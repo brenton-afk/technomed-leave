@@ -56,7 +56,7 @@ export async function sendNotificationEmail(formData) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      from: 'TechnoMed Leave Portal <noreply@technomed.com.au>',
+      from: 'TechnoMed Leave Portal <onboarding@resend.dev>',
       to: recipients,
       subject: `Leave Application — ${name} (${leaveLabel})`,
       html: buildEmailHtml(formData),
