@@ -131,10 +131,10 @@ export default function LeaveForm() {
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.stepCounter}>{step + 1} of {STEPS.length}</div>
-        <div className={styles.logoRow}>
-          <div className={styles.logoMark}>TM</div>
+        <div className={styles.logoRow}><img src="/logo.png" alt="TechnoMed" style={{height:48,width:"auto"}} />
+          
           <div>
-            <div className={styles.logoName}>TechnoMed</div>
+            
             <div className={styles.logoSub}>Staff Portal</div>
           </div>
         </div>
