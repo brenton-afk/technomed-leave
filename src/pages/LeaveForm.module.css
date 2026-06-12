@@ -402,3 +402,65 @@
 .btnSubmit { background: var(--tm-teal); }
 .btnSubmit:hover { background: var(--tm-teal); filter: brightness(1.1); }
 .btnSubmit:disabled { opacity: 0.7; cursor: not-allowed; }
+
+.staffList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.staffBtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--tm-border);
+  border-radius: 12px;
+  background: var(--tm-white);
+  cursor: pointer;
+  transition: all 0.18s;
+  text-align: left;
+  width: 100%;
+}
+
+.staffBtn:hover {
+  border-color: var(--tm-accent);
+  background: var(--tm-teal-light);
+}
+
+.staffBtnSelected {
+  border-color: var(--tm-accent) !important;
+  background: var(--tm-teal-light) !important;
+}
+
+.staffAvatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--tm-navy);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.staffBtnSelected .staffAvatar {
+  background: var(--tm-accent);
+}
+
+.staffInfo { flex: 1; }
+
+.staffName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tm-navy);
+}
+
+.staffRole {
+  font-size: 11px;
+  color: var(--tm-muted);
+  margin-top: 2px;
+}

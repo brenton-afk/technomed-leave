@@ -3,8 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import styles from './LeaveForm.module.css'
 
+const STAFF = [
+  { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', division: 'Operations', role: 'Managing Director' },
+  { name: 'Erin Smallbon', email: 'erin@technomed.com.au', division: 'Operations', role: 'General Manager' },
+  { name: 'Emma Lovering', email: 'marketing@technomed.com.au', division: 'Operations', role: 'Co-Founder, Brand Lead' },
+  { name: 'Toni Hoppitt', email: 'toni@technomed.com.au', division: 'Operations', role: 'Operations Coordinator' },
+  { name: 'Ben Cassidy', email: 'ben@technomed.com.au', division: 'Spine', role: 'Clinical Support Specialist' },
+  { name: 'Mat Usher', email: 'mat@technomed.com.au', division: 'CMF', role: 'Business Development and Director' },
+  { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', division: 'Orthopaedics', role: 'Director of Orthopaedics' },
+  { name: 'April Foale', email: 'april@technomed.com.au', division: 'Orthopaedics', role: 'Clinical Support Specialist' },
+  { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', division: 'Spine', role: 'Clinical Support Specialist' }
+]
+
 const STEPS = [
-  { title: 'Your details', sub: 'Tell us who you are' },
+  { title: 'Your details', sub: 'Select your name from the list' },
   { title: 'Leave dates', sub: 'Select your leave period' },
   { title: 'Type of leave', sub: 'What category applies?' },
   { title: 'Reason & notes', sub: 'Brief description of your leave' },
@@ -16,8 +28,6 @@ const LEAVE_TYPES = [
   { id: 'SICK', label: 'Personal / Sick Leave', desc: 'Illness, injury or personal circumstances', icon: '💙' },
   { id: 'TOIL', label: 'Time Off In Lieu (TOIL)', desc: 'Using time accrued from overtime hours', icon: '⏱' }
 ]
-
-const DIVISIONS = ['Spine', 'CMF', 'Orthopaedics', 'Operations']
 
 function formatDate(d) {
   if (!d) return '—'
@@ -40,7 +50,9 @@ export default function LeaveForm() {
 
   const [form, setForm] = useState({
     name: '',
+    email: '',
     division: '',
+    role: '',
     startDate: '',
     endDate: '',
     returnDate: '',
@@ -50,7 +62,16 @@ export default function LeaveForm() {
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
-  // Check if Xero is connected and fetch balances when name is set
+  const selectStaff = (staffMember) => {
+    setForm(prev => ({
+      ...prev,
+      name: staffMember.name,
+      email: staffMember.email,
+      division: staffMember.division,
+      role: staffMember.role
+    }))
+  }
+
   useEffect(() => {
     checkXeroConnection()
   }, [])
@@ -74,15 +95,12 @@ export default function LeaveForm() {
     try {
       const res = await axios.get(`/api/xero/balances?name=${encodeURIComponent(name)}`)
       setBalances(res.data)
-    } catch {
-      // Balances unavailable — not critical, form still works
-    }
+    } catch {}
   }
 
   function validate() {
     if (step === 0) {
-      if (!form.name.trim()) return 'Please enter your full name'
-      if (!form.division) return 'Please select your division'
+      if (!form.name) return 'Please select your name'
     }
     if (step === 1) {
       if (!form.startDate) return 'Please select your first day of leave'
@@ -119,7 +137,7 @@ export default function LeaveForm() {
       await axios.post('/api/submit', form)
       navigate('/success', { state: { form } })
     } catch (e) {
-      setError(e.response?.data?.error || 'Submission failed. Please try again or contact IT support.')
+      setError(e.response?.data?.error || 'Submission failed. Please try again.')
       setSubmitting(false)
     }
   }
@@ -128,15 +146,10 @@ export default function LeaveForm() {
 
   return (
     <div className={styles.container}>
-      {/* Header */}
       <div className={styles.header}>
         <div className={styles.stepCounter}>{step + 1} of {STEPS.length}</div>
-        <div className={styles.logoRow}><img src="/logo.png" alt="TechnoMed" style={{height:48,width:"auto"}} />
-          
-          <div>
-            
-            <div className={styles.logoSub}>Staff Portal</div>
-          </div>
+        <div className={styles.logoRow}>
+          <img src="/logo.png" alt="TechnoMed" className={styles.logoImg} />
         </div>
         <div className={styles.headerTitle}>{STEPS[step].title}</div>
         <div className={styles.headerSub}>{STEPS[step].sub}</div>
@@ -145,38 +158,31 @@ export default function LeaveForm() {
         </div>
       </div>
 
-      {/* Body */}
       <div className={styles.body}>
 
-        {/* Step 0 — Details */}
+        {/* Step 0 — Staff selection */}
         {step === 0 && (
           <div className={styles.slide}>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>Full name</label>
-              <p className={styles.hint}>As it appears in your Xero employee record</p>
-              <input
-                type="text"
-                className={styles.input}
-                placeholder="e.g. Jane Smith"
-                value={form.name}
-                onChange={e => set('name', e.target.value)}
-                autoComplete="name"
-              />
-            </div>
-            <div className={styles.fieldGroup}>
-              <label className={styles.label}>Division</label>
-              <p className={styles.hint}>Select your team division</p>
-              <div className={styles.selectWrap}>
-                <select
-                  className={styles.select}
-                  value={form.division}
-                  onChange={e => set('division', e.target.value)}
-                >
-                  <option value="">Select division…</option>
-                  {DIVISIONS.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+              <label className={styles.label}>Select your name</label>
+              <p className={styles.hint}>Tap your name from the list below</p>
+              <div className={styles.staffList}>
+                {STAFF.map(s => (
+                  <button
+                    key={s.email}
+                    className={`${styles.staffBtn} ${form.name === s.name ? styles.staffBtnSelected : ''}`}
+                    onClick={() => selectStaff(s)}
+                  >
+                    <div className={styles.staffAvatar}>
+                      {s.name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <div className={styles.staffInfo}>
+                      <div className={styles.staffName}>{s.name}</div>
+                      <div className={styles.staffRole}>{s.role} · {s.division}</div>
+                    </div>
+                    <div className={`${styles.checkDot} ${form.name === s.name ? styles.checkDotSelected : ''}`} />
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -187,35 +193,16 @@ export default function LeaveForm() {
           <div className={styles.slide}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>First day of leave</label>
-              <input
-                type="date"
-                className={styles.input}
-                value={form.startDate}
-                onChange={e => set('startDate', e.target.value)}
-              />
+              <input type="date" className={styles.input} value={form.startDate} onChange={e => set('startDate', e.target.value)} />
             </div>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>Last day of leave</label>
-              <input
-                type="date"
-                className={styles.input}
-                value={form.endDate}
-                min={form.startDate}
-                onChange={e => set('endDate', e.target.value)}
-              />
+              <input type="date" className={styles.input} value={form.endDate} min={form.startDate} onChange={e => set('endDate', e.target.value)} />
             </div>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>Return to work date</label>
-              <input
-                type="date"
-                className={styles.input}
-                value={form.returnDate}
-                min={form.endDate}
-                onChange={e => set('returnDate', e.target.value)}
-              />
+              <input type="date" className={styles.input} value={form.returnDate} min={form.endDate} onChange={e => set('returnDate', e.target.value)} />
             </div>
-
-            {/* Leave balances from Xero */}
             {balances && (
               <div className={styles.balanceCard}>
                 <div className={styles.balanceTitle}>Your leave balances (from Xero)</div>
@@ -228,13 +215,6 @@ export default function LeaveForm() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {!xeroConnected && (
-              <div className={styles.infoBox}>
-                💡 Connect Xero to see your live leave balances here.{' '}
-                <a href="/api/xero/connect" className={styles.link}>Connect now →</a>
               </div>
             )}
           </div>
@@ -267,7 +247,7 @@ export default function LeaveForm() {
           <div className={styles.slide}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>Reason for leave</label>
-              <p className={styles.hint}>This will appear in Xero and the notification email to management</p>
+              <p className={styles.hint}>This will appear in the notification email to management</p>
               <textarea
                 className={styles.textarea}
                 placeholder="e.g. Family holiday, medical procedure, personal matter…"
@@ -277,7 +257,7 @@ export default function LeaveForm() {
               />
             </div>
             <div className={styles.disclaimer}>
-              <span>🔒</span> Your application will be emailed to management, logged in Xero under your employee record, and added to the TechnoMed bookings calendar automatically.
+              <span>🔒</span> Your application will be reviewed by management before anything is confirmed.
             </div>
           </div>
         )}
@@ -296,32 +276,22 @@ export default function LeaveForm() {
               <SummaryRow label="Reason" value={form.reason} />
             </div>
             <div className={styles.disclaimer}>
-              <span>📧</span> Notification will be sent to Erin, Brenton and Bookings upon submission.
+              <span>📧</span> Management will be notified and will review your application.
             </div>
           </div>
         )}
 
-        {/* Error message */}
         {error && <div className={styles.errorBox}>{error}</div>}
       </div>
 
-      {/* Navigation */}
       <div className={styles.navRow}>
         {step > 0 && (
-          <button className={styles.btnBack} onClick={back} disabled={submitting}>
-            Back
-          </button>
+          <button className={styles.btnBack} onClick={back} disabled={submitting}>Back</button>
         )}
         {step < STEPS.length - 1 ? (
-          <button className={styles.btnNext} onClick={next}>
-            Continue →
-          </button>
+          <button className={styles.btnNext} onClick={next}>Continue →</button>
         ) : (
-          <button
-            className={styles.btnSubmit}
-            onClick={submit}
-            disabled={submitting}
-          >
+          <button className={styles.btnSubmit} onClick={submit} disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit application ✓'}
           </button>
         )}
@@ -332,21 +302,10 @@ export default function LeaveForm() {
 
 function SummaryRow({ label, value, highlight }) {
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      padding: '10px 14px',
-      borderBottom: '0.5px solid rgba(26,43,74,0.08)',
-      gap: 12
-    }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 14px', borderBottom: '0.5px solid rgba(26,43,74,0.08)', gap: 12 }}>
       <span style={{ fontSize: 12, color: '#6b7a8d', flexShrink: 0 }}>{label}</span>
       {highlight ? (
-        <span style={{
-          fontSize: 12, fontWeight: 600,
-          background: '#e6f4f2', color: '#1a7a6e',
-          padding: '3px 10px', borderRadius: 20
-        }}>{value}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, background: '#e6f4f2', color: '#1a7a6e', padding: '3px 10px', borderRadius: 20 }}>{value}</span>
       ) : (
         <span style={{ fontSize: 13, fontWeight: 500, color: '#1a2b4a', textAlign: 'right' }}>{value}</span>
       )}
