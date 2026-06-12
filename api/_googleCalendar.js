@@ -5,7 +5,7 @@
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
 
 // Google Calendar colour ID for Grape
-const GRAPE_COLOR_ID = '9'
+const GRAPE_COLOR_ID = '3'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
