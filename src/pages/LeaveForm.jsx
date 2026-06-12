@@ -166,23 +166,20 @@ export default function LeaveForm() {
             <div className={styles.fieldGroup}>
               <label className={styles.label}>Select your name</label>
               <p className={styles.hint}>Tap your name from the list below</p>
-              <div className={styles.staffList}>
-                {STAFF.map(s => (
-                  <button
-                    key={s.email}
-                    className={`${styles.staffBtn} ${form.name === s.name ? styles.staffBtnSelected : ''}`}
-                    onClick={() => selectStaff(s)}
-                  >
-                    <div className={styles.staffAvatar}>
-                      {s.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div className={styles.staffInfo}>
-                      <div className={styles.staffName}>{s.name}</div>
-                      <div className={styles.staffRole}>{s.role} · {s.division}</div>
-                    </div>
-                    <div className={`${styles.checkDot} ${form.name === s.name ? styles.checkDotSelected : ''}`} />
-                  </button>
-                ))}
+              <div className={styles.selectWrap}>
+                <select
+                  className={styles.select}
+                  value={form.name}
+                  onChange={e => {
+                    const staff = STAFF.find(s => s.name === e.target.value)
+                    if (staff) selectStaff(staff)
+                  }}
+                >
+                  <option value="">Select your name...</option>
+                  {STAFF.map(s => (
+                    <option key={s.email} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
