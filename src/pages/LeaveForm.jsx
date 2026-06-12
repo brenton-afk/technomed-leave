@@ -1,25 +1,4 @@
-cat > /tmp/step0.txt << 'EOF'
-            <div className={styles.fieldGroup}>
-              <label className={styles.label}>Your name</label>
-              <p className={styles.hint}>Select your name from the list</p>
-              <div className={styles.selectWrap}>
-                <select
-                  className={styles.select}
-                  value={form.name}
-                  onChange={e => {
-                    const staff = STAFF.find(s => s.name === e.target.value)
-                    if (staff) selectStaff(staff)
-                  }}
-                >
-                  <option value="">Select your name…</option>
-                  {STAFF.map(s => (
-                    <option key={s.email} value={s.name}>{s.name} — {s.role}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-EOF
-echo "Done"import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import styles from './LeaveForm.module.css'
@@ -63,7 +42,7 @@ function leaveLabel(id) {
 
 export default function LeaveForm() {
   const navigate = useNavigate()
-  const [step, setStep] = useState(0); // init
+  const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [balances, setBalances] = useState(null)
@@ -186,7 +165,7 @@ export default function LeaveForm() {
           <div className={styles.slide}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>Select your name</label>
-              <p className={styles.hint}>Select your name from the dropdown</p>
+              <p className={styles.hint}>Tap your name from the list below</p>
               <div className={styles.staffList}>
                 {STAFF.map(s => (
                   <button
