@@ -4,7 +4,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  background: #f0f3f7;
+  background: white;
 }
 
 .header {
@@ -203,7 +203,7 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: #f0f3f7;
+  background: white;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -383,7 +383,7 @@
   transition: all 0.18s;
 }
 
-.btnBack:hover { background: #f0f3f7; color: var(--tm-navy); }
+.btnBack:hover { background: white; color: var(--tm-navy); }
 
 .btnNext, .btnSubmit {
   flex: 2;
