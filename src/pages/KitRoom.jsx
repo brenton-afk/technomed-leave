@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react'
 
+const DISTRIBUTORS = {
+  signus: { name: 'Signus', logo: '/logos/signus.png', color: '#c0392b', kits: ['Diplomat', 'Athlet', 'Ascot', 'MOBIS'] },
+  e4surgical: { name: 'E4 Surgical', logo: '/logos/e4surgical.png', color: '#2c3e6b', kits: ['Dakota', 'Reform Cervical', 'Reform Lumbar', 'E4 Global PLIF', 'E4 Global ALIF'] },
+  devicetech: { name: 'Device Technologies', logo: '/logos/devicetech.png', color: '#8e24aa', kits: ['Mariner', 'Shoreline'] },
+  orthofix: { name: 'Orthofix', logo: '/logos/orthofix.png', color: '#0077c8', kits: ['Orthofix Connectors'] },
+  technomed: { name: 'TechnoMed', logo: '/logo.png', color: '#042746', kits: ['TM Screw Removal', 'TM Locking Distractor'] },
+}
+
+function getDistributor(kitName) {
+  for (const [id, dist] of Object.entries(DISTRIBUTORS)) {
+    if (dist.kits.includes(kitName)) return { id, ...dist }
+  }
+  return null
+}
+
 const LOCATIONS = [
   {
     id: 'calvary',
