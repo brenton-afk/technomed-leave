@@ -14,7 +14,8 @@ const TABS = [
   { id: 'payroll', label: 'Payroll', icon: '💰' },
   { id: 'kitroom', label: 'Kit Room', icon: '🔧' },
   { id: 'projects', label: 'Projects', icon: '📋' },
-  { id: 'admin', label: 'Admin', icon: '⚙️' }
+  { id: 'admin', label: 'Admin', icon: '⚙️' },
+  { id: 'logout', label: 'Log out', icon: '🚪' }
 ]
 
 export default function App() {
@@ -31,6 +32,14 @@ export default function App() {
   function handleLogin(userData) {
     setUser(userData)
     sessionStorage.setItem('tm_user', JSON.stringify(userData))
+    sessionStorage.setItem('tm_login_time', Date.now().toString())
+  }
+
+  function handleLogout() {
+    setUser(null)
+    setActiveTab('home')
+    sessionStorage.removeItem('tm_user')
+    sessionStorage.removeItem('tm_login_time')
   }
 
   function handleSuccess(form) {
@@ -54,6 +63,7 @@ export default function App() {
       case 'payroll': return <ComingSoon title="Payroll" subtitle="Timesheets and pay run submission coming soon" icon="💰" />
       case 'kitroom': return <KitRoom user={user} />
       case 'projects': return <ComingSoon title="Projects" subtitle="Project management coming soon" icon="📋" />
+      case 'logout': return null
       case 'admin':
         if (user.isAdmin) return <AdminPortal user={user} />
         return <ComingSoon title="Admin" subtitle="You do not have admin access. Please contact Brenton or Erin." icon="🔒" isLocked />
@@ -71,7 +81,7 @@ export default function App() {
           {TABS.map(tab => {
             const active = activeTab === tab.id
             return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              <button key={tab.id} onClick={() => { if (tab.id === 'logout') { if (window.confirm('Log out of TechnoMed Portal?')) handleLogout() } else setActiveTab(tab.id) }}
                 style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'8px 4px 12px', background:'transparent', border:'none', cursor:'pointer', gap:'3px', position:'relative' }}>
                 {active && <div style={{ position:'absolute', top:0, left:'50%', transform:'translateX(-50%)', width:'24px', height:'3px', background:'#2ab5a0', borderRadius:'0 0 3px 3px' }} />}
                 <span style={{ fontSize:'20px', lineHeight:1 }}>{tab.icon}</span>
