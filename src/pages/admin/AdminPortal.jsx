@@ -32,6 +32,8 @@ export default function AdminPortal({ user }) {
       const res = await fetch(`/api/admin/applications?password=Technoadmin2026`)
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      if (data.xeroError) alert('Xero error: ' + data.xeroError)
+      if (data.xeroResult) alert('Xero success! Leave ID: ' + data.xeroResult.leaveApplicationID)
       setApplications(data)
     } catch (err) {
       setError('Failed to load applications: ' + err.message)
@@ -49,6 +51,8 @@ export default function AdminPortal({ user }) {
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      if (data.xeroError) alert('Xero error: ' + data.xeroError)
+      if (data.xeroResult) alert('Xero success! Leave ID: ' + data.xeroResult.leaveApplicationID)
       await fetchApplications()
       setDeclineModal(null)
       setDeclineReason('')
