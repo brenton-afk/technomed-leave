@@ -26,19 +26,31 @@ export default async function handler(req, res) {
   try {
     const token = await getGoogleToken()
     const calendarId = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
-    const now = new Date()
+
+    // Get date range — default 4 weeks centred on today, or use query params
     const aestOffset = 10 * 60 * 60 * 1000
+    const now = new Date()
     const aestNow = new Date(now.getTime() + aestOffset)
-    const todayStart = new Date(aestNow)
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date(aestNow)
-    todayEnd.setHours(23, 59, 59, 999)
-    const timeMin = new Date(todayStart.getTime() - aestOffset).toISOString()
-    const timeMax = new Date(todayEnd.getTime() - aestOffset).toISOString()
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=50`
+
+    // Start from 7 days ago, end 28 days from now to cover any week navigation
+    const rangeStart = new Date(aestNow)
+    rangeStart.setDate(rangeStart.getDate() - 7)
+    rangeStart.setHours(0, 0, 0, 0)
+
+    const rangeEnd = new Date(aestNow)
+    rangeEnd.setDate(rangeEnd.getDate() + 28)
+    rangeEnd.setHours(23, 59, 59, 999)
+
+    const timeMin = new Date(rangeStart.getTime() - aestOffset).toISOString()
+    const timeMax = new Date(rangeEnd.getTime() - aestOffset).toISOString()
+
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=500`
+
     const eventsRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const data = await eventsRes.json()
+
     if (data.error) throw new Error(data.error.message)
+
     const events = (data.items || []).map(e => ({
       id: e.id,
       title: e.summary || 'No title',
@@ -48,7 +60,8 @@ export default async function handler(req, res) {
       allDay: !e.start?.dateTime,
       colorId: e.colorId || null
     }))
-    res.status(200).json({ events, date: aestNow.toISOString().split('T')[0] })
+
+    res.status(200).json({ events, today: aestNow.toISOString().split('T')[0] })
   } catch (err) {
     console.error('Calendar error:', err)
     res.status(500).json({ error: err.message })
