@@ -16,7 +16,7 @@ function formatDate(d) {
 
 export default function AdminPortal() {
   const [password, setPassword] = useState('')
-  const [loggedIn, setLoggedIn] = useState(false)
+  const [loggedIn, setLoggedIn] = useState(user?.isAdmin || false)
   const [error, setError] = useState('')
   const [applications, setApplications] = useState({ pending: [], approved: [], declined: [] })
   const [loading, setLoading] = useState(false)
