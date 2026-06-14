@@ -158,11 +158,11 @@ export default function LeaveForm() {
         </div>
       </div>
 
-      <div className={styles.body}>
+      <div style={{flex:1,overflowY:"auto",background:"#f0f3f7",padding:0}}>
 
         {/* Step 0 — Staff selection */}
         {step === 0 && (
-          <div className={styles.slide}>
+          <div style={{padding:"22px 20px 8px",animation:"slideIn 0.25s ease"}}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>Select your name</label>
               <p className={styles.hint}>Tap your name from the list below</p>
@@ -187,7 +187,7 @@ export default function LeaveForm() {
 
         {/* Step 1 — Dates */}
         {step === 1 && (
-          <div className={styles.slide}>
+          <div style={{padding:"22px 20px 8px",animation:"slideIn 0.25s ease"}}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>First day of leave</label>
               <input type="date" className={styles.input} value={form.startDate} onChange={e => set('startDate', e.target.value)} />
@@ -219,7 +219,7 @@ export default function LeaveForm() {
 
         {/* Step 2 — Leave type */}
         {step === 2 && (
-          <div className={styles.slide}>
+          <div style={{padding:"22px 20px 8px",animation:"slideIn 0.25s ease"}}>
             <div className={styles.leaveTypes}>
               {LEAVE_TYPES.map(type => (
                 <button
@@ -241,7 +241,7 @@ export default function LeaveForm() {
 
         {/* Step 3 — Reason */}
         {step === 3 && (
-          <div className={styles.slide}>
+          <div style={{padding:"22px 20px 8px",animation:"slideIn 0.25s ease"}}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>Reason for leave</label>
               <p className={styles.hint}>This will appear in the notification email to management</p>
@@ -261,7 +261,7 @@ export default function LeaveForm() {
 
         {/* Step 4 — Review */}
         {step === 4 && (
-          <div className={styles.slide}>
+          <div style={{padding:"22px 20px 8px",animation:"slideIn 0.25s ease"}}>
             <div className={styles.summaryCard}>
               <div className={styles.summaryHeader}>Application summary</div>
               <SummaryRow label="Employee" value={form.name} />
