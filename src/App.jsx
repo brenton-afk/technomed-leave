@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import PinScreen from './pages/PinScreen.jsx'
 import LeaveForm from './pages/LeaveForm.jsx'
+import TodayView from './pages/TodayView.jsx'
 import AdminPortal from './pages/admin/AdminPortal.jsx'
 import ComingSoon from './pages/ComingSoon.jsx'
 import Success from './pages/Success.jsx'
 
 const TABS = [
+  { id: 'home', label: 'Today', icon: '📅' },
   { id: 'leave', label: 'Leave', icon: '🏖' },
   { id: 'payroll', label: 'Payroll', icon: '💰' },
   { id: 'kitroom', label: 'Kit Room', icon: '🔧' },
@@ -46,6 +48,7 @@ export default function App() {
 
   function renderContent() {
     switch (activeTab) {
+      case 'home': return <TodayView user={user} />
       case 'leave': return <LeaveForm user={user} onSuccess={handleSuccess} />
       case 'payroll': return <ComingSoon title="Payroll" subtitle="Timesheets and pay run submission coming soon" icon="💰" />
       case 'kitroom': return <ComingSoon title="Kit Room" subtitle="Consignment and loan set tracking coming soon" icon="🔧" />
