@@ -4,20 +4,26 @@ export default async function handler(req, res) {
       headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
     })
     const d = await r.json()
-    if (!d.result) return res.json({ error: 'No tokens', raw: d })
-    
-    let tokens
-    try { tokens = typeof d.result === 'string' ? JSON.parse(d.result) : d.result } 
-    catch(e) { return res.json({ error: 'Parse failed', raw: String(d.result).slice(0,300) }) }
+    if (!d.result) return res.json({ error: 'No tokens' })
+    const tokens = typeof d.result === 'string' ? JSON.parse(d.result) : d.result
+
+    const empRes = await fetch('https://api.xero.com/payroll.xro/1.0/Employees', {
+      headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' }
+    })
+    const empData = await empRes.json()
+
+    const ltRes = await fetch('https://api.xero.com/payroll.xro/1.0/LeaveTypes', {
+      headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' }
+    })
+    const ltData = await ltRes.json()
 
     res.json({
-      has_access_token: !!tokens.access_token,
-      has_refresh_token: !!tokens.refresh_token,
-      has_tenant_id: !!tokens.tenant_id,
-      tenant_id: tokens.tenant_id,
-      token_expired: Date.now() > tokens.expires_at,
-      access_token_preview: tokens.access_token ? tokens.access_token.slice(0,20) + '...' : null,
-      keys_in_object: Object.keys(tokens)
+      emp_status: empRes.status,
+      lt_status: ltRes.status,
+      employees: (empData.Employees || []).map(e => e.FirstName + ' ' + e.LastName),
+      leaveTypes: (ltData.LeaveTypes || []).map(lt => lt.Name),
+      empError: empData.ErrorNumber ? empData.Message : null,
+      ltError: ltData.ErrorNumber ? ltData.Message : null
     })
   } catch(err) { res.json({ error: err.message }) }
 }
