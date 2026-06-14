@@ -1,19 +1,71 @@
-import React from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import PinScreen from './pages/PinScreen.jsx'
 import LeaveForm from './pages/LeaveForm.jsx'
-import XeroCallback from './pages/XeroCallback.jsx'
-import Success from './pages/Success.jsx'
 import AdminPortal from './pages/admin/AdminPortal.jsx'
+import ComingSoon from './pages/ComingSoon.jsx'
+
+const TABS = [
+  { id: 'leave', label: 'Leave', icon: '🏖' },
+  { id: 'payroll', label: 'Payroll', icon: '💰' },
+  { id: 'kitroom', label: 'Kit Room', icon: '🔧' },
+  { id: 'projects', label: 'Projects', icon: '📋' },
+  { id: 'admin', label: 'Admin', icon: '⚙️' }
+]
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LeaveForm />} />
-        <Route path="/success" element={<Success />} />
-        <Route path="/admin" element={<AdminPortal />} />
-        <Route path="/api/xero/callback" element={<XeroCallback />} />
-      </Routes>
-    </BrowserRouter>
+  const [user, setUser] = useState(null)
+  const [activeTab, setActiveTab] = useState('leave')
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem('tm_user')
+    if (saved) {
+      try { setUser(JSON.parse(saved)) } catch {}
+    }
+  }, [])
+
+  function handleLogin(userData) {
+    setUser(userData)
+    sessionStorage.setItem('tm_user', JSON.stringify(userData))
+  }
+
+  if (!user) return React.createElement(PinScreen, { onLogin: handleLogin })
+
+  function renderContent() {
+    switch (activeTab) {
+      case 'leave': return React.createElement(LeaveForm, { user })
+      case 'payroll': return React.createElement(ComingSoon, { title: 'Payroll', subtitle: 'Timesheets and pay run submission coming soon', icon: '💰' })
+      case 'kitroom': return React.createElement(ComingSoon, { title: 'Kit Room', subtitle: 'Consignment and loan set tracking coming soon', icon: '🔧' })
+      case 'projects': return React.createElement(ComingSoon, { title: 'Projects', subtitle: 'Project management coming soon', icon: '📋' })
+      case 'admin':
+        if (user.isAdmin) return React.createElement(AdminPortal, { user })
+        return React.createElement(ComingSoon, { title: 'Admin', subtitle: 'You do not have admin access. Please contact Brenton or Erin.', icon: '🔒', isLocked: true })
+      default: return null
+    }
+  }
+
+  return React.createElement('div', {
+    style: { minHeight: '100vh', maxWidth: '430px', margin: '0 auto', display: 'flex', flexDirection: 'column', background: '#f0f3f7', fontFamily: '-apple-system,BlinkMacSystemFont,sans-serif' }
+  },
+    React.createElement('div', { style: { flex: 1, overflowY: 'auto', paddingBottom: '70px' } },
+      renderContent()
+    ),
+    React.createElement('div', {
+      style: { position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '430px', background: 'white', borderTop: '0.5px solid rgba(26,43,74,0.12)', display: 'flex', zIndex: 100, boxShadow: '0 -2px 12px rgba(26,43,74,0.08)' }
+    },
+      TABS.map(function(tab) {
+        var active = activeTab === tab.id
+        return React.createElement('button', {
+          key: tab.id,
+          onClick: function() { setActiveTab(tab.id) },
+          style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px 4px 12px', background: 'transparent', border: 'none', cursor: 'pointer', gap: '3px', position: 'relative' }
+        },
+          active && React.createElement('div', {
+            style: { position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: '24px', height: '3px', background: '#2ab5a0', borderRadius: '0 0 3px 3px' }
+          }),
+          React.createElement('span', { style: { fontSize: '20px', lineHeight: 1 } }, tab.icon),
+          React.createElement('span', { style: { fontSize: '10px', fontWeight: active ? '700' : '400', color: active ? '#042746' : '#9aabb8', letterSpacing: '0.2px' } }, tab.label)
+        )
+      })
+    )
   )
 }
