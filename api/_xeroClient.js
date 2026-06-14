@@ -1,22 +1,24 @@
-// ─── Xero API Client ─────────────────────────────────────────────────────────
-// Handles token refresh, employee lookup and leave application submission
-
-const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
-// Map our internal leave type IDs to Xero leave type names
-// These must match the leave type names configured in your Xero payroll settings
 const LEAVE_TYPE_MAP = {
   'ANNUAL_LEAVE': 'Annual Leave',
-  'SICK': 'Personal/Carer\'s Leave',
+  'SICK': "Personal/Carer's Leave",
   'TOIL': 'Time Off In Lieu'
 }
 
-export async function getXeroToken() {
-  // Refresh the access token using client credentials
-  // In production with Vercel KV, you'd store/retrieve the refresh token
-  // For initial setup, uses client credentials flow
-  const res = await fetch(XERO_TOKEN_URL, {
+async function getStoredTokens() {
+  const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL
+  const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
+  const res = await fetch(`${REDIS_URL}/get/xero_tokens`, {
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+  })
+  const data = await res.json()
+  if (!data.result) throw new Error('Xero not connected. Please visit /api/xero/connect first.')
+  return JSON.parse(decodeURIComponent(data.result))
+}
+
+async function refreshToken(refreshToken) {
+  const res = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -25,31 +27,42 @@ export async function getXeroToken() {
       ).toString('base64')
     },
     body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      scope: 'payroll.employees payroll.leaveapplications payroll.settings.read'
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
     })
   })
-
   const data = await res.json()
-  if (!data.access_token) {
-    throw new Error(`Xero token error: ${data.error_description || 'Unknown error'}`)
+  if (!data.access_token) throw new Error('Token refresh failed: ' + JSON.stringify(data))
+  return data
+}
+
+async function getValidToken() {
+  const stored = await getStoredTokens()
+  if (Date.now() < stored.expires_at - 60000) {
+    return { token: stored.access_token, tenantId: stored.tenant_id }
   }
-  return data.access_token
+  // Refresh token
+  const refreshed = await refreshToken(stored.refresh_token)
+  const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL
+  const REDIS_TOKEN_ENV = process.env.UPSTASH_REDIS_REST_TOKEN
+  const newData = {
+    access_token: refreshed.access_token,
+    refresh_token: refreshed.refresh_token || stored.refresh_token,
+    tenant_id: stored.tenant_id,
+    expires_at: Date.now() + (refreshed.expires_in * 1000)
+  }
+  await fetch(`${REDIS_URL}/set/xero_tokens/${encodeURIComponent(JSON.stringify(newData))}`, {
+    headers: { Authorization: `Bearer ${REDIS_TOKEN_ENV}` }
+  })
+  return { token: refreshed.access_token, tenantId: stored.tenant_id }
 }
 
 export async function findEmployee(token, tenantId, name) {
   const res = await fetch(`${XERO_API_BASE}/Employees`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Xero-tenant-id': tenantId,
-      Accept: 'application/json'
-    }
+    headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' }
   })
-
   const data = await res.json()
   const employees = data.Employees || []
-
-  // Match by full name (case-insensitive)
   const nameLower = name.toLowerCase().trim()
   return employees.find(e => {
     const fullName = `${e.FirstName} ${e.LastName}`.toLowerCase()
@@ -59,45 +72,32 @@ export async function findEmployee(token, tenantId, name) {
 
 export async function getLeaveTypes(token, tenantId) {
   const res = await fetch(`${XERO_API_BASE}/LeaveTypes`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Xero-tenant-id': tenantId,
-      Accept: 'application/json'
-    }
+    headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' }
   })
   const data = await res.json()
   return data.LeaveTypes || []
 }
 
 export async function submitToXero({ name, startDate, endDate, leaveType, reason }) {
-  const token = await getXeroToken()
-  const tenantId = process.env.XERO_TENANT_ID
+  const { token, tenantId } = await getValidToken()
 
-  // 1. Find the employee
   const employee = await findEmployee(token, tenantId, name)
-  if (!employee) {
-    throw new Error(`Employee "${name}" not found in Xero. Check the name matches exactly.`)
-  }
+  if (!employee) throw new Error(`Employee "${name}" not found in Xero`)
 
-  // 2. Find the matching leave type in Xero
   const xeroLeaveTypes = await getLeaveTypes(token, tenantId)
   const targetName = LEAVE_TYPE_MAP[leaveType] || leaveType
   const xeroLeaveType = xeroLeaveTypes.find(lt =>
     lt.Name.toLowerCase().includes(targetName.toLowerCase())
   )
+  if (!xeroLeaveType) throw new Error(`Leave type "${targetName}" not found in Xero`)
 
-  if (!xeroLeaveType) {
-    throw new Error(`Leave type "${targetName}" not found in Xero payroll settings`)
-  }
-
-  // 3. Submit leave application
   const leaveApp = {
     EmployeeID: employee.EmployeeID,
     LeaveTypeID: xeroLeaveType.LeaveTypeID,
     StartDate: `/Date(${new Date(startDate).getTime()}+0000)/`,
     EndDate: `/Date(${new Date(endDate).getTime()}+0000)/`,
-    Description: reason,
-    Title: `${name} - ${LEAVE_TYPE_MAP[leaveType] || leaveType}`
+    Description: reason || '',
+    Title: `${name} - ${targetName}`
   }
 
   const submitRes = await fetch(`${XERO_API_BASE}/LeaveApplications`, {
@@ -112,14 +112,10 @@ export async function submitToXero({ name, startDate, endDate, leaveType, reason
   })
 
   const result = await submitRes.json()
-
-  if (result.ErrorNumber) {
-    throw new Error(result.Message || 'Xero leave submission failed')
-  }
+  if (result.ErrorNumber) throw new Error(result.Message || 'Xero submission failed')
 
   return {
     leaveApplicationID: result.LeaveApplications?.[0]?.LeaveApplicationID,
-    employeeID: employee.EmployeeID,
     employeeName: `${employee.FirstName} ${employee.LastName}`
   }
 }
