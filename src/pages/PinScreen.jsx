@@ -3,6 +3,27 @@ import { STAFF } from '../staffConfig.js'
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
+const QUOTES = [
+  { text: 'The secret of getting ahead is getting started.', author: 'Mark Twain' },
+  { text: 'Great things are never done by one person. They are done by a team.', author: 'Steve Jobs' },
+  { text: 'Take care of your team and they will take care of everything else.', author: 'Richard Branson' },
+  { text: 'Success is not final, failure is not fatal: it is the courage to continue that counts.', author: 'Winston Churchill' },
+  { text: 'The best way to predict the future is to create it.', author: 'Peter Drucker' },
+  { text: 'Alone we can do so little; together we can do so much.', author: 'Helen Keller' },
+  { text: 'It always seems impossible until it is done.', author: 'Nelson Mandela' },
+  { text: 'In the middle of every difficulty lies opportunity.', author: 'Albert Einstein' },
+  { text: 'Believe you can and you are halfway there.', author: 'Theodore Roosevelt' },
+  { text: 'Quality is not an act, it is a habit.', author: 'Aristotle' },
+  { text: 'The patient is not an interruption of our work. The patient is the purpose of it.', author: 'Unknown' },
+  { text: 'Coming together is a beginning. Staying together is progress. Working together is success.', author: 'Henry Ford' },
+  { text: 'The strength of the team is each individual member. The strength of each member is the team.', author: 'Phil Jackson' },
+  { text: 'Precision in medicine begins with precision in preparation.', author: 'TechnoMed' },
+  { text: 'Every patient deserves our very best. Every single time.', author: 'TechnoMed' },
+  { text: 'Do what you can, with what you have, where you are.', author: 'Theodore Roosevelt' },
+  { text: 'Excellence is not a destination but a continuous journey.', author: 'Brian Tracy' },
+  { text: 'Small acts of kindness can change the world.', author: 'Kobi Yamada' },
+]
+
 export default function PinScreen({ onLogin }) {
   const [step, setStep] = useState('select')
   const [selectedEmail, setSelectedEmail] = useState('')
@@ -10,6 +31,7 @@ export default function PinScreen({ onLogin }) {
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)])
   const [pinInput, setPinInput] = useState('')
 
   const staff = STAFF.find(s => s.email === selectedEmail)
@@ -126,7 +148,11 @@ export default function PinScreen({ onLogin }) {
           <img src="/logo.png" alt="TechnoMed" style={{ height:'48px', width:'auto', marginBottom:'6px' }} />
           <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'32px' }}>Staff Portal</div>
           <div style={{ fontSize:'22px', fontWeight:'700', color:'white', marginBottom:'8px' }}>Welcome</div>
-          <div style={{ fontSize:'14px', color:'rgba(255,255,255,0.55)', marginBottom:'32px' }}>Select your name to sign in</div>
+          <div style={{ fontSize:'14px', color:'rgba(255,255,255,0.55)', marginBottom:'20px' }}>Select your name to sign in</div>
+        <div style={{ background:'rgba(255,255,255,0.06)', borderRadius:12, padding:'16px 18px', marginBottom:'24px', borderLeft:'3px solid #2ab5a0' }}>
+          <div style={{ fontSize:13, color:'rgba(255,255,255,0.75)', lineHeight:1.7, fontStyle:'italic', marginBottom:6 }}>{quote.text}</div>
+          <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', letterSpacing:'0.5px' }}>— {quote.author}</div>
+        </div>
           <div style={{ position:'relative', width:'100%' }}>
             <select style={{ width:'100%', padding:'12px 14px', border:'1px solid rgba(255,255,255,0.2)', borderRadius:'10px', fontSize:'15px', background:'rgba(255,255,255,0.08)', color:'white', outline:'none', appearance:'none', WebkitAppearance:'none', boxSizing:'border-box' }}
               value={selectedEmail} onChange={e => e.target.value && handleStaffSelect(e.target.value)}>
