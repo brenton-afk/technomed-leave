@@ -1,35 +1,31 @@
 export default async function handler(req, res) {
   try {
-    const r = await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/get/xero_tokens`, {
-      headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
-    })
-    const d = await r.json()
-    if (!d.result) return res.json({ error: 'No tokens stored', raw: d })
-
-    let tokens
-    try {
-      tokens = typeof d.result === 'string' ? JSON.parse(d.result) : d.result
-    } catch(e) {
-      return res.json({ error: 'Parse failed', raw_preview: String(d.result).slice(0, 200) })
-    }
-
+    const R = process.env.UPSTASH_REDIS_REST_URL
+    const T = process.env.UPSTASH_REDIS_REST_TOKEN
+    const h = { Authorization: `Bearer ${T}` }
+    const [at, tid, exp] = await Promise.all([
+      fetch(`${R}/get/xero_at`, { headers: h }).then(r => r.json()),
+      fetch(`${R}/get/xero_tid`, { headers: h }).then(r => r.json()),
+      fetch(`${R}/get/xero_exp`, { headers: h }).then(r => r.json())
+    ])
+    const access_token = at.result
+    const tenant_id = tid.result
+    if (!access_token) return res.json({ error: 'No access token', at, tid })
     const empRes = await fetch('https://api.xero.com/payroll.xro/1.0/Employees', {
-      headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' }
+      headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' }
     })
     const empData = await empRes.json()
-
     const ltRes = await fetch('https://api.xero.com/payroll.xro/1.0/LeaveTypes', {
-      headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' }
+      headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' }
     })
     const ltData = await ltRes.json()
-
     res.json({
       emp_status: empRes.status,
       lt_status: ltRes.status,
+      tenant_id,
       employees: (empData.Employees || []).map(e => e.FirstName + ' ' + e.LastName),
       leaveTypes: (ltData.LeaveTypes || []).map(lt => lt.Name),
-      empError: empData.ErrorNumber ? empData.Message : null,
-      ltError: ltData.ErrorNumber ? ltData.Message : null
+      empError: empData.ErrorNumber ? empData.Message : null
     })
   } catch(err) { res.json({ error: err.message }) }
 }
