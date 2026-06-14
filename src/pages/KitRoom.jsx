@@ -100,7 +100,7 @@ export default function KitRoom({ user }) {
   if (!selectedLocation) {
     return (
       <div style={{ minHeight:'100vh', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
-        <div style={{ background:'#042746', padding:'48px 20px 24px' }}>
+        <div style={{ background:'#042746', paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
           <img src="/logo.png" alt="TechnoMed" style={{ height:36, width:'auto', marginBottom:4 }} />
           <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:12 }}>Kit Room</div>
           <div style={{ fontSize:22, fontWeight:700, color:'white', marginBottom:4 }}>Kit Board</div>
@@ -149,7 +149,7 @@ export default function KitRoom({ user }) {
     const cats = Object.entries(selectedLocation.categories).filter(([,kits]) => kits !== null)
     return (
       <div style={{ minHeight:'100vh', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
-        <div style={{ background:selectedLocation.color, padding:'48px 20px 24px' }}>
+        <div style={{ background:selectedLocation.color, paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
           <button onClick={() => setSelectedLocation(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', padding:0, marginBottom:12 }}>← All Locations</button>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <span style={{ fontSize:36 }}>{selectedLocation.icon}</span>
@@ -195,7 +195,7 @@ export default function KitRoom({ user }) {
   const kits = selectedLocation.categories[selectedCat] || []
   return (
     <div style={{ minHeight:'100vh', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
-      <div style={{ background:selectedLocation.color, padding:'48px 20px 24px' }}>
+      <div style={{ background:selectedLocation.color, paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
         <button onClick={() => setSelectedCat(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', padding:0, marginBottom:12 }}>← {selectedLocation.name}</button>
         <div style={{ fontSize:20, fontWeight:700, color:'white', marginBottom:2 }}>{CAT_LABELS[selectedCat]}</div>
         <div style={{ fontSize:13, color:'rgba(255,255,255,0.55)' }}>{kits.length} kits</div>

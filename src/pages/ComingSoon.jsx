@@ -3,7 +3,7 @@ import React from 'react'
 export default function ComingSoon({ title, subtitle, icon, isLocked }) {
   return (
     <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', fontFamily:'-apple-system,sans-serif' }}>
-      <div style={{ background:'#042746', padding:'48px 20px 24px' }}>
+      <div style={{ background:'#042746', paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
         <img src="/logo.png" alt="TechnoMed" style={{ height:36, width:'auto', marginBottom:4 }} />
         <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:12 }}>{isLocked ? 'Access Denied' : 'Coming Soon'}</div>
         <div style={{ fontSize:22, fontWeight:700, color:'white' }}>{title}</div>
