@@ -63,11 +63,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div style={{ minHeight:'100vh', maxWidth:'430px', margin:'0 auto', display:'flex', flexDirection:'column', background:'#f0f3f7', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif' }}>
+      <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'#f0f3f7', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', width:'100%' }}>
         <div style={{ flex:1, overflowY:'auto', paddingBottom:'70px' }}>
           {renderContent()}
         </div>
-        <div style={{ position:'fixed', bottom:0, left:'50%', transform:'translateX(-50%)', width:'100%', maxWidth:'430px', background:'white', borderTop:'0.5px solid rgba(26,43,74,0.12)', display:'flex', zIndex:100, boxShadow:'0 -2px 12px rgba(26,43,74,0.08)' }}>
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, width:'100%', background:'white', borderTop:'0.5px solid rgba(26,43,74,0.12)', display:'flex', zIndex:100, boxShadow:'0 -2px 12px rgba(26,43,74,0.08)' }}>
           {TABS.map(tab => {
             const active = activeTab === tab.id
             return (

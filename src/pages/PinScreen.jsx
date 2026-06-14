@@ -106,7 +106,7 @@ export default function PinScreen({ onLogin }) {
 
   const currentPin = step === 'confirm' ? confirmPin : pin
 
-  const w = { minHeight:'100vh', maxWidth:'430px', margin:'0 auto', display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif' }
+  const w = { minHeight:'100vh',  display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif' }
   const top = { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'40px 24px 20px' }
   const keyStyle = { background:'rgba(255,255,255,0.1)', border:'none', borderRadius:'50%', width:'72px', height:'72px', fontSize:'24px', color:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }
   const btnStyle = { width:'100%', padding:'14px', background:'#2ab5a0', border:'none', borderRadius:'10px', color:'white', fontSize:'16px', fontWeight:'600', cursor:'pointer' }
