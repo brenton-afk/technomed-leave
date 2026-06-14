@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { STAFF } from '../staffConfig.js'
 
 export default function PinScreen({ onLogin }) {
@@ -10,6 +10,16 @@ export default function PinScreen({ onLogin }) {
   const [loading, setLoading] = useState(false)
 
   const staff = STAFF.find(s => s.email === selectedEmail)
+
+  useEffect(() => {
+    function handleKey(e) {
+      if (e.key >= '0' && e.key <= '9') addDigit(e.key)
+      if (e.key === 'Backspace') deleteDigit()
+      if (e.key === 'Enter') handleAction()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  })
 
   function handleStaffSelect(email) {
     setSelectedEmail(email); setPin(''); setError('')
