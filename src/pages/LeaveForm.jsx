@@ -68,7 +68,7 @@ export default function LeaveForm({ user, onSuccess }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', minHeight:'100vh', fontFamily:'-apple-system,sans-serif' }}>
-      <div style={{ background:'#042746', padding:'48px 20px 18px', position:'relative' }}>
+      <div style={{ background:'#042746', padding:'48px 20px 18px', position:'relative', marginTop:0 }}>
         <div style={{ position:'absolute', top:16, right:20, fontSize:11, color:'rgba(255,255,255,0.4)' }}>{step+1} of {STEPS.length}</div>
         <img src="/logo.png" alt="TechnoMed" style={{ height:'44px', width:'auto', marginBottom:'4px' }} />
         <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'8px' }}>Staff Portal</div>

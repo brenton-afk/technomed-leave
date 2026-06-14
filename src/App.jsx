@@ -5,6 +5,7 @@ import LeaveForm from './pages/LeaveForm.jsx'
 import TodayView from './pages/TodayView.jsx'
 import AdminPortal from './pages/admin/AdminPortal.jsx'
 import ComingSoon from './pages/ComingSoon.jsx'
+import KitRoom from './pages/KitRoom.jsx'
 import Success from './pages/Success.jsx'
 
 const TABS = [
@@ -51,7 +52,7 @@ export default function App() {
       case 'home': return <TodayView user={user} />
       case 'leave': return <LeaveForm user={user} onSuccess={handleSuccess} />
       case 'payroll': return <ComingSoon title="Payroll" subtitle="Timesheets and pay run submission coming soon" icon="💰" />
-      case 'kitroom': return <ComingSoon title="Kit Room" subtitle="Consignment and loan set tracking coming soon" icon="🔧" />
+      case 'kitroom': return <KitRoom user={user} />
       case 'projects': return <ComingSoon title="Projects" subtitle="Project management coming soon" icon="📋" />
       case 'admin':
         if (user.isAdmin) return <AdminPortal user={user} />
