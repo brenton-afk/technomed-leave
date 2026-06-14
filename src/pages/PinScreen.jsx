@@ -81,7 +81,7 @@ export default function PinScreen({ onLogin }) {
     const data = await res.json()
     setLoading(false)
     if (data.valid) {
-      onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin })
+      onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin, staff: data.staff })
     } else {
       setError('Incorrect PIN. Please try again.')
       setPin(''); setPinInput('')
@@ -104,7 +104,7 @@ export default function PinScreen({ onLogin }) {
         body: JSON.stringify({ action: 'set', email: selectedEmail, newPin: pin })
       }).then(r => r.json()).then(data => {
         setLoading(false)
-        if (data.success) onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin })
+        if (data.success) onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin, staff: data.staff })
         else setError('Failed to set PIN. Please try again.')
       })
     }
