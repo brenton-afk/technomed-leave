@@ -3,14 +3,13 @@ export default async function handler(req, res) {
     const R = process.env.UPSTASH_REDIS_REST_URL
     const T = process.env.UPSTASH_REDIS_REST_TOKEN
     const h = { Authorization: `Bearer ${T}` }
-    const [at, tid, exp] = await Promise.all([
+    const [at, tid] = await Promise.all([
       fetch(`${R}/get/xero_at`, { headers: h }).then(r => r.json()),
-      fetch(`${R}/get/xero_tid`, { headers: h }).then(r => r.json()),
-      fetch(`${R}/get/xero_exp`, { headers: h }).then(r => r.json())
+      fetch(`${R}/get/xero_tid`, { headers: h }).then(r => r.json())
     ])
-    const access_token = at.result
+    if (!at.result) return res.json({ error: 'No access token in Redis' })
+    const access_token = Buffer.from(at.result, 'base64').toString('utf8')
     const tenant_id = tid.result
-    if (!access_token) return res.json({ error: 'No access token', at, tid })
     const empRes = await fetch('https://api.xero.com/payroll.xro/1.0/Employees', {
       headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' }
     })

@@ -21,9 +21,11 @@ export default async function handler(req, res) {
     const R = process.env.UPSTASH_REDIS_REST_URL
     const T = process.env.UPSTASH_REDIS_REST_TOKEN
     const h = { Authorization: `Bearer ${T}` }
+    const atB64 = Buffer.from(tokens.access_token).toString('base64')
+    const rtB64 = Buffer.from(tokens.refresh_token).toString('base64')
     await Promise.all([
-      fetch(`${R}/set/xero_at/${encodeURIComponent(tokens.access_token)}`, { headers: h }),
-      fetch(`${R}/set/xero_rt/${encodeURIComponent(tokens.refresh_token)}`, { headers: h }),
+      fetch(`${R}/set/xero_at/${encodeURIComponent(atB64)}`, { headers: h }),
+      fetch(`${R}/set/xero_rt/${encodeURIComponent(rtB64)}`, { headers: h }),
       fetch(`${R}/set/xero_tid/${tenantId}`, { headers: h }),
       fetch(`${R}/set/xero_exp/${Date.now() + (tokens.expires_in * 1000)}`, { headers: h })
     ])
