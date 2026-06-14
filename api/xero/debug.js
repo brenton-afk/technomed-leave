@@ -22,16 +22,11 @@ export default async function handler(req, res) {
     })
     const ltText = await ltRes.text()
 
-    let empData, ltData
-    try { empData = JSON.parse(empText) } catch(e) { return res.json({ step: 'parse_emp', error: e.message, raw: empText.slice(0,200) }) }
-    try { ltData = JSON.parse(ltText) } catch(e) { return res.json({ step: 'parse_lt', error: e.message, raw: ltText.slice(0,200) }) }
-
     res.json({
       emp_status: empRes.status,
       lt_status: ltRes.status,
-      employees: (empData.Employees || []).map(e => e.FirstName + ' ' + e.LastName),
-      leaveTypes: (ltData.LeaveTypes || []).map(lt => lt.Name),
-      empError: empData.ErrorNumber ? empData.Message : null
+      emp_raw: empText.slice(0, 300),
+      lt_raw: ltText.slice(0, 300)
     })
   } catch(err) { res.json({ error: err.message }) }
 }
