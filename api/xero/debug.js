@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       emp_status: empRes.status,
       lt_status: ltRes.status,
       emp_raw: empText.slice(0, 300),
-      lt_raw: ltText.slice(0, 1000)
+      lt_raw: ltText.slice(0, 3000)
     })
   } catch(err) { res.json({ error: err.message }) }
 }
