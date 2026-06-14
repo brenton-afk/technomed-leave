@@ -20,11 +20,12 @@ export default function LeaveForm({ user, onSuccess }) {
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const staffMember = user?.staff || user
   const [form, setForm] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    division: user?.staff?.division || '',
-    role: user?.staff?.role || '',
+    division: staffMember?.division || '',
+    role: staffMember?.role || '',
     startDate: '', endDate: '', returnDate: '', leaveType: '', reason: ''
   })
 
