@@ -17,7 +17,7 @@ async function getValidToken() {
     fetch(`${R}/get/xero_exp`, { headers: h }).then(r => r.json())
   ])
   if (!atR.result) throw new Error('Xero not connected. Please visit /api/xero/connect')
-  const access_token = Buffer.from(atR.result, 'base64').toString('utf8')
+  const access_token = Buffer.from(atR.result.replace(/ /g, '+'), 'base64').toString('utf8')
   const tenant_id = tidR.result
   const expires_at = parseInt(expR.result || '0')
 
@@ -28,7 +28,7 @@ async function getValidToken() {
 
   // Refresh token
   const rtR = await fetch(`${R}/get/xero_rt`, { headers: h }).then(r => r.json())
-  const refresh_token = Buffer.from(rtR.result, 'base64').toString('utf8')
+  const refresh_token = Buffer.from(rtR.result.replace(/ /g, '+'), 'base64').toString('utf8')
   const refreshRes = await fetch('https://identity.xero.com/connect/token', {
     method: 'POST',
     headers: {
