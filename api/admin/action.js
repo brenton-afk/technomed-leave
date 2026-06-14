@@ -29,9 +29,9 @@ export default async function handler(req, res) {
 
   await updateApplicationStatus(id, 'approved')
 
-  try { await submitToXero(application) } catch (err) { console.error('Xero:', err.message) }
+  let xeroResult = null; let xeroError = null; try { xeroResult = await submitToXero(application) } catch (err) { xeroError = err.message }
   try { await addCalendarEvent(application) } catch (err) { console.error('Calendar:', err.message) }
   try { await sendApprovalEmail(application) } catch (err) { console.error('Email:', err.message) }
 
-  return res.status(200).json({ success: true, status: 'approved' })
+  return res.status(200).json({ success: true, status: 'approved', xeroResult, xeroError })
 }
