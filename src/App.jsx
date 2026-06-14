@@ -18,7 +18,7 @@ const TABS = [
 
 export default function App() {
   const [user, setUser] = useState(null)
-  const [activeTab, setActiveTab] = useState('leave')
+  const [activeTab, setActiveTab] = useState('home')
   const [submitted, setSubmitted] = useState(false)
   const [submittedForm, setSubmittedForm] = useState(null)
 
