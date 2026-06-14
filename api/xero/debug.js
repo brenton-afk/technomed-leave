@@ -8,25 +8,16 @@ export default async function handler(req, res) {
     
     let tokens
     try { tokens = typeof d.result === 'string' ? JSON.parse(d.result) : d.result } 
-    catch(e) { return res.json({ error: 'Parse failed', raw: String(d.result).slice(0,200) }) }
-
-    const empRes = await fetch('https://api.xero.com/payroll.xro/1.0/Employees', {
-      headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' }
-    })
-    const empRaw = await empRes.text()
-
-    const ltRes = await fetch('https://api.xero.com/payroll.xro/1.0/LeaveTypes', {
-      headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' }
-    })
-    const ltRaw = await ltRes.text()
+    catch(e) { return res.json({ error: 'Parse failed', raw: String(d.result).slice(0,300) }) }
 
     res.json({
+      has_access_token: !!tokens.access_token,
+      has_refresh_token: !!tokens.refresh_token,
+      has_tenant_id: !!tokens.tenant_id,
       tenant_id: tokens.tenant_id,
       token_expired: Date.now() > tokens.expires_at,
-      emp_status: empRes.status,
-      lt_status: ltRes.status,
-      emp_raw: empRaw.slice(0, 500),
-      lt_raw: ltRaw.slice(0, 500)
+      access_token_preview: tokens.access_token ? tokens.access_token.slice(0,20) + '...' : null,
+      keys_in_object: Object.keys(tokens)
     })
   } catch(err) { res.json({ error: err.message }) }
 }
