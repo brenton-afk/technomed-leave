@@ -6,7 +6,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Exchange code for tokens
     const tokenRes = await fetch('https://identity.xero.com/connect/token', {
       method: 'POST',
       headers: {
@@ -28,7 +27,6 @@ export default async function handler(req, res) {
       throw new Error(tokens.error_description || 'Token exchange failed')
     }
 
-    // Get tenant ID (Xero organisation)
     const connectionsRes = await fetch('https://api.xero.com/connections', {
       headers: { Authorization: `Bearer ${tokens.access_token}` }
     })
@@ -37,15 +35,25 @@ export default async function handler(req, res) {
 
     if (!tenantId) throw new Error('No Xero organisation found')
 
-    // In production, store tokens securely (database or Vercel KV)
-    // For now, we store in environment — see README for Vercel KV setup
-    console.log('Xero connected. Tenant ID:', tenantId)
-    console.log('Access token obtained. Refresh token available:', !!tokens.refresh_token)
+    // Save tokens and tenant ID to Redis
+    const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL
+    const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 
-    // Redirect back to app with success
+    const saveData = {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      tenant_id: tenantId,
+      expires_at: Date.now() + (tokens.expires_in * 1000)
+    }
+
+    await fetch(`${REDIS_URL}/set/xero_tokens/${encodeURIComponent(JSON.stringify(saveData))}`, {
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    })
+
+    console.log('Xero connected. Tenant ID:', tenantId)
     res.redirect('/?xero=connected')
   } catch (err) {
     console.error('Xero callback error:', err)
-    res.redirect('/?xero=error')
+    res.redirect('/?xero=error&msg=' + encodeURIComponent(err.message))
   }
 }
