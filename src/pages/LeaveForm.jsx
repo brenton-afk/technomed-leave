@@ -46,7 +46,6 @@ export default function LeaveForm() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [balances, setBalances] = useState(null)
-  const [xeroConnected, setXeroConnected] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
@@ -72,31 +71,7 @@ export default function LeaveForm() {
     }))
   }
 
-  useEffect(() => {
-    checkXeroConnection()
-  }, [])
 
-  useEffect(() => {
-    if (form.name && xeroConnected && step === 1) {
-      fetchBalances(form.name)
-    }
-  }, [step, form.name, xeroConnected])
-
-  async function checkXeroConnection() {
-    try {
-      const res = await axios.get('/api/xero/status')
-      setXeroConnected(res.data.connected)
-    } catch {
-      setXeroConnected(false)
-    }
-  }
-
-  async function fetchBalances(name) {
-    try {
-      const res = await axios.get(`/api/xero/balances?name=${encodeURIComponent(name)}`)
-      setBalances(res.data)
-    } catch {}
-  }
 
   function validate() {
     if (step === 0) {
