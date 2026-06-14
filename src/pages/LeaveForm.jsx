@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+
 import axios from 'axios'
 
 const STAFF = [
@@ -64,7 +64,7 @@ const css = {
 }
 
 export default function LeaveForm() {
-  const navigate = useNavigate()
+
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
