@@ -224,9 +224,12 @@ export default function KitRoom({ user }) {
           return (
             <div key={kit} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', border:'1px solid rgba(26,43,74,0.06)' }}>
               <div style={{ padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div>
-                  <div style={{ fontSize:14, fontWeight:600, color:'#042746' }}>{kit}</div>
-                  <span style={{ fontSize:11, background:si.bg, color:si.color, padding:'2px 8px', borderRadius:20, fontWeight:500, display:'inline-block', marginTop:4 }}>{si.label}</span>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  {getDistributor(kit) && <img src={getDistributor(kit).logo} alt={getDistributor(kit).name} style={{ height:28, width:'auto', objectFit:'contain', maxWidth:70 }} />}
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:600, color:'#042746' }}>{kit}</div>
+                    <span style={{ fontSize:11, background:si.bg, color:si.color, padding:'2px 8px', borderRadius:20, fontWeight:500, display:'inline-block', marginTop:4 }}>{si.label}</span>
+                  </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
                   <button onClick={() => setMoveModal({ kitName: kit })} style={{ padding:'6px 12px', background:'#f0f3f7', border:'none', borderRadius:8, fontSize:12, color:'#6b7a8d', cursor:'pointer' }}>Move</button>
