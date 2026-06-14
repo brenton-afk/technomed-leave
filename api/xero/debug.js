@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     })
     const empText = await empRes.text()
 
-    const ltRes = await fetch('https://api.xero.com/payroll.xro/1.0/LeaveTypes', {
+    const ltRes = await fetch('https://api.xero.com/payroll.xro/1.0/LeaveApplications', {
       headers: { Authorization: `Bearer ${access_token}`, 'Xero-tenant-id': tenant_id, Accept: 'application/json' }
     })
     const ltText = await ltRes.text()
