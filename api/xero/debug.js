@@ -4,8 +4,14 @@ export default async function handler(req, res) {
       headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
     })
     const d = await r.json()
-    if (!d.result) return res.json({ error: 'No tokens' })
-    const tokens = typeof d.result === 'string' ? JSON.parse(d.result) : d.result
+    if (!d.result) return res.json({ error: 'No tokens stored', raw: d })
+
+    let tokens
+    try {
+      tokens = typeof d.result === 'string' ? JSON.parse(d.result) : d.result
+    } catch(e) {
+      return res.json({ error: 'Parse failed', raw_preview: String(d.result).slice(0, 200) })
+    }
 
     const empRes = await fetch('https://api.xero.com/payroll.xro/1.0/Employees', {
       headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' }

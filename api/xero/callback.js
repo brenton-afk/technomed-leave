@@ -12,21 +12,31 @@ export default async function handler(req, res) {
     })
     const tokens = await tokenRes.json()
     if (!tokens.access_token) throw new Error(tokens.error_description || 'Token exchange failed')
+
     const connRes = await fetch('https://api.xero.com/connections', {
       headers: { Authorization: `Bearer ${tokens.access_token}` }
     })
     const connections = await connRes.json()
     const tenantId = connections[0]?.tenantId
     if (!tenantId) throw new Error('No org found')
-    const saveData = JSON.stringify({
+
+    const saveData = {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       tenant_id: tenantId,
       expires_at: Date.now() + (tokens.expires_in * 1000)
+    }
+
+    // Use Upstash pipeline POST to store JSON safely
+    await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/pipeline`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify([['SET', 'xero_tokens', JSON.stringify(saveData)]])
     })
-    await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/set/xero_tokens/${encodeURIComponent(saveData)}`, {
-      headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
-    })
+
     res.redirect('/?xero=connected')
   } catch (err) {
     res.redirect('/?xero=error&msg=' + encodeURIComponent(err.message))
