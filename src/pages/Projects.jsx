@@ -48,7 +48,7 @@ export default function Projects({ user }) {
   async function loadWorklist() {
     setLoadingBoard(true)
     try {
-      const res = await fetch('/api/meetings/worklist')
+      const res = await fetch('/api/meetings/agent?action=worklist')
       const data = await res.json()
       setWorklist(data.items || [])
     } catch (err) {
@@ -95,11 +95,11 @@ export default function Projects({ user }) {
     try {
       const uploaded = await upload(`meetings/${Date.now()}.webm`, blob, {
         access: 'public',
-        handleUploadUrl: '/api/meetings/blob-upload'
+        handleUploadUrl: '/api/meetings/agent?action=blob-upload'
       })
 
       setPhase('transcribing')
-      const startRes = await fetch('/api/meetings/start-transcription', {
+      const startRes = await fetch('/api/meetings/agent?action=start-transcription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audioUrl: uploaded.url })
@@ -110,7 +110,7 @@ export default function Projects({ user }) {
       const transcript = await pollTranscription(startData.transcriptId)
 
       setPhase('analyzing')
-      const analyzeRes = await fetch('/api/meetings/analyze', {
+      const analyzeRes = await fetch('/api/meetings/agent?action=analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,7 +137,7 @@ export default function Projects({ user }) {
     return new Promise((resolve, reject) => {
       const poll = async () => {
         try {
-          const res = await fetch(`/api/meetings/status?id=${transcriptId}`)
+          const res = await fetch(`/api/meetings/agent?action=status&id=${transcriptId}`)
           const data = await res.json()
           if (data.status === 'completed') return resolve(data.transcript)
           if (data.status === 'error') return reject(new Error(data.error || 'Transcription failed'))
@@ -162,7 +162,7 @@ export default function Projects({ user }) {
     setPhase('sending')
     setError('')
     try {
-      const res = await fetch('/api/meetings/finalize', {
+      const res = await fetch('/api/meetings/agent?action=finalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,7 +200,7 @@ export default function Projects({ user }) {
   async function updateStatus(id, status) {
     setWorklist(items => items.map(it => it.id === id ? { ...it, status } : it))
     try {
-      await fetch('/api/meetings/worklist', {
+      await fetch('/api/meetings/agent?action=worklist', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status })
@@ -213,7 +213,7 @@ export default function Projects({ user }) {
   async function deleteItem(id) {
     setWorklist(items => items.filter(it => it.id !== id))
     try {
-      await fetch(`/api/meetings/worklist?id=${id}`, { method: 'DELETE' })
+      await fetch(`/api/meetings/agent?action=worklist&id=${id}`, { method: 'DELETE' })
     } catch (err) {
       console.error(err)
     }
