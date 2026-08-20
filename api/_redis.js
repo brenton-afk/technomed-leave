@@ -1,11 +1,18 @@
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 
+// Single Upstash REST helper for the whole API surface. Values travel as URL
+// path segments, so every argument must be encoded — callers pass raw strings.
 export async function redis(command, ...args) {
-  const res = await fetch(`${REDIS_URL}/${command}/${args.map(a => encodeURIComponent(a)).join('/')}`, {
+  if (!REDIS_URL || !REDIS_TOKEN) {
+    throw new Error('UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not configured')
+  }
+  const path = args.map(a => encodeURIComponent(a)).join('/')
+  const res = await fetch(`${REDIS_URL}/${command}/${path}`, {
     headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
   })
   const data = await res.json()
+  if (data.error) throw new Error(`Redis ${command} failed: ${data.error}`)
   return data.result
 }
 

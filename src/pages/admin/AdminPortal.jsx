@@ -22,18 +22,19 @@ export default function AdminPortal({ user }) {
   const [declineReason, setDeclineReason] = useState('')
   const [error, setError] = useState('')
 
-  const password = process.env.ADMIN_PASSWORD || 'Technoadmin2026'
+  // The admin endpoints authorise on the session token minted at PIN login —
+  // there is no shared password in the client bundle.
+  const authHeaders = { Authorization: `Bearer ${user?.token || ''}` }
 
   useEffect(() => { fetchApplications() }, [])
 
   async function fetchApplications() {
     setLoading(true)
+    setError('')
     try {
-      const res = await fetch(`/api/admin/applications?password=Technoadmin2026`)
+      const res = await fetch('/api/admin/applications', { headers: authHeaders })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      if (data.xeroError) alert('Xero error: ' + data.xeroError)
-      if (data.xeroResult) alert('Xero success! Leave ID: ' + data.xeroResult.leaveApplicationID)
       setApplications(data)
     } catch (err) {
       setError('Failed to load applications: ' + err.message)
@@ -46,18 +47,29 @@ export default function AdminPortal({ user }) {
     try {
       const res = await fetch('/api/admin/action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action, password: 'Technoadmin2026', declineReason: reason })
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ id, action, declineReason: reason })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      if (data.xeroError) alert('Xero error: ' + data.xeroError)
-      if (data.xeroResult) alert('Xero success! Leave ID: ' + data.xeroResult.leaveApplicationID)
+
+      // Approval succeeds even if an integration fails, so surface each result
+      // rather than letting a silent failure look like a clean approval.
+      const problems = [
+        data.xeroError && `Xero: ${data.xeroError}`,
+        data.calendarError && `Calendar: ${data.calendarError}`,
+        data.emailError && `Email: ${data.emailError}`
+      ].filter(Boolean)
+
+      // fetchApplications clears the banner, so report after it refreshes.
       await fetchApplications()
+      if (problems.length) {
+        setError(`${action === 'decline' ? 'Declined' : 'Approved'}, but some steps failed — ${problems.join(' · ')}`)
+      }
       setDeclineModal(null)
       setDeclineReason('')
     } catch (err) {
-      alert('Action failed: ' + err.message)
+      setError('Action failed: ' + err.message)
     }
     setActionLoading(null)
   }

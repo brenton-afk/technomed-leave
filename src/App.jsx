@@ -19,6 +19,17 @@ const TABS = [
   { id: 'logout', label: 'Log out', icon: '🚪' }
 ]
 
+// Matches the server-side session TTL in api/_auth.js.
+const SESSION_MAX_AGE_MS = 60 * 60 * 1000
+
+function loadStoredSession() {
+  const saved = sessionStorage.getItem('tm_user')
+  const loginTime = parseInt(sessionStorage.getItem('tm_login_time') || '0', 10)
+  if (!saved || !loginTime) return null
+  if (Date.now() - loginTime > SESSION_MAX_AGE_MS) return null
+  try { return JSON.parse(saved) } catch { return null }
+}
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('home')
@@ -26,9 +37,25 @@ export default function App() {
   const [submittedForm, setSubmittedForm] = useState(null)
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('tm_user')
-    if (saved) { try { setUser(JSON.parse(saved)) } catch {} }
+    const restored = loadStoredSession()
+    if (restored) setUser(restored)
+    else clearSession()
   }, [])
+
+  // The stored login time was previously written but never checked, so sessions
+  // outlived their intended hour. Expire them on restore and while open.
+  useEffect(() => {
+    if (!user) return
+    const timer = setInterval(() => {
+      if (!loadStoredSession()) handleLogout()
+    }, 60 * 1000)
+    return () => clearInterval(timer)
+  }, [user])
+
+  function clearSession() {
+    sessionStorage.removeItem('tm_user')
+    sessionStorage.removeItem('tm_login_time')
+  }
 
   function handleLogin(userData) {
     setUser(userData)
@@ -37,10 +64,17 @@ export default function App() {
   }
 
   function handleLogout() {
+    const token = user?.token
     setUser(null)
     setActiveTab('home')
-    sessionStorage.removeItem('tm_user')
-    sessionStorage.removeItem('tm_login_time')
+    clearSession()
+    if (token) {
+      fetch('/api/auth/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout', token })
+      }).catch(() => {})
+    }
   }
 
   function handleSuccess(form) {

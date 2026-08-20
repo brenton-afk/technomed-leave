@@ -1,10 +1,14 @@
 // ─── Google Calendar Client ───────────────────────────────────────────────────
-// Uses a Google Service Account to write events to bookings@technomed.com.au
-// Calendar colour: Grape (#8E24AA) — Google Calendar colorId 9
+// Uses a Google Service Account to read and write events on the bookings
+// calendar. Service-account JWTs are signed inline with node:crypto so the
+// googleapis dependency is not needed.
 
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
 
-// Google Calendar colour ID for Grape
+export const CALENDAR_SCOPE_WRITE = 'https://www.googleapis.com/auth/calendar'
+export const CALENDAR_SCOPE_READONLY = 'https://www.googleapis.com/auth/calendar.readonly'
+
+// Google Calendar event colour ID 3 is Grape.
 const GRAPE_COLOR_ID = '3'
 
 const LEAVE_LABELS = {
@@ -13,25 +17,33 @@ const LEAVE_LABELS = {
   'TOIL': 'TOIL'
 }
 
-async function getGoogleToken() {
+export function getCalendarId() {
+  return GOOGLE_CALENDAR_ID
+}
+
+// Mints a service-account access token for the requested scope. Shared by the
+// write path here and the read path in api/calendar/today.js.
+export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE) {
   const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
   if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not configured')
 
-  const serviceAccount = JSON.parse(serviceAccountJson)
+  let serviceAccount
+  try {
+    serviceAccount = JSON.parse(serviceAccountJson)
+  } catch {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON')
+  }
 
-  // Create JWT for Google OAuth
   const now = Math.floor(Date.now() / 1000)
   const claim = {
     iss: serviceAccount.client_email,
-    scope: 'https://www.googleapis.com/auth/calendar',
+    scope,
     aud: 'https://oauth2.googleapis.com/token',
     exp: now + 3600,
     iat: now
   }
 
-  // Sign JWT with service account private key
   const { createSign } = await import('crypto')
-
   const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url')
   const payload = Buffer.from(JSON.stringify(claim)).toString('base64url')
   const signingInput = `${header}.${payload}`
@@ -41,7 +53,6 @@ async function getGoogleToken() {
   const signature = sign.sign(serviceAccount.private_key, 'base64url')
   const jwt = `${signingInput}.${signature}`
 
-  // Exchange JWT for access token
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -53,17 +64,17 @@ async function getGoogleToken() {
 
   const tokenData = await tokenRes.json()
   if (!tokenData.access_token) {
-    throw new Error(`Google auth failed: ${tokenData.error_description || 'Unknown'}`)
+    throw new Error(`Google auth failed: ${tokenData.error_description || tokenData.error || 'unknown error'}`)
   }
   return tokenData.access_token
 }
 
 export async function addCalendarEvent({ name, division, startDate, endDate, leaveType, reason }) {
-  const token = await getGoogleToken()
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
 
-  // Calendar events need end date to be day AFTER last day (Google's convention)
-  const endDateObj = new Date(endDate)
-  endDateObj.setDate(endDateObj.getDate() + 1)
+  // Google treats all-day event ends as exclusive, so shift past the last day.
+  const endDateObj = new Date(`${endDate}T00:00:00Z`)
+  endDateObj.setUTCDate(endDateObj.getUTCDate() + 1)
   const endDateStr = endDateObj.toISOString().split('T')[0]
 
   const leaveLabel = LEAVE_LABELS[leaveType] || leaveType
@@ -97,10 +108,7 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
   )
 
   const result = await res.json()
-
-  if (result.error) {
-    throw new Error(result.error.message || 'Google Calendar error')
-  }
+  if (result.error) throw new Error(result.error.message || 'Google Calendar error')
 
   return { eventId: result.id, eventLink: result.htmlLink }
 }
