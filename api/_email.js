@@ -168,16 +168,19 @@ export async function sendDeclineEmail(application, declineReason = '') {
 const PRIORITY_COLORS = { urgent: '#c0392b', normal: '#1a7a6e', low: '#6b7a8d' }
 const PRIORITY_LABELS = { urgent: 'Urgent', normal: 'Normal', low: 'Low' }
 
+// Every interpolated value here is plain text by contract: the meeting title is
+// typed by staff, and the summary / task / notes come back from the transcript
+// analysis, which is prompted for prose and never markup.
 function buildMeetingEmailHtml(staff, meeting, myItems) {
   const itemsHtml = myItems.length
     ? myItems.map(it => `
       <tr><td style="padding:11px 14px;border-bottom:1px solid rgba(26,43,74,0.06);">
-        <div style="font-size:13px;font-weight:600;color:#1a2b4a;">${it.task}</div>
+        <div style="font-size:13px;font-weight:600;color:#1a2b4a;">${escapeHtml(it.task)}</div>
         <div style="font-size:11px;margin-top:3px;">
-          <span style="color:${PRIORITY_COLORS[it.priority] || '#6b7a8d'};font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">${PRIORITY_LABELS[it.priority] || it.priority}</span>
-          ${it.due_date ? `<span style="color:#6b7a8d;"> · Due ${formatDate(it.due_date)}</span>` : ''}
+          <span style="color:${PRIORITY_COLORS[it.priority] || '#6b7a8d'};font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">${escapeHtml(PRIORITY_LABELS[it.priority] || it.priority)}</span>
+          ${it.due_date ? `<span style="color:#6b7a8d;"> · Due ${escapeHtml(formatDate(it.due_date))}</span>` : ''}
         </div>
-        ${it.notes ? `<div style="font-size:12px;color:#6b7a8d;margin-top:5px;line-height:1.5;">${it.notes}</div>` : ''}
+        ${it.notes ? `<div style="font-size:12px;color:#6b7a8d;margin-top:5px;line-height:1.5;">${escapeHtml(it.notes)}</div>` : ''}
       </td></tr>`).join('')
     : `<tr><td style="padding:20px 14px;font-size:13px;color:#6b7a8d;text-align:center;">No action items assigned to you from this meeting.</td></tr>`
 
@@ -186,14 +189,14 @@ function buildMeetingEmailHtml(staff, meeting, myItems) {
   <table width="100%" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;">
   <tr><td style="background:#1a2b4a;padding:28px 32px;">
   <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Meeting minutes</div>
-  <div style="font-size:20px;font-weight:700;color:#ffffff;">${meeting.title}</div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-top:4px;">${formatDate(meeting.date)}</div>
+  <div style="font-size:20px;font-weight:700;color:#ffffff;">${escapeHtml(meeting.title)}</div>
+  <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-top:4px;">${escapeHtml(formatDate(meeting.date))}</div>
   </td></tr>
   <tr><td style="padding:24px 32px 4px;">
-  <div style="font-size:13px;color:#1a2b4a;line-height:1.65;">${meeting.summary}</div>
+  <div style="font-size:13px;color:#1a2b4a;line-height:1.65;">${escapeHtml(meeting.summary)}</div>
   </td></tr>
   <tr><td style="padding:20px 32px 8px;">
-  <div style="font-size:11px;color:#6b7a8d;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Hi ${staff.name.split(' ')[0]}, your action items</div>
+  <div style="font-size:11px;color:#6b7a8d;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Hi ${escapeHtml(staff.name.split(' ')[0])}, your action items</div>
   </td></tr>
   <tr><td style="padding:0 32px 24px;">
   <table width="100%" style="border:1px solid rgba(26,43,74,0.1);border-radius:10px;overflow:hidden;">${itemsHtml}</table>
