@@ -18,6 +18,24 @@ export async function redis(command, ...args) {
 
 // ─── LEAVE APPLICATIONS (existing) ─────────────────────────
 
+// SET with the value in the request body instead of the URL path. Upstash puts
+// path-form values in the URL, which caps how much you can store before the
+// request line gets too long — use this for anything that can grow (a case with
+// dozens of line items, a long transcript).
+export async function redisSetBody(key, value) {
+  if (!REDIS_URL || !REDIS_TOKEN) {
+    throw new Error('UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not configured')
+  }
+  const res = await fetch(`${REDIS_URL}/set/${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+    body: value
+  })
+  const data = await res.json()
+  if (data.error) throw new Error(`Redis set failed: ${data.error}`)
+  return data.result
+}
+
 export async function saveApplication(id, application) {
   await redis('set', `leave:${id}`, JSON.stringify(application))
   await redis('lpush', 'leave:pending', id)
@@ -116,4 +134,24 @@ export async function updateWorklistItem(id, updates) {
 export async function deleteWorklistItem(id) {
   await redis('del', `worklist:${id}`)
   await redis('lrem', 'worklist:all', '0', id)
+}
+
+// ─── SURGEON USAGE ──────────────────────────────────────────
+
+export async function saveUsageRecord(record) {
+  // Body-form SET: a case with many line items outgrows a URL path.
+  await redisSetBody(`usage:${record.id}`, JSON.stringify(record))
+  await redis('lrem', 'usage:all', '0', record.id)
+  await redis('lpush', 'usage:all', record.id)
+}
+
+export async function getUsageRecord(id) {
+  const data = await redis('get', `usage:${id}`)
+  return data ? JSON.parse(data) : null
+}
+
+export async function getUsageHistory(limit = 50) {
+  const ids = await redis('lrange', 'usage:all', '0', String(limit - 1)) || []
+  const records = await Promise.all(ids.map(id => getUsageRecord(id)))
+  return records.filter(Boolean)
 }

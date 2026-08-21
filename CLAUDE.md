@@ -65,6 +65,27 @@ Service-account JWT signed inline with `node:crypto` `createSign` — no `google
 
 Calendar times are handled with a manual `+10h` AEST offset, not a timezone library, despite `date-fns` being a dependency.
 
+### Usage scanning
+
+Reps photograph a hospital "Record of Implantable/Rebatable Items Used" form; it is read by vision extraction, filed to Dropbox, and emailed to each distributor whose products appear.
+
+`api/usage/agent.js` routes `scan` → `save` → `email` → `list` off `?action=`, in **one** serverless function. That is not stylistic: Vercel's Hobby plan caps a deployment at 12 functions and the app is now exactly at 12, which is also why `api/meetings/agent.js` is shaped the same way. Splitting these into the four separate files the spec describes needs a Pro plan first.
+
+The domain rules live apart from the route so they can be tested and edited without touching the request handling:
+
+- **`api/_distributors.js`** — the contact groups, the `DISTRIBUTOR_RULES` product→distributor patterns, the exclusion list, and `CLINICAL_TEAM_CC`. Rule order matters: `BOOST` must be tested before the generic Device match, and the allograft rules before anything matching a bare "global". This is the only file to edit when contacts or systems change.
+- **`api/_usageCase.js`** — normalises an extraction into a case: Australian-order dates, Calvary/Royal Hobart → `CLV`/`RHH`, `x1`/`×4` quantities, surname extraction, and the `{Surname}_{DDMMYYYY}_{Surgeon}_{Procedure}_{Hospital}` folder name. **The model's own `distributor` field is deliberately ignored** — `detectDistributor` re-derives it, because emailing the wrong company is worse than flagging a row.
+- **`api/_usageExcel.js`** / **`api/_usagePdf.js`** / **`api/_dropbox.js`** — the 20-column sheet (Extended Price is a live formula so it fills in when a unit price is typed), photos combined into one PDF, and the `ALL SURGEON USAGE/SPINE/{Surgeon}/{Month Year}/{Case}` tree.
+
+Invariants worth preserving:
+
+- **Nothing uncertain is ever sent.** `groupByDistributor` skips anything excluded, flagged, or without a resolved distributor. Held-back rows still appear on the Dropbox sheet marked `YES` in Manual Review Flag; they just do not leave the building.
+- **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending. Emails record a per-distributor outcome and a single failure can be retried with `{ only: [key] }`.
+- **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.
+- **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
+
+The vision call uses `claude-opus-5` at `effort: 'high'`, streaming (a slow extraction would otherwise hit the HTTP timeout), overridable via `USAGE_VISION_MODEL`. `budget_tokens` and `temperature` are rejected on this model family — don't add them. `maxDuration` is set to 60s in `vercel.json`; a very long form on a slow connection can still exceed it, which needs a Pro plan (300s).
+
 ## Verifying changes
 
 There is no test runner, so the two cheap checks worth running after touching `api/`:

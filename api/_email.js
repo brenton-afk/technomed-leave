@@ -91,12 +91,22 @@ function buildEmailHtml(application, variant, declineReason) {
   </body></html>`
 }
 
-async function send({ to, subject, html, text }) {
+async function send({ to, cc, subject, html, text, attachments }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new Error('RESEND_API_KEY not configured')
 
   const recipients = to.filter(Boolean)
   if (recipients.length === 0) throw new Error('No recipients for email')
+
+  const payload = {
+    from: process.env.EMAIL_FROM || 'TechnoMed Leave Portal <onboarding@resend.dev>',
+    to: recipients,
+    subject,
+    html,
+    text
+  }
+  if (cc?.length) payload.cc = cc.filter(Boolean)
+  if (attachments?.length) payload.attachments = attachments
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -104,13 +114,7 @@ async function send({ to, subject, html, text }) {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      from: process.env.EMAIL_FROM || 'TechnoMed Leave Portal <onboarding@resend.dev>',
-      to: recipients,
-      subject,
-      html,
-      text
-    })
+    body: JSON.stringify(payload)
   })
 
   if (!res.ok) {
@@ -160,6 +164,41 @@ export async function sendDeclineEmail(application, declineReason = '') {
       `Leave declined for ${application.name}`,
       declineReason ? `\nDecline reason: ${declineReason}` : ''
     )
+  })
+}
+
+// ─── SURGEON USAGE ─────────────────────────────────────────
+
+// One email per distributor, carrying only that distributor's items. The
+// subject is the case folder name so the distributor's filing matches ours.
+// Deliberately plain: distributors reconcile from the attachment, and the body
+// must not carry patient identifiers to an external party.
+export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, xlsxFilename }) {
+  const body = 'Please find usage attached.'
+  const signoff = 'Warm regards,<br>TechnoMed'
+
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#042746;padding:24px 28px;">
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Usage</div>
+  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(subject)}</div>
+  ${distributorLabel ? `<div style="font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;">${escapeHtml(distributorLabel)}</div>` : ''}
+  </td></tr>
+  <tr><td style="padding:24px 28px;font-size:14px;color:#042746;line-height:1.6;">
+  ${escapeHtml(body)}<div style="margin-top:16px;color:#6b7a8d;font-size:13px;">${signoff}</div>
+  </td></tr>
+  <tr><td style="padding:0 28px 22px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed · technomed.com.au</td></tr>
+  </table></td></tr></table>
+  </body></html>`
+
+  return send({
+    to,
+    cc,
+    subject,
+    html,
+    text: `${body}\n\nWarm regards,\nTechnoMed`,
+    attachments: [{ filename: xlsxFilename, content: xlsx.toString('base64') }]
   })
 }
 

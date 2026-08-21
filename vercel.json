@@ -1,11 +1,21 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "functions": {
     "api/meetings/agent.js": {
       "includeFiles": "node_modules/@vercel/blob/**"
+    },
+    "api/usage/agent.js": {
+      "maxDuration": 60,
+      "memory": 1024
     }
   }
 }

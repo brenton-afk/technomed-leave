@@ -37,6 +37,22 @@ function tokenFrom(req) {
   return req.body?.token || req.query?.token || null
 }
 
+// Any signed-in staff member. Use this to guard routes that handle patient or
+// case data — they must never be reachable without a session.
+// Returns the session on success, or null after writing the error response.
+export async function requireSession(req, res) {
+  const session = await getSession(tokenFrom(req))
+  if (!session) {
+    res.status(401).json({ error: 'Not signed in, or your session has expired' })
+    return null
+  }
+  if (!STAFF.some(s => s.email === session.email)) {
+    res.status(403).json({ error: 'Not authorised' })
+    return null
+  }
+  return session
+}
+
 // Returns the session on success, or null after writing the error response.
 export async function requireAdmin(req, res) {
   const session = await getSession(tokenFrom(req))

@@ -8,12 +8,14 @@ import ComingSoon from './pages/ComingSoon.jsx'
 import KitRoom from './pages/KitRoom.jsx'
 import Success from './pages/Success.jsx'
 import Projects from './pages/Projects.jsx'
+import UsageScan from './pages/UsageScan.jsx'
 
 const TABS = [
   { id: 'home', label: 'Today', icon: '📅' },
   { id: 'leave', label: 'Leave', icon: '🏖' },
   { id: 'payroll', label: 'Payroll', icon: '💰' },
   { id: 'kitroom', label: 'Kit Room', icon: '🔧' },
+  { id: 'usage', label: 'Usage', icon: '📷' },
   { id: 'projects', label: 'Projects', icon: '📋' },
   { id: 'admin', label: 'Admin', icon: '⚙️' },
   { id: 'logout', label: 'Log out', icon: '🚪' }
@@ -97,6 +99,7 @@ export default function App() {
       case 'leave': return <LeaveForm user={user} onSuccess={handleSuccess} />
       case 'payroll': return <ComingSoon title="Payroll" subtitle="Timesheets and pay run submission coming soon" icon="💰" />
       case 'kitroom': return <KitRoom user={user} />
+      case 'usage': return <UsageScan user={user} />
       case 'projects': return <Projects user={user} />
       case 'logout': return null
       case 'admin':
