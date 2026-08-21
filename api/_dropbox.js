@@ -5,6 +5,10 @@
 
 const ROOT = '/ALL SURGEON USAGE/SPINE'
 
+export function dropboxConfigured() {
+  return Boolean(process.env.DROPBOX_ACCESS_TOKEN)
+}
+
 function token() {
   const t = process.env.DROPBOX_ACCESS_TOKEN
   if (!t) throw new Error('DROPBOX_ACCESS_TOKEN not configured')

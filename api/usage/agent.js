@@ -5,7 +5,7 @@ import { normaliseCase, recomputeCase } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
-import { caseFolderPath, saveUsageFiles } from '../_dropbox.js'
+import { caseFolderPath, saveUsageFiles, dropboxConfigured } from '../_dropbox.js'
 import { sendUsageEmail } from '../_email.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
@@ -207,19 +207,28 @@ async function handleSave(req, res, session) {
     buildUsageWorkbook(caseRecord, included)
   ])
 
-  // Dropbox first. If this throws the record is not written and no email goes
-  // out, so the rep can simply retry.
-  const { saved } = await saveUsageFiles({
-    folderPath,
-    folderName: caseRecord.folderName,
-    scanPdf,
-    usageSheet
-  })
+  // Dropbox is optional. Where it is configured it goes first, so a filing
+  // failure leaves nothing recorded and nothing emailed and the rep can simply
+  // retry. Where it is not configured the case still records and still emails —
+  // the distributor's sheet travels as the email attachment either way.
+  let saved = []
+  let dropboxSkipped = false
+  if (dropboxConfigured()) {
+    ;({ saved } = await saveUsageFiles({
+      folderPath,
+      folderName: caseRecord.folderName,
+      scanPdf,
+      usageSheet
+    }))
+  } else {
+    dropboxSkipped = true
+  }
 
   const record = {
     ...caseRecord,
     id: incoming.id || `${Date.now()}-${(caseRecord.patientSurname || 'case').toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-    dropboxPath: folderPath,
+    dropboxPath: dropboxSkipped ? '' : folderPath,
+    dropboxSkipped,
     filesSaved: saved,
     emailsSent: incoming.emailsSent || [],
     createdByEmail: session.email,
@@ -233,7 +242,8 @@ async function handleSave(req, res, session) {
 
   return res.status(200).json({
     record,
-    dropboxPath: folderPath,
+    dropboxPath: dropboxSkipped ? '' : folderPath,
+    dropboxSkipped,
     filesSaved: saved,
     readyToEmail: [...groups.keys()].map(key => ({
       key,
@@ -254,8 +264,10 @@ async function handleEmail(req, res, session) {
 
   const record = await getUsageRecord(usageId)
   if (!record) return res.status(404).json({ error: 'Usage record not found' })
-  if (!record.dropboxPath) {
-    return res.status(409).json({ error: 'Save to Dropbox before sending usage emails' })
+  // A saved case is the precondition, not a Dropbox path — Dropbox may be
+  // deliberately switched off.
+  if (!record.submittedAt && !record.createdAt) {
+    return res.status(409).json({ error: 'Save the case before sending usage emails' })
   }
 
   const groups = groupByDistributor(record.items)

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { STAFF } from '../staffConfig.js'
+import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
@@ -59,6 +60,37 @@ export default function PinScreen({ onLogin }) {
   const [checking, setChecking] = useState(false)
   const [requesting, setRequesting] = useState(false)
   const [resetRequested, setResetRequested] = useState(false)
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false)
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
+
+  // Face ID / Touch ID / device passcode. Additive only: the PIN keypad stays
+  // on screen, so a device that cannot do this is never locked out.
+  async function signInWithPasskey() {
+    setPasskeyBusy(true); setError('')
+    try {
+      const optRes = await fetch('/api/auth/pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'passkey-login-options', email: selectedEmail })
+      })
+      const optData = await optRes.json()
+      if (optData.error) throw new Error(optData.error)
+
+      const assertion = await startAuthentication({ optionsJSON: optData.options })
+
+      const res = await fetch('/api/auth/pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'passkey-login', email: selectedEmail, response: assertion })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin, staff: data.staff, token: data.token })
+    } catch (err) {
+      // A cancelled Face ID prompt is not an error worth shouting about.
+      const cancelled = /NotAllowedError|abort|cancel/i.test(err?.name + ' ' + err?.message)
+      if (!cancelled) setError(err.message || 'Face ID sign-in failed. Use your PIN instead.')
+    }
+    setPasskeyBusy(false)
+  }
 
   // Asks the admins to clear this PIN. Grants no access by itself — the staff
   // member still has to wait for the reset — so it is safe from the sign-in
@@ -98,6 +130,17 @@ export default function PinScreen({ onLogin }) {
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setFirstTime(!data.hasPin)
+
+      // Does this account have a passkey on any device? Offered alongside the
+      // keypad when the browser can actually do WebAuthn.
+      if (data.hasPin && browserSupportsWebAuthn()) {
+        fetch('/api/auth/pin', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'passkey-available', email })
+        }).then(r => r.json()).then(d => setPasskeyAvailable(Boolean(d.available))).catch(() => {})
+      } else {
+        setPasskeyAvailable(false)
+      }
       // Never signed in → the welcome screen, which explains what the portal
       // is before asking them to invent a PIN. Already enrolled → straight to
       // the keypad.
@@ -112,9 +155,23 @@ export default function PinScreen({ onLogin }) {
     setChecking(false)
   }
 
+  // Four digits submits on its own. Tapping a separate "Sign in" afterwards was
+  // pure friction — the PIN is a fixed length, so completion is unambiguous.
   function addDigit(d) {
-    if (step === 'confirm' && confirmPin.length < 4) setConfirmPin(p => p + d)
-    else if (pin.length < 4) setPin(p => p + d)
+    if (loading) return
+    if (step === 'confirm') {
+      if (confirmPin.length >= 4) return
+      const next = confirmPin + d
+      setConfirmPin(next)
+      if (next.length === 4) submitNewPin(pin, next)
+      return
+    }
+    if (pin.length >= 4) return
+    const next = pin + d
+    setPin(next)
+    if (next.length !== 4) return
+    if (step === 'pin') verifyPin(next)
+    else if (step === 'setup') { setStep('confirm'); setError('') }
   }
 
   function deleteDigit() {
@@ -169,9 +226,13 @@ export default function PinScreen({ onLogin }) {
       if (p.length === 4) verifyPin(p)
     }
     if (step === 'setup' && pin.length === 4) { setStep('confirm'); setError('') }
-    if (step === 'confirm') {
-      if (confirmPin.length !== 4) return
-      if (pin !== confirmPin) { setError('PINs do not match. Try again.'); setConfirmPin(''); return }
+    if (step === 'confirm') submitNewPin(pin, confirmPin)
+  }
+
+  function submitNewPin(chosen, confirmValue) {
+    if (confirmValue.length !== 4) return
+    if (chosen !== confirmValue) { setError('PINs do not match. Try again.'); setConfirmPin(''); return }
+    {
       setLoading(true)
       fetch('/api/auth/pin', {
         method: 'POST',
@@ -206,12 +267,15 @@ export default function PinScreen({ onLogin }) {
     if (field === 'pin') setPin(val)
     if (field === 'confirm') setConfirmPin(val)
     setError('')
+    if (val.length !== 4) return
+    if (field === 'pin' && step === 'setup') setStep('confirm')
+    if (field === 'confirm') submitNewPin(pin, val)
   }
 
   const currentPin = step === 'confirm' ? confirmPin : pin
 
-  const w = { minHeight:'100vh',  display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif' }
-  const top = { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'40px 24px 20px' }
+  const w = { minHeight:'100vh', display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif', width:'100%', maxWidth:460, margin:'0 auto' }
+  const top = { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'40px 24px 20px', width:'100%', maxWidth:360, margin:'0 auto', boxSizing:'border-box' }
   const keyStyle = { background:'rgba(255,255,255,0.1)', border:'none', borderRadius:'50%', width:'72px', height:'72px', fontSize:'24px', color:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }
   const btnStyle = { width:'100%', padding:'14px', background:'#2ab5a0', border:'none', borderRadius:'10px', color:'white', fontSize:'16px', fontWeight:'600', cursor:'pointer' }
   const desktopInputStyle = { width:'100%', padding:'16px', border:'2px solid rgba(255,255,255,0.2)', borderRadius:'12px', fontSize:'32px', background:'rgba(255,255,255,0.08)', color:'white', outline:'none', textAlign:'center', letterSpacing:'16px', boxSizing:'border-box', fontFamily:'monospace', WebkitTextSecurity: step === 'pin' ? 'disc' : 'disc' }
@@ -386,12 +450,26 @@ export default function PinScreen({ onLogin }) {
             <button style={keyStyle} onClick={() => addDigit('0')}>0</button>
             <button style={{ ...keyStyle, background:'transparent', fontSize:'22px', color:'rgba(255,255,255,0.6)' }} onClick={deleteDigit}>⌫</button>
           </div>
-          {currentPin.length === 4 && !loading && (
+          {/* Only a fallback now — completing four digits already submits. */}
+          {currentPin.length === 4 && !loading && step !== 'pin' && (
             <div style={{ padding:'0 32px 16px' }}>
-              <button style={btnStyle} onClick={handleAction}>{step === 'pin' ? 'Sign in' : step === 'setup' ? 'Continue' : 'Set PIN'}</button>
+              <button style={btnStyle} onClick={handleAction}>{step === 'setup' ? 'Continue' : 'Set PIN'}</button>
             </div>
           )}
         </>
+      )}
+
+      {step === 'pin' && passkeyAvailable && (
+        <div style={{ padding:'0 28px 12px' }}>
+          <button onClick={signInWithPasskey} disabled={passkeyBusy || loading}
+            style={{ width:'100%', padding:'14px', background:'#2ab5a0', border:'none', borderRadius:12, color:'white', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:9 }}>
+            <span style={{ fontSize:17 }}>🔐</span>
+            {passkeyBusy ? 'Waiting for Face ID…' : 'Sign in with Face ID'}
+          </button>
+          <div style={{ textAlign:'center', fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:8 }}>
+            or enter your PIN below
+          </div>
+        </div>
       )}
 
       {step === 'pin' && (

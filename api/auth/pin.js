@@ -1,11 +1,25 @@
 import { STAFF } from '../../src/staffConfig.js'
 import { redis } from '../_redis.js'
-import { createSession, destroySession, requireAdmin, SESSION_TTL_SECONDS } from '../_auth.js'
+import { createSession, destroySession, requireAdmin, requireSession, SESSION_TTL_SECONDS } from '../_auth.js'
+import {
+  beginRegistration, finishRegistration, beginAuthentication, finishAuthentication,
+  listPasskeys, hasPasskeys, removePasskey, removeAllPasskeys
+} from '../_passkeys.js'
 import { sendPinResetRequestEmail } from '../_email.js'
 
 export default async function handler(req, res) {
   const body = req.method === 'POST' ? req.body : req.query
   const { action, email, pin, newPin } = body
+
+  try {
+    return await route(req, res, body, { action, email, pin, newPin })
+  } catch (err) {
+    console.error(`auth/pin ${action} failed:`, err.message)
+    return res.status(err.status || 400).json({ error: err.message })
+  }
+}
+
+async function route(req, res, body, { action, email, pin, newPin }) {
 
   if (action === 'verify') {
     if (!email || !pin) return res.status(400).json({ error: 'Email and PIN required' })
@@ -99,6 +113,65 @@ export default async function handler(req, res) {
     await sendPinResetRequestEmail(staff)
     await redis('set', cooldownKey, String(Date.now()), 'EX', '600')
     return res.status(200).json({ sent: true })
+  }
+
+  // ─── Passkeys: Face ID / Touch ID / device passcode ───────
+  // Enrolment requires an existing session, so a passkey can only ever be
+  // added by someone who already proved they know the PIN.
+
+  if (action === 'passkey-available') {
+    if (!email) return res.status(400).json({ error: 'Email required' })
+    return res.status(200).json({ available: await hasPasskeys(email) })
+  }
+
+  if (action === 'passkey-register-options') {
+    const session = await requireSession(req, res)
+    if (!session) return
+    const staff = STAFF.find(s => s.email === session.email)
+    return res.status(200).json({ options: await beginRegistration(req, staff) })
+  }
+
+  if (action === 'passkey-register') {
+    const session = await requireSession(req, res)
+    if (!session) return
+    const staff = STAFF.find(s => s.email === session.email)
+    const saved = await finishRegistration(req, staff, body.response, body.label)
+    return res.status(200).json({ success: true, passkey: saved })
+  }
+
+  if (action === 'passkey-list') {
+    const session = await requireSession(req, res)
+    if (!session) return
+    return res.status(200).json({ passkeys: await listPasskeys(session.email) })
+  }
+
+  if (action === 'passkey-remove') {
+    const session = await requireSession(req, res)
+    if (!session) return
+    if (body.credentialId) await removePasskey(session.email, body.credentialId)
+    else await removeAllPasskeys(session.email)
+    return res.status(200).json({ success: true, passkeys: await listPasskeys(session.email) })
+  }
+
+  if (action === 'passkey-login-options') {
+    if (!email) return res.status(400).json({ error: 'Email required' })
+    if (!STAFF.some(s => s.email === email)) return res.status(404).json({ error: 'Staff member not found' })
+    return res.status(200).json({ options: await beginAuthentication(req, email) })
+  }
+
+  if (action === 'passkey-login') {
+    if (!email) return res.status(400).json({ error: 'Email required' })
+    const staff = STAFF.find(s => s.email === email)
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' })
+
+    // A passkey proves the device and the person; it does not depend on the PIN
+    // still being set, so it stands on its own as an authentication factor.
+    await finishAuthentication(req, email, body.response)
+    const { token, session } = await createSession(email)
+    return res.status(200).json({
+      valid: true, token, expiresIn: SESSION_TTL_SECONDS,
+      name: session.name, isAdmin: session.isAdmin, staff
+    })
   }
 
   if (action === 'logout') {

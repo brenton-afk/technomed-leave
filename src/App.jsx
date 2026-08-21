@@ -10,6 +10,7 @@ import Success from './pages/Success.jsx'
 import Projects from './pages/Projects.jsx'
 import UsageScan from './pages/UsageScan.jsx'
 import Payroll from './pages/Payroll.jsx'
+import FaceIdSetup from './pages/FaceIdSetup.jsx'
 
 const TABS = [
   { id: 'home', label: 'Today', icon: '📅' },
@@ -96,7 +97,7 @@ export default function App() {
 
   function renderContent() {
     switch (activeTab) {
-      case 'home': return <TodayView user={user} />
+      case 'home': return <><FaceIdSetup user={user} /><TodayView user={user} /></>
       case 'leave': return <LeaveForm user={user} onSuccess={handleSuccess} />
       case 'payroll': return <Payroll user={user} />
       case 'kitroom': return <KitRoom user={user} />
@@ -112,11 +113,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'#f0f3f7', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', width:'100%' }}>
+      <div className="tm-shell" style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'#f0f3f7', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif' }}>
         <div style={{ flex:1, overflowY:'auto', paddingBottom:'70px' }}>
           {renderContent()}
         </div>
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, width:'100%', background:'white', borderTop:'0.5px solid rgba(26,43,74,0.12)', display:'flex', zIndex:100, boxShadow:'0 -2px 12px rgba(26,43,74,0.08)' }}>
+        <div className="tm-fixed" style={{ position:'fixed', bottom:0, background:'white', borderTop:'0.5px solid rgba(26,43,74,0.12)', display:'flex', zIndex:100, boxShadow:'0 -2px 12px rgba(26,43,74,0.08)' }}>
           {TABS.map(tab => {
             const active = activeTab === tab.id
             return (

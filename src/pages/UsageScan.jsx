@@ -488,6 +488,7 @@ export default function UsageScan({ user }) {
       setResult({
         record: saved.record,
         dropboxPath: saved.dropboxPath,
+        dropboxSkipped: saved.dropboxSkipped,
         filesSaved: saved.filesSaved,
         heldBackCount: saved.heldBackCount,
         emails: emailed.results || [],
@@ -744,11 +745,22 @@ export default function UsageScan({ user }) {
           )}
 
           <div style={{ background: 'white', borderRadius: 12, padding: 15, marginBottom: 12, border: `1px solid ${BORDER}` }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Saved to Dropbox</div>
-            <div style={{ fontSize: 12, color: NAVY, wordBreak: 'break-all', marginBottom: 8 }}>{result.dropboxPath}</div>
-            {result.filesSaved.map(f => (
-              <div key={f} style={{ fontSize: 12, color: TEAL, marginTop: 3 }}>✓ {f}</div>
-            ))}
+            <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+              {result.dropboxSkipped ? 'Dropbox filing' : 'Saved to Dropbox'}
+            </div>
+            {result.dropboxSkipped ? (
+              <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55 }}>
+                Dropbox isn't connected, so no files were filed. The case is recorded and each
+                distributor still received their sheet by email.
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 12, color: NAVY, wordBreak: 'break-all', marginBottom: 8 }}>{result.dropboxPath}</div>
+                {result.filesSaved.map(f => (
+                  <div key={f} style={{ fontSize: 12, color: TEAL, marginTop: 3 }}>✓ {f}</div>
+                ))}
+              </>
+            )}
           </div>
 
           <div style={{ background: 'white', borderRadius: 12, padding: 15, marginBottom: 12, border: `1px solid ${BORDER}` }}>
