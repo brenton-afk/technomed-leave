@@ -167,6 +167,69 @@ export async function sendDeclineEmail(application, declineReason = '') {
   })
 }
 
+// ─── TIMESHEETS ────────────────────────────────────────────
+
+const TIMESHEET_APPROVERS = ['brenton@technomed.com.au', 'erin@technomed.com.au']
+
+function timesheetSummaryRows(record) {
+  const t = record.totals || {}
+  return [
+    ['Staff', record.staffName],
+    ['Pay period', `${formatDate(record.periodStart)} — ${formatDate(record.periodEnd)}`],
+    ['Total hours', `${t.totalHours ?? 0}`],
+    ['Week 1 / Week 2', `${t.weekHours?.[0] ?? 0}h / ${t.weekHours?.[1] ?? 0}h`],
+    ...(t.callouts ? [['Call-ins', `${t.callouts}`]] : [])
+  ]
+}
+
+function timesheetHtml({ heading, banner, record, extraRows = [] }) {
+  const rows = [...timesheetSummaryRows(record), ...extraRows].map(([label, value], i) => `
+  <tr${i % 2 === 0 ? ' style="background:#f8f9fc;"' : ''}><td style="padding:11px 14px;font-size:12px;color:#6b7a8d;width:150px;">${escapeHtml(label)}</td><td style="padding:11px 14px;font-size:13px;color:#1a2b4a;font-weight:500;">${escapeHtml(value)}</td></tr>`).join('')
+
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+  <table width="100%" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#042746;padding:26px 30px;">
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Timesheet</div>
+  <div style="font-size:19px;font-weight:700;color:#ffffff;">${escapeHtml(heading)}</div>
+  </td></tr>
+  ${banner ? `<tr><td style="padding:20px 30px 0;"><div style="background:${banner.bg};color:${banner.fg};padding:12px 14px;border-radius:10px;font-size:13px;font-weight:600;">${escapeHtml(banner.text)}</div></td></tr>` : ''}
+  <tr><td style="padding:20px 30px;">
+  <table width="100%" style="border:1px solid rgba(26,43,74,0.1);border-radius:10px;overflow:hidden;">${rows}</table>
+  </td></tr>
+  <tr><td style="padding:0 30px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Staff Portal · technomed.com.au</td></tr>
+  </table></td></tr></table>
+  </body></html>`
+}
+
+export async function sendTimesheetSubmittedEmail(record) {
+  return send({
+    to: TIMESHEET_APPROVERS,
+    subject: `Timesheet submitted — ${record.staffName} (${record.periodStart} to ${record.periodEnd})`,
+    html: timesheetHtml({ heading: 'Timesheet submitted for approval', record }),
+    text: `${record.staffName} submitted a timesheet for ${record.periodStart} to ${record.periodEnd}.\nTotal hours: ${record.totals?.totalHours ?? 0}\nApprove it in the Admin portal.`
+  })
+}
+
+export async function sendTimesheetDecisionEmail(record, decision, reason = '') {
+  const approved = decision === 'approved'
+  return send({
+    to: [record.email, ...TIMESHEET_APPROVERS],
+    subject: `Timesheet ${approved ? 'approved' : 'returned'} — ${record.periodStart} to ${record.periodEnd}`,
+    html: timesheetHtml({
+      heading: approved ? 'Timesheet approved' : 'Timesheet returned for changes',
+      banner: approved
+        ? { bg: '#e6f4f2', fg: '#189a85', text: '✅ Approved and sent to Xero for the pay run.' }
+        : { bg: '#fdecea', fg: '#c0392b', text: '❌ Returned — please correct and resubmit.' },
+      record,
+      extraRows: !approved && reason ? [['Reason', reason]] : []
+    }),
+    text: approved
+      ? `Your timesheet for ${record.periodStart} to ${record.periodEnd} has been approved.`
+      : `Your timesheet for ${record.periodStart} to ${record.periodEnd} was returned.\nReason: ${reason || 'no reason given'}`
+  })
+}
+
 // ─── SURGEON USAGE ─────────────────────────────────────────
 
 // One email per distributor, carrying only that distributor's items. The

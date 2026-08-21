@@ -45,7 +45,7 @@ Leave type ids used throughout are `ANNUAL_LEAVE` | `SICK` | `TOIL`. Each integr
 One mechanism, in two parts:
 
 - **Staff PIN** — `api/auth/pin.js`, one handler multiplexing on an `action` field (`check` | `verify` | `set` | `reset` | `logout`). PINs are self-service on first login only; `set` returns 409 if a PIN already exists, so changing one requires an admin `reset`. PINs are stored as plaintext in Redis.
-- **Sessions** — `api/_auth.js`. A successful `verify`/`set` mints a `crypto.randomUUID()` token stored at `session:{token}` with a 1-hour TTL. The client keeps it in `sessionStorage` and sends it as `Authorization: Bearer <token>`; `requireAdmin(req, res)` guards `api/admin/*` and `api/xero/debug.js`, writing the 401/403 itself and returning `null` so handlers just `if (!session) return`.
+- **Sessions** — `api/_auth.js`. A successful `verify`/`set` mints a `crypto.randomUUID()` token stored at `session:{token}` with a 1-hour TTL. The client keeps it in `sessionStorage` and sends it as `Authorization: Bearer <token>`; `requireAdmin(req, res)` guards `api/admin/*` and the debug action of `api/xero/info.js`, writing the 401/403 itself and returning `null` so handlers just `if (!session) return`.
 
 `isAdmin` is re-read from `staffConfig.js` on every request rather than trusted from the stored session, so revoking admin takes effect immediately. There is no shared admin password — the previous `ADMIN_PASSWORD` secret (and its `'Technoadmin2026'` fallback, which was shipped in the client bundle) is gone; do not reintroduce a secret into `src/`.
 
@@ -54,7 +54,7 @@ One mechanism, in two parts:
 `api/_xeroClient.js` handles OAuth token refresh and leave submission. Notes:
 
 - Tokens are stored as **four separate short Redis keys** rather than one JSON blob — earlier attempts at a single key failed because Upstash's REST API passes values through the URL path. They are stored **raw, not base64**: Xero tokens are already URL-safe, whereas base64 padding and `+` were being mangled by URL decoding (hence the old `.replace(/ /g, '+')` workaround). `storeXeroTokens()` is the only writer — the OAuth callback and the refresh path both go through it, so the read and write encodings cannot drift apart again.
-- Leave type IDs are resolved at submit time by name-matching against the org's `/LeaveTypes` (`LEAVE_TYPE_PATTERNS` in `_xeroClient.js`), which is what makes TOIL work. `FALLBACK_LEAVE_TYPE_IDS` holds the known annual/personal UUIDs and is used only if that lookup fails (e.g. missing `payroll.settings` scope). Inspect the live org with `GET /api/xero/debug` (admin session required), which returns employee names plus leave type names *and* IDs.
+- Leave type IDs are resolved at submit time by name-matching against the org's `/LeaveTypes` (`LEAVE_TYPE_PATTERNS` in `_xeroClient.js`), which is what makes TOIL work. `FALLBACK_LEAVE_TYPE_IDS` holds the known annual/personal UUIDs and is used only if that lookup fails (e.g. missing `payroll.settings` scope). Inspect the live org with `GET /api/xero/info?action=debug` (admin session required), which returns employee names plus leave type names *and* IDs.
 - Employee matching is fuzzy — exact full name, substring, then last-name-only fallback. A `staffConfig.js` name that doesn't resemble the Xero record fails at approval time.
 - Dates are sent in Xero's legacy `/Date(ms+0000)/` format, and the API base is the *old* `payroll.xro/1.0` (not the newer AU Payroll API), which is why endpoint paths were repeatedly wrong in the commit history.
 - OAuth flow: `/api/xero/connect` (redirect to Xero) → `/api/xero/callback` (token exchange, then `res.redirect('/?xero=...')`). Scopes in `connect.js` must match those configured on the Xero app or consent fails silently.
@@ -85,6 +85,26 @@ Invariants worth preserving:
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
 The vision call uses `claude-opus-5` at `effort: 'high'`, streaming (a slow extraction would otherwise hit the HTTP timeout), overridable via `USAGE_VISION_MODEL`. `budget_tokens` and `temperature` are rejected on this model family — don't add them. `maxDuration` is set to 60s in `vercel.json`; a very long form on a slow connection can still exceed it, which needs a Pro plan (300s).
+
+### Timesheets
+
+Fortnightly timesheets under Payroll → Timesheets, submitted to Xero AU Payroll and approved by Brenton or Erin in the Admin portal.
+
+**`FORTNIGHT_ANCHOR` in `api/_fortnight.js` is the single source of every pay period.** It is `2026-06-15`. The spec said "Monday 16 June 2026", but 16 June 2026 is a Tuesday; Monday→Sunday is the load-bearing shape (it drives the grid, the Xero `NumberOfUnits` ordering and the Sunday deadline), so the anchor is that week's Monday. Changing this constant shifts every period — do it deliberately.
+
+- **`api/_fortnight.js`** — all period maths, on UTC date-only strings so no server timezone can shift a boundary. "Today" is AEST (UTC+10), matching `api/calendar/today.js`.
+- **`api/_payItems.js`** — `CATEGORY_RULES` maps Xero earnings-rate *names* to categories, ordered most-specific-first: the two Toni rates must be tested before the generic `/ordinary/`, or she would get the wrong rate. Earnings rate **IDs always come from Xero**, never hardcoded. An unrecognised Xero rate is surfaced as `kind: 'other'` rather than hidden, so a new rate shows up instead of silently going missing.
+- **`api/_timesheetValidate.js`** — totals and validation. `src/pages/Timesheets.jsx` mirrors `computeTotals` so the running total a staff member sees is the number that gets validated; **change both together.** A `unit: 'count'` category (call-in allowance) must never add to the hours total.
+- **`api/_timesheetXero.js`** — `NumberOfUnits` has **one value per day of the period, so 14 for a fortnight.** The spec's example showed 7; a 7-value array silently drops the second week. Length is derived from the period rather than written down.
+
+Flow and invariants:
+
+- Staff submit → Xero as `DRAFT`. Admin approve → the **same** Xero timesheet (`TimesheetID` included in the POST, which makes it an update) flips to `APPROVED`. That is how the spec's "submit to Xero" and later "approval triggers the pay run" both hold.
+- **Validation runs before Xero**, so invalid hours never leave the app; and Xero is called before the record is stored, so a submitted record always means Xero accepted it.
+- Resubmission is blocked with 409 unless the timesheet was returned; returning requires a reason.
+- `api/cron/timesheet-reminder.js` runs Fri/Sat 22:00 UTC = Sat/Sun 8am AEST, verifying `CRON_SECRET`. **Tasmania observes daylight saving**, so from October to April this lands at 9am local — Hobby allows only two crons total, so there is no seasonal second pair. Staff `mobileNumber` fields in `staffConfig.js` are blank, so every reminder is currently skipped rather than sent.
+
+Call-in detection reads after-hours bookings from the calendar, but the calendar has no rep field — it cannot know whose case it was, so these are always prompts, never auto-entered.
 
 ## Verifying changes
 

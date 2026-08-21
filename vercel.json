@@ -16,6 +16,22 @@
     "api/usage/agent.js": {
       "maxDuration": 60,
       "memory": 1024
+    },
+    "api/timesheet/agent.js": {
+      "maxDuration": 30
+    },
+    "api/cron/timesheet-reminder.js": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/timesheet-reminder",
+      "schedule": "0 22 * * 5"
+    },
+    {
+      "path": "/api/cron/timesheet-reminder",
+      "schedule": "0 22 * * 6"
+    }
+  ]
 }

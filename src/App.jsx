@@ -9,6 +9,7 @@ import KitRoom from './pages/KitRoom.jsx'
 import Success from './pages/Success.jsx'
 import Projects from './pages/Projects.jsx'
 import UsageScan from './pages/UsageScan.jsx'
+import Payroll from './pages/Payroll.jsx'
 
 const TABS = [
   { id: 'home', label: 'Today', icon: '📅' },
@@ -97,7 +98,7 @@ export default function App() {
     switch (activeTab) {
       case 'home': return <TodayView user={user} />
       case 'leave': return <LeaveForm user={user} onSuccess={handleSuccess} />
-      case 'payroll': return <ComingSoon title="Payroll" subtitle="Timesheets and pay run submission coming soon" icon="💰" />
+      case 'payroll': return <Payroll user={user} />
       case 'kitroom': return <KitRoom user={user} />
       case 'usage': return <UsageScan user={user} />
       case 'projects': return <Projects user={user} />

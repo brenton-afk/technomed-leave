@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import TimesheetApprovals from './TimesheetApprovals.jsx'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -21,6 +22,7 @@ export default function AdminPortal({ user }) {
   const [declineModal, setDeclineModal] = useState(null)
   const [declineReason, setDeclineReason] = useState('')
   const [error, setError] = useState('')
+  const [domain, setDomain] = useState('leave')
 
   // The admin endpoints authorise on the session token minted at PIN login —
   // there is no shared password in the client bundle.
@@ -89,7 +91,14 @@ export default function AdminPortal({ user }) {
         <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:8 }}>Admin Portal</div>
         <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:4 }}>Leave Applications</div>
         <div style={{ fontSize:13, color:'rgba(255,255,255,0.5)', marginBottom:16 }}>Welcome, {user?.name?.split(' ')[0]}</div>
-        <div style={{ display:'flex', gap:8 }}>
+        <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+          {[['leave','Leave'],['timesheets','Timesheets']].map(([id,label]) => (
+            <button key={id} onClick={() => setDomain(id)} style={{ padding:'7px 15px', borderRadius:20, border:'none', background: domain===id ? '#189a85' : 'rgba(255,255,255,0.12)', color:'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: domain === 'leave' ? 'flex' : 'none', gap:8 }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:'7px 14px', borderRadius:20, border:'none', background: tab===t.id ? 'white' : 'rgba(255,255,255,0.12)', color: tab===t.id ? '#042746' : 'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
               {t.label} {t.count > 0 && `(${t.count})`}
@@ -99,6 +108,8 @@ export default function AdminPortal({ user }) {
       </div>
 
       <div style={{ padding:16 }}>
+        {domain === 'timesheets' && <TimesheetApprovals user={user} />}
+        {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
         {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{error}</div>}
 
@@ -147,6 +158,7 @@ export default function AdminPortal({ user }) {
         <button onClick={fetchApplications} style={{ width:'100%', padding:12, background:'transparent', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize:13, color:'#6b7a8d', cursor:'pointer', marginTop:8 }}>
           Refresh
         </button>
+        </>}
       </div>
 
       {declineModal && (

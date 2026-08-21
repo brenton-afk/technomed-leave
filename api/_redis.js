@@ -150,6 +150,47 @@ export async function getUsageRecord(id) {
   return data ? JSON.parse(data) : null
 }
 
+// ─── TIMESHEETS ─────────────────────────────────────────────
+
+const timesheetKey = (status, email, periodStart) =>
+  status === 'draft' ? `timesheet:draft:${email}` : `timesheet:${status}:${email}:${periodStart}`
+
+export async function saveTimesheetDraft(email, draft) {
+  await redisSetBody(timesheetKey('draft', email), JSON.stringify(draft))
+}
+
+export async function getTimesheetDraft(email) {
+  const data = await redis('get', timesheetKey('draft', email))
+  return data ? JSON.parse(data) : null
+}
+
+export async function clearTimesheetDraft(email) {
+  await redis('del', timesheetKey('draft', email))
+}
+
+// Submitted and approved records are keyed by period so a fortnight can be
+// looked up directly, with an index list for the admin view.
+export async function saveTimesheet(status, record) {
+  const key = timesheetKey(status, record.email, record.periodStart)
+  await redisSetBody(key, JSON.stringify(record))
+  await redis('lrem', 'timesheet:index', '0', key)
+  await redis('lpush', 'timesheet:index', key)
+}
+
+export async function getTimesheet(status, email, periodStart) {
+  const data = await redis('get', timesheetKey(status, email, periodStart))
+  return data ? JSON.parse(data) : null
+}
+
+export async function getAllTimesheets(limit = 100) {
+  const keys = await redis('lrange', 'timesheet:index', '0', String(limit - 1)) || []
+  const records = await Promise.all(keys.map(async k => {
+    const data = await redis('get', k)
+    return data ? JSON.parse(data) : null
+  }))
+  return records.filter(Boolean)
+}
+
 export async function getUsageHistory(limit = 50) {
   const ids = await redis('lrange', 'usage:all', '0', String(limit - 1)) || []
   const records = await Promise.all(ids.map(id => getUsageRecord(id)))
