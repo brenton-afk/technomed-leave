@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import TimesheetApprovals from './TimesheetApprovals.jsx'
 import StaffPins from './StaffPins.jsx'
+import SystemStatus from './SystemStatus.jsx'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -92,8 +93,8 @@ export default function AdminPortal({ user }) {
         <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:8 }}>Admin Portal</div>
         <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:4 }}>Leave Applications</div>
         <div style={{ fontSize:13, color:'rgba(255,255,255,0.5)', marginBottom:16 }}>Welcome, {user?.name?.split(' ')[0]}</div>
-        <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-          {[['leave','Leave'],['timesheets','Timesheets'],['pins','Staff PINs']].map(([id,label]) => (
+        <div style={{ display:'flex', gap:7, marginBottom:12, flexWrap:'wrap' }}>
+          {[['leave','Leave'],['timesheets','Timesheets'],['pins','Staff PINs'],['system','System']].map(([id,label]) => (
             <button key={id} onClick={() => setDomain(id)} style={{ padding:'7px 15px', borderRadius:20, border:'none', background: domain===id ? '#189a85' : 'rgba(255,255,255,0.12)', color:'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
               {label}
             </button>
@@ -111,6 +112,7 @@ export default function AdminPortal({ user }) {
       <div style={{ padding:16 }}>
         {domain === 'timesheets' && <TimesheetApprovals user={user} />}
         {domain === 'pins' && <StaffPins user={user} />}
+        {domain === 'system' && <SystemStatus user={user} />}
         {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
         {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{error}</div>}
