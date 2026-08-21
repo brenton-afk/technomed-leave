@@ -1,6 +1,6 @@
 import { STAFF } from '../../src/staffConfig.js'
 import { redis } from '../_redis.js'
-import { createSession, destroySession, SESSION_TTL_SECONDS } from '../_auth.js'
+import { createSession, destroySession, requireAdmin, SESSION_TTL_SECONDS } from '../_auth.js'
 
 export default async function handler(req, res) {
   const body = req.method === 'POST' ? req.body : req.query
@@ -50,19 +50,34 @@ export default async function handler(req, res) {
     return res.status(200).json({ hasPin: !!stored })
   }
 
+  // Who has signed in before. Lets an admin see which staff have never set a
+  // PIN, and is what backs the reset panel in the Admin portal.
+  if (action === 'roster') {
+    const admin = await requireAdmin(req, res)
+    if (!admin) return
+    const roster = await Promise.all(STAFF.map(async s => ({
+      name: s.name,
+      email: s.email,
+      isAdmin: !!s.isAdmin,
+      hasTimesheets: !!s.hasTimesheets,
+      hasPin: Boolean(await redis('get', `pin:${s.email}`))
+    })))
+    return res.status(200).json({ roster })
+  }
+
+  // Clearing a PIN sends that person back through first-time setup on their
+  // next sign-in. Authenticated by admin session rather than by posting an
+  // admin's own PIN in the request body.
   if (action === 'reset') {
-    const { adminEmail, adminPin, targetEmail } = body
-    if (!adminEmail || !adminPin || !targetEmail) {
-      return res.status(400).json({ error: 'adminEmail, adminPin and targetEmail required' })
+    const admin = await requireAdmin(req, res)
+    if (!admin) return
+    const targetEmail = body.targetEmail
+    if (!targetEmail) return res.status(400).json({ error: 'targetEmail required' })
+    if (!STAFF.some(s => s.email === targetEmail)) {
+      return res.status(404).json({ error: 'Staff member not found' })
     }
-    const storedAdmin = await redis('get', `pin:${adminEmail}`)
-    if (!storedAdmin || storedAdmin !== adminPin) {
-      return res.status(401).json({ error: 'Invalid admin credentials' })
-    }
-    const adminStaff = STAFF.find(s => s.email === adminEmail)
-    if (!adminStaff?.isAdmin) return res.status(403).json({ error: 'Not authorised' })
     await redis('del', `pin:${targetEmail}`)
-    return res.status(200).json({ success: true })
+    return res.status(200).json({ success: true, targetEmail })
   }
 
   if (action === 'logout') {
