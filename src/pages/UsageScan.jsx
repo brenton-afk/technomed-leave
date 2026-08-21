@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -92,6 +92,194 @@ function payloadBytes(pages) {
   return pages.reduce((sum, p) => sum + Math.ceil(p.data.length * 0.75), 0)
 }
 
+function newPageId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+// A drawn canvas → the same page shape produced by fileToPage.
+function canvasToPage(canvas, index) {
+  const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+  return {
+    id: newPageId(),
+    mediaType: 'image/jpeg',
+    data: dataUrl.split(',')[1],
+    preview: dataUrl,
+    name: `page-${index}.jpg`
+  }
+}
+
+// ─── In-app camera (stays open across pages) ─────────────────
+// The native file picker (`<input capture>`) returns to the app after a single
+// shot, which meant tapping "Take Photo" again for every page of the form.
+// This holds one live camera stream open so a 2–3 page form is one session.
+
+function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const [ready, setReady] = useState(false)
+  const [error, setError] = useState('')
+  const [shots, setShots] = useState([])
+  const [flash, setFlash] = useState(false)
+  const [torchOn, setTorchOn] = useState(false)
+  const [hasTorch, setHasTorch] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function start() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('This browser cannot open the camera directly.')
+        return
+      }
+      try {
+        // Ask for more than we keep: capturing at high resolution and
+        // downscaling to 1568px reads handwriting better than capturing small.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 2560 },
+            height: { ideal: 1440 }
+          },
+          audio: false
+        })
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play().catch(() => {})
+        }
+        const track = stream.getVideoTracks()[0]
+        setHasTorch(Boolean(track?.getCapabilities?.().torch))
+        setReady(true)
+      } catch (err) {
+        if (cancelled) return
+        setError(
+          err?.name === 'NotAllowedError'
+            ? 'Camera access was blocked. Allow it in your browser settings, or use the photo library instead.'
+            : `Could not open the camera (${err?.name || 'unknown'}).`
+        )
+      }
+    }
+    start()
+
+    // Releasing the tracks matters — otherwise the camera stays active after
+    // the sheet closes.
+    return () => {
+      cancelled = true
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+  }, [])
+
+  async function toggleTorch() {
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    try {
+      await track.applyConstraints({ advanced: [{ torch: !torchOn }] })
+      setTorchOn(t => !t)
+    } catch { /* torch unsupported on this device */ }
+  }
+
+  const shoot = useCallback(() => {
+    const video = videoRef.current
+    if (!video?.videoWidth) return
+
+    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(video.videoWidth, video.videoHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    const page = canvasToPage(canvas, startIndex + shots.length + 1)
+    const accepted = onCapture(page)
+    if (accepted === false) return // payload cap reached; onCapture surfaced why
+
+    setShots(s => [...s, page])
+    setFlash(true)
+    setTimeout(() => setFlash(false), 130)
+  }, [onCapture, shots.length, startIndex])
+
+  const total = startIndex + shots.length
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+        <video ref={videoRef} autoPlay muted playsInline
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: error ? 'none' : 'block' }} />
+
+        {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.75 }} />}
+
+        {!ready && !error && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>
+            Opening camera…
+          </div>
+        )}
+
+        {error && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14, textAlign: 'center' }}>
+            <div style={{ fontSize: 34 }}>📷</div>
+            <div style={{ color: 'white', fontSize: 14, lineHeight: 1.6 }}>{error}</div>
+            <button onClick={onFallback}
+              style={{ padding: '12px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              Use photo library
+            </button>
+            <button onClick={onDone}
+              style={{ padding: '10px 16px', background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
+              Close
+            </button>
+          </div>
+        )}
+
+        {/* Framing guide — the forms are portrait A4 */}
+        {ready && !error && (
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', padding: '7% 6%' }}>
+            <div style={{ width: '100%', height: '100%', border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 10 }} />
+          </div>
+        )}
+
+        {ready && !error && (
+          <div style={{ position: 'absolute', top: 'calc(12px + env(safe-area-inset-top, 0px))', left: 0, right: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 14px' }}>
+            <div style={{ background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 20 }}>
+              {total === 0 ? 'Ready' : `${total} page${total === 1 ? '' : 's'} captured`}
+            </div>
+            {hasTorch && (
+              <button onClick={toggleTorch}
+                style={{ background: torchOn ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)', color: torchOn ? '#042746' : 'white', border: 'none', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                {torchOn ? '🔆 Light on' : '🔅 Light'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {!error && (
+        <div style={{ background: '#000', padding: '12px 14px calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+          {shots.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10 }}>
+              {shots.map((s, i) => (
+                <img key={s.id} src={s.preview} alt={`Captured page ${startIndex + i + 1}`}
+                  style={{ width: 44, height: 58, objectFit: 'cover', borderRadius: 6, border: '1px solid rgba(255,255,255,0.25)', flexShrink: 0 }} />
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ flex: 1, fontSize: 11.5, color: 'rgba(255,255,255,0.55)', lineHeight: 1.45 }}>
+              Fill the frame with the page.<br />Keep shooting for each page.
+            </div>
+            <button onClick={shoot} disabled={!ready} aria-label="Capture page"
+              style={{ width: 70, height: 70, borderRadius: 35, background: ready ? 'white' : 'rgba(255,255,255,0.35)', border: '4px solid rgba(255,255,255,0.35)', cursor: ready ? 'pointer' : 'default', flexShrink: 0 }} />
+            <button onClick={onDone} disabled={total === 0}
+              style={{ flex: 1, padding: '12px 0', background: total ? TEAL : 'rgba(255,255,255,0.12)', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: total ? 'pointer' : 'default' }}>
+              {total ? `Done · ${total}` : 'Done'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Mirrors buildFolderName in api/_usageCase.js so the rep sees the folder
 // update as they correct fields. The server recomputes it authoritatively.
 function folderPreview(c) {
@@ -168,8 +356,8 @@ export default function UsageScan({ user }) {
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+  const [showCamera, setShowCamera] = useState(false)
 
-  const cameraRef = useRef(null)
   const uploadRef = useRef(null)
 
   const authHeaders = { Authorization: `Bearer ${user?.token || ''}` }
@@ -189,6 +377,23 @@ export default function UsageScan({ user }) {
     setHistoryLoading(false)
   }
 
+  // Single gate for both capture paths, so the request-size cap is enforced
+  // whether pages arrive from the camera or the photo library.
+  const addPages = useCallback(added => {
+    let accepted = true
+    setPages(prev => {
+      const next = [...prev, ...added]
+      if (payloadBytes(next) > MAX_PAYLOAD_BYTES) {
+        accepted = false
+        setError('That is as many pages as can be processed in one scan. Read these now, then start a second scan for the rest.')
+        return prev
+      }
+      setError('')
+      return next
+    })
+    return accepted
+  }, [])
+
   async function addFiles(fileList) {
     const files = Array.from(fileList || [])
     if (!files.length) return
@@ -196,12 +401,7 @@ export default function UsageScan({ user }) {
     try {
       const added = []
       for (const file of files) added.push(await fileToPage(file))
-      const next = [...pages, ...added]
-      if (payloadBytes(next) > MAX_PAYLOAD_BYTES) {
-        setError('Those pages are too large to process together. Remove a page, or photograph the form in two scans.')
-        return
-      }
-      setPages(next)
+      addPages(added)
     } catch (err) {
       setError(err.message)
     }
@@ -213,7 +413,7 @@ export default function UsageScan({ user }) {
 
   function startNew() {
     setPages([]); setCaseRecord(null); setResult(null)
-    setError(''); setNotice(''); setStep('capture')
+    setError(''); setNotice(''); setStep('capture'); setShowCamera(false)
   }
 
   async function processScan() {
@@ -371,14 +571,12 @@ export default function UsageScan({ user }) {
         <div style={{ padding: 16 }}>
           {error && <Banner tone="error">{error}</Banner>}
 
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-            onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
           <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }}
             onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-            <button onClick={() => cameraRef.current?.click()} style={{ flex: 1, padding: 14, background: TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-              📷 Take Photo
+            <button onClick={() => setShowCamera(true)} style={{ flex: 1, padding: 14, background: TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              📷 {pages.length ? 'Add more pages' : 'Scan pages'}
             </button>
             <button onClick={() => uploadRef.current?.click()} style={{ flex: 1, padding: 14, background: 'white', color: NAVY, border: `1px solid ${BORDER}`, borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
               📄 Upload
@@ -415,6 +613,15 @@ export default function UsageScan({ user }) {
             Cancel
           </button>
         </div>
+
+        {showCamera && (
+          <CameraCapture
+            startIndex={pages.length}
+            onCapture={page => addPages([page])}
+            onDone={() => setShowCamera(false)}
+            onFallback={() => { setShowCamera(false); uploadRef.current?.click() }}
+          />
+        )}
       </div>
     )
   }
