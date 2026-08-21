@@ -39,6 +39,48 @@ export default async function handler(req, res) {
       })))
     }
 
+    // Which integrations are actually configured on this deployment. Reports
+    // presence only — never a value — so a missing or wrongly-scoped Vercel
+    // environment variable can be diagnosed from the app instead of guessed at.
+    if (action === 'env') {
+      const session = await requireAdmin(req, res)
+      if (!session) return
+
+      const required = {
+        UPSTASH_REDIS_REST_URL: 'Redis (everything)',
+        UPSTASH_REDIS_REST_TOKEN: 'Redis (everything)',
+        ANTHROPIC_API_KEY: 'Usage scanning + meeting analysis',
+        RESEND_API_KEY: 'All email',
+        GOOGLE_SERVICE_ACCOUNT_JSON: 'Calendar read/write',
+        XERO_CLIENT_ID: 'Xero',
+        XERO_CLIENT_SECRET: 'Xero',
+        XERO_REDIRECT_URI: 'Xero OAuth callback',
+        DROPBOX_ACCESS_TOKEN: 'Usage filing to Dropbox',
+        TWILIO_ACCOUNT_SID: 'Timesheet SMS reminders',
+        TWILIO_AUTH_TOKEN: 'Timesheet SMS reminders',
+        TWILIO_FROM_NUMBER: 'Timesheet SMS reminders',
+        EMAIL_FROM: 'Email sender (falls back to resend.dev)',
+        CRON_SECRET: 'Cron authentication'
+      }
+
+      const configured = {}
+      const missing = []
+      for (const [key, purpose] of Object.entries(required)) {
+        const present = Boolean(process.env[key])
+        configured[key] = present
+        if (!present) missing.push({ key, purpose })
+      }
+
+      return res.status(200).json({
+        deployment: {
+          env: process.env.VERCEL_ENV || 'unknown',
+          commit: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || 'unknown'
+        },
+        configured,
+        missing
+      })
+    }
+
     if (action === 'debug') {
       // Exposes staff names and payroll configuration — admin only.
       const session = await requireAdmin(req, res)
