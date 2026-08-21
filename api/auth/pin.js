@@ -1,6 +1,7 @@
 import { STAFF } from '../../src/staffConfig.js'
 import { redis } from '../_redis.js'
 import { createSession, destroySession, requireAdmin, SESSION_TTL_SECONDS } from '../_auth.js'
+import { sendPinResetRequestEmail } from '../_email.js'
 
 export default async function handler(req, res) {
   const body = req.method === 'POST' ? req.body : req.query
@@ -78,6 +79,26 @@ export default async function handler(req, res) {
     }
     await redis('del', `pin:${targetEmail}`)
     return res.status(200).json({ success: true, targetEmail })
+  }
+
+  // A locked-out staff member asking an admin to clear their PIN. Deliberately
+  // grants nothing — it only sends an email — so it is safe to leave
+  // unauthenticated, which it has to be: the person cannot sign in.
+  if (action === 'request-reset') {
+    if (!email) return res.status(400).json({ error: 'Email required' })
+    const staff = STAFF.find(s => s.email === email)
+    if (!staff) return res.status(404).json({ error: 'Staff member not found' })
+
+    // One request per staff member per 10 minutes, so the button cannot be
+    // used to spam the approvers.
+    const cooldownKey = `pinreset:sent:${email}`
+    if (await redis('get', cooldownKey)) {
+      return res.status(200).json({ sent: true, alreadyRequested: true })
+    }
+
+    await sendPinResetRequestEmail(staff)
+    await redis('set', cooldownKey, String(Date.now()), 'EX', '600')
+    return res.status(200).json({ sent: true })
   }
 
   if (action === 'logout') {

@@ -132,7 +132,14 @@ function parseExtraction(text) {
 
 async function handleScan(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured')
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw badRequest(
+      'Scanning is not switched on yet: ANTHROPIC_API_KEY is missing from this '
+      + 'deployment. An admin needs to add it in Vercel (Settings → Environment '
+      + 'Variables → Production) and then redeploy. Admins can confirm what is '
+      + 'configured at /api/xero/info?action=env'
+    )
+  }
 
   const pages = validatePages(req.body?.pages)
   const client = new Anthropic()

@@ -167,6 +167,39 @@ export async function sendDeclineEmail(application, declineReason = '') {
   })
 }
 
+// ─── PIN RESET REQUESTS ────────────────────────────────────
+
+// Sent when someone taps "I don't know my PIN". Grants nothing — it just tells
+// the admins to clear it, so a locked-out staff member is not a dead end.
+export async function sendPinResetRequestEmail(staff) {
+  const approvers = ['brenton@technomed.com.au', 'erin@technomed.com.au']
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#042746;padding:26px 30px;">
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Staff Portal</div>
+  <div style="font-size:19px;font-weight:700;color:#ffffff;">PIN reset requested</div>
+  </td></tr>
+  <tr><td style="padding:24px 30px;font-size:14px;color:#042746;line-height:1.65;">
+  <strong>${escapeHtml(staff.name)}</strong> can't sign in and has asked for their PIN to be reset.
+  <div style="margin-top:16px;padding:14px 16px;background:#f8f9fc;border-radius:10px;font-size:13px;color:#6b7a8d;line-height:1.6;">
+  Open the portal → <strong style="color:#042746;">Admin</strong> → <strong style="color:#042746;">Staff PINs</strong> →
+  ${escapeHtml(staff.name.split(' ')[0])} → <strong style="color:#042746;">Reset PIN</strong>.<br>
+  They'll then be able to create a new one next time they sign in.
+  </div>
+  </td></tr>
+  <tr><td style="padding:0 30px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Staff Portal · technomed.com.au</td></tr>
+  </table></td></tr></table>
+  </body></html>`
+
+  return send({
+    to: approvers,
+    subject: `PIN reset requested — ${staff.name}`,
+    html,
+    text: `${staff.name} cannot sign in and has requested a PIN reset.\n\nAdmin → Staff PINs → ${staff.name} → Reset PIN.`
+  })
+}
+
 // ─── TIMESHEETS ────────────────────────────────────────────
 
 const TIMESHEET_APPROVERS = ['brenton@technomed.com.au', 'erin@technomed.com.au']

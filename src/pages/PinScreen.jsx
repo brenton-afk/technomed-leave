@@ -57,6 +57,28 @@ export default function PinScreen({ onLogin }) {
   // rather than just presenting an unexplained "create a PIN".
   const [firstTime, setFirstTime] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+  const [resetRequested, setResetRequested] = useState(false)
+
+  // Asks the admins to clear this PIN. Grants no access by itself — the staff
+  // member still has to wait for the reset — so it is safe from the sign-in
+  // screen, which is the only place a locked-out person can reach.
+  async function requestReset() {
+    setRequesting(true); setError('')
+    try {
+      const res = await fetch('/api/auth/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'request-reset', email: selectedEmail })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setResetRequested(true)
+    } catch (err) {
+      setError(`Could not send the request (${err.message}). Call Brenton or Erin instead.`)
+    }
+    setRequesting(false)
+  }
 
   // Asks the server whether this person already has a PIN, and routes to
   // either sign-in or first-time setup. Every failure path has to land
@@ -65,6 +87,7 @@ export default function PinScreen({ onLogin }) {
   // not recognising them.
   async function handleStaffSelect(email) {
     setSelectedEmail(email); setPin(''); setConfirmPin(''); setError(''); setPinInput('')
+    setResetRequested(false)
     setChecking(true)
     try {
       const res = await fetch('/api/auth/pin', {
@@ -75,7 +98,10 @@ export default function PinScreen({ onLogin }) {
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setFirstTime(!data.hasPin)
-      setStep(data.hasPin ? 'pin' : 'setup')
+      // Never signed in → the welcome screen, which explains what the portal
+      // is before asking them to invent a PIN. Already enrolled → straight to
+      // the keypad.
+      setStep(data.hasPin ? 'pin' : 'welcome')
     } catch (err) {
       // Clearing the selection matters: the <select> only fires onChange when
       // the value changes, so without this, picking the same name again to
@@ -203,6 +229,64 @@ export default function PinScreen({ onLogin }) {
     confirm: 'Enter your PIN again to confirm'
   }
 
+  // ─── Start page: first time this person has ever signed in ───
+  if (step === 'welcome') {
+    const features = [
+      { icon: '📅', title: 'Today', body: "Your bookings and who's on leave this week" },
+      { icon: '🏖', title: 'Leave', body: 'Apply for annual, personal or TOIL leave' },
+      ...(staff?.hasTimesheets
+        ? [{ icon: '💰', title: 'Timesheets', body: 'Enter your fortnightly hours for payroll' }]
+        : []),
+      { icon: '📷', title: 'Usage', body: 'Scan hospital usage forms straight from theatre' },
+      { icon: '🔧', title: 'Kit Room', body: 'What kit is where, across both hospitals' }
+    ]
+
+    return (
+      <div style={{ ...w, overflowY: 'auto' }}>
+        <div style={{ padding: '48px 24px 24px', textAlign: 'center' }}>
+          <img src="/logo.png" alt="TechnoMed" style={{ height: '46px', width: 'auto', marginBottom: '6px' }} />
+          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Staff Portal</div>
+        </div>
+
+        <div style={{ padding: '0 24px' }}>
+          <div style={{ fontSize: '11px', color: '#2ab5a0', letterSpacing: '1.2px', textTransform: 'uppercase', fontWeight: 700, marginBottom: 6 }}>
+            First time here
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'white', marginBottom: 8, lineHeight: 1.25 }}>
+            Welcome, {staff?.name?.split(' ')[0]}
+          </div>
+          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.6)', lineHeight: 1.65, marginBottom: 26 }}>
+            This is your TechnoMed staff portal. You haven't signed in before, so
+            let's set up a 4-digit PIN — that's all you'll need from now on.
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: '6px 4px', marginBottom: 22 }}>
+            {features.map((f, i) => (
+              <div key={f.title} style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: '13px 14px', borderBottom: i < features.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                <span style={{ fontSize: 19, lineHeight: 1.15, flexShrink: 0 }}>{f.icon}</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 2 }}>{f.title}</div>
+                  <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>{f.body}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() => { setStep('setup'); setPin(''); setConfirmPin(''); setError('') }}
+            style={{ ...btnStyle, padding: '16px', fontSize: '16px', fontWeight: 700, marginBottom: 12 }}>
+            Create my PIN →
+          </button>
+
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.35)', textAlign: 'center', lineHeight: 1.6, paddingBottom: 20 }}>
+            Signing in as {staff?.email}.<br />
+            Not you? <span onClick={() => { setStep('select'); setSelectedEmail(''); setFirstTime(false) }}
+              style={{ color: '#2ab5a0', cursor: 'pointer', textDecoration: 'underline' }}>Choose a different name</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (step === 'select') {
     return (
       <div style={w}>
@@ -311,15 +395,26 @@ export default function PinScreen({ onLogin }) {
       )}
 
       {step === 'pin' && (
-        <div style={{ padding:'0 32px 8px', textAlign:'center', fontSize:12, color:'rgba(255,255,255,0.4)', lineHeight:1.6 }}>
-          Forgotten your PIN? Ask Brenton or Erin to reset it in the Admin portal,
-          then sign in and choose a new one.
+        <div style={{ padding:'0 28px 10px' }}>
+          {resetRequested ? (
+            <div style={{ background:'rgba(42,181,160,0.12)', border:'1px solid rgba(42,181,160,0.35)', borderRadius:12, padding:'14px 16px', fontSize:13, color:'rgba(255,255,255,0.85)', lineHeight:1.6, textAlign:'center' }}>
+              ✓ Brenton and Erin have been asked to reset your PIN.<br />
+              <span style={{ color:'rgba(255,255,255,0.5)', fontSize:12 }}>
+                Once they do, come back here and you'll be able to create a new one.
+              </span>
+            </div>
+          ) : (
+            <button onClick={requestReset} disabled={requesting}
+              style={{ width:'100%', padding:'13px', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.18)', borderRadius:12, color:'rgba(255,255,255,0.75)', fontSize:13.5, cursor:'pointer', lineHeight:1.4 }}>
+              {requesting ? 'Sending…' : "I don't know my PIN"}
+            </button>
+          )}
         </div>
       )}
 
       <div style={{ display:'flex', justifyContent:'center', paddingBottom:'32px' }}>
         <button style={{ background:'transparent', border:'none', color:'rgba(255,255,255,0.4)', fontSize:'14px', cursor:'pointer', padding:'12px' }}
-          onClick={() => { setStep('select'); setSelectedEmail(''); setPin(''); setConfirmPin(''); setError(''); setPinInput(''); setFirstTime(false) }}>← Back</button>
+          onClick={() => { setStep('select'); setSelectedEmail(''); setPin(''); setConfirmPin(''); setError(''); setPinInput(''); setFirstTime(false); setResetRequested(false) }}>← Back</button>
       </div>
     </div>
   )
