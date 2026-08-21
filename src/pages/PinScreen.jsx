@@ -24,6 +24,23 @@ const QUOTES = [
   { text: 'Small acts of kindness can change the world.', author: 'Kobi Yamada' },
 ]
 
+// Which build is actually running. Tapping it forces a reload that bypasses
+// the cache, which is the fix when a phone is holding on to an older version.
+function BuildStamp() {
+  const built = new Date(__APP_BUILT_AT__)
+  const when = built.toLocaleString('en-AU', {
+    day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    timeZone: 'Australia/Hobart'
+  })
+  return (
+    <button
+      onClick={() => { window.location.href = `/?r=${Date.now()}` }}
+      style={{ background:'transparent', border:'none', color:'rgba(255,255,255,0.28)', fontSize:10.5, padding:'0 0 18px', width:'100%', textAlign:'center', cursor:'pointer', letterSpacing:'0.3px' }}>
+      build {__APP_COMMIT__} · {when} · tap to refresh
+    </button>
+  )
+}
+
 export default function PinScreen({ onLogin }) {
   const [step, setStep] = useState('select')
   const [selectedEmail, setSelectedEmail] = useState('')
@@ -224,6 +241,8 @@ export default function PinScreen({ onLogin }) {
             </div>
           )}
         </div>
+
+        <BuildStamp />
       </div>
     )
   }
