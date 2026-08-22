@@ -24,7 +24,21 @@ export function CaseBlock({ surgicalCase, dark }) {
           <span style={{ color: t.inkFaint, fontWeight: 400 }}> / </span>
           <span style={{ color: accentText }}>{surgicalCase.surgeon}</span>
         </div>
-        <div style={{ fontSize: 13.5, color: t.ink, lineHeight: 1.45 }}>{surgicalCase.procedure}</div>
+        {/* The operation leads when it is known: "C5/6 ACDF" says more about the
+            case than the implant system does. The system then reads as support
+            rather than as the headline. */}
+        {surgicalCase.operation && (
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: t.ink, lineHeight: 1.45 }}>
+            {surgicalCase.operation}
+          </div>
+        )}
+        <div style={{
+          fontSize: surgicalCase.operation ? 13 : 13.5,
+          color: surgicalCase.operation ? t.inkMuted : t.ink,
+          lineHeight: 1.45
+        }}>
+          {surgicalCase.procedure}
+        </div>
         {surgicalCase.kit && (
           <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>Kit: {surgicalCase.kit}</div>
         )}
@@ -108,6 +122,23 @@ export function DayBlock({ day, dark, headingLevel = 3 }) {
 
       {/* Flags sit above the hospital subheading and cases (§6.4.4) */}
       {day.flags.map((flag, i) => <FlagLine key={i} flag={flag} dark={dark} />)}
+
+      {/* A booking the parser could not read. Shown before the cases, because
+          the risk is a real case being absent from the counts above. */}
+      {(day.needsAttention || []).map(item => (
+        <div key={item.id} style={{
+          background: dark ? 'rgba(220,38,38,0.12)' : '#fef3f2',
+          border: `1px solid ${dark ? 'rgba(220,38,38,0.4)' : '#fda29b'}`,
+          borderRadius: 6, padding: '8px 10px', marginBottom: 8
+        }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: t.alert, lineHeight: 1.4 }}>
+            <span aria-hidden="true">■ </span>NOT COUNTED: {item.text}
+          </div>
+          <div style={{ fontSize: 11.5, color: t.inkMuted, lineHeight: 1.45, marginTop: 2 }}>
+            {item.reason}
+          </div>
+        </div>
+      ))}
 
       {day.casesByHospital.map(group => (
         <div key={group.hospital}>

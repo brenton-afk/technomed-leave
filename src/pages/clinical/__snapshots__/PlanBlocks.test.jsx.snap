@@ -221,7 +221,12 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13.5px; font-weight: 600; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            L4/5 TLIF
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             DAKOTA
           </div>
@@ -373,7 +378,12 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13.5px; font-weight: 600; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            C5/6 ACDF
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             MARINER
           </div>
@@ -629,7 +639,12 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13.5px; font-weight: 600; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            L4/5 TLIF
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             DAKOTA
           </div>

@@ -89,6 +89,39 @@ export function isSurgicalCase(title) {
   return parseCaseTitle(title) !== null
 }
 
+// The clinical procedure, from the event notes — "C5/6 ACDF" and the like.
+// This is the most clinically meaningful thing about a case and was previously
+// discarded: only the kit and the hospital were read out of the description.
+//
+// Accepts an explicit label, and otherwise takes the first line that is not the
+// Kit line, which is where the team already writes it.
+const OPERATION_LABEL = /\b(?:procedure|operation|op|surgery)\s*[:\-]\s*([^\n;|]+)/i
+// A vertebral level or a known approach is a strong signal on its own, e.g.
+// "C5/6", "L4-L5", "ACDF", "PLIF", "TLIF", "ALIF", "XLIF".
+const CLINICAL_HINT = /\b([CTLS]\d{1,2}\s*[/\-–]\s*[CTLS]?\d{1,2}|ACDF|[APTX]LIF|laminectomy|discectomy|fusion|decompression|arthroplasty)\b/i
+
+export function extractOperation(description) {
+  const text = stripIdentifiers(description)
+  if (!text) return undefined
+
+  const labelled = OPERATION_LABEL.exec(text)
+  if (labelled) {
+    const value = labelled[1].trim().replace(/[.,;]$/, '')
+    if (value) return value
+  }
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim().replace(/[.,;]$/, '')
+    if (!line) continue
+    if (/^kit\s*[:\-]/i.test(line)) continue      // that's the kit line
+    if (/^(rep|surgeon|hospital|theatre)\s*[:\-]/i.test(line)) continue
+    // A first line is only taken as the operation if it reads clinical, so a
+    // stray note ("call Erin first") is not mistaken for a procedure.
+    if (CLINICAL_HINT.test(line)) return line
+  }
+  return undefined
+}
+
 // An explicit "Kit: ..." line in the event description. The title's middle part
 // is the procedure; the kit is often a different set, e.g. procedure
 // "STRYKER CCI" with "Kit: Stryker PSI".

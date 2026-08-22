@@ -69,10 +69,17 @@ function caseParagraphs(c) {
       // The coloured left bar becomes a left border on the block.
       border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
     }),
-    para(run(c.procedure, { color: hex(TOKENS.ink), size: 21 }), {
+    para(run(c.operation || c.procedure, {
+      color: hex(TOKENS.ink), size: 21, bold: Boolean(c.operation)
+    }), {
       border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
     })
   ]
+  if (c.operation) {
+    out.push(para(run(c.procedure, { color: hex(TOKENS.inkMuted), size: 20 }), {
+      border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
+    }))
+  }
   if (c.kit) {
     out.push(para(run(`Kit: ${c.kit}`, { color: hex(TOKENS.inkMuted), size: 20 }), {
       border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
@@ -121,6 +128,12 @@ function dayChildren(day) {
       bold: true, color: hex(TOKENS.inkFaint), size: 18, allCaps: true
     }), { spacing: { before: 160, after: 40 } }))
     for (const c of group.cases) out.push(...caseParagraphs(c))
+  }
+
+  for (const item of day.needsAttention || []) {
+    out.push(para(run(`■ NOT COUNTED: ${item.text} — ${item.reason}`, {
+      bold: true, color: hex(TOKENS.alert), size: 19
+    }), { spacing: { before: 60 } }))
   }
 
   for (const item of day.nonSurgeonItems) {

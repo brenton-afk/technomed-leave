@@ -13,7 +13,8 @@
  * @property {string} id
  * @property {string} patient              Surname only — never a full name
  * @property {SurgeonKey} surgeon
- * @property {string} procedure
+ * @property {string} procedure            The implant system, from the title
+ * @property {string} [operation]         The clinical procedure, from the notes
  * @property {string} [kit]
  * @property {Hospital} hospital
  * @property {string} start                ISO instant
@@ -33,6 +34,7 @@
  * @property {Array<{ hospital: Hospital, cases: SurgicalCase[] }>} casesByHospital
  * @property {OtherItem[]} nonSurgeonItems
  * @property {OtherItem[]} otherRollup
+ * @property {Array<{id:string,text:string,reason:string}>} needsAttention  Bookings that could not be read as a case
  *
  * @typedef {{ label: string, text: string }} KeyFlag
  *

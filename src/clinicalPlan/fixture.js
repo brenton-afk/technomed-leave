@@ -46,6 +46,7 @@ export const FIXTURE_WEEK = {
               patient: 'Jackson',
               surgeon: 'Fowler',
               procedure: 'MARINER',
+              operation: 'C5/6 ACDF',
               hospital: 'RHH',
               start: T('24', '10:00'),
               end: T('24', '11:00'),
@@ -70,6 +71,7 @@ export const FIXTURE_WEEK = {
         }
       ],
       nonSurgeonItems: [],
+      needsAttention: [],
       otherRollup: [
         { text: 'Toni – TM Office (all day)', allDay: true },
         { text: 'List Order 4:00pm–4:30pm', start: T('24', '16:00'), end: T('24', '16:30'), allDay: false }
@@ -133,6 +135,7 @@ export const FIXTURE_WEEK = {
               patient: 'Horne',
               surgeon: 'Ibbett',
               procedure: 'DAKOTA',
+              operation: 'L4/5 TLIF',
               kit: 'Dakota (consignment)',
               hospital: 'CALVARY LENAH VALLEY',
               start: T('25', '09:00'),
@@ -144,6 +147,7 @@ export const FIXTURE_WEEK = {
         }
       ],
       nonSurgeonItems: [],
+      needsAttention: [],
       otherRollup: [
         { text: 'Erin – office (all day)', allDay: true },
         { text: 'MSL team chat 6:00pm–6:30pm', start: T('25', '18:00'), end: T('25', '18:30'), allDay: false },
@@ -160,6 +164,7 @@ export const FIXTURE_WEEK = {
       ],
       casesByHospital: [],
       nonSurgeonItems: [],
+      needsAttention: [],
       otherRollup: [
         { text: 'Toni – WFH (all day)', allDay: true },
         { text: 'Erin – office (all day)', allDay: true },
@@ -181,6 +186,7 @@ export const FIXTURE_WEEK = {
         { text: 'S2AI transfer from RHH, Pt Fox · 11:00am–11:30am (case itself 31/8 @ Calvary — outside this window)', start: T('27', '11:00'), end: T('27', '11:30'), allDay: false },
         { text: 'Spine Logistics Meeting (Erin, Brent, Toni, Ben, Mat) · 1:00pm–2:00pm', start: T('27', '13:00'), end: T('27', '14:00'), allDay: false }
       ],
+      needsAttention: [],
       otherRollup: [
         { text: 'Toni – TM office (all day)', allDay: true },
         { text: 'Ben – late start / early finish, last day', allDay: true },
@@ -227,6 +233,7 @@ export const FIXTURE_WEEK = {
         }
       ],
       nonSurgeonItems: [],
+      needsAttention: [],
       otherRollup: [
         // Verbatim: this says the visit begins today, while the key flag below
         // says Saturday. Preserved, not reconciled.
@@ -244,6 +251,7 @@ export const FIXTURE_WEEK = {
       ],
       casesByHospital: [],
       nonSurgeonItems: [],
+      needsAttention: [],
       otherRollup: [
         { text: 'Andrea Weller (Signus) in Hobart (continuing)', allDay: true }
       ]
@@ -258,6 +266,7 @@ export const FIXTURE_WEEK = {
       ],
       casesByHospital: [],
       nonSurgeonItems: [],
+      needsAttention: [],
       otherRollup: [
         { text: 'List Order 4:00pm–4:30pm (flagged — unusual for a Sunday, worth confirming)', start: T('30', '16:00'), end: T('30', '16:30'), allDay: false }
       ]

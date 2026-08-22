@@ -25,12 +25,19 @@ export default async function handler(req, res) {
     const aestOffset = 10 * 60 * 60 * 1000
     const aestNow = new Date(Date.now() + aestOffset)
 
+    // The window used to be -7/+28 days, which meant a booking more than four
+    // weeks out was invisible in the app while sitting on the calendar — and
+    // gave no hint that anything had been cut off. Overridable per request so a
+    // caller can ask for exactly what it needs.
+    const daysBack = Math.min(Math.max(parseInt(req.query.back || '14', 10) || 14, 0), 90)
+    const daysForward = Math.min(Math.max(parseInt(req.query.forward || '120', 10) || 120, 1), 400)
+
     const rangeStart = new Date(aestNow)
-    rangeStart.setDate(rangeStart.getDate() - 7)
+    rangeStart.setDate(rangeStart.getDate() - daysBack)
     rangeStart.setHours(0, 0, 0, 0)
 
     const rangeEnd = new Date(aestNow)
-    rangeEnd.setDate(rangeEnd.getDate() + 28)
+    rangeEnd.setDate(rangeEnd.getDate() + daysForward)
     rangeEnd.setHours(23, 59, 59, 999)
 
     const timeMin = new Date(rangeStart.getTime() - aestOffset).toISOString()
@@ -38,7 +45,7 @@ export default async function handler(req, res) {
 
     const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
       + `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`
-      + '&singleEvents=true&orderBy=startTime&maxResults=500'
+      + '&singleEvents=true&orderBy=startTime&maxResults=2500'
 
     const eventsRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const data = await eventsRes.json()
@@ -54,7 +61,13 @@ export default async function handler(req, res) {
       colorId: e.colorId || null
     }))
 
-    res.status(200).json({ events, today: aestNow.toISOString().split('T')[0] })
+    res.status(200).json({
+      events,
+      today: aestNow.toISOString().split('T')[0],
+      window: { from: timeMin, to: timeMax, daysBack, daysForward },
+      // If Google paginated, say so rather than quietly returning a partial week.
+      truncated: Boolean(data.nextPageToken)
+    })
   } catch (err) {
     console.error('Calendar error:', err)
     res.status(500).json({ error: err.message })
@@ -77,8 +90,11 @@ async function handleWeek(req, res) {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
     // Hobart is +10/+11; the window is widened by a day either side and then
     // filtered client-side, so a DST shift cannot clip an edge event.
-    const timeMin = `${start}T00:00:00+10:00`
-    const timeMax = `${end}T23:59:59+11:00`
+    // Hobart is +10 (AEST) or +11 (AEDT). Widening by a day either side and
+    // letting the client filter is safe; mixing the two offsets was not — a
+    // +11:00 timeMax on an AEST week excluded the last hour of Sunday.
+    const timeMin = `${start}T00:00:00+11:00`
+    const timeMax = `${end}T23:59:59+10:00`
 
     const calendars = [
       { id: getCalendarId(), source: 'bookings' },
@@ -88,7 +104,7 @@ async function handleWeek(req, res) {
     const results = await Promise.all(calendars.map(async cal => {
       const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`
         + `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`
-        + `&singleEvents=true&orderBy=startTime&maxResults=500`
+        + `&singleEvents=true&orderBy=startTime&maxResults=2500`
         + `&timeZone=${encodeURIComponent(QUERY_TZ)}`
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       const data = await r.json()
@@ -96,6 +112,7 @@ async function handleWeek(req, res) {
       if (data.error) return { source: cal.source, events: [], error: data.error.message }
       return {
         source: cal.source,
+        truncated: Boolean(data.nextPageToken),
         events: (data.items || []).map(e => ({
           id: e.id, summary: e.summary || '', description: e.description || '',
           location: e.location || '', colorId: e.colorId || null,
@@ -109,9 +126,10 @@ async function handleWeek(req, res) {
 
     return res.status(200).json({
       events,
-      window: { start, end },
+      window: { start, end, timeMin, timeMax },
       syncedAt: new Date().toISOString(),
-      sourceErrors
+      sourceErrors,
+      truncated: results.some(r => r.truncated)
     })
   } catch (err) {
     console.error('calendar/week failed:', err.message)

@@ -305,3 +305,97 @@ describe('accessibility of the accent palette (§10)', () => {
     expect(contrastRatio(TOKENS.alert, '#FFFFFF')).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+describe('nothing on the calendar may disappear (§ the missing-case bug)', () => {
+  it('surfaces a booking whose surgeon is not on the list', () => {
+    // The failure that hid a real case: the title parses only for a known
+    // surgeon, so a locum or a spelling variant demoted it to italic "Other"
+    // text and it stopped being counted.
+    const plan = build([ev('c1', 'Nguyen DIPLOMAT - Kowalski', '24', '10:00', '11:00', { location: 'RHH' })])
+    const mon = plan.days[0]
+
+    expect(mon.casesByHospital).toHaveLength(0)
+    expect(mon.needsAttention).toHaveLength(1)
+    expect(mon.needsAttention[0].text).toContain('Nguyen DIPLOMAT - Kowalski')
+    expect(mon.needsAttention[0].reason).toMatch(/surgeon was not recognised/)
+    // And it is impossible to miss at week level too.
+    expect(plan.keyFlags.find(f => f.label === 'Bookings needing attention').text)
+      .toContain('Nguyen DIPLOMAT - Kowalski')
+  })
+
+  it('surfaces a booking wearing a surgeon colour that does not parse', () => {
+    const plan = build([ev('c1', 'Theatre 3 list', '24', '08:00', '12:00', { colorId: COLOR.Grape })])
+    expect(plan.days[0].needsAttention).toHaveLength(1)
+    expect(plan.days[0].needsAttention[0].reason).toMatch(/Coloured as a surgeon/)
+  })
+
+  it('keeps an untitled booking visible instead of dropping it', () => {
+    // `if (!title) continue` used to remove the event with no trace at all.
+    const plan = build([ev('c1', '', '24', '10:00', '11:00')])
+    const shown = [
+      ...plan.days[0].otherRollup.map(o => o.text),
+      ...plan.days[0].needsAttention.map(n => n.text)
+    ].join(' ')
+    expect(shown).toContain('untitled booking')
+  })
+
+  it('does not cry wolf over routine entries', () => {
+    const plan = build([
+      ev('a', 'List Order', '24', '16:00', '16:30'),
+      allDayEv('b', 'Toni – WFH', '24'),
+      ev('c', 'Spine Logistics Meeting (Erin, Brent)', '24', '13:00', '14:00'),
+      ev('d', 'Jackson MARINER - Fowler', '24', '10:00', '11:00', { colorId: COLOR.Grape })
+    ])
+    expect(plan.days[0].needsAttention).toHaveLength(0)
+    expect(plan.keyFlags.some(f => f.label === 'Bookings needing attention')).toBe(false)
+  })
+
+  it('every timed booking ends up somewhere a reader will see it', () => {
+    const titles = [
+      'Jackson MARINER - Fowler',      // a case
+      'Nguyen DIPLOMAT - Kowalski',    // unknown surgeon
+      'Brent on call',                 // a flag
+      'Spine Logistics Meeting',       // a grey-bar block
+      'List Order',                    // the Other line
+      ''                               // untitled
+    ]
+    const plan = build(titles.map((t, i) => ev(`e${i}`, t, '24', `0${i + 1}:00`, `0${i + 2}:00`)))
+    const mon = plan.days[0]
+    const accountedFor =
+      mon.casesByHospital.flatMap(g => g.cases).length +
+      mon.flags.length + mon.nonSurgeonItems.length +
+      mon.otherRollup.length + mon.needsAttention.length
+    expect(accountedFor).toBe(titles.length)
+  })
+})
+
+describe('operation description from the notes', () => {
+  it('reads the clinical procedure and keeps the system alongside it', () => {
+    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00',
+      { colorId: COLOR.Grape, description: 'C5/6 ACDF\nKit: Mariner set' })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.operation).toBe('C5/6 ACDF')
+    expect(c.procedure).toBe('MARINER')   // the system is not overwritten
+    expect(c.kit).toBe('Mariner set')
+  })
+
+  it('accepts an explicit label anywhere in the notes', () => {
+    const plan = build([ev('c1', 'Gill STRYKER - Fowler', '24', '10:00', '11:00',
+      { colorId: COLOR.Grape, description: 'Kit: PSI\nProcedure: L4-L5 PLIF' })])
+    expect(plan.days[0].casesByHospital[0].cases[0].operation).toBe('L4-L5 PLIF')
+  })
+
+  it('leaves it unset rather than guessing from an unrelated note', () => {
+    const plan = build([ev('c1', 'Gill STRYKER - Fowler', '24', '10:00', '11:00',
+      { colorId: COLOR.Grape, description: 'Call Erin before the list starts' })])
+    expect(plan.days[0].casesByHospital[0].cases[0].operation).toBeUndefined()
+  })
+
+  it('never lets an identifier through the notes', () => {
+    const plan = build([ev('c1', 'Gill STRYKER - Fowler', '24', '10:00', '11:00',
+      { colorId: COLOR.Grape, description: 'UR 4457821 DOB 14/03/1958 C5/6 ACDF' })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.operation).toContain('C5/6 ACDF')
+    expect(JSON.stringify(c)).not.toMatch(/4457821|1958/)
+  })
+})

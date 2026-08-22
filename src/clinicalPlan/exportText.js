@@ -36,12 +36,16 @@ export function planToText(plan, { includeWeekend = true } = {}) {
       lines.push(`  ${group.hospital}`)
       for (const c of group.cases) {
         const time = formatTimeRange(c.start, c.end)
-        lines.push(`    ${c.patient} / ${c.surgeon} — ${c.procedure}${time ? ` — ${time}` : ''}`)
+        lines.push(`    ${c.patient} / ${c.surgeon} — ${c.operation || c.procedure}${time ? ` — ${time}` : ''}`)
+        if (c.operation) lines.push(`      System: ${c.procedure}`)
         if (c.kit) lines.push(`      Kit: ${c.kit}`)
         for (const note of c.notes) lines.push(`      ${note.text}`)
       }
     }
 
+    for (const item of day.needsAttention || []) {
+      lines.push(`  ■ NOT COUNTED: ${item.text} — ${item.reason}`)
+    }
     for (const item of day.nonSurgeonItems) lines.push(`  ${item.text}`)
     if (day.otherRollup.length) {
       lines.push(`  Other: ${day.otherRollup.map(o => o.text).join(' · ')}`)

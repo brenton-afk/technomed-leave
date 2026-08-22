@@ -5,10 +5,10 @@
 
 import './types.js'
 import {
-  normaliseEvent, parseCaseTitle, extractKit, detectHospital,
+  normaliseEvent, parseCaseTitle, extractKit, extractOperation, detectHospital,
   stripIdentifiers, HOSPITALS
 } from './parse.js'
-import { colourNameFor, checkEventColour, summariseColourFindings } from './colours.js'
+import { colourNameFor, checkEventColour, summariseColourFindings, surgeonForColourName } from './colours.js'
 import {
   formatWeekRange, formatDayHeading, weekdayName, formatTimeRange,
   zonedCivil, parseDateStr, TZ
@@ -42,6 +42,20 @@ const NON_SURGEON_BLOCK = /meeting|catch up|catch-up|transfer|logistics|handover
 
 // Routine markers that belong on the "Other:" roll-up line.
 const ROLLUP_HINT = /wfh|office|tm office|list order|day off|annual leave|personal leave|leave\b/i
+
+// Bookings that were probably meant to be cases but did not parse. A title has
+// to match `<Patient> <KIT> - <Surgeon>` with a *known* surgeon, so a locum, a
+// spelling variant or initials quietly demoted the booking to a line of italic
+// text. Anything carrying a separator or a surgeon's colour is called out
+// instead, because a case that silently disappears is the worst failure this
+// screen can have.
+function looksLikeMisfiledCase(event, title) {
+  if (event.allDay) return false
+  if (ROLLUP_HINT.test(title)) return false
+  const hasSeparator = /\s+[-–—]\s+/.test(title)
+  const wearsSurgeonColour = Boolean(surgeonForColourName(colourNameFor(event.colorId)))
+  return hasSeparator || wearsSurgeonColour
+}
 
 function classifyFlag(title, rules) {
   for (const rule of rules) {
@@ -211,6 +225,17 @@ function buildKeyFlags(allCases, days, findings, surgeons) {
   const alerts = byKind('clinicalAlert')
   if (alerts.length) flags.push({ label: 'Clinical alerts', text: listPhrase(alerts) + '.' })
 
+  const unrecognised = days.flatMap(d => d.needsAttention || [])
+  if (unrecognised.length) {
+    flags.push({
+      label: 'Bookings needing attention',
+      text: `${unrecognised.length} booking${unrecognised.length === 1 ? '' : 's'} on the calendar `
+        + `could not be read as a case and ${unrecognised.length === 1 ? 'is' : 'are'} not counted above — `
+        + unrecognised.map(u => `"${u.text}"`).join('; ')
+        + '. Check the title reads "<Patient> <KIT> - <Surgeon>" with a known surgeon.'
+    })
+  }
+
   // Always present, so a reader can see the check ran even in a clean week.
   flags.push({ label: 'Colour-coding check', text: summariseColourFindings(findings, allCases) })
   return flags
@@ -241,6 +266,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         patient: parsed.patient,
         surgeon: parsed.surgeon,
         procedure: parsed.procedure,
+        // The clinical procedure from the notes, where the team writes it.
+        operation: extractOperation(event.description),
         kit: extractKit(event.description),
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,
@@ -277,11 +304,13 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
     const flags = []
     const nonSurgeonItems = []
     const otherRollup = []
+    const needsAttention = []
 
     for (const event of dayEvents) {
       if (caseIds.has(event.id)) continue
-      const title = stripIdentifiers(event.title)
-      if (!title) continue
+      // An untitled event used to be skipped outright, which meant it vanished
+      // from the app while still sitting on the calendar.
+      const title = stripIdentifiers(event.title) || '(untitled booking)'
 
       const nonCaseFinding = checkEventColour({
         id: event.id, title, date: dayDate, colorId: event.colorId,
@@ -304,6 +333,18 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
 
       const late = classifyFlag(title, LATE_FLAG_RULES)
       if (late) { asFlag(late); continue }
+      if (looksLikeMisfiledCase(event, title)) {
+        needsAttention.push({
+          id: event.id,
+          text: timeRange ? `${title} · ${timeRange}` : title,
+          reason: /\s+[-–—]\s+/.test(title)
+            ? 'Reads like a case but the surgeon was not recognised'
+            : `Coloured as a surgeon's case but the title does not parse`,
+          start: event.start || undefined,
+          end: event.end || undefined
+        })
+        continue
+      }
       otherRollup.push({
         text: event.allDay ? `${title} (all day)` : (timeRange ? `${title} ${timeRange}` : title),
         start: event.start || undefined,
@@ -323,7 +364,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       flags,
       casesByHospital: groupByHospital(cases.map(stripInternals)),
       nonSurgeonItems,
-      otherRollup
+      otherRollup,
+      needsAttention
     }
   })
 

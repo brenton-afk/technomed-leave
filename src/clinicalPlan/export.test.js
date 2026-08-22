@@ -43,7 +43,12 @@ describe('text export (§8)', () => {
 
   it('carries the case detail, times and colour faults', () => {
     const text = planToText(FIXTURE_WEEK)
-    expect(text).toContain('Jackson / Fowler — MARINER — 10:00am–11:00am')
+    // The clinical procedure leads where it is known; the implant system
+    // follows it rather than standing in for it.
+    expect(text).toContain('Jackson / Fowler — C5/6 ACDF — 10:00am–11:00am')
+    expect(text).toContain('System: MARINER')
+    // A case with no operation in its notes still reads as before.
+    expect(text).toContain('Gill / Fowler — STRYKER CCI — 11:00am–12:00pm')
     expect(text).toContain('Kit: Dakota (consignment)')
     expect(text).toContain('COLOUR-CODING: no calendar colour set — should be Grape')
     expect(text).toContain('Colour-coding check:')
