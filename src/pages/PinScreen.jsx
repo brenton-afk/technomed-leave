@@ -62,10 +62,21 @@ export default function PinScreen({ onLogin }) {
   const [resetRequested, setResetRequested] = useState(false)
   const [passkeyAvailable, setPasskeyAvailable] = useState(false)
   const [passkeyBusy, setPasskeyBusy] = useState(false)
+  // idle → attempting → done | failed. Face ID is offered without a tap, but a
+  // browser may refuse a WebAuthn call that is not tied to a fresh user gesture,
+  // and a cancelled prompt looks the same from here — so either way the button
+  // appears as a fallback rather than retrying in a loop.
+  const [passkeyAuto, setPasskeyAuto] = useState('idle')
 
   // Face ID / Touch ID / device passcode. Additive only: the PIN keypad stays
   // on screen, so a device that cannot do this is never locked out.
-  async function signInWithPasskey() {
+  useEffect(() => {
+    if (step !== 'pin' || !passkeyAvailable || passkeyAuto !== 'idle') return
+    setPasskeyAuto('attempting')
+    signInWithPasskey({ auto: true })
+  }, [step, passkeyAvailable, passkeyAuto])
+
+  async function signInWithPasskey({ auto = false } = {}) {
     setPasskeyBusy(true); setError('')
     try {
       const optRes = await fetch('/api/auth/pin', {
@@ -85,9 +96,11 @@ export default function PinScreen({ onLogin }) {
       if (data.error) throw new Error(data.error)
       onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin, staff: data.staff, token: data.token })
     } catch (err) {
-      // A cancelled Face ID prompt is not an error worth shouting about.
-      const cancelled = /NotAllowedError|abort|cancel/i.test(err?.name + ' ' + err?.message)
+      // A cancelled prompt, or a browser declining an ungestured call, is not
+      // worth shouting about — the keypad is right there.
+      const cancelled = /NotAllowedError|abort|cancel/i.test(`${err?.name} ${err?.message}`)
       if (!cancelled) setError(err.message || 'Face ID sign-in failed. Use your PIN instead.')
+      if (auto) setPasskeyAuto('failed')
     }
     setPasskeyBusy(false)
   }
@@ -120,27 +133,25 @@ export default function PinScreen({ onLogin }) {
   async function handleStaffSelect(email) {
     setSelectedEmail(email); setPin(''); setConfirmPin(''); setError(''); setPinInput('')
     setResetRequested(false)
+    setPasskeyAuto('idle')
     setChecking(true)
     try {
-      const res = await fetch('/api/auth/pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'check', email })
-      })
-      const data = await res.json()
+      const ask = body => fetch('/api/auth/pin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(r => r.json())
+
+      // Both lookups go out together. Sequentially, the Face ID prompt only
+      // appeared after two round trips, which was long enough to feel like the
+      // app was waiting for a tap.
+      const canUsePasskey = browserSupportsWebAuthn()
+      const [data, passkey] = await Promise.all([
+        ask({ action: 'check', email }),
+        canUsePasskey ? ask({ action: 'passkey-available', email }).catch(() => ({})) : Promise.resolve({})
+      ])
       if (data.error) throw new Error(data.error)
       setFirstTime(!data.hasPin)
-
-      // Does this account have a passkey on any device? Offered alongside the
-      // keypad when the browser can actually do WebAuthn.
-      if (data.hasPin && browserSupportsWebAuthn()) {
-        fetch('/api/auth/pin', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'passkey-available', email })
-        }).then(r => r.json()).then(d => setPasskeyAvailable(Boolean(d.available))).catch(() => {})
-      } else {
-        setPasskeyAvailable(false)
-      }
+      setPasskeyAvailable(Boolean(data.hasPin && canUsePasskey && passkey.available))
       // Never signed in → the welcome screen, which explains what the portal
       // is before asking them to invent a PIN. Already enrolled → straight to
       // the keypad.
@@ -461,11 +472,17 @@ export default function PinScreen({ onLogin }) {
 
       {step === 'pin' && passkeyAvailable && (
         <div style={{ padding:'0 28px 12px' }}>
-          <button onClick={signInWithPasskey} disabled={passkeyBusy || loading}
-            style={{ width:'100%', padding:'14px', background:'#2ab5a0', border:'none', borderRadius:12, color:'white', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:9 }}>
-            <span style={{ fontSize:17 }}>🔐</span>
-            {passkeyBusy ? 'Waiting for Face ID…' : 'Sign in with Face ID'}
-          </button>
+          {passkeyAuto === 'failed' ? (
+            <button onClick={() => signInWithPasskey()} disabled={passkeyBusy || loading}
+              style={{ width:'100%', padding:'14px', background:'#2ab5a0', border:'none', borderRadius:12, color:'white', fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:9 }}>
+              <span style={{ fontSize:17 }}>🔐</span>
+              {passkeyBusy ? 'Waiting for Face ID…' : 'Try Face ID again'}
+            </button>
+          ) : (
+            <div style={{ textAlign:'center', fontSize:13, color:'rgba(255,255,255,0.55)', padding:'4px 0 2px' }}>
+              <span style={{ marginRight:7 }}>🔐</span>Waiting for Face ID…
+            </div>
+          )}
           <div style={{ textAlign:'center', fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:8 }}>
             or enter your PIN below
           </div>
@@ -492,7 +509,7 @@ export default function PinScreen({ onLogin }) {
 
       <div style={{ display:'flex', justifyContent:'center', paddingBottom:'32px' }}>
         <button style={{ background:'transparent', border:'none', color:'rgba(255,255,255,0.4)', fontSize:'14px', cursor:'pointer', padding:'12px' }}
-          onClick={() => { setStep('select'); setSelectedEmail(''); setPin(''); setConfirmPin(''); setError(''); setPinInput(''); setFirstTime(false); setResetRequested(false) }}>← Back</button>
+          onClick={() => { setStep('select'); setSelectedEmail(''); setPin(''); setConfirmPin(''); setError(''); setPinInput(''); setFirstTime(false); setResetRequested(false); setPasskeyAuto('idle') }}>← Back</button>
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { detectDocumentQuad, smoothQuad, toGrayscale } from '../scanner/edgeDetect.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -113,15 +114,27 @@ function canvasToPage(canvas, index) {
 // shot, which meant tapping "Take Photo" again for every page of the form.
 // This holds one live camera stream open so a 2–3 page form is one session.
 
+// Frames are analysed at this width. Small enough that detection costs a
+// couple of milliseconds, large enough to place an edge within a pixel or two
+// once scaled back up.
+const DETECT_WIDTH = 160
+const DETECT_FPS = 12
+
 function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
+  const detectCanvasRef = useRef(null)
+  const quadRef = useRef(null)
+  const rafRef = useRef(0)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [shots, setShots] = useState([])
   const [flash, setFlash] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [hasTorch, setHasTorch] = useState(false)
+  // The live page outline. Held in a ref for the detection loop and mirrored
+  // into state for rendering, so the loop never re-runs on every frame.
+  const [quad, setQuad] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -166,10 +179,49 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
     // the sheet closes.
     return () => {
       cancelled = true
+      cancelAnimationFrame(rafRef.current)
       streamRef.current?.getTracks().forEach(t => t.stop())
       streamRef.current = null
     }
   }, [])
+
+  // Follows the page as the camera moves. Runs off requestAnimationFrame but
+  // throttled: detection every frame would burn battery for no visible gain,
+  // and the smoothing already hides the lower rate.
+  useEffect(() => {
+    if (!ready || error) return
+    let stop = false
+    let lastRun = 0
+
+    function tick(now) {
+      if (stop) return
+      rafRef.current = requestAnimationFrame(tick)
+      if (now - lastRun < 1000 / DETECT_FPS) return
+      lastRun = now
+
+      const video = videoRef.current
+      if (!video?.videoWidth) return
+
+      if (!detectCanvasRef.current) detectCanvasRef.current = document.createElement('canvas')
+      const canvas = detectCanvasRef.current
+      const height = Math.max(1, Math.round(DETECT_WIDTH * video.videoHeight / video.videoWidth))
+      if (canvas.width !== DETECT_WIDTH) { canvas.width = DETECT_WIDTH; canvas.height = height }
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      ctx.drawImage(video, 0, 0, DETECT_WIDTH, height)
+      const { data } = ctx.getImageData(0, 0, DETECT_WIDTH, height)
+
+      const found = detectDocumentQuad(toGrayscale(data, DETECT_WIDTH, height), DETECT_WIDTH, height)
+      // Ease toward a new outline; drop it outright when the page leaves frame,
+      // so a stale rectangle never lingers over nothing.
+      const next = found ? smoothQuad(quadRef.current, found) : null
+      quadRef.current = next
+      setQuad(next)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => { stop = true; cancelAnimationFrame(rafRef.current) }
+  }, [ready, error])
 
   async function toggleTorch() {
     const track = streamRef.current?.getVideoTracks()[0]
@@ -184,12 +236,28 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
     const video = videoRef.current
     if (!video?.videoWidth) return
 
-    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(video.videoWidth, video.videoHeight))
+    // Crop to the detected page (with a little margin) rather than sending the
+    // whole frame. Less bench and background reaches the model, which reads
+    // better, and the same pixel budget covers more of the form.
+    const detected = quadRef.current
+    let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight
+    if (detected) {
+      const xs = detected.corners.map(c => c.x), ys = detected.corners.map(c => c.y)
+      const pad = 0.02
+      const x0 = Math.max(0, Math.min(...xs) - pad), x1 = Math.min(1, Math.max(...xs) + pad)
+      const y0 = Math.max(0, Math.min(...ys) - pad), y1 = Math.min(1, Math.max(...ys) + pad)
+      sx = Math.round(x0 * video.videoWidth)
+      sy = Math.round(y0 * video.videoHeight)
+      sw = Math.max(1, Math.round((x1 - x0) * video.videoWidth))
+      sh = Math.max(1, Math.round((y1 - y0) * video.videoHeight))
+    }
+
+    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(sw, sh))
     const canvas = document.createElement('canvas')
-    canvas.width = Math.round(video.videoWidth * scale)
-    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.width = Math.round(sw * scale)
+    canvas.height = Math.round(sh * scale)
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
 
     const page = canvasToPage(canvas, startIndex + shots.length + 1)
     const accepted = onCapture(page)
@@ -231,11 +299,32 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
           </div>
         )}
 
-        {/* Framing guide — the forms are portrait A4 */}
+        {/* The frame follows the page. Falls back to a hint, not a fixed
+            rectangle, when nothing is detected — a guide that does not match
+            what you are holding is worse than none. */}
         {ready && !error && (
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', padding: '7% 6%' }}>
-            <div style={{ width: '100%', height: '100%', border: '2px dashed rgba(255,255,255,0.35)', borderRadius: 10 }} />
-          </div>
+          quad ? (
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              <polygon
+                points={quad.corners.map(c => `${c.x * 100},${c.y * 100}`).join(' ')}
+                fill="rgba(24,154,133,0.12)"
+                stroke={quad.confidence > 0.55 ? TEAL : 'rgba(255,255,255,0.7)'}
+                strokeWidth="0.7"
+                vectorEffect="non-scaling-stroke"
+              />
+              {quad.corners.map((c, i) => (
+                <circle key={i} cx={c.x * 100} cy={c.y * 100} r="1.1"
+                  fill={quad.confidence > 0.55 ? TEAL : 'white'} />
+              ))}
+            </svg>
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '14%', pointerEvents: 'none' }}>
+              <div style={{ background: 'rgba(0,0,0,0.5)', color: 'rgba(255,255,255,0.8)', fontSize: 12, padding: '7px 13px', borderRadius: 18 }}>
+                Point at the form — looking for the page…
+              </div>
+            </div>
+          )
         )}
 
         {ready && !error && (
@@ -264,8 +353,10 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ flex: 1, fontSize: 11.5, color: 'rgba(255,255,255,0.55)', lineHeight: 1.45 }}>
-              Fill the frame with the page.<br />Keep shooting for each page.
+            <div style={{ flex: 1, fontSize: 11.5, color: quad ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.45)', lineHeight: 1.45 }}>
+              {quad
+                ? <>Page detected — captures just the form.<br />Keep shooting for each page.</>
+                : <>Fill the frame with the page.<br />More light helps it lock on.</>}
             </div>
             <button onClick={shoot} disabled={!ready} aria-label="Capture page"
               style={{ width: 70, height: 70, borderRadius: 35, background: ready ? 'white' : 'rgba(255,255,255,0.35)', border: '4px solid rgba(255,255,255,0.35)', cursor: ready ? 'pointer' : 'default', flexShrink: 0 }} />
