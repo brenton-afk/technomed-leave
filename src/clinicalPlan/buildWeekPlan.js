@@ -5,7 +5,7 @@
 
 import './types.js'
 import {
-  normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, describeCase
+  normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking
 } from './parse.js'
 import { colourNameFor, checkEventColour, surgeonForColourName } from './colours.js'
 import {
@@ -268,26 +268,28 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       // surgeon allocation is visible at a glance. Where the title does not
       // name a surgeon, the colour is allowed to.
       const colourSurgeon = surgeonForColourName(colourNameFor(event.colorId))
-      const parsed = parseCaseTitle(event.rawTitle, { colourSurgeon })
-      if (!parsed || event.allDay) continue
-      // One reader for the whole booking, so each fact lands in exactly one
-      // field however the booking happens to be written. See describeCase.
-      const { operation, system, supply, kit } = describeCase(parsed.procedure, event.description)
+      if (event.allDay) continue
+      // One reader for the whole booking, shared with the calendar view, so each
+      // fact lands in exactly one field however the booking is written and both
+      // screens say the same thing. See readBooking.
+      const read = readBooking(event.rawTitle, event.description, { colourSurgeon })
+      if (!read) continue
       allCases.push({
         id: event.id,
-        patient: parsed.patient,
-        surgeon: parsed.surgeon,
+        patient: read.patient,
+        surgeon: read.surgeon,
         // The title's raw middle section is not kept: it ran the operation and
         // the system together, which is exactly the ambiguity being removed.
-        operation,
-        system,
-        supply,
-        kit,
+        operation: read.operation,
+        system: read.system,
+        supply: read.supply,
+        kit: read.kit,
+        navigation: read.navigation,
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,
         end: event.end,
         calendarColorName: colourNameFor(event.colorId) || undefined,
-        surgeonSource: parsed.surgeonSource,
+        surgeonSource: read.surgeonSource,
         notes: [],
         dayDate,
         _event: event

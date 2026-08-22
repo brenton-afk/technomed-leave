@@ -101,3 +101,23 @@ export function systemWords(text) {
   }
   return words
 }
+
+/**
+ * Image guidance and navigation platforms.
+ *
+ * A case using one of these is a different kind of day: the platform has to be
+ * booked, set up and calibrated, and whoever is covering needs to see that at a
+ * glance rather than read for it. So these override the surgeon's colour — the
+ * one thing on the plan that is allowed to.
+ */
+export const NAVIGATION = [
+  { name: 'Varioguide', test: /vario\s*guide/i },
+  { name: 'Brainlab', test: /brain\s*lab/i },
+  { name: 'AIRO', test: /\bairo\b/i }
+]
+
+/** The navigation platforms named in a piece of text. */
+export function findNavigation(text) {
+  const haystack = String(text || '')
+  return NAVIGATION.filter(n => n.test.test(haystack)).map(n => n.name)
+}

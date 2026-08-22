@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react'
 import { Page, Header, Body } from '../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../design/tokens.js'
+import { readBooking } from '../clinicalPlan/parse.js'
+import { accentForCase, accentTextForCase } from '../clinicalPlan/theme.js'
+import { surgeonForColourName, colourNameFor } from '../clinicalPlan/colours.js'
 
-
+// Google Calendar's event palette, by colorId. Three of these were wrong: 9, 10
+// and 11 were carrying Basil, Tomato and Graphite's values a place out, so a
+// Basil booking — Gupta's colour — drew pink, and Blueberry drew green. The
+// colour is how surgeon allocation is read at a glance, so being a place out is
+// not cosmetic.
 const COLOR_MAP = {
   '1':'#7986cb','2':'#33b679','3':'#8e24aa','4':'#e67c73',
   '5':'#f6c026','6':'#f5511d','7':'#039be5','8':'#616161',
-  '9':'#0b8043','10':'#d81b60','11':'#616161'
+  '9':'#3f51b5','10':'#0b8043','11':'#d50000'
 }
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
@@ -15,10 +22,42 @@ const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct
 
 function getColor(colorId) { return COLOR_MAP[colorId] || colour.navy }
 
+/**
+ * What a booking is, and how to draw it.
+ *
+ * This screen used to print the calendar's title exactly as typed, which is why
+ * the system and kit text showed through raw and often twice — a title reading
+ * "Kennedy REFORM/ASCOT/ATHLET - JPW" with a note reading "Kit: Athlet, Ascot +
+ * Reform" was rendered as both. It now goes through the same reader as the case
+ * plan, so a case says the same thing on both screens.
+ */
+function describe(event) {
+  const colourSurgeon = surgeonForColourName(colourNameFor(event.colorId))
+  const read = event.allDay ? null : readBooking(event.title, event.description, { colourSurgeon })
+  if (!read) return { isCase: false, accent: getColor(event.colorId) }
+  return {
+    isCase: true,
+    read,
+    // Surgeon's own colour, except for a navigation case, which outranks it.
+    accent: accentForCase(read),
+    accentText: accentTextForCase(read)
+  }
+}
+
+/** The one detail line: system and how it is supplied. */
+function systemLine(read) {
+  return [read.system, read.supply].filter(Boolean).join(' · ')
+}
+
 function formatTime(dateStr) {
   if (!dateStr || !dateStr.includes('T')) return null
   const d = new Date(dateStr)
-  return d.toLocaleTimeString('en-AU', { hour:'numeric', minute:'2-digit', hour12:true }).toLowerCase()
+  // Pinned to Hobart rather than left to the device. Every other part of the app
+  // fixes the timezone, and this did not — so a rep away for a conference saw the
+  // day's bookings shifted into wherever they happened to be standing.
+  return d.toLocaleTimeString('en-AU', {
+    timeZone: 'Australia/Hobart', hour: 'numeric', minute: '2-digit', hour12: true
+  }).toLowerCase().replace(/\s+/g, '')
 }
 
 function dateKey(date) {
@@ -115,7 +154,7 @@ export default function TodayView({ user, onBack }) {
                   <span style={{ fontSize:10.5, color: tod?colour.accent:'rgba(255,255,255,0.5)', fontWeight: tod?'700':'400', marginBottom:4 }}>{DAYS[date.getDay()]}</span>
                   <span style={{ fontSize:16, fontWeight: sel||tod?'700':'400', color: tod?colour.accent:'white', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{date.getDate()}</span>
                   <div style={{ display:'flex', gap:2, marginTop:4, height:6 }}>
-                    {dayEvs.slice(0,3).map((e,j) => <div key={j} style={{ width:5, height:5, borderRadius:'50%', background: getColor(e.colorId) }} />)}
+                    {dayEvs.slice(0,3).map((e,j) => <div key={j} style={{ width:5, height:5, borderRadius:'50%', background: describe(e).accent }} />)}
                   </div>
                 </button>
               )
@@ -148,14 +187,32 @@ export default function TodayView({ user, onBack }) {
                 </button>
                 {dayEvs.length > 0 && (
                   <div style={{ marginLeft:46 }}>
-                    {dayEvs.slice(0,3).map(e => (
-                      <div key={e.id} onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'white', borderRadius:8, marginBottom:4, cursor:'pointer', borderLeft:`3px solid ${getColor(e.colorId)}` }}>
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontSize:14, fontWeight:500, color:colour.navy }}>{e.title}</div>
-                          {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFainter }}>{formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}{e.location?` · ${e.location}`:''}</div>}
+                    {dayEvs.slice(0,3).map(e => {
+                      const d = describe(e)
+                      return (
+                        <div key={e.id} onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'white', borderRadius:8, marginBottom:4, cursor:'pointer', borderLeft:`3px solid ${d.accent}` }}>
+                          <div style={{ flex:1 }}>
+                            {d.isCase ? (
+                              <>
+                                <div style={{ fontSize:14, fontWeight:500, color:colour.navy }}>
+                                  {d.read.patient}
+                                  <span style={{ color:colour.inkFainter }}> / </span>
+                                  <span style={{ color:d.accentText }}>{d.read.surgeon}</span>
+                                </div>
+                                {systemLine(d.read) && (
+                                  <div style={{ fontSize:12.5, color:colour.inkFainter }}>{systemLine(d.read)}</div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontSize:14, fontWeight:500, color:colour.navy }}>{e.title}</div>
+                                {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFainter }}>{formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}{e.location?` · ${e.location}`:''}</div>}
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                     {dayEvs.length > 3 && (
                       <div onClick={() => selectDay(date)} style={{ fontSize:12.5, color:colour.accent, padding:'4px 10px', cursor:'pointer', fontWeight:600 }}>+{dayEvs.length-3} more →</div>
                     )}
@@ -201,16 +258,40 @@ export default function TodayView({ user, onBack }) {
           {!loading && timedEvents.length > 0 && (
             <div>
               <div style={{ fontSize:12.5, fontWeight:600, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>Schedule</div>
-              {timedEvents.map(e => (
-                <div key={e.id} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', display:'flex', border:'1px solid rgba(26,43,74,0.06)' }}>
-                  <div style={{ width:5, background:getColor(e.colorId), flexShrink:0 }} />
-                  <div style={{ padding:'12px 14px', flex:1 }}>
-                    <div style={{ fontSize:14, fontWeight:600, color:colour.navy, marginBottom:3 }}>{e.title}</div>
-                    {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:e.location?3:0 }}>🕐 {formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}</div>}
-                    {e.location && <div style={{ fontSize:12.5, color:colour.inkFaint }}>📍 {e.location}</div>}
+              {timedEvents.map(e => {
+                const d = describe(e)
+                return (
+                  <div key={e.id} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', display:'flex', border:'1px solid rgba(26,43,74,0.06)' }}>
+                    <div style={{ width:5, background:d.accent, flexShrink:0 }} />
+                    <div style={{ padding:'12px 14px', flex:1 }}>
+                      {d.isCase ? (
+                        <>
+                          {/* Two lines and nothing else. Everything the old
+                              version added here — the raw title, a second kit
+                              line, the time — either repeated something or moved
+                              often enough to be misleading. */}
+                          <div style={{ fontSize:14, fontWeight:600, color:colour.navy }}>
+                            {d.read.patient}
+                            <span style={{ color:colour.inkFainter, fontWeight:400 }}> / </span>
+                            <span style={{ color:d.accentText }}>{d.read.surgeon}</span>
+                          </div>
+                          {systemLine(d.read) && (
+                            <div style={{ fontSize:12.5, color:colour.inkFaint, marginTop:3 }}>{systemLine(d.read)}</div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontSize:14, fontWeight:600, color:colour.navy, marginBottom:3 }}>{e.title}</div>
+                          {/* Meetings and handovers keep their times: unlike a
+                              theatre list, those do not move. */}
+                          {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:e.location?3:0 }}>🕐 {formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}</div>}
+                          {e.location && <div style={{ fontSize:12.5, color:colour.inkFaint }}>📍 {e.location}</div>}
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

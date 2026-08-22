@@ -58,6 +58,9 @@ export default async function handler(req, res) {
     const events = (data.items || []).map(e => ({
       id: e.id,
       title: e.summary || 'No title',
+      // The day view reads the system and supply out of this. Without it the only
+      // thing it could show was the title exactly as typed.
+      description: e.description || '',
       start: e.start?.dateTime || e.start?.date,
       end: e.end?.dateTime || e.end?.date,
       location: e.location || null,

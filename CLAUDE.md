@@ -131,7 +131,13 @@ Call-in detection reads after-hours bookings from the calendar, but the calendar
 
 ## Verifying changes
 
-There is no test runner, so the two cheap checks worth running after touching `api/`:
+`npx vitest run` is the suite. `npm run bench:scanner` measures the document
+detector's accuracy and speed against the synthetic scenes in
+`src/scanner/scenes.js` — the suite's own timing checks are deliberately loose
+because jsdom timing swings by a factor of five between runs, so that script is
+the real figure.
+
+Two more cheap checks worth running after touching `api/`:
 
 ```bash
 npm run build                     # catches frontend breakage

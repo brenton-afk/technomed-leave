@@ -1,4 +1,4 @@
-import { findSystems, findLoanSets, systemWords } from './systems.js'
+import { findSystems, findLoanSets, systemWords, findNavigation } from './systems.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -502,4 +502,27 @@ export function describeCase(titleSection, description) {
   const kit = extras.length ? extras.join(' · ') : undefined
 
   return { operation, system: system || undefined, supply, kit }
+}
+
+
+/**
+ * Reads a calendar booking into a case, or returns null if it is not one.
+ *
+ * The single entry point for "what is this booking?". Both the case plan and the
+ * calendar view go through it, which is the point: the calendar view used to
+ * render the raw event title instead, so the same booking appeared one way on one
+ * screen and another way on the other, with the system and kit text showing
+ * through exactly as it had been typed.
+ */
+export function readBooking(title, description, { colourSurgeon } = {}) {
+  const parsed = parseCaseTitle(title, { colourSurgeon })
+  if (!parsed) return null
+  const described = describeCase(parsed.procedure, description)
+  return {
+    patient: parsed.patient,
+    surgeon: parsed.surgeon,
+    surgeonSource: parsed.surgeonSource,
+    ...described,
+    navigation: findNavigation(`${title || ''}\n${description || ''}`).join(' + ') || undefined
+  }
 }

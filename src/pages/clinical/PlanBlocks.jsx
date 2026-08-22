@@ -1,5 +1,5 @@
 import React from 'react'
-import { accentFor, accentTextFor, tokens, FONT_STACK } from '../../clinicalPlan/theme.js'
+import { accentFor, accentTextFor, accentForCase, accentTextForCase, tokens, FONT_STACK } from '../../clinicalPlan/theme.js'
 import { formatDayHeading } from '../../clinicalPlan/week.js'
 
 // Presentational only. Every component here takes already-derived plan data and
@@ -13,8 +13,8 @@ import { formatDayHeading } from '../../clinicalPlan/week.js'
 // place they are kept up to date, and meetings below do keep theirs.
 export function CaseBlock({ surgicalCase, dark }) {
   const t = tokens(dark)
-  const accent = accentFor(surgicalCase.surgeon, dark)          // the bar
-  const accentText = accentTextFor(surgicalCase.surgeon, dark)  // legible as text
+  const accent = accentForCase(surgicalCase, dark)          // the bar
+  const accentText = accentTextForCase(surgicalCase, dark)  // legible as text
 
   return (
     <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
