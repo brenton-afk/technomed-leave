@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { detectDocumentQuad, toGrayscale, QuadTracker } from '../scanner/edgeDetect.js'
+import { rectifiedSize, warpToRect, expandQuad, worthRectifying } from '../scanner/rectify.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -117,7 +118,14 @@ function canvasToPage(canvas, index) {
 // Frames are analysed at this width. Small enough that detection costs a
 // couple of milliseconds, large enough to place an edge within a pixel or two
 // once scaled back up.
-const DETECT_WIDTH = 240
+// Detection runs at this width, and it is not an arbitrary choice. The detector
+// measures brightness across a border over a band a few pixels wide, sized to
+// clear a form's printed margin without reaching into its text; those distances
+// are in pixels, so the whole thing is calibrated for 320 across. Measured on the
+// synthetic bench in scanner/scenes.js, the same scenes score 11/15 at 320x240
+// and only 5/15 at 240x180 — the bands stop straddling what they are meant to.
+// Larger is not better either: 400x300 scores 9/15 and costs a third more time.
+const DETECT_WIDTH = 320
 const DETECT_FPS = 30
 
 function CameraCapture({ pageCount, onCapture, onDone, onFallback }) {
@@ -208,7 +216,12 @@ function CameraCapture({ pageCount, onCapture, onDone, onFallback }) {
       if (!detectCanvasRef.current) detectCanvasRef.current = document.createElement('canvas')
       const canvas = detectCanvasRef.current
       const height = Math.max(1, Math.round(DETECT_WIDTH * video.videoHeight / video.videoWidth))
-      if (canvas.width !== DETECT_WIDTH) { canvas.width = DETECT_WIDTH; canvas.height = height }
+      // Height as well as width: turning the phone changes the aspect, and
+      // checking only the width left the canvas at the old shape.
+      if (canvas.width !== DETECT_WIDTH || canvas.height !== height) {
+        canvas.width = DETECT_WIDTH
+        canvas.height = height
+      }
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true })
       ctx.drawImage(video, 0, 0, DETECT_WIDTH, height)
@@ -238,32 +251,54 @@ function CameraCapture({ pageCount, onCapture, onDone, onFallback }) {
     const video = videoRef.current
     if (!video?.videoWidth) return
 
-    // Crop to the detected page (with a little margin) rather than sending the
-    // whole frame. Less bench and background reaches the model, which reads
-    // better, and the same pixel budget covers more of the form.
-    const detected = quadRef.current
-    let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight
-    if (detected) {
-      const xs = detected.corners.map(c => c.x), ys = detected.corners.map(c => c.y)
-      const pad = 0.02
-      const x0 = Math.max(0, Math.min(...xs) - pad), x1 = Math.min(1, Math.max(...xs) + pad)
-      const y0 = Math.max(0, Math.min(...ys) - pad), y1 = Math.min(1, Math.max(...ys) + pad)
-      sx = Math.round(x0 * video.videoWidth)
-      sy = Math.round(y0 * video.videoHeight)
-      sw = Math.max(1, Math.round((x1 - x0) * video.videoWidth))
-      sh = Math.max(1, Math.round((y1 - y0) * video.videoHeight))
+    // Two outcomes only, and which one depends on whether the outline had settled.
+    //
+    // Settled: warp the page flat. That is better than the crop this used to do
+    // in two ways — no wedge of bench in the corners, and the form comes out
+    // square instead of skewed, which is much easier to read off.
+    //
+    // Not settled: keep the whole photograph, untouched. The previous behaviour
+    // was to crop to the outline's bounding box regardless, which meant a wrong
+    // outline quietly cut a column off the form and the only way to find out was
+    // to read the result. A wider picture costs nothing but a margin; a narrow
+    // one costs data.
+    const settled = quadRef.current?.locked ? quadRef.current : null
+    const frame = document.createElement('canvas')
+    frame.width = video.videoWidth
+    frame.height = video.videoHeight
+    const frameCtx = frame.getContext('2d', { willReadFrequently: true })
+    frameCtx.drawImage(video, 0, 0)
+
+    let canvas = null
+    if (settled) {
+      // A little outwards, so a border found a pixel inside the paper does not
+      // shave the edge of the form away.
+      const quad = expandQuad(
+        settled.corners.map(c => ({ x: c.x * frame.width, y: c.y * frame.height })), 0.015)
+      if (worthRectifying(quad, frame.width, frame.height)) {
+        const size = rectifiedSize(quad, MAX_IMAGE_DIM)
+        const flattened = warpToRect(
+          frameCtx.getImageData(0, 0, frame.width, frame.height), quad, size,
+          (w, h) => frameCtx.createImageData(w, h))
+        if (flattened) {
+          canvas = document.createElement('canvas')
+          canvas.width = size.width
+          canvas.height = size.height
+          canvas.getContext('2d').putImageData(flattened, 0, 0)
+        }
+      }
     }
 
-    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(sw, sh))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(sw * scale)
-    canvas.height = Math.round(sh * scale)
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+    if (!canvas) {
+      const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(frame.width, frame.height))
+      canvas = document.createElement('canvas')
+      canvas.width = Math.round(frame.width * scale)
+      canvas.height = Math.round(frame.height * scale)
+      canvas.getContext('2d').drawImage(frame, 0, 0, canvas.width, canvas.height)
+    }
 
-    const page = canvasToPage(canvas, pageCount + 1)
-    const accepted = onCapture(page)
-    if (accepted === false) return // payload cap reached; onCapture surfaced why
+    const page = { ...canvasToPage(canvas, pageCount + 1), flattened: Boolean(settled) }
+    if (!onCapture(page)) return // payload cap reached; onCapture surfaced why
 
     setShots(s => [...s, page])
     setFlash(true)
@@ -359,10 +394,10 @@ function CameraCapture({ pageCount, onCapture, onDone, onFallback }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ flex: 1, fontSize: 11.5, color: quad ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.45)', lineHeight: 1.45 }}>
               {quad?.locked
-                ? <>Page locked — captures just the form.<br />Keep shooting for each page.</>
+                ? <>Page locked — it will be cropped<br />and straightened. Keep shooting.</>
                 : quad
-                  ? <>Finding the edges…</>
-                  : <>Point at the form.<br />Any surface, any angle.</>}
+                  ? <>Holding steady…</>
+                  : <>Point at the form. Any surface,<br />any angle — or shoot the whole photo.</>}
             </div>
             <button onClick={shoot} disabled={!ready} aria-label="Capture page"
               style={{ width: 70, height: 70, borderRadius: 35, background: ready ? 'white' : 'rgba(255,255,255,0.35)', border: '4px solid rgba(255,255,255,0.35)', cursor: ready ? 'pointer' : 'default', flexShrink: 0 }} />
@@ -456,6 +491,9 @@ export default function UsageScan({ user }) {
   // making that three taps was the wrong default.
   const [step, setStep] = useState('capture')
   const [pages, setPages] = useState([])
+  // Mirrors `pages` so a capture can check the payload size and answer straight
+  // away, without reading state that has not been committed yet.
+  const pagesRef = useRef([])
   const [caseRecord, setCaseRecord] = useState(null)
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
@@ -486,19 +524,25 @@ export default function UsageScan({ user }) {
 
   // Single gate for both capture paths, so the request-size cap is enforced
   // whether pages arrive from the camera or the photo library.
+  // Deliberately not written as a setPages updater. It used to be, with the size
+  // check and setError inside it, and that is why the shutter appeared to do
+  // nothing and Done did nothing after it: React runs updaters during render, so
+  // calling setError from inside one is not allowed and the page was never
+  // actually added. The returned flag was wrong for the same reason — it was read
+  // before the updater had run, so it always said "accepted".
+  //
+  // A ref holds the authoritative list so the size check is synchronous and the
+  // answer this returns is true.
   const addPages = useCallback(added => {
-    let accepted = true
-    setPages(prev => {
-      const next = [...prev, ...added]
-      if (payloadBytes(next) > MAX_PAYLOAD_BYTES) {
-        accepted = false
-        setError('That is as many pages as can be processed in one scan. Read these now, then start a second scan for the rest.')
-        return prev
-      }
-      setError('')
-      return next
-    })
-    return accepted
+    const next = [...pagesRef.current, ...added]
+    if (payloadBytes(next) > MAX_PAYLOAD_BYTES) {
+      setError('That is as many pages as can be processed in one scan. Read these now, then start a second scan for the rest.')
+      return false
+    }
+    pagesRef.current = next
+    setPages(next)
+    setError('')
+    return true
   }, [])
 
   async function addFiles(fileList) {
@@ -515,10 +559,12 @@ export default function UsageScan({ user }) {
   }
 
   function removePage(id) {
-    setPages(pages.filter(p => p.id !== id))
+    pagesRef.current = pages.filter(p => p.id !== id)
+    setPages(pagesRef.current)
   }
 
   function startNew() {
+    pagesRef.current = []
     setPages([]); setCaseRecord(null); setResult(null)
     setError(''); setNotice(''); setStep('capture'); setShowCamera(true)
   }

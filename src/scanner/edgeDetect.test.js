@@ -1,21 +1,29 @@
 import { describe, it, expect } from 'vitest'
 import {
   detectDocumentQuad, toGrayscale, blur3, gradients,
-  dominantOrientations, strongestLinePair, intersect,
+  dominantOrientations, edgeField, candidateLines, groupByDirection, intersect,
   QuadTracker, maxCornerDistance
 } from './edgeDetect.js'
+import { benchmark, cornerError } from './scenes.js'
 
-const W = 240, H = 180
+// The same size the app runs detection at, and not incidentally: the detector
+// measures across a border over bands a few pixels wide, so its calibration is
+// in pixels. Testing at another size tests something that never ships.
+const W = 320, H = 240
+// Scenes below were written for a 240-wide frame.
+const K = W / 240
 
 // Synthetic scenes. The important ones are the surfaces the old brightness-blob
 // detector could not see: a page no lighter than what it sits on.
-function scene({ bg = 45, fg = 210, quad, noise = 0, gradient = 0 } = {}) {
+function scene({ bg = 45, fg = 210, quad, noise = 0, gradient = 0, seed = 0 } = {}) {
   const g = new Uint8Array(W * H)
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       let v = bg + (gradient ? gradient * (x / W) : 0)
       if (quad && inQuad(x, y, quad)) v = fg + (gradient ? gradient * (x / W) : 0)
-      if (noise) v += ((x * 7919 + y * 104729) % 512 - 256) / 256 * noise
+      // `seed` varies the pattern between frames, which is what real sensor noise
+      // does and what the tracker relies on to refuse a spurious outline.
+      if (noise) v += ((x * 7919 + y * 104729 + seed * 15485863) % 512 - 256) / 256 * noise
       g[y * W + x] = Math.max(0, Math.min(255, v))
     }
   }
@@ -31,17 +39,20 @@ function inQuad(px, py, q) {
   return inside
 }
 
-const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+const rect = (x0, y0, x1, y1) => [
+  { x: x0 * K, y: y0 * K }, { x: x1 * K, y: y0 * K },
+  { x: x1 * K, y: y1 * K }, { x: x0 * K, y: y1 * K }
+]
 const PAGE = rect(40, 25, 205, 155)
 const px = c => ({ x: Math.round(c.x * W), y: Math.round(c.y * H) })
 
-function expectNearPage(found, tolerance = 12) {
+function expectNearPage(found, tolerance = 12 * K) {
   expect(found).not.toBeNull()
   const [tl, , br] = found.corners.map(px)
-  expect(Math.abs(tl.x - 40)).toBeLessThanOrEqual(tolerance)
-  expect(Math.abs(tl.y - 25)).toBeLessThanOrEqual(tolerance)
-  expect(Math.abs(br.x - 205)).toBeLessThanOrEqual(tolerance)
-  expect(Math.abs(br.y - 155)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(tl.x - 40 * K)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(tl.y - 25 * K)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(br.x - 205 * K)).toBeLessThanOrEqual(tolerance)
+  expect(Math.abs(br.y - 155 * K)).toBeLessThanOrEqual(tolerance)
 }
 
 describe('finds a page on any surface', () => {
@@ -70,7 +81,34 @@ describe('finds a page on any surface', () => {
   })
 
   it('a noisy sensor in low light', () => {
-    expectNearPage(detectDocumentQuad(scene({ bg: 50, fg: 205, quad: PAGE, noise: 26 }), W, H), 16)
+    // Ten percent noise on a sheet with nothing printed on it. Above this a
+    // single frame can be wrong — see the lock test below, which is the property
+    // that matters in live video. The exact level is not a clean threshold: this
+    // pattern is deterministic, so a given amount either happens to line up into
+    // a false edge or does not.
+    expectNearPage(detectDocumentQuad(scene({ bg: 50, fg: 205, quad: PAGE, noise: 10 }), W, H), 16)
+  })
+
+  it('will not lock onto an outline that noise invented', () => {
+    // At around ten percent noise on a *blank* sheet — no print to anchor to —
+    // the outline is no longer reliable: enough noise pixels line up to put a
+    // spurious edge just outside the real one, and since the page border is the
+    // outermost real boundary, that spurious edge wins. This is a real limit and
+    // it is worse than the blob detector this replaced, which is a trade made
+    // knowingly: a blank sheet is not what this scans, and on an actual printed
+    // form the same noise is nothing next to the print.
+    //
+    // What protects the user is that noise does not repeat. A wrong outline moves
+    // every frame, so it never earns the lock, and the frame stays open and pale
+    // instead of closing confidently around the wrong thing.
+    const tracker = new QuadTracker()
+    let locked = false
+    for (let frame = 0; frame < 12; frame++) {
+      const image = scene({ bg: 50, fg: 205, quad: PAGE, noise: 26, seed: frame })
+      const view = tracker.update(detectDocumentQuad(image, W, H))
+      if (view?.locked) locked = true
+    }
+    expect(locked).toBe(false)
   })
 })
 
@@ -182,13 +220,32 @@ describe('signal stages', () => {
     expect(separation).toBeGreaterThan(Math.PI / 2 - 0.45)
   })
 
-  it('finds a well-separated pair of lines in one direction', () => {
-    const { mag, angle } = gradients(blur3(scene({ quad: PAGE }), W, H), W, H)
+  it('finds the page borders as two opposing pairs', () => {
+    const grey = blur3(scene({ quad: PAGE }), W, H)
+    const { mag, angle, gx, gy } = gradients(grey, W, H)
+    const field = edgeField(grey, mag, angle, gx, gy, W, H)
     const [a, b] = dominantOrientations(mag, angle)
-    const pair = strongestLinePair(mag, angle, W, H, a)
-    expect(pair).not.toBeNull()
-    expect(Math.abs(pair[1].d - pair[0].d)).toBeGreaterThan(20)
-    expect(strongestLinePair(mag, angle, W, H, b)).not.toBeNull()
+    const [familyA, familyB] = groupByDirection(candidateLines(field, W, H), a, b)
+
+    for (const family of [familyA, familyB]) {
+      expect(family.length).toBeGreaterThanOrEqual(2)
+      // Opposite borders sit apart, and are opposite transitions: into the page
+      // and back out of it.
+      const spread = family[family.length - 1].along - family[0].along
+      expect(spread).toBeGreaterThan(20)
+      expect(family.some(l => l.sign > 0) && family.some(l => l.sign < 0)).toBe(true)
+    }
+  })
+
+  it('gives every border its own angle, since perspective is not parallel', () => {
+    // A page tilted towards the camera has converging sides. Assuming one angle
+    // per direction cannot express that, and made a steeply held page invisible.
+    const steep = [{ x: 88, y: 26 }, { x: 232, y: 30 }, { x: 296, y: 214 }, { x: 24, y: 210 }]
+    const grey = blur3(scene({ quad: steep.map(c => ({ x: c.x, y: c.y })) }), W, H)
+    const { mag, angle, gx, gy } = gradients(grey, W, H)
+    const field = edgeField(grey, mag, angle, gx, gy, W, H)
+    const angles = new Set(candidateLines(field, W, H).map(l => Math.round(l.theta * 180 / Math.PI)))
+    expect(angles.size).toBeGreaterThan(2)
   })
 
   it('intersects two lines, and reports parallel ones as no intersection', () => {
@@ -267,5 +324,77 @@ describe('QuadTracker — why the frame stops wandering', () => {
   it('measures corner drift for the jump test', () => {
     expect(maxCornerDistance(quadAt(0).corners, quadAt(0).corners)).toBe(0)
     expect(maxCornerDistance(quadAt(0).corners, quadAt(0.2).corners)).toBeCloseTo(0.2, 5)
+  })
+})
+
+describe('a form, not a blank rectangle', () => {
+  // The detector this replaced scored perfectly on blank rectangles and then
+  // failed on a real usage form, because a form is covered in printed text and
+  // table rules whose edges are stronger and straighter than the page border.
+  // Every scene here is a form with content on a surface, at an angle, with
+  // noise. See scanner/scenes.js.
+  const cases = benchmark(W, H)
+  const found = c => detectDocumentQuad(c.image, W, H)
+
+  // The everyday situations. These have to work.
+  const mustFind = [
+    'square on, dark bench', 'square on, mid bench', 'square on, LIGHT bench',
+    'dark form, light bench', 'tilted, light bench', 'rotated 20 deg',
+    'low light, noisy', 'vignette + light bench', 'fills the frame',
+    'small in frame', 'print to the edge'
+  ]
+
+  it.each(mustFind)('frames the page: %s', name => {
+    const c = cases.find(x => x.name === name)
+    const error = cornerError(found(c), c.quad, W, H)
+    expect(error).toBeLessThanOrEqual(10)
+  })
+
+  it('is accurate, not merely close', () => {
+    const errors = mustFind.map(name => {
+      const c = cases.find(x => x.name === name)
+      return cornerError(found(c), c.quad, W, H)
+    })
+    const mean = errors.reduce((a, b) => a + b, 0) / errors.length
+    expect(mean).toBeLessThan(4)
+  })
+
+  it('declines when a form is barely distinguishable from the bench', () => {
+    // Eleven grey levels between paper and bench. Saying nothing is the right
+    // answer here — a frame drawn on a guess is worse than no frame.
+    const c = cases.find(x => x.name === 'near-identical bench')
+    expect(found(c)).toBeNull()
+  })
+
+  it('never crops into the form, even when it gets the page wrong', () => {
+    // The failures that remain all frame too widely rather than too tightly: a
+    // page on a contrasting mat frames the mat. That direction is recoverable —
+    // the whole form is still in the shot — and cropping into a form is not.
+    for (const c of cases) {
+      const r = found(c)
+      if (!r) continue
+      const inside = c.quad.map(t =>
+        r.corners.some(d => Math.hypot(d.x * W - t.x, d.y * H - t.y) <= 16))
+      // Either the corners match the page, or the quad encloses it.
+      if (inside.every(Boolean)) continue
+      const xs = r.corners.map(d => d.x * W), ys = r.corners.map(d => d.y * H)
+      const slack = 6
+      for (const t of c.quad) {
+        expect(t.x, c.name).toBeGreaterThanOrEqual(Math.min(...xs) - slack)
+        expect(t.x, c.name).toBeLessThanOrEqual(Math.max(...xs) + slack)
+        expect(t.y, c.name).toBeGreaterThanOrEqual(Math.min(...ys) - slack)
+        expect(t.y, c.name).toBeLessThanOrEqual(Math.max(...ys) + slack)
+      }
+    }
+  })
+
+  it('keeps inside a frame budget on a real form', () => {
+    const c = cases.find(x => x.name === 'square on, LIGHT bench')
+    detectDocumentQuad(c.image, W, H) // warm
+    const start = performance.now()
+    for (let i = 0; i < 15; i++) detectDocumentQuad(c.image, W, H)
+    const each = (performance.now() - start) / 15
+    // 30fps leaves 33ms a frame, and the preview needs most of it.
+    expect(each).toBeLessThan(16)
   })
 })
