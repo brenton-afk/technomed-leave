@@ -251,6 +251,57 @@ export function splitOperationAndSystem(procedure, fromNotes) {
   return { operation, system: same || !system ? undefined : system }
 }
 
+/**
+ * How the kit is being supplied, and whether the kit line says anything the
+ * system line has not already said.
+ *
+ * These were two lines showing one fact: a case with system DAKOTA and a notes
+ * line "Kit: Dakota (consignment)" printed "DAKOTA" and then "Kit: Dakota
+ * (consignment)" underneath it. The only new word in the second line was
+ * "consignment".
+ *
+ * So the supply is pulled out and shown against the system, and the kit keeps a
+ * line of its own only when it names something the system does not. That last
+ * part matters: "STRYKER CCI" with "Kit: Stryker PSI" is two genuinely different
+ * things — patient-specific instruments alongside the implant system — and
+ * collapsing those would lose a kit the rep has to physically bring.
+ *
+ * @returns {{supply: string|undefined, kit: string|undefined}}
+ */
+export function describeSupply(system, kit) {
+  const text = String(kit || '').trim()
+  if (!text) return { supply: undefined, kit: undefined }
+
+  const supply = /consignment/i.test(text) ? 'Consignment'
+    : /\bloan(ed)?\b/i.test(text) ? 'Loan'
+      : undefined
+
+  // What the kit line says once the supply words and their brackets are gone.
+  const remainder = text
+    .replace(/\(?\s*(?:on\s+)?(?:consignment|loan(?:ed)?(?:\s+kit)?)\s*\)?/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,\-–]+|[\s,\-–]+$/g, '')
+    .trim()
+
+  // Filler is stripped before comparing, so "Mariner set" against system MARINER
+  // reads as the same thing rather than as an extra kit to bring.
+  const plain = value => String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(?:set|sets|kit|kits|tray|trays|the|a)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const kitWords = plain(remainder)
+  const systemWords = plain(system)
+  // Only a kit that is a *subset* of the system says nothing new. A kit naming
+  // the system plus something else — "Diplomat + extra cages" — is naming a
+  // second thing the rep has to physically bring, and dropping it would lose it.
+  const saysNothingNew = !kitWords
+    || (systemWords && (kitWords === systemWords || systemWords.includes(kitWords)))
+
+  return { supply, kit: saysNothingNew ? undefined : remainder }
+}
+
 export function extractOperation(description) {
   const text = stripIdentifiers(description)
   if (!text) return undefined

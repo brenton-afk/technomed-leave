@@ -10,6 +10,10 @@ const LEAVE_CALENDAR_ID = process.env.GOOGLE_LEAVE_CALENDAR_ID
 const QUERY_TZ = 'Australia/Melbourne'
 
 export default async function handler(req, res) {
+  // The case plan polls this so the app tracks the calendar as it is edited. A
+  // cached response would make those edits invisible for as long as the cache
+  // lived, which is the one thing the polling exists to prevent.
+  res.setHeader('Cache-Control', 'no-store, max-age=0')
   // ?action=week backs the Clinical Plan tab. It lives here rather than in its
   // own file because Vercel's Hobby plan caps a deployment at 12 serverless
   // functions and the app is at that ceiling — same reason the meetings, usage

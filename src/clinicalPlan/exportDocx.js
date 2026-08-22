@@ -76,10 +76,15 @@ function caseParagraphs(c) {
   if (c.operation) {
     out.push(para(run(c.operation, { color: hex(TOKENS.ink), size: 21, bold: true }), { border: bar }))
   }
-  if (c.system) {
+  if (c.system || c.supply) {
     // Same weight whether or not an operation sits above it. Varying it was what
-    // made the plan read differently from row to row.
-    out.push(para(run(c.system, { color: hex(TOKENS.inkMuted), size: 20 }), { border: bar }))
+    // made the plan read differently from row to row. Supply sits on this line
+    // rather than on one of its own, which used to repeat the system to say it.
+    const runs = []
+    if (c.system) runs.push(run(c.system, { color: hex(TOKENS.inkMuted), size: 20 }))
+    if (c.system && c.supply) runs.push(run(' · ', { color: hex(TOKENS.inkFaint), size: 20 }))
+    if (c.supply) runs.push(run(c.supply, { color: hex(TOKENS.ink), size: 20, bold: true }))
+    out.push(para(runs, { border: bar }))
   }
   if (c.kit) {
     out.push(para(run(`Kit: ${c.kit}`, { color: hex(TOKENS.inkMuted), size: 20 }), { border: bar }))

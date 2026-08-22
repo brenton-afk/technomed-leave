@@ -8,9 +8,47 @@ import { FIXTURE_WEEK } from './fixture.js'
 
 const CACHE_PREFIX = 'tm_clinical_plan:'
 const PREFS_KEY = 'tm_clinical_prefs'
-// Short TTL on top of the scheduled 5:00pm / 4:30pm syncs, so an open tab
-// picks up a fresh plan without hammering the calendar.
-const TTL_MS = 15 * 60 * 1000
+// How long a cached plan may be shown before it is refetched. Short, because
+// this is only the first paint: an open tab also polls (see LIVE_POLL_MS), so
+// the cache exists to avoid a blank screen rather than to avoid fetching.
+const TTL_MS = 60 * 1000
+
+// How often an open, visible tab rechecks the calendar. The plan is worked from
+// while lists are still being moved around, so it has to follow the calendar
+// rather than snapshot it. A minute is frequent enough that an edit made in
+// Google shows up before anyone would think to reload, and rare enough to be
+// nothing next to the app's other traffic. Hidden tabs do not poll at all.
+export const LIVE_POLL_MS = 60 * 1000
+
+/**
+ * A fingerprint of everything the plan actually displays.
+ *
+ * Polling means most fetches return exactly what is already on screen. Replacing
+ * the plan anyway would rebuild the whole page every minute — losing scroll
+ * position and flickering — so the fetched plan is only adopted when this
+ * changes. Deliberately excludes the sync timestamp, which changes on every
+ * fetch by definition and would make every poll look like an edit.
+ */
+export function planSignature(plan) {
+  if (!plan) return ''
+  const parts = [plan.title, plan.subtitle, plan.summaryLine, plan.notes,
+    (plan.surgeons || []).join(','),
+    (plan.keyFlags || []).map(f => `${f.label}:${f.text}`).join('|')]
+  for (const day of plan.days || []) {
+    parts.push(day.date, day.caseCountLine || '')
+    for (const flag of day.flags || []) parts.push(flag.text)
+    for (const group of day.casesByHospital || []) {
+      parts.push(group.hospital)
+      for (const c of group.cases || []) {
+        parts.push([c.id, c.patient, c.surgeon, c.operation, c.system, c.supply, c.kit,
+          (c.notes || []).map(n => n.text).join('~')].join('\u0001'))
+      }
+    }
+    for (const item of day.nonSurgeonItems || []) parts.push(item.text)
+    for (const item of day.otherRollup || []) parts.push(item.text || String(item))
+  }
+  return parts.join('\u0002')
+}
 
 function cacheKey(weekStart) {
   return `${CACHE_PREFIX}${weekStart}`

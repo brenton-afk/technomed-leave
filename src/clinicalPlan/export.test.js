@@ -50,7 +50,7 @@ describe('text export (§8)', () => {
     // A case with no operation in its notes names its system where the operation
     // would otherwise sit, rather than leaving the line blank.
     expect(text).toContain('Gill / Fowler — STRYKER CCI')
-    expect(text).toContain('Kit: Dakota (consignment)')
+    expect(text).toContain('System: DAKOTA · Consignment')
     // Theatre lists move too often for a printed time to be reliable. Meetings
     // and handovers keep theirs, since those are actually fixed.
     // Case lines only: an "Other:" line can contain a slash of its own ("late

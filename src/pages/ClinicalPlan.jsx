@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   DayBlock, SurgeonLegend, NotesCallout, KeyFlagsSection, PlanFooter
 } from './clinical/PlanBlocks.jsx'
@@ -9,7 +9,7 @@ import {
   resolveDefaultWeek, weekWindowFor, stepWeek, todayStr,
   formatWeekRange, formatDayHeading, formatStamp
 } from '../clinicalPlan/week.js'
-import { fetchWeekPlan, readCachedPlan, readPrefs, writePrefs } from '../clinicalPlan/provider.js'
+import { fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature, LIVE_POLL_MS } from '../clinicalPlan/provider.js'
 import { planToText, dayToText } from '../clinicalPlan/exportText.js'
 import { DOCX_FILENAME } from '../clinicalPlan/exportMeta.js'
 
@@ -46,22 +46,48 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
     writePrefs({ view, weekStart: window_.startDate, selectedDay })
   }, [view, window_.startDate, selectedDay])
 
-  const load = useCallback(async (win, { force = false } = {}) => {
-    // Show cached content immediately rather than a skeleton over good data.
-    const cached = readCachedPlan(win.startDate)
-    if (cached) { setPlan(cached.plan); setStatus('ready') } else { setStatus('loading') }
-    setErrorText(''); setStaleInfo(null)
+  // What is on screen, so a poll that finds nothing new can leave it alone.
+  const shownRef = useRef('')
+  const [checkedAt, setCheckedAt] = useState(null)
+  // Also held as a ref, because `load` must not depend on it: `load` is a
+  // dependency of the effect that runs it, so anything that changes on every
+  // poll would make the poll retrigger a full reload.
+  const checkedAtRef = useRef(null)
+
+  const load = useCallback(async (win, { force = false, quiet = false } = {}) => {
+    if (!quiet) {
+      // Show cached content immediately rather than a skeleton over good data.
+      const cached = readCachedPlan(win.startDate)
+      if (cached) {
+        setPlan(cached.plan)
+        shownRef.current = planSignature(cached.plan)
+        setStatus('ready')
+      } else {
+        setStatus('loading')
+      }
+      setErrorText(''); setStaleInfo(null)
+    }
 
     try {
       const result = await fetchWeekPlan(win, { token, force })
-      setPlan(result.plan)
-      if (result.error) {
-        setStaleInfo({ at: result.cachedAt, message: result.error })
+      // Only adopt it if something actually changed. A poll usually returns
+      // exactly what is already displayed, and replacing it anyway would rebuild
+      // the page and throw away the reader's scroll position every minute.
+      const signature = planSignature(result.plan)
+      if (signature !== shownRef.current) {
+        shownRef.current = signature
+        setPlan(result.plan)
       }
+      checkedAtRef.current = Date.now()
+      setCheckedAt(checkedAtRef.current)
+      if (result.error) setStaleInfo({ at: result.cachedAt, message: result.error })
+      else if (quiet) setStaleInfo(null)
       const hasContent = result.plan.days.some(d =>
         d.casesByHospital.length || d.flags.length || d.nonSurgeonItems.length || d.otherRollup.length)
       setStatus(hasContent ? 'ready' : 'empty')
     } catch (err) {
+      // A failed poll must never blank a plan that is already readable.
+      if (quiet) { setStaleInfo({ at: checkedAtRef.current, message: err.message }); return }
       // Only reachable with no cache at all — otherwise the provider returns
       // the cached plan with an error attached.
       setStatus('error')
@@ -70,6 +96,26 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
   }, [token])
 
   useEffect(() => { load(window_) }, [window_, load])
+
+  // Follow the calendar rather than snapshot it. Lists are still being reordered
+  // while the plan is being worked from, so an edit made in Google has to appear
+  // here without anyone reloading.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible') load(window_, { force: true, quiet: true })
+    }
+    // A tab that has been in the background is the most likely to be out of date,
+    // so coming back to it rechecks straight away rather than waiting for the
+    // next tick.
+    const timer = setInterval(refresh, LIVE_POLL_MS)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [window_, load])
 
   function goWeek(direction) {
     const next = stepWeek(window_.startDate, direction)
@@ -191,8 +237,17 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
         )}
 
         {plan && (
-          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', marginTop: 10 }}>
-            Last synced {formatStamp(plan.lastGeneratedAt)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: 'rgba(255,255,255,0.4)', marginTop: 10 }}>
+            {/* Says whether what is on screen can be trusted right now, which
+                "last synced" alone does not: the plan is followed live, so the
+                useful fact is when it was last checked, not when it was built. */}
+            <span aria-hidden="true" style={{
+              width: 6, height: 6, borderRadius: 3, flexShrink: 0,
+              background: staleInfo ? 'rgba(255,190,90,0.9)' : 'rgba(120,220,180,0.9)'
+            }} />
+            {staleInfo
+              ? `Not updating — showing the last plan that loaded`
+              : `Following the calendar · checked ${checkedAt ? formatStamp(checkedAt) : formatStamp(plan.lastGeneratedAt)}`}
           </div>
         )}
       </Header>

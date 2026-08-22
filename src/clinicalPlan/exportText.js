@@ -38,10 +38,17 @@ export function planToText(plan, { includeWeekend = true } = {}) {
         // Same four lines as the screen, and no time: theatre lists move too
         // often for one printed here to be right.
         // The operation leads the line where it is known, otherwise the system
-        // does, so a case is never reduced to two names and a kit.
-        const described = c.operation || c.system
-        lines.push(`    ${c.patient} / ${c.surgeon}${described ? ` — ${described}` : ''}`)
-        if (c.operation && c.system) lines.push(`      System: ${c.system}`)
+        // does, so a case is never reduced to two names and a kit. The supply
+        // rides on whichever line names the system.
+        const supply = c.supply ? ` · ${c.supply}` : ''
+        if (c.operation) {
+          lines.push(`    ${c.patient} / ${c.surgeon} — ${c.operation}`)
+          if (c.system) lines.push(`      System: ${c.system}${supply}`)
+          else if (c.supply) lines.push(`      ${c.supply}`)
+        } else {
+          lines.push(`    ${c.patient} / ${c.surgeon}${c.system ? ` — ${c.system}${supply}` : ''}`)
+          if (!c.system && c.supply) lines.push(`      ${c.supply}`)
+        }
         if (c.kit) lines.push(`      Kit: ${c.kit}`)
         for (const note of c.notes) lines.push(`      ${note.text}`)
       }

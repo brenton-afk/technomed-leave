@@ -6,9 +6,9 @@
 import './types.js'
 import {
   normaliseEvent, parseCaseTitle, extractKit, extractOperation, detectHospital,
-  stripIdentifiers, HOSPITALS, splitOperationAndSystem
+  stripIdentifiers, HOSPITALS, splitOperationAndSystem, describeSupply
 } from './parse.js'
-import { colourNameFor, checkEventColour, summariseColourFindings, surgeonForColourName } from './colours.js'
+import { colourNameFor, checkEventColour, surgeonForColourName } from './colours.js'
 import {
   formatWeekRange, formatDayHeading, weekdayName, formatTimeRange,
   zonedCivil, parseDateStr, TZ
@@ -172,12 +172,10 @@ function buildSummaryLine(allCases, surgeons, days) {
 
 function buildNotes(findings, days) {
   const parts = []
-  const missing = findings.filter(f => f.kind === 'missingColour')
+  // A booking with no colour set is an administrative tidy-up, not something the
+  // week's plan needs to open with, so only a genuine mismatch is mentioned —
+  // where the colour and the title disagree about who is operating.
   const wrong = findings.filter(f => f.kind === 'wrongColour')
-  if (missing.length) {
-    parts.push(`${missing.length === 1 ? 'One booking' : `${missing.length} bookings`} this week `
-      + `${missing.length === 1 ? 'is' : 'are'} missing their calendar colour and should be recoloured before the next sync.`)
-  }
   if (wrong.length) {
     parts.push(`${wrong.length === 1 ? 'One booking is' : `${wrong.length} bookings are`} coloured against the guide.`)
   }
@@ -242,7 +240,10 @@ function buildKeyFlags(allCases, days, findings, surgeons) {
   }
 
   // Always present, so a reader can see the check ran even in a clean week.
-  flags.push({ label: 'Colour-coding check', text: summariseColourFindings(findings, allCases) })
+  // No colour-coding summary. It restated, in a paragraph of prose, what the
+  // per-case markers already say in place, and it was the longest thing on the
+  // page while being the least actionable. The colour data is still used where it
+  // does work: attributing a surgeon to a booking whose title does not name one.
   return flags
 }
 
@@ -275,6 +276,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       // one field with one place to appear.
       const { operation, system } = splitOperationAndSystem(
         parsed.procedure, extractOperation(event.description))
+      // The kit line usually just repeats the system with the supply in brackets.
+      // Pull the supply out and keep the kit only where it names something else.
+      const { supply, kit } = describeSupply(system, extractKit(event.description))
       allCases.push({
         id: event.id,
         patient: parsed.patient,
@@ -283,7 +287,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // the system together, which is exactly the ambiguity being removed.
         operation,
         system,
-        kit: extractKit(event.description),
+        supply,
+        kit,
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,
         end: event.end,

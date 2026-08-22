@@ -124,10 +124,11 @@ describe('colour-coding check (§5.4)', () => {
     const finding = plan.colourCodingFindings[0]
     expect(finding.kind).toBe('missingColour')
     expect(finding.expected).toBe('Grape')
-    // Inline on the case, and in the roll-up.
+    // Marked on the case itself, where it can be acted on. There is no longer a
+    // roll-up paragraph at the foot of the plan restating the same thing.
     expect(plan.days[0].casesByHospital[0].cases[0].notes[0].text)
       .toBe('■ COLOUR-CODING: no calendar colour set — should be Grape')
-    expect(plan.keyFlags.find(f => f.label === 'Colour-coding check').text).toMatch(/should be Grape/)
+    expect(plan.keyFlags.some(f => f.label === 'Colour-coding check')).toBe(false)
   })
 
   it('detects a case coloured as the wrong surgeon', () => {
@@ -171,11 +172,13 @@ describe('colour-coding check (§5.4)', () => {
     const plan = build([ev('c1', 'Gill STRYKER CCI - Fowler', '24', '11:00', '12:00', { colorId: COLOR.Grape })])
     expect(plan.colourCodingFindings).toHaveLength(0)
     expect(plan.days[0].casesByHospital[0].cases[0].notes).toEqual([])
-    expect(plan.keyFlags.find(f => f.label === 'Colour-coding check').text).toMatch(/All cases correctly coded/)
+    expect(plan.keyFlags.map(f => f.label)).not.toContain('Colour-coding check')
   })
 
-  it('always reports the check, even in a clean week', () => {
-    expect(build([]).keyFlags.some(f => f.label === 'Colour-coding check')).toBe(true)
+  it('never adds a colour-coding paragraph to the foot of the plan', () => {
+    // It restated the per-case markers in prose, and was the longest and least
+    // actionable thing on the page.
+    expect(build([]).keyFlags.some(f => f.label === 'Colour-coding check')).toBe(false)
   })
 
   it('maps Google colorIds to the names the guide uses', () => {
@@ -205,9 +208,10 @@ describe('key flags (§6.7)', () => {
     expect(load).toMatch(/Ibbett \(1 case Tue, Calvary\)/)
   })
 
-  it('includes only the labels relevant to the week', () => {
-    const labels = build([]).keyFlags.map(f => f.label)
-    expect(labels).toEqual(['Colour-coding check'])
+  it('adds no flags at all to a week with nothing in it', () => {
+    // Every flag has to be earned by something in the week. A section that is
+    // always present teaches people to stop reading it.
+    expect(build([]).keyFlags).toEqual([])
   })
 
   it('surfaces handover, travel and staffing as their own labels', () => {
@@ -232,9 +236,18 @@ describe('derived prose', () => {
     expect(plan.summaryLine).toMatch(/^2 surgical cases across two surgeons/)
   })
 
-  it('mentions missing colours in the notes', () => {
+  it('does not open the week with an uncoloured booking', () => {
+    // A booking with no colour is an administrative tidy-up, not the headline.
     const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00')])
-    expect(plan.notes).toMatch(/missing their calendar colour/)
+    expect(plan.notes).not.toMatch(/missing their calendar colour/)
+  })
+
+  it('does open the week with a colour that disagrees with the title', () => {
+    // Here the colour and the title name different surgeons, so one of them is
+    // wrong about who is operating — worth saying out loud.
+    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00',
+      { colorId: COLOR.Basil })])
+    expect(plan.notes).toMatch(/colour/i)
   })
 
   it('carries both the date range and the hospitals in the subtitle', () => {
@@ -376,7 +389,29 @@ describe('operation description from the notes', () => {
     const c = plan.days[0].casesByHospital[0].cases[0]
     expect(c.operation).toBe('C5/6 ACDF')
     expect(c.system).toBe('MARINER')
-    expect(c.kit).toBe('Mariner set')
+    // "Mariner set" beside system MARINER is the same thing said twice, so it
+    // does not earn a line of its own.
+    expect(c.kit).toBeUndefined()
+  })
+
+  it('shows the supply against the system instead of repeating it', () => {
+    const plan = build([ev('c1', 'Horne DAKOTA - Ibbett', '24', '09:00', '10:00',
+      { colorId: COLOR.Banana, description: 'Kit: Dakota (consignment)' })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.system).toBe('DAKOTA')
+    expect(c.supply).toBe('Consignment')
+    expect(c.kit).toBeUndefined()
+  })
+
+  it('keeps a kit that names something the system does not', () => {
+    // Patient-specific instruments alongside the implant system: two things to
+    // physically bring, so collapsing them would lose one.
+    const plan = build([ev('c1', 'Gill STRYKER CCI - Fowler', '24', '11:00', '12:00',
+      { colorId: COLOR.Grape, description: 'Kit: Stryker PSI on loan' })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.system).toBe('STRYKER CCI')
+    expect(c.supply).toBe('Loan')
+    expect(c.kit).toBe('Stryker PSI')
   })
 
   it('splits an operation out of the title, so it is never said twice', () => {

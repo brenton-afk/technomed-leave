@@ -35,9 +35,19 @@ export function CaseBlock({ surgicalCase, dark }) {
             {surgicalCase.operation}
           </div>
         )}
-        {surgicalCase.system && (
-          <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>{surgicalCase.system}</div>
+        {/* System and supply on one line. They were two, and the second was the
+            first repeated with "(consignment)" added to it. */}
+        {(surgicalCase.system || surgicalCase.supply) && (
+          <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>
+            {surgicalCase.system}
+            {surgicalCase.system && surgicalCase.supply ? ' · ' : ''}
+            {surgicalCase.supply && (
+              <span style={{ fontWeight: 600, color: t.ink }}>{surgicalCase.supply}</span>
+            )}
+          </div>
         )}
+        {/* Only reached when the kit names something the system does not — a
+            loan tray alongside the implant system, say. */}
         {surgicalCase.kit && (
           <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>Kit: {surgicalCase.kit}</div>
         )}

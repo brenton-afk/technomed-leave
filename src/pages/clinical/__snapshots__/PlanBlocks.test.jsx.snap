@@ -214,12 +214,12 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
             style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             DAKOTA
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
-          >
-            Kit: 
-            Dakota (consignment)
+             · 
+            <span
+              style="font-weight: 600; color: rgb(17, 24, 39);"
+            >
+              Consignment
+            </span>
           </div>
         </div>
       </div>
@@ -403,6 +403,12 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             STRYKER CCI
+             · 
+            <span
+              style="font-weight: 600; color: rgb(17, 24, 39);"
+            >
+              Loan
+            </span>
           </div>
           <div
             style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
@@ -602,12 +608,12 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             DAKOTA
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
-          >
-            Kit: 
-            Dakota (consignment)
+             · 
+            <span
+              style="font-weight: 600; color: rgb(17, 24, 39);"
+            >
+              Consignment
+            </span>
           </div>
         </div>
       </div>
