@@ -399,3 +399,45 @@ describe('operation description from the notes', () => {
     expect(JSON.stringify(c)).not.toMatch(/4457821|1958/)
   })
 })
+
+describe('a colour-attributed case reaches the plan', () => {
+  const COLOUR_ONLY = { colorId: COLOR.Flamingo, location: 'RHH' }
+
+  it('counts a booking whose surgeon comes only from its colour', () => {
+    const plan = build([ev('k', 'Kennedy REFORM', '25', '10:00', '11:00', COLOUR_ONLY)])
+    const cases = plan.days[1].casesByHospital.flatMap(g => g.cases)
+    expect(cases).toHaveLength(1)
+    expect(cases[0]).toMatchObject({ patient: 'Kennedy', surgeon: 'JPW' })
+    expect(plan.days[1].caseCountLine).toBe('1 case — 1 RHH')
+    expect(plan.surgeons).toEqual(['JPW'])
+    // And it is no longer sitting in the needs-attention list.
+    expect(plan.days[1].needsAttention).toHaveLength(0)
+  })
+
+  it('says on the case that the surgeon came from the colour', () => {
+    const plan = build([ev('k', 'Kennedy REFORM', '25', '10:00', '11:00', COLOUR_ONLY)])
+    const note = plan.days[1].casesByHospital[0].cases[0].notes.find(n => /calendar colour/.test(n.text))
+    expect(note).toBeTruthy()
+    expect(note.kind).toBe('info')   // information, not a fault
+  })
+
+  it('does not report a colour fault against a case it attributed by colour', () => {
+    const plan = build([ev('k', 'Kennedy REFORM', '25', '10:00', '11:00', COLOUR_ONLY)])
+    expect(plan.colourCodingFindings).toHaveLength(0)
+  })
+
+  it('still reports a genuine mismatch when the title names the surgeon', () => {
+    const plan = build([ev('k', 'Kennedy REFORM - JPW', '25', '10:00', '11:00',
+      { colorId: COLOR.Basil, location: 'RHH' })])
+    expect(plan.colourCodingFindings[0]).toMatchObject({
+      kind: 'wrongColour', expected: 'Flamingo', actual: 'Basil'
+    })
+  })
+
+  it('does not turn a Graphite on-call entry into a Dubey case', () => {
+    const plan = build([ev('o', 'Brent on call', '28', '17:00', '18:00', { colorId: COLOR.Graphite })])
+    expect(plan.surgeons).toEqual([])
+    expect(plan.days[4].casesByHospital).toHaveLength(0)
+    expect(plan.days[4].flags.some(f => /on call/i.test(f.text))).toBe(true)
+  })
+})

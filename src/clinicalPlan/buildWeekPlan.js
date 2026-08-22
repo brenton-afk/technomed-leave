@@ -259,7 +259,11 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
   const allCases = []
   for (const dayDate of days) {
     for (const event of buckets.get(dayDate) || []) {
-      const parsed = parseCaseTitle(event.rawTitle)
+      // The colour is a real signal, not decoration: the team's guide exists so
+      // surgeon allocation is visible at a glance. Where the title does not
+      // name a surgeon, the colour is allowed to.
+      const colourSurgeon = surgeonForColourName(colourNameFor(event.colorId))
+      const parsed = parseCaseTitle(event.rawTitle, { colourSurgeon })
       if (!parsed || event.allDay) continue
       allCases.push({
         id: event.id,
@@ -273,6 +277,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         start: event.start,
         end: event.end,
         calendarColorName: colourNameFor(event.colorId) || undefined,
+        surgeonSource: parsed.surgeonSource,
         notes: [],
         dayDate,
         _event: event
@@ -284,6 +289,16 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
   // Second pass: colour findings, attached to their case and rolled up.
   const findings = []
   for (const c of allCases) {
+    if (c.surgeonSource === 'colour') {
+      // Attributed *by* its colour, so checking it against its colour would
+      // report a fault that cannot exist. Say where the surgeon came from
+      // instead, so the inference is visible rather than silent.
+      c.notes.push({
+        text: `Surgeon read from the calendar colour (${c.calendarColorName}) — the title does not name one`,
+        kind: 'info'
+      })
+      continue
+    }
     const finding = checkEventColour({
       id: c.id, title: `${c.patient}/${c.surgeon}`, date: c.dayDate,
       colorId: c._event.colorId, surgeon: c.surgeon, isCase: true, surgeonsWithCases
