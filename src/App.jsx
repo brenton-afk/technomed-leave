@@ -11,6 +11,7 @@ import Projects from './pages/Projects.jsx'
 import UsageScan from './pages/UsageScan.jsx'
 import Payroll from './pages/Payroll.jsx'
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
+import ClinicalPlan from './pages/ClinicalPlan.jsx'
 
 const TABS = [
   { id: 'home', label: 'Today', icon: '📅' },
@@ -18,9 +19,9 @@ const TABS = [
   { id: 'payroll', label: 'Payroll', icon: '💰' },
   { id: 'kitroom', label: 'Kit Room', icon: '🔧' },
   { id: 'usage', label: 'Usage', icon: '📷' },
+  { id: 'clinical', label: 'Plan', icon: '🗓' },
   { id: 'projects', label: 'Projects', icon: '📋' },
-  { id: 'admin', label: 'Admin', icon: '⚙️' },
-  { id: 'logout', label: 'Log out', icon: '🚪' }
+  { id: 'admin', label: 'Admin', icon: '⚙️' }
 ]
 
 // Matches the server-side session TTL in api/_auth.js.
@@ -102,8 +103,8 @@ export default function App() {
       case 'payroll': return <Payroll user={user} />
       case 'kitroom': return <KitRoom user={user} />
       case 'usage': return <UsageScan user={user} />
+      case 'clinical': return <ClinicalPlan user={user} />
       case 'projects': return <Projects user={user} />
-      case 'logout': return null
       case 'admin':
         if (user.isAdmin) return <AdminPortal user={user} />
         return <ComingSoon title="Admin" subtitle="You do not have admin access. Please contact Brenton or Erin." icon="🔒" isLocked />
@@ -114,6 +115,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="tm-shell" style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'#f0f3f7', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif' }}>
+        {/* Log out moved off the tab bar to make room for Clinical Plan. Every
+            page header is navy at the top, so it sits there as a quiet control. */}
+        <button onClick={() => { if (window.confirm('Log out of TechnoMed Portal?')) handleLogout() }}
+          aria-label="Log out"
+          className="tm-noprint"
+          style={{ position:'fixed', top:'calc(12px + env(safe-area-inset-top, 0px))', right:14, zIndex:120,
+            padding:'7px 12px', borderRadius:18, border:'1px solid rgba(255,255,255,0.25)',
+            background:'rgba(255,255,255,0.12)', color:'white', fontSize:12, cursor:'pointer',
+            backdropFilter:'blur(4px)' }}>
+          Log out
+        </button>
+
         <div style={{ flex:1, overflowY:'auto', paddingBottom:'70px' }}>
           {renderContent()}
         </div>
@@ -121,7 +134,7 @@ export default function App() {
           {TABS.map(tab => {
             const active = activeTab === tab.id
             return (
-              <button key={tab.id} onClick={() => { if (tab.id === 'logout') { if (window.confirm('Log out of TechnoMed Portal?')) handleLogout() } else setActiveTab(tab.id) }}
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'8px 4px 12px', background:'transparent', border:'none', cursor:'pointer', gap:'3px', position:'relative' }}>
                 {active && <div style={{ position:'absolute', top:0, left:'50%', transform:'translateX(-50%)', width:'24px', height:'3px', background:'#2ab5a0', borderRadius:'0 0 3px 3px' }} />}
                 <span style={{ fontSize:'20px', lineHeight:1 }}>{tab.icon}</span>

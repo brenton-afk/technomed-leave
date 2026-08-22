@@ -1,0 +1,362 @@
+// ─── Derivation: calendar events → WeekPlan ───────────────────────────────────
+// Pure. No fetching, no React, no dates from the ambient clock except the
+// `generatedAt` that is passed in. This is what makes the same plan reusable by
+// the UI, the text copy and the .docx export without any of them diverging.
+
+import './types.js'
+import {
+  normaliseEvent, parseCaseTitle, extractKit, detectHospital,
+  stripIdentifiers, HOSPITALS
+} from './parse.js'
+import { colourNameFor, checkEventColour, summariseColourFindings } from './colours.js'
+import {
+  formatWeekRange, formatDayHeading, weekdayName, formatTimeRange,
+  zonedCivil, parseDateStr, TZ
+} from './week.js'
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December']
+
+// How a non-case event is classified. Order matters — the first match wins, so
+// the more specific patterns are listed first. These are heuristics over
+// free-text calendar titles, which is the only signal available.
+// Checked before the meeting test: these are always flags, even when the title
+// also reads like a meeting ("Handover: ..." contains a word the meeting
+// pattern matches).
+const PRIORITY_FLAG_RULES = [
+  { kind: 'recurringStaffing', boxed: true, test: /late start|early finish|reduced hours|boy'?s week/i },
+  { kind: 'handover', boxed: false, test: /handover|team leader/i },
+  { kind: 'travel', boxed: false, test: /conference|offsite|off-site|travel|depart|flight|on call|on-call/i },
+  { kind: 'clinicalAlert', boxed: false, test: /revision|loan kit|resupply|urgent|shortage|recall/i }
+]
+
+// Checked only after the meeting test, so "Spine Logistics Meeting" renders as
+// a grey-bar block (as the document does) rather than as a logistics flag.
+const LATE_FLAG_RULES = [
+  { kind: 'logistics', boxed: false, test: /sterilis|steriliz|stock|resupply/i }
+]
+
+// Meetings and named logistics entries get their own grey-bar block rather than
+// being rolled into the "Other:" line.
+const NON_SURGEON_BLOCK = /meeting|catch up|catch-up|transfer|logistics|handover|review|huddle/i
+
+// Routine markers that belong on the "Other:" roll-up line.
+const ROLLUP_HINT = /wfh|office|tm office|list order|day off|annual leave|personal leave|leave\b/i
+
+function classifyFlag(title, rules) {
+  for (const rule of rules) {
+    if (rule.test.test(title)) return rule
+  }
+  return null
+}
+
+function isAlertFlag(kind) {
+  return kind === 'clinicalAlert'
+}
+
+/** Groups events by the Hobart calendar day they start on. */
+function bucketByDay(events, days, tz) {
+  const buckets = new Map(days.map(d => [d, []]))
+  for (const event of events) {
+    const dayKeys = daysCovered(event, days, tz)
+    for (const key of dayKeys) {
+      if (buckets.has(key)) buckets.get(key).push(event)
+    }
+  }
+  return buckets
+}
+
+// An all-day event spanning several days appears on each day it covers; a timed
+// event belongs to the day it starts.
+function daysCovered(event, days, tz) {
+  if (event.allDay && event.startDate) {
+    const from = event.startDate
+    // Google's all-day end date is exclusive.
+    const toExclusive = event.endDate || event.startDate
+    return days.filter(d => d >= from && d < toExclusive || d === from)
+  }
+  if (!event.start) return []
+  const civil = zonedCivil(new Date(event.start), tz)
+  const key = `${civil.year}-${String(civil.month).padStart(2, '0')}-${String(civil.day).padStart(2, '0')}`
+  return [key]
+}
+
+function caseCountLine(cases, nonSurgeonItems) {
+  if (cases.length === 0) {
+    if (nonSurgeonItems.length === 1) return 'No surgical cases — 1 internal meeting'
+    if (nonSurgeonItems.length > 1) return `No surgical cases — ${nonSurgeonItems.length} internal meetings`
+    return 'No surgical cases'
+  }
+  const byHospital = new Map()
+  for (const c of cases) byHospital.set(c.hospital, (byHospital.get(c.hospital) || 0) + 1)
+  const shortName = h => h === HOSPITALS.CALVARY ? 'Calvary' : h
+  // Same order the case blocks use, so the count line reads in the order the
+  // reader is about to scan.
+  const rank = h => h === HOSPITALS.RHH ? 0 : h === HOSPITALS.CALVARY ? 1 : 2
+  const breakdown = [...byHospital.entries()]
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
+    .map(([h, n]) => `${n} ${shortName(h)}`).join(', ')
+  return `${cases.length} case${cases.length === 1 ? '' : 's'} — ${breakdown}`
+}
+
+function groupByHospital(cases) {
+  const order = []
+  const map = new Map()
+  for (const c of cases) {
+    if (!map.has(c.hospital)) { map.set(c.hospital, []); order.push(c.hospital) }
+    map.get(c.hospital).push(c)
+  }
+  // RHH first, then Calvary, then anything else — the document's order.
+  const rank = h => h === HOSPITALS.RHH ? 0 : h === HOSPITALS.CALVARY ? 1 : 2
+  order.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+  return order.map(hospital => ({
+    hospital,
+    cases: map.get(hospital).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)))
+  }))
+}
+
+// ─── Derived prose (§6.1, §6.3) ─────────────────────────────
+// Templated from what the events actually say. Deliberately mechanical: it
+// states what is on rather than trying to imitate a person's editorial voice.
+
+function listPhrase(items) {
+  if (items.length === 0) return ''
+  if (items.length === 1) return items[0]
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+function countWord(n) {
+  return COUNT_WORDS[n] || String(n)
+}
+
+function buildSummaryLine(allCases, surgeons, days) {
+  if (allCases.length === 0) {
+    const meetings = days.reduce((n, d) => n + d.nonSurgeonItems.length, 0)
+    return meetings
+      ? `No surgical cases this week; ${meetings} internal meeting${meetings === 1 ? '' : 's'} scheduled.`
+      : 'No surgical cases or meetings scheduled this week.'
+  }
+
+  const headline = []
+  for (const day of days) {
+    for (const flag of day.flags) {
+      if (flag.kind === 'travel' || flag.kind === 'handover') headline.push(flag.text)
+    }
+  }
+  const unique = [...new Set(headline)].slice(0, 3)
+
+  const base = `${allCases.length} surgical case${allCases.length === 1 ? '' : 's'} across `
+    + `${countWord(surgeons.length)} surgeon${surgeons.length === 1 ? '' : 's'}`
+  return unique.length ? `${base}, plus ${listPhrase(unique)}.` : `${base}.`
+}
+
+function buildNotes(findings, days) {
+  const parts = []
+  const missing = findings.filter(f => f.kind === 'missingColour')
+  const wrong = findings.filter(f => f.kind === 'wrongColour')
+  if (missing.length) {
+    parts.push(`${missing.length === 1 ? 'One booking' : `${missing.length} bookings`} this week `
+      + `${missing.length === 1 ? 'is' : 'are'} missing their calendar colour and should be recoloured before the next sync.`)
+  }
+  if (wrong.length) {
+    parts.push(`${wrong.length === 1 ? 'One booking is' : `${wrong.length} bookings are`} coloured against the guide.`)
+  }
+
+  const travel = [...new Set(days.flatMap(d => d.flags.filter(f => f.kind === 'travel').map(f => f.text)))]
+  if (travel.length) parts.push(`${listPhrase(travel)}; factor into on-site coverage.`)
+
+  const handover = [...new Set(days.flatMap(d => d.flags.filter(f => f.kind === 'handover').map(f => f.text)))]
+  if (handover.length) parts.push(`${listPhrase(handover)}.`)
+
+  const alerts = [...new Set(days.flatMap(d => d.flags.filter(f => isAlertFlag(f.kind)).map(f => f.text)))]
+  if (alerts.length) parts.push(`${listPhrase(alerts)}.`)
+
+  return parts.join(' ') || 'No outstanding issues flagged for this week.'
+}
+
+// ─── Key flags (§6.7) ───────────────────────────────────────
+
+function buildKeyFlags(allCases, days, findings, surgeons) {
+  const flags = []
+
+  if (allCases.length) {
+    const perSurgeon = surgeons.map(surgeon => {
+      const own = allCases.filter(c => c.surgeon === surgeon)
+      const dayNames = [...new Set(own.map(c => weekdayName(c.dayDate).slice(0, 3)))]
+      const hospitals = [...new Set(own.map(c => c.hospital === HOSPITALS.CALVARY ? 'Calvary' : c.hospital))]
+      return `${surgeon} (${own.length} case${own.length === 1 ? '' : 's'} ${dayNames.join('/')}, ${hospitals.join(' & ')})`
+    })
+    flags.push({ label: 'Surgeon load', text: perSurgeon.join(', ') + '.' })
+  }
+
+  const byKind = kind => [...new Set(days.flatMap(d => d.flags.filter(f => f.kind === kind).map(f => f.text)))]
+
+  const handover = byKind('handover')
+  if (handover.length) flags.push({ label: 'Team leader handover', text: listPhrase(handover) + '.' })
+
+  const staffing = [...new Set(days.flatMap(d =>
+    d.flags.filter(f => f.kind === 'recurringStaffing' || f.kind === 'staffing').map(f => f.text)))]
+  if (staffing.length) flags.push({ label: 'Staffing', text: listPhrase(staffing) + '.' })
+
+  const travel = byKind('travel')
+  if (travel.length) flags.push({ label: 'Travel', text: listPhrase(travel) + '.' })
+
+  const logistics = [
+    ...byKind('logistics'),
+    ...[...new Set(days.flatMap(d => d.otherRollup.filter(o => /list order/i.test(o.text)).map(() => 'Daily List Order call')))]
+  ]
+  if (logistics.length) flags.push({ label: 'Logistics', text: listPhrase([...new Set(logistics)]) + '.' })
+
+  const alerts = byKind('clinicalAlert')
+  if (alerts.length) flags.push({ label: 'Clinical alerts', text: listPhrase(alerts) + '.' })
+
+  // Always present, so a reader can see the check ran even in a clean week.
+  flags.push({ label: 'Colour-coding check', text: summariseColourFindings(findings, allCases) })
+  return flags
+}
+
+/**
+ * @param {Array<object>} rawEvents  Google Calendar events (bookings + leave)
+ * @param {{ startDate: string, endDate: string, days: string[] }} window
+ * @param {{ generatedAt?: string, tz?: string }} [opts]
+ * @returns {import('./types.js').WeekPlan}
+ */
+export function buildWeekPlan(rawEvents, window, opts = {}) {
+  const tz = opts.tz || TZ
+  const generatedAt = opts.generatedAt || new Date().toISOString()
+  const days = window.days
+  const events = (rawEvents || []).map(normaliseEvent)
+  const buckets = bucketByDay(events, days, tz)
+
+  // First pass: identify every case, so the colour check knows which surgeons
+  // actually have work this week.
+  const allCases = []
+  for (const dayDate of days) {
+    for (const event of buckets.get(dayDate) || []) {
+      const parsed = parseCaseTitle(event.rawTitle)
+      if (!parsed || event.allDay) continue
+      allCases.push({
+        id: event.id,
+        patient: parsed.patient,
+        surgeon: parsed.surgeon,
+        procedure: parsed.procedure,
+        kit: extractKit(event.description),
+        hospital: detectHospital(event.location, event.description, { caseEvent: true }),
+        start: event.start,
+        end: event.end,
+        calendarColorName: colourNameFor(event.colorId) || undefined,
+        notes: [],
+        dayDate,
+        _event: event
+      })
+    }
+  }
+  const surgeonsWithCases = [...new Set(allCases.map(c => c.surgeon))]
+
+  // Second pass: colour findings, attached to their case and rolled up.
+  const findings = []
+  for (const c of allCases) {
+    const finding = checkEventColour({
+      id: c.id, title: `${c.patient}/${c.surgeon}`, date: c.dayDate,
+      colorId: c._event.colorId, surgeon: c.surgeon, isCase: true, surgeonsWithCases
+    })
+    if (finding) {
+      findings.push(finding)
+      c.notes.push({ text: `■ ${finding.message}`, kind: 'colourCoding' })
+    }
+  }
+
+  // Third pass: the day blocks.
+  const dayPlans = days.map(dayDate => {
+    const dayEvents = buckets.get(dayDate) || []
+    const cases = allCases.filter(c => c.dayDate === dayDate)
+    const caseIds = new Set(cases.map(c => c.id))
+
+    /** @type {import('./types.js').DayFlag[]} */
+    const flags = []
+    const nonSurgeonItems = []
+    const otherRollup = []
+
+    for (const event of dayEvents) {
+      if (caseIds.has(event.id)) continue
+      const title = stripIdentifiers(event.title)
+      if (!title) continue
+
+      const nonCaseFinding = checkEventColour({
+        id: event.id, title, date: dayDate, colorId: event.colorId,
+        surgeon: null, isCase: false, surgeonsWithCases
+      })
+      if (nonCaseFinding) findings.push(nonCaseFinding)
+
+      const timeRange = formatTimeRange(event.start, event.end, tz)
+      const asFlag = rule => {
+        flags.push({ text: timeRange && !event.allDay ? `${title} · ${timeRange}` : title, kind: rule.kind, boxed: rule.boxed })
+      }
+
+      const priority = classifyFlag(title, PRIORITY_FLAG_RULES)
+      if (priority) { asFlag(priority); continue }
+
+      if (!event.allDay && NON_SURGEON_BLOCK.test(title)) {
+        nonSurgeonItems.push({ text: timeRange ? `${title} · ${timeRange}` : title, start: event.start, end: event.end, allDay: false })
+        continue
+      }
+
+      const late = classifyFlag(title, LATE_FLAG_RULES)
+      if (late) { asFlag(late); continue }
+      otherRollup.push({
+        text: event.allDay ? `${title} (all day)` : (timeRange ? `${title} ${timeRange}` : title),
+        start: event.start || undefined,
+        end: event.end || undefined,
+        allDay: event.allDay
+      })
+    }
+
+    // Boxed recurring-staffing flags first, then the rest — flags render above
+    // the hospital subheading (§6.4.4).
+    flags.sort((a, b) => Number(b.boxed) - Number(a.boxed))
+
+    return {
+      date: dayDate,
+      weekday: weekdayName(dayDate),
+      caseCountLine: caseCountLine(cases, nonSurgeonItems),
+      flags,
+      casesByHospital: groupByHospital(cases.map(stripInternals)),
+      nonSurgeonItems,
+      otherRollup
+    }
+  })
+
+  const surgeons = surgeonsWithCases.slice().sort()
+  const hospitals = [...new Set(allCases.map(c => c.hospital))]
+  const hospitalLabel = hospitals.length
+    ? hospitals.map(h => h === HOSPITALS.CALVARY ? 'Calvary (Lenah Valley)' : h).join(' & ')
+    : 'No hospitals booked'
+
+  const startCivil = parseDateStr(window.startDate)
+  const endCivil = parseDateStr(window.endDate)
+  const fridayCivil = parseDateStr(days[4])
+
+  return {
+    weekStart: window.startDate,
+    weekEnd: window.endDate,
+    title: `TechnoMed Clinical Plan — ${formatWeekRange(window.startDate, window.endDate)}`,
+    // The exported document must carry both the range and the hospitals (§6.1).
+    subtitle: `${formatDayHeading(days[0])} – ${formatDayHeading(days[4])} ${fridayCivil.year} · ${hospitalLabel}`
+      .replace(`${MONTHS[startCivil.month - 1]} –`, '–'),
+    summaryLine: buildSummaryLine(allCases, surgeons, dayPlans),
+    surgeons,
+    notes: buildNotes(findings, dayPlans),
+    days: dayPlans,
+    keyFlags: buildKeyFlags(allCases, dayPlans, findings, surgeons),
+    colourCodingFindings: findings,
+    lastGeneratedAt: generatedAt,
+    _endYear: endCivil.year
+  }
+}
+
+// The internal helpers used during derivation never reach the rendered plan.
+function stripInternals(c) {
+  const { dayDate, _event, ...rest } = c
+  return rest
+}

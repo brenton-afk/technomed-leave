@@ -1,0 +1,1063 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Daily view (snapshot) > renders a single day with the same block styling 1`] = `
+<article>
+  <div
+    style="font-size: 13px; color: rgb(75, 85, 99); margin-bottom: 14px; line-height: 1.6;"
+  >
+    <span>
+      Surgeons this week: 
+    </span>
+    <strong
+      style="color: rgb(147, 51, 234);"
+    >
+      Fowler
+    </strong>
+     
+    <strong
+      style="color: rgb(149, 111, 4);"
+    >
+      Ibbett
+    </strong>
+     
+    <strong
+      style="color: rgb(175, 71, 106);"
+    >
+      JPW
+    </strong>
+     
+    <strong
+      style="color: rgb(18, 132, 60);"
+    >
+      Gupta
+    </strong>
+  </div>
+  <section
+    aria-label="Tuesday 25 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h2
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Tuesday 25 August
+    </h2>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      4 cases — 3 RHH, 1 Calvary
+    </div>
+    <div
+      style="background: rgb(239, 246, 255); border: 1px solid rgb(147, 197, 253); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      BEN: Late start / early finish (Boy's Week)
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      Brent departs 3:30pm — NSA Conference, South Australia (3:30pm Tue → 10:30pm Fri)
+    </div>
+    <div>
+      <h4
+        style="font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: rgb(107, 114, 128); margin: 10px 0px 6px;"
+      >
+        RHH
+      </h4>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Kennedy
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(175, 71, 106);"
+            >
+              JPW
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            REFORM / ASCOT / ATHLET
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            10:00am–11:00am
+          </div>
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Streets
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(175, 71, 106);"
+            >
+              JPW
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            LONESTAR
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            12:00pm–1:00pm
+          </div>
+          <div
+            style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
+          >
+            ■ COLOUR-CODING: no calendar colour set — should be Flamingo
+          </div>
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Panthi
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(18, 132, 60);"
+            >
+              Gupta
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            SHORELINE (PM list)
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            1:30pm–2:30pm
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h4
+        style="font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: rgb(107, 114, 128); margin: 10px 0px 6px;"
+      >
+        CALVARY LENAH VALLEY
+      </h4>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(251, 188, 4); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Horne
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(149, 111, 4);"
+            >
+              Ibbett
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            DAKOTA
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
+          >
+            Kit: 
+            Dakota (consignment)
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            9:00am–10:00am
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      Erin – office (all day) · MSL team chat 6:00pm–6:30pm · List Order 4:00pm–4:30pm
+    </div>
+  </section>
+  <footer
+    style="margin-top: 20px;"
+  >
+    <hr
+      style="border-width: 1px medium medium; border-style: solid none none; border-color: rgb(229, 231, 235) currentcolor currentcolor; border-image: none; margin: 0px 0px 10px;"
+    />
+    <p
+      style="font-size: 11px; font-style: italic; color: rgb(107, 114, 128); text-align: center; line-height: 1.6; margin: 0px;"
+    >
+      Generated from bookings@technomed.com.au and Staff Leave calendar entries. Planning week runs Monday–Sunday: this document shows next week from Friday onward, and the current week on the Monday–Thursday syncs. Last generated: 
+      21 August 2026, 5:30pm AEST
+    </p>
+  </footer>
+</article>
+`;
+
+exports[`Weekly view (snapshot) > matches the document layout for the fixture week 1`] = `
+<article>
+  <h2>
+    TechnoMed Clinical Plan — 24 – 30 August 2026
+  </h2>
+  <div>
+    Monday 24 – Friday 28 August 2026 · RHH & Calvary (Lenah Valley)
+  </div>
+  <div>
+    7 surgical cases across four surgeons, plus Brent offsite at the NSA Conference (SA) Tue–Fri, a Spine Team Leader handover from Brent to Ben Friday 5:00pm, and Andrea Weller (Signus) visiting from Saturday.
+  </div>
+  <div
+    style="font-size: 13px; color: rgb(75, 85, 99); margin-bottom: 14px; line-height: 1.6;"
+  >
+    <span>
+      Surgeons this week: 
+    </span>
+    <strong
+      style="color: rgb(147, 51, 234);"
+    >
+      Fowler
+    </strong>
+     
+    <strong
+      style="color: rgb(149, 111, 4);"
+    >
+      Ibbett
+    </strong>
+     
+    <strong
+      style="color: rgb(175, 71, 106);"
+    >
+      JPW
+    </strong>
+     
+    <strong
+      style="color: rgb(18, 132, 60);"
+    >
+      Gupta
+    </strong>
+  </div>
+  <div
+    style="background: rgb(249, 250, 251); border: 1px solid rgb(229, 231, 235); border-radius: 8px; padding: 12px 14px; margin-bottom: 18px;"
+  >
+    <div
+      style="font-size: 12.5px; font-weight: 700; color: rgb(17, 24, 39); margin-bottom: 4px;"
+    >
+      Notes
+    </div>
+    <div
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6;"
+    >
+      Two bookings this week are missing their calendar colour and should be recoloured before the next sync. Brent is travelling Tuesday afternoon through Friday night; factor into on-site coverage Wed–Fri. Team Leader duties pass from Brent to Ben Friday 5:00pm.
+    </div>
+  </div>
+  <section
+    aria-label="Monday 24 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h3
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Monday 24 August
+    </h3>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      2 cases — 2 RHH
+    </div>
+    <div
+      style="background: rgb(239, 246, 255); border: 1px solid rgb(147, 197, 253); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      BEN: Late start / early finish (Boy's Week)
+    </div>
+    <div>
+      <h4
+        style="font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: rgb(107, 114, 128); margin: 10px 0px 6px;"
+      >
+        RHH
+      </h4>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(147, 51, 234); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Jackson
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(147, 51, 234);"
+            >
+              Fowler
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            MARINER
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            10:00am–11:00am
+          </div>
+          <div
+            style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
+          >
+            ■ COLOUR-CODING: no calendar colour set — should be Grape
+          </div>
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(147, 51, 234); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Gill
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(147, 51, 234);"
+            >
+              Fowler
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            STRYKER CCI
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
+          >
+            Kit: 
+            Stryker PSI
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            11:00am–12:00pm
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      Toni – TM Office (all day) · List Order 4:00pm–4:30pm
+    </div>
+  </section>
+  <section
+    aria-label="Tuesday 25 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h3
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Tuesday 25 August
+    </h3>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      4 cases — 3 RHH, 1 Calvary
+    </div>
+    <div
+      style="background: rgb(239, 246, 255); border: 1px solid rgb(147, 197, 253); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      BEN: Late start / early finish (Boy's Week)
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      Brent departs 3:30pm — NSA Conference, South Australia (3:30pm Tue → 10:30pm Fri)
+    </div>
+    <div>
+      <h4
+        style="font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: rgb(107, 114, 128); margin: 10px 0px 6px;"
+      >
+        RHH
+      </h4>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Kennedy
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(175, 71, 106);"
+            >
+              JPW
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            REFORM / ASCOT / ATHLET
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            10:00am–11:00am
+          </div>
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Streets
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(175, 71, 106);"
+            >
+              JPW
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            LONESTAR
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            12:00pm–1:00pm
+          </div>
+          <div
+            style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
+          >
+            ■ COLOUR-CODING: no calendar colour set — should be Flamingo
+          </div>
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Panthi
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(18, 132, 60);"
+            >
+              Gupta
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            SHORELINE (PM list)
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            1:30pm–2:30pm
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h4
+        style="font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: rgb(107, 114, 128); margin: 10px 0px 6px;"
+      >
+        CALVARY LENAH VALLEY
+      </h4>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(251, 188, 4); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Horne
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(149, 111, 4);"
+            >
+              Ibbett
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            DAKOTA
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
+          >
+            Kit: 
+            Dakota (consignment)
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            9:00am–10:00am
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      Erin – office (all day) · MSL team chat 6:00pm–6:30pm · List Order 4:00pm–4:30pm
+    </div>
+  </section>
+  <section
+    aria-label="Wednesday 26 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h3
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Wednesday 26 August
+    </h3>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      No surgical cases
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      Brent offsite — NSA Conference, SA (continuing)
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      Toni – WFH (all day) · Erin – office (all day) · Ben – late start / early finish (continuing) · List Order 4:00pm–4:30pm
+    </div>
+  </section>
+  <section
+    aria-label="Thursday 27 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h3
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Thursday 27 August
+    </h3>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      No surgical cases — 1 internal meeting
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      Brent offsite — NSA Conference, SA (continuing)
+    </div>
+    <div
+      style="margin-top: 0px;"
+    >
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(156, 163, 175); flex-shrink: 0;"
+        />
+        <div
+          style="font-size: 13.5px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.45;"
+        >
+          Catch up – Erin, Brent & Toni · 10:00am–11:00am
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(156, 163, 175); flex-shrink: 0;"
+        />
+        <div
+          style="font-size: 13.5px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.45;"
+        >
+          S2AI transfer from RHH, Pt Fox · 11:00am–11:30am (case itself 31/8 @ Calvary — outside this window)
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(156, 163, 175); flex-shrink: 0;"
+        />
+        <div
+          style="font-size: 13.5px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.45;"
+        >
+          Spine Logistics Meeting (Erin, Brent, Toni, Ben, Mat) · 1:00pm–2:00pm
+        </div>
+      </div>
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      Toni – TM office (all day) · Ben – late start / early finish, last day · List Order 4:00pm–4:30pm
+    </div>
+  </section>
+  <section
+    aria-label="Friday 28 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h3
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Friday 28 August
+    </h3>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      2 cases — 2 RHH
+    </div>
+    <div
+      style="background: rgb(239, 246, 255); border: 1px solid rgb(147, 197, 253); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      BEN: Late start / regular finish
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      5:00pm — Handover: Ben becomes Spine Team Leader
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      Brent on call 5:00pm Fri – 7:30am Mon (resumes after conference, ends 10:30pm)
+    </div>
+    <div>
+      <h4
+        style="font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: rgb(107, 114, 128); margin: 10px 0px 6px;"
+      >
+        RHH
+      </h4>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Gordan
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(18, 132, 60);"
+            >
+              Gupta
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            DIPLOMAT
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            9:00am–10:00am
+          </div>
+        </div>
+      </div>
+      <div
+        style="display: flex; gap: 10px; margin-bottom: 10px;"
+      >
+        <div
+          aria-hidden="true"
+          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+        />
+        <div
+          style="min-width: 0px; flex: 1 1 0%;"
+        >
+          <div
+            style="font-size: 14px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.35;"
+          >
+            Vanderheim
+            <span
+              style="color: rgb(107, 114, 128); font-weight: 400;"
+            >
+               / 
+            </span>
+            <span
+              style="color: rgb(18, 132, 60);"
+            >
+              Gupta
+            </span>
+          </div>
+          <div
+            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+          >
+            MARINER + E4 CAGES
+          </div>
+          <div
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
+          >
+            10:00am–11:00am
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      Andrea Weller (Signus) in Hobart — vendor visit begins today · List Order 4:00pm–4:30pm
+    </div>
+  </section>
+  <section
+    aria-label="Saturday 29 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h3
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Saturday 29 August
+    </h3>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      No surgical cases
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      Brent on call (continuing)
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      Andrea Weller (Signus) in Hobart (continuing)
+    </div>
+  </section>
+  <section
+    aria-label="Sunday 30 August"
+    style="margin-bottom: 22px; font-family: Arial, Helvetica, "Helvetica Neue", sans-serif;"
+  >
+    <h3
+      style="font-size: 15px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 2px;"
+    >
+      Sunday 30 August
+    </h3>
+    <div
+      style="font-size: 12.5px; color: rgb(107, 114, 128); margin-bottom: 10px;"
+    >
+      No surgical cases
+    </div>
+    <div
+      style="font-size: 13px; font-weight: 700; color: rgb(30, 64, 175); margin-bottom: 6px; line-height: 1.45;"
+    >
+      <span
+        aria-hidden="true"
+      >
+        ■ 
+      </span>
+      Brent on call, through to 7:30am Monday 31 Aug (continuing)
+    </div>
+    <div
+      style="font-size: 12.5px; font-style: italic; color: rgb(107, 114, 128); line-height: 1.55; margin-top: 4px;"
+    >
+      Other: 
+      List Order 4:00pm–4:30pm (flagged — unusual for a Sunday, worth confirming)
+    </div>
+  </section>
+  <section
+    style="margin-top: 6px;"
+  >
+    <h3
+      style="font-size: 14.5px; font-weight: 700; color: rgb(17, 24, 39); margin: 0px 0px 10px;"
+    >
+      Key flags for the week
+    </h3>
+    <p
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
+    >
+      <strong
+        style="color: rgb(17, 24, 39);"
+      >
+        Surgeon load
+        :
+      </strong>
+       
+      Fowler (2 cases Mon, RHH), Ibbett (1 case Tue, Calvary), JPW (2 cases Tue, RHH), Gupta (3 cases: 1 Tue PM list, 2 Fri, all RHH).
+    </p>
+    <p
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
+    >
+      <strong
+        style="color: rgb(17, 24, 39);"
+      >
+        Team leader handover
+        :
+      </strong>
+       
+      Brent hands Spine Team Leader duties to Ben Friday 28 Aug, 5:00pm.
+    </p>
+    <p
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
+    >
+      <strong
+        style="color: rgb(17, 24, 39);"
+      >
+        Staffing
+        :
+      </strong>
+       
+      Ben on late start/early finish Mon–Thu (Boy's Week), then late start/regular finish Friday.
+    </p>
+    <p
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
+    >
+      <strong
+        style="color: rgb(17, 24, 39);"
+      >
+        Travel
+        :
+      </strong>
+       
+      Brent at the NSA Conference in South Australia from Tue afternoon (25 Aug) through Fri night (28 Aug) — factor into on-site coverage Wed/Thu/Fri.
+    </p>
+    <p
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
+    >
+      <strong
+        style="color: rgb(17, 24, 39);"
+      >
+        Logistics
+        :
+      </strong>
+       
+      S2AI transfer Thu 27 Aug for Pt Fox, whose case is 31 Aug at Calvary — just after this window. Daily List Order call 4:00pm Mon–Thu, plus one showing Sunday 30 Aug — worth double-checking that's intentional.
+    </p>
+    <p
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
+    >
+      <strong
+        style="color: rgb(17, 24, 39);"
+      >
+        Vendor visit
+        :
+      </strong>
+       
+      Andrea Weller (Signus) in Hobart from Sat 29 Aug.
+    </p>
+    <p
+      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
+    >
+      <strong
+        style="color: rgb(17, 24, 39);"
+      >
+        Colour-coding check
+        :
+      </strong>
+       
+      Two bookings missing their calendar colour — Jackson/Fowler (Mon 24 Aug, should be Grape) and Streets/JPW (Tue 25 Aug, should be Flamingo). All other cases correctly coded: Horne/Ibbett Banana, Gill/Fowler Grape, Kennedy/JPW Flamingo, Panthi/Gordan/Vanderheim (Gupta) Basil. The "Brent on Call" and "Ben – early finish" entries are coded Graphite (officially Dubey's colour) — likely an established staffing/on-call convention rather than a mistake, flagged per the standing check since Dubey has no case this window to confirm against.
+    </p>
+  </section>
+  <footer
+    style="margin-top: 20px;"
+  >
+    <hr
+      style="border-width: 1px medium medium; border-style: solid none none; border-color: rgb(229, 231, 235) currentcolor currentcolor; border-image: none; margin: 0px 0px 10px;"
+    />
+    <p
+      style="font-size: 11px; font-style: italic; color: rgb(107, 114, 128); text-align: center; line-height: 1.6; margin: 0px;"
+    >
+      Generated from bookings@technomed.com.au and Staff Leave calendar entries. Planning week runs Monday–Sunday: this document shows next week from Friday onward, and the current week on the Monday–Thursday syncs. Last generated: 
+      21 August 2026, 5:30pm AEST
+    </p>
+  </footer>
+</article>
+`;
