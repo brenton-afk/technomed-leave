@@ -18,14 +18,14 @@ const NAVY = colour.navy
 // Weekly is the default on a wide screen and on Fridays (when the new week
 // lands); Daily is the default on a phone Mon–Thu, where staff are reading it
 // in a corridor and only care about today.
+// Opens on today. This is the front door now, and the first thing anyone wants
+// is what is on today — the week is one tap away.
 function defaultView() {
   const wide = typeof window !== 'undefined' && window.innerWidth >= 640
-  const isFriday = new Date(todayStr() + 'T00:00:00Z').getUTCDay() === 5
-  if (wide || isFriday) return 'weekly'
-  return 'daily'
+  return wide ? 'weekly' : 'daily'
 }
 
-export default function ClinicalPlan({ user, onBack }) {
+export default function ClinicalPlan({ user, onBack, promptBanner }) {
   const prefs = useMemo(() => readPrefs(), [])
   const [view, setView] = useState(prefs.view || defaultView())
   const [window_, setWindow] = useState(() =>
@@ -143,7 +143,7 @@ export default function ClinicalPlan({ user, onBack }) {
       `}</style>
 
       <div className="tm-noprint">
-      <Header eyebrow="Case support" title="Clinical plan" onBack={onBack}>
+      <Header eyebrow="Case plan" title="Cases" onBack={onBack}>
         {/* View switcher — keyboard operable as a radio group */}
         <div role="radiogroup" aria-label="Plan view" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {[['weekly', 'Weekly'], ['daily', 'Daily']].map(([id, label]) => (
@@ -197,6 +197,8 @@ export default function ClinicalPlan({ user, onBack }) {
         )}
       </Header>
       </div>
+
+      {promptBanner}
 
       <div className="tm-plan" style={{ padding: 16 }}>
         {staleInfo && (

@@ -33,7 +33,7 @@ describe('bottom navigation', () => {
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Today', 'Scan', 'Cases', 'Me', 'Admin'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Kit', 'Me', 'Admin'])
   })
 
   it('hides Admin from everyone else', () => {
@@ -41,7 +41,7 @@ describe('bottom navigation', () => {
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Today', 'Scan', 'Cases', 'Me'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Kit', 'Me'])
     expect(labels).not.toContain('Admin')
   })
 
@@ -58,26 +58,34 @@ describe('bottom navigation', () => {
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const current = [...nav.querySelectorAll('button')].filter(b => b.getAttribute('aria-current') === 'page')
     expect(current).toHaveLength(1)
-    expect(current[0].textContent).toBe('Today')
+    expect(current[0].textContent).toBe('Cases')
   })
 
-  it('opens a hub rather than a screen when a tab is tapped', async () => {
+  it('opens a hub rather than a screen when a section tab is tapped', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Cases/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
     // A hub is a list of cards; these are its contents.
-    await waitFor(() => expect(screen.getByText('Clinical plan')).toBeInTheDocument())
-    expect(screen.getByText('Kit Room')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Kit Room')).toBeInTheDocument())
     expect(screen.getByText('Resources')).toBeInTheDocument()
+    expect(screen.getByText('Stock take')).toBeInTheDocument()
+  })
+
+  it('opens straight onto the case plan, with no Today screen', async () => {
+    signIn(REP)
+    render(<App />)
+    // The plan is the front door: a view switcher, not a hub of cards.
+    await waitFor(() => expect(screen.getByRole('radiogroup', { name: 'Plan view' })).toBeInTheDocument())
+    expect(screen.queryByText(/Scan a usage form/)).not.toBeInTheDocument()
   })
 })
 
 describe('hub contents (the agreed structure)', () => {
-  it('Cases carries the plan, calendar, kit, stock, resources and projects', async () => {
+  it('Kit carries kit, stock, resources, projects and the calendar view', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Cases/ }))
-    for (const label of ['Clinical plan', 'Calendar', 'Kit Room', 'Stock take', 'Resources', 'Projects & actions']) {
+    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
+    for (const label of ['Kit Room', 'Stock take', 'Resources', 'Projects & actions', 'Calendar view']) {
       await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument())
     }
   })
@@ -101,18 +109,18 @@ describe('hub contents (the agreed structure)', () => {
   it('navigates into a section and back out again', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Cases/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
     await waitFor(() => expect(screen.getByText('Stock take')).toBeInTheDocument())
 
     fireEvent.click(screen.getByText('Stock take'))
     await waitFor(() => expect(screen.getByText('Not set up yet')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    // Back returns to the hub, not out to Today.
-    await waitFor(() => expect(screen.getByText('Clinical plan')).toBeInTheDocument())
+    // Back returns to the hub, not out to the case plan.
+    await waitFor(() => expect(screen.getByText('Kit Room')).toBeInTheDocument())
   })
 
-  it('sends a non-admin who lands on Admin back to Today', () => {
+  it('does not render the admin portal for a non-admin', () => {
     signIn(REP)
     render(<App />)
     // The tab is not rendered, but the state is still reachable in principle.
@@ -124,7 +132,7 @@ describe('icon set', () => {
   const names = Object.keys(icons).filter(k => k.startsWith('Icon'))
 
   it('exports an icon for every tab and card', () => {
-    for (const required of ['IconToday', 'IconScan', 'IconCases', 'IconMe', 'IconAdmin']) {
+    for (const required of ['IconScan', 'IconCases', 'IconKit', 'IconMe', 'IconAdmin']) {
       expect(names).toContain(required)
     }
     expect(names.length).toBeGreaterThanOrEqual(18)

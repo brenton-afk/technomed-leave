@@ -2,7 +2,7 @@ import React from 'react'
 import { Page, Header, Body, NavCard, SectionLabel, Banner } from '../design/Shell.jsx'
 import { colour, text, space } from '../design/tokens.js'
 import {
-  IconPlan, IconCalendar, IconKit, IconStock, IconFolder, IconTasks,
+  IconCalendar, IconKit, IconStock, IconFolder, IconTasks,
   IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout
 } from '../design/icons.jsx'
 
@@ -11,36 +11,31 @@ import {
 // a tab gives you two competing "where am I" signals, which is most of what
 // makes an app feel cluttered.
 
-export function CasesHub({ user, onNavigate }) {
+export function KitHub({ user, onNavigate }) {
   return (
     <Page>
-      <Header eyebrow="Case support" title="Cases" subtitle="The plan, the kit, and everything you need before a list" />
+      <Header eyebrow="Kit and reference" title="Kit" subtitle="What's where, and everything you need before a list" />
       <Body>
-        <SectionLabel style={{ marginTop: 0 }}>This week</SectionLabel>
-        <NavCard icon={IconPlan} label="Clinical plan" tone="accent"
-          detail="Weekly and daily views, exportable"
-          onClick={() => onNavigate({ tab: 'cases', sub: 'plan' })} />
-        <NavCard icon={IconCalendar} label="Calendar"
-          detail="Bookings and leave, week by week"
-          onClick={() => onNavigate({ tab: 'cases', sub: 'calendar' })} />
-
-        <SectionLabel>Kit and stock</SectionLabel>
-        <NavCard icon={IconKit} label="Kit Room"
+        <SectionLabel style={{ marginTop: 0 }}>Kit and stock</SectionLabel>
+        <NavCard icon={IconKit} label="Kit Room" tone="accent"
           detail="What's where, across both hospitals"
-          onClick={() => onNavigate({ tab: 'cases', sub: 'kit' })} />
+          onClick={() => onNavigate({ tab: 'kit', sub: 'kitroom' })} />
         <NavCard icon={IconStock} label="Stock take"
           detail="Not set up yet"
-          onClick={() => onNavigate({ tab: 'cases', sub: 'stock' })} />
+          onClick={() => onNavigate({ tab: 'kit', sub: 'stock' })} />
 
         <SectionLabel>Reference</SectionLabel>
         <NavCard icon={IconFolder} label="Resources"
           detail="Surgical templates, techniques, implant codes"
-          onClick={() => onNavigate({ tab: 'cases', sub: 'resources' })} />
+          onClick={() => onNavigate({ tab: 'kit', sub: 'resources' })} />
 
         <SectionLabel>Team</SectionLabel>
         <NavCard icon={IconTasks} label="Projects & actions"
           detail="Meeting notes and the shared worklist"
-          onClick={() => onNavigate({ tab: 'cases', sub: 'projects' })} />
+          onClick={() => onNavigate({ tab: 'kit', sub: 'projects' })} />
+        <NavCard icon={IconCalendar} label="Calendar view"
+          detail="Day and week strip, all bookings"
+          onClick={() => onNavigate({ tab: 'kit', sub: 'calendar' })} />
       </Body>
     </Page>
   )
