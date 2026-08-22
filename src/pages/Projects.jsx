@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Page, Header } from '../design/Shell.jsx'
+import { colour, text } from '../design/tokens.js'
 import { upload } from '@vercel/blob/client'
 import { STAFF } from '../staffConfig.js'
 
-const PRIORITY_COLORS = { urgent: '#c0392b', normal: '#1a7a6e', low: '#6b7a8d' }
+const PRIORITY_COLORS = { urgent: colour.danger, normal: '#1a7a6e', low: colour.inkFaint }
 const PRIORITY_LABELS = { urgent: 'Urgent', normal: 'Normal', low: 'Low' }
 const STATUS_COLUMNS = [
   { key: 'open', label: 'Open', icon: '○' },
@@ -23,7 +25,7 @@ function formatElapsed(seconds) {
   return `${m}:${s}`
 }
 
-export default function Projects({ user }) {
+export default function Projects({ user, onBack }) {
   // recording state machine: idle | recording | uploading | transcribing | analyzing | reviewing | sending | sent
   const [phase, setPhase] = useState('idle')
   const [meetingTitle, setMeetingTitle] = useState('')
@@ -220,16 +222,12 @@ export default function Projects({ user }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
-      <div style={{ background: '#042746', paddingTop: 56, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }}>
-        <img src="/logo.png" alt="TechnoMed" style={{ height: 40, width: 'auto', marginBottom: 4 }} />
-        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 }}>Projects</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>Meeting notes & action items</div>
-      </div>
+    <Page>
+      <Header eyebrow="Team" title="Projects" subtitle="Meeting notes and the shared worklist" onBack={onBack} />
 
       <div style={{ padding: 16 }}>
         {error && (
-          <div style={{ background: '#fdecea', color: '#c0392b', padding: '12px 14px', borderRadius: 10, marginBottom: 12, fontSize: 13 }}>
+          <div style={{ background: colour.dangerSoft, color: colour.danger, padding: '12px 14px', borderRadius: 10, marginBottom: 12, fontSize: 14 }}>
             {error}
           </div>
         )}
@@ -239,7 +237,7 @@ export default function Projects({ user }) {
           <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(26,43,74,0.08)' }}>
             {phase === 'idle' && (
               <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#042746', marginBottom: 10 }}>New meeting</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: colour.navy, marginBottom: 10 }}>New meeting</div>
                 <input
                   type="text"
                   value={meetingTitle}
@@ -253,21 +251,21 @@ export default function Projects({ user }) {
                   onChange={e => setMeetingDate(e.target.value)}
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
                 />
-                <div style={{ fontSize: 12, color: '#6b7a8d', marginBottom: 12, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 12.5, color: colour.inkFaint, marginBottom: 12, lineHeight: 1.5 }}>
                   Keep this screen open and your phone unlocked for the whole meeting — recording stops if the screen locks.
                 </div>
-                <button onClick={startRecording} style={{ width: '100%', padding: 13, background: '#c0392b', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={startRecording} style={{ width: '100%', padding: 13, background: colour.danger, color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                   ● Start recording
                 </button>
               </>
             )}
             {phase === 'recording' && (
               <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 6 }}>{meetingTitle || 'Untitled meeting'}</div>
-                <div style={{ fontSize: 32, fontWeight: 700, color: '#042746', fontVariantNumeric: 'tabular-nums', marginBottom: 16 }}>
-                  <span style={{ color: '#c0392b' }}>●</span> {formatElapsed(elapsed)}
+                <div style={{ fontSize: 14, color: colour.inkFaint, marginBottom: 6 }}>{meetingTitle || 'Untitled meeting'}</div>
+                <div style={{ fontSize: 32, fontWeight: 700, color: colour.navy, fontVariantNumeric: 'tabular-nums', marginBottom: 16 }}>
+                  <span style={{ color: colour.danger }}>●</span> {formatElapsed(elapsed)}
                 </div>
-                <button onClick={stopRecording} style={{ width: '100%', padding: 13, background: '#042746', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={stopRecording} style={{ width: '100%', padding: 13, background: colour.navy, color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                   ■ Stop & send to agent
                 </button>
               </div>
@@ -277,23 +275,23 @@ export default function Projects({ user }) {
 
         {['uploading', 'transcribing', 'analyzing', 'sending'].includes(phase) && (
           <div style={{ background: 'white', borderRadius: 12, padding: 32, marginBottom: 16, textAlign: 'center', border: '1px solid rgba(26,43,74,0.08)' }}>
-            <div style={{ fontSize: 14, color: '#042746', fontWeight: 600, marginBottom: 4 }}>
+            <div style={{ fontSize: 14, color: colour.navy, fontWeight: 600, marginBottom: 4 }}>
               {phase === 'uploading' && 'Uploading recording…'}
               {phase === 'transcribing' && 'Transcribing the meeting…'}
               {phase === 'analyzing' && 'Drafting minutes and action items…'}
               {phase === 'sending' && 'Sending minutes to the team…'}
             </div>
-            <div style={{ fontSize: 12, color: '#6b7a8d' }}>This can take a few minutes for longer meetings.</div>
+            <div style={{ fontSize: 12.5, color: colour.inkFaint }}>This can take a few minutes for longer meetings.</div>
           </div>
         )}
 
         {phase === 'reviewing' && (
           <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(26,43,74,0.08)' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#042746', marginBottom: 6 }}>Review before sending</div>
-            <div style={{ fontSize: 13, color: '#6b7a8d', lineHeight: 1.5, marginBottom: 14 }}>{summary}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: colour.navy, marginBottom: 6 }}>Review before sending</div>
+            <div style={{ fontSize: 14, color: colour.inkFaint, lineHeight: 1.5, marginBottom: 14 }}>{summary}</div>
 
             {draftItems.length === 0 && (
-              <div style={{ fontSize: 13, color: '#6b7a8d', textAlign: 'center', padding: '16px 0' }}>No action items found in this meeting.</div>
+              <div style={{ fontSize: 14, color: colour.inkFaint, textAlign: 'center', padding: '16px 0' }}>No action items found in this meeting.</div>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -303,24 +301,24 @@ export default function Projects({ user }) {
                     <input
                       value={it.task}
                       onChange={e => updateDraft(it._localId, 'task', e.target.value)}
-                      style={{ flex: 1, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 13, fontWeight: 500 }}
+                      style={{ flex: 1, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 14, fontWeight: 500 }}
                     />
                     <button onClick={() => removeDraft(it._localId)} style={{ background: 'none', border: 'none', color: '#aab0bb', fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                     <select value={it.assignee} onChange={e => updateDraft(it._localId, 'assignee', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12 }}>
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5 }}>
                       <option value="Unassigned">Unassigned</option>
                       {STAFF.map(s => <option key={s.email} value={s.name}>{s.name}</option>)}
                     </select>
                     <select value={it.priority} onChange={e => updateDraft(it._localId, 'priority', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12, color: PRIORITY_COLORS[it.priority] }}>
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5, color: PRIORITY_COLORS[it.priority] }}>
                       {Object.keys(PRIORITY_LABELS).map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
                     </select>
                     <input type="date" value={it.due_date} onChange={e => updateDraft(it._localId, 'due_date', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12 }} />
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5 }} />
                   </div>
-                  {it.notes && <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 6 }}>{it.notes}</div>}
+                  {it.notes && <div style={{ fontSize: 12.5, color: colour.inkFaint, marginTop: 6 }}>{it.notes}</div>}
                 </div>
               ))}
             </div>
@@ -328,7 +326,7 @@ export default function Projects({ user }) {
             <button onClick={sendToTeam} style={{ width: '100%', padding: 13, background: '#1a7a6e', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', marginTop: 14 }}>
               Send minutes & action items to team
             </button>
-            <button onClick={resetFlow} style={{ width: '100%', padding: 10, background: 'transparent', color: '#6b7a8d', border: 'none', fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+            <button onClick={resetFlow} style={{ width: '100%', padding: 10, background: 'transparent', color: colour.inkFaint, border: 'none', fontSize: 14, cursor: 'pointer', marginTop: 4 }}>
               Discard
             </button>
           </div>
@@ -337,11 +335,11 @@ export default function Projects({ user }) {
         {phase === 'sent' && (
           <div style={{ background: 'white', borderRadius: 12, padding: 24, marginBottom: 16, textAlign: 'center', border: '1px solid rgba(26,43,74,0.08)' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#042746', marginBottom: 4 }}>Minutes sent</div>
-            <div style={{ fontSize: 13, color: '#6b7a8d', marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: colour.navy, marginBottom: 4 }}>Minutes sent</div>
+            <div style={{ fontSize: 14, color: colour.inkFaint, marginBottom: 16 }}>
               {sentResult?.itemCount || 0} action item{sentResult?.itemCount === 1 ? '' : 's'} added to the worklist and emailed to the team.
             </div>
-            <button onClick={resetFlow} style={{ padding: '10px 20px', background: '#042746', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={resetFlow} style={{ padding: '10px 20px', background: colour.navy, color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
               Record another meeting
             </button>
           </div>
@@ -349,12 +347,12 @@ export default function Projects({ user }) {
 
         {/* Worklist board */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#042746' }}>Worklist</div>
-          <div style={{ fontSize: 11, color: '#6b7a8d' }}>{worklist.length} item{worklist.length === 1 ? '' : 's'}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: colour.navy }}>Worklist</div>
+          <div style={{ fontSize: 12.5, color: colour.inkFaint }}>{worklist.length} item{worklist.length === 1 ? '' : 's'}</div>
         </div>
 
         {loadingBoard ? (
-          <div style={{ textAlign: 'center', padding: 30, color: '#aab0bb', fontSize: 13 }}>Loading…</div>
+          <div style={{ textAlign: 'center', padding: 30, color: '#aab0bb', fontSize: 14 }}>Loading…</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {STATUS_COLUMNS.map(col => {
@@ -362,22 +360,22 @@ export default function Projects({ user }) {
               return (
                 <div key={col.key} style={{ background: 'white', borderRadius: 12, border: '1px solid rgba(26,43,74,0.08)', overflow: 'hidden' }}>
                   <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(26,43,74,0.06)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 12 }}>{col.icon}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#042746', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{col.label}</span>
-                    <span style={{ fontSize: 11, color: '#aab0bb', marginLeft: 'auto' }}>{items.length}</span>
+                    <span style={{ fontSize: 12.5 }}>{col.icon}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: colour.navy, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{col.label}</span>
+                    <span style={{ fontSize: 12.5, color: '#aab0bb', marginLeft: 'auto' }}>{items.length}</span>
                   </div>
                   <div style={{ padding: 10 }}>
-                    {items.length === 0 && <div style={{ fontSize: 12, color: '#aab0bb', textAlign: 'center', padding: '10px 0' }}>Nothing here</div>}
+                    {items.length === 0 && <div style={{ fontSize: 12.5, color: '#aab0bb', textAlign: 'center', padding: '10px 0' }}>Nothing here</div>}
                     {items.map(it => (
-                      <div key={it.id} onClick={() => cycleStatus(it)} style={{ background: '#f8f9fc', borderRadius: 8, padding: 10, marginBottom: 8, cursor: 'pointer', borderLeft: `3px solid ${PRIORITY_COLORS[it.priority] || '#6b7a8d'}` }}>
+                      <div key={it.id} onClick={() => cycleStatus(it)} style={{ background: '#f8f9fc', borderRadius: 8, padding: 10, marginBottom: 8, cursor: 'pointer', borderLeft: `3px solid ${PRIORITY_COLORS[it.priority] || colour.inkFaint}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#042746' }}>{it.task}</div>
-                          <button onClick={e => { e.stopPropagation(); deleteItem(it.id) }} style={{ background: 'none', border: 'none', color: '#aab0bb', fontSize: 13, cursor: 'pointer', padding: '0 0 0 8px' }}>✕</button>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: colour.navy }}>{it.task}</div>
+                          <button onClick={e => { e.stopPropagation(); deleteItem(it.id) }} style={{ background: 'none', border: 'none', color: '#aab0bb', fontSize: 14, cursor: 'pointer', padding: '0 0 0 8px' }}>✕</button>
                         </div>
-                        <div style={{ fontSize: 11, color: '#6b7a8d', marginTop: 4 }}>
+                        <div style={{ fontSize: 12.5, color: colour.inkFaint, marginTop: 4 }}>
                           {it.assignee}{it.due_date ? ` · Due ${formatDate(it.due_date)}` : ''}
                         </div>
-                        <div style={{ fontSize: 10, color: '#aab0bb', marginTop: 4 }}>from {it.sourceMeetingTitle} · {formatDate(it.sourceMeetingDate)}</div>
+                        <div style={{ fontSize: 10.5, color: '#aab0bb', marginTop: 4 }}>from {it.sourceMeetingTitle} · {formatDate(it.sourceMeetingDate)}</div>
                       </div>
                     ))}
                   </div>
@@ -387,6 +385,6 @@ export default function Projects({ user }) {
           </div>
         )}
       </div>
-    </div>
+    </Page>
   )
 }

@@ -33,6 +33,13 @@ Screens built on `design/Shell.jsx`'s `Header` draw their own back arrow; older 
 - **`icons.jsx`** — hand-drawn, stroke-only, 24 grid, 1.7 stroke, round caps. The active tab is marked by stroke *weight*, not a filled variant, so the set stays one family. All are `aria-hidden` because each sits beside a text label.
 - **`Shell.jsx`** — `Page`, `Header`, `Body`, `NavCard`, `Card`, `Banner`, `Button`, `EmptyState`, `Skeleton`. Hairline borders over drop shadows; `elevation` is only for things that genuinely float.
 
+All six pages behind the hubs are migrated onto `Header`/`Page` and the token scale. Two deliberate exemptions, asserted by `src/design/consistency.test.js` rather than left implicit:
+
+- **`clinical/PlanBlocks.jsx` and `ClinicalPlan.jsx`'s document body** keep their own palette and sizes. They exist to replicate the emailed Word document, snapshot tests lock that, and pulling them onto the app scale would break the thing they copy. Only the plan's *chrome* uses `Header`.
+- **`admin/*`** still carries its own styling. The consistency test names it as outstanding rather than ignoring it.
+
+That test also fails the build if an off-scale font size or a hardcoded brand hex reappears in a migrated page — the drift it guards against is invisible in review, because each screen looks fine on its own.
+
 `src/pages/TodayFeed.jsx` is the home screen: a scrolling feed, not a dashboard. It surfaces today's cases, the day's flags, the signed-in user's action items and an unsubmitted-timesheet prompt. Every item is a pointer into a section — the feed never becomes a place to do work.
 
 `src/pages/FileBrowser.jsx` serves both Resources and filed usage sheets from Dropbox, since they are the same problem. Paths are constrained server-side to the usage and resources roots (`assertAllowedPath` in `api/usage/agent.js`); without that, any signed-in user could read the whole Dropbox account. Temporary links are fetched per tap and never stored — a persisted one would be a public URL to patient data.

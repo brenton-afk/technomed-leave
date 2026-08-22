@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { Page, Header } from '../design/Shell.jsx'
+import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 
-const NAVY = '#042746'
-const TEAL = '#189a85'
-const BLUE = '#2899d4'
+// Points at the shared tokens rather than redefining them, so this screen
+// cannot drift from the rest of the app. Amber and purple stay local: here they
+// are data categories (overtime, on-call), not decoration.
+const NAVY = tokenColour.navy
+const TEAL = tokenColour.accent
+const BLUE = tokenColour.navySoft
 const AMBER = '#f59e0b'
 const PURPLE = '#8e24aa'
-const MUTED = '#6b7a8d'
-const BORDER = 'rgba(26,43,74,0.12)'
+const MUTED = tokenColour.inkFaint
+const BORDER = tokenColour.line
 
 const COLOURS = { navy: NAVY, teal: TEAL, blue: BLUE, amber: AMBER, purple: PURPLE }
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -60,21 +65,21 @@ function NumberPad({ cell, categories, onSet, onClose }) {
       <div onClick={e => e.stopPropagation()}
         style={{ background: 'white', width: '100%', borderRadius: '18px 18px 0 0', padding: '18px 16px calc(18px + env(safe-area-inset-bottom, 0px))' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>{category?.label}</div>
-          <div style={{ fontSize: 12, color: MUTED }}>{DAY_NAMES[cell.dayIndex % 7]} {cell.day.slice(8, 10)}/{cell.day.slice(5, 7)}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{category?.label}</div>
+          <div style={{ fontSize: 12.5, color: MUTED }}>{DAY_NAMES[cell.dayIndex % 7]} {cell.day.slice(8, 10)}/{cell.day.slice(5, 7)}</div>
         </div>
-        <div style={{ fontSize: 11, color: MUTED, marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 12 }}>
           {isCount ? 'Number of callouts' : 'Hours'}{category?.hint ? ` · ${category.hint}` : ''}
         </div>
 
-        <div style={{ background: '#f0f3f7', borderRadius: 12, padding: '16px 18px', marginBottom: 12, textAlign: 'right', fontSize: 32, fontWeight: 700, color: NAVY, minHeight: 64, boxSizing: 'border-box' }}>
-          {value || '0'}<span style={{ fontSize: 15, color: MUTED, marginLeft: 6 }}>{isCount ? '' : 'h'}</span>
+        <div style={{ background: tokenColour.canvas, borderRadius: 12, padding: '16px 18px', marginBottom: 12, textAlign: 'right', fontSize: 32, fontWeight: 700, color: NAVY, minHeight: 64, boxSizing: 'border-box' }}>
+          {value || '0'}<span style={{ fontSize: 16, color: MUTED, marginLeft: 6 }}>{isCount ? '' : 'h'}</span>
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           {quick.map(q => (
             <button key={q} onClick={() => setValue(String(q))}
-              style={{ flex: 1, padding: '9px 0', background: '#eef4f3', color: TEAL, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              style={{ flex: 1, padding: '9px 0', background: '#eef4f3', color: TEAL, border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               {q}{isCount ? '' : 'h'}
             </button>
           ))}
@@ -83,7 +88,7 @@ function NumberPad({ cell, categories, onSet, onClose }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
           {['1', '2', '3', '4', '5', '6', '7', '8', '9', isCount ? '' : '.', '0', '⌫'].map((k, i) => (
             <button key={i} disabled={!k} onClick={() => k === '⌫' ? setValue(v => v.slice(0, -1)) : k && press(k)}
-              style={{ padding: '16px 0', background: k ? 'white' : 'transparent', border: k ? `1px solid ${BORDER}` : 'none', borderRadius: 10, fontSize: 20, fontWeight: 600, color: NAVY, cursor: k ? 'pointer' : 'default' }}>
+              style={{ padding: '16px 0', background: k ? 'white' : 'transparent', border: k ? `1px solid ${BORDER}` : 'none', borderRadius: 10, fontSize: 19, fontWeight: 600, color: NAVY, cursor: k ? 'pointer' : 'default' }}>
               {k}
             </button>
           ))}
@@ -95,7 +100,7 @@ function NumberPad({ cell, categories, onSet, onClose }) {
             Clear
           </button>
           <button onClick={() => { onSet(Number(value) || 0); onClose() }}
-            style={{ flex: 2, padding: 14, background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ flex: 2, padding: 14, background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
             Done
           </button>
         </div>
@@ -124,15 +129,15 @@ function OnCallModal({ days, onApply, onClose }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: '100%', maxWidth: 380 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>On-call calculator</div>
-        <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>Overnight periods roll past midnight automatically.</div>
-        <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Night starting</label>
+        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 16 }}>Overnight periods roll past midnight automatically.</div>
+        <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Night starting</label>
         <select value={day} onChange={e => setDay(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, marginBottom: 12, background: 'white', color: NAVY }}>
           {days.map((d, i) => <option key={d} value={d}>{DAY_NAMES[i % 7]} {d.slice(8, 10)}/{d.slice(5, 7)}</option>)}
         </select>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           {[['From', from, setFrom], ['To', to, setTo]].map(([label, val, set]) => (
             <div key={label} style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>{label}</label>
+              <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>{label}</label>
               <input type="time" value={val} onChange={e => set(e.target.value)}
                 style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box', color: NAVY }} />
             </div>
@@ -142,7 +147,7 @@ function OnCallModal({ days, onApply, onClose }) {
           {hours} on-call hours
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 13, background: '#f0f3f7', border: 'none', borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ flex: 1, padding: 13, background: tokenColour.canvas, border: 'none', borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Cancel</button>
           <button onClick={() => { onApply(day, hours); onClose() }} disabled={!hours}
             style={{ flex: 2, padding: 13, background: hours ? PURPLE : '#c8d2dc', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: hours ? 'pointer' : 'default' }}>
             Add to timesheet
@@ -168,16 +173,16 @@ function SplitModal({ days, onApply, onClose }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: '100%', maxWidth: 380 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Split a day</div>
-        <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>Divide the day between admin and scientific hours.</div>
+        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 16 }}>Divide the day between admin and scientific hours.</div>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 2 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Day</label>
+            <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Day</label>
             <select value={day} onChange={e => setDay(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, background: 'white', color: NAVY }}>
               {days.map((d, i) => <option key={d} value={d}>{DAY_NAMES[i % 7]} {d.slice(8, 10)}/{d.slice(5, 7)}</option>)}
             </select>
           </div>
           <div style={{ flex: 1 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Hours</label>
+            <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Hours</label>
             <input type="number" step="0.1" value={hours} onChange={e => setHours(e.target.value)}
               style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box', color: NAVY }} />
           </div>
@@ -186,16 +191,16 @@ function SplitModal({ days, onApply, onClose }) {
           style={{ width: '100%', marginBottom: 8, accentColor: NAVY }} />
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <div style={{ flex: 1, background: '#eaeff4', color: NAVY, borderRadius: 10, padding: '11px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.4px', opacity: 0.7 }}>Admin {pct}%</div>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>{admin}h</div>
+            <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.4px', opacity: 0.7 }}>Admin {pct}%</div>
+            <div style={{ fontSize: 19, fontWeight: 700 }}>{admin}h</div>
           </div>
           <div style={{ flex: 1, background: '#eaf4fc', color: BLUE, borderRadius: 10, padding: '11px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.4px', opacity: 0.7 }}>Scientific {100 - pct}%</div>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>{scientific}h</div>
+            <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.4px', opacity: 0.7 }}>Scientific {100 - pct}%</div>
+            <div style={{ fontSize: 19, fontWeight: 700 }}>{scientific}h</div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: 13, background: '#f0f3f7', border: 'none', borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ flex: 1, padding: 13, background: tokenColour.canvas, border: 'none', borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Cancel</button>
           <button onClick={() => { onApply(day, admin, scientific); onClose() }} disabled={!total}
             style={{ flex: 2, padding: 13, background: total ? TEAL : '#c8d2dc', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: total ? 'pointer' : 'default' }}>
             Apply split
@@ -208,7 +213,7 @@ function SplitModal({ days, onApply, onClose }) {
 
 // ─── Main ────────────────────────────────────────────────────
 
-export default function Timesheets({ user }) {
+export default function Timesheets({ user, onBack }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [categories, setCategories] = useState([])
@@ -351,8 +356,8 @@ export default function Timesheets({ user }) {
   if (error && !categories.length) {
     return (
       <div style={{ padding: 16 }}>
-        <div style={{ background: '#fdecea', color: '#c0392b', padding: 14, borderRadius: 10, fontSize: 13, lineHeight: 1.5 }}>{error}</div>
-        <button onClick={boot} style={{ width: '100%', marginTop: 12, padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 13, color: MUTED, cursor: 'pointer' }}>Try again</button>
+        <div style={{ background: '#fdecea', color: '#c0392b', padding: 14, borderRadius: 10, fontSize: 14, lineHeight: 1.5 }}>{error}</div>
+        <button onClick={boot} style={{ width: '100%', marginTop: 12, padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Try again</button>
       </div>
     )
   }
@@ -363,7 +368,7 @@ export default function Timesheets({ user }) {
       <div style={{ padding: '28px 16px 90px', textAlign: 'center' }}>
         <div style={{ width: 64, height: 64, borderRadius: 32, background: '#e6f4f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 30, color: TEAL }}>✓</div>
         <div style={{ fontSize: 19, fontWeight: 700, color: NAVY, marginBottom: 6 }}>Timesheet submitted</div>
-        <div style={{ fontSize: 13, color: MUTED, marginBottom: 20, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 14, color: MUTED, marginBottom: 20, lineHeight: 1.6 }}>
           {submitted.periodStart} to {submitted.periodEnd}<br />Brenton and Erin have been notified.
         </div>
         <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, textAlign: 'left', marginBottom: 14 }}>
@@ -371,13 +376,13 @@ export default function Timesheets({ user }) {
             ['Week 1', `${submitted.totals.weekHours[0]}h`],
             ['Week 2', `${submitted.totals.weekHours[1]}h`],
             ...(submitted.totals.callouts ? [['Call-ins', submitted.totals.callouts]] : [])].map(([l, v]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid rgba(26,43,74,0.06)', fontSize: 13 }}>
+            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid rgba(26,43,74,0.06)', fontSize: 14 }}>
               <span style={{ color: MUTED }}>{l}</span><strong style={{ color: NAVY }}>{v}</strong>
             </div>
           ))}
         </div>
         {submitted.warnings?.length > 0 && (
-          <div style={{ background: '#fff8e6', color: '#8a5a00', padding: 12, borderRadius: 10, fontSize: 12, textAlign: 'left', marginBottom: 14, lineHeight: 1.5 }}>
+          <div style={{ background: '#fff8e6', color: '#8a5a00', padding: 12, borderRadius: 10, fontSize: 12.5, textAlign: 'left', marginBottom: 14, lineHeight: 1.5 }}>
             {submitted.warnings.map((w, i) => <div key={i}>· {w}</div>)}
           </div>
         )}
@@ -393,17 +398,17 @@ export default function Timesheets({ user }) {
   if (stage === 'review') {
     return (
       <div style={{ padding: '16px 16px 90px' }}>
-        <div style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Review your timesheet</div>
-        <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>{period.start} to {period.end}</div>
-        {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        <div style={{ fontSize: 19, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Review your timesheet</div>
+        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 16 }}>{period.start} to {period.end}</div>
+        {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12 }}>{error}</div>}
 
         <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
           {categories.filter(c => totals.byCategory[c.key]).map(c => (
             <div key={c.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(26,43,74,0.06)' }}>
-              <span style={{ fontSize: 13, color: NAVY, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ fontSize: 14, color: NAVY, display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: COLOURS[c.colour] || NAVY }} />{c.label}
               </span>
-              <strong style={{ fontSize: 13, color: NAVY }}>{totals.byCategory[c.key]}{c.unit === 'count' ? '' : 'h'}</strong>
+              <strong style={{ fontSize: 14, color: NAVY }}>{totals.byCategory[c.key]}{c.unit === 'count' ? '' : 'h'}</strong>
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 11, marginTop: 4 }}>
@@ -417,7 +422,7 @@ export default function Timesheets({ user }) {
           {busy ? 'Submitting to Xero…' : 'Confirm and submit'}
         </button>
         <button onClick={() => setStage('entry')} disabled={busy}
-          style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 13, color: MUTED, cursor: 'pointer' }}>
+          style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>
           Keep editing
         </button>
       </div>
@@ -431,17 +436,23 @@ export default function Timesheets({ user }) {
   const hasToniSplit = categories.some(c => c.key === 'ordinary_toni_admin') && categories.some(c => c.key === 'ordinary_toni_scientific')
 
   return (
-    <div style={{ paddingBottom: 130 }}>
+    <Page style={{ paddingBottom: 130 }}>
+      <Header
+        eyebrow="Pay and time"
+        title="Timesheet"
+        subtitle={period ? `${period.start} to ${period.end}` : undefined}
+        onBack={onBack}
+      />
       <div style={{ padding: '14px 16px 0' }}>
-        {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12 }}>{error}</div>}
 
         {alreadySubmitted && (
-          <div style={{ background: '#e6f4f2', color: TEAL, padding: 12, borderRadius: 10, fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ background: '#e6f4f2', color: TEAL, padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12, lineHeight: 1.5 }}>
             ✓ This fortnight was already <strong>{alreadySubmitted.status}</strong>. Any changes here won't be sent.
           </div>
         )}
         {rejected && (
-          <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12, lineHeight: 1.5 }}>
             This fortnight was returned: <strong>{rejected.rejectionReason}</strong><br />Correct it below and resubmit.
           </div>
         )}
@@ -449,7 +460,7 @@ export default function Timesheets({ user }) {
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {[0, 1].map(w => (
             <button key={w} onClick={() => setActiveWeek(w)}
-              style={{ flex: 1, padding: '9px 0', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: activeWeek === w ? NAVY : 'rgba(4,39,70,0.07)', color: activeWeek === w ? 'white' : MUTED }}>
+              style={{ flex: 1, padding: '9px 0', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700, background: activeWeek === w ? NAVY : 'rgba(4,39,70,0.07)', color: activeWeek === w ? 'white' : MUTED }}>
               Week {w + 1} · {totals.weekHours[w]}h
             </button>
           ))}
@@ -457,16 +468,16 @@ export default function Timesheets({ user }) {
 
         <div style={{ display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap' }}>
           <button onClick={() => fillStandardWeek(activeWeek)}
-            style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12, fontWeight: 600, color: NAVY, cursor: 'pointer' }}>
+            style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: NAVY, cursor: 'pointer' }}>
             ⚡ Standard week
           </button>
           <button onClick={() => setShowOnCall(true)}
-            style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12, fontWeight: 600, color: PURPLE, cursor: 'pointer' }}>
+            style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: PURPLE, cursor: 'pointer' }}>
             🌙 On-call
           </button>
           {hasToniSplit && (
             <button onClick={() => setShowSplit(true)}
-              style={{ flex: '1 1 100%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12, fontWeight: 600, color: TEAL, cursor: 'pointer' }}>
+              style={{ flex: '1 1 100%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: TEAL, cursor: 'pointer' }}>
               ◑ Split admin / scientific
             </button>
           )}
@@ -474,11 +485,11 @@ export default function Timesheets({ user }) {
 
         {overtimeNudges.filter(n => Math.floor(n.dayIndex / 7) === activeWeek).map(n => (
           <div key={n.day} style={{ background: '#fff8e6', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ fontSize: 12, color: '#8a5a00', lineHeight: 1.4 }}>
+            <div style={{ fontSize: 12.5, color: '#8a5a00', lineHeight: 1.4 }}>
               <strong>{DAY_NAMES[n.dayIndex % 7]}</strong> is {round2(totals.byDay[n.day])}h — {n.excess}h over a standard day.
             </div>
             <button onClick={() => applyOvertime(n)}
-              style={{ padding: '8px 11px', background: AMBER, color: 'white', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ padding: '8px 11px', background: AMBER, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               → Overtime
             </button>
           </div>
@@ -486,15 +497,15 @@ export default function Timesheets({ user }) {
 
         {callInCategory && visibleCallIns.filter(c => days.indexOf(c.day) >= activeWeek * 7 && days.indexOf(c.day) < activeWeek * 7 + 7).map(c => (
           <div key={c.id} style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: PURPLE, fontWeight: 700, marginBottom: 3 }}>Called in for this case?</div>
-            <div style={{ fontSize: 12, color: NAVY, lineHeight: 1.45 }}>{c.title} · {DAY_NAMES[days.indexOf(c.day) % 7]} {c.time} ({c.reason})</div>
+            <div style={{ fontSize: 12.5, color: PURPLE, fontWeight: 700, marginBottom: 3 }}>Called in for this case?</div>
+            <div style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>{c.title} · {DAY_NAMES[days.indexOf(c.day) % 7]} {c.time} ({c.reason})</div>
             <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
               <button onClick={() => { addToCell(callInCategory.key, c.day, 1); setDismissedCallIns(p => [...p, c.id]) }}
-                style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
                 Add call-in allowance
               </button>
               <button onClick={() => setDismissedCallIns(p => [...p, c.id])}
-                style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: MUTED, cursor: 'pointer' }}>
+                style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, color: MUTED, cursor: 'pointer' }}>
                 No
               </button>
             </div>
@@ -508,8 +519,8 @@ export default function Timesheets({ user }) {
           <div style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
             <div />
             {weekDays.map((d, i) => (
-              <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: isWeekend(activeWeek * 7 + i) ? BLUE : MUTED, textTransform: 'uppercase' }}>
-                {DAY_NAMES[i]}<div style={{ fontSize: 11, fontWeight: 600, color: NAVY }}>{dayNumber(d)}</div>
+              <div key={d} style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: isWeekend(activeWeek * 7 + i) ? BLUE : MUTED, textTransform: 'uppercase' }}>
+                {DAY_NAMES[i]}<div style={{ fontSize: 12.5, fontWeight: 600, color: NAVY }}>{dayNumber(d)}</div>
               </div>
             ))}
           </div>
@@ -527,7 +538,7 @@ export default function Timesheets({ user }) {
                   <button key={day}
                     onClick={() => setPadCell({ categoryKey: cat.key, day, dayIndex: activeWeek * 7 + i, value })}
                     style={{
-                      padding: '11px 0', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: value ? 700 : 400,
+                      padding: '11px 0', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: value ? 700 : 400,
                       background: value ? tint : (isWeekend(activeWeek * 7 + i) ? 'rgba(4,39,70,0.035)' : 'white'),
                       color: value ? 'white' : 'rgba(26,43,74,0.25)',
                       border: value ? 'none' : `1px solid ${BORDER}`
@@ -540,11 +551,11 @@ export default function Timesheets({ user }) {
           ))}
 
           <div style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginTop: 7 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>Day total</div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>Day total</div>
             {weekDays.map(day => {
               const v = round2(totals.byDay[day] || 0)
               return (
-                <div key={day} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, padding: '7px 0', color: v > STANDARD_DAY ? AMBER : (v ? NAVY : 'rgba(26,43,74,0.22)') }}>
+                <div key={day} style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, padding: '7px 0', color: v > STANDARD_DAY ? AMBER : (v ? NAVY : 'rgba(26,43,74,0.22)') }}>
                   {v || '·'}
                 </div>
               )
@@ -555,7 +566,7 @@ export default function Timesheets({ user }) {
 
       <div style={{ padding: '10px 16px 0' }}>
         <button onClick={saveDraft} disabled={busy}
-          style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 13, color: MUTED, cursor: 'pointer' }}>
+          style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>
           {busy ? 'Saving…' : savedAt ? `Draft saved ${new Date(savedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })} — save again` : 'Save draft'}
         </button>
       </div>
@@ -563,10 +574,10 @@ export default function Timesheets({ user }) {
       {/* Running total bar, above the app's bottom nav */}
       <div className="tm-fixed" style={{ position: 'fixed', bottom: 70, background: NAVY, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 90 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Fortnight total</div>
+          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Fortnight total</div>
           <div style={{ fontSize: 19, fontWeight: 700, color: 'white', lineHeight: 1.15 }}>
             {totals.totalHours}h
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 400, marginLeft: 7 }}>
+            <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', fontWeight: 400, marginLeft: 7 }}>
               {totals.weekHours[0]} + {totals.weekHours[1]}
               {totals.callouts ? ` · ${totals.callouts} call-in${totals.callouts === 1 ? '' : 's'}` : ''}
             </span>
@@ -597,6 +608,6 @@ export default function Timesheets({ user }) {
             setCell('ordinary_toni_scientific', day, scientific)
           }} />
       )}
-    </div>
+    </Page>
   )
 }

@@ -40,7 +40,11 @@ const TABS = [
 // Screens built on the new Header draw their own back arrow. Everything else
 // predates it and gets a floating control instead, which avoids rewriting six
 // working pages just to add one button.
-const SELF_BACK = new Set(['resources', 'stock', 'usagefiles', 'security', 'payslips'])
+const SELF_BACK = new Set([
+  'resources', 'stock', 'usagefiles', 'security', 'payslips',
+  // Migrated to design/Shell.jsx's Header, so they draw their own.
+  'plan', 'calendar', 'kit', 'projects', 'timesheets', 'leave'
+])
 
 // Matches the server-side session TTL in api/_auth.js.
 const SESSION_MAX_AGE_MS = 60 * 60 * 1000
@@ -128,10 +132,10 @@ export default function App() {
 
     if (tab === 'cases') {
       switch (sub) {
-        case 'plan': return <ClinicalPlan user={user} />
-        case 'calendar': return <TodayView user={user} />
-        case 'kit': return <KitRoom user={user} />
-        case 'projects': return <Projects user={user} />
+        case 'plan': return <ClinicalPlan user={user} onBack={back} />
+        case 'calendar': return <TodayView user={user} onBack={back} />
+        case 'kit': return <KitRoom user={user} onBack={back} />
+        case 'projects': return <Projects user={user} onBack={back} />
         case 'resources':
           return <FileBrowser user={user} root="resources" eyebrow="Case support" title="Resources" onBack={back} />
         case 'stock':
@@ -143,8 +147,8 @@ export default function App() {
 
     if (tab === 'me') {
       switch (sub) {
-        case 'timesheets': return <Timesheets user={user} />
-        case 'leave': return <LeaveForm user={user} onSuccess={setSubmitted} />
+        case 'timesheets': return <Timesheets user={user} onBack={back} />
+        case 'leave': return <LeaveForm user={user} onSuccess={setSubmitted} onBack={back} />
         case 'usagefiles':
           return <FileBrowser user={user} root="usage" eyebrow="Your files" title="Filed usage" onBack={back} />
         case 'security':

@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react'
+import { Page, Header, Body } from '../design/Shell.jsx'
+import { colour, text, space, radius, border } from '../design/tokens.js'
+
 
 const COLOR_MAP = {
   '1':'#7986cb','2':'#33b679','3':'#8e24aa','4':'#e67c73',
@@ -10,7 +13,7 @@ const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-function getColor(colorId) { return COLOR_MAP[colorId] || '#042746' }
+function getColor(colorId) { return COLOR_MAP[colorId] || colour.navy }
 
 function formatTime(dateStr) {
   if (!dateStr || !dateStr.includes('T')) return null
@@ -39,7 +42,7 @@ function eventOnDate(event, dateStr) {
   return event.start.split('T')[0] === dateStr
 }
 
-export default function TodayView({ user }) {
+export default function TodayView({ user, onBack }) {
   const [view, setView] = useState('day')
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [weekBase, setWeekBase] = useState(new Date())
@@ -84,32 +87,23 @@ export default function TodayView({ user }) {
   function eventsOnDay(date) { return events.filter(e => eventOnDate(e, dateKey(date))) }
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', background:'#f0f3f7' }}>
-      {/* Header */}
-      <div style={{ background:'#042746', padding:'48px 20px 0' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
-          <div>
-            <img src="/logo.png" alt="TechnoMed" style={{ height:36, width:'auto', marginBottom:4 }} />
-            <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase' }}>Staff Portal</div>
-          </div>
-          <div style={{ paddingTop:4, fontSize:12, color:'rgba(255,255,255,0.5)' }}>Hi, {user?.name?.split(' ')[0]}</div>
-        </div>
-
+    <Page style={{ display:'flex', flexDirection:'column' }}>
+      <Header eyebrow="Case support" title="Calendar" subtitle="Bookings and leave, week by week" onBack={onBack}>
         {/* View toggle */}
-        <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-          <button onClick={() => setView('day')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='day'?'white':'rgba(255,255,255,0.12)', color: view==='day'?'#042746':'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>Day</button>
-          <button onClick={() => setView('week')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='week'?'white':'rgba(255,255,255,0.12)', color: view==='week'?'#042746':'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>Week</button>
-          <button onClick={() => { setSelectedDate(new Date()); setWeekBase(new Date()); setView('day') }} style={{ padding:'6px 16px', borderRadius:20, border:'1px solid rgba(255,255,255,0.3)', background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:13, cursor:'pointer', marginLeft:'auto' }}>Today</button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={() => setView('day')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='day'?'white':'rgba(255,255,255,0.12)', color: view==='day'?colour.navy:'white', fontSize:14, fontWeight:600, cursor:'pointer' }}>Day</button>
+          <button onClick={() => setView('week')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='week'?'white':'rgba(255,255,255,0.12)', color: view==='week'?colour.navy:'white', fontSize:14, fontWeight:600, cursor:'pointer' }}>Week</button>
+          <button onClick={() => { setSelectedDate(new Date()); setWeekBase(new Date()); setView('day') }} style={{ padding:'6px 16px', borderRadius:20, border:'1px solid rgba(255,255,255,0.3)', background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:14, cursor:'pointer', marginLeft:'auto' }}>Today</button>
         </div>
 
         {/* Week strip */}
         <div style={{ background:'rgba(0,0,0,0.15)', borderRadius:'12px 12px 0 0', padding:'10px 8px 0' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8, padding:'0 4px' }}>
-            <button onClick={prevWeek} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:18, cursor:'pointer', padding:'0 4px' }}>‹</button>
-            <span style={{ fontSize:13, fontWeight:600, color:'rgba(255,255,255,0.8)' }}>
+            <button onClick={prevWeek} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:19, cursor:'pointer', padding:'0 4px' }}>‹</button>
+            <span style={{ fontSize:14, fontWeight:600, color:'rgba(255,255,255,0.8)' }}>
               {MONTHS_SHORT[weekDates[0].getMonth()]} {weekDates[0].getDate()} – {MONTHS_SHORT[weekDates[6].getMonth()]} {weekDates[6].getDate()}, {weekDates[6].getFullYear()}
             </span>
-            <button onClick={nextWeek} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:18, cursor:'pointer', padding:'0 4px' }}>›</button>
+            <button onClick={nextWeek} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:19, cursor:'pointer', padding:'0 4px' }}>›</button>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, paddingBottom:0 }}>
             {weekDates.map((date, i) => {
@@ -117,9 +111,9 @@ export default function TodayView({ user }) {
               const sel = isSelected(date)
               const tod = isToday(date)
               return (
-                <button key={i} onClick={() => selectDay(date)} style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'6px 2px 10px', background: sel?'rgba(42,181,160,0.25)':'transparent', border:'none', borderRadius:'8px 8px 0 0', cursor:'pointer', borderBottom: sel?'3px solid #2ab5a0':'3px solid transparent' }}>
-                  <span style={{ fontSize:10, color: tod?'#2ab5a0':'rgba(255,255,255,0.5)', fontWeight: tod?'700':'400', marginBottom:4 }}>{DAYS[date.getDay()]}</span>
-                  <span style={{ fontSize:16, fontWeight: sel||tod?'700':'400', color: tod?'#2ab5a0':'white', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{date.getDate()}</span>
+                <button key={i} onClick={() => selectDay(date)} style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'6px 2px 10px', background: sel?'rgba(24,154,133,0.25)':'transparent', border:'none', borderRadius:'8px 8px 0 0', cursor:'pointer', borderBottom: sel?`3px solid ${colour.accent}`:'3px solid transparent' }}>
+                  <span style={{ fontSize:10.5, color: tod?colour.accent:'rgba(255,255,255,0.5)', fontWeight: tod?'700':'400', marginBottom:4 }}>{DAYS[date.getDay()]}</span>
+                  <span style={{ fontSize:16, fontWeight: sel||tod?'700':'400', color: tod?colour.accent:'white', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{date.getDate()}</span>
                   <div style={{ display:'flex', gap:2, marginTop:4, height:6 }}>
                     {dayEvs.slice(0,3).map((e,j) => <div key={j} style={{ width:5, height:5, borderRadius:'50%', background: getColor(e.colorId) }} />)}
                   </div>
@@ -128,42 +122,42 @@ export default function TodayView({ user }) {
             })}
           </div>
         </div>
-      </div>
+      </Header>
 
       {/* WEEK VIEW */}
       {view === 'week' && (
         <div style={{ flex:1, padding:'16px 16px 100px', overflowY:'auto' }}>
-          <div style={{ fontSize:15, fontWeight:700, color:'#042746', marginBottom:12 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:colour.navy, marginBottom:12 }}>
             Week of {weekDates[0].getDate()} {MONTHS[weekDates[0].getMonth()]}
           </div>
-          {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
+          {loading && <div style={{ textAlign:'center', padding:40, color:colour.inkFaint }}>Loading...</div>}
           {weekDates.map((date, i) => {
             const dayEvs = eventsOnDay(date)
             const tod = isToday(date)
             return (
               <div key={i} style={{ marginBottom:12 }}>
                 <button onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:10, background:'none', border:'none', cursor:'pointer', marginBottom:6, padding:0, width:'100%', textAlign:'left' }}>
-                  <div style={{ width:36, height:36, borderRadius:'50%', background: tod?'#2ab5a0':'#042746', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <div style={{ width:36, height:36, borderRadius:'50%', background: tod?colour.accent:colour.navy, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     <span style={{ fontSize:14, fontWeight:700, color:'white' }}>{date.getDate()}</span>
                   </div>
                   <div>
-                    <div style={{ fontSize:14, fontWeight:700, color: tod?'#2ab5a0':'#042746' }}>{tod ? 'Today' : DAYS_FULL[date.getDay()]}</div>
-                    <div style={{ fontSize:11, color:'#9aabb8' }}>{MONTHS_SHORT[date.getMonth()]} {date.getDate()}</div>
+                    <div style={{ fontSize:14, fontWeight:700, color: tod?colour.accent:colour.navy }}>{tod ? 'Today' : DAYS_FULL[date.getDay()]}</div>
+                    <div style={{ fontSize:12.5, color:colour.inkFainter }}>{MONTHS_SHORT[date.getMonth()]} {date.getDate()}</div>
                   </div>
-                  <div style={{ marginLeft:'auto', fontSize:12, color:'#9aabb8' }}>{dayEvs.length > 0 ? `${dayEvs.length} event${dayEvs.length>1?'s':''}` : 'No bookings'} →</div>
+                  <div style={{ marginLeft:'auto', fontSize:12.5, color:colour.inkFainter }}>{dayEvs.length > 0 ? `${dayEvs.length} event${dayEvs.length>1?'s':''}` : 'No bookings'} →</div>
                 </button>
                 {dayEvs.length > 0 && (
                   <div style={{ marginLeft:46 }}>
                     {dayEvs.slice(0,3).map(e => (
                       <div key={e.id} onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'white', borderRadius:8, marginBottom:4, cursor:'pointer', borderLeft:`3px solid ${getColor(e.colorId)}` }}>
                         <div style={{ flex:1 }}>
-                          <div style={{ fontSize:13, fontWeight:500, color:'#042746' }}>{e.title}</div>
-                          {formatTime(e.start) && <div style={{ fontSize:11, color:'#9aabb8' }}>{formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}{e.location?` · ${e.location}`:''}</div>}
+                          <div style={{ fontSize:14, fontWeight:500, color:colour.navy }}>{e.title}</div>
+                          {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFainter }}>{formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}{e.location?` · ${e.location}`:''}</div>}
                         </div>
                       </div>
                     ))}
                     {dayEvs.length > 3 && (
-                      <div onClick={() => selectDay(date)} style={{ fontSize:12, color:'#2ab5a0', padding:'4px 10px', cursor:'pointer', fontWeight:600 }}>+{dayEvs.length-3} more →</div>
+                      <div onClick={() => selectDay(date)} style={{ fontSize:12.5, color:colour.accent, padding:'4px 10px', cursor:'pointer', fontWeight:600 }}>+{dayEvs.length-3} more →</div>
                     )}
                   </div>
                 )}
@@ -171,7 +165,7 @@ export default function TodayView({ user }) {
               </div>
             )
           })}
-          <button onClick={loadEvents} style={{ width:'100%', padding:12, background:'transparent', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize:13, color:'#6b7a8d', cursor:'pointer', marginTop:8 }}>↻ Refresh</button>
+          <button onClick={loadEvents} style={{ width:'100%', padding:12, background:'transparent', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize:14, color:colour.inkFaint, cursor:'pointer', marginTop:8 }}>↻ Refresh</button>
         </div>
       )}
 
@@ -180,8 +174,8 @@ export default function TodayView({ user }) {
         <div style={{ flex:1, padding:'16px 16px 100px', overflowY:'auto' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <div>
-              <div style={{ fontSize:22, fontWeight:'700', color:'#042746' }}>{isToday(selectedDate)?'Today':DAYS_FULL[selectedDate.getDay()]}</div>
-              <div style={{ fontSize:13, color:'#6b7a8d' }}>{selectedDate.getDate()} {MONTHS[selectedDate.getMonth()]} {selectedDate.getFullYear()}</div>
+              <div style={{ fontSize:22, fontWeight:'700', color:colour.navy }}>{isToday(selectedDate)?'Today':DAYS_FULL[selectedDate.getDay()]}</div>
+              <div style={{ fontSize:14, color:colour.inkFaint }}>{selectedDate.getDate()} {MONTHS[selectedDate.getMonth()]} {selectedDate.getFullYear()}</div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={() => goToDay(-1)} style={{ width:36, height:36, borderRadius:'50%', background:'white', border:'1px solid rgba(26,43,74,0.12)', fontSize:16, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
@@ -189,16 +183,16 @@ export default function TodayView({ user }) {
             </div>
           </div>
 
-          {loading && <div style={{ textAlign:'center', padding:'40px 20px', color:'#6b7a8d' }}>Loading calendar...</div>}
-          {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, fontSize:13, marginBottom:12 }}>Could not load calendar: {error}</div>}
+          {loading && <div style={{ textAlign:'center', padding:'40px 20px', color:colour.inkFaint }}>Loading calendar...</div>}
+          {error && <div style={{ background:colour.dangerSoft, color:colour.danger, padding:'12px 14px', borderRadius:10, fontSize:14, marginBottom:12 }}>Could not load calendar: {error}</div>}
 
           {!loading && allDayEvents.length > 0 && (
             <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:11, fontWeight:600, color:'#6b7a8d', letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>All day</div>
+              <div style={{ fontSize:12.5, fontWeight:600, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>All day</div>
               {allDayEvents.map(e => (
                 <div key={e.id} style={{ background:getColor(e.colorId), borderRadius:10, padding:'10px 14px', marginBottom:8 }}>
                   <div style={{ fontSize:14, fontWeight:600, color:'white' }}>{e.title}</div>
-                  {e.location && <div style={{ fontSize:12, color:'rgba(255,255,255,0.75)', marginTop:2 }}>📍 {e.location}</div>}
+                  {e.location && <div style={{ fontSize:12.5, color:'rgba(255,255,255,0.75)', marginTop:2 }}>📍 {e.location}</div>}
                 </div>
               ))}
             </div>
@@ -206,14 +200,14 @@ export default function TodayView({ user }) {
 
           {!loading && timedEvents.length > 0 && (
             <div>
-              <div style={{ fontSize:11, fontWeight:600, color:'#6b7a8d', letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>Schedule</div>
+              <div style={{ fontSize:12.5, fontWeight:600, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>Schedule</div>
               {timedEvents.map(e => (
                 <div key={e.id} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', display:'flex', border:'1px solid rgba(26,43,74,0.06)' }}>
                   <div style={{ width:5, background:getColor(e.colorId), flexShrink:0 }} />
                   <div style={{ padding:'12px 14px', flex:1 }}>
-                    <div style={{ fontSize:14, fontWeight:600, color:'#042746', marginBottom:3 }}>{e.title}</div>
-                    {formatTime(e.start) && <div style={{ fontSize:12, color:'#6b7a8d', marginBottom:e.location?3:0 }}>🕐 {formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}</div>}
-                    {e.location && <div style={{ fontSize:12, color:'#6b7a8d' }}>📍 {e.location}</div>}
+                    <div style={{ fontSize:14, fontWeight:600, color:colour.navy, marginBottom:3 }}>{e.title}</div>
+                    {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:e.location?3:0 }}>🕐 {formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}</div>}
+                    {e.location && <div style={{ fontSize:12.5, color:colour.inkFaint }}>📍 {e.location}</div>}
                   </div>
                 </div>
               ))}
@@ -223,14 +217,14 @@ export default function TodayView({ user }) {
           {!loading && !error && dayEvents.length === 0 && (
             <div style={{ textAlign:'center', padding:'40px 20px' }}>
               <div style={{ fontSize:40, marginBottom:12 }}>✨</div>
-              <div style={{ fontSize:16, fontWeight:600, color:'#042746', marginBottom:6 }}>No bookings</div>
-              <div style={{ fontSize:13, color:'#6b7a8d' }}>Nothing scheduled for this day</div>
+              <div style={{ fontSize:16, fontWeight:600, color:colour.navy, marginBottom:6 }}>No bookings</div>
+              <div style={{ fontSize:14, color:colour.inkFaint }}>Nothing scheduled for this day</div>
             </div>
           )}
 
-          <button onClick={loadEvents} style={{ width:'100%', padding:12, background:'transparent', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize:13, color:'#6b7a8d', cursor:'pointer', marginTop:8 }}>↻ Refresh</button>
+          <button onClick={loadEvents} style={{ width:'100%', padding:12, background:'transparent', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize:14, color:colour.inkFaint, cursor:'pointer', marginTop:8 }}>↻ Refresh</button>
         </div>
       )}
-    </div>
+    </Page>
   )
 }

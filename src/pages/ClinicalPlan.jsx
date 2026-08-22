@@ -3,6 +3,8 @@ import {
   DayBlock, SurgeonLegend, NotesCallout, KeyFlagsSection, PlanFooter
 } from './clinical/PlanBlocks.jsx'
 import { tokens, FONT_STACK } from '../clinicalPlan/theme.js'
+import { Header } from '../design/Shell.jsx'
+import { colour } from '../design/tokens.js'
 import {
   resolveDefaultWeek, weekWindowFor, stepWeek, todayStr,
   formatWeekRange, formatDayHeading, formatStamp
@@ -11,7 +13,7 @@ import { fetchWeekPlan, readCachedPlan, readPrefs, writePrefs } from '../clinica
 import { planToText, dayToText } from '../clinicalPlan/exportText.js'
 import { DOCX_FILENAME } from '../clinicalPlan/exportMeta.js'
 
-const NAVY = '#042746'
+const NAVY = colour.navy
 
 // Weekly is the default on a wide screen and on Fridays (when the new week
 // lands); Daily is the default on a phone Mon–Thu, where staff are reading it
@@ -23,7 +25,7 @@ function defaultView() {
   return 'daily'
 }
 
-export default function ClinicalPlan({ user }) {
+export default function ClinicalPlan({ user, onBack }) {
   const prefs = useMemo(() => readPrefs(), [])
   const [view, setView] = useState(prefs.view || defaultView())
   const [window_, setWindow] = useState(() =>
@@ -140,12 +142,8 @@ export default function ClinicalPlan({ user }) {
         }
       `}</style>
 
-      <div className="tm-noprint" style={{ background: NAVY, paddingTop: 56, paddingLeft: 20, paddingRight: 20, paddingBottom: 16 }}>
-        <img src="/logo.png" alt="TechnoMed" style={{ height: 34, width: 'auto', marginBottom: 4 }} />
-        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 10 }}>
-          Clinical Plan
-        </div>
-
+      <div className="tm-noprint">
+      <Header eyebrow="Case support" title="Clinical plan" onBack={onBack}>
         {/* View switcher — keyboard operable as a radio group */}
         <div role="radiogroup" aria-label="Plan view" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {[['weekly', 'Weekly'], ['daily', 'Daily']].map(([id, label]) => (
@@ -197,6 +195,7 @@ export default function ClinicalPlan({ user }) {
             Last synced {formatStamp(plan.lastGeneratedAt)}
           </div>
         )}
+      </Header>
       </div>
 
       <div className="tm-plan" style={{ padding: 16 }}>
