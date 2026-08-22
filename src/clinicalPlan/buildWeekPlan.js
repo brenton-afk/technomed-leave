@@ -5,8 +5,7 @@
 
 import './types.js'
 import {
-  normaliseEvent, parseCaseTitle, extractKit, extractOperation, detectHospital,
-  stripIdentifiers, HOSPITALS, splitOperationAndSystem, describeSupply
+  normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, describeCase
 } from './parse.js'
 import { colourNameFor, checkEventColour, surgeonForColourName } from './colours.js'
 import {
@@ -271,14 +270,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       const colourSurgeon = surgeonForColourName(colourNameFor(event.colorId))
       const parsed = parseCaseTitle(event.rawTitle, { colourSurgeon })
       if (!parsed || event.allDay) continue
-      // The title runs the operation and the implant system together, and the
-      // notes often name the operation as well. Separated here so that each is
-      // one field with one place to appear.
-      const { operation, system } = splitOperationAndSystem(
-        parsed.procedure, extractOperation(event.description))
-      // The kit line usually just repeats the system with the supply in brackets.
-      // Pull the supply out and keep the kit only where it names something else.
-      const { supply, kit } = describeSupply(system, extractKit(event.description))
+      // One reader for the whole booking, so each fact lands in exactly one
+      // field however the booking happens to be written. See describeCase.
+      const { operation, system, supply, kit } = describeCase(parsed.procedure, event.description)
       allCases.push({
         id: event.id,
         patient: parsed.patient,
@@ -423,9 +417,61 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
     days: dayPlans,
     keyFlags: buildKeyFlags(allCases, dayPlans, findings, surgeons),
     colourCodingFindings: findings,
+    readings: buildReadings(days, buckets, allCases),
     lastGeneratedAt: generatedAt,
     _endYear: endCivil.year
   }
+}
+
+/**
+ * What the plan made of every booking in the window, side by side with what was
+ * typed into the calendar.
+ *
+ * Bookings are free text, so the plan is always an interpretation of them. Until
+ * now that interpretation was invisible: a booking read the wrong way looked
+ * exactly like a booking entered the wrong way, and there was no way to tell
+ * which — or to see that a case had been dropped entirely. This makes the
+ * interpretation inspectable, so a title that reads badly can be either retyped
+ * or reported.
+ *
+ * Identifiers are stripped, as everywhere else — a diagnostic is not a licence to
+ * show more than the plan does.
+ */
+function buildReadings(days, buckets, allCases) {
+  const readCases = new Map(allCases.map(c => [c.id, c]))
+  const out = []
+
+  for (const dayDate of days) {
+    for (const event of buckets.get(dayDate) || []) {
+      const title = stripIdentifiers(event.rawTitle || '')
+      if (!title) continue
+      const read = readCases.get(event.id)
+      out.push({
+        date: dayDate,
+        title,
+        // First line only. The rest is usually logistics prose, and the point
+        // here is what the plan read, not to reproduce the note.
+        note: stripIdentifiers((event.description || '').split(/\r?\n/).find(l => l.trim()) || ''),
+        colour: colourNameFor(event.colorId) || undefined,
+        allDay: Boolean(event.allDay),
+        read: read
+          ? {
+            patient: read.patient,
+            surgeon: read.surgeon,
+            surgeonSource: read.surgeonSource,
+            operation: read.operation,
+            system: read.system,
+            supply: read.supply,
+            kit: read.kit
+          }
+          : undefined,
+        // Why it is not on the plan as a case. An all-day entry or a meeting is
+        // expected; a booking that looks like a case but did not parse is not.
+        status: read ? 'case' : (event.allDay ? 'all-day entry' : 'not read as a case')
+      })
+    }
+  }
+  return out
 }
 
 // The internal helpers used during derivation never reach the rendered plan.

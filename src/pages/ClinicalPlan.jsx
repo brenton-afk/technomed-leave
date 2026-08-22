@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  DayBlock, SurgeonLegend, NotesCallout, KeyFlagsSection, PlanFooter
+  DayBlock, SurgeonLegend, NotesCallout, KeyFlagsSection, PlanFooter, BookingReadings
 } from './clinical/PlanBlocks.jsx'
 import { tokens, FONT_STACK } from '../clinicalPlan/theme.js'
 import { Header } from '../design/Shell.jsx'
@@ -37,6 +37,7 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
   const [errorText, setErrorText] = useState('')
   const [copied, setCopied] = useState('')
   const [docxNotice, setDocxNotice] = useState('')
+  const [showReadings, setShowReadings] = useState(false)
 
   const t = tokens(false)
   const token = user?.token
@@ -218,6 +219,10 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
               <button onClick={goThisWeek} style={chipStyle}>This week</button>
               <button onClick={downloadDocx} disabled={!plan} style={chipStyle}>Download .docx</button>
               <button onClick={copyText} disabled={!plan} style={chipStyle}>{copied || 'Copy as text'}</button>
+              <button onClick={() => setShowReadings(v => !v)} disabled={!plan}
+                aria-pressed={showReadings} style={chipStyle}>
+                {showReadings ? 'Hide what was read' : 'Check bookings'}
+              </button>
             </div>
           </>
         ) : (
@@ -300,6 +305,7 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
             <NotesCallout notes={plan.notes} />
             {plan.days.map(day => <DayBlock key={day.date} day={day} />)}
             <KeyFlagsSection keyFlags={plan.keyFlags} />
+            {showReadings && <BookingReadings readings={plan.readings} />}
             <PlanFooter generatedAtLabel={formatStamp(plan.lastGeneratedAt)} />
           </article>
         )}

@@ -1,3 +1,4 @@
+import { findSystems, findLoanSets, systemWords } from './systems.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -374,4 +375,131 @@ export function normaliseEvent(event) {
     startDate: startIso ? null : (event.start?.date || null),
     endDate: endIso ? null : (event.end?.date || null)
   }
+}
+
+
+// ─── One case, four facts ─────────────────────────────────────
+
+const SUPPLY_PATTERN = /\(?\s*(?:on\s+)?(?:consignment|consigned|loan(?:ed)?(?:\s+(?:kit|set))?)\s*\)?/gi
+// Words that only join other words together. Left stranded when a system name is
+// lifted out of the middle of a sentence, and meaningless on their own.
+const JOINERS = new Set(['with', 'using', 'and', 'plus', 'the', 'a', 'an', 'for',
+  'via', 'in', 'of', 'set', 'sets', 'kit', 'kits', 'tray', 'trays', 'x'])
+
+function stripSupply(text) {
+  return String(text || '').replace(SUPPLY_PATTERN, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function tidy(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s/+,\-–:;]+|[\s/+,\-–:;]+$/g, '')
+    .trim()
+}
+
+/** Drops joining words left stranded at either end. */
+function trimJoiners(words) {
+  const bare = word => word.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const out = words.slice()
+  while (out.length && JOINERS.has(bare(out[0]))) out.shift()
+  while (out.length && JOINERS.has(bare(out[out.length - 1]))) out.pop()
+  return out
+}
+
+/**
+ * Cuts a description off after its last clinical term.
+ *
+ * A note is rarely only the operation — "L4/5 TLIF. TM Locking Distractor also
+ * needed" is an operation followed by a request for kit. Everything up to the last
+ * clinical term is the surgery; whatever trails it is about something else, and
+ * leaving it in put the kit on the operation line as well as the kit line.
+ *
+ * Text *before* the first clinical term is kept, since that is where the surgery
+ * is qualified: "Revision of L4/5 fusion" is not the same operation as "L4/5
+ * fusion".
+ */
+function toLastClinical(text) {
+  const scan = new RegExp(CLINICAL_SPAN.source, 'gi')
+  let end = -1, match
+  while ((match = scan.exec(text)) !== null) end = match.index + match[0].length
+  return end === -1 ? '' : text.slice(0, end)
+}
+
+/**
+ * Reads one booking into the four things the plan shows, with every fact assigned
+ * to exactly one of them.
+ *
+ * This exists because the same case can be written half a dozen ways and used to
+ * come out differently each time:
+ *
+ *   "Panthi SHORELINE - Gupta"           + note "C4/5 ACDF Shoreline"
+ *   "Panthi C4/5 ACDF SHORELINE - Gupta" + note "C4/5 ACDF SHORELINE consignment"
+ *   "Horne DAKOTA - Ibbett"              + note "L4/5 TLIF DAKOTA loan kit"
+ *
+ * Every one of those printed the system twice — once inside the bolded operation,
+ * because the operation was taken as the whole note line, and again on the system
+ * line beneath it. Two of them also lost the consignment or loan status, because
+ * the word was sitting inside the operation text where nothing looked for it.
+ *
+ * So each fact is now found by what it is rather than by where it sits: the supply
+ * is whichever of consignment or loan appears anywhere, the system is whichever
+ * known system is named anywhere, and the operation is what is left of the
+ * clinical description once those have been taken out of it.
+ *
+ * @returns {{operation, system, supply, kit}} any of which may be undefined
+ */
+export function describeCase(titleSection, description) {
+  const title = stripIdentifiers(titleSection || '')
+  const notes = stripIdentifiers(description || '')
+  const everything = `${title}\n${notes}`
+
+  // ── Supply, from wherever it was written ──
+  const supply = /consign/i.test(everything) ? 'Consignment'
+    : /\bloan(ed)?\b/i.test(everything) ? 'Loan'
+      : undefined
+
+  // ── System ──
+  // The title's own wording is preferred, so "REFORM / ASCOT / ATHLET" keeps the
+  // shape the team gave it rather than being rewritten.
+  const fromTitle = splitOperationAndSystem(stripSupply(title))
+  let system = fromTitle.system
+  if (!system) {
+    // Nothing usable in the title, so fall back to whatever is named in the
+    // notes. A booking titled only "Kennedy - JPW" still gets its system.
+    const named = findSystems(notes).map(s => s.name)
+    if (named.length) system = named.join(' + ')
+  }
+
+  // ── Operation ──
+  // The notes are preferred: written out deliberately, rather than squeezed into
+  // a title alongside everything else.
+  let operation = extractOperation(notes) || fromTitle.operation
+  if (operation) {
+    const drop = new Set([
+      ...systemWords(everything),
+      ...String(system || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
+      // Loan sets belong on the kit line. Left in, they appeared on both.
+      ...findLoanSets(everything).join(' ').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+    ])
+    const kept = trimJoiners(
+      stripSupply(operation).split(/\s+/).filter(word => {
+        const bare = word.toLowerCase().replace(/[^a-z0-9]/g, '')
+        return bare && !drop.has(bare)
+      }))
+    const rebuilt = tidy(toLastClinical(kept.join(' ')))
+    // Only accept the trimmed version if it still describes an operation. If
+    // taking the system out leaves nothing clinical behind, the line was naming
+    // the system rather than describing surgery, and there is no operation here.
+    operation = CLINICAL_HINT.test(rebuilt) ? rebuilt : undefined
+  }
+
+  // ── Kit ──
+  // Only what the system line does not already say. A TechnoMed loan set named
+  // anywhere counts, since that is a physical set someone has to bring.
+  const loanSets = findLoanSets(everything)
+  const explicit = describeSupply(system, extractKit(notes)).kit
+  const extras = [...new Set([...loanSets, ...(explicit ? [explicit] : [])])]
+  const kit = extras.length ? extras.join(' · ') : undefined
+
+  return { operation, system: system || undefined, supply, kit }
 }

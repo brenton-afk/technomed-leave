@@ -231,3 +231,83 @@ export function PlanFooter({ generatedAtLabel, dark }) {
     </footer>
   )
 }
+
+
+/**
+ * What the plan made of each booking, beside what was typed.
+ *
+ * A booking read the wrong way and a booking entered the wrong way look
+ * identical on the plan — both just come out odd — so there was no way to tell
+ * which had happened, or to notice a case that had been dropped altogether. This
+ * shows the interpretation, so a title that reads badly can be retyped or
+ * reported rather than puzzled over.
+ */
+export function BookingReadings({ readings, dark }) {
+  const t = tokens(dark)
+  if (!readings?.length) return null
+
+  const unread = readings.filter(r => r.status === 'not read as a case')
+  const label = { color: t.inkFaint, fontSize: 11.5 }
+
+  return (
+    <section style={{ marginTop: 18 }}>
+      <h3 style={{ fontSize: 14.5, fontWeight: 700, color: t.ink, margin: '0 0 4px' }}>
+        What the plan read from the calendar
+      </h3>
+      <p style={{ fontSize: 12, color: t.inkMuted, lineHeight: 1.55, margin: '0 0 12px' }}>
+        Every booking this week, and what the app made of it. Bookings are free
+        text, so this is where to check whether an odd-looking case was entered
+        that way or read that way.
+        {unread.length > 0 && ` ${unread.length} entr${unread.length === 1 ? 'y is' : 'ies are'} not counted as cases.`}
+      </p>
+
+      {readings.map((r, i) => (
+        <div key={`${r.date}-${i}`} style={{
+          borderTop: `1px solid ${t.notesBorder}`,
+          padding: '9px 0',
+          display: 'flex', gap: 10, alignItems: 'flex-start'
+        }}>
+          <span aria-hidden="true" style={{
+            width: 6, height: 6, borderRadius: 3, marginTop: 6, flexShrink: 0,
+            background: r.read ? 'rgba(24,154,133,0.9)' : t.inkFainter
+          }} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, color: t.ink, lineHeight: 1.4, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+              {r.title}
+            </div>
+            {r.note && (
+              <div style={{ ...label, lineHeight: 1.45, marginTop: 2, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                {r.note}
+              </div>
+            )}
+            {r.read ? (
+              <div style={{ fontSize: 12, color: t.inkMuted, lineHeight: 1.6, marginTop: 4 }}>
+                <Read label="Patient" value={r.read.patient} t={t} />
+                <Read label="Surgeon" value={r.read.surgeon
+                  + (r.read.surgeonSource === 'colour' ? ' (from the calendar colour)' : '')} t={t} />
+                <Read label="Operation" value={r.read.operation} t={t} />
+                <Read label="System" value={r.read.system} t={t} />
+                <Read label="Supply" value={r.read.supply} t={t} />
+                <Read label="Kit" value={r.read.kit} t={t} />
+              </div>
+            ) : (
+              <div style={{ ...label, marginTop: 4 }}>
+                {r.allDay ? 'All-day entry — shown as a flag, not a case.' : 'Not read as a case.'}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+/** One field of a reading. Absent fields are shown as absent, not hidden. */
+function Read({ label, value, t }) {
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      <span style={{ color: t.inkFainter, minWidth: 66, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: value ? t.ink : t.inkFainter }}>{value || '—'}</span>
+    </div>
+  )
+}

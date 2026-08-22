@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseCaseTitle, isSurgicalCase, sanitisePatient, stripIdentifiers,
-  extractKit, detectHospital, normaliseSurgeon, HOSPITALS
+  extractKit, detectHospital, normaliseSurgeon, describeCase, HOSPITALS
 } from './parse.js'
 
 describe('parseCaseTitle', () => {
@@ -201,5 +201,100 @@ describe('attributing a case by its calendar colour', () => {
   it('keeps stripping identifiers whichever route is taken', () => {
     const parsed = parseCaseTitle('Kennedy UR 4457821 REFORM', { colourSurgeon: 'JPW' })
     expect(JSON.stringify(parsed)).not.toMatch(/4457821/)
+  })
+})
+
+
+describe('reading a booking however it was written', () => {
+  // The same case, typed six ways. Bookings are free text entered in a hurry, so
+  // the plan cannot depend on a convention being followed — and until this was
+  // fixed, every one of these produced a different layout, printed the system
+  // twice, or silently lost the consignment status.
+  const shapes = [
+    ['SHORELINE', 'C4/5 ACDF Shoreline\nKit: Shoreline (consignment)'],
+    ['C4/5 ACDF SHORELINE', 'C4/5 ACDF SHORELINE consignment'],
+    ['SHORELINE', 'Procedure: C4/5 ACDF with Shoreline — on consignment'],
+    ['C4/5 ACDF SHORELINE (consignment)', ''],
+    ['SHORELINE', 'C4/5 ACDF\nKit: Shoreline consignment'],
+    ['', 'C4/5 ACDF Shoreline, consignment']
+  ]
+
+  it.each(shapes)('reads "%s" / "%s" the same way', (title, notes) => {
+    const read = describeCase(title, notes)
+    expect(read.operation).toBe('C4/5 ACDF')
+    expect(read.system).toMatch(/shoreline/i)
+    expect(read.supply).toBe('Consignment')
+    // The system must not also be sitting inside the operation.
+    expect(read.operation).not.toMatch(/shoreline/i)
+    expect(read.kit).toBeUndefined()
+  })
+
+  it('never repeats the system on the kit line', () => {
+    for (const [title, notes] of shapes) {
+      const read = describeCase(title, notes)
+      if (!read.kit || !read.system) continue
+      expect(read.kit.toLowerCase()).not.toBe(read.system.toLowerCase())
+    }
+  })
+})
+
+describe('assigning each fact to one field', () => {
+  it('keeps the team\'s own wording for a multi-system case', () => {
+    const read = describeCase('REFORM / ASCOT / ATHLET', '')
+    expect(read.system).toBe('REFORM / ASCOT / ATHLET')
+    expect(read.operation).toBeUndefined()
+  })
+
+  it('finds the system in the notes when the title has none', () => {
+    // "Kennedy - JPW" with the detail written underneath.
+    const read = describeCase('', 'C5/6 ACDF Mariner, consignment')
+    expect(read.system).toMatch(/mariner/i)
+    expect(read.operation).toBe('C5/6 ACDF')
+    expect(read.supply).toBe('Consignment')
+  })
+
+  it('puts a TechnoMed loan set on the kit line, not the operation', () => {
+    const read = describeCase('DAKOTA-2', 'L4/5 TLIF. TM Locking Distractor also needed')
+    expect(read.operation).toBe('L4/5 TLIF')
+    expect(read.system).toBe('DAKOTA-2')
+    expect(read.kit).toBe('TM Locking Distractor')
+  })
+
+  it('keeps instruments that are genuinely a second thing to bring', () => {
+    // Patient-specific instruments alongside the implant system: two sets.
+    const read = describeCase('STRYKER CCI', 'Kit: Stryker PSI on loan')
+    expect(read.system).toBe('STRYKER CCI')
+    expect(read.kit).toBe('Stryker PSI')
+    expect(read.supply).toBe('Loan')
+  })
+
+  it('keeps a qualifier on the operation rather than trimming it away', () => {
+    // "Revision of L4/5 fusion" is not the same operation as "L4/5 fusion".
+    const read = describeCase('MARINER', 'Revision of L4/5 fusion, Mariner consignment')
+    expect(read.operation).toBe('Revision of L4/5 fusion')
+  })
+
+  it('stops the operation at the surgery, not at the end of the note', () => {
+    const read = describeCase('REFORM', 'C3-C6 ACDF please bring extra plates')
+    expect(read.operation).toBe('C3-C6 ACDF')
+  })
+
+  it('reads an unknown system by position, so a new one still shows', () => {
+    // Adding a system to systems.js is what makes it tidy, not what makes it
+    // appear. A system nobody has listed yet must not vanish from the plan.
+    const read = describeCase('NEWSYSTEM 9000', 'L5/S1 ALIF')
+    expect(read.system).toBe('NEWSYSTEM 9000')
+    expect(read.operation).toBe('L5/S1 ALIF')
+  })
+
+  it('reports nothing rather than guessing when there is nothing to read', () => {
+    expect(describeCase('', '')).toEqual({
+      operation: undefined, system: undefined, supply: undefined, kit: undefined
+    })
+  })
+
+  it('still strips identifiers, whichever field they were written in', () => {
+    const read = describeCase('MARINER UR 4457821', 'C5/6 ACDF DOB 14/03/1958')
+    expect(JSON.stringify(read)).not.toMatch(/4457821|1958/)
   })
 })
