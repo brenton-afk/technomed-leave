@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { detectDocumentQuad, smoothQuad, toGrayscale } from '../scanner/edgeDetect.js'
+import { detectDocumentQuad, toGrayscale, QuadTracker } from '../scanner/edgeDetect.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -117,10 +117,10 @@ function canvasToPage(canvas, index) {
 // Frames are analysed at this width. Small enough that detection costs a
 // couple of milliseconds, large enough to place an edge within a pixel or two
 // once scaled back up.
-const DETECT_WIDTH = 160
-const DETECT_FPS = 12
+const DETECT_WIDTH = 240
+const DETECT_FPS = 30
 
-function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
+function CameraCapture({ pageCount, onCapture, onDone, onFallback }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const detectCanvasRef = useRef(null)
@@ -135,6 +135,9 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
   // The live page outline. Held in a ref for the detection loop and mirrored
   // into state for rendering, so the loop never re-runs on every frame.
   const [quad, setQuad] = useState(null)
+  // Hysteresis lives here, not in the render loop: a tracker instance survives
+  // frames, which is what lets the outline lock instead of twitching.
+  const trackerRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -212,9 +215,8 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
       const { data } = ctx.getImageData(0, 0, DETECT_WIDTH, height)
 
       const found = detectDocumentQuad(toGrayscale(data, DETECT_WIDTH, height), DETECT_WIDTH, height)
-      // Ease toward a new outline; drop it outright when the page leaves frame,
-      // so a stale rectangle never lingers over nothing.
-      const next = found ? smoothQuad(quadRef.current, found) : null
+      if (!trackerRef.current) trackerRef.current = new QuadTracker()
+      const next = trackerRef.current.update(found)
       quadRef.current = next
       setQuad(next)
     }
@@ -259,16 +261,18 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
     const ctx = canvas.getContext('2d')
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
 
-    const page = canvasToPage(canvas, startIndex + shots.length + 1)
+    const page = canvasToPage(canvas, pageCount + 1)
     const accepted = onCapture(page)
     if (accepted === false) return // payload cap reached; onCapture surfaced why
 
     setShots(s => [...s, page])
     setFlash(true)
     setTimeout(() => setFlash(false), 130)
-  }, [onCapture, shots.length, startIndex])
+  }, [onCapture, pageCount])
 
-  const total = startIndex + shots.length
+  // The parent owns the page list, so its count is the only truth. Deriving
+  // from both it and the local shots double-counted every capture.
+  const total = pageCount
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
@@ -308,14 +312,14 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
               <polygon
                 points={quad.corners.map(c => `${c.x * 100},${c.y * 100}`).join(' ')}
-                fill="rgba(24,154,133,0.12)"
-                stroke={quad.confidence > 0.55 ? TEAL : 'rgba(255,255,255,0.7)'}
+                fill={quad.locked ? 'rgba(24,154,133,0.14)' : 'rgba(255,255,255,0.06)'}
+                stroke={quad.locked ? TEAL : 'rgba(255,255,255,0.75)'}
                 strokeWidth="0.7"
                 vectorEffect="non-scaling-stroke"
               />
               {quad.corners.map((c, i) => (
                 <circle key={i} cx={c.x * 100} cy={c.y * 100} r="1.1"
-                  fill={quad.confidence > 0.55 ? TEAL : 'white'} />
+                  fill={quad.locked ? TEAL : 'white'} />
               ))}
             </svg>
           ) : (
@@ -347,23 +351,33 @@ function CameraCapture({ startIndex, onCapture, onDone, onFallback }) {
           {shots.length > 0 && (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10 }}>
               {shots.map((s, i) => (
-                <img key={s.id} src={s.preview} alt={`Captured page ${startIndex + i + 1}`}
+                <img key={s.id} src={s.preview} alt={`Captured page ${i + 1}`}
                   style={{ width: 44, height: 58, objectFit: 'cover', borderRadius: 6, border: '1px solid rgba(255,255,255,0.25)', flexShrink: 0 }} />
               ))}
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ flex: 1, fontSize: 11.5, color: quad ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.45)', lineHeight: 1.45 }}>
-              {quad
-                ? <>Page detected — captures just the form.<br />Keep shooting for each page.</>
-                : <>Fill the frame with the page.<br />More light helps it lock on.</>}
+              {quad?.locked
+                ? <>Page locked — captures just the form.<br />Keep shooting for each page.</>
+                : quad
+                  ? <>Finding the edges…</>
+                  : <>Point at the form.<br />Any surface, any angle.</>}
             </div>
             <button onClick={shoot} disabled={!ready} aria-label="Capture page"
               style={{ width: 70, height: 70, borderRadius: 35, background: ready ? 'white' : 'rgba(255,255,255,0.35)', border: '4px solid rgba(255,255,255,0.35)', cursor: ready ? 'pointer' : 'default', flexShrink: 0 }} />
-            <button onClick={onDone} disabled={total === 0}
-              style={{ flex: 1, padding: '12px 0', background: total ? TEAL : 'rgba(255,255,255,0.12)', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: total ? 'pointer' : 'default' }}>
-              {total ? `Done · ${total}` : 'Done'}
-            </button>
+            {total > 0 ? (
+              <button onClick={onDone}
+                style={{ flex: 1, padding: '12px 0', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                Done · {total}
+              </button>
+            ) : (
+              /* Nothing to finish yet, so nothing to press. */
+              <button onClick={onDone}
+                style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -438,7 +452,9 @@ function Banner({ tone, children }) {
 // ─── Main component ──────────────────────────────────────────
 
 export default function UsageScan({ user }) {
-  const [step, setStep] = useState('history')
+  // Opens on capture, not history: tapping Scan means "scan something now", and
+  // making that three taps was the wrong default.
+  const [step, setStep] = useState('capture')
   const [pages, setPages] = useState([])
   const [caseRecord, setCaseRecord] = useState(null)
   const [history, setHistory] = useState([])
@@ -504,7 +520,7 @@ export default function UsageScan({ user }) {
 
   function startNew() {
     setPages([]); setCaseRecord(null); setResult(null)
-    setError(''); setNotice(''); setStep('capture'); setShowCamera(false)
+    setError(''); setNotice(''); setStep('capture'); setShowCamera(true)
   }
 
   async function processScan() {
@@ -702,13 +718,13 @@ export default function UsageScan({ user }) {
             Read usage document
           </button>
           <button onClick={() => setStep('history')} style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 13, color: MUTED, cursor: 'pointer' }}>
-            Cancel
+            Past scans
           </button>
         </div>
 
         {showCamera && (
           <CameraCapture
-            startIndex={pages.length}
+            pageCount={pages.length}
             onCapture={page => addPages([page])}
             onDone={() => setShowCamera(false)}
             onFallback={() => { setShowCamera(false); uploadRef.current?.click() }}

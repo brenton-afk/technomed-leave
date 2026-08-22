@@ -1,78 +1,260 @@
-// ─── Live document edge detection ─────────────────────────────────────────────
-// Finds the page in front of the camera so the capture frame can follow it,
-// instead of showing a fixed guide that rarely matches what you are holding.
+// ─── Document edge detection ──────────────────────────────────────────────────
+// Finds the page in front of the camera, on any surface, and holds still.
 //
-// Deliberately no OpenCV/wasm: a usage form is a light rectangle on a darker
-// bench, which is the one case a simple approach handles well. The steps are
+// The previous version thresholded brightness and took the largest bright blob.
+// That had two fatal properties: it assumed paper is lighter than whatever it is
+// lying on, so a form on a white bench was invisible; and a blob outline shifts
+// every frame as light flickers, which is why the frame wandered.
 //
-//   luminance → Otsu threshold → largest bright blob → its four extreme corners
+// This works the way a real scanner does — on edges, then on lines:
 //
-// and everything here is a pure function over a grayscale array, so it can be
-// tested without a camera or a canvas.
+//   blur → Sobel gradient → local contrast normalisation
+//        → dominant edge orientations → the four strongest lines → intersect
+//
+// Gradients respond to a contrast boundary regardless of which side is lighter,
+// which is what makes light-on-light work. Lines are geometrically stable in a
+// way blob outlines are not, which is what stops the wander. A tracker on top
+// adds hysteresis, so the frame locks instead of twitching.
 
-/**
- * Otsu's method: picks the threshold that best separates the histogram into two
- * classes. Chosen over a fixed cut-off because bench lighting varies wildly
- * between a theatre corridor and a car boot.
- */
-export function otsuThreshold(gray) {
-  const histogram = new Uint32Array(256)
-  for (let i = 0; i < gray.length; i++) histogram[gray[i]]++
+const PI = Math.PI
 
-  const total = gray.length
-  let sum = 0
-  for (let t = 0; t < 256; t++) sum += t * histogram[t]
+// ─── Preparation ──────────────────────────────────────────────
 
-  let sumBackground = 0, weightBackground = 0, best = 0, bestVariance = -1
-  for (let t = 0; t < 256; t++) {
-    weightBackground += histogram[t]
-    if (weightBackground === 0) continue
-    const weightForeground = total - weightBackground
-    if (weightForeground === 0) break
-
-    sumBackground += t * histogram[t]
-    const meanBackground = sumBackground / weightBackground
-    const meanForeground = (sum - sumBackground) / weightForeground
-    const between = weightBackground * weightForeground
-      * (meanBackground - meanForeground) * (meanBackground - meanForeground)
-    if (between > bestVariance) { bestVariance = between; best = t }
+/** RGBA from a canvas → one luminance byte per pixel. */
+export function toGrayscale(rgba, width, height) {
+  const gray = new Uint8Array(width * height)
+  for (let i = 0, p = 0; p < gray.length; i += 4, p++) {
+    // Rec. 601 luma, integer maths — this runs on every frame.
+    gray[p] = (rgba[i] * 77 + rgba[i + 1] * 150 + rgba[i + 2] * 29) >> 8
   }
-  return best
+  return gray
 }
 
 /**
- * Largest 4-connected run of pixels above the threshold. Iterative flood fill —
- * a recursive one blows the stack on a full-frame page.
- * @returns {{ size: number, label: Int32Array, id: number } | null}
+ * Separable 3x3 box blur. Sensor noise in low light produces gradients as strong
+ * as a real paper edge; one cheap blur removes most of it.
  */
-export function largestBrightBlob(gray, width, height, threshold) {
-  const label = new Int32Array(width * height).fill(-1)
-  const stack = new Int32Array(width * height)
-  let bestId = -1, bestSize = 0, nextId = 0
-
-  for (let start = 0; start < gray.length; start++) {
-    if (gray[start] <= threshold || label[start] !== -1) continue
-    const id = nextId++
-    let top = 0, size = 0
-    stack[top++] = start
-    label[start] = id
-
-    while (top > 0) {
-      const p = stack[--top]
-      size++
-      const x = p % width, y = (p - x) / width
-      // 4-connectivity is enough and roughly twice as fast as 8.
-      if (x > 0) { const n = p - 1; if (gray[n] > threshold && label[n] === -1) { label[n] = id; stack[top++] = n } }
-      if (x < width - 1) { const n = p + 1; if (gray[n] > threshold && label[n] === -1) { label[n] = id; stack[top++] = n } }
-      if (y > 0) { const n = p - width; if (gray[n] > threshold && label[n] === -1) { label[n] = id; stack[top++] = n } }
-      if (y < height - 1) { const n = p + width; if (gray[n] > threshold && label[n] === -1) { label[n] = id; stack[top++] = n } }
+export function blur3(src, width, height) {
+  const tmp = new Uint16Array(src.length)
+  const out = new Uint8Array(src.length)
+  for (let y = 0; y < height; y++) {
+    const row = y * width
+    for (let x = 0; x < width; x++) {
+      const l = src[row + (x > 0 ? x - 1 : 0)]
+      const c = src[row + x]
+      const r = src[row + (x < width - 1 ? x + 1 : width - 1)]
+      tmp[row + x] = l + c + r
     }
+  }
+  for (let y = 0; y < height; y++) {
+    const up = (y > 0 ? y - 1 : 0) * width
+    const mid = y * width
+    const down = (y < height - 1 ? y + 1 : height - 1) * width
+    for (let x = 0; x < width; x++) {
+      out[mid + x] = (tmp[up + x] + tmp[mid + x] + tmp[down + x]) / 9
+    }
+  }
+  return out
+}
 
-    if (size > bestSize) { bestSize = size; bestId = id }
+/**
+ * Sobel gradients, with magnitude normalised against the local average.
+ *
+ * The normalisation is what lets a faint edge in shadow compete with a strong
+ * one under a window. Without it a single bright region dominates the frame and
+ * a page in the dim half is never found.
+ *
+ * @returns {{ mag: Float32Array, angle: Float32Array }} angle in [0, PI)
+ */
+export function gradients(gray, width, height) {
+  const mag = new Float32Array(width * height)
+  const angle = new Float32Array(width * height)
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x
+      const tl = gray[i - width - 1], t = gray[i - width], tr = gray[i - width + 1]
+      const l = gray[i - 1], r = gray[i + 1]
+      const bl = gray[i + width - 1], b = gray[i + width], br = gray[i + width + 1]
+
+      const gx = (tr + 2 * r + br) - (tl + 2 * l + bl)
+      const gy = (bl + 2 * b + br) - (tl + 2 * t + tr)
+
+      mag[i] = Math.sqrt(gx * gx + gy * gy)
+      // Folded to [0, PI): an edge and its reverse are the same line, so
+      // direction beyond PI carries no extra information.
+      let a = Math.atan2(gy, gx)
+      if (a < 0) a += PI
+      if (a >= PI) a -= PI
+      angle[i] = a
+    }
   }
 
-  return bestId === -1 ? null : { size: bestSize, label, id: bestId }
+  // Local mean magnitude on a coarse grid, then divide through.
+  const CELL = 16
+  const cols = Math.ceil(width / CELL)
+  const rows = Math.ceil(height / CELL)
+  const cellSum = new Float32Array(cols * rows)
+  const cellCount = new Float32Array(cols * rows)
+  let globalMean = 0
+
+  for (let y = 0; y < height; y++) {
+    const cy = (y / CELL) | 0
+    for (let x = 0; x < width; x++) {
+      const value = mag[y * width + x]
+      const c = cy * cols + ((x / CELL) | 0)
+      cellSum[c] += value
+      cellCount[c]++
+      globalMean += value
+    }
+  }
+  globalMean /= Math.max(1, width * height)
+
+  for (let y = 0; y < height; y++) {
+    const cy = (y / CELL) | 0
+    for (let x = 0; x < width; x++) {
+      const c = cy * cols + ((x / CELL) | 0)
+      const local = cellSum[c] / Math.max(1, cellCount[c])
+      // Blended with the global mean so a genuinely flat cell cannot amplify
+      // its own noise into a phantom edge.
+      const scale = 0.65 * local + 0.35 * globalMean
+      mag[y * width + x] /= (scale + 1e-3)
+    }
+  }
+
+  return { mag, angle }
 }
+
+// ─── Dominant orientations ────────────────────────────────────
+
+const ORIENTATION_BINS = 90 // 2 degrees per bin
+
+/**
+ * The two dominant edge orientations, roughly perpendicular. A rectangular page
+ * produces exactly two, at whatever angle it is held.
+ * @returns {[number, number] | null} radians in [0, PI)
+ */
+export function dominantOrientations(mag, angle, minMagnitude = 1.6) {
+  const hist = new Float32Array(ORIENTATION_BINS)
+  for (let i = 0; i < mag.length; i++) {
+    const m = mag[i]
+    if (m < minMagnitude) continue
+    const bin = Math.min(ORIENTATION_BINS - 1, (angle[i] / PI * ORIENTATION_BINS) | 0)
+    hist[bin] += m
+  }
+
+  // Circular smoothing: 179 degrees and 1 degree are the same direction.
+  const smooth = new Float32Array(ORIENTATION_BINS)
+  for (let b = 0; b < ORIENTATION_BINS; b++) {
+    let sum = 0
+    for (let k = -2; k <= 2; k++) {
+      sum += hist[(b + k + ORIENTATION_BINS) % ORIENTATION_BINS] * (3 - Math.abs(k))
+    }
+    smooth[b] = sum
+  }
+
+  let first = -1, firstValue = 0
+  for (let b = 0; b < ORIENTATION_BINS; b++) {
+    if (smooth[b] > firstValue) { firstValue = smooth[b]; first = b }
+  }
+  if (first === -1 || firstValue <= 0) return null
+
+  // The partner sits near 90 degrees away, within tolerance for perspective.
+  const quarter = ORIENTATION_BINS / 2
+  const tolerance = Math.round(22 / 180 * ORIENTATION_BINS)
+  let second = -1, secondValue = 0
+  for (let d = -tolerance; d <= tolerance; d++) {
+    const b = (first + quarter + d + ORIENTATION_BINS) % ORIENTATION_BINS
+    if (smooth[b] > secondValue) { secondValue = smooth[b]; second = b }
+  }
+  if (second === -1 || secondValue <= 0) return null
+
+  const toRad = b => (b + 0.5) / ORIENTATION_BINS * PI
+  return [toRad(first), toRad(second)]
+}
+
+// ─── The strongest line pair in one direction ─────────────────
+
+/**
+ * Two parallel lines with normal `theta`, found by projecting edge strength onto
+ * that normal and taking the two strongest well-separated peaks. Those are the
+ * page's opposing edges.
+ */
+export function strongestLinePair(mag, angle, width, height, theta, opts = {}) {
+  const {
+    angleTolerance = 20 / 180 * PI,
+    minMagnitude = 1.6,
+    minSeparationFraction = 0.15
+  } = opts
+
+  const nx = Math.cos(theta), ny = Math.sin(theta)
+  // Offset keeps every projected distance non-negative for any orientation.
+  const offset = (nx < 0 ? -nx * width : 0) + (ny < 0 ? -ny * height : 0)
+  const span = Math.abs(nx) * width + Math.abs(ny) * height
+  const bins = Math.max(32, Math.ceil(span) + 1)
+  const acc = new Float32Array(bins)
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x
+      const m = mag[i]
+      if (m < minMagnitude) continue
+      // Only pixels whose gradient runs along this normal — those are the ones
+      // belonging to an edge perpendicular to it.
+      let diff = Math.abs(angle[i] - theta)
+      if (diff > PI / 2) diff = PI - diff
+      if (diff > angleTolerance) continue
+
+      const bin = Math.min(bins - 1, Math.max(0, Math.round(x * nx + y * ny + offset)))
+      acc[bin] += m
+    }
+  }
+
+  const smooth = new Float32Array(bins)
+  for (let b = 0; b < bins; b++) {
+    let sum = 0
+    for (let k = -2; k <= 2; k++) {
+      const j = b + k
+      if (j >= 0 && j < bins) sum += acc[j] * (3 - Math.abs(k))
+    }
+    smooth[b] = sum
+  }
+
+  let firstBin = -1, firstValue = 0
+  for (let b = 0; b < bins; b++) {
+    if (smooth[b] > firstValue) { firstValue = smooth[b]; firstBin = b }
+  }
+  if (firstBin === -1 || firstValue <= 0) return null
+
+  // The second peak must be far enough away to be the opposite edge of a page
+  // rather than the far side of one thick line.
+  const minSeparation = Math.max(6, Math.round(span * minSeparationFraction))
+  let secondBin = -1, secondValue = 0
+  for (let b = 0; b < bins; b++) {
+    if (Math.abs(b - firstBin) < minSeparation) continue
+    if (smooth[b] > secondValue) { secondValue = smooth[b]; secondBin = b }
+  }
+  if (secondBin === -1 || secondValue <= 0) return null
+
+  const make = (bin, strength) => ({ theta, d: bin - offset, strength })
+  const a = make(firstBin, firstValue)
+  const b = make(secondBin, secondValue)
+  return a.d <= b.d ? [a, b] : [b, a]
+}
+
+/** Where two lines meet, or null if they are parallel. */
+export function intersect(l1, l2) {
+  const n1x = Math.cos(l1.theta), n1y = Math.sin(l1.theta)
+  const n2x = Math.cos(l2.theta), n2y = Math.sin(l2.theta)
+  const det = n1x * n2y - n1y * n2x
+  if (Math.abs(det) < 1e-6) return null
+  return {
+    x: (l1.d * n2y - l2.d * n1y) / det,
+    y: (l2.d * n1x - l1.d * n2x) / det
+  }
+}
+
+// ─── Assemble and validate ────────────────────────────────────
 
 function polygonArea(corners) {
   let area = 0
@@ -83,163 +265,95 @@ function polygonArea(corners) {
   return Math.abs(area) / 2
 }
 
-// The corner search works by taking the extreme blob pixels along a pair of
-// perpendicular axes. Which pair matters: the diagonal pair nails an
-// axis-aligned page but collapses to a line on one rotated 45°, and the
-// horizontal/vertical pair does the reverse. So several rotations are tried and
-// the one that best explains the blob wins — that is what lets the frame track
-// a page held at any angle.
-const CORNER_SEARCH_ANGLES = 8
-
-// How completely the blob must fill the quad its own corners describe.
-const MIN_QUAD_FILL = 0.78
-
-/** Extreme points along one rotated basis, ordered clockwise from top-left. */
-function cornersForBasis(label, id, width, height, angle) {
-  const ux = Math.cos(angle), uy = Math.sin(angle)
-  const vx = -Math.sin(angle), vy = Math.cos(angle)
-
-  let maxU = -Infinity, minU = Infinity, maxV = -Infinity, minV = Infinity
-  let pMaxU = null, pMinU = null, pMaxV = null, pMinV = null
-
-  for (let y = 0; y < height; y++) {
-    const row = y * width
-    for (let x = 0; x < width; x++) {
-      if (label[row + x] !== id) continue
-      const u = x * ux + y * uy
-      const v = x * vx + y * vy
-      if (u > maxU) { maxU = u; pMaxU = { x, y } }
-      if (u < minU) { minU = u; pMinU = { x, y } }
-      if (v > maxV) { maxV = v; pMaxV = { x, y } }
-      if (v < minV) { minV = v; pMinV = { x, y } }
-    }
-  }
-  if (!pMaxU || !pMinU || !pMaxV || !pMinV) return null
-
-  const points = [pMinU, pMinV, pMaxU, pMaxV]
-  const cx = points.reduce((s, p) => s + p.x, 0) / 4
-  const cy = points.reduce((s, p) => s + p.y, 0) / 4
-  // Order around the centroid, then rotate so the top-left comes first.
-  points.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx))
-  let startIndex = 0, best = Infinity
+function isConvex(corners) {
+  let sign = 0
   for (let i = 0; i < 4; i++) {
-    const score = points[i].x + points[i].y
+    const a = corners[i], b = corners[(i + 1) % 4], c = corners[(i + 2) % 4]
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+    if (Math.abs(cross) < 1e-6) continue
+    const s = Math.sign(cross)
+    if (sign === 0) sign = s
+    else if (s !== sign) return false
+  }
+  return true
+}
+
+function orderCorners(points) {
+  const cx = points.reduce((s, p) => s + p.x, 0) / points.length
+  const cy = points.reduce((s, p) => s + p.y, 0) / points.length
+  const sorted = points.slice().sort((a, b) =>
+    Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx))
+  let startIndex = 0, best = Infinity
+  for (let i = 0; i < sorted.length; i++) {
+    const score = sorted[i].x + sorted[i].y
     if (score < best) { best = score; startIndex = i }
   }
-  return [0, 1, 2, 3].map(i => points[(startIndex + i) % 4])
+  return [0, 1, 2, 3].map(i => sorted[(startIndex + i) % 4])
 }
 
-/**
- * The four corners of a blob. Tries several basis rotations and keeps the
- * candidate whose quadrilateral best contains the blob, so the result is
- * correct for a page at any angle rather than only an upright one.
- *
- * @returns {Array<{x:number,y:number}>|null} TL, TR, BR, BL
- */
-export function extremeCorners(label, id, width, height, blobSize = null) {
-  let bestCorners = null, bestFill = -Infinity
-
-  for (let i = 0; i < CORNER_SEARCH_ANGLES; i++) {
-    const angle = (Math.PI / 2) * (i / CORNER_SEARCH_ANGLES)
-    const corners = cornersForBasis(label, id, width, height, angle)
-    if (!corners) continue
-
-    const area = polygonArea(corners)
-    if (area < 1) continue // degenerate: this basis collapsed the quad
-
-    // Without a blob size to compare against, the largest quad is the best
-    // guess; with one, prefer the quad the blob actually fills.
-    if (blobSize == null) {
-      if (area > bestFill) { bestFill = area; bestCorners = corners }
-      continue
-    }
-    const fill = blobSize / area
-    // A quad smaller than its own blob is not describing the shape at all
-    // (a cross, say, whose extremes only trace one arm).
-    if (fill > 1.12) continue
-    if (fill > bestFill) { bestFill = fill; bestCorners = corners }
-  }
-
-  return bestCorners
-}
-
-function distance(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y)
-}
+function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) }
 
 /**
  * Detects the page quad in a grayscale frame.
  *
- * @param {Uint8Array|Uint8ClampedArray} gray  one byte per pixel
- * @param {number} width
- * @param {number} height
- * @param {{minAreaFraction?: number, maxAreaFraction?: number, minContrast?: number}} [opts]
- * @returns {{ corners: Array<{x:number,y:number}>, confidence: number, areaFraction: number } | null}
- *          corners are normalised 0..1 and ordered TL, TR, BR, BL
+ * @returns {{corners: Array<{x:number,y:number}>, confidence: number, areaFraction: number} | null}
+ *          corners normalised 0..1, ordered TL, TR, BR, BL
  */
 export function detectDocumentQuad(gray, width, height, opts = {}) {
   const {
-    // Below this the "page" is probably a highlight or a sticker; above it we
-    // are looking at a wall or an overexposed frame, not an edge.
-    minAreaFraction = 0.10,
-    maxAreaFraction = 0.97,
-    // Otsu always returns a split, even for a flat grey wall. Requiring real
-    // separation between the two classes is what "reasonable contrast" means.
-    minContrast = 26
+    minAreaFraction = 0.08,
+    // Above 1 is allowed: a page held close legitimately overflows the frame.
+    maxAreaFraction = 1.7,
+    minMagnitude = 1.6,
+    outsideMargin = 0.35,
+    minSquareness = 0.5
   } = opts
 
-  if (!gray || !width || !height) return null
+  if (!gray || !width || !height || gray.length < width * height) return null
 
-  const threshold = otsuThreshold(gray)
+  const smoothed = blur3(gray, width, height)
+  const { mag, angle } = gradients(smoothed, width, height)
 
-  // Mean of each class, to measure how genuinely separated they are.
-  let sumLow = 0, countLow = 0, sumHigh = 0, countHigh = 0
-  for (let i = 0; i < gray.length; i++) {
-    if (gray[i] > threshold) { sumHigh += gray[i]; countHigh++ }
-    else { sumLow += gray[i]; countLow++ }
-  }
-  if (!countLow || !countHigh) return null
-  const contrast = (sumHigh / countHigh) - (sumLow / countLow)
-  if (contrast < minContrast) return null
+  const orientations = dominantOrientations(mag, angle, minMagnitude)
+  if (!orientations) return null
 
-  const blob = largestBrightBlob(gray, width, height, threshold)
-  if (!blob) return null
+  const pairA = strongestLinePair(mag, angle, width, height, orientations[0], { minMagnitude })
+  const pairB = strongestLinePair(mag, angle, width, height, orientations[1], { minMagnitude })
+  if (!pairA || !pairB) return null
 
-  const frameArea = width * height
-  if (blob.size / frameArea < minAreaFraction) return null
+  const raw = [
+    intersect(pairA[0], pairB[0]), intersect(pairA[0], pairB[1]),
+    intersect(pairA[1], pairB[1]), intersect(pairA[1], pairB[0])
+  ]
+  if (raw.some(p => p === null)) return null
 
-  const corners = extremeCorners(blob.label, blob.id, width, height, blob.size)
-  if (!corners) return null
+  // A corner just off screen is normal when a page is held close, so a margin
+  // is allowed rather than rejecting the whole detection.
+  const marginX = width * outsideMargin, marginY = height * outsideMargin
+  if (raw.some(p =>
+    p.x < -marginX || p.x > width + marginX ||
+    p.y < -marginY || p.y > height + marginY)) return null
 
-  const quadArea = polygonArea(corners)
-  const areaFraction = quadArea / frameArea
+  const corners = orderCorners(raw)
+  if (!isConvex(corners)) return null
+
+  const areaFraction = polygonArea(corners) / (width * height)
   if (areaFraction < minAreaFraction || areaFraction > maxAreaFraction) return null
 
-  // A page is convex and roughly rectangular. If the blob fills its own quad
-  // poorly, it is an irregular shape (a hand, a shadow) rather than paper.
-  // A real page fills its own quad almost completely — around 0.97 even when
-  // skewed, since its four corners *are* the extreme points. Anything much
-  // lower is an irregular bright shape (a hand, a shadow, a window) whose
-  // extremes happen to form a quad. Above 1 the quad fails to enclose its own
-  // blob, so the corners are simply wrong.
-  const fill = blob.size / quadArea
-  if (fill < MIN_QUAD_FILL || fill > 1.12) return null
-
-  // Opposite sides should be similar lengths. Rejects wedge shapes that are
-  // clearly not a rectangle seen at an angle.
+  // Opposite sides of a rectangle stay similar even under perspective.
   const top = distance(corners[0], corners[1])
   const right = distance(corners[1], corners[2])
   const bottom = distance(corners[2], corners[3])
   const left = distance(corners[3], corners[0])
   const horizontalRatio = Math.min(top, bottom) / Math.max(top, bottom)
   const verticalRatio = Math.min(left, right) / Math.max(left, right)
-  if (horizontalRatio < 0.45 || verticalRatio < 0.45) return null
+  if (horizontalRatio < minSquareness || verticalRatio < minSquareness) return null
 
-  // Reported so the UI can show a settled frame differently from a guess.
-  const confidence = Math.min(1,
-    Math.max(0, (fill - MIN_QUAD_FILL) / (1 - MIN_QUAD_FILL)) * 0.5 +
-    Math.min(horizontalRatio, verticalRatio) * 0.5
-  )
+  // Line strength carries through, so a crisp page reads as more confident than
+  // a quad assembled from weak edges.
+  const strength = pairA[0].strength + pairA[1].strength + pairB[0].strength + pairB[1].strength
+  const squareness = Math.min(horizontalRatio, verticalRatio)
+  const confidence = Math.min(1, squareness * 0.6 + Math.min(1, strength / 30000) * 0.4)
 
   return {
     corners: corners.map(c => ({ x: c.x / width, y: c.y / height })),
@@ -248,28 +362,85 @@ export function detectDocumentQuad(gray, width, height, opts = {}) {
   }
 }
 
-/**
- * Exponential smoothing between frames. Detection jitters by a pixel or two
- * every frame; without this the overlay shivers even on a still page.
- */
-export function smoothQuad(previous, next, alpha = 0.35) {
-  if (!previous) return next
-  if (!next) return null
-  return {
-    ...next,
-    corners: next.corners.map((c, i) => ({
-      x: previous.corners[i].x + (c.x - previous.corners[i].x) * alpha,
-      y: previous.corners[i].y + (c.y - previous.corners[i].y) * alpha
-    }))
+// ─── Holding still ────────────────────────────────────────────
+
+export function maxCornerDistance(a, b) {
+  let worst = 0
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    worst = Math.max(worst, Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y))
   }
+  return worst
 }
 
-/** RGBA from a canvas → one luminance byte per pixel. */
-export function toGrayscale(rgba, width, height) {
-  const gray = new Uint8Array(width * height)
-  for (let i = 0, p = 0; p < gray.length; i += 4, p++) {
-    // Rec. 601 luma; integer maths, called on every frame.
-    gray[p] = (rgba[i] * 77 + rgba[i + 1] * 150 + rgba[i + 2] * 29) >> 8
+/**
+ * Temporal tracker. Detection alone twitches slightly every frame and drops out
+ * for the occasional frame; both read as the frame "searching". This adds
+ * hysteresis — a candidate must agree with itself for a few frames before it is
+ * shown as locked, a brief dropout holds the last good outline instead of
+ * discarding it, and updates are eased rather than snapped.
+ */
+export class QuadTracker {
+  constructor({ lockAfter = 3, holdFrames = 10, jumpThreshold = 0.09, ease = 0.45 } = {}) {
+    this.lockAfter = lockAfter
+    this.holdFrames = holdFrames
+    this.jumpThreshold = jumpThreshold
+    this.ease = ease
+    this.current = null
+    this.hits = 0
+    this.misses = 0
   }
-  return gray
+
+  /** @returns {{corners, confidence, locked: boolean} | null} what to draw */
+  update(detection) {
+    if (!detection) {
+      this.misses++
+      // Hold the last outline briefly: one dropped frame should not make the
+      // frame blink off and on.
+      if (this.current && this.misses <= this.holdFrames) return this.view()
+      this.current = null
+      this.hits = 0
+      return null
+    }
+
+    this.misses = 0
+    if (!this.current) {
+      this.current = detection
+      this.hits = 1
+      return this.view()
+    }
+
+    const drift = maxCornerDistance(this.current.corners, detection.corners)
+    if (drift > this.jumpThreshold) {
+      // A real move — the camera panned, or a different page came into view.
+      // Adopt it and start earning the lock again.
+      this.current = detection
+      this.hits = 1
+      return this.view()
+    }
+
+    this.hits++
+    // Once locked, ease more slowly. That is what makes it feel planted rather
+    // than nervous.
+    const alpha = this.hits >= this.lockAfter ? this.ease * 0.5 : this.ease
+    const previous = this.current.corners
+    this.current = {
+      ...detection,
+      corners: detection.corners.map((c, i) => ({
+        x: previous[i].x + (c.x - previous[i].x) * alpha,
+        y: previous[i].y + (c.y - previous[i].y) * alpha
+      }))
+    }
+    return this.view()
+  }
+
+  view() {
+    if (!this.current) return null
+    return { ...this.current, locked: this.hits >= this.lockAfter }
+  }
+
+  reset() {
+    this.current = null
+    this.hits = 0
+    this.misses = 0
+  }
 }
