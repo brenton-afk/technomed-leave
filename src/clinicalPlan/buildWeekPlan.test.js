@@ -370,13 +370,50 @@ describe('nothing on the calendar may disappear (§ the missing-case bug)', () =
 })
 
 describe('operation description from the notes', () => {
-  it('reads the clinical procedure and keeps the system alongside it', () => {
+  it('reads the operation and keeps the system alongside it', () => {
     const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00',
       { colorId: COLOR.Grape, description: 'C5/6 ACDF\nKit: Mariner set' })])
     const c = plan.days[0].casesByHospital[0].cases[0]
     expect(c.operation).toBe('C5/6 ACDF')
-    expect(c.procedure).toBe('MARINER')   // the system is not overwritten
+    expect(c.system).toBe('MARINER')
     expect(c.kit).toBe('Mariner set')
+  })
+
+  it('splits an operation out of the title, so it is never said twice', () => {
+    // The real shape that showed the fault: the title carries the operation and
+    // the system together, and the notes name the operation as well. Rendering
+    // both fields then printed "C4/5 ACDF" in bold and "C4/5 ACDF SHORELINE"
+    // underneath it.
+    const plan = build([ev('c1', 'Panthi C4/5 ACDF SHORELINE - Gupta', '25', '13:30', '14:30',
+      { colorId: COLOR.Basil, description: 'C4/5 ACDF' })])
+    const c = plan.days[1].casesByHospital[0].cases[0]
+    expect(c.operation).toBe('C4/5 ACDF')
+    expect(c.system).toBe('SHORELINE')
+  })
+
+  it('finds the operation in the title when the notes are empty', () => {
+    const plan = build([ev('c1', 'Horne L4-L5 TLIF DAKOTA-2 - Ibbett', '24', '09:00', '10:00',
+      { colorId: COLOR.Banana })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.operation).toBe('L4-L5 TLIF')
+    // A hyphenated system name survives, since the title is split on what reads
+    // clinically rather than on punctuation.
+    expect(c.system).toBe('DAKOTA-2')
+  })
+
+  it('drops a booking with an unreadable date instead of losing the week', () => {
+    const broken = { id: 'bad', summary: 'Smith MARINER - Fowler', start: { dateTime: 'not a date' }, end: {} }
+    const good = ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00', { colorId: COLOR.Grape })
+    const plan = build([broken, good])
+    expect(plan.days[0].casesByHospital[0].cases.map(c => c.patient)).toEqual(['Jackson'])
+  })
+
+  it('leaves the system alone when the title names no operation', () => {
+    const plan = build([ev('c1', 'Vanderheim MARINER + E4 CAGES - Gupta', '24', '09:00', '10:00',
+      { colorId: COLOR.Basil })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.operation).toBeUndefined()
+    expect(c.system).toBe('MARINER + E4 CAGES')
   })
 
   it('accepts an explicit label anywhere in the notes', () => {

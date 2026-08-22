@@ -41,15 +41,25 @@ describe('text export (§8)', () => {
     expect(text).not.toContain('SATURDAY 29 AUGUST')
   })
 
-  it('carries the case detail, times and colour faults', () => {
+  it('carries the case detail and colour faults, and no case times', () => {
     const text = planToText(FIXTURE_WEEK)
-    // The clinical procedure leads where it is known; the implant system
-    // follows it rather than standing in for it.
-    expect(text).toContain('Jackson / Fowler — C5/6 ACDF — 10:00am–11:00am')
+    // The operation leads where it is known; the implant system follows on its
+    // own line rather than standing in for it or repeating it.
+    expect(text).toContain('Jackson / Fowler — C5/6 ACDF')
     expect(text).toContain('System: MARINER')
-    // A case with no operation in its notes still reads as before.
-    expect(text).toContain('Gill / Fowler — STRYKER CCI — 11:00am–12:00pm')
+    // A case with no operation in its notes names its system where the operation
+    // would otherwise sit, rather than leaving the line blank.
+    expect(text).toContain('Gill / Fowler — STRYKER CCI')
     expect(text).toContain('Kit: Dakota (consignment)')
+    // Theatre lists move too often for a printed time to be reliable. Meetings
+    // and handovers keep theirs, since those are actually fixed.
+    // Case lines only: an "Other:" line can contain a slash of its own ("late
+    // start / early finish") and meetings legitimately keep their times.
+    const caseLines = text.split('\n').filter(line => /^ {4}\S[^:]* \/ \S/.test(line))
+    expect(caseLines.length).toBeGreaterThan(4)
+    for (const line of caseLines) {
+      expect(line).not.toMatch(/\d{1,2}:\d{2}(am|pm)/)
+    }
     expect(text).toContain('COLOUR-CODING: no calendar colour set — should be Grape')
     expect(text).toContain('Colour-coding check:')
   })

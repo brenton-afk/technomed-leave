@@ -11,7 +11,7 @@ import {
   Table, TableRow, TableCell, WidthType, ShadingType
 } from 'docx'
 import { SURGEON_ACCENTS, TOKENS, DOCX_FONT, accentTextFor } from './theme.js'
-import { formatDayHeading, formatTimeRange, formatStamp } from './week.js'
+import { formatDayHeading, formatStamp } from './week.js'
 import { DOCX_FILENAME } from './exportMeta.js'
 
 export { DOCX_FILENAME }
@@ -59,6 +59,9 @@ function calloutBox(children, { bg, border }) {
 }
 
 function caseParagraphs(c) {
+  const bar = { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
+  // Operation in bold, then the system, then the kit. No time: theatre lists
+  // change often enough that a printed one is misleading.
   const out = [
     para([
       run(c.patient, { bold: true, color: hex(TOKENS.ink), size: 22 }),
@@ -69,27 +72,17 @@ function caseParagraphs(c) {
       // The coloured left bar becomes a left border on the block.
       border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
     }),
-    para(run(c.operation || c.procedure, {
-      color: hex(TOKENS.ink), size: 21, bold: Boolean(c.operation)
-    }), {
-      border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
-    })
   ]
   if (c.operation) {
-    out.push(para(run(c.procedure, { color: hex(TOKENS.inkMuted), size: 20 }), {
-      border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
-    }))
+    out.push(para(run(c.operation, { color: hex(TOKENS.ink), size: 21, bold: true }), { border: bar }))
+  }
+  if (c.system) {
+    // Same weight whether or not an operation sits above it. Varying it was what
+    // made the plan read differently from row to row.
+    out.push(para(run(c.system, { color: hex(TOKENS.inkMuted), size: 20 }), { border: bar }))
   }
   if (c.kit) {
-    out.push(para(run(`Kit: ${c.kit}`, { color: hex(TOKENS.inkMuted), size: 20 }), {
-      border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
-    }))
-  }
-  const time = formatTimeRange(c.start, c.end)
-  if (time) {
-    out.push(para(run(time, { color: hex(TOKENS.inkMuted), size: 20 }), {
-      border: { left: { style: BorderStyle.SINGLE, size: 18, color: accent(c.surgeon), space: 8 } }
-    }))
+    out.push(para(run(`Kit: ${c.kit}`, { color: hex(TOKENS.inkMuted), size: 20 }), { border: bar }))
   }
   for (const note of c.notes || []) {
     const isAlert = note.kind === 'colourCoding' || note.kind === 'clinicalAlert'

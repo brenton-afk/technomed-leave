@@ -3,7 +3,7 @@
 // never disagree. Unlike the .docx this includes the weekend, because it mirrors
 // what is on screen.
 
-import { formatDayHeading, formatTimeRange, formatStamp } from './week.js'
+import { formatDayHeading, formatStamp } from './week.js'
 
 export function planToText(plan, { includeWeekend = true } = {}) {
   const lines = []
@@ -35,9 +35,13 @@ export function planToText(plan, { includeWeekend = true } = {}) {
     for (const group of day.casesByHospital) {
       lines.push(`  ${group.hospital}`)
       for (const c of group.cases) {
-        const time = formatTimeRange(c.start, c.end)
-        lines.push(`    ${c.patient} / ${c.surgeon} — ${c.operation || c.procedure}${time ? ` — ${time}` : ''}`)
-        if (c.operation) lines.push(`      System: ${c.procedure}`)
+        // Same four lines as the screen, and no time: theatre lists move too
+        // often for one printed here to be right.
+        // The operation leads the line where it is known, otherwise the system
+        // does, so a case is never reduced to two names and a kit.
+        const described = c.operation || c.system
+        lines.push(`    ${c.patient} / ${c.surgeon}${described ? ` — ${described}` : ''}`)
+        if (c.operation && c.system) lines.push(`      System: ${c.system}`)
         if (c.kit) lines.push(`      Kit: ${c.kit}`)
         for (const note of c.notes) lines.push(`      ${note.text}`)
       }

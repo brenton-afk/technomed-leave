@@ -98,14 +98,9 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             REFORM / ASCOT / ATHLET
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            10:00am–11:00am
           </div>
         </div>
       </div>
@@ -135,14 +130,9 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             LONESTAR
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            12:00pm–1:00pm
           </div>
           <div
             style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
@@ -177,14 +167,9 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             SHORELINE (PM list)
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            1:30pm–2:30pm
           </div>
         </div>
       </div>
@@ -221,7 +206,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
             </span>
           </div>
           <div
-            style="font-size: 13.5px; font-weight: 600; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13.5px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.45;"
           >
             L4/5 TLIF
           </div>
@@ -235,11 +220,6 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
           >
             Kit: 
             Dakota (consignment)
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            9:00am–10:00am
           </div>
         </div>
       </div>
@@ -378,7 +358,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; font-weight: 600; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13.5px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.45;"
           >
             C5/6 ACDF
           </div>
@@ -386,11 +366,6 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             MARINER
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            10:00am–11:00am
           </div>
           <div
             style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
@@ -425,7 +400,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             STRYKER CCI
           </div>
@@ -434,11 +409,6 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
           >
             Kit: 
             Stryker PSI
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            11:00am–12:00pm
           </div>
         </div>
       </div>
@@ -516,14 +486,9 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             REFORM / ASCOT / ATHLET
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            10:00am–11:00am
           </div>
         </div>
       </div>
@@ -553,14 +518,9 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             LONESTAR
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            12:00pm–1:00pm
           </div>
           <div
             style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
@@ -595,14 +555,9 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             SHORELINE (PM list)
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            1:30pm–2:30pm
           </div>
         </div>
       </div>
@@ -639,7 +594,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; font-weight: 600; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13.5px; font-weight: 700; color: rgb(17, 24, 39); line-height: 1.45;"
           >
             L4/5 TLIF
           </div>
@@ -653,11 +608,6 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
           >
             Kit: 
             Dakota (consignment)
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            9:00am–10:00am
           </div>
         </div>
       </div>
@@ -850,14 +800,9 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             DIPLOMAT
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            9:00am–10:00am
           </div>
         </div>
       </div>
@@ -887,14 +832,9 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
             </span>
           </div>
           <div
-            style="font-size: 13.5px; color: rgb(17, 24, 39); line-height: 1.45;"
+            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.45;"
           >
             MARINER + E4 CAGES
-          </div>
-          <div
-            style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.5;"
-          >
-            10:00am–11:00am
           </div>
         </div>
       </div>

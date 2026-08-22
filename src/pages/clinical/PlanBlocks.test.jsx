@@ -98,11 +98,31 @@ describe('Weekly view content (§6)', () => {
     expect(note).toHaveStyle({ color: TOKENS.alert, fontStyle: 'italic', fontWeight: '700' })
   })
 
-  it('shows real clock times on every case', () => {
+  it('leaves case times off the plan', () => {
+    // Theatre lists are reordered often enough that a time printed here is wrong
+    // more often than it is right, and a wrong time is worse than none. The
+    // calendar keeps them, and meetings below still carry theirs.
     render(<WeeklyDocument />)
     for (const time of ['10:00am–11:00am', '11:00am–12:00pm', '9:00am–10:00am', '1:30pm–2:30pm']) {
-      expect(screen.getAllByText(time).length).toBeGreaterThan(0)
+      expect(screen.queryAllByText(time)).toHaveLength(0)
     }
+  })
+
+  it('states each case as who, what, with what, from where — once each', () => {
+    // A booking title runs the operation and the system together, and the notes
+    // often name the operation too, so this used to print the operation in bold
+    // and then again beneath it with the system attached — but only for the cases
+    // that had notes, so the plan read differently row to row.
+    render(<WeeklyDocument />)
+    const block = screen.getByText('Jackson').closest('div').parentElement
+
+    const operation = screen.getAllByText('C5/6 ACDF')
+    expect(operation).toHaveLength(1)
+    expect(operation[0]).toHaveStyle({ fontWeight: '700' })
+
+    // The system stands on its own line, without the operation repeated in it.
+    expect(block.textContent).toContain('MARINER')
+    expect(block.textContent).not.toContain('C5/6 ACDF MARINER')
   })
 
   it('groups by hospital with a small caps subheading', () => {

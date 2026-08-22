@@ -1,16 +1,20 @@
 import React from 'react'
 import { accentFor, accentTextFor, tokens, FONT_STACK } from '../../clinicalPlan/theme.js'
-import { formatDayHeading, formatTimeRange } from '../../clinicalPlan/week.js'
+import { formatDayHeading } from '../../clinicalPlan/week.js'
 
 // Presentational only. Every component here takes already-derived plan data and
 // draws it — no fetching, no parsing, no date maths beyond formatting. Order
 // follows §6.4 exactly, because the document's order is what readers scan by.
 
+// Four lines, always in this order: who, what was done, what it was done with,
+// and where the kit came from. Times are deliberately absent — theatre lists move
+// so often that a time printed here is wrong more often than it is right, and a
+// wrong time is worse than none. They are still on the calendar, which is the one
+// place they are kept up to date, and meetings below do keep theirs.
 export function CaseBlock({ surgicalCase, dark }) {
   const t = tokens(dark)
   const accent = accentFor(surgicalCase.surgeon, dark)          // the bar
   const accentText = accentTextFor(surgicalCase.surgeon, dark)  // legible as text
-  const time = formatTimeRange(surgicalCase.start, surgicalCase.end)
 
   return (
     <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
@@ -24,25 +28,19 @@ export function CaseBlock({ surgicalCase, dark }) {
           <span style={{ color: t.inkFaint, fontWeight: 400 }}> / </span>
           <span style={{ color: accentText }}>{surgicalCase.surgeon}</span>
         </div>
-        {/* The operation leads when it is known: "C5/6 ACDF" says more about the
-            case than the implant system does. The system then reads as support
-            rather than as the headline. */}
+        {/* The operation leads, in bold: "C5/6 ACDF" says more about the case
+            than the implant system does. */}
         {surgicalCase.operation && (
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: t.ink, lineHeight: 1.45 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: t.ink, lineHeight: 1.45 }}>
             {surgicalCase.operation}
           </div>
         )}
-        <div style={{
-          fontSize: surgicalCase.operation ? 13 : 13.5,
-          color: surgicalCase.operation ? t.inkMuted : t.ink,
-          lineHeight: 1.45
-        }}>
-          {surgicalCase.procedure}
-        </div>
+        {surgicalCase.system && (
+          <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>{surgicalCase.system}</div>
+        )}
         {surgicalCase.kit && (
           <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>Kit: {surgicalCase.kit}</div>
         )}
-        {time && <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.5 }}>{time}</div>}
         {(surgicalCase.notes || []).map((note, i) => (
           <div key={i} style={{
             fontSize: 12.5, fontStyle: 'italic', lineHeight: 1.5, marginTop: 2,

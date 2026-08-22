@@ -204,6 +204,53 @@ const OPERATION_LABEL = /\b(?:procedure|operation|op|surgery)\s*[:\-]\s*([^\n;|]
 // "C5/6", "L4-L5", "ACDF", "PLIF", "TLIF", "ALIF", "XLIF".
 const CLINICAL_HINT = /\b([CTLS]\d{1,2}\s*[/\-–]\s*[CTLS]?\d{1,2}|ACDF|[APTX]LIF|laminectomy|discectomy|fusion|decompression|arthroplasty)\b/i
 
+/**
+ * Clinical fragments: a vertebral level, or a named approach. Global, because a
+ * title carries several ("C4/5 ACDF").
+ */
+const CLINICAL_SPAN = /\b([CTLS]\d{1,2}(?:\s*[/\-–]\s*[CTLS]?\d{1,2})+|ACDF|[APTX]LIF|laminectomy|discectomy|fusion|decompression|arthroplasty|corpectomy)\b/gi
+
+/**
+ * Separates what was done from what it was done with.
+ *
+ * A booking title's middle section runs the two together — "C4/5 ACDF SHORELINE"
+ * is an operation and an implant system in one string — while the operation is
+ * often *also* written in the notes. Rendering both then says the same thing
+ * twice: the operation appears in bold and again on the line beneath with the
+ * system tacked on. Cases whose notes are empty showed it once, so the plan read
+ * inconsistently from row to row.
+ *
+ * Splitting here rather than at the point of display means the operation and the
+ * system are separate fields everywhere afterwards — on screen, in the text
+ * export and in the document — and neither can be shown twice.
+ *
+ * @param {string} procedure   the title's middle section
+ * @param {string} [fromNotes] an operation written out in the calendar notes,
+ *                             which is preferred when present since it is
+ *                             deliberate prose rather than a fragment of a title
+ * @returns {{operation: string|undefined, system: string|undefined}}
+ */
+export function splitOperationAndSystem(procedure, fromNotes) {
+  const text = String(procedure || '').trim()
+  const spans = text.match(CLINICAL_SPAN) || []
+
+  // Whatever is left once the clinical fragments are taken out is the system.
+  let system = text
+  for (const span of spans) system = system.replace(span, ' ')
+  system = system
+    // Separators orphaned by the removal: "C4/5 ACDF / SHORELINE" would leave a
+    // leading slash behind.
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s/+,\-–]+|[\s/+,\-–]+$/g, '')
+    .replace(/([/+])\s*\1+/g, '$1')
+    .trim()
+
+  const operation = (fromNotes || spans.join(' ')).trim() || undefined
+  // A system that only repeats the operation is not worth a line of its own.
+  const same = operation && system && system.toLowerCase() === operation.toLowerCase()
+  return { operation, system: same || !system ? undefined : system }
+}
+
 export function extractOperation(description) {
   const text = stripIdentifiers(description)
   if (!text) return undefined

@@ -6,7 +6,7 @@
 import './types.js'
 import {
   normaliseEvent, parseCaseTitle, extractKit, extractOperation, detectHospital,
-  stripIdentifiers, HOSPITALS
+  stripIdentifiers, HOSPITALS, splitOperationAndSystem
 } from './parse.js'
 import { colourNameFor, checkEventColour, summariseColourFindings, surgeonForColourName } from './colours.js'
 import {
@@ -90,7 +90,12 @@ function daysCovered(event, days, tz) {
     return days.filter(d => d >= from && d < toExclusive || d === from)
   }
   if (!event.start) return []
-  const civil = zonedCivil(new Date(event.start), tz)
+  // A calendar entry with an unreadable date used to throw from inside the
+  // timezone maths and take the whole week's plan with it. One bad booking should
+  // cost that booking, not the plan.
+  const at = new Date(event.start)
+  if (Number.isNaN(at.getTime())) return []
+  const civil = zonedCivil(at, tz)
   const key = `${civil.year}-${String(civil.month).padStart(2, '0')}-${String(civil.day).padStart(2, '0')}`
   return [key]
 }
@@ -265,13 +270,19 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       const colourSurgeon = surgeonForColourName(colourNameFor(event.colorId))
       const parsed = parseCaseTitle(event.rawTitle, { colourSurgeon })
       if (!parsed || event.allDay) continue
+      // The title runs the operation and the implant system together, and the
+      // notes often name the operation as well. Separated here so that each is
+      // one field with one place to appear.
+      const { operation, system } = splitOperationAndSystem(
+        parsed.procedure, extractOperation(event.description))
       allCases.push({
         id: event.id,
         patient: parsed.patient,
         surgeon: parsed.surgeon,
-        procedure: parsed.procedure,
-        // The clinical procedure from the notes, where the team writes it.
-        operation: extractOperation(event.description),
+        // The title's raw middle section is not kept: it ran the operation and
+        // the system together, which is exactly the ambiguity being removed.
+        operation,
+        system,
         kit: extractKit(event.description),
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,
