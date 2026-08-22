@@ -7,3 +7,8 @@ if (!navigator.clipboard) {
     configurable: true
   })
 }
+
+// jsdom does not implement scrollTo, and navigating between tabs calls it.
+if (!window.scrollTo || !window.scrollTo._stubbed) {
+  window.scrollTo = Object.assign(() => {}, { _stubbed: true })
+}

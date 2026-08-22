@@ -108,3 +108,61 @@ export async function saveUsageFiles({ folderPath, folderName, scanPdf, usageShe
   }
   return { folderPath, saved }
 }
+
+// ─── Reading back ─────────────────────────────────────────────
+// Lets the app browse what was filed, which is what makes a saved usage sheet
+// reachable from the phone rather than only from Dropbox itself. Read-only.
+
+const RESOURCES_ROOT = process.env.DROPBOX_RESOURCES_PATH || '/RESOURCES'
+
+export function resourcesRoot() {
+  return RESOURCES_ROOT
+}
+
+export function usageRoot() {
+  return ROOT
+}
+
+/** Folders and files directly under `path`, folders first. */
+export async function listFolder(path) {
+  const { ok, data, status, text } = await rpc('files/list_folder', {
+    path: path === '/' ? '' : path,
+    recursive: false,
+    include_deleted: false,
+    include_non_downloadable_files: true,
+    limit: 500
+  })
+  if (!ok) {
+    const summary = data?.error_summary || text || ''
+    // A folder that was never created is an empty folder as far as the UI cares.
+    if (String(summary).includes('not_found')) return { entries: [], missing: true }
+    throw new Error(`Dropbox could not list "${path}" (${status}): ${summary}`)
+  }
+
+  const entries = (data.entries || []).map(e => ({
+    kind: e['.tag'] === 'folder' ? 'folder' : 'file',
+    name: e.name,
+    path: e.path_lower || e.path_display,
+    displayPath: e.path_display,
+    size: e.size ?? null,
+    modified: e.server_modified || null
+  }))
+
+  entries.sort((a, b) =>
+    a.kind === b.kind ? a.name.localeCompare(b.name, 'en-AU') : (a.kind === 'folder' ? -1 : 1))
+
+  return { entries, missing: false }
+}
+
+/**
+ * A short-lived direct link to one file. Dropbox expires these after ~4 hours,
+ * so they are fetched on demand and never stored — a persisted link would be a
+ * public URL to patient data long after anyone remembered it existed.
+ */
+export async function temporaryLink(path) {
+  const { ok, data, status, text } = await rpc('files/get_temporary_link', { path })
+  if (!ok) {
+    throw new Error(`Dropbox could not open that file (${status}): ${data?.error_summary || text}`)
+  }
+  return { url: data.link, name: data.metadata?.name || path.split('/').pop() }
+}

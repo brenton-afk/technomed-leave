@@ -5,7 +5,10 @@ import { normaliseCase, recomputeCase } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
-import { caseFolderPath, saveUsageFiles, dropboxConfigured } from '../_dropbox.js'
+import {
+  caseFolderPath, saveUsageFiles, dropboxConfigured,
+  listFolder, temporaryLink, resourcesRoot, usageRoot
+} from '../_dropbox.js'
 import { sendUsageEmail } from '../_email.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
@@ -67,6 +70,8 @@ export default async function handler(req, res) {
     if (action === 'save') return await handleSave(req, res, session)
     if (action === 'email') return await handleEmail(req, res, session)
     if (action === 'list') return await handleList(req, res)
+    if (action === 'files') return await handleFiles(req, res)
+    if (action === 'open') return await handleOpen(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     // err.message here is ours or the provider's; extracted content is never
@@ -310,6 +315,48 @@ async function handleEmail(req, res, session) {
     allSent: failed.length === 0,
     record: updated
   })
+}
+
+// ─── files / open: browsing what was filed ─────────────────
+// Read-only browsing of the Dropbox tree, so a saved usage sheet and the shared
+// resources folder are both reachable from the phone. Paths are constrained to
+// the two known roots — an unconstrained path parameter would let any signed-in
+// staff member read the whole Dropbox account.
+
+function assertAllowedPath(path) {
+  const roots = [usageRoot().toLowerCase(), resourcesRoot().toLowerCase()]
+  const lower = String(path || '').toLowerCase()
+  if (!roots.some(root => lower === root || lower.startsWith(root + '/'))) {
+    throw badRequest('That folder is outside the usage and resources folders')
+  }
+  if (lower.includes('..')) throw badRequest('Invalid path')
+}
+
+async function handleFiles(req, res) {
+  if (!dropboxConfigured()) {
+    return res.status(200).json({ configured: false, entries: [] })
+  }
+  const root = req.query.root === 'resources' ? resourcesRoot() : usageRoot()
+  const path = req.query.path || root
+  assertAllowedPath(path)
+
+  const { entries, missing } = await listFolder(path)
+  return res.status(200).json({
+    configured: true, path, root, missing,
+    // Never send the account-absolute path any further than needed.
+    entries: entries.map(e => ({ ...e, displayPath: undefined }))
+  })
+}
+
+async function handleOpen(req, res) {
+  if (!dropboxConfigured()) throw badRequest('Dropbox is not connected')
+  const path = req.query.path
+  if (!path) throw badRequest('path is required')
+  assertAllowedPath(path)
+
+  const link = await temporaryLink(path)
+  // Short-lived by design: the link is fetched per tap and never persisted.
+  return res.status(200).json({ url: link.url, name: link.name, expiresInHours: 4 })
 }
 
 // ─── list: history ─────────────────────────────────────────
