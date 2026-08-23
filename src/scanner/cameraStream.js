@@ -53,24 +53,52 @@ export function acquireCamera() {
     return Promise.reject(new Error('This browser cannot open the camera directly.'))
   }
 
-  opening = navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { ideal: 'environment' },
-      // Deliberately width only, and deliberately `ideal`. No height, and no
-      // aspectRatio — see above.
-      width: { ideal: 1920 }
-    },
-    audio: false
-  }).then(granted => {
-    stream = granted
-    opening = null
-    return granted
-  }).catch(err => {
-    opening = null
-    throw err
-  })
+  opening = tryEach(CONSTRAINT_LADDER)
+    .then(granted => {
+      stream = granted
+      opening = null
+      return granted
+    })
+    .catch(err => {
+      opening = null
+      throw err
+    })
 
   return opening
+}
+
+/**
+ * What to ask for, in order, stopping at the first thing the device will give.
+ *
+ * A ladder rather than one request, because a phone that refuses the first must
+ * still end up with a camera. Asking for a width *and* a height is what made an
+ * iPhone crop its sensor to manufacture the shape, so no rung does that; the last
+ * rung asks for nothing at all, which no device with a camera can refuse.
+ */
+const CONSTRAINT_LADDER = [
+  { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false },
+  { video: { facingMode: { ideal: 'environment' } }, audio: false },
+  { video: true, audio: false }
+]
+
+async function tryEach(ladder) {
+  let lastError = null
+  for (const constraints of ladder) {
+    try {
+      const granted = await navigator.mediaDevices.getUserMedia(constraints)
+      // Checked rather than assumed. A rung that resolves without a usable
+      // stream would otherwise be taken as success, and the camera would read as
+      // open with nothing behind it.
+      if (granted?.getVideoTracks?.().length) return granted
+      lastError = lastError || new Error('The camera returned no video')
+    } catch (err) {
+      lastError = err
+      // A refusal is a refusal — asking for less will not change the answer, and
+      // trying again only produces another prompt.
+      if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') throw err
+    }
+  }
+  throw lastError || new Error('No camera available')
 }
 
 /**

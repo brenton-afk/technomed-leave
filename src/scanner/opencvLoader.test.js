@@ -1,39 +1,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { loadOpenCv, openCvReady, resetOpenCvForTests } from './opencvLoader.js'
 
-// The engine is eleven megabytes. The first version fetched it with a plain
-// script tag behind a full-screen "Starting the scanner…", which on a hospital
-// connection is most of a minute of nothing moving and no way to take a
-// photograph — reported, fairly, as the scanner being broken.
+// The engine is eleven megabytes, and how it is loaded has now been wrong twice.
+// A script tag behind a full-screen wait looked like a hang. Fetching it for a
+// progress bar was worse: response, chunks, Blob, a 22MB UTF-16 string and then
+// eval, on a phone already holding a camera stream — enough to have the tab
+// killed, which presented as the camera not opening at all.
 //
-// So: the bytes are counted as they arrive, the wait has a deadline, and a
-// failure is never cached. Every one of those is a guarantee the camera relies
-// on, since it now runs without waiting for any of this.
+// It is a script tag again, so the browser streams and compiles it without the
+// copies. What these hold to is the rest: a deadline, a failure that is not
+// cached, and waiting for the WASM runtime rather than merely for the file.
 
-/** A script that registers a cv module asynchronously, as the real one does. */
-const ASYNC_SOURCE = `
-  window.cv = window.cv || {};
-  const handler = window.cv.onRuntimeInitialized;
-  setTimeout(() => { window.cv.Mat = function () {}; handler && handler(); }, 0);
-`
+/** The injected script, so a test can decide what happens to it. */
+function injected() {
+  return document.querySelector('script[data-opencv]')
+}
 
-function respondWith(source, { length = source.length, stream = true } = {}) {
-  const encoded = new TextEncoder().encode(source)
-  global.fetch = vi.fn(() => Promise.resolve({
-    ok: true,
-    headers: { get: name => (name === 'content-length' ? String(length) : null) },
-    text: () => Promise.resolve(source),
-    body: stream
-      ? {
-        getReader() {
-          // Two chunks, so progress has something to report between them.
-          const halves = [encoded.slice(0, encoded.length >> 1), encoded.slice(encoded.length >> 1)]
-          let i = 0
-          return { read: () => Promise.resolve(i < halves.length ? { done: false, value: halves[i++] } : { done: true }) }
-        }
-      }
-      : undefined
-  }))
+/** Behaves as the library does: adopts the seeded module, then finishes async. */
+function succeed() {
+  const module = window.cv
+  injected().dispatchEvent(new Event('load'))
+  setTimeout(() => {
+    window.cv.Mat = function () {}
+    module.onRuntimeInitialized?.()
+  }, 0)
 }
 
 beforeEach(() => {
@@ -48,85 +38,88 @@ afterEach(() => {
 
 describe('loading the engine', () => {
   it('waits for the WASM runtime, not merely for the file', async () => {
-    // Resolving on the download gives a module whose Mat is not a constructor.
-    respondWith(ASYNC_SOURCE)
-    const cv = await loadOpenCv()
+    // Resolving on the script's load event gives a module whose Mat is not a
+    // constructor, which fails on the first frame rather than here.
+    const loading = loadOpenCv()
+    await waitForScript()
+    succeed()
+    const cv = await loading
     expect(typeof cv.Mat).toBe('function')
     expect(openCvReady()).toBe(true)
   })
 
-  it('reports progress as the bytes arrive', async () => {
-    respondWith(ASYNC_SOURCE)
-    const seen = []
-    await loadOpenCv(f => seen.push(f))
-    expect(seen.length).toBeGreaterThan(1)
-    expect(seen[seen.length - 1]).toBe(1)
-    // Monotonic, so a percentage on screen never goes backwards.
-    for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1])
+  it('seeds the module before the script runs, so the handler cannot be missed', async () => {
+    loadOpenCv()
+    await waitForScript()
+    // The library begins `var Module = typeof cv !== "undefined" ? cv : {}`, so
+    // it adopts this. Attaching afterwards races WASM compilation.
+    expect(typeof window.cv.onRuntimeInitialized).toBe('function')
   })
 
-  it('still loads when the response cannot be streamed or measured', async () => {
-    respondWith(ASYNC_SOURCE, { length: 0, stream: false })
-    const cv = await loadOpenCv()
-    expect(typeof cv.Mat).toBe('function')
-  })
-
-  it('downloads once however many callers ask', async () => {
-    respondWith(ASYNC_SOURCE)
-    const [a, b] = await Promise.all([loadOpenCv(), loadOpenCv()])
+  it('fetches once however many callers ask', async () => {
+    const both = Promise.all([loadOpenCv(), loadOpenCv()])
+    await waitForScript()
+    expect(document.querySelectorAll('script[data-opencv]')).toHaveLength(1)
+    succeed()
+    const [a, b] = await both
     expect(a).toBe(b)
-    expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('costs nothing at all once it is in memory', async () => {
-    respondWith(ASYNC_SOURCE)
-    await loadOpenCv()
-    resetOpenCvForTests()          // forget the promise, keep window.cv
     window.cv = { Mat: function () {} }
-    global.fetch = vi.fn()
     await loadOpenCv()
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(injected()).toBeNull()
   })
 })
+
+/** The script is appended synchronously, but React and promises are not. */
+async function waitForScript() {
+  for (let i = 0; i < 20 && !injected(); i++) await Promise.resolve()
+  expect(injected()).not.toBeNull()
+}
 
 describe('when it does not arrive', () => {
   it('gives up rather than leaving the scanner waiting forever', async () => {
     vi.useFakeTimers()
-    // A download that never completes: the case that looked like a hang.
-    global.fetch = vi.fn(() => new Promise(() => {}))
     const attempt = loadOpenCv()
     const assertion = expect(attempt).rejects.toThrow(/too long/i)
-    await vi.advanceTimersByTimeAsync(46000)
+    await vi.advanceTimersByTimeAsync(61000)
     await assertion
   })
 
-  it('does not cache a failure, so a retry can succeed', async () => {
-    global.fetch = vi.fn(() => Promise.reject(new Error('offline')))
-    await expect(loadOpenCv()).rejects.toThrow()
+  it('reports a script that will not load', async () => {
+    const attempt = loadOpenCv()
+    await waitForScript()
+    injected().dispatchEvent(new Event('error'))
+    await expect(attempt).rejects.toThrow(/Could not load/)
+  })
 
-    respondWith(ASYNC_SOURCE)
+  it('does not cache a failure, so a retry can succeed', async () => {
+    const first = loadOpenCv()
+    await waitForScript()
+    injected().dispatchEvent(new Event('error'))
+    await expect(first).rejects.toThrow()
+
     // Back on wifi. A cached rejection would mean reloading the app was the only
     // way to get edge detection back.
-    await expect(loadOpenCv()).resolves.toBeTruthy()
+    resetOpenCvForTests()
+    const second = loadOpenCv()
+    await waitForScript()
+    succeed()
+    await expect(second).resolves.toBeTruthy()
   })
 
-  it('reports a bad response rather than running it', async () => {
-    global.fetch = vi.fn(() => Promise.resolve({
-      ok: false, status: 404, headers: { get: () => null }
-    }))
-    await expect(loadOpenCv()).rejects.toThrow(/404/)
-  })
-
-  it('gives up on a file that is not the engine, rather than hanging', async () => {
-    // What a catch-all rewrite serving index.html would produce. It cannot be
-    // detected the moment the script runs: the real library reuses the very
-    // object seeded for it, so there is nothing to compare identities against.
-    // The deadline is what catches it.
+  it('gives up on a file that loads but is not the engine', async () => {
+    // What a catch-all rewrite serving index.html would produce: the script runs,
+    // nothing registers, and the deadline is what catches it. It cannot be spotted
+    // sooner — the real library adopts the very object seeded for it, so there is
+    // no identity to compare.
     vi.useFakeTimers()
-    respondWith('/* not opencv */')
     const attempt = loadOpenCv()
     const assertion = expect(attempt).rejects.toThrow(/too long/i)
-    await vi.advanceTimersByTimeAsync(46000)
+    for (let i = 0; i < 20 && !injected(); i++) await Promise.resolve()
+    injected()?.dispatchEvent(new Event('load'))
+    await vi.advanceTimersByTimeAsync(61000)
     await assertion
   })
 })

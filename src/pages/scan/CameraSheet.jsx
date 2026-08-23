@@ -16,6 +16,29 @@ import { acquireCamera, cameraOpen, setTorch, hasTorch } from '../../scanner/cam
 // smoothing, which is what the outline actually needed.
 
 const TEAL = '#189a85'
+
+/** Plain words for the failure, then the browser's own, which is the diagnostic. */
+function describeCameraError(err) {
+  const detail = [err?.name, err?.message].filter(Boolean).join(': ') || 'no detail given'
+  // iOS blocked getUserMedia outright in home-screen apps for years and is still
+  // inconsistent about it, so it is worth naming rather than leaving as a mystery.
+  const standalone = typeof navigator !== 'undefined'
+    && (navigator.standalone === true
+      || (typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)')?.matches))
+
+  if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
+    return standalone
+      ? `Camera access was refused. Home-screen apps on iOS often cannot open the camera — try the same page in Safari. (${detail})`
+      : `Camera access was blocked. Allow it for this site in your browser settings, or use the photo library instead. (${detail})`
+  }
+  if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') {
+    return `No usable camera was found on this device. (${detail})`
+  }
+  if (err?.name === 'NotReadableError') {
+    return `The camera is in use by something else. Close other camera apps and try again. (${detail})`
+  }
+  return `Could not open the camera. (${detail})`
+}
 const DETECT_WIDTH = 240
 const FRAME_INTERVAL = 3
 const MAX_IMAGE_DIM = 1568
@@ -193,12 +216,12 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
   const busyRef = useRef(false)
 
   const [engine, setEngine] = useState(openCvReady() ? 'ready' : 'loading')
-  const [engineProgress, setEngineProgress] = useState(0)
   // The video's own dimensions, so the preview can be shown whole rather than
   // cropped to whatever shape the screen happens to be.
   const [frame, setFrame] = useState(null)
   const [cameraState, setCameraState] = useState(cameraOpen() ? 'ready' : 'opening')
   const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
   const [view, setView] = useState(null)
   const [autoCapture, setAutoCapture] = useState(true)
   const [torchOn, setTorchOn] = useState(false)
@@ -237,19 +260,21 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
     }).catch(err => {
       if (cancelled) return
       setCameraState('failed')
-      setError(err?.name === 'NotAllowedError'
-        ? 'Camera access was blocked. Allow it in your browser settings, or use the photo library instead.'
-        : (err?.message || `Could not open the camera (${err?.name || 'unknown'}).`))
+      // The name and the message both, verbatim. A camera that will not open is
+      // the one failure that cannot be diagnosed from here — it depends on the
+      // phone, the browser and whether the app was opened from the home screen —
+      // so whoever is holding it needs to be able to read out what it said.
+      setError(describeCameraError(err))
     })
     // Deliberately no cleanup that stops the stream. It is released when the
     // scanner is left, not when this component unmounts to show a captured page.
     return () => { cancelled = true }
-  }, [])
+  }, [attempt])
 
   // ── The engine. ──
   useEffect(() => {
     let cancelled = false
-    loadOpenCv(fraction => { if (!cancelled) setEngineProgress(fraction) }).then(cv => {
+    loadOpenCv().then(cv => {
       if (cancelled) return
       cvRef.current = cv
       setEngine('ready')
@@ -400,9 +425,15 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14, textAlign: 'center' }}>
             <div style={{ fontSize: 34 }}>📷</div>
             <div style={{ color: 'white', fontSize: 14, lineHeight: 1.5 }}>{error}</div>
-            <button onClick={onFallback} style={{ padding: '11px 18px', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-              Choose photos instead
-            </button>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button onClick={() => { setError(''); setCameraState('opening'); setAttempt(n => n + 1) }}
+                style={{ padding: '11px 18px', background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}>
+                Try again
+              </button>
+              <button onClick={onFallback} style={{ padding: '11px 18px', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                Choose photos instead
+              </button>
+            </div>
           </div>
         )}
 
@@ -412,9 +443,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
         {engine === 'loading' && cameraState === 'ready' && !error && (
           <div style={{ position: 'absolute', top: 14, left: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', borderRadius: 16, background: 'rgba(0,0,0,0.55)', color: 'rgba(255,255,255,0.85)', fontSize: 11.5 }}>
             <span style={{ width: 12, height: 12, borderRadius: 6, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: TEAL, animation: 'tm-spin 700ms linear infinite' }} />
-            {engineProgress > 0.02
-              ? `Edge detection ${Math.round(engineProgress * 100)}%`
-              : 'Edge detection loading'}
+            Edge detection loading
             <style>{'@keyframes tm-spin{to{transform:rotate(360deg)}}'}</style>
           </div>
         )}
