@@ -144,12 +144,30 @@ The domain rules live apart from the route so they can be tested and edited with
 
 - **`api/_distributors.js`** — the contact groups, the `DISTRIBUTOR_RULES` product→distributor patterns, the exclusion list, and `CLINICAL_TEAM_CC`. Rule order matters: `BOOST` must be tested before the generic Device match, and the allograft rules before anything matching a bare "global". This is the only file to edit when contacts or systems change.
 - **`api/_usageCase.js`** — normalises an extraction into a case: Australian-order dates, Calvary/Royal Hobart → `CLV`/`RHH`, `x1`/`×4` quantities, surname extraction, and the `{Surname}_{DDMMYYYY}_{Surgeon}_{Procedure}_{Hospital}` folder name. **The model's own `distributor` field is deliberately ignored** — `detectDistributor` re-derives it, because emailing the wrong company is worse than flagging a row.
-- **`api/_usageExcel.js`** / **`api/_usagePdf.js`** / **`api/_dropbox.js`** — the 20-column sheet (Extended Price is a live formula so it fills in when a unit price is typed), photos combined into one PDF, and the `ALL SURGEON USAGE/SPINE/{Surgeon}/{Month Year}/{Case}` tree.
+- **`api/_usageExcel.js`** / **`api/_usagePdf.js`** / **`api/_dropbox.js`** — the usage sheet, photos combined into one PDF, and the `ALL SURGEON USAGE/SPINE/{Surgeon}/{Month Year}/{Case}` tree.
+
+  The sheet is a **header block over a narrow item table**, not a wide grid. It
+  was twenty columns with all seven case details repeated on every row so that a
+  row would stand alone in a pricing workbook; on the phone it is actually opened
+  on, that was several screens of sideways scrolling made mostly of the same case
+  detail. Details now appear once, vertically, and the table below carries only
+  what differs per item — about 105 characters wide against 380.
+
+  Pricing, Rep Name, Manual Review Flag and Notes are gone as columns. Unit Price
+  and the live Extended Price formula were the reason a row had to stand alone and
+  were never filled in. `buildUsageWorkbook(caseRecord, items, { internal })`
+  takes `internal: true` for the Dropbox copy, which is the only caller that
+  needs the two facts those columns carried — see the invariants below.
+
+  Distributor is a header line when every row shares one (every email attachment)
+  and a column when they do not (the Dropbox copy).
 
 Invariants worth preserving:
 
-- **The rep who scanned it is recorded three ways.** Their name is a column on the
-  sheet, they are the sender of the distributor email, and their `firstName` is
+- **The rep who scanned it is recorded three ways.** Their name is a `Scanned by`
+  line in the header block of the *internal* sheet (it was a column repeated on
+  every row, and the Dropbox copy is the only place it belongs — a distributor has
+  no use for it), they are the sender of the distributor email, and their `firstName` is
   appended to the matching booking on the calendar as `(Brent)` — `markAttendance`
   in `api/_googleCalendar.js`. That last one writes to the team's shared calendar,
   so it is strictly additive: it appends and never reformats, it is idempotent, and
@@ -164,7 +182,7 @@ Invariants worth preserving:
   a caller-supplied address would be a way to walk that data out on one valid staff
   login. A test is also not written to `emailsSent`, so it cannot make a case look
   sent when the distributor has had nothing.
-- **Nothing uncertain is ever sent.** `groupByDistributor` skips anything excluded, flagged, or without a resolved distributor. Held-back rows still appear on the Dropbox sheet marked `YES` in Manual Review Flag; they just do not leave the building.
+- **Nothing uncertain is ever sent.** `groupByDistributor` skips anything excluded, flagged, or without a resolved distributor. Held-back rows still appear on the Dropbox sheet — shaded amber, with a `Held back from email` line in the header block saying how many. That replaced the `Manual Review Flag` column and is the whole record that they did not leave the building, so it has to survive any further tidying of that sheet. A distributor's sheet never shades a row: it is built from items that already passed the filter, and amber would be telling them a transcription was uncertain.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
 - **The distributor email carries two attachments**: the 20-column sheet of their
   own items, and the scanned form with every page merged into one PDF

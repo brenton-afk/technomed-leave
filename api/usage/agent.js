@@ -227,7 +227,9 @@ async function handleSave(req, res, session) {
   const folderPath = caseFolderPath(caseRecord)
   const [scanPdf, usageSheet] = await Promise.all([
     buildScanPdf(pages),
-    buildUsageWorkbook(caseRecord, included)
+    // The Dropbox copy: every distributor's items together, and the only place
+    // that records who scanned it and which rows never left the building.
+    buildUsageWorkbook(caseRecord, included, { internal: true })
   ])
 
   // Dropbox is optional. Where it is configured it goes first, so a filing
