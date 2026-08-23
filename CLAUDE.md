@@ -107,6 +107,42 @@ Invariants worth preserving:
 - **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
+### The scanner
+
+`src/pages/scan/CameraSheet.jsx` plus four modules in `src/scanner/`:
+
+- **`opencvLoader.js`** — loads `public/vendor/opencv-4.13.0.js` (11MB, WASM
+  embedded) once per session. Served from this origin, not docs.opencv.org, which
+  is documentation hosting rather than infrastructure. The version is in the
+  filename so `vercel.json` can cache it immutably for a year.
+- **`documentDetect.js`** — Canny → `findContours` → **convex hull** →
+  `approxPolyDP`, largest 4-gon over 20% of the frame. Three details are
+  load-bearing and each fixed a real failure: the hull (print reaching a margin
+  joins the border and made the outline a 16-gon), filtering on *hull* area rather
+  than contour area (a border broken anywhere traces an open ribbon enclosing
+  nothing, so the largest survivor became the region below a form's header rule),
+  and ladders of Canny thresholds and approx epsilons because no single value
+  spans a form on a dark bench and the same form on a white one.
+- **`documentTracker.js`** — the anti-jitter, and the thing the rebuild was
+  actually for. Eight-frame weighted average, then the drawn outline is *not
+  moved at all* until the average shifts more than 3% of frame width, then a
+  500ms fade instead of blinking out. Also decides auto-capture: 800ms still,
+  ≥60% of frame, enough contrast.
+- **`cameraStream.js`** — one shared stream, module-level, held across pages. A
+  component that stops its tracks on unmount re-opens the camera for every page,
+  which on iOS is a stall and a second of black each time.
+
+**Detection runs at 240×180 on every third frame**, and low is deliberate: a page
+border survives downscaling and a form's printed table rules do not, so the small
+frame is *more* accurate as well as four times faster (`npm run bench:scanner`
+shows 8/15 at 240 against 5/15 at 640).
+
+Treat that bench as a regression check, not as evidence about real performance.
+The hand-written detector it replaced scored 11/15 there and was unusable on an
+actual phone — single-frame accuracy on piecewise-flat synthetic renders turned
+out not to predict either temporal stability or Canny's behaviour on a real
+camera frame.
+
 The vision call uses `claude-opus-5` at `effort: 'high'`, streaming (a slow extraction would otherwise hit the HTTP timeout), overridable via `USAGE_VISION_MODEL`. `budget_tokens` and `temperature` are rejected on this model family — don't add them. `maxDuration` is set to 60s in `vercel.json`; a very long form on a slow connection can still exceed it, which needs a Pro plan (300s).
 
 ### Timesheets

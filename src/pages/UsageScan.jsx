@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { detectDocumentQuad, toGrayscale, QuadTracker } from '../scanner/edgeDetect.js'
-import { rectifiedSize, warpToRect, expandQuad, worthRectifying } from '../scanner/rectify.js'
+import CameraSheet from './scan/CameraSheet.jsx'
+import { releaseCamera } from '../scanner/cameraStream.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -99,6 +99,18 @@ function newPageId() {
 }
 
 // A drawn canvas → the same page shape produced by fileToPage.
+/** A page from an already-flattened preview, as the scanner hands it over. */
+function pageFromPreview(page, index) {
+  return {
+    id: newPageId(),
+    mediaType: 'image/jpeg',
+    data: page.preview.split(',')[1],
+    preview: page.preview,
+    name: `page-${index}.jpg`,
+    flattened: page.flattened
+  }
+}
+
 function canvasToPage(canvas, index) {
   const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
   return {
@@ -127,298 +139,6 @@ function canvasToPage(canvas, index) {
 // Larger is not better either: 400x300 scores 9/15 and costs a third more time.
 const DETECT_WIDTH = 320
 const DETECT_FPS = 30
-
-function CameraCapture({ pageCount, onCapture, onDone, onFallback }) {
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const detectCanvasRef = useRef(null)
-  const quadRef = useRef(null)
-  const rafRef = useRef(0)
-  const [ready, setReady] = useState(false)
-  const [error, setError] = useState('')
-  const [shots, setShots] = useState([])
-  const [flash, setFlash] = useState(false)
-  const [torchOn, setTorchOn] = useState(false)
-  const [hasTorch, setHasTorch] = useState(false)
-  // The live page outline. Held in a ref for the detection loop and mirrored
-  // into state for rendering, so the loop never re-runs on every frame.
-  const [quad, setQuad] = useState(null)
-  // Hysteresis lives here, not in the render loop: a tracker instance survives
-  // frames, which is what lets the outline lock instead of twitching.
-  const trackerRef = useRef(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setError('This browser cannot open the camera directly.')
-        return
-      }
-      try {
-        // Ask for more than we keep: capturing at high resolution and
-        // downscaling to 1568px reads handwriting better than capturing small.
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 2560 },
-            height: { ideal: 1440 }
-          },
-          audio: false
-        })
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
-        streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          await videoRef.current.play().catch(() => {})
-        }
-        const track = stream.getVideoTracks()[0]
-        setHasTorch(Boolean(track?.getCapabilities?.().torch))
-        setReady(true)
-      } catch (err) {
-        if (cancelled) return
-        setError(
-          err?.name === 'NotAllowedError'
-            ? 'Camera access was blocked. Allow it in your browser settings, or use the photo library instead.'
-            : `Could not open the camera (${err?.name || 'unknown'}).`
-        )
-      }
-    }
-    start()
-
-    // Releasing the tracks matters — otherwise the camera stays active after
-    // the sheet closes.
-    return () => {
-      cancelled = true
-      cancelAnimationFrame(rafRef.current)
-      streamRef.current?.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-  }, [])
-
-  // Follows the page as the camera moves. Runs off requestAnimationFrame but
-  // throttled: detection every frame would burn battery for no visible gain,
-  // and the smoothing already hides the lower rate.
-  useEffect(() => {
-    if (!ready || error) return
-    let stop = false
-    let lastRun = 0
-
-    function tick(now) {
-      if (stop) return
-      rafRef.current = requestAnimationFrame(tick)
-      if (now - lastRun < 1000 / DETECT_FPS) return
-      lastRun = now
-
-      const video = videoRef.current
-      if (!video?.videoWidth) return
-
-      if (!detectCanvasRef.current) detectCanvasRef.current = document.createElement('canvas')
-      const canvas = detectCanvasRef.current
-      const height = Math.max(1, Math.round(DETECT_WIDTH * video.videoHeight / video.videoWidth))
-      // Height as well as width: turning the phone changes the aspect, and
-      // checking only the width left the canvas at the old shape.
-      if (canvas.width !== DETECT_WIDTH || canvas.height !== height) {
-        canvas.width = DETECT_WIDTH
-        canvas.height = height
-      }
-
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      ctx.drawImage(video, 0, 0, DETECT_WIDTH, height)
-      const { data } = ctx.getImageData(0, 0, DETECT_WIDTH, height)
-
-      const found = detectDocumentQuad(toGrayscale(data, DETECT_WIDTH, height), DETECT_WIDTH, height)
-      if (!trackerRef.current) trackerRef.current = new QuadTracker()
-      const next = trackerRef.current.update(found)
-      quadRef.current = next
-      setQuad(next)
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { stop = true; cancelAnimationFrame(rafRef.current) }
-  }, [ready, error])
-
-  async function toggleTorch() {
-    const track = streamRef.current?.getVideoTracks()[0]
-    if (!track) return
-    try {
-      await track.applyConstraints({ advanced: [{ torch: !torchOn }] })
-      setTorchOn(t => !t)
-    } catch { /* torch unsupported on this device */ }
-  }
-
-  const shoot = useCallback(() => {
-    const video = videoRef.current
-    if (!video?.videoWidth) return
-
-    // Two outcomes only, and which one depends on whether the outline had settled.
-    //
-    // Settled: warp the page flat. That is better than the crop this used to do
-    // in two ways — no wedge of bench in the corners, and the form comes out
-    // square instead of skewed, which is much easier to read off.
-    //
-    // Not settled: keep the whole photograph, untouched. The previous behaviour
-    // was to crop to the outline's bounding box regardless, which meant a wrong
-    // outline quietly cut a column off the form and the only way to find out was
-    // to read the result. A wider picture costs nothing but a margin; a narrow
-    // one costs data.
-    const settled = quadRef.current?.locked ? quadRef.current : null
-    const frame = document.createElement('canvas')
-    frame.width = video.videoWidth
-    frame.height = video.videoHeight
-    const frameCtx = frame.getContext('2d', { willReadFrequently: true })
-    frameCtx.drawImage(video, 0, 0)
-
-    let canvas = null
-    if (settled) {
-      // A little outwards, so a border found a pixel inside the paper does not
-      // shave the edge of the form away.
-      const quad = expandQuad(
-        settled.corners.map(c => ({ x: c.x * frame.width, y: c.y * frame.height })), 0.015)
-      if (worthRectifying(quad, frame.width, frame.height)) {
-        const size = rectifiedSize(quad, MAX_IMAGE_DIM)
-        const flattened = warpToRect(
-          frameCtx.getImageData(0, 0, frame.width, frame.height), quad, size,
-          (w, h) => frameCtx.createImageData(w, h))
-        if (flattened) {
-          canvas = document.createElement('canvas')
-          canvas.width = size.width
-          canvas.height = size.height
-          canvas.getContext('2d').putImageData(flattened, 0, 0)
-        }
-      }
-    }
-
-    if (!canvas) {
-      const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(frame.width, frame.height))
-      canvas = document.createElement('canvas')
-      canvas.width = Math.round(frame.width * scale)
-      canvas.height = Math.round(frame.height * scale)
-      canvas.getContext('2d').drawImage(frame, 0, 0, canvas.width, canvas.height)
-    }
-
-    const page = { ...canvasToPage(canvas, pageCount + 1), flattened: Boolean(settled) }
-    if (!onCapture(page)) return // payload cap reached; onCapture surfaced why
-
-    setShots(s => [...s, page])
-    setFlash(true)
-    setTimeout(() => setFlash(false), 130)
-  }, [onCapture, pageCount])
-
-  // The parent owns the page list, so its count is the only truth. Deriving
-  // from both it and the local shots double-counted every capture.
-  const total = pageCount
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-        <video ref={videoRef} autoPlay muted playsInline
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: error ? 'none' : 'block' }} />
-
-        {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.75 }} />}
-
-        {!ready && !error && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>
-            Opening camera…
-          </div>
-        )}
-
-        {error && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14, textAlign: 'center' }}>
-            <div style={{ fontSize: 34 }}>📷</div>
-            <div style={{ color: 'white', fontSize: 14, lineHeight: 1.6 }}>{error}</div>
-            <button onClick={onFallback}
-              style={{ padding: '12px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-              Use photo library
-            </button>
-            <button onClick={onDone}
-              style={{ padding: '10px 16px', background: 'transparent', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
-              Close
-            </button>
-          </div>
-        )}
-
-        {/* The frame follows the page. Falls back to a hint, not a fixed
-            rectangle, when nothing is detected — a guide that does not match
-            what you are holding is worse than none. */}
-        {ready && !error && (
-          quad ? (
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none"
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-              <polygon
-                points={quad.corners.map(c => `${c.x * 100},${c.y * 100}`).join(' ')}
-                fill={quad.locked ? 'rgba(24,154,133,0.14)' : 'rgba(255,255,255,0.06)'}
-                stroke={quad.locked ? TEAL : 'rgba(255,255,255,0.75)'}
-                strokeWidth="0.7"
-                vectorEffect="non-scaling-stroke"
-              />
-              {quad.corners.map((c, i) => (
-                <circle key={i} cx={c.x * 100} cy={c.y * 100} r="1.1"
-                  fill={quad.locked ? TEAL : 'white'} />
-              ))}
-            </svg>
-          ) : (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '14%', pointerEvents: 'none' }}>
-              <div style={{ background: 'rgba(0,0,0,0.5)', color: 'rgba(255,255,255,0.8)', fontSize: 12, padding: '7px 13px', borderRadius: 18 }}>
-                Point at the form — looking for the page…
-              </div>
-            </div>
-          )
-        )}
-
-        {ready && !error && (
-          <div style={{ position: 'absolute', top: 'calc(12px + env(safe-area-inset-top, 0px))', left: 0, right: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 14px' }}>
-            <div style={{ background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 20 }}>
-              {total === 0 ? 'Ready' : `${total} page${total === 1 ? '' : 's'} captured`}
-            </div>
-            {hasTorch && (
-              <button onClick={toggleTorch}
-                style={{ background: torchOn ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)', color: torchOn ? '#042746' : 'white', border: 'none', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                {torchOn ? '🔆 Light on' : '🔅 Light'}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {!error && (
-        <div style={{ background: '#000', padding: '12px 14px calc(16px + env(safe-area-inset-bottom, 0px))' }}>
-          {shots.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10 }}>
-              {shots.map((s, i) => (
-                <img key={s.id} src={s.preview} alt={`Captured page ${i + 1}`}
-                  style={{ width: 44, height: 58, objectFit: 'cover', borderRadius: 6, border: '1px solid rgba(255,255,255,0.25)', flexShrink: 0 }} />
-              ))}
-            </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ flex: 1, fontSize: 11.5, color: quad ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.45)', lineHeight: 1.45 }}>
-              {quad?.locked
-                ? <>Page locked — it will be cropped<br />and straightened. Keep shooting.</>
-                : quad
-                  ? <>Holding steady…</>
-                  : <>Point at the form. Any surface,<br />any angle — or shoot the whole photo.</>}
-            </div>
-            <button onClick={shoot} disabled={!ready} aria-label="Capture page"
-              style={{ width: 70, height: 70, borderRadius: 35, background: ready ? 'white' : 'rgba(255,255,255,0.35)', border: '4px solid rgba(255,255,255,0.35)', cursor: ready ? 'pointer' : 'default', flexShrink: 0 }} />
-            {total > 0 ? (
-              <button onClick={onDone}
-                style={{ flex: 1, padding: '12px 0', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                Done · {total}
-              </button>
-            ) : (
-              /* Nothing to finish yet, so nothing to press. */
-              <button onClick={onDone}
-                style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
-                Cancel
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // Mirrors buildFolderName in api/_usageCase.js so the rep sees the folder
 // update as they correct fields. The server recomputes it authoritatively.
@@ -562,6 +282,10 @@ export default function UsageScan({ user }) {
     pagesRef.current = pages.filter(p => p.id !== id)
     setPages(pagesRef.current)
   }
+
+  // The stream is held open across pages on purpose — see cameraStream.js — so
+  // something has to close it when the scanner is actually finished with.
+  useEffect(() => () => releaseCamera(), [])
 
   function startNew() {
     pagesRef.current = []
@@ -769,9 +493,9 @@ export default function UsageScan({ user }) {
         </div>
 
         {showCamera && (
-          <CameraCapture
+          <CameraSheet
             pageCount={pages.length}
-            onCapture={page => addPages([page])}
+            onCapture={page => addPages([pageFromPreview(page, pages.length + 1)])}
             onDone={() => setShowCamera(false)}
             onFallback={() => { setShowCamera(false); uploadRef.current?.click() }}
           />

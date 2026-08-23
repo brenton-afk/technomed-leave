@@ -19,7 +19,13 @@ const MIGRATED = [
 // The clinical plan components deliberately replicate the emailed Word
 // document, down to its own palette and sizes, and snapshot tests lock that.
 // Pulling them onto the app scale would break the thing they exist to copy.
-const EXEMPT = ['clinical/PlanBlocks.jsx', 'ClinicalPlan.jsx', 'UsageScan.jsx', 'PinScreen.jsx']
+const EXEMPT = [
+  'clinical/PlanBlocks.jsx', 'ClinicalPlan.jsx', 'UsageScan.jsx', 'PinScreen.jsx',
+  // A full-screen camera view over a live video feed. It has no page ground to
+  // sit on and no surface to be legible against, so the app's palette does not
+  // apply: everything is white or teal on whatever the camera happens to see.
+  'scan/CameraSheet.jsx'
+]
 
 const SCALE = new Set(Object.values(type).map(t => t.size))
 // Anything this large is an emoji or a glyph badge, not text on the scale.
