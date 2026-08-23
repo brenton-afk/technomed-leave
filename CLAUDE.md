@@ -25,6 +25,37 @@ Hubs (`src/pages/Hubs.jsx`) are lists of `NavCard`s, deliberately **not** nested
 
 Screens built on `design/Shell.jsx`'s `Header` draw their own back arrow; older pages predate it and get a floating one, listed in `SELF_BACK`. If you migrate a page to `Header`, add its key to that set or it will show two.
 
+### The app shell is a fixed frame
+
+`#root` is exactly the height of the visible viewport with its overflow hidden,
+`.tm-shell` is a flex column inside it, and `.tm-scroll` is the **only** scrolling
+region. The bottom tab bar is the last child of that column, in normal flow.
+
+It used to be `position: fixed; bottom: 0` and it scrolled away with the case
+list. Fixed was not enough, and it is worth knowing why: a fixed element is
+positioned against its containing block, and *any* ancestor with a `transform`,
+`filter`, `backdrop-filter` or `contain` silently becomes that block — at which
+point "fixed" scrolls. On iOS a collapsing toolbar moves it as well. A bar that
+is simply the last row of a viewport-height column cannot be moved by either.
+
+Three details are load-bearing:
+
+- **`min-height: 0` on `.tm-scroll`.** A flex item's default minimum is its
+  content size, so without it the middle grows to fit the case list and pushes the
+  bar off the bottom of the screen instead of scrolling. That one line *is* the fix.
+- **`height: 100dvh`, with a `100vh` line before it as the fallback.** On iOS
+  `100vh` is the large viewport — taller than what is actually on screen — which
+  is why fixed elements appeared to shift under momentum scrolling.
+- **A `@media print` block undoing all of it.** A viewport-height frame with
+  hidden overflow clips a printout to one screen, and the case plan has `@page A4`
+  rules and gets printed.
+
+No screen inside the shell may set `minHeight: 100vh` — the region is already the
+viewport minus the header and the bar, so a child demanding a full viewport makes
+every screen scroll by the height of that chrome. `PinScreen` and `Success` render
+before the shell and are the exceptions. `design/safeArea.test.js` asserts all of
+this.
+
 ### Design system
 
 `src/design/` is the single source for appearance and must be used by new screens:

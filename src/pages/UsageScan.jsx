@@ -444,7 +444,7 @@ export default function UsageScan({ user }) {
   // ── History ──────────────────────────────────────────────
   if (step === 'history') {
     return (
-      <div style={{ minHeight: '100vh', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Usage Scanning" subtitle={`${user?.name?.split(' ')[0] || 'Rep'} · scan a usage form to file and send it`} />
         <div style={{ padding: 16 }}>
           {error && <Banner tone="error">{error}</Banner>}
@@ -486,7 +486,7 @@ export default function UsageScan({ user }) {
   // ── Capture ──────────────────────────────────────────────
   if (step === 'capture') {
     return (
-      <div style={{ minHeight: '100vh', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Add pages" subtitle="Photograph or upload every page of the usage form" />
         <div style={{ padding: 16 }}>
           {error && <Banner tone="error">{error}</Banner>}
@@ -549,7 +549,7 @@ export default function UsageScan({ user }) {
   // ── Processing ───────────────────────────────────────────
   if (step === 'processing') {
     return (
-      <div style={{ minHeight: '100vh', background: NAVY, fontFamily: '-apple-system,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+      <div style={{ minHeight: '100%', background: NAVY, fontFamily: '-apple-system,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ width: 44, height: 44, margin: '0 auto 22px', border: '3px solid rgba(255,255,255,0.18)', borderTopColor: TEAL, borderRadius: '50%', animation: 'tmspin 0.9s linear infinite' }} />
           <style>{'@keyframes tmspin{to{transform:rotate(360deg)}}'}</style>
@@ -569,7 +569,7 @@ export default function UsageScan({ user }) {
     const excluded = caseRecord.items.filter(it => it.excluded)
 
     return (
-      <div style={{ minHeight: '100vh', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Review extracted usage" subtitle="Check every field before filing and sending" />
         <div style={{ padding: 16 }}>
           {error && <Banner tone="error">{error}</Banner>}
@@ -675,7 +675,7 @@ export default function UsageScan({ user }) {
   if (step === 'done' && result) {
     const failed = result.emails.filter(e => !e.ok)
     return (
-      <div style={{ minHeight: '100vh', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header
           title={result.test ? 'Test sent to you only' : (failed.length ? 'Filed, with email issues' : 'Usage filed and sent')}
           subtitle={result.record.folderName} />

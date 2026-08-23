@@ -87,7 +87,7 @@ export default function AdminPortal({ user }) {
   const currentApps = applications[tab] || []
 
   return (
-    <div style={{ minHeight:'100vh', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
+    <div style={{ minHeight:'100%', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
       {/* Safe-area inset plus normal spacing. It was a fixed 56px, which is one
           iPhone's status bar and wrong everywhere else. */}
       <div style={{ background:'#042746', paddingTop:'calc(env(safe-area-inset-top, 0px) + 20px)', paddingLeft:20, paddingRight:20, paddingBottom:20 }}>

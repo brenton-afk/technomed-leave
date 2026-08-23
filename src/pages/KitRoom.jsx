@@ -161,7 +161,7 @@ export default function KitRoom({ user, onBack }) {
   if (!selectedCat) {
     const cats = Object.entries(selectedLocation.categories).filter(([,kits]) => kits !== null)
     return (
-      <div style={{ minHeight:'100vh', background:colour.canvas, fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
+      <div style={{ minHeight:'100%', background:colour.canvas, fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
         <div style={{ background:selectedLocation.color, paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
           <button onClick={() => setSelectedLocation(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', padding:0, marginBottom:12 }}>← All Locations</button>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -207,7 +207,7 @@ export default function KitRoom({ user, onBack }) {
   // Kit list view
   const kits = selectedLocation.categories[selectedCat] || []
   return (
-    <div style={{ minHeight:'100vh', background:colour.canvas, fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
+    <div style={{ minHeight:'100%', background:colour.canvas, fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
       <div style={{ background:selectedLocation.color, paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
         <button onClick={() => setSelectedCat(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', padding:0, marginBottom:12 }}>← {selectedLocation.name}</button>
         <div style={{ fontSize:19, fontWeight:700, color:'white', marginBottom:2 }}>{CAT_LABELS[selectedCat]}</div>

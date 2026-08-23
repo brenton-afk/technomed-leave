@@ -179,7 +179,7 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
   const dayForDaily = plan?.days.find(d => d.date === selectedDay) || plan?.days[0]
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f3f7', fontFamily: FONT_STACK }}>
+    <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: FONT_STACK }}>
       <style>{`
         @media print {
           .tm-noprint { display: none !important; }

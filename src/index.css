@@ -36,8 +36,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A frame the exact height of the visible viewport, which does not scroll.
+   Only the middle of it does — see .tm-scroll.
+
+   `dvh` rather than `vh` on purpose. On iOS `100vh` is the *large* viewport, the
+   one you get with the browser toolbar collapsed, so a `100vh` document is taller
+   than what you can actually see and the page shifts under momentum scrolling.
+   `dvh` tracks what is on screen right now. The `vh` line above it is the
+   fallback for anything that does not know `dvh`. */
 #root {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -72,6 +82,31 @@ a {
   width: 100%;
   max-width: 460px;
   margin: 0 auto;
+  /* Fills the frame and lays out its three parts down the page. */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The only thing on a screen that scrolls.
+
+   `min-height: 0` is what makes it work: a flex item's default minimum size is
+   its content, so without this the middle grows to fit the case list and pushes
+   the tab bar off the bottom of the screen instead of scrolling. That is the
+   whole bug this replaced.
+
+   The bar itself is now an ordinary flex child at the end of the column rather
+   than `position: fixed`, which means it cannot scroll away for any reason: not a
+   collapsing toolbar, and not an ancestor with a transform or a backdrop-filter
+   quietly becoming the containing block for fixed descendants. */
+.tm-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Keeps a rubber-band at the end of the list from scrolling the page behind. */
+  overscroll-behavior-y: contain;
 }
 
 /* Bars that are position:fixed have to be re-centred, or they span the
@@ -86,7 +121,6 @@ a {
     background: #071726;
   }
   .tm-shell {
-    min-height: 100vh;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 22px 70px rgba(0, 0, 0, 0.45);
   }
   .tm-fixed {
@@ -95,5 +129,32 @@ a {
     transform: translateX(-50%);
     width: 100%;
     max-width: 460px;
+  }
+}
+
+/* Printing has to see the whole document, not one screenful.
+
+   The frame above is exactly the height of the viewport with its overflow
+   hidden, which is what pins the tab bar — and would otherwise clip a printed
+   case plan to whatever happened to be on screen. Printing is a real path here:
+   the plan has @page A4 rules and gets printed and handed round. */
+@media print {
+  #root {
+    height: auto;
+    overflow: visible;
+    display: block;
+  }
+
+  .tm-shell {
+    height: auto;
+    max-width: none;
+    overflow: visible;
+    display: block;
+    box-shadow: none;
+  }
+
+  .tm-scroll {
+    overflow: visible;
+    height: auto;
   }
 }

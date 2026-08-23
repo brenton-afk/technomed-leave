@@ -169,10 +169,7 @@ export default function App() {
   }
 
   return (
-    <div className="tm-shell" style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      background: colour.canvas, fontFamily: font
-    }}>
+    <div className="tm-shell" style={{ background: colour.canvas, fontFamily: font }}>
       {nav.sub && !SELF_BACK.has(nav.sub) && (
         <button onClick={back} aria-label="Back"
           style={{
@@ -186,16 +183,18 @@ export default function App() {
         </button>
       )}
 
-      {/* The tab bar grows by the bottom inset, so what has to clear it grows
-          too — otherwise the last row of any list hides behind it on a phone
-          with a home indicator. */}
-      <div style={{ flex: 1, paddingBottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}>
-        {renderContent()}
-      </div>
+      {/* The one scrolling region. The tab bar is a sibling below it rather than
+          something this has to leave room for, so there is no clearance to keep
+          in step with the bar's height. */}
+      <div className="tm-scroll">{renderContent()}</div>
 
-      <nav className="tm-fixed" aria-label="Main"
+      {/* Not `position: fixed`. It is the last child of a column that is exactly
+          the height of the viewport, so it is pinned by the layout itself — which
+          nothing can scroll away and no ancestor can reparent. The blur can stay
+          because there is no longer anything passing underneath it. */}
+      <nav aria-label="Main"
         style={{
-          position: 'fixed', bottom: 0,
+          flexShrink: 0,
           background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
           borderTop: `1px solid ${colour.line}`, display: 'flex', zIndex: 100,

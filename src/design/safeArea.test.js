@@ -63,12 +63,11 @@ describe('the app shell', () => {
     expect(app).toMatch(/paddingBottom: 'env\(safe-area-inset-bottom/)
   })
 
-  it('clears a tab bar that the inset has made taller', () => {
-    // The knock-on effect of the fix, and the one that would have been missed:
-    // real insets make the bar taller, so the last row of any list hides behind
-    // it unless what clears it grows too.
-    expect(app).toMatch(/paddingBottom: 'calc\(76px \+ env\(safe-area-inset-bottom/)
-  })
+  // There was a test here asserting the content reserved `76px + inset` of
+  // clearance beneath it. That was right while the bar was position:fixed and
+  // floating over the content. The bar is now a sibling in the layout, so there
+  // is nothing to clear and nothing to keep in step with its height — see "the
+  // shell is a fixed frame with one scrolling region" below.
 
   it('positions the floating back button below the inset', () => {
     expect(app).toMatch(/top: 'calc\(14px \+ env\(safe-area-inset-top/)
@@ -135,5 +134,85 @@ describe('no screen is left out', () => {
       return !usesShared && !HANDLED.has(page) && !INSIDE_ANOTHER.has(page)
     })
     expect(unaccounted, 'screens drawing their own chrome with no safe-area decision').toEqual([])
+  })
+})
+
+describe('the shell is a fixed frame with one scrolling region', () => {
+  // The tab bar scrolled away with the case list. It had `position: fixed` and
+  // `left/right/bottom` set, which looks correct and is not enough: a fixed
+  // element is positioned against its containing block, and any ancestor with a
+  // transform, filter, backdrop-filter or `contain` quietly becomes that block —
+  // at which point "fixed" scrolls. On iOS a collapsing toolbar moves it too.
+  //
+  // So the bar is not fixed any more. It is the last child of a column that is
+  // exactly the height of the viewport, which nothing can scroll away.
+  const css = read('src/index.css')
+  const app = read('src/App.jsx')
+
+  it('makes the frame the height of the visible viewport, and not scrollable', () => {
+    expect(css).toMatch(/#root\s*\{[^}]*overflow:\s*hidden/)
+    // dvh tracks what is on screen; vh is the large viewport, which on iOS is
+    // taller than what you can see and is why fixed things appear to shift.
+    expect(css).toMatch(/#root\s*\{[^}]*height:\s*100dvh/)
+    // With a plain-vh line before it, for anything that does not know dvh.
+    expect(css).toMatch(/#root\s*\{[^}]*height:\s*100vh/)
+  })
+
+  it('gives the scrolling region a floor of zero, or it pushes the bar away', () => {
+    // A flex item's default minimum is its content size, so without min-height:0
+    // the middle grows to fit the case list and shoves the tab bar off screen.
+    // This one line is the difference.
+    expect(css).toMatch(/\.tm-scroll\s*\{[^}]*min-height:\s*0/)
+    expect(css).toMatch(/\.tm-scroll\s*\{[^}]*overflow-y:\s*auto/)
+    expect(css).toMatch(/\.tm-scroll\s*\{[^}]*flex:\s*1/)
+  })
+
+  it('scrolls exactly one region', () => {
+    expect(app).toMatch(/className="tm-scroll"/)
+    expect((app.match(/className="tm-scroll"/g) || []).length).toBe(1)
+  })
+
+  it('does not position the tab bar, it lays it out', () => {
+    const nav = app.slice(app.indexOf('<nav aria-label="Main"'), app.indexOf('</nav>'))
+    expect(nav, 'the nav should not be position:fixed any more').not.toMatch(/position:\s*'fixed'/)
+    expect(nav).toMatch(/flexShrink:\s*0/)
+    // It still has to clear the home indicator.
+    expect(nav).toMatch(/env\(safe-area-inset-bottom/)
+  })
+
+  it('stops reserving space for a bar that is now in the layout', () => {
+    // The old clearance had to be kept in step with the bar's height, insets and
+    // all. A sibling needs no clearance at all.
+    expect(app).not.toMatch(/paddingBottom: 'calc\(76px \+ env\(safe-area-inset-bottom/)
+  })
+
+  it('lets a printout run past one screen', () => {
+    // A viewport-height frame with hidden overflow is what pins the bar, and it
+    // would clip a printed case plan to whatever was on screen. The plan has
+    // @page A4 rules and is printed and handed round, so this is a real path.
+    const printBlock = css.slice(css.lastIndexOf('@media print'))
+    expect(printBlock).toMatch(/#root\s*\{[^}]*overflow:\s*visible/)
+    expect(printBlock).toMatch(/#root\s*\{[^}]*height:\s*auto/)
+    expect(printBlock).toMatch(/\.tm-scroll\s*\{[^}]*overflow:\s*visible/)
+  })
+
+  it('has no screen inside the frame demanding a whole viewport', () => {
+    // A child asking for 100vh inside a region that is already the viewport minus
+    // the header and the bar makes every screen scroll by the height of that
+    // chrome, even an empty one. Only the screens rendered *before* the shell —
+    // sign-in and the leave confirmation — may ask for 100vh.
+    const outsideTheShell = ['PinScreen.jsx', 'Success.jsx']
+    const offenders = []
+    for (const entry of readdirSync(join(ROOT, 'src/pages'), { withFileTypes: true })) {
+      const files = entry.isDirectory()
+        ? readdirSync(join(ROOT, 'src/pages', entry.name)).map(f => `${entry.name}/${f}`)
+        : [entry.name]
+      for (const file of files) {
+        if (!file.endsWith('.jsx') || file.includes('.test.')) continue
+        if (outsideTheShell.includes(file.split('/').pop())) continue
+        if (/minHeight:\s*'100vh'/.test(read(join('src/pages', file)))) offenders.push(file)
+      }
+    }
+    expect(offenders, 'screens inside the shell asking for a full viewport').toEqual([])
   })
 })
