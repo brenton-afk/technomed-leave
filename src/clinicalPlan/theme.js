@@ -140,25 +140,47 @@ export function contrastRatio(a, b) {
 export const NAVIGATION_ACCENT = '#4a1c96'
 
 /**
- * The bar colour for a case: its surgeon's, unless the case uses image guidance.
+ * The colour a case is drawn in: the one its booking carries in the calendar.
  *
- * Navigation is the one thing allowed to outrank the surgeon here. A Varioguide,
- * Brainlab or AIRO case needs the platform booked and calibrated, which changes
- * what the day requires of whoever is covering it, so it has to be visible
- * without reading the case.
+ * The plan used to draw from its own table of surgeon accents, which meant it
+ * could disagree with Google — and then reported the disagreement as a fault, in
+ * a note telling the reader something they could already see. Taking the colour
+ * from the booking removes both the disagreement and the note: the calendar is
+ * the colour, and the guide is a booking convention the team already knows.
+ *
+ * The surgeon's own accent is the fallback for a booking with no colour set, so
+ * an uncoloured case is still identifiable rather than grey.
  */
 export function accentForCase(surgicalCase, dark = false) {
   if (surgicalCase?.navigation) return NAVIGATION_ACCENT
-  return accentFor(surgicalCase?.surgeon, dark)
+  const fromCalendar = surgicalCase?.colourHex
+  if (!fromCalendar) return accentFor(surgicalCase?.surgeon, dark)
+  return dark ? lighten(fromCalendar, 0.35) : fromCalendar
 }
 
 /**
- * The surgeon's name, always in the surgeon's own colour.
+ * The same colour, darkened as far as it needs to be to read as text on white.
  *
- * Deliberately not overridden for navigation. The override belongs on the bar,
- * where it reads as a property of the case; on the name it would read as a claim
- * about who is operating.
+ * Calendar colours are chosen to sit behind white text in Google, so several are
+ * far too light the other way round: Banana on white is 1.7:1, effectively
+ * invisible. The hue is kept and the lightness taken down until it passes, so a
+ * surgeon is still recognisable by colour while the name stays readable.
  */
 export function accentTextForCase(surgicalCase, dark = false) {
-  return accentTextFor(surgicalCase?.surgeon, dark)
+  const base = accentForCase(surgicalCase, dark)
+  if (dark) return base
+  return legibleOnWhite(base)
+}
+
+const legibleCache = new Map()
+
+function legibleOnWhite(hex) {
+  if (legibleCache.has(hex)) return legibleCache.get(hex)
+  let candidate = hex
+  for (let step = 0; step < 20; step++) {
+    if (contrastRatio(candidate, '#FFFFFF') >= AA_TEXT_CONTRAST) break
+    candidate = darken(candidate, 0.1)
+  }
+  legibleCache.set(hex, candidate)
+  return candidate
 }

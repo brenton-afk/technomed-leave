@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import TodayView from './TodayView.jsx'
-import { NAVIGATION_ACCENT, accentTextFor } from '../clinicalPlan/theme.js'
+import { NAVIGATION_ACCENT, accentTextForCase } from '../clinicalPlan/theme.js'
 
 // A booking carries the case as labelled lines in its description. This screen
 // used to print the event title instead and stop there, which is why the system
@@ -142,10 +142,24 @@ describe('reading the labelled description', () => {
     expect(screen.queryByText(/C4\/5 ACDF Shoreline/)).not.toBeInTheDocument()
   })
 
-  it('leaves the surgeon in their own colour', async () => {
-    await show([booking('c1', notes({ Pt: 'Jackson', Surg: 'Fowler', Kit: 'Dakota (Loan)' }))])
+  it('writes the surgeon in the colour their booking carries', async () => {
+    // Grape (colorId 3), darkened only as far as it must be to read on white.
+    await show([booking('c1', notes({ Pt: 'Jackson', Surg: 'Fowler', Kit: 'Dakota (Loan)' }),
+      { colorId: '3' })])
     await waitFor(() => expect(screen.getByText('Fowler')).toBeInTheDocument())
-    expect(screen.getByText('Fowler')).toHaveStyle({ color: accentTextFor('Fowler') })
+    expect(screen.getByText('Fowler')).toHaveStyle({
+      color: accentTextForCase({ surgeon: 'Fowler', colourHex: GRAPE })
+    })
+  })
+
+  it('writes the surgeon in blueberry on a navigation case', async () => {
+    // The team codes these Blueberry, so the name matches the border rather than
+    // arguing with it.
+    await show([booking('c1', notes({
+      Pt: 'Horne', Surg: 'Ibbett', Procedure: 'L3/4 decompression Varioguide', Kit: 'Dakota (Loan)'
+    }), { colorId: '9' })])
+    await waitFor(() => expect(screen.getByText('Ibbett')).toBeInTheDocument())
+    expect(screen.getByText('Ibbett')).toHaveStyle({ color: NAVIGATION_ACCENT })
   })
 
   it('keeps working on a booking with no labels at all', async () => {

@@ -2,26 +2,19 @@ import React, { useState, useEffect } from 'react'
 import { Page, Header, Body } from '../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../design/tokens.js'
 import { readBooking } from '../clinicalPlan/parse.js'
-import { accentTextFor, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
-import { surgeonForColourName, colourNameFor } from '../clinicalPlan/colours.js'
+import { accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
+import { surgeonForColourName, colourNameFor, colourHexFor } from '../clinicalPlan/colours.js'
 import { hospitalCode } from '../clinicalPlan/labelledFields.js'
 
-// Google Calendar's event palette, by colorId. Three of these were wrong: 9, 10
-// and 11 were carrying Basil, Tomato and Graphite's values a place out, so a
-// Basil booking — Gupta's colour — drew pink, and Blueberry drew green. The
-// colour is how surgeon allocation is read at a glance, so being a place out is
-// not cosmetic.
-const COLOR_MAP = {
-  '1':'#7986cb','2':'#33b679','3':'#8e24aa','4':'#e67c73',
-  '5':'#f6c026','6':'#f5511d','7':'#039be5','8':'#616161',
-  '9':'#3f51b5','10':'#0b8043','11':'#d50000'
-}
+// The palette lives in clinicalPlan/colours.js, so this screen and the case plan
+// cannot drift apart. It used to be a second copy here, and three of its entries
+// were a place out — a Basil booking, which is Gupta's colour, drew pink.
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-function getColor(colorId) { return COLOR_MAP[colorId] || colour.navy }
+function getColor(colorId) { return colourHexFor(colorId) || colour.navy }
 
 /**
  * What a booking is, and how to draw it.
@@ -42,7 +35,12 @@ function describe(event) {
   const navigation = NAVIGATION_PATTERN.test(`${event.title || ''}\n${event.description || ''}`)
   const border = navigation ? NAVIGATION_ACCENT : getColor(event.colorId)
   if (!read) return { isCase: false, border }
-  return { isCase: true, read, border, surgeonColour: accentTextFor(read.surgeon) }
+  // The surgeon's name in the booking's own colour — darkened only as far as it
+  // must be to read on white. Blueberry for a navigation case, so the name and
+  // the border agree.
+  const surgeonColour = accentTextForCase(
+    { ...read, colourHex: colourHexFor(event.colorId) })
+  return { isCase: true, read, border, surgeonColour }
 }
 
 const NAVIGATION_PATTERN = /vario\s*guide|brain\s*lab|\bairo\b/i

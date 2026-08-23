@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { buildWeekPlan } from './buildWeekPlan.js'
 import { weekWindowFor } from './week.js'
-import { checkEventColour, summariseColourFindings, colourNameFor } from './colours.js'
+import { colourNameFor } from './colours.js'
 import { accentFor, accentTextFor, hasConfirmedAccent, contrastRatio, SURGEON_ACCENTS, TOKENS } from './theme.js'
 
 const WINDOW = weekWindowFor('2026-08-24')
@@ -118,81 +118,40 @@ describe('flags and non-case classification', () => {
   })
 })
 
-describe('colour-coding check (§5.4)', () => {
-  it('detects a case with no colour set', () => {
-    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00', { location: 'RHH' })])
-    const finding = plan.colourCodingFindings[0]
-    expect(finding.kind).toBe('missingColour')
-    expect(finding.expected).toBe('Grape')
-    // Marked on the case itself, where it can be acted on. There is no longer a
-    // roll-up paragraph at the foot of the plan restating the same thing.
-    expect(plan.days[0].casesByHospital[0].cases[0].notes[0].text)
-      .toBe('■ COLOUR-CODING: no calendar colour set — should be Grape')
-    expect(plan.keyFlags.some(f => f.label === 'Colour-coding check')).toBe(false)
+describe('colour comes from the calendar (no checking)', () => {
+  // The plan used to keep its own table of surgeon colours, draw from that, and
+  // report any disagreement with Google as a fault — in a note telling the reader
+  // something they could already see on the booking. Taking the colour from the
+  // booking removes the disagreement and the note together.
+  it('draws a case in the colour its booking carries', () => {
+    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00',
+      { colorId: COLOR.Basil, location: 'RHH' })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.colourHex).toBe('#0b8043')      // Basil
+    expect(c.calendarColorName).toBe('Basil')
   })
 
-  it('detects a case coloured as the wrong surgeon', () => {
-    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00', { colorId: COLOR.Basil })])
-    const finding = plan.colourCodingFindings[0]
-    expect(finding.kind).toBe('wrongColour')
-    expect(finding.actual).toBe('Basil')
-    expect(finding.expected).toBe('Grape')
-  })
-
-  it('notes a non-surgical entry wearing a surgeon colour without relabelling it', () => {
-    const plan = build([ev('x1', 'Vendor visit — Andrea Weller', '28', '09:00', '10:00', { colorId: COLOR.Grape })])
-    const finding = plan.colourCodingFindings[0]
-    expect(finding.kind).toBe('surgeonColourOnNonCase')
-    expect(finding.surgeon).toBe('Fowler')
-    // Not turned into a Fowler case.
-    expect(plan.surgeons).toEqual([])
-    expect(plan.days[4].casesByHospital).toHaveLength(0)
-  })
-
-  it('treats a Graphite on-call entry as a probable convention, not an error', () => {
-    const plan = build([ev('x1', 'Brent on call', '28', '17:00', '18:00', { colorId: COLOR.Graphite })])
-    const finding = plan.colourCodingFindings[0]
-    expect(finding.kind).toBe('staffingConvention')
-    expect(finding.severity).toBe('info')
-    expect(finding.message).toMatch(/established/)
-    // Dubey has no case this week, so that is called out.
-    expect(finding.message).toMatch(/no case this window/)
-  })
-
-  it('says so when a Graphite entry coincides with a real Dubey case', () => {
-    const finding = checkEventColour({
-      id: 'x', title: 'Brent on call', date: '2026-08-28', colorId: 8,
-      surgeon: null, isCase: false, surgeonsWithCases: ['Dubey']
-    })
-    expect(finding.kind).toBe('staffingConvention')
-    expect(finding.message).not.toMatch(/no case this window/)
-  })
-
-  it('passes a correctly coloured case silently', () => {
-    const plan = build([ev('c1', 'Gill STRYKER CCI - Fowler', '24', '11:00', '12:00', { colorId: COLOR.Grape })])
-    expect(plan.colourCodingFindings).toHaveLength(0)
-    expect(plan.days[0].casesByHospital[0].cases[0].notes).toEqual([])
+  it('says nothing about a colour that disagrees with the guide', () => {
+    // Fowler's guide colour is Grape; this booking is Basil. That is now simply
+    // what colour the case is.
+    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00',
+      { colorId: COLOR.Basil, location: 'RHH' })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.notes).toEqual([])
+    expect(plan.notes).not.toMatch(/colour/i)
     expect(plan.keyFlags.map(f => f.label)).not.toContain('Colour-coding check')
   })
 
-  it('never adds a colour-coding paragraph to the foot of the plan', () => {
-    // It restated the per-case markers in prose, and was the longest and least
-    // actionable thing on the page.
-    expect(build([]).keyFlags.some(f => f.label === 'Colour-coding check')).toBe(false)
+  it('says nothing about a booking with no colour set either', () => {
+    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00', { location: 'RHH' })])
+    const c = plan.days[0].casesByHospital[0].cases[0]
+    expect(c.notes).toEqual([])
+    expect(c.colourHex).toBeUndefined()      // falls back to the surgeon's accent
   })
 
-  it('maps Google colorIds to the names the guide uses', () => {
-    expect(colourNameFor(3)).toBe('Grape')
-    expect(colourNameFor(8)).toBe('Graphite')
-    expect(colourNameFor(null)).toBeNull()
-  })
-
-  it('summarises what is wrong and confirms what is right', () => {
-    const cases = [{ id: 'a', patient: 'Gill', surgeon: 'Fowler', calendarColorName: 'Grape' }]
-    const findings = [{ kind: 'missingColour', severity: 'error', eventId: 'b', title: 'Jackson/Fowler', date: '2026-08-24', expected: 'Grape' }]
-    const text = summariseColourFindings(findings, cases)
-    expect(text).toMatch(/One booking is coded incorrectly/)
-    expect(text).toMatch(/Correctly coded: Gill\/Fowler Grape/)
+  it('leaves nothing about colour on a non-surgical entry', () => {
+    const plan = build([ev('x', 'Brent on call', '24', '09:00', '10:00', { colorId: COLOR.Graphite })])
+    expect(plan.notes).not.toMatch(/colour/i)
   })
 })
 
@@ -242,12 +201,24 @@ describe('derived prose', () => {
     expect(plan.notes).not.toMatch(/missing their calendar colour/)
   })
 
-  it('does open the week with a colour that disagrees with the title', () => {
-    // Here the colour and the title name different surgeons, so one of them is
-    // wrong about who is operating — worth saying out loud.
-    const plan = build([ev('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00',
-      { colorId: COLOR.Basil })])
-    expect(plan.notes).toMatch(/colour/i)
+  it('opens the week with someone away, since that changes who can cover', () => {
+    const plan = build([ev('t', 'Brent — NSA Conference, South Australia', '25', '15:30', '16:00')])
+    expect(plan.notes).toMatch(/NSA Conference/)
+  })
+
+  it('does not open the week with the on-call rota', () => {
+    // A standing arrangement, and it appears on its own day regardless.
+    const plan = build([ev('x', 'Brent on call', '24', '09:00', '10:00')])
+    expect(plan.notes).not.toMatch(/on call/i)
+    expect(plan.days[0].flags.some(f => /on call/i.test(f.text))).toBe(true)
+  })
+
+  it('does not open the week with the team leader handover', () => {
+    const plan = build([ev('h', 'Handover: Ben becomes Team Leader', '28', '17:00', '17:30')])
+    expect(plan.notes).not.toMatch(/handover|team leader/i)
+    expect(plan.summaryLine).not.toMatch(/handover|team leader/i)
+    // Still on Friday, where it happens.
+    expect(plan.days[4].flags.some(f => /Team Leader/.test(f.text))).toBe(true)
   })
 
   it('carries both the date range and the hospitals in the subtitle', () => {
@@ -493,18 +464,6 @@ describe('a colour-attributed case reaches the plan', () => {
     expect(note.kind).toBe('info')   // information, not a fault
   })
 
-  it('does not report a colour fault against a case it attributed by colour', () => {
-    const plan = build([ev('k', 'Kennedy REFORM', '25', '10:00', '11:00', COLOUR_ONLY)])
-    expect(plan.colourCodingFindings).toHaveLength(0)
-  })
-
-  it('still reports a genuine mismatch when the title names the surgeon', () => {
-    const plan = build([ev('k', 'Kennedy REFORM - JPW', '25', '10:00', '11:00',
-      { colorId: COLOR.Basil, location: 'RHH' })])
-    expect(plan.colourCodingFindings[0]).toMatchObject({
-      kind: 'wrongColour', expected: 'Flamingo', actual: 'Basil'
-    })
-  })
 
   it('does not turn a Graphite on-call entry into a Dubey case', () => {
     const plan = build([ev('o', 'Brent on call', '28', '17:00', '18:00', { colorId: COLOR.Graphite })])

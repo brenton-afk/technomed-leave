@@ -4,7 +4,7 @@ import {
   DayBlock, SurgeonLegend, NotesCallout, KeyFlagsSection, PlanFooter, CaseBlock
 } from './PlanBlocks.jsx'
 import { FIXTURE_WEEK } from '../../clinicalPlan/fixture.js'
-import { accentFor, accentTextFor, TOKENS } from '../../clinicalPlan/theme.js'
+import { accentFor, accentTextFor, accentForCase, accentTextForCase, TOKENS } from '../../clinicalPlan/theme.js'
 
 const MON = FIXTURE_WEEK.days[0]
 const TUE = FIXTURE_WEEK.days[1]
@@ -81,21 +81,34 @@ describe('Weekly view content (§6)', () => {
     expect(boxed[0].textContent).toContain("BEN: Late start / early finish (Boy's Week)")
   })
 
-  it('gives each case a left bar in its surgeon accent', () => {
+  it('gives each case a left bar in the colour its booking carries', () => {
     const { container } = render(<DayBlock day={TUE} />)
     const bars = [...container.querySelectorAll('div[aria-hidden="true"]')]
       .filter(el => el.style.width === '4px')
       .map(el => el.style.background)
     // Three JPW/Gupta cases at RHH plus one Ibbett at Calvary.
     expect(bars).toHaveLength(4)
-    expect(bars).toContain(hexToRgb(accentFor('Ibbett')))
-    expect(bars).toContain(hexToRgb(accentFor('Gupta')))
+    for (const c of TUE.casesByHospital.flatMap(g => g.cases)) {
+      expect(bars).toContain(hexToRgb(accentForCase(c)))
+    }
   })
 
-  it('renders a colour-coding fault as bold red italic under its case', () => {
-    render(<DayBlock day={MON} />)
-    const note = screen.getByText('■ COLOUR-CODING: no calendar colour set — should be Grape')
-    expect(note).toHaveStyle({ color: TOKENS.alert, fontStyle: 'italic', fontWeight: '700' })
+  it('falls back to the surgeon accent for a booking with no colour set', () => {
+    const uncoloured = { ...TUE.casesByHospital[0].cases[0], calendarColorName: undefined, colourHex: undefined }
+    expect(accentForCase(uncoloured)).toBe(accentFor(uncoloured.surgeon))
+  })
+
+  it('writes each surgeon\'s name in the colour their booking carries', () => {
+    // Kennedy's booking is Flamingo, so that case reads Flamingo — whatever the
+    // guide says JPW should be. The plan no longer keeps a second opinion, which
+    // is what it used to report as a fault.
+    const { container } = render(<DayBlock day={TUE} />)
+    const cases = TUE.casesByHospital.flatMap(g => g.cases)
+    const drawn = [...container.querySelectorAll('span')]
+      .map(el => el.style.color).filter(Boolean)
+    for (const c of cases) {
+      expect(drawn, c.patient).toContain(hexToRgb(accentTextForCase(c)))
+    }
   })
 
   it('leaves case times off the plan', () => {
@@ -155,7 +168,7 @@ describe('Weekly view content (§6)', () => {
   it('keeps every key flag label from the fixture', () => {
     render(<KeyFlagsSection keyFlags={FIXTURE_WEEK.keyFlags} />)
     for (const label of ['Surgeon load', 'Team leader handover', 'Staffing', 'Travel',
-      'Logistics', 'Vendor visit', 'Colour-coding check']) {
+      'Logistics', 'Vendor visit']) {
       expect(screen.getByText(`${label}:`)).toBeInTheDocument()
     }
   })

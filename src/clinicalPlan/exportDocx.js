@@ -90,7 +90,7 @@ function caseParagraphs(c) {
     out.push(para(run(`Kit: ${c.kit}`, { color: hex(TOKENS.inkMuted), size: 20 }), { border: bar }))
   }
   for (const note of c.notes || []) {
-    const isAlert = note.kind === 'colourCoding' || note.kind === 'clinicalAlert'
+    const isAlert = note.kind === 'clinicalAlert'
     out.push(para(run(note.text, {
       italics: true, bold: isAlert, size: 19,
       color: hex(isAlert ? TOKENS.alert : TOKENS.inkFaint)

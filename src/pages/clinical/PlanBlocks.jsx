@@ -14,7 +14,7 @@ import { formatDayHeading } from '../../clinicalPlan/week.js'
 export function CaseBlock({ surgicalCase, dark }) {
   const t = tokens(dark)
   const accent = accentForCase(surgicalCase, dark)          // the bar
-  const accentText = accentTextForCase(surgicalCase, dark)  // legible as text
+  const accentText = accentTextForCase(surgicalCase, dark)  // the same, legible as text
 
   return (
     <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
@@ -54,8 +54,8 @@ export function CaseBlock({ surgicalCase, dark }) {
         {(surgicalCase.notes || []).map((note, i) => (
           <div key={i} style={{
             fontSize: 12.5, fontStyle: 'italic', lineHeight: 1.5, marginTop: 2,
-            fontWeight: note.kind === 'colourCoding' || note.kind === 'clinicalAlert' ? 700 : 400,
-            color: note.kind === 'colourCoding' || note.kind === 'clinicalAlert' ? t.alert : t.inkFaint
+            fontWeight: note.kind === 'clinicalAlert' ? 700 : 400,
+            color: note.kind === 'clinicalAlert' ? t.alert : t.inkFaint
           }}>
             {note.text}
           </div>

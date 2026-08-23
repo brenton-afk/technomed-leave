@@ -41,7 +41,7 @@ describe('text export (§8)', () => {
     expect(text).not.toContain('SATURDAY 29 AUGUST')
   })
 
-  it('carries the case detail and colour faults, and no case times', () => {
+  it('carries the case detail, and no colour notes or case times', () => {
     const text = planToText(FIXTURE_WEEK)
     // The operation leads where it is known; the implant system follows on its
     // own line rather than standing in for it or repeating it.
@@ -60,8 +60,9 @@ describe('text export (§8)', () => {
     for (const line of caseLines) {
       expect(line).not.toMatch(/\d{1,2}:\d{2}(am|pm)/)
     }
-    expect(text).toContain('COLOUR-CODING: no calendar colour set — should be Grape')
-    expect(text).toContain('Colour-coding check:')
+    // Nothing about colour anywhere: the plan draws each case in the colour its
+    // booking carries, so there is nothing to report.
+    expect(text).not.toMatch(/colour/i)
   })
 
   it('cites the sources and window logic', () => {

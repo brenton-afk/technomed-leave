@@ -25,9 +25,8 @@ export const FIXTURE_WEEK = {
     + 'Tue–Fri, a Spine Team Leader handover from Brent to Ben Friday 5:00pm, and Andrea Weller '
     + '(Signus) visiting from Saturday.',
   surgeons: ['Fowler', 'Ibbett', 'JPW', 'Gupta'],
-  notes: 'Two bookings this week are missing their calendar colour and should be recoloured before '
-    + 'the next sync. Brent is travelling Tuesday afternoon through Friday night; factor into '
-    + 'on-site coverage Wed–Fri. Team Leader duties pass from Brent to Ben Friday 5:00pm.',
+  notes: 'Brent is travelling Tuesday afternoon through Friday night; factor into '
+    + 'on-site coverage Wed–Fri.',
 
   days: [
     {
@@ -51,9 +50,7 @@ export const FIXTURE_WEEK = {
               start: T('24', '10:00'),
               end: T('24', '11:00'),
               calendarColorName: undefined,
-              notes: [
-                { text: '■ COLOUR-CODING: no calendar colour set — should be Grape', kind: 'colourCoding' }
-              ]
+              notes: []
             },
             {
               id: 'fx-gill',
@@ -65,6 +62,7 @@ export const FIXTURE_WEEK = {
               start: T('24', '11:00'),
               end: T('24', '12:00'),
               calendarColorName: 'Grape',
+              colourHex: '#8e24aa',
               notes: []
             }
           ]
@@ -99,6 +97,7 @@ export const FIXTURE_WEEK = {
               start: T('25', '10:00'),
               end: T('25', '11:00'),
               calendarColorName: 'Flamingo',
+              colourHex: '#e67c73',
               notes: []
             },
             {
@@ -110,9 +109,7 @@ export const FIXTURE_WEEK = {
               start: T('25', '12:00'),
               end: T('25', '13:00'),
               calendarColorName: undefined,
-              notes: [
-                { text: '■ COLOUR-CODING: no calendar colour set — should be Flamingo', kind: 'colourCoding' }
-              ]
+              notes: []
             },
             {
               id: 'fx-panthi',
@@ -123,6 +120,7 @@ export const FIXTURE_WEEK = {
               start: T('25', '13:30'),
               end: T('25', '14:30'),
               calendarColorName: 'Basil',
+              colourHex: '#0b8043',
               notes: []
             }
           ]
@@ -141,6 +139,7 @@ export const FIXTURE_WEEK = {
               start: T('25', '09:00'),
               end: T('25', '10:00'),
               calendarColorName: 'Banana',
+              colourHex: '#f6c026',
               notes: []
             }
           ]
@@ -216,6 +215,7 @@ export const FIXTURE_WEEK = {
               start: T('28', '09:00'),
               end: T('28', '10:00'),
               calendarColorName: 'Basil',
+              colourHex: '#0b8043',
               notes: []
             },
             {
@@ -227,6 +227,7 @@ export const FIXTURE_WEEK = {
               start: T('28', '10:00'),
               end: T('28', '11:00'),
               calendarColorName: 'Basil',
+              colourHex: '#0b8043',
               notes: []
             }
           ]
@@ -280,31 +281,8 @@ export const FIXTURE_WEEK = {
     { label: 'Travel', text: 'Brent at the NSA Conference in South Australia from Tue afternoon (25 Aug) through Fri night (28 Aug) — factor into on-site coverage Wed/Thu/Fri.' },
     { label: 'Logistics', text: "S2AI transfer Thu 27 Aug for Pt Fox, whose case is 31 Aug at Calvary — just after this window. Daily List Order call 4:00pm Mon–Thu, plus one showing Sunday 30 Aug — worth double-checking that's intentional." },
     { label: 'Vendor visit', text: 'Andrea Weller (Signus) in Hobart from Sat 29 Aug.' },
-    { label: 'Colour-coding check', text: 'Two bookings missing their calendar colour — Jackson/Fowler (Mon 24 Aug, should be Grape) and Streets/JPW (Tue 25 Aug, should be Flamingo). All other cases correctly coded: Horne/Ibbett Banana, Gill/Fowler Grape, Kennedy/JPW Flamingo, Panthi/Gordan/Vanderheim (Gupta) Basil. The "Brent on Call" and "Ben – early finish" entries are coded Graphite (officially Dubey\'s colour) — likely an established staffing/on-call convention rather than a mistake, flagged per the standing check since Dubey has no case this window to confirm against.' }
   ],
 
-  colourCodingFindings: [
-    {
-      kind: 'missingColour', severity: 'error', eventId: 'fx-jackson',
-      title: 'Jackson/Fowler', date: '2026-08-24', surgeon: 'Fowler',
-      expected: 'Grape', actual: null,
-      message: 'COLOUR-CODING: no calendar colour set — should be Grape'
-    },
-    {
-      kind: 'missingColour', severity: 'error', eventId: 'fx-streets',
-      title: 'Streets/JPW', date: '2026-08-25', surgeon: 'JPW',
-      expected: 'Flamingo', actual: null,
-      message: 'COLOUR-CODING: no calendar colour set — should be Flamingo'
-    },
-    {
-      kind: 'staffingConvention', severity: 'info', eventId: 'fx-brent-oncall',
-      title: 'Brent on Call', date: '2026-08-28', surgeon: 'Dubey',
-      expected: null, actual: 'Graphite',
-      message: "COLOUR-CODING: coded Graphite (officially Dubey's colour) — likely an established "
-        + 'staffing/on-call convention rather than a mistake, flagged since Dubey has no case this '
-        + 'window to confirm against'
-    }
-  ],
 
   lastGeneratedAt: '2026-08-21T17:30:00+10:00'
 }

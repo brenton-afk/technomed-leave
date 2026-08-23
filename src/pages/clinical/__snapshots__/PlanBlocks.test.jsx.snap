@@ -77,7 +77,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(230, 124, 115); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -92,7 +92,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
                / 
             </span>
             <span
-              style="color: rgb(175, 71, 106);"
+              style="color: rgb(167, 91, 85);"
             >
               JPW
             </span>
@@ -134,11 +134,6 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
           >
             LONESTAR
           </div>
-          <div
-            style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
-          >
-            ■ COLOUR-CODING: no calendar colour set — should be Flamingo
-          </div>
         </div>
       </div>
       <div
@@ -146,7 +141,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(11, 128, 67); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -161,7 +156,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
                / 
             </span>
             <span
-              style="color: rgb(18, 132, 60);"
+              style="color: rgb(11, 128, 67);"
             >
               Gupta
             </span>
@@ -185,7 +180,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(251, 188, 4); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(246, 192, 38); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -200,7 +195,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
                / 
             </span>
             <span
-              style="color: rgb(149, 111, 4);"
+              style="color: rgb(145, 113, 23);"
             >
               Ibbett
             </span>
@@ -299,7 +294,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
     <div
       style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6;"
     >
-      Two bookings this week are missing their calendar colour and should be recoloured before the next sync. Brent is travelling Tuesday afternoon through Friday night; factor into on-site coverage Wed–Fri. Team Leader duties pass from Brent to Ben Friday 5:00pm.
+      Brent is travelling Tuesday afternoon through Friday night; factor into on-site coverage Wed–Fri.
     </div>
   </div>
   <section
@@ -367,11 +362,6 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
           >
             MARINER
           </div>
-          <div
-            style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
-          >
-            ■ COLOUR-CODING: no calendar colour set — should be Grape
-          </div>
         </div>
       </div>
       <div
@@ -379,7 +369,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(147, 51, 234); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(142, 36, 170); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -394,7 +384,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(147, 51, 234);"
+              style="color: rgb(142, 36, 170);"
             >
               Fowler
             </span>
@@ -471,7 +461,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(230, 124, 115); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -486,7 +476,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(175, 71, 106);"
+              style="color: rgb(167, 91, 85);"
             >
               JPW
             </span>
@@ -528,11 +518,6 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
           >
             LONESTAR
           </div>
-          <div
-            style="font-size: 12.5px; font-style: italic; line-height: 1.5; margin-top: 2px; font-weight: 700; color: rgb(220, 38, 38);"
-          >
-            ■ COLOUR-CODING: no calendar colour set — should be Flamingo
-          </div>
         </div>
       </div>
       <div
@@ -540,7 +525,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(11, 128, 67); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -555,7 +540,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(18, 132, 60);"
+              style="color: rgb(11, 128, 67);"
             >
               Gupta
             </span>
@@ -579,7 +564,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(251, 188, 4); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(246, 192, 38); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -594,7 +579,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(149, 111, 4);"
+              style="color: rgb(145, 113, 23);"
             >
               Ibbett
             </span>
@@ -785,7 +770,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(11, 128, 67); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -800,7 +785,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(18, 132, 60);"
+              style="color: rgb(11, 128, 67);"
             >
               Gupta
             </span>
@@ -817,7 +802,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(22, 163, 74); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(11, 128, 67); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -832,7 +817,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(18, 132, 60);"
+              style="color: rgb(11, 128, 67);"
             >
               Gupta
             </span>
@@ -993,18 +978,6 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       </strong>
        
       Andrea Weller (Signus) in Hobart from Sat 29 Aug.
-    </p>
-    <p
-      style="font-size: 13px; color: rgb(75, 85, 99); line-height: 1.6; margin: 0px 0px 9px;"
-    >
-      <strong
-        style="color: rgb(17, 24, 39);"
-      >
-        Colour-coding check
-        :
-      </strong>
-       
-      Two bookings missing their calendar colour — Jackson/Fowler (Mon 24 Aug, should be Grape) and Streets/JPW (Tue 25 Aug, should be Flamingo). All other cases correctly coded: Horne/Ibbett Banana, Gill/Fowler Grape, Kennedy/JPW Flamingo, Panthi/Gordan/Vanderheim (Gupta) Basil. The "Brent on Call" and "Ben – early finish" entries are coded Graphite (officially Dubey's colour) — likely an established staffing/on-call convention rather than a mistake, flagged per the standing check since Dubey has no case this window to confirm against.
     </p>
   </section>
   <footer

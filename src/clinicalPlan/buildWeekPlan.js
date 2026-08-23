@@ -7,7 +7,7 @@ import './types.js'
 import {
   normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking
 } from './parse.js'
-import { colourNameFor, checkEventColour, surgeonForColourName } from './colours.js'
+import { colourNameFor, colourHexFor, surgeonForColourName } from './colours.js'
 import {
   formatWeekRange, formatDayHeading, weekdayName, formatTimeRange,
   zonedCivil, parseDateStr, TZ
@@ -25,7 +25,12 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
 const PRIORITY_FLAG_RULES = [
   { kind: 'recurringStaffing', boxed: true, test: /late start|early finish|reduced hours|boy'?s week/i },
   { kind: 'handover', boxed: false, test: /handover|team leader/i },
-  { kind: 'travel', boxed: false, test: /conference|offsite|off-site|travel|depart|flight|on call|on-call/i },
+  // On-call is deliberately separate from travel. Both used to be one rule, which
+  // is how "Brent on call" ended up in the week's opening paragraph beside a
+  // conference in another state. It is a standing rota, so it belongs on its day
+  // and nowhere else.
+  { kind: 'onCall', boxed: false, test: /on call|on-call/i },
+  { kind: 'travel', boxed: false, test: /conference|offsite|off-site|travel|depart|flight/i },
   { kind: 'clinicalAlert', boxed: false, test: /revision|loan kit|resupply|urgent|shortage|recall/i }
 ]
 
@@ -159,7 +164,7 @@ function buildSummaryLine(allCases, surgeons, days) {
   const headline = []
   for (const day of days) {
     for (const flag of day.flags) {
-      if (flag.kind === 'travel' || flag.kind === 'handover') headline.push(flag.text)
+      if (flag.kind === 'travel') headline.push(flag.text)
     }
   }
   const unique = [...new Set(headline)].slice(0, 3)
@@ -169,21 +174,23 @@ function buildSummaryLine(allCases, surgeons, days) {
   return unique.length ? `${base}, plus ${listPhrase(unique)}.` : `${base}.`
 }
 
-function buildNotes(findings, days) {
+/**
+ * The short paragraph at the top of the week.
+ *
+ * Only what changes the week's coverage. It has been trimmed twice, and what came
+ * out is as informative as what stayed:
+ *
+ *   colour faults — the calendar is the colour now, so there is nothing to fault
+ *   on-call       — a standing rota, and it appears on its own day anyway
+ *   handovers     — the team leader arrangement is known; it is not week news
+ *
+ * Someone away interstate does belong here, because it is the one thing that
+ * changes who can physically cover a list.
+ */
+function buildNotes(days) {
   const parts = []
-  // A booking with no colour set is an administrative tidy-up, not something the
-  // week's plan needs to open with, so only a genuine mismatch is mentioned —
-  // where the colour and the title disagree about who is operating.
-  const wrong = findings.filter(f => f.kind === 'wrongColour')
-  if (wrong.length) {
-    parts.push(`${wrong.length === 1 ? 'One booking is' : `${wrong.length} bookings are`} coloured against the guide.`)
-  }
-
   const travel = [...new Set(days.flatMap(d => d.flags.filter(f => f.kind === 'travel').map(f => f.text)))]
   if (travel.length) parts.push(`${listPhrase(travel)}; factor into on-site coverage.`)
-
-  const handover = [...new Set(days.flatMap(d => d.flags.filter(f => f.kind === 'handover').map(f => f.text)))]
-  if (handover.length) parts.push(`${listPhrase(handover)}.`)
 
   const alerts = [...new Set(days.flatMap(d => d.flags.filter(f => isAlertFlag(f.kind)).map(f => f.text)))]
   if (alerts.length) parts.push(`${listPhrase(alerts)}.`)
@@ -193,7 +200,7 @@ function buildNotes(findings, days) {
 
 // ─── Key flags (§6.7) ───────────────────────────────────────
 
-function buildKeyFlags(allCases, days, findings, surgeons) {
+function buildKeyFlags(allCases, days, surgeons) {
   const flags = []
 
   if (allCases.length) {
@@ -289,6 +296,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         start: event.start,
         end: event.end,
         calendarColorName: colourNameFor(event.colorId) || undefined,
+        // What the booking is drawn in. Taken from the calendar so the app and
+        // Google cannot disagree about a case's colour.
+        colourHex: colourHexFor(event.colorId) || undefined,
         surgeonSource: read.surgeonSource,
         notes: [],
         dayDate,
@@ -298,8 +308,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
   }
   const surgeonsWithCases = [...new Set(allCases.map(c => c.surgeon))]
 
-  // Second pass: colour findings, attached to their case and rolled up.
-  const findings = []
+  // Second pass: note where a surgeon was inferred from a colour rather than named.
   for (const c of allCases) {
     if (c.surgeonSource === 'colour') {
       // Attributed *by* its colour, so checking it against its colour would
@@ -311,14 +320,11 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       })
       continue
     }
-    const finding = checkEventColour({
-      id: c.id, title: `${c.patient}/${c.surgeon}`, date: c.dayDate,
-      colorId: c._event.colorId, surgeon: c.surgeon, isCase: true, surgeonsWithCases
-    })
-    if (finding) {
-      findings.push(finding)
-      c.notes.push({ text: `■ ${finding.message}`, kind: 'colourCoding' })
-    }
+    // No colour check. The plan now draws each case in the colour its booking
+    // actually carries, so there is nothing left to check it against — a booking
+    // cannot disagree with itself. The guide is a booking convention the team
+    // already knows, and a note telling them a case is the wrong colour told them
+    // something they could see.
   }
 
   // Third pass: the day blocks.
@@ -338,12 +344,6 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       // An untitled event used to be skipped outright, which meant it vanished
       // from the app while still sitting on the calendar.
       const title = stripIdentifiers(event.title) || '(untitled booking)'
-
-      const nonCaseFinding = checkEventColour({
-        id: event.id, title, date: dayDate, colorId: event.colorId,
-        surgeon: null, isCase: false, surgeonsWithCases
-      })
-      if (nonCaseFinding) findings.push(nonCaseFinding)
 
       const timeRange = formatTimeRange(event.start, event.end, tz)
       const asFlag = rule => {
@@ -415,10 +415,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       .replace(`${MONTHS[startCivil.month - 1]} –`, '–'),
     summaryLine: buildSummaryLine(allCases, surgeons, dayPlans),
     surgeons,
-    notes: buildNotes(findings, dayPlans),
+    notes: buildNotes(dayPlans),
     days: dayPlans,
-    keyFlags: buildKeyFlags(allCases, dayPlans, findings, surgeons),
-    colourCodingFindings: findings,
+    keyFlags: buildKeyFlags(allCases, dayPlans, surgeons),
     readings: buildReadings(days, buckets, allCases),
     lastGeneratedAt: generatedAt,
     _endYear: endCivil.year
