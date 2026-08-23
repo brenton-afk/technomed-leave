@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { Page, Header, Body } from '../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../design/tokens.js'
 import { readBooking } from '../clinicalPlan/parse.js'
-import { accentForCase, accentTextForCase } from '../clinicalPlan/theme.js'
+import { accentTextFor, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import { surgeonForColourName, colourNameFor } from '../clinicalPlan/colours.js'
+import { hospitalCode } from '../clinicalPlan/labelledFields.js'
 
 // Google Calendar's event palette, by colorId. Three of these were wrong: 9, 10
 // and 11 were carrying Basil, Tomato and Graphite's values a place out, so a
@@ -34,19 +35,75 @@ function getColor(colorId) { return COLOR_MAP[colorId] || colour.navy }
 function describe(event) {
   const colourSurgeon = surgeonForColourName(colourNameFor(event.colorId))
   const read = event.allDay ? null : readBooking(event.title, event.description, { colourSurgeon })
-  if (!read) return { isCase: false, accent: getColor(event.colorId) }
-  return {
-    isCase: true,
-    read,
-    // Surgeon's own colour, except for a navigation case, which outranks it.
-    accent: accentForCase(read),
-    accentText: accentTextForCase(read)
-  }
+  // The border is the calendar's own colour, so the app agrees with what the
+  // person who made the booking sees in Google. Navigation is the one exception:
+  // a Varioguide, Brainlab or AIRO case needs the platform booked, set up and
+  // calibrated, which changes what the day asks of whoever is covering it.
+  const navigation = NAVIGATION_PATTERN.test(`${event.title || ''}\n${event.description || ''}`)
+  const border = navigation ? NAVIGATION_ACCENT : getColor(event.colorId)
+  if (!read) return { isCase: false, border }
+  return { isCase: true, read, border, surgeonColour: accentTextFor(read.surgeon) }
 }
 
-/** The one detail line: system and how it is supplied. */
+const NAVIGATION_PATTERN = /vario\s*guide|brain\s*lab|\bairo\b/i
+
+/** The system and how it is supplied, as one line. Uppercase, as the plan shows it. */
 function systemLine(read) {
-  return [read.system, read.supply].filter(Boolean).join(' · ')
+  const system = read.system ? read.system.toUpperCase() : undefined
+  return [system, read.supply].filter(Boolean).join(' · ')
+}
+
+/**
+ * A case card: three lines at most, and never a line of raw notes.
+ *
+ * Anything that could not be read is left out rather than shown as it was typed.
+ * A raw line looks like data, so it is worse than a missing one — it takes a
+ * second reading to work out that the app did not understand the booking.
+ */
+function CaseCard({ described, compact = false }) {
+  const { read, surgeonColour } = described
+  const system = systemLine(read)
+  return (
+    <>
+      <div style={{ fontSize: 14, fontWeight: 600, color: colour.navy }}>
+        {read.patient}
+        <span style={{ color: colour.inkFainter, fontWeight: 400 }}> / </span>
+        <span style={{ color: surgeonColour }}>{read.surgeon}</span>
+      </div>
+      {read.operation && (
+        <div style={{ fontSize: 12.5, color: colour.ink, marginTop: 2 }}>{read.operation}</div>
+      )}
+      {system && (
+        <div style={{ fontSize: 12.5, color: colour.inkFaint, marginTop: 2, letterSpacing: '0.2px' }}>
+          {system}
+        </div>
+      )}
+    </>
+  )
+}
+
+// RHH first, matching the order the case plan and the emailed document use.
+const HOSPITAL_RANK = { RHH: 0, CLV: 1 }
+
+/**
+ * Groups a day's cases under their hospital, and leaves everything else after.
+ *
+ * The hospital is on the card's heading rather than the card, since every card
+ * beneath a heading shares it.
+ */
+function groupByHospital(events) {
+  const groups = new Map()
+  const other = []
+  for (const event of events) {
+    const described = describe(event)
+    if (!described.isCase) { other.push({ event, described }); continue }
+    const code = described.read.hospital || hospitalCode(event.location) || 'Other'
+    if (!groups.has(code)) groups.set(code, [])
+    groups.get(code).push({ event, described })
+  }
+  const ordered = [...groups.entries()].sort((a, b) =>
+    (HOSPITAL_RANK[a[0]] ?? 9) - (HOSPITAL_RANK[b[0]] ?? 9) || a[0].localeCompare(b[0]))
+  return { groups: ordered, other }
 }
 
 function formatTime(dateStr) {
@@ -154,7 +211,7 @@ export default function TodayView({ user, onBack }) {
                   <span style={{ fontSize:10.5, color: tod?colour.accent:'rgba(255,255,255,0.5)', fontWeight: tod?'700':'400', marginBottom:4 }}>{DAYS[date.getDay()]}</span>
                   <span style={{ fontSize:16, fontWeight: sel||tod?'700':'400', color: tod?colour.accent:'white', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{date.getDate()}</span>
                   <div style={{ display:'flex', gap:2, marginTop:4, height:6 }}>
-                    {dayEvs.slice(0,3).map((e,j) => <div key={j} style={{ width:5, height:5, borderRadius:'50%', background: describe(e).accent }} />)}
+                    {dayEvs.slice(0,3).map((e,j) => <div key={j} style={{ width:5, height:5, borderRadius:'50%', background: describe(e).border }} />)}
                   </div>
                 </button>
               )
@@ -190,20 +247,9 @@ export default function TodayView({ user, onBack }) {
                     {dayEvs.slice(0,3).map(e => {
                       const d = describe(e)
                       return (
-                        <div key={e.id} onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'white', borderRadius:8, marginBottom:4, cursor:'pointer', borderLeft:`3px solid ${d.accent}` }}>
+                        <div key={e.id} onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'white', borderRadius:8, marginBottom:4, cursor:'pointer', borderLeft:`3px solid ${d.border}` }}>
                           <div style={{ flex:1 }}>
-                            {d.isCase ? (
-                              <>
-                                <div style={{ fontSize:14, fontWeight:500, color:colour.navy }}>
-                                  {d.read.patient}
-                                  <span style={{ color:colour.inkFainter }}> / </span>
-                                  <span style={{ color:d.accentText }}>{d.read.surgeon}</span>
-                                </div>
-                                {systemLine(d.read) && (
-                                  <div style={{ fontSize:12.5, color:colour.inkFainter }}>{systemLine(d.read)}</div>
-                                )}
-                              </>
-                            ) : (
+                            {d.isCase ? <CaseCard described={d} compact /> : (
                               <>
                                 <div style={{ fontSize:14, fontWeight:500, color:colour.navy }}>{e.title}</div>
                                 {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFainter }}>{formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}{e.location?` · ${e.location}`:''}</div>}
@@ -255,45 +301,45 @@ export default function TodayView({ user, onBack }) {
             </div>
           )}
 
-          {!loading && timedEvents.length > 0 && (
-            <div>
-              <div style={{ fontSize:12.5, fontWeight:600, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>Schedule</div>
-              {timedEvents.map(e => {
-                const d = describe(e)
-                return (
-                  <div key={e.id} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', display:'flex', border:'1px solid rgba(26,43,74,0.06)' }}>
-                    <div style={{ width:5, background:d.accent, flexShrink:0 }} />
-                    <div style={{ padding:'12px 14px', flex:1 }}>
-                      {d.isCase ? (
-                        <>
-                          {/* Two lines and nothing else. Everything the old
-                              version added here — the raw title, a second kit
-                              line, the time — either repeated something or moved
-                              often enough to be misleading. */}
-                          <div style={{ fontSize:14, fontWeight:600, color:colour.navy }}>
-                            {d.read.patient}
-                            <span style={{ color:colour.inkFainter, fontWeight:400 }}> / </span>
-                            <span style={{ color:d.accentText }}>{d.read.surgeon}</span>
-                          </div>
-                          {systemLine(d.read) && (
-                            <div style={{ fontSize:12.5, color:colour.inkFaint, marginTop:3 }}>{systemLine(d.read)}</div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <div style={{ fontSize:14, fontWeight:600, color:colour.navy, marginBottom:3 }}>{e.title}</div>
-                          {/* Meetings and handovers keep their times: unlike a
-                              theatre list, those do not move. */}
-                          {formatTime(e.start) && <div style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:e.location?3:0 }}>🕐 {formatTime(e.start)}{formatTime(e.end)?` – ${formatTime(e.end)}`:''}</div>}
-                          {e.location && <div style={{ fontSize:12.5, color:colour.inkFaint }}>📍 {e.location}</div>}
-                        </>
-                      )}
+          {!loading && timedEvents.length > 0 && (() => {
+            const { groups, other } = groupByHospital(timedEvents)
+            const card = ({ event, described }) => (
+              <div key={event.id} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', display:'flex', border:'1px solid rgba(26,43,74,0.06)' }}>
+                <div style={{ width:5, background:described.border, flexShrink:0 }} />
+                <div style={{ padding:'12px 14px', flex:1 }}>
+                  {described.isCase ? <CaseCard described={described} /> : (
+                    <>
+                      <div style={{ fontSize:14, fontWeight:600, color:colour.navy, marginBottom:3 }}>{event.title}</div>
+                      {/* Meetings and handovers keep their times: unlike a
+                          theatre list, those do not move. */}
+                      {formatTime(event.start) && <div style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:event.location?3:0 }}>🕐 {formatTime(event.start)}{formatTime(event.end)?` – ${formatTime(event.end)}`:''}</div>}
+                      {event.location && <div style={{ fontSize:12.5, color:colour.inkFaint }}>📍 {event.location}</div>}
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+            return (
+              <div>
+                {groups.map(([code, items]) => (
+                  <div key={code} style={{ marginBottom:6 }}>
+                    <div style={{ fontSize:12.5, fontWeight:700, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>
+                      {code} · {items.length} case{items.length === 1 ? '' : 's'}
                     </div>
+                    {items.map(card)}
                   </div>
-                )
-              })}
-            </div>
-          )}
+                ))}
+                {other.length > 0 && (
+                  <div>
+                    <div style={{ fontSize:12.5, fontWeight:700, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>
+                      {groups.length ? 'Also on' : 'Schedule'}
+                    </div>
+                    {other.map(card)}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {!loading && !error && dayEvents.length === 0 && (
             <div style={{ textAlign:'center', padding:'40px 20px' }}>

@@ -1,4 +1,5 @@
 import { findSystems, findLoanSets, systemWords, findNavigation } from './systems.js'
+import { parseLabelledDescription, parseKitField, hospitalCode } from './labelledFields.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -269,6 +270,29 @@ export function splitOperationAndSystem(procedure, fromNotes) {
  *
  * @returns {{supply: string|undefined, kit: string|undefined}}
  */
+/**
+ * Whether one description of kit says anything the other has not already said.
+ *
+ * Filler is ignored, so "Mariner set" beside system MARINER reads as the same
+ * thing rather than as a second kit. Only a *subset* says nothing new: a
+ * candidate naming the system plus something else — "Diplomat + extra cages" — is
+ * naming a second thing the rep has to physically bring, and dropping it would
+ * lose it.
+ */
+export function addsNothingTo(candidate, existing) {
+  const plain = value => String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(?:set|sets|kit|kits|tray|trays|the|a)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const words = plain(candidate)
+  const already = plain(existing)
+  if (!words) return true
+  if (!already) return false
+  return words === already || already.includes(words)
+}
+
 export function describeSupply(system, kit) {
   const text = String(kit || '').trim()
   if (!text) return { supply: undefined, kit: undefined }
@@ -286,19 +310,7 @@ export function describeSupply(system, kit) {
 
   // Filler is stripped before comparing, so "Mariner set" against system MARINER
   // reads as the same thing rather than as an extra kit to bring.
-  const plain = value => String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\b(?:set|sets|kit|kits|tray|trays|the|a)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  const kitWords = plain(remainder)
-  const systemWords = plain(system)
-  // Only a kit that is a *subset* of the system says nothing new. A kit naming
-  // the system plus something else — "Diplomat + extra cages" — is naming a
-  // second thing the rep has to physically bring, and dropping it would lose it.
-  const saysNothingNew = !kitWords
-    || (systemWords && (kitWords === systemWords || systemWords.includes(kitWords)))
+  const saysNothingNew = addsNothingTo(remainder, system)
 
   return { supply, kit: saysNothingNew ? undefined : remainder }
 }
@@ -473,25 +485,8 @@ export function describeCase(titleSection, description) {
   // ── Operation ──
   // The notes are preferred: written out deliberately, rather than squeezed into
   // a title alongside everything else.
-  let operation = extractOperation(notes) || fromTitle.operation
-  if (operation) {
-    const drop = new Set([
-      ...systemWords(everything),
-      ...String(system || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
-      // Loan sets belong on the kit line. Left in, they appeared on both.
-      ...findLoanSets(everything).join(' ').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-    ])
-    const kept = trimJoiners(
-      stripSupply(operation).split(/\s+/).filter(word => {
-        const bare = word.toLowerCase().replace(/[^a-z0-9]/g, '')
-        return bare && !drop.has(bare)
-      }))
-    const rebuilt = tidy(toLastClinical(kept.join(' ')))
-    // Only accept the trimmed version if it still describes an operation. If
-    // taking the system out leaves nothing clinical behind, the line was naming
-    // the system rather than describing surgery, and there is no operation here.
-    operation = CLINICAL_HINT.test(rebuilt) ? rebuilt : undefined
-  }
+  const operation = cleanOperation(extractOperation(notes) || fromTitle.operation,
+    { system, context: everything, requireClinical: true })
 
   // ── Kit ──
   // Only what the system line does not already say. A TechnoMed loan set named
@@ -506,6 +501,46 @@ export function describeCase(titleSection, description) {
 
 
 /**
+ * Takes the system, the supply and any loan set out of an operation description.
+ *
+ * Shared by both routes into a case — a `Procedure:` label and a bare clinical
+ * line in the notes — so a system named inside the description is removed the
+ * same way whichever way it arrived, and can never appear on both the operation
+ * line and the system line.
+ *
+ * @param {object} o
+ * @param {string} [o.system]   the system, so its words can be removed
+ * @param {string} [o.context]  all the booking's text, for finding system names
+ * @param {boolean} [o.requireClinical] reject the result unless it still reads
+ *   clinically. Right for a line guessed out of free text, wrong for a labelled
+ *   field: someone who filled in "Procedure:" meant what they wrote there.
+ * @param {boolean} [o.truncate] cut the text off after its last clinical term.
+ */
+export function cleanOperation(text, o = {}) {
+  if (!text) return undefined
+  const { system, context = text, requireClinical = false, truncate = requireClinical } = o
+
+  const drop = new Set([
+    ...systemWords(context),
+    ...String(system || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
+    // Loan sets belong on the kit line. Left in, they appeared on both.
+    ...findLoanSets(context).join(' ').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  ])
+
+  const kept = trimJoiners(
+    stripSupply(text).split(/\s+/).filter(word => {
+      const bare = word.toLowerCase().replace(/[^a-z0-9]/g, '')
+      return bare && !drop.has(bare)
+    }))
+  const rebuilt = tidy(truncate ? toLastClinical(kept.join(' ')) : kept.join(' '))
+  if (!rebuilt) return undefined
+  // A guessed line that no longer reads clinically was naming the system rather
+  // than describing surgery, so there is no operation in it.
+  if (requireClinical && !CLINICAL_HINT.test(rebuilt)) return undefined
+  return rebuilt
+}
+
+/**
  * Reads a calendar booking into a case, or returns null if it is not one.
  *
  * The single entry point for "what is this booking?". Both the case plan and the
@@ -515,14 +550,65 @@ export function describeCase(titleSection, description) {
  * through exactly as it had been typed.
  */
 export function readBooking(title, description, { colourSurgeon } = {}) {
-  const parsed = parseCaseTitle(title, { colourSurgeon })
-  if (!parsed) return null
-  const described = describeCase(parsed.procedure, description)
+  const everything = `${title || ''}\n${description || ''}`
+  // Labelled fields first. Where the team has written "Surgeon: Fowler" there is
+  // nothing to infer, and inference was only ever a way of coping without them.
+  const raw = parseLabelledDescription(description)
+  // Identifiers are stripped on the way out of every labelled value, not only the
+  // patient one. A UR number in "Patient:" was already handled; a date of birth
+  // typed into "Procedure:" was not, and went straight to the screen.
+  const labelled = Object.fromEntries(
+    Object.entries(raw).map(([field, value]) => [field, stripIdentifiers(value)]))
+  const kitField = parseKitField(labelled.kit)
+  const fromTitle = parseCaseTitle(title, { colourSurgeon })
+
+  const patient = sanitisePatient(labelled.patient) || fromTitle?.patient
+  const surgeon = normaliseSurgeon(labelled.surgeon) || fromTitle?.surgeon
+  // Both names are needed. Without them this is a meeting, a list marker or a
+  // staffing entry, and calling it a case would put a half-blank card on the day.
+  if (!patient || !surgeon) return null
+
+  // Free-text reading still runs, as the fallback for whatever was not labelled.
+  const inferred = describeCase(fromTitle?.procedure, description)
+
+  // Two conventions are live in the calendar, and "Kit:" means something
+  // different in each.
+  //
+  // In a properly labelled booking it is the system field — that is what the
+  // label is for — so it is what the system line shows.
+  //
+  // In an older free-text booking, where "Kit:" is the only label on an otherwise
+  // prose note, it often names an *extra* set to bring while the title names the
+  // system: "Gill STRYKER CCI - Fowler" with "Kit: Stryker PSI on loan" is an
+  // implant system and a tray of patient-specific instruments, two things.
+  // Collapsing those would lose one.
+  //
+  // The presence of the other labels is what tells them apart.
+  const isLabelled = Boolean(labelled.patient || labelled.surgeon
+    || labelled.procedure || labelled.hospital)
+
+  const system = isLabelled
+    // Even here the title can have the better wording: "Kit: Mariner set" beside
+    // a title reading MARINER is the same system in worse words.
+    ? (kitField.system && !addsNothingTo(kitField.system, inferred.system)
+      ? kitField.system : (inferred.system || kitField.system))
+    : (inferred.system || kitField.system)
+  const supply = kitField.type || inferred.supply
+
   return {
-    patient: parsed.patient,
-    surgeon: parsed.surgeon,
-    surgeonSource: parsed.surgeonSource,
-    ...described,
-    navigation: findNavigation(`${title || ''}\n${description || ''}`).join(' + ') || undefined
+    patient,
+    surgeon,
+    surgeonSource: normaliseSurgeon(labelled.surgeon) ? 'label'
+      : (fromTitle?.surgeonSource || undefined),
+    // A labelled procedure is trusted as written, beyond having the system and
+    // supply lifted out of it so they cannot appear twice.
+    operation: cleanOperation(labelled.procedure, { system, context: everything })
+      || inferred.operation,
+    system,
+    supply,
+    // A labelled booking has said everything on the system line already.
+    kit: isLabelled ? undefined : inferred.kit,
+    hospital: hospitalCode(labelled.hospital),
+    navigation: findNavigation(everything).join(' + ') || undefined
   }
 }

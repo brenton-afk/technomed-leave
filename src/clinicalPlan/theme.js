@@ -133,11 +133,11 @@ export function contrastRatio(a, b) {
   return (light + 0.05) / (dark + 0.05)
 }
 
-// Google Calendar's Blueberry. Used for navigation cases rather than the deep
-// purple that reads as "blueberry" in isolation, because that purple sits right
-// next to Fowler's Grape accent and the whole point of an override is to be
-// distinguishable at a glance. This blue is unlike every surgeon accent in use.
-export const NAVIGATION_ACCENT = '#3F51B5'
+// The blueberry used for navigation cases. Note this sits close to Fowler's
+// Grape accent (#9333EA), so on a screen where the bar also carries the surgeon
+// it is a Fowler case and a navigation case that look most alike — raised, and
+// chosen anyway.
+export const NAVIGATION_ACCENT = '#4a1c96'
 
 /**
  * The bar colour for a case: its surgeon's, unless the case uses image guidance.
@@ -152,8 +152,13 @@ export function accentForCase(surgicalCase, dark = false) {
   return accentFor(surgicalCase?.surgeon, dark)
 }
 
-/** As accentForCase, but legible as text on the page's ground. */
+/**
+ * The surgeon's name, always in the surgeon's own colour.
+ *
+ * Deliberately not overridden for navigation. The override belongs on the bar,
+ * where it reads as a property of the case; on the name it would read as a claim
+ * about who is operating.
+ */
 export function accentTextForCase(surgicalCase, dark = false) {
-  if (surgicalCase?.navigation) return NAVIGATION_ACCENT
   return accentTextFor(surgicalCase?.surgeon, dark)
 }

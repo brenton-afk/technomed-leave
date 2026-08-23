@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import TodayView from './TodayView.jsx'
-import { NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
-import { accentTextFor } from '../clinicalPlan/theme.js'
+import { NAVIGATION_ACCENT, accentTextFor } from '../clinicalPlan/theme.js'
 
-// This screen used to print the calendar's event title exactly as it was typed,
-// which is why the system and kit showed through raw and, when the notes repeated
-// them, twice over. It now reads a booking through the same reader as the case
-// plan, so a case says the same thing wherever it appears.
+// A booking carries the case as labelled lines in its description. This screen
+// used to print the event title instead and stop there, which is why the system
+// and kit showed through raw and, when the notes repeated them, twice over.
+//
+// The rules these hold to: three lines at most, no label prefixes, nothing said
+// twice, and a field that could not be read left out rather than shown as typed.
 
 const USER = { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', token: 'tok' }
 
@@ -15,10 +16,26 @@ let events
 
 const at = (hour, day = 24) => `2026-08-${day}T${String(hour).padStart(2, '0')}:00:00+10:00`
 
-const booking = (id, title, extra = {}) => ({
-  id, title, description: '', location: 'RHH',
-  start: at(10), end: at(11), allDay: false, colorId: null, ...extra
+/** Labelled description lines, as the team writes them. */
+const notes = fields => Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n')
+
+const booking = (id, description, extra = {}) => ({
+  id,
+  title: 'Booking',
+  description,
+  location: null,
+  start: at(10), end: at(11), allDay: false,
+  colorId: '3', // Grape
+  ...extra
 })
+
+const GRAPE = '#8e24aa'
+
+/** jsdom reports colours as rgb(), so comparisons have to speak the same units. */
+function asRgb(hex) {
+  const [, r, g, b] = /^#(\w\w)(\w\w)(\w\w)$/.exec(hex)
+  return `rgb(${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)})`
+}
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -35,7 +52,6 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-/** Renders the day list and waits for it to settle. */
 async function show(list) {
   events = list
   const view = render(<TodayView user={USER} />)
@@ -43,99 +59,193 @@ async function show(list) {
   return view
 }
 
-describe('a case on the calendar view', () => {
-  it('shows the surname, the surgeon, and the system — and nothing else', async () => {
-    await show([booking('c1', 'Jackson MARINER - Fowler', {
-      description: 'C5/6 ACDF Mariner\nKit: Mariner (consignment)'
-    })])
+/** The colour of the strip down the left of the card containing `text`. */
+function borderFor(container, text) {
+  const strips = [...container.querySelectorAll('div')].filter(node => {
+    const strip = node.firstElementChild
+    return strip && strip.style.width === '5px' && node.textContent.includes(text)
+  })
+  return strips[0]?.firstElementChild?.style?.background
+}
+
+describe('reading the labelled description', () => {
+  it('shows patient, surgeon, procedure and system — and nothing else', async () => {
+    await show([booking('c1', notes({
+      Surgeon: 'Fowler', Patient: 'Jackson', Procedure: 'C5/6 ACDF',
+      Kit: 'Dakota (Consignment)', Hospital: 'RHH'
+    }))])
 
     await waitFor(() => expect(screen.getByText('Jackson')).toBeInTheDocument())
     expect(screen.getByText('Fowler')).toBeInTheDocument()
-    expect(screen.getByText('MARINER · Consignment')).toBeInTheDocument()
+    expect(screen.getByText('C5/6 ACDF')).toBeInTheDocument()
+    expect(screen.getByText('DAKOTA · Consignment')).toBeInTheDocument()
 
-    // The raw title is gone, and so is everything it used to drag in.
-    expect(screen.queryByText('Jackson MARINER - Fowler')).not.toBeInTheDocument()
-    expect(screen.queryByText(/^Kit:/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/C5\/6 ACDF/)).not.toBeInTheDocument()
+    // No label survives, and no raw line either.
+    expect(screen.queryByText(/Surgeon:|Patient:|Procedure:|Kit:|Hospital:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Dakota (Consignment)')).not.toBeInTheDocument()
+    expect(screen.queryByText('Booking')).not.toBeInTheDocument()
   })
 
-  it('never says the system twice, however the booking repeated it', async () => {
-    // The exact shape reported: the systems in the title, and again as a
-    // reordered list in the notes.
-    await show([booking('c1', 'Kennedy REFORM/ASCOT/ATHLET - JPW', {
-      description: 'Kit: Athlet, Ascot + Reform'
-    })])
-
-    await waitFor(() => expect(screen.getByText('Kennedy')).toBeInTheDocument())
-    expect(screen.getByText('REFORM/ASCOT/ATHLET')).toBeInTheDocument()
-    expect(screen.queryByText(/Athlet, Ascot/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Kit:/)).not.toBeInTheDocument()
+  it.each([
+    ['full words', { Surgeon: 'Ibbett', Patient: 'Horne', Procedure: 'L4/5 TLIF', Kit: 'Mariner (Loan)' }],
+    ['short forms', { Surg: 'Ibbett', Pt: 'Horne', Op: 'L4/5 TLIF', Kit: 'Mariner (Loan)' }],
+    ['lower case', { surgeon: 'Ibbett', patient: 'Horne', surgery: 'L4/5 TLIF', kit: 'Mariner (Loan)' }],
+    ['mixed', { surg: 'Ibbett', Patient: 'Horne', operation: 'L4/5 TLIF', Kit: 'Mariner (Loan)' }]
+  ])('reads the same case written with %s', async (_style, fields) => {
+    await show([booking('c1', notes(fields))])
+    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
+    expect(screen.getByText('Ibbett')).toBeInTheDocument()
+    expect(screen.getByText('L4/5 TLIF')).toBeInTheDocument()
+    expect(screen.getByText('MARINER · Loan')).toBeInTheDocument()
   })
 
-  it('merges a separate kit line into the one system line', async () => {
-    await show([booking('c1', 'Fox STRYKER CCI - Fowler', {
-      description: 'Kit: Stryker PSI\nConsignment'
-    })])
-
-    await waitFor(() => expect(screen.getByText('Fox')).toBeInTheDocument())
-    expect(screen.getByText('STRYKER CCI · Consignment')).toBeInTheDocument()
-    expect(screen.queryByText('Stryker PSI')).not.toBeInTheDocument()
-  })
-
-  it('reads the supply wherever it was written', async () => {
-    await show([
-      booking('c1', 'Panthi LONESTAR (consignment) - Gupta'),
-      booking('c2', 'Horne DAKOTA - Ibbett', { description: 'DAKOTA loan kit', start: at(13), end: at(14) })
-    ])
+  it('reads fields written on one line', async () => {
+    await show([booking('c1',
+      'Pt: Panthi | Surg: Gupta | Op: C4/5 ACDF | Kit: Shoreline (Consignment) | Hosp: RHH')])
     await waitFor(() => expect(screen.getByText('Panthi')).toBeInTheDocument())
-    expect(screen.getByText('LONESTAR · Consignment')).toBeInTheDocument()
-    expect(screen.getByText('DAKOTA · Loan')).toBeInTheDocument()
+    expect(screen.getByText('C4/5 ACDF')).toBeInTheDocument()
+    expect(screen.getByText('SHORELINE · Consignment')).toBeInTheDocument()
+    // No label leaked into a neighbouring value.
+    expect(screen.queryByText(/Surg:|Kit:/)).not.toBeInTheDocument()
+  })
+
+  it('splits the kit into the system and how it is supplied', async () => {
+    await show([
+      booking('c1', notes({ Pt: 'Horne', Surg: 'Ibbett', Kit: 'Dakota (Consignment)' })),
+      booking('c2', notes({ Pt: 'Gill', Surg: 'Fowler', Kit: 'Mariner (Loan)' }), { start: at(13), end: at(14) })
+    ])
+    await waitFor(() => expect(screen.getByText('DAKOTA · Consignment')).toBeInTheDocument())
+    expect(screen.getByText('MARINER · Loan')).toBeInTheDocument()
+  })
+
+  it('omits a line it cannot read rather than showing raw text', async () => {
+    // No procedure and no kit. Two of the three lines simply are not there.
+    const { container } = await show([booking('c1', notes({ Pt: 'Kennedy', Surg: 'JPW' }))])
+    await waitFor(() => expect(screen.getByText('Kennedy')).toBeInTheDocument())
+    expect(screen.getByText('JPW')).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/Pt:|Surg:/)
+  })
+
+  it('shows the system alone when no supply was given', async () => {
+    await show([booking('c1', notes({ Pt: 'Fox', Surg: 'Fowler', Kit: 'Stryker CCI' }))])
+    await waitFor(() => expect(screen.getByText('Fox')).toBeInTheDocument())
+    expect(screen.getByText('STRYKER CCI')).toBeInTheDocument()
+  })
+
+  it('never says the system on both the procedure and the system line', async () => {
+    // Someone repeats the system inside the procedure field.
+    await show([booking('c1', notes({
+      Pt: 'Panthi', Surg: 'Gupta', Procedure: 'C4/5 ACDF Shoreline', Kit: 'Shoreline (Consignment)'
+    }))])
+    await waitFor(() => expect(screen.getByText('C4/5 ACDF')).toBeInTheDocument())
+    expect(screen.getByText('SHORELINE · Consignment')).toBeInTheDocument()
+    expect(screen.queryByText(/C4\/5 ACDF Shoreline/)).not.toBeInTheDocument()
   })
 
   it('leaves the surgeon in their own colour', async () => {
-    await show([booking('c1', 'Jackson MARINER - Fowler')])
+    await show([booking('c1', notes({ Pt: 'Jackson', Surg: 'Fowler', Kit: 'Dakota (Loan)' }))])
     await waitFor(() => expect(screen.getByText('Fowler')).toBeInTheDocument())
     expect(screen.getByText('Fowler')).toHaveStyle({ color: accentTextFor('Fowler') })
   })
 
-  it('shows a case with no system as just the two names', async () => {
-    await show([booking('c1', 'Kennedy - JPW')])
-    await waitFor(() => expect(screen.getByText('Kennedy')).toBeInTheDocument())
-    expect(screen.getByText('JPW')).toBeInTheDocument()
+  it('keeps working on a booking with no labels at all', async () => {
+    // The old free-text shape. Still read, so nothing that works today breaks.
+    await show([booking('c1', 'C5/6 ACDF Mariner, consignment', { title: 'Jackson MARINER - Fowler' })])
+    await waitFor(() => expect(screen.getByText('Jackson')).toBeInTheDocument())
+    expect(screen.getByText('MARINER · Consignment')).toBeInTheDocument()
   })
 })
 
-describe('navigation cases override the surgeon colour', () => {
-  it.each([
-    ['Varioguide', 'Horne DAKOTA Varioguide - Ibbett', ''],
-    ['Brainlab', 'Horne DAKOTA - Ibbett', 'L4/5 TLIF with Brainlab'],
-    ['AIRO', 'Horne DAKOTA - Ibbett', 'AIRO scanner booked']
-  ])('colours a %s case blueberry', async (_platform, title, description) => {
-    await show([booking('c1', title, { description })])
-    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
-    // Ibbett's own accent is a yellow; the override has to win.
-    expect(screen.getByText('Ibbett')).toHaveStyle({ color: NAVIGATION_ACCENT })
+describe('grouping by hospital', () => {
+  const day = [
+    booking('c1', notes({ Pt: 'Jackson', Surg: 'Fowler', Kit: 'Dakota (Loan)', Hospital: 'RHH' })),
+    booking('c2', notes({ Pt: 'Horne', Surg: 'Ibbett', Kit: 'Mariner (Loan)', Hosp: 'Calvary Lenah Valley' }),
+      { start: at(12), end: at(13) }),
+    booking('c3', notes({ Pt: 'Gill', Surg: 'Fowler', Kit: 'Shoreline (Consignment)', Hosp: 'RHH' }),
+      { start: at(14), end: at(15) })
+  ]
+
+  it('puts a heading over each hospital, with RHH first', async () => {
+    const { container } = await show(day)
+    await waitFor(() => expect(screen.getByText('Jackson')).toBeInTheDocument())
+    expect(screen.getByText('RHH · 2 cases')).toBeInTheDocument()
+    expect(screen.getByText('CLV · 1 case')).toBeInTheDocument()
+    // RHH's heading comes before Calvary's in the document.
+    const text = container.textContent
+    expect(text.indexOf('RHH · 2 cases')).toBeLessThan(text.indexOf('CLV · 1 case'))
   })
 
-  it('leaves an ordinary case on its surgeon colour', async () => {
-    await show([booking('c1', 'Horne DAKOTA - Ibbett')])
-    await waitFor(() => expect(screen.getByText('Ibbett')).toBeInTheDocument())
-    expect(screen.getByText('Ibbett')).toHaveStyle({ color: accentTextFor('Ibbett') })
+  it('does not repeat the hospital on the card', async () => {
+    await show([day[1]])
+    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
+    // Once, as the heading — not again beneath it.
+    expect(screen.getAllByText(/CLV/)).toHaveLength(1)
+    expect(screen.queryByText(/Calvary Lenah Valley/)).not.toBeInTheDocument()
+  })
+
+  it('falls back to the event location when no hospital was labelled', async () => {
+    await show([booking('c1', notes({ Pt: 'Streets', Surg: 'JPW', Kit: 'Lonestar (Loan)' }),
+      { location: 'Royal Hobart Hospital' })])
+    await waitFor(() => expect(screen.getByText('Streets')).toBeInTheDocument())
+    expect(screen.getByText('RHH · 1 case')).toBeInTheDocument()
+  })
+})
+
+describe('the left border', () => {
+  it('uses the calendar colour', async () => {
+    const { container } = await show([
+      booking('c1', notes({ Pt: 'Jackson', Surg: 'Fowler', Kit: 'Dakota (Loan)' }), { colorId: '3' })
+    ])
+    await waitFor(() => expect(screen.getByText('Jackson')).toBeInTheDocument())
+    expect(borderFor(container, 'Jackson')).toBe(asRgb(GRAPE))
+  })
+
+  it.each([
+    ['Varioguide in the procedure', { Procedure: 'L3/4 decompression Varioguide' }],
+    ['Brainlab in the procedure', { Procedure: 'L4/5 TLIF with Brainlab' }],
+    ['AIRO in the procedure', { Procedure: 'L5/S1 ALIF, AIRO' }]
+  ])('turns blueberry for %s', async (_name, extra) => {
+    const { container } = await show([
+      booking('c1', notes({ Pt: 'Horne', Surg: 'Ibbett', Kit: 'Dakota (Loan)', ...extra }), { colorId: '3' })
+    ])
+    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
+    expect(borderFor(container, 'Horne')).toBe(asRgb(NAVIGATION_ACCENT))
+  })
+
+  it('turns blueberry for a platform named in the title', async () => {
+    const { container } = await show([
+      booking('c1', notes({ Pt: 'Horne', Surg: 'Ibbett', Kit: 'Dakota (Loan)' }),
+        { title: 'Horne — Brainlab navigation', colorId: '3' })
+    ])
+    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
+    expect(borderFor(container, 'Horne')).toBe(asRgb(NAVIGATION_ACCENT))
   })
 
   it('is not fooled by a word that merely contains "airo"', async () => {
-    // "Cairo" must not turn a case blue.
-    await show([booking('c1', 'Horne DAKOTA - Ibbett', { description: 'Cairo conference follow-up' })])
-    await waitFor(() => expect(screen.getByText('Ibbett')).toBeInTheDocument())
-    expect(screen.getByText('Ibbett')).toHaveStyle({ color: accentTextFor('Ibbett') })
+    const { container } = await show([
+      booking('c1', notes({ Pt: 'Horne', Surg: 'Ibbett', Kit: 'Dakota (Loan)' }),
+        { title: 'Cairo conference debrief', colorId: '3' })
+    ])
+    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
+    expect(borderFor(container, 'Horne')).toBe(asRgb(GRAPE))
   })
 })
 
 describe('everything that is not a case', () => {
   it('keeps its title and its time, since meetings do not move', async () => {
-    await show([booking('m1', 'Spine Logistics Meeting', { start: at(8), end: at(9) })])
+    await show([booking('m1', '', { title: 'Spine Logistics Meeting', start: at(8), end: at(9) })])
     await waitFor(() => expect(screen.getByText('Spine Logistics Meeting')).toBeInTheDocument())
     expect(screen.getByText(/8:00am/)).toBeInTheDocument()
+  })
+
+  it('sits after the hospitals rather than among them', async () => {
+    const { container } = await show([
+      booking('m1', '', { title: 'Spine Logistics Meeting', start: at(8), end: at(9) }),
+      booking('c1', notes({ Pt: 'Jackson', Surg: 'Fowler', Kit: 'Dakota (Loan)', Hospital: 'RHH' }))
+    ])
+    await waitFor(() => expect(screen.getByText('Jackson')).toBeInTheDocument())
+    const text = container.textContent
+    expect(text.indexOf('RHH · 1 case')).toBeLessThan(text.indexOf('Also on'))
   })
 
   it('leaves an all-day entry alone', async () => {
@@ -147,9 +257,10 @@ describe('everything that is not a case', () => {
   })
 
   it('never shows a patient identifier', async () => {
-    const { container } = await show([booking('c1', 'Smith UR 4457821 MARINER - Fowler', {
-      description: 'C5/6 ACDF DOB 14/03/1958'
-    })])
+    const { container } = await show([booking('c1', notes({
+      Patient: 'Smith UR 4457821', Surgeon: 'Fowler',
+      Procedure: 'C5/6 ACDF DOB 14/03/1958', Kit: 'Dakota (Loan)'
+    }))])
     await waitFor(() => expect(screen.getByText('Smith')).toBeInTheDocument())
     expect(container.textContent).not.toMatch(/4457821|1958/)
   })
