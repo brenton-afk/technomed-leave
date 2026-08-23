@@ -89,12 +89,6 @@ async function fileToPage(file) {
   }
 }
 
-/** A YYYY-MM-DD date as the team writes it. */
-function formatAusDate(iso) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''))
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || '')
-}
-
 /** Today, on this device, as YYYY-MM-DD. */
 function deviceToday() {
   const now = new Date()
@@ -578,15 +572,17 @@ export default function UsageScan({ user }) {
               <Field label="First name" value={caseRecord.patientFirstName} onChange={v => updateCase('patientFirstName', v)} />
               <Field label="UR number" value={caseRecord.patientUrNumber} onChange={v => updateCase('patientUrNumber', v)} />
               <Field label="Date" type="date" value={caseRecord.date} onChange={v => updateCase('date', v)} />
-              {/* Filled in from the device, so it is right for a form scanned on
-                  the day. Said out loud rather than assumed, because it is the
-                  one field nobody thinks to check — and it decides the folder
-                  the case is filed in. */}
-              {caseRecord.dateSource === 'scan' && caseRecord.dateOnForm !== caseRecord.date && (
+              {/* A quiet confirmation, not a question.
+                  Forms are always scanned in theatre on the day of surgery, so
+                  today's date is right by definition and a date read off the form
+                  that differs is a misread. An earlier version said so — "the form
+                  looks like it says 18/08/2026" — which invited replacing a
+                  correct date with a wrong one. The field is still editable for
+                  the day that assumption does not hold; it is just not asked
+                  about. */}
+              {caseRecord.dateSource === 'scan' && (
                 <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, margin: '-4px 0 10px' }}>
-                  {caseRecord.dateOnForm
-                    ? <>Set to today. The form looks like it says <strong style={{ color: NAVY }}>{formatAusDate(caseRecord.dateOnForm)}</strong> — change it above if the surgery was not today.</>
-                    : <>Set to today, from this device. Change it above if the surgery was not today.</>}
+                  Today, from this device.
                 </div>
               )}
               <Field label="Surgeon" value={caseRecord.surgeonName} onChange={v => updateCase('surgeonName', v)} />
