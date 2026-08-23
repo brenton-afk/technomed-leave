@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { STAFF } from '../staffConfig.js'
+import { rememberedUser, forgetUser } from '../lastUser.js'
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
@@ -43,7 +44,17 @@ function BuildStamp() {
 }
 
 export default function PinScreen({ onLogin }) {
-  const [step, setStep] = useState('select')
+  // Read once, before the first paint. Deciding this in an effect instead shows
+  // the roster and the quote for a frame and then replaces them, which reads as
+  // the app changing its mind about who you are.
+  const [resumed] = useState(() => rememberedUser())
+  // Which name lookup is the live one. Tapping "Not Brent?" while the resume's
+  // lookup was still in flight put the answer on screen anyway: the reply landed
+  // after the screen had changed and set the step back to Brent's keypad, so the
+  // tap appeared to do nothing at all. Also covers picking one name and then
+  // quickly picking another.
+  const selection = useRef(0)
+  const [step, setStep] = useState(resumed ? 'resuming' : 'select')
   const [selectedEmail, setSelectedEmail] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -67,6 +78,13 @@ export default function PinScreen({ onLogin }) {
   // and a cancelled prompt looks the same from here — so either way the button
   // appears as a fallback rather than retrying in a loop.
   const [passkeyAuto, setPasskeyAuto] = useState('idle')
+
+  // Straight to the keypad for the person whose phone this is. Their Face ID
+  // prompt then comes from the effect below, so a sign-in is one glance with no
+  // name to find and nothing to type.
+  useEffect(() => {
+    if (resumed) handleStaffSelect(resumed)
+  }, [])
 
   // Face ID / Touch ID / device passcode. Additive only: the PIN keypad stays
   // on screen, so a device that cannot do this is never locked out.
@@ -130,7 +148,15 @@ export default function PinScreen({ onLogin }) {
   // somewhere visible: previously an error here left the user on the select
   // screen with no spinner and no message, which looked like the app simply
   // not recognising them.
+  /** Abandons any lookup in flight, so a late reply cannot reinstate it. */
+  function abandonSelection() {
+    selection.current += 1
+    setChecking(false)
+  }
+
   async function handleStaffSelect(email) {
+    const mine = selection.current + 1
+    selection.current = mine
     setSelectedEmail(email); setPin(''); setConfirmPin(''); setError(''); setPinInput('')
     setResetRequested(false)
     setPasskeyAuto('idle')
@@ -150,6 +176,7 @@ export default function PinScreen({ onLogin }) {
         canUsePasskey ? ask({ action: 'passkey-available', email }).catch(() => ({})) : Promise.resolve({})
       ])
       if (data.error) throw new Error(data.error)
+      if (selection.current !== mine) return
       setFirstTime(!data.hasPin)
       setPasskeyAvailable(Boolean(data.hasPin && canUsePasskey && passkey.available))
       // Never signed in → the welcome screen, which explains what the portal
@@ -157,10 +184,14 @@ export default function PinScreen({ onLogin }) {
       // the keypad.
       setStep(data.hasPin ? 'pin' : 'welcome')
     } catch (err) {
+      if (selection.current !== mine) return
       // Clearing the selection matters: the <select> only fires onChange when
       // the value changes, so without this, picking the same name again to
       // retry would do nothing.
       setSelectedEmail('')
+      // Including a resume that could not reach the server: the roster is the
+      // only screen with a way forward, so never stay on 'resuming'.
+      setStep('select')
       setError(`Could not reach the server (${err.message}). Check your connection and select your name again.`)
     }
     setChecking(false)
@@ -294,8 +325,8 @@ export default function PinScreen({ onLogin }) {
   const desktopInputStyle = { width:'100%', padding:'16px', border:'2px solid rgba(255,255,255,0.2)', borderRadius:'12px', fontSize:'32px', background:'rgba(255,255,255,0.08)', color:'white', outline:'none', textAlign:'center', letterSpacing:'16px', boxSizing:'border-box', fontFamily:'monospace', WebkitTextSecurity: step === 'pin' ? 'disc' : 'disc' }
 
   const titleMap = {
-    pin: `Hi, ${staff?.name?.split(' ')[0] || ''}`,
-    setup: firstTime ? `Welcome, ${staff?.name?.split(' ')[0] || ''}` : 'Create your PIN',
+    pin: `Hi, ${staff?.firstName || ''}`,
+    setup: firstTime ? `Welcome, ${staff?.firstName || ''}` : 'Create your PIN',
     confirm: 'Confirm your PIN'
   }
   const hintMap = {
@@ -304,6 +335,29 @@ export default function PinScreen({ onLogin }) {
       ? "First time signing in — choose a 4-digit PIN you'll use from now on"
       : 'Choose a 4-digit PIN for your account',
     confirm: 'Enter your PIN again to confirm'
+  }
+
+  // ─── Resuming: this device's person, going straight to their keypad ───
+  // On screen for one round trip. It says the name so that a wrong one is
+  // obvious immediately rather than after a Face ID prompt, and it offers the
+  // roster the moment there is any doubt.
+  if (step === 'resuming') {
+    const who = STAFF.find(s => s.email === resumed)
+    return (
+      <div style={w}>
+        <div style={top}>
+          <img src="/logo.png" alt="TechnoMed" style={{ height:'48px', width:'auto', marginBottom:'6px' }} />
+          <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'32px' }}>Staff Portal</div>
+          <div style={{ fontSize:'22px', fontWeight:'700', color:'white', marginBottom:'8px' }}>Hi, {who?.firstName || ''}</div>
+          <div style={{ fontSize:'14px', color:'rgba(255,255,255,0.55)' }}>Signing you in…</div>
+          <button style={{ marginTop:28, background:'transparent', border:'none', color:'rgba(255,255,255,0.4)', fontSize:14, cursor:'pointer', padding:12 }}
+            onClick={() => { forgetUser(); abandonSelection(); setStep('select'); setSelectedEmail(''); setChecking(false); setError('') }}>
+            Not {who?.firstName || 'you'}?
+          </button>
+        </div>
+        <BuildStamp />
+      </div>
+    )
   }
 
   // ─── Start page: first time this person has ever signed in ───
@@ -356,7 +410,7 @@ export default function PinScreen({ onLogin }) {
 
           <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.35)', textAlign: 'center', lineHeight: 1.6, paddingBottom: 20 }}>
             Signing in as {staff?.email}.<br />
-            Not you? <span onClick={() => { setStep('select'); setSelectedEmail(''); setFirstTime(false) }}
+            Not you? <span onClick={() => { forgetUser(); abandonSelection(); setStep('select'); setSelectedEmail(''); setFirstTime(false) }}
               style={{ color: '#2ab5a0', cursor: 'pointer', textDecoration: 'underline' }}>Choose a different name</span>
           </div>
         </div>
@@ -511,7 +565,9 @@ export default function PinScreen({ onLogin }) {
 
       <div style={{ display:'flex', justifyContent:'center', paddingBottom:'32px' }}>
         <button style={{ background:'transparent', border:'none', color:'rgba(255,255,255,0.4)', fontSize:'14px', cursor:'pointer', padding:'12px' }}
-          onClick={() => { setStep('select'); setSelectedEmail(''); setPin(''); setConfirmPin(''); setError(''); setPinInput(''); setFirstTime(false); setResetRequested(false); setPasskeyAuto('idle') }}>← Back</button>
+          onClick={() => { forgetUser(); abandonSelection(); setStep('select'); setSelectedEmail(''); setPin(''); setConfirmPin(''); setError(''); setPinInput(''); setFirstTime(false); setResetRequested(false); setPasskeyAuto('idle') }}>
+          {resumed ? `Not ${staff?.firstName || 'you'}?` : '← Back'}
+        </button>
       </div>
     </div>
   )

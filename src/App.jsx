@@ -10,6 +10,7 @@ import ClinicalPlan from './pages/ClinicalPlan.jsx'
 import Timesheets from './pages/Timesheets.jsx'
 import AdminPortal from './pages/admin/AdminPortal.jsx'
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
+import { rememberUser } from './lastUser.js'
 import FileBrowser from './pages/FileBrowser.jsx'
 import { KitHub, MeHub, ComingSoonSection } from './pages/Hubs.jsx'
 import PromptBanner from './pages/PromptBanner.jsx'
@@ -83,6 +84,9 @@ export default function App() {
 
   function handleLogin(userData) {
     setUser(userData)
+    // Every route in — PIN, first-time setup, passkey — arrives here, so this is
+    // the one place the device's person is recorded.
+    rememberUser(userData.email)
     sessionStorage.setItem('tm_user', JSON.stringify(userData))
     sessionStorage.setItem('tm_login_time', Date.now().toString())
     setNav({ tab: 'cases', sub: null })
