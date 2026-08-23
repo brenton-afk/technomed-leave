@@ -264,7 +264,7 @@ async function handleSave(req, res, session) {
 async function handleEmail(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { usageId, only } = req.body || {}
+  const { usageId, only, testOnly } = req.body || {}
   if (!usageId) throw badRequest('No usage record specified')
 
   const record = await getUsageRecord(usageId)
@@ -282,36 +282,58 @@ async function handleEmail(req, res, session) {
 
   // `only` lets the rep retry a single distributor that failed earlier.
   const targets = only?.length ? [...groups.keys()].filter(k => only.includes(k)) : [...groups.keys()]
-  const cc = ccFor(session.email)
+
+  // A test send goes to whoever is signed in, and to nobody else.
+  //
+  // The address is taken from the session and never from the request, which is
+  // the whole point: this attaches a workbook of patient identifiers, so an
+  // endpoint that emailed it to an address supplied by the caller would be a way
+  // to walk that data out of the building with one valid staff login. There is no
+  // way to name a recipient here — only to say "me".
+  const test = Boolean(testOnly)
+  const cc = test ? [] : ccFor(session.email)
   const results = []
 
   for (const key of targets) {
     const distributor = DISTRIBUTORS[key]
     const items = groups.get(key)
+    const to = test ? [session.email] : distributor.to
     try {
       const xlsx = await buildUsageWorkbook(record, items)
       await sendUsageEmail({
-        to: distributor.to,
+        to,
         cc,
         subject: record.folderName,
         distributorLabel: distributor.name,
         xlsx,
-        xlsxFilename: `${record.folderName}_Usage_Sheet.xlsx`
+        xlsxFilename: `${record.folderName}_Usage_Sheet.xlsx`,
+        test: test ? { wouldSendTo: distributor.to } : undefined
       })
-      results.push({ key, name: distributor.name, to: distributor.to, itemCount: items.length, ok: true, sentAt: new Date().toISOString() })
+      results.push({ key, name: distributor.name, to, itemCount: items.length, ok: true, test, sentAt: new Date().toISOString() })
     } catch (err) {
-      results.push({ key, name: distributor.name, to: distributor.to, itemCount: items.length, ok: false, error: err.message })
+      results.push({ key, name: distributor.name, to, itemCount: items.length, ok: false, test, error: err.message })
     }
   }
 
-  // Keep the latest outcome per distributor so a retry replaces the failure.
-  const merged = [...(record.emailsSent || [])].filter(e => !results.some(r => r.key === e.key))
-  const updated = { ...record, emailsSent: [...merged, ...results], updatedAt: new Date().toISOString() }
-  await saveUsageRecord(updated)
+  // A test is not recorded against the case. Otherwise it would show as sent, and
+  // the distributor would never get the real one — a test that quietly satisfies
+  // the thing it was testing is worse than no test.
+  const updated = test
+    ? record
+    : (() => {
+      // Keep the latest outcome per distributor so a retry replaces the failure.
+      const merged = [...(record.emailsSent || [])].filter(e => !results.some(r => r.key === e.key))
+      return { ...record, emailsSent: [...merged, ...results], updatedAt: new Date().toISOString() }
+    })()
+  if (!test) await saveUsageRecord(updated)
 
   const failed = results.filter(r => !r.ok)
   return res.status(failed.length && failed.length === results.length ? 502 : 200).json({
     results,
+    test,
+    // Said back explicitly, so the app can show where it actually went rather
+    // than assume.
+    sentTo: test ? session.email : undefined,
     allSent: failed.length === 0,
     record: updated
   })

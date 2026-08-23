@@ -102,6 +102,14 @@ The domain rules live apart from the route so they can be tested and edited with
 
 Invariants worth preserving:
 
+- **A test send goes to the signed-in user and nowhere else.** `testOnly: true` on
+  the email action replaces every distributor recipient with `session.email`, drops
+  the CC, marks the subject `[TEST]`, and says in the body who it would have gone
+  to. The address is taken from the session and *never* from the request body:
+  this attaches a workbook of patient identifiers, so an endpoint that mailed it to
+  a caller-supplied address would be a way to walk that data out on one valid staff
+  login. A test is also not written to `emailsSent`, so it cannot make a case look
+  sent when the distributor has had nothing.
 - **Nothing uncertain is ever sent.** `groupByDistributor` skips anything excluded, flagged, or without a resolved distributor. Held-back rows still appear on the Dropbox sheet marked `YES` in Manual Review Flag; they just do not leave the building.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending. Emails record a per-distributor outcome and a single failure can be retried with `{ only: [key] }`.
 - **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.

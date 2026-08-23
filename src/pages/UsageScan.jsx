@@ -341,7 +341,7 @@ export default function UsageScan({ user }) {
 
   // Save to Dropbox, then email. Emails only go out once the files are safely
   // stored, so a Dropbox failure is always retryable without double-sending.
-  async function confirmAndSend() {
+  async function confirmAndSend({ testOnly = false } = {}) {
     setBusy(true); setError(''); setNotice('')
     try {
       const saveRes = await fetch('/api/usage/agent?action=save', {
@@ -358,7 +358,7 @@ export default function UsageScan({ user }) {
       const emailRes = await fetch('/api/usage/agent?action=email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ usageId: saved.record.id })
+        body: JSON.stringify({ usageId: saved.record.id, testOnly })
       })
       const emailed = await emailRes.json()
 
@@ -369,7 +369,9 @@ export default function UsageScan({ user }) {
         filesSaved: saved.filesSaved,
         heldBackCount: saved.heldBackCount,
         emails: emailed.results || [],
-        emailError: emailed.error || ''
+        emailError: emailed.error || '',
+        test: Boolean(emailed.test),
+        sentTo: emailed.sentTo
       })
       setStep('done')
       loadHistory()
@@ -600,6 +602,14 @@ export default function UsageScan({ user }) {
             style={{ width: '100%', padding: 15, background: (busy || clean.length === 0) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: (busy || clean.length === 0) ? 'default' : 'pointer', margin: '18px 0 10px' }}>
             {busy ? 'Saving and sending…' : `Confirm — file to Dropbox & email${clean.length ? ` (${clean.length} item${clean.length === 1 ? '' : 's'})` : ''}`}
           </button>
+          {/* Testing the scanner should not mean emailing a distributor. This
+              sends the identical message and attachment to whoever is signed in,
+              and to nobody else — the address comes from the session, so there is
+              no way to type one in. */}
+          <button onClick={() => confirmAndSend({ testOnly: true })} disabled={busy || clean.length === 0}
+            style={{ width: '100%', padding: 13, background: 'transparent', border: `1px solid ${TEAL}`, borderRadius: 10, fontSize: 13.5, fontWeight: 600, color: TEAL, cursor: (busy || clean.length === 0) ? 'default' : 'pointer', marginBottom: 10 }}>
+            {busy ? 'Sending…' : `Send a test to me only (${user?.email || 'your address'})`}
+          </button>
           <button onClick={() => setStep('capture')} disabled={busy} style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 13, color: MUTED, cursor: 'pointer' }}>
             Back to pages
           </button>
@@ -613,8 +623,16 @@ export default function UsageScan({ user }) {
     const failed = result.emails.filter(e => !e.ok)
     return (
       <div style={{ minHeight: '100vh', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
-        <Header title={failed.length ? 'Filed, with email issues' : 'Usage filed and sent'} subtitle={result.record.folderName} />
+        <Header
+          title={result.test ? 'Test sent to you only' : (failed.length ? 'Filed, with email issues' : 'Usage filed and sent')}
+          subtitle={result.record.folderName} />
         <div style={{ padding: 16 }}>
+          {result.test && (
+            <Banner tone="warn">
+              Test only. Everything went to {result.sentTo} and nothing to any distributor —
+              and the case is not recorded as sent, so the real send is still there to do.
+            </Banner>
+          )}
           {error && <Banner tone="error">{error}</Banner>}
           {result.emailError && <Banner tone="error">{result.emailError}</Banner>}
           {result.heldBackCount > 0 && (
@@ -641,16 +659,23 @@ export default function UsageScan({ user }) {
           </div>
 
           <div style={{ background: 'white', borderRadius: 12, padding: 15, marginBottom: 12, border: `1px solid ${BORDER}` }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Distributor emails</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+              {result.test ? 'Test emails — to you only' : 'Distributor emails'}
+            </div>
             {result.emails.length === 0 && <div style={{ fontSize: 13, color: MUTED }}>No emails were sent.</div>}
             {result.emails.map(e => (
               <div key={e.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, padding: '7px 0', borderBottom: '1px solid rgba(26,43,74,0.06)' }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: NAVY }}>{e.name}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{e.itemCount} item{e.itemCount === 1 ? '' : 's'}{e.ok ? ` · ${e.to.length} recipient${e.to.length === 1 ? '' : 's'}` : ''}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+                    {e.itemCount} item{e.itemCount === 1 ? '' : 's'}
+                    {e.ok ? (e.test ? ` · to you` : ` · ${e.to.length} recipient${e.to.length === 1 ? '' : 's'}`) : ''}
+                  </div>
                   {!e.ok && <div style={{ fontSize: 11, color: '#c0392b', marginTop: 3 }}>{e.error}</div>}
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: e.ok ? TEAL : '#c0392b', whiteSpace: 'nowrap' }}>{e.ok ? '✓ Sent' : '✕ Failed'}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: e.ok ? TEAL : '#c0392b', whiteSpace: 'nowrap' }}>
+                  {e.ok ? (e.test ? '✓ Test sent' : '✓ Sent') : '✕ Failed'}
+                </span>
               </div>
             ))}
           </div>

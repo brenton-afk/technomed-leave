@@ -269,18 +269,32 @@ export async function sendTimesheetDecisionEmail(record, decision, reason = '') 
 // subject is the case folder name so the distributor's filing matches ours.
 // Deliberately plain: distributors reconcile from the attachment, and the body
 // must not carry patient identifiers to an external party.
-export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, xlsxFilename }) {
-  const body = 'Please find usage attached.'
+export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, xlsxFilename, test }) {
+  // A test send goes to the person testing and nowhere else, and has to be
+  // impossible to mistake for the real thing — in the inbox list, in the subject,
+  // and at the top of the body. Someone forwarding one on by accident is the
+  // failure being designed against.
+  const body = test
+    ? 'This is a test. Nothing has been sent to the distributor. The attached sheet '
+      + 'is the one that would have gone to them.'
+    : 'Please find usage attached.'
   const signoff = 'Warm regards,<br>TechnoMed'
+  const heading = test ? `[TEST] ${subject}` : subject
+  const wouldHaveGone = test && to.length
+    ? `Would have gone to: ${test.wouldSendTo.join(', ')}`
+    : ''
 
   const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
   <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
   <tr><td style="background:#042746;padding:24px 28px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Usage</div>
-  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(subject)}</div>
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">${test ? 'Usage · test' : 'Usage'}</div>
+  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(heading)}</div>
   ${distributorLabel ? `<div style="font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;">${escapeHtml(distributorLabel)}</div>` : ''}
   </td></tr>
+  ${test ? `<tr><td style="padding:14px 28px;background:#fff3cd;color:#856404;font-size:13px;font-weight:700;line-height:1.5;">
+  TEST — not sent to the distributor${wouldHaveGone ? `<div style="font-weight:400;margin-top:4px;">${escapeHtml(wouldHaveGone)}</div>` : ''}
+  </td></tr>` : ''}
   <tr><td style="padding:24px 28px;font-size:14px;color:#042746;line-height:1.6;">
   ${escapeHtml(body)}<div style="margin-top:16px;color:#6b7a8d;font-size:13px;">${signoff}</div>
   </td></tr>
@@ -291,9 +305,9 @@ export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, 
   return send({
     to,
     cc,
-    subject,
+    subject: heading,
     html,
-    text: `${body}\n\nWarm regards,\nTechnoMed`,
+    text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${body}\n\nWarm regards,\nTechnoMed`,
     attachments: [{ filename: xlsxFilename, content: xlsx.toString('base64') }]
   })
 }
