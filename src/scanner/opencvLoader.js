@@ -1,26 +1,44 @@
 // ─── Loading OpenCV ──────────────────────────────────────────────────────────
 // Eleven megabytes, on a deadline, and never in the way of the camera.
 //
-// Loaded with a plain <script src>, and that is a deliberate step *backwards*
-// from the version before it. That one fetched the file so it could report a
-// percentage: response → chunks → Blob → `.text()` → `eval`. Each of those is
-// another copy, and a UTF-16 string of an 11MB file is 22MB before the engine
-// compiles anything. On a phone already holding a live camera stream that is
-// enough to have the tab killed, and a killed tab cannot open a camera — which
-// is how a progress bar turned into "the scanner can't even open the camera".
+// Loaded with a plain <script src>. A previous version fetched it so it could
+// report a percentage — response → chunks → Blob → `.text()` → `eval`, each arrow
+// another copy, and a UTF-16 string of an 11MB file is 22MB before anything
+// compiles. On a phone already holding a camera stream that was enough to have
+// the tab killed, and a killed tab cannot open a camera. A script tag lets the
+// browser stream it, compile it off the main thread and cache the compiled form.
 //
-// A script tag hands the file to the browser instead, which streams it, compiles
-// it off the main thread and caches the compiled form. No percentage, which is a
-// real loss. Worth it.
+// ── How this build says it is ready ──
+//
+// This is where it went wrong twice, so it is worth writing down. The file ends:
+//
+//     if (typeof Module === 'undefined') Module = {};
+//     return cv(Module);
+//
+// `cv` is a factory, and what it returns — and what therefore lands on
+// `window.cv` — is a *thenable*. `window.cv.Mat` is undefined until that thenable
+// resolves, and it resolves to the very same object with its classes attached.
+//
+// So waiting for `window.cv.Mat` waits forever, and seeding
+// `window.cv.onRuntimeInitialized` before the script runs is discarded, because
+// `root.cv = factory()` overwrites the seeded object. Both were tried. Both
+// presented as "Edge detection loading" until the deadline.
+//
+// Every handshake is therefore attempted, and a poll runs underneath all of them,
+// because being wrong about this again costs the whole feature and a poll costs
+// one comparison every 150ms.
 
 const SOURCE = '/vendor/opencv-4.13.0.js'
-const DEADLINE_MS = 60000
+const DEADLINE_MS = 90000
+const POLL_MS = 150
 
 let pending = null
 
-/**
- * @returns {Promise<object>} the initialised cv module
- */
+/** The module is usable when its classes exist. Nothing else is a reliable signal. */
+function usable(candidate) {
+  return typeof candidate?.Mat === 'function'
+}
+
 export function loadOpenCv() {
   if (pending) return pending
   if (openCvReady()) {
@@ -31,40 +49,71 @@ export function loadOpenCv() {
 
   pending = new Promise((resolve, reject) => {
     let settled = false
-    const finish = () => {
-      if (settled) return
+
+    const succeed = module => {
+      if (settled || !usable(module)) return
       settled = true
-      clearTimeout(timer)
-      resolve(window.cv)
+      clearTimeout(deadline)
+      clearInterval(poll)
+
+      // `then` has to go before this module is resolved with, and this is not a
+      // tidy-up — it is the difference between working and hanging.
+      //
+      // Resolving a promise with a thenable makes the Promise machinery adopt it:
+      // it calls `then` and waits for *that* to settle. This module's `then`
+      // hands back the module itself, which is a thenable, which is adopted
+      // again. The outer promise never settles, and the scanner reports "Edge
+      // detection loading" for ever having in fact loaded perfectly.
+      if (typeof module.then === 'function') {
+        try { delete module.then } catch { module.then = undefined }
+      }
+
+      // Left on the global as the module rather than the thenable, so a second
+      // call and `openCvReady` both see something usable.
+      window.cv = module
+      resolve(module)
     }
+
     const fail = message => {
       if (settled) return
       settled = true
-      clearTimeout(timer)
+      clearTimeout(deadline)
+      clearInterval(poll)
       // Cleared so a later attempt retries rather than being handed this failure
       // for the rest of the session — walking into better signal should work.
       pending = null
       reject(new Error(message))
     }
 
-    const timer = setTimeout(() => fail('The scanner engine took too long to load'), DEADLINE_MS)
-
-    // Seeded *before* the script runs, because the library begins with
-    // `var Module = typeof cv !== "undefined" ? cv : {}` — it adopts whatever is
-    // already there. Attaching the handler afterwards is a race with WASM
-    // compilation, and losing it means waiting forever for a callback that has
-    // already fired.
-    window.cv = { onRuntimeInitialized: finish }
+    const deadline = setTimeout(() => fail('The scanner engine took too long to load'), DEADLINE_MS)
+    // Underneath every handshake below. Cheap, and it does not care which one
+    // this build happens to use.
+    const poll = setInterval(() => { if (usable(window.cv)) succeed(window.cv) }, POLL_MS)
 
     const script = document.createElement('script')
     script.async = true
     script.src = SOURCE
     script.dataset.opencv = 'true'
+
     script.addEventListener('load', () => {
-      // Some builds are ready the moment the script has run; most are not, and
-      // for those the seeded handler above is what resolves this.
-      if (typeof window.cv?.Mat === 'function') finish()
+      const exported = window.cv
+
+      // 1. Already built — some builds finish while the script runs.
+      if (usable(exported)) { succeed(exported); return }
+
+      // 2. A thenable, which is what this build gives. It resolves to itself with
+      //    the classes attached.
+      if (typeof exported?.then === 'function') {
+        exported.then(succeed, () => fail('The scanner engine failed to start'))
+      }
+
+      // 3. The older emscripten callback, in case a future build reverts to it.
+      if (exported && typeof exported === 'object') {
+        exported.onRuntimeInitialized = () => succeed(window.cv)
+      }
+      // Otherwise the poll above is what finishes this.
     })
+
     script.addEventListener('error', () => fail('Could not load the scanner engine'))
     document.head.appendChild(script)
   })
@@ -73,7 +122,7 @@ export function loadOpenCv() {
 
 /** Whether it is already in memory, so no wait is shown. */
 export function openCvReady() {
-  return typeof window !== 'undefined' && typeof window.cv?.Mat === 'function'
+  return typeof window !== 'undefined' && usable(window.cv)
 }
 
 /** For tests: forget the cached attempt. */

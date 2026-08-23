@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench:scanner": "node scripts/scanner-bench.mjs"
+    "bench:scanner": "node scripts/scanner-bench.mjs",
+    "check:engine": "node scripts/opencv-handshake.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

@@ -16,14 +16,29 @@ function injected() {
   return document.querySelector('script[data-opencv]')
 }
 
-/** Behaves as the library does: adopts the seeded module, then finishes async. */
-function succeed() {
-  const module = window.cv
+/**
+ * Behaves as the real build does: `window.cv` becomes a *thenable* whose Mat does
+ * not exist until it resolves, and which resolves to itself.
+ *
+ * This is the shape that was got wrong twice. Waiting for `.Mat` on the exported
+ * object waits forever; seeding `onRuntimeInitialized` on it is discarded, because
+ * the UMD wrapper overwrites `window.cv` with the factory's return value.
+ */
+function succeedAsThenable() {
+  let settle
+  const module = {
+    then(onResolved) { settle = () => onResolved(module); return module }
+  }
+  window.cv = module
   injected().dispatchEvent(new Event('load'))
-  setTimeout(() => {
-    window.cv.Mat = function () {}
-    module.onRuntimeInitialized?.()
-  }, 0)
+  setTimeout(() => { module.Mat = function () {}; settle?.() }, 0)
+}
+
+/** An older build: the classes simply appear, with no announcement at all. */
+function succeedSilently() {
+  window.cv = {}
+  injected().dispatchEvent(new Event('load'))
+  setTimeout(() => { window.cv.Mat = function () {} }, 0)
 }
 
 beforeEach(() => {
@@ -37,30 +52,41 @@ afterEach(() => {
 })
 
 describe('loading the engine', () => {
-  it('waits for the WASM runtime, not merely for the file', async () => {
-    // Resolving on the script's load event gives a module whose Mat is not a
-    // constructor, which fails on the first frame rather than here.
+  it('waits for the thenable to resolve, which is how this build reports ready', async () => {
+    // The bug that produced "Edge detection loading" for ever: `window.cv.Mat`
+    // does not exist until the exported thenable resolves.
     const loading = loadOpenCv()
     await waitForScript()
-    succeed()
+    succeedAsThenable()
     const cv = await loading
     expect(typeof cv.Mat).toBe('function')
     expect(openCvReady()).toBe(true)
   })
 
-  it('seeds the module before the script runs, so the handler cannot be missed', async () => {
-    loadOpenCv()
+  it('leaves the module on the global, not the thenable', async () => {
+    // So a second caller and openCvReady() both find something usable.
+    const loading = loadOpenCv()
     await waitForScript()
-    // The library begins `var Module = typeof cv !== "undefined" ? cv : {}`, so
-    // it adopts this. Attaching afterwards races WASM compilation.
-    expect(typeof window.cv.onRuntimeInitialized).toBe('function')
+    succeedAsThenable()
+    await loading
+    expect(typeof window.cv.Mat).toBe('function')
+  })
+
+  it('notices a build that announces nothing and simply becomes ready', async () => {
+    // The poll underneath every handshake. Being wrong about this again costs the
+    // whole feature; the poll costs one comparison every 150ms.
+    const loading = loadOpenCv()
+    await waitForScript()
+    succeedSilently()
+    const cv = await loading
+    expect(typeof cv.Mat).toBe('function')
   })
 
   it('fetches once however many callers ask', async () => {
     const both = Promise.all([loadOpenCv(), loadOpenCv()])
     await waitForScript()
     expect(document.querySelectorAll('script[data-opencv]')).toHaveLength(1)
-    succeed()
+    succeedAsThenable()
     const [a, b] = await both
     expect(a).toBe(b)
   })
@@ -83,7 +109,7 @@ describe('when it does not arrive', () => {
     vi.useFakeTimers()
     const attempt = loadOpenCv()
     const assertion = expect(attempt).rejects.toThrow(/too long/i)
-    await vi.advanceTimersByTimeAsync(61000)
+    await vi.advanceTimersByTimeAsync(91000)
     await assertion
   })
 
@@ -105,7 +131,7 @@ describe('when it does not arrive', () => {
     resetOpenCvForTests()
     const second = loadOpenCv()
     await waitForScript()
-    succeed()
+    succeedAsThenable()
     await expect(second).resolves.toBeTruthy()
   })
 
@@ -119,7 +145,13 @@ describe('when it does not arrive', () => {
     const assertion = expect(attempt).rejects.toThrow(/too long/i)
     for (let i = 0; i < 20 && !injected(); i++) await Promise.resolve()
     injected()?.dispatchEvent(new Event('load'))
-    await vi.advanceTimersByTimeAsync(61000)
+    await vi.advanceTimersByTimeAsync(91000)
     await assertion
   })
 })
+
+
+// The real 11MB file is exercised by `npm run check:engine` rather than here.
+// Running an emscripten bundle inside vitest's module environment fights the
+// harness — and it is the check that matters most, so it should not be the one
+// that is flaky. See scripts/opencv-handshake.mjs.

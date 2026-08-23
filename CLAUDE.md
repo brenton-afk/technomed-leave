@@ -115,6 +115,28 @@ Invariants worth preserving:
   embedded) once per session. Served from this origin, not docs.opencv.org, which
   is documentation hosting rather than infrastructure. The version is in the
   filename so `vercel.json` can cache it immutably for a year.
+
+  **The handshake is the part that breaks.** The file ends `return cv(Module)`, so
+  what lands on `window.cv` is a *thenable* whose `.Mat` does not exist yet and
+  which resolves to itself. Three separate ways of getting this wrong all present
+  identically — "Edge detection loading", for ever, on a device that downloaded
+  the file perfectly:
+
+  1. waiting for `window.cv.Mat`, which never appears on the thenable;
+  2. seeding `window.cv.onRuntimeInitialized` before the script, which the UMD
+     wrapper's `root.cv = factory()` discards;
+  3. `resolve(module)` — the Promise machinery *adopts* a thenable, calling `then`,
+     which hands back the module, which is adopted again, for ever. `delete
+     module.then` before resolving is what fixes it.
+
+  `npm run check:engine` runs the real file through the real handshake in jsdom
+  and is the only check that catches any of this. Run it after touching the
+  loader; a mock cannot see these.
+
+  Never fetch the file to report progress. That was tried: response → chunks →
+  Blob → `.text()` → `eval` is several copies of 11MB plus a 22MB UTF-16 string,
+  and on a phone holding a camera stream it gets the tab killed — which presents
+  as the camera not opening at all.
 - **`documentDetect.js`** — Canny → `findContours` → **convex hull** →
   `approxPolyDP`, largest 4-gon over 20% of the frame. Three details are
   load-bearing and each fixed a real failure: the hull (print reaching a margin
