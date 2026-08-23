@@ -741,6 +741,12 @@ export default function UsageScan({ user }) {
                   : ' · usage sheet only'}
               </div>
             )}
+            {result.emails.some(e => e.senderFellBack) && (
+              <div style={{ fontSize: 11, color: '#856404', marginBottom: 8, lineHeight: 1.5 }}>
+                Sent from the portal address, not yours — technomed.com.au is not a verified
+                sending domain in Resend. Replies still come back to you.
+              </div>
+            )}
             {!result.scanAttached && result.scanError && (
               <div style={{ fontSize: 11, color: '#856404', marginBottom: 8, lineHeight: 1.5 }}>
                 The scanned form was not attached — {result.scanError}.

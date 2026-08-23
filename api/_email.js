@@ -114,6 +114,13 @@ function fromAddress(sender) {
   return process.env.EMAIL_FROM || 'TechnoMed Portal <onboarding@resend.dev>'
 }
 
+/** Whether a rejection is Resend saying "not from a domain you own". */
+function isSenderRejection(status, body) {
+  const raw = String(body || '')
+  if (status !== 403 && status !== 422) return false
+  return /not verified|verify your domain|only send testing emails|domain is not/i.test(raw)
+}
+
 async function send({ to, cc, subject, html, text, attachments, sender, replyTo }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new Error('RESEND_API_KEY not configured')
@@ -121,33 +128,56 @@ async function send({ to, cc, subject, html, text, attachments, sender, replyTo 
   const recipients = to.filter(Boolean)
   if (recipients.length === 0) throw new Error('No recipients for email')
 
-  const from = fromAddress(sender)
-  const payload = {
-    from,
-    to: recipients,
-    subject,
-    html,
-    text
-  }
-  if (replyTo) payload.reply_to = replyTo
-  if (cc?.length) payload.cc = cc.filter(Boolean)
-  if (attachments?.length) payload.attachments = attachments
+  const post = async from => {
+    const payload = { from, to: recipients, subject, html, text }
+    if (replyTo) payload.reply_to = replyTo
+    if (cc?.length) payload.cc = cc.filter(Boolean)
+    if (attachments?.length) payload.attachments = attachments
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(explainSendFailure(res.status, err, from))
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    return { ok: res.ok, status: res.status, body: res.ok ? '' : await res.text() }
   }
 
-  return { sent: true, recipients, from }
+  const preferred = fromAddress(sender)
+  const fallback = fromAddress(null)
+
+  let attempt = await post(preferred)
+
+  // Sending as the rep is nicer but it requires their domain to be verified in
+  // Resend, and that is a DNS change nobody can make from inside the app. So a
+  // rejection on those grounds falls back to the configured sender rather than
+  // failing: the reply-to still carries the rep, so a distributor replying
+  // reaches them either way, and the usage still goes out.
+  //
+  // This exists because it happened. Switching the sender to the rep's own
+  // address broke sending that had been working, and the only visible symptom was
+  // "the email failed" — the feature should not depend on a DNS record having
+  // been added.
+  let usedFallback = false
+  if (!attempt.ok && preferred !== fallback && isSenderRejection(attempt.status, attempt.body)) {
+    const retried = await post(fallback)
+    if (retried.ok) {
+      usedFallback = true
+      attempt = retried
+    } else {
+      // Report the original failure, which names the real problem.
+      throw new Error(explainSendFailure(attempt.status, attempt.body, preferred))
+    }
+  }
+
+  if (!attempt.ok) throw new Error(explainSendFailure(attempt.status, attempt.body, preferred))
+
+  return {
+    sent: true,
+    recipients,
+    from: usedFallback ? fallback : preferred,
+    // So the app can say the nicer sender is one DNS change away.
+    senderFellBack: usedFallback
+  }
 }
 
 /**

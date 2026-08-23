@@ -359,7 +359,7 @@ async function handleEmail(req, res, session) {
     const to = test ? [session.email] : distributor.to
     try {
       const xlsx = await buildUsageWorkbook(record, items)
-      await sendUsageEmail({
+      const sent = await sendUsageEmail({
         to,
         cc,
         subject: record.folderName,
@@ -374,7 +374,10 @@ async function handleEmail(req, res, session) {
       })
       results.push({
         key, name: distributor.name, to, itemCount: items.length, ok: true, test,
-        from: session.email, scanAttached: Boolean(scanPdf), sentAt: new Date().toISOString()
+        from: sent?.from || session.email,
+        senderFellBack: Boolean(sent?.senderFellBack),
+        scanAttached: Boolean(scanPdf),
+        sentAt: new Date().toISOString()
       })
     } catch (err) {
       results.push({ key, name: distributor.name, to, itemCount: items.length, ok: false, test, error: err.message })
