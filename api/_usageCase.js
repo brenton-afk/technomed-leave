@@ -143,12 +143,47 @@ function normaliseItem(raw, index) {
   }
 }
 
-// Builds the full case from the extraction payload plus the signed-in rep.
-export function normaliseCase(extracted, { repName, repEmail }) {
+/**
+ * A date typed by the device, trusted only as far as it is plausible.
+ *
+ * The client sends its own local date because the server has none: Vercel runs in
+ * UTC, and for most of a Hobart evening "today" there is already tomorrow here.
+ * It arrives from the request, though, so it is checked rather than believed — it
+ * ends up in the folder name and on the emailed sheet, and a garbage value would
+ * file a case somewhere nobody would find it again.
+ */
+function plausibleScanDate(raw) {
+  const date = normaliseDate(raw)
+  if (!date) return ''
+  const asTime = Date.parse(`${date}T00:00:00Z`)
+  if (Number.isNaN(asTime)) return ''
+  const now = Date.now()
+  // A day either side for timezones, and no further: this is meant to be today.
+  if (asTime > now + 36 * 3600e3) return ''
+  if (asTime < now - 36 * 3600e3) return ''
+  return date
+}
+
+/**
+ * Builds the full case from the extraction payload plus the signed-in rep.
+ *
+ * `scanDate` is the date on the device doing the scanning, and it is what the
+ * surgery date becomes. A form is scanned in theatre or straight after, so today
+ * is a better assumption than a handwritten date read off a photograph — those
+ * come back misread often enough that the folder name, which is derived from the
+ * date, was the thing most often wrong.
+ *
+ * What the form says is kept as `dateOnForm` rather than thrown away. Where the
+ * two disagree the rep is told, because a genuine mismatch means either the scan
+ * is late or the date was misread, and only they can say which.
+ */
+export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
   const patientSurname = surnameOf(extracted.patientSurname) ||
     str(extracted.patientSurname)
   const surgeonSurname = surnameOf(extracted.surgeonName)
-  const date = normaliseDate(extracted.date)
+  const dateOnForm = normaliseDate(extracted.date)
+  const scanned = plausibleScanDate(scanDate)
+  const date = scanned || dateOnForm
   const hospital = normaliseHospital(extracted.hospital)
   const procedure = str(extracted.procedure || extracted.procedureDescription)
 
@@ -163,6 +198,13 @@ export function normaliseCase(extracted, { repName, repEmail }) {
     surgeonName: str(extracted.surgeonName),
     surgeonSurname,
     date,
+    // Where the date came from, and what the form said, so the review screen can
+    // point out a disagreement rather than quietly overwriting one.
+    dateSource: scanned ? 'scan' : (dateOnForm ? 'form' : 'none'),
+    dateOnForm,
+    // What was filled in without being asked, so a later edit is distinguishable
+    // from the original assumption.
+    dateSuggested: date,
     hospital,
     procedure,
     // The signed-in user is the authority on who scanned it; what the form says
@@ -216,6 +258,11 @@ export function recomputeCase(caseRecord) {
     patientSurname,
     surgeonSurname,
     date,
+    // Carried through rather than recomputed. Once the rep has edited the date
+    // this is a record of where it started, and re-deriving it here would claim
+    // the device set a value the rep typed.
+    dateSource: caseRecord.date && caseRecord.date !== caseRecord.dateSuggested ? 'edited' : caseRecord.dateSource,
+    dateOnForm: caseRecord.dateOnForm || '',
     hospital,
     procedure,
     items,

@@ -89,6 +89,24 @@ async function fileToPage(file) {
   }
 }
 
+/** A YYYY-MM-DD date as the team writes it. */
+function formatAusDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''))
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || '')
+}
+
+/** Today, on this device, as YYYY-MM-DD. */
+function deviceToday() {
+  const now = new Date()
+  // Built from the local parts rather than toISOString(), which converts to UTC
+  // and would hand back tomorrow for most of a Hobart evening.
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0')
+  ].join('-')
+}
+
 function payloadBytes(pages) {
   // base64 inflates by ~4/3.
   return pages.reduce((sum, p) => sum + Math.ceil(p.data.length * 0.75), 0)
@@ -304,7 +322,14 @@ export default function UsageScan({ user }) {
       const res = await fetch('/api/usage/agent?action=scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ pages: pages.map(p => ({ mediaType: p.mediaType, data: p.data })) })
+        body: JSON.stringify({
+          pages: pages.map(p => ({ mediaType: p.mediaType, data: p.data })),
+          // The surgery date is taken to be today: a form is scanned in theatre
+          // or straight after, and today is a better assumption than a
+          // handwritten date read off a photograph. Sent from here because only
+          // the device knows what day it is where the rep is standing.
+          scanDate: deviceToday()
+        })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -553,6 +578,17 @@ export default function UsageScan({ user }) {
               <Field label="First name" value={caseRecord.patientFirstName} onChange={v => updateCase('patientFirstName', v)} />
               <Field label="UR number" value={caseRecord.patientUrNumber} onChange={v => updateCase('patientUrNumber', v)} />
               <Field label="Date" type="date" value={caseRecord.date} onChange={v => updateCase('date', v)} />
+              {/* Filled in from the device, so it is right for a form scanned on
+                  the day. Said out loud rather than assumed, because it is the
+                  one field nobody thinks to check — and it decides the folder
+                  the case is filed in. */}
+              {caseRecord.dateSource === 'scan' && caseRecord.dateOnForm !== caseRecord.date && (
+                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, margin: '-4px 0 10px' }}>
+                  {caseRecord.dateOnForm
+                    ? <>Set to today. The form looks like it says <strong style={{ color: NAVY }}>{formatAusDate(caseRecord.dateOnForm)}</strong> — change it above if the surgery was not today.</>
+                    : <>Set to today, from this device. Change it above if the surgery was not today.</>}
+                </div>
+              )}
               <Field label="Surgeon" value={caseRecord.surgeonName} onChange={v => updateCase('surgeonName', v)} />
               <Field label="Surgeon surname" value={caseRecord.surgeonSurname} onChange={v => updateCase('surgeonSurname', v)} />
               <Field label="Procedure" value={caseRecord.procedure} onChange={v => updateCase('procedure', v)} />

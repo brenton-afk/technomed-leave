@@ -170,6 +170,10 @@ async function handleScan(req, res, session) {
 
   const extracted = parseExtraction(textBlock.text)
   const caseRecord = normaliseCase(extracted, {
+    // The device's own date. The server has none to offer: Vercel runs in UTC, so
+    // through a Hobart evening its "today" is already tomorrow here, and a case
+    // scanned at 8pm would be filed under the wrong day.
+    scanDate: req.body?.scanDate,
     repName: session.name,
     repEmail: session.email
   })
