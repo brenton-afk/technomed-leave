@@ -6,7 +6,16 @@
 import { buildWeekPlan } from './buildWeekPlan.js'
 import { FIXTURE_WEEK } from './fixture.js'
 
-const CACHE_PREFIX = 'tm_clinical_plan:'
+// The cache holds a *derived* plan — the notes, the flags, the case lines — not
+// the calendar events it came from. So it is only valid for the code that derived
+// it, and the build stamp is part of the key.
+//
+// Without that, changing the derivation changes nothing anyone can see: the
+// browser keeps serving the plan the previous build produced, and the app looks
+// like the deploy never happened. That is exactly what happened when the colour
+// note and the on-call line were taken out of the week's notes.
+const BUILD = typeof __APP_COMMIT__ === 'string' ? __APP_COMMIT__ : 'dev'
+const CACHE_PREFIX = `tm_clinical_plan:${BUILD}:`
 const PREFS_KEY = 'tm_clinical_prefs'
 // How long a cached plan may be shown before it is refetched. Short, because
 // this is only the first paint: an open tab also polls (see LIVE_POLL_MS), so
@@ -50,9 +59,32 @@ export function planSignature(plan) {
   return parts.join('\u0002')
 }
 
-function cacheKey(weekStart) {
+/** Exported so a test can ask which key this build writes, rather than guess. */
+export function cacheKey(weekStart) {
   return `${CACHE_PREFIX}${weekStart}`
 }
+
+/**
+ * Clears plans left by other builds.
+ *
+ * Keying by build stops a stale plan being *read*, but without this the old
+ * entries stay in localStorage for good, and a week's plan is not small. One
+ * sweep on load is enough — there is only ever one build writing.
+ */
+function forgetOtherBuilds() {
+  try {
+    const stale = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('tm_clinical_plan:') && !key.startsWith(CACHE_PREFIX)) stale.push(key)
+    }
+    for (const key of stale) localStorage.removeItem(key)
+  } catch {
+    // Nothing here is worth failing a page load over.
+  }
+}
+
+forgetOtherBuilds()
 
 export function readCachedPlan(weekStart) {
   try {
