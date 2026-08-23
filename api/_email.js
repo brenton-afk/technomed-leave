@@ -91,20 +91,45 @@ function buildEmailHtml(application, variant, declineReason) {
   </body></html>`
 }
 
-async function send({ to, cc, subject, html, text, attachments }) {
+/**
+ * The sender.
+ *
+ * `onboarding@resend.dev` is Resend's test address, and it can only ever deliver
+ * to the Resend account's own owner. Any other recipient is refused. So this is
+ * the last resort and not a working default — if `EMAIL_FROM` is unset, mail to
+ * a distributor fails, and it fails in a way that looks like the feature being
+ * broken rather than the configuration being absent.
+ *
+ * `sender` is a staff member's name and work address, used where the message is
+ * genuinely from a person: a rep's usage sheet reads better, and replies land with
+ * them rather than in a shared inbox. It requires technomed.com.au to be a
+ * verified domain in Resend; where it is not, Resend says so and that error is
+ * surfaced rather than swallowed.
+ */
+function fromAddress(sender) {
+  if (sender?.email) {
+    const name = String(sender.name || '').replace(/[<>"@]/g, '').trim()
+    return name ? `${name} <${sender.email}>` : sender.email
+  }
+  return process.env.EMAIL_FROM || 'TechnoMed Portal <onboarding@resend.dev>'
+}
+
+async function send({ to, cc, subject, html, text, attachments, sender, replyTo }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new Error('RESEND_API_KEY not configured')
 
   const recipients = to.filter(Boolean)
   if (recipients.length === 0) throw new Error('No recipients for email')
 
+  const from = fromAddress(sender)
   const payload = {
-    from: process.env.EMAIL_FROM || 'TechnoMed Leave Portal <onboarding@resend.dev>',
+    from,
     to: recipients,
     subject,
     html,
     text
   }
+  if (replyTo) payload.reply_to = replyTo
   if (cc?.length) payload.cc = cc.filter(Boolean)
   if (attachments?.length) payload.attachments = attachments
 
@@ -119,10 +144,33 @@ async function send({ to, cc, subject, html, text, attachments }) {
 
   if (!res.ok) {
     const err = await res.text()
-    throw new Error(`Resend error ${res.status}: ${err}`)
+    throw new Error(explainSendFailure(res.status, err, from))
   }
 
-  return { sent: true, recipients }
+  return { sent: true, recipients, from }
+}
+
+/**
+ * Resend's own words, plus what they mean here.
+ *
+ * The two failures this app actually hits both report as a flat 403 with prose
+ * nobody reading a phone screen will act on. Naming the cause and the fix turns
+ * "the email failed" into something someone can go and do.
+ */
+function explainSendFailure(status, body, from) {
+  const raw = String(body || '').slice(0, 400)
+  const detail = `Resend ${status}: ${raw}`
+
+  if (/only send testing emails to your own email/i.test(raw) || /resend\.dev/i.test(from)) {
+    return `${detail} — the sender is Resend's test address, which can only deliver to the `
+      + 'Resend account owner. Set EMAIL_FROM, or verify technomed.com.au in Resend so mail '
+      + `can be sent as a staff member. Sending as: ${from}`
+  }
+  if (/domain is not verified|not verified/i.test(raw)) {
+    return `${detail} — ${from} is not on a domain verified in Resend. Verify technomed.com.au `
+      + 'there, or set EMAIL_FROM to an address on a domain that is.'
+  }
+  return `${detail} (sending as ${from})`
 }
 
 function summaryText(application, prefix, extra = '') {
@@ -269,7 +317,7 @@ export async function sendTimesheetDecisionEmail(record, decision, reason = '') 
 // subject is the case folder name so the distributor's filing matches ours.
 // Deliberately plain: distributors reconcile from the attachment, and the body
 // must not carry patient identifiers to an external party.
-export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, xlsxFilename, test }) {
+export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, xlsxFilename, test, sender }) {
   // A test send goes to the person testing and nowhere else, and has to be
   // impossible to mistake for the real thing — in the inbox list, in the subject,
   // and at the top of the body. Someone forwarding one on by accident is the
@@ -308,7 +356,11 @@ export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, 
     subject: heading,
     html,
     text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${body}\n\nWarm regards,\nTechnoMed`,
-    attachments: [{ filename: xlsxFilename, content: xlsx.toString('base64') }]
+    attachments: [{ filename: xlsxFilename, content: xlsx.toString('base64') }],
+    // From the rep who scanned it, so a distributor replying reaches the person
+    // who was in the theatre rather than a shared inbox.
+    sender,
+    replyTo: sender?.email
   })
 }
 

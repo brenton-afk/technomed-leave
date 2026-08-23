@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { requireSession } from '../_auth.js'
+import { markAttendance } from '../_googleCalendar.js'
+import { STAFF } from '../../src/staffConfig.js'
 import { saveUsageRecord, getUsageRecord, getUsageHistory } from '../_redis.js'
 import { normaliseCase, recomputeCase } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
@@ -135,6 +137,18 @@ function parseExtraction(text) {
   }
 }
 
+/**
+ * The name this person is known by, from the roster.
+ *
+ * Taken from staffConfig rather than split off the full name: Brenton is Brent and
+ * Matthew is Mat, and the calendar has to match what the team already writes there
+ * by hand.
+ */
+function firstNameFor(email) {
+  const staff = STAFF.find(s => s.email.toLowerCase() === String(email || '').toLowerCase())
+  return staff?.firstName || ''
+}
+
 async function handleScan(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -249,11 +263,27 @@ async function handleSave(req, res, session) {
   const groups = groupByDistributor(record.items)
   const heldBack = record.items.filter(i => !i.excluded && (i.manualReview || !i.distributorKey))
 
+  // Records on the bookings calendar that this rep was at the case. In its own
+  // try/catch and reported rather than thrown, exactly like the leave side
+  // effects: the usage is filed and the sheet is going out either way, and a
+  // calendar that would not accept a title change must not cost the scan.
+  let attendance = { updated: false, reason: 'not attempted' }
+  try {
+    attendance = await markAttendance({
+      date: record.date,
+      patientSurname: record.patientSurname,
+      firstName: firstNameFor(session.email)
+    })
+  } catch (err) {
+    attendance = { updated: false, reason: err.message }
+  }
+
   return res.status(200).json({
     record,
     dropboxPath: dropboxSkipped ? '' : folderPath,
     dropboxSkipped,
     filesSaved: saved,
+    attendance,
     readyToEmail: [...groups.keys()].map(key => ({
       key,
       name: DISTRIBUTORS[key].name,
@@ -311,9 +341,11 @@ async function handleEmail(req, res, session) {
         distributorLabel: distributor.name,
         xlsx,
         xlsxFilename: `${record.folderName}_Usage_Sheet.xlsx`,
-        test: test ? { wouldSendTo: distributor.to } : undefined
+        test: test ? { wouldSendTo: distributor.to } : undefined,
+        // Sent as the rep, and replies come back to them.
+        sender: { name: session.name, email: session.email }
       })
-      results.push({ key, name: distributor.name, to, itemCount: items.length, ok: true, test, sentAt: new Date().toISOString() })
+      results.push({ key, name: distributor.name, to, itemCount: items.length, ok: true, test, from: session.email, sentAt: new Date().toISOString() })
     } catch (err) {
       results.push({ key, name: distributor.name, to, itemCount: items.length, ok: false, test, error: err.message })
     }

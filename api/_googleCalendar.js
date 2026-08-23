@@ -112,3 +112,81 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
 
   return { eventId: result.id, eventLink: result.htmlLink }
 }
+
+// ─── Marking who attended a case ──────────────────────────────────────────────
+
+/** `(Brent)` — the form the team already writes by hand. */
+function attendanceTag(firstName) {
+  const name = String(firstName || '').trim()
+  return name ? `(${name})` : ''
+}
+
+/**
+ * Appends the rep's first name to a booking's title, to record that they were
+ * there.
+ *
+ * Strictly additive, and that is the whole design. This writes to the shared
+ * bookings calendar, which is the team's source of truth and is edited by hand by
+ * people who are not looking at this app — so the title is never rewritten into a
+ * tidier format, never reordered, and nothing is removed. Only ` (Brent)` is put
+ * on the end of whatever is already there.
+ *
+ * It also refuses to guess. A day with two bookings for the same surname gets left
+ * alone and says so, because appending the wrong rep to the wrong case is worse
+ * than appending nothing and is not visible until someone reads the calendar
+ * weeks later.
+ *
+ * @returns {{updated: boolean, reason?: string, title?: string}}
+ */
+export async function markAttendance({ date, patientSurname, firstName }) {
+  const tag = attendanceTag(firstName)
+  const surname = String(patientSurname || '').trim()
+  if (!tag) return { updated: false, reason: 'no first name for this staff member' }
+  if (!surname || !/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) {
+    return { updated: false, reason: 'no surname or date to match a booking on' }
+  }
+
+  const calendarId = getCalendarId()
+  if (!calendarId) return { updated: false, reason: 'no bookings calendar configured' }
+
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
+
+  // The whole Hobart day, in the offsets either side of it, so a booking cannot
+  // fall outside the window because of a timezone.
+  const params = new URLSearchParams({
+    timeMin: `${date}T00:00:00+11:00`,
+    timeMax: `${date}T23:59:59+10:00`,
+    singleEvents: 'true',
+    maxResults: '250'
+  })
+  const listed = await fetch(`${base}?${params}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!listed.ok) return { updated: false, reason: `could not read the calendar (${listed.status})` }
+
+  const events = (await listed.json()).items || []
+  const lower = surname.toLowerCase()
+  const matches = events.filter(e => String(e.summary || '').toLowerCase().includes(lower))
+
+  if (matches.length === 0) return { updated: false, reason: `no booking on ${date} mentions ${surname}` }
+  if (matches.length > 1) {
+    return { updated: false, reason: `${matches.length} bookings on ${date} mention ${surname}, so none was changed` }
+  }
+
+  const event = matches[0]
+  const summary = String(event.summary || '')
+  // Idempotent: scanning a second page, or re-saving, must not produce
+  // "(Brent) (Brent)".
+  if (summary.includes(tag)) return { updated: false, reason: 'already recorded', title: summary }
+
+  const title = `${summary} ${tag}`.replace(/\s+/g, ' ').trim()
+  const patched = await fetch(`${base}/${encodeURIComponent(event.id)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ summary: title })
+  })
+  if (!patched.ok) {
+    const detail = await patched.text()
+    return { updated: false, reason: `could not update the booking (${patched.status}): ${detail.slice(0, 160)}` }
+  }
+  return { updated: true, title }
+}

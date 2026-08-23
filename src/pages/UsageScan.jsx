@@ -391,6 +391,7 @@ export default function UsageScan({ user }) {
         dropboxSkipped: saved.dropboxSkipped,
         filesSaved: saved.filesSaved,
         heldBackCount: saved.heldBackCount,
+        attendance: saved.attendance,
         emails: emailed.results || [],
         emailError: emailed.error || '',
         test: Boolean(emailed.test),
@@ -694,10 +695,33 @@ export default function UsageScan({ user }) {
             )}
           </div>
 
+          {/* Whether the booking was marked. Said either way: silently not
+              recording attendance looks identical to recording it. */}
+          {result.attendance && (
+            <div style={{ background: 'white', borderRadius: 12, padding: 15, marginBottom: 12, border: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Calendar</div>
+              {result.attendance.updated ? (
+                <div style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.5 }}>
+                  ✓ Booking now reads <strong>{result.attendance.title}</strong>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.5 }}>
+                  Attendance not recorded — {result.attendance.reason}. The usage is filed
+                  regardless; add your name to the booking by hand if it matters.
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ background: 'white', borderRadius: 12, padding: 15, marginBottom: 12, border: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
               {result.test ? 'Test emails — to you only' : 'Distributor emails'}
             </div>
+            {result.emails.some(e => e.from) && (
+              <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>
+                Sent from {result.emails.find(e => e.from)?.from}
+              </div>
+            )}
             {result.emails.length === 0 && <div style={{ fontSize: 13, color: MUTED }}>No emails were sent.</div>}
             {result.emails.map(e => (
               <div key={e.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, padding: '7px 0', borderBottom: '1px solid rgba(26,43,74,0.06)' }}>

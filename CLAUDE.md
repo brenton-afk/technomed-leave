@@ -46,9 +46,24 @@ That test also fails the build if an off-scale font size or a hardcoded brand he
 
 Session lives in `sessionStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a one-hour age limit on restore and re-checks every minute, matching the server-side Redis TTL in `api/_auth.js` — keep the two constants in step.
 
+### Email sender
+
+`onboarding@resend.dev` is Resend's *test* address and can only ever deliver to
+the Resend account's own owner — every other recipient is refused. It is the last
+resort in `api/_email.js`, not a working default, so an unset `EMAIL_FROM` shows
+up as the feature being broken. Usage mail is sent as the rep who scanned it
+(`sender: { name, email }` from the session, with `reply_to` set to them), which
+needs technomed.com.au verified as a domain in Resend. `explainSendFailure()`
+names the cause for the two failures this app actually hits, because Resend
+reports both as a flat 403.
+
 ### Staff roster is the shared source of truth
 
-`src/staffConfig.js` is a hardcoded `STAFF` array (name, email, division, role, `isAdmin`, `hasTimesheets`). Notably, **`api/auth/pin.js` imports it across the frontend/backend boundary** (`import { STAFF } from '../../src/staffConfig.js'`) — so `src/` is not purely client-side. Adding or renaming staff means editing only this file, but a name change also has to match the Xero employee record (see below).
+`src/staffConfig.js` is a hardcoded `STAFF` array (name, `firstName`, email,
+division, role, `isAdmin`, `hasTimesheets`). `firstName` is written down rather
+than derived because Brenton is **Brent** and Matthew is **Mat** — no rule gets
+from one to the other, and it goes on the bookings calendar where it has to match
+what the team already writes by hand. Notably, **`api/auth/pin.js` imports it across the frontend/backend boundary** (`import { STAFF } from '../../src/staffConfig.js'`) — so `src/` is not purely client-side. Adding or renaming staff means editing only this file, but a name change also has to match the Xero employee record (see below).
 
 ### Leave application lifecycle
 
@@ -102,6 +117,14 @@ The domain rules live apart from the route so they can be tested and edited with
 
 Invariants worth preserving:
 
+- **The rep who scanned it is recorded three ways.** Their name is a column on the
+  sheet, they are the sender of the distributor email, and their `firstName` is
+  appended to the matching booking on the calendar as `(Brent)` — `markAttendance`
+  in `api/_googleCalendar.js`. That last one writes to the team's shared calendar,
+  so it is strictly additive: it appends and never reformats, it is idempotent, and
+  a day with two bookings for the same surname is **left alone** rather than
+  guessed at. It runs in its own try/catch and is reported, never thrown — a
+  calendar that will not take a title change must not cost the filing.
 - **A test send goes to the signed-in user and nowhere else.** `testOnly: true` on
   the email action replaces every distributor recipient with `session.email`, drops
   the CC, marks the subject `[TEST]`, and says in the body who it would have gone
