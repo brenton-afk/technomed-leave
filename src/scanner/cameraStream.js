@@ -12,6 +12,15 @@
 
 let stream = null
 let opening = null
+// The torch belongs beside the stream, not in a component.
+//
+// It used to be a useState in the camera view while the stream lived here, and
+// the two came apart the moment the view closed: the light stayed on because
+// nothing stopped the track, the flag was lost with the unmount, and reopening
+// showed a torch button reading "off" whose first tap sent torch:true again. Two
+// taps to turn it off, the first appearing to do nothing — reported, correctly,
+// as not being able to turn it off at all.
+let torchIsOn = false
 
 /** What the browser already knows, so a prompt is never shown unnecessarily. */
 export async function cameraPermission() {
@@ -106,9 +115,12 @@ async function tryEach(ladder) {
  */
 export function releaseCamera() {
   if (stream) {
+    // Stopping the track extinguishes the light, so this is bookkeeping rather
+    // than the mechanism — but a stale flag would make the next torch button lie.
     for (const track of stream.getTracks()) track.stop()
     stream = null
   }
+  torchIsOn = false
   opening = null
 }
 
@@ -117,16 +129,48 @@ export function cameraOpen() {
   return Boolean(stream?.active)
 }
 
-/** The torch, where the device has one. */
+/** Whether the light is actually on, as far as the browser will say. */
+export function torchOn() {
+  return torchIsOn
+}
+
+/**
+ * The torch, where the device has one.
+ *
+ * Two constraint shapes are tried. `advanced` is the form everything documents,
+ * and some builds accept it for switching on and quietly ignore it for switching
+ * off — which is the worst possible failure for a light. Where the browser will
+ * report the setting back, its report is believed over the request.
+ */
 export async function setTorch(on) {
   const track = stream?.getVideoTracks()?.[0]
   if (!track?.getCapabilities?.().torch) return false
-  try {
-    await track.applyConstraints({ advanced: [{ torch: on }] })
-    return true
-  } catch {
-    return false
+
+  for (const constraints of [{ advanced: [{ torch: on }] }, { torch: on }]) {
+    try {
+      await track.applyConstraints(constraints)
+      const reported = track.getSettings?.()?.torch
+      if (reported === undefined || reported === on) {
+        torchIsOn = on
+        return true
+      }
+    } catch {
+      // Try the other shape before giving up.
+    }
   }
+  return false
+}
+
+/**
+ * Puts the light out, and says whether it worked.
+ *
+ * Called on leaving the camera and on the app being backgrounded. A torch left
+ * burning in someone's pocket flattens the phone they need for the next case, and
+ * it is not obvious where it came from.
+ */
+export async function turnTorchOff() {
+  if (!torchIsOn) return true
+  return setTorch(false)
 }
 
 export function hasTorch() {
@@ -137,4 +181,5 @@ export function hasTorch() {
 export function resetCameraForTests() {
   stream = null
   opening = null
+  torchIsOn = false
 }

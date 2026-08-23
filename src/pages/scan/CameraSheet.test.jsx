@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import CameraSheet from './CameraSheet.jsx'
-import { resetCameraForTests } from '../../scanner/cameraStream.js'
+import { resetCameraForTests, torchOn, acquireCamera, setTorch }
+  from '../../scanner/cameraStream.js'
 import { resetOpenCvForTests } from '../../scanner/opencvLoader.js'
 
 // The scanner has now been broken three times in ways that thirty seconds with a
@@ -156,5 +157,93 @@ describe('opening it a second time', () => {
     // One prompt for the session. Re-asking is what made a three-page scan stall
     // three times.
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('the torch', () => {
+  // "My iphone light is being left on if you choose it to scan the document. I
+  // can't turn it off." The light outlived the camera view because the stream
+  // does, and the state used to live in the view.
+  function torchStream() {
+    const track = {
+      on: false,
+      stop: vi.fn(function () { this.on = false }),
+      getCapabilities: () => ({ torch: true }),
+      getSettings() { return { torch: this.on } },
+      applyConstraints: vi.fn(function (c) {
+        this.on = c.advanced?.[0]?.torch ?? c.torch
+        return Promise.resolve()
+      })
+    }
+    return {
+      track,
+      stream: { active: true, getTracks: () => [track], getVideoTracks: () => [track] }
+    }
+  }
+
+  let track
+
+  beforeEach(() => {
+    const made = torchStream()
+    track = made.track
+    stream = made.stream
+    navigator.mediaDevices.getUserMedia = vi.fn(() => Promise.resolve(stream))
+  })
+
+  it('offers a torch only where the camera has one', async () => {
+    show()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Torch' })).toBeInTheDocument())
+  })
+
+  it('turns on, and says so', async () => {
+    show()
+    const button = await waitFor(() => screen.getByRole('button', { name: 'Torch' }))
+    button.click()
+    await waitFor(() => expect(track.on).toBe(true))
+    await waitFor(() => expect(button.getAttribute('aria-pressed')).toBe('true'))
+  })
+
+  it('goes out when the camera view is left', async () => {
+    const view = show()
+    const button = await waitFor(() => screen.getByRole('button', { name: 'Torch' }))
+    button.click()
+    await waitFor(() => expect(track.on).toBe(true))
+
+    // Tapping Done closes the sheet. The stream is held on purpose — so if
+    // nothing here puts the light out, it burns on with the app showing no camera.
+    view.unmount()
+    await waitFor(() => expect(track.on).toBe(false))
+    expect(torchOn()).toBe(false)
+  })
+
+  it('goes out when the phone goes in a pocket', async () => {
+    show()
+    const button = await waitFor(() => screen.getByRole('button', { name: 'Torch' }))
+    button.click()
+    await waitFor(() => expect(track.on).toBe(true))
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(track.on).toBe(false))
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+  })
+
+  it('reads the light from the stream, not from a fresh false', async () => {
+    // The button's starting state is where this went wrong. The stream outlives
+    // the view, so a light on with a button reading "off" is reachable — and its
+    // first tap then sent torch:true, which is exactly "I can't turn it off".
+    await acquireCamera()
+    await setTorch(true)
+    expect(track.on).toBe(true)
+
+    show()
+    const button = await waitFor(() => screen.getByRole('button', { name: 'Torch' }))
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+
+    // One tap, and it is out.
+    button.click()
+    await waitFor(() => expect(track.on).toBe(false))
+    expect(torchOn()).toBe(false)
   })
 })

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
-  acquireCamera, releaseCamera, cameraOpen, cameraPermission, resetCameraForTests
+  acquireCamera, releaseCamera, cameraOpen, cameraPermission, resetCameraForTests,
+  setTorch, torchOn, turnTorchOff, hasTorch
 } from './cameraStream.js'
 
 // Scanning a three-page form used to open the camera three times, because the
@@ -119,5 +120,132 @@ describe('reading the existing permission', () => {
   it('reports not knowing when there is no permissions API', async () => {
     global.navigator.permissions = undefined
     expect(await cameraPermission()).toBe('unknown')
+  })
+})
+
+
+// ─── The torch ───────────────────────────────────────────────────────────────
+// Reported as "my iphone light is being left on if you choose it to scan the
+// document. I can't turn it off", and both halves of that were true.
+//
+// The state used to live in the camera view while the stream lived here, and the
+// stream deliberately outlives the view. So closing the scanner lost the flag
+// while the hardware light stayed on — nothing stopped the track — and reopening
+// showed a torch button reading "off" whose first tap sent torch:true. Two taps
+// to turn it off, the first appearing to do nothing.
+//
+// It is one piece of state now, kept beside the thing it controls.
+
+/** A track that behaves as a real one does: settings report what was applied. */
+function torchTrack({ honours = 'both', reports = true } = {}) {
+  const track = {
+    on: false,
+    stop: vi.fn(function () { this.on = false }),
+    getCapabilities: () => ({ torch: true }),
+    getSettings() { return reports ? { torch: this.on } : {} },
+    applyConstraints: vi.fn(function (constraints) {
+      const wanted = constraints.advanced?.[0]?.torch ?? constraints.torch
+      const shape = constraints.advanced ? 'advanced' : 'flat'
+      if (honours === 'both' || honours === shape) this.on = wanted
+      return Promise.resolve()
+    })
+  }
+  return track
+}
+
+function streamOf(track) {
+  return { active: true, getTracks: () => [track], getVideoTracks: () => [track] }
+}
+
+describe('the torch', () => {
+  let track
+
+  beforeEach(() => {
+    track = torchTrack()
+    granted = streamOf(track)
+  })
+
+  it('is off before the camera is even open', () => {
+    expect(torchOn()).toBe(false)
+    expect(hasTorch()).toBe(false)
+  })
+
+  it('remembers being on, so the button that follows cannot lie', async () => {
+    await acquireCamera()
+    expect(await setTorch(true)).toBe(true)
+    // The whole bug: this is what the reopened camera view reads instead of
+    // starting at false and sending torch:true on the first tap.
+    expect(torchOn()).toBe(true)
+    expect(track.on).toBe(true)
+  })
+
+  it('survives the camera view closing and coming back', async () => {
+    await acquireCamera()
+    await setTorch(true)
+    // The view unmounts; the stream is held on purpose.
+    expect(cameraOpen()).toBe(true)
+    expect(torchOn()).toBe(true)
+  })
+
+  it('puts the light out when asked', async () => {
+    await acquireCamera()
+    await setTorch(true)
+    expect(await turnTorchOff()).toBe(true)
+    expect(torchOn()).toBe(false)
+    expect(track.on).toBe(false)
+  })
+
+  it('does not touch the camera to turn off a light already off', async () => {
+    await acquireCamera()
+    await turnTorchOff()
+    expect(track.applyConstraints).not.toHaveBeenCalled()
+  })
+
+  it('is out once the camera is released', async () => {
+    await acquireCamera()
+    await setTorch(true)
+    releaseCamera()
+    // Stopping the track is what extinguishes it; the flag has to agree, or the
+    // next session starts with a button claiming a light that is not on.
+    expect(track.on).toBe(false)
+    expect(torchOn()).toBe(false)
+  })
+
+  it('falls back to the flat constraint when advanced is ignored', async () => {
+    // Some builds accept `advanced` for on and quietly ignore it for off, which
+    // is the worst possible failure for a light.
+    track = torchTrack({ honours: 'flat' })
+    granted = streamOf(track)
+    await acquireCamera()
+    expect(await setTorch(true)).toBe(true)
+    expect(track.on).toBe(true)
+    expect(track.applyConstraints).toHaveBeenCalledTimes(2)
+  })
+
+  it('believes the camera over the request', async () => {
+    // A browser that accepts the constraint and does nothing. Claiming success
+    // would leave the flag inverted and the next tap turning it back on.
+    track = torchTrack({ honours: 'neither' })
+    granted = streamOf(track)
+    await acquireCamera()
+    expect(await setTorch(true)).toBe(false)
+    expect(torchOn()).toBe(false)
+  })
+
+  it('takes silence as agreement, since not every browser reports settings', async () => {
+    track = torchTrack({ reports: false })
+    granted = streamOf(track)
+    await acquireCamera()
+    expect(await setTorch(true)).toBe(true)
+    expect(torchOn()).toBe(true)
+  })
+
+  it('says so rather than pretending on a phone with no light', async () => {
+    const plain = { stop: vi.fn(), getCapabilities: () => ({}) }
+    granted = { active: true, getTracks: () => [plain], getVideoTracks: () => [plain] }
+    await acquireCamera()
+    expect(hasTorch()).toBe(false)
+    expect(await setTorch(true)).toBe(false)
+    expect(torchOn()).toBe(false)
   })
 })

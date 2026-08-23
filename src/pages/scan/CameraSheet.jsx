@@ -3,7 +3,8 @@ import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument } from '../../scanner/documentDetect.js'
 import { DocumentTracker } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
-import { acquireCamera, cameraOpen, setTorch, hasTorch } from '../../scanner/cameraStream.js'
+import { acquireCamera, cameraOpen, setTorch, hasTorch, torchOn as torchIsOn, turnTorchOff }
+  from '../../scanner/cameraStream.js'
 
 // ─── The scanner ──────────────────────────────────────────────────────────────
 // Live outline, auto-capture, then a chance to correct the corners before the
@@ -224,7 +225,10 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
   const [attempt, setAttempt] = useState(0)
   const [view, setView] = useState(null)
   const [autoCapture, setAutoCapture] = useState(true)
-  const [torchOn, setTorchOn] = useState(false)
+  // Read from the stream rather than started at false. The stream outlives this
+  // component, so a torch left on and a button initialised to "off" is how the
+  // light became impossible to put out: the first tap sent torch:true again.
+  const [torchLit, setTorchLit] = useState(() => torchIsOn())
   const [torchAvailable, setTorchAvailable] = useState(false)
   const [flash, setFlash] = useState(false)
   const [pending, setPending] = useState(null)
@@ -256,6 +260,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
         videoRef.current.play().catch(() => {})
       }
       setTorchAvailable(hasTorch())
+      setTorchLit(torchIsOn())
       setCameraState('ready')
     }).catch(err => {
       if (cancelled) return
@@ -317,6 +322,22 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
     })
   }, [])
 
+  // ── The light goes out with the camera view. ──
+  //
+  // The stream is deliberately kept open across pages, so nothing else here
+  // stops the torch: leaving the scanner with it on left it burning, and it is
+  // not obvious afterwards where the light is coming from — the phone is out of
+  // the camera by then. Backgrounding counts as leaving, because the usual way
+  // this happens is putting the phone in a pocket.
+  useEffect(() => {
+    const off = () => { if (document.visibilityState === 'hidden') turnTorchOff() }
+    document.addEventListener('visibilitychange', off)
+    return () => {
+      document.removeEventListener('visibilitychange', off)
+      turnTorchOff()
+    }
+  }, [])
+
   // ── Detection. Every third frame, at a small size. ──
   useEffect(() => {
     if (cameraState !== 'ready' || engine !== 'ready') return
@@ -371,8 +392,10 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
   }
 
   async function toggleTorch() {
-    const worked = await setTorch(!torchOn)
-    if (worked) setTorchOn(!torchOn)
+    const wanted = !torchIsOn()
+    const worked = await setTorch(wanted)
+    setTorchLit(torchIsOn())
+    if (!worked) setError('This camera has no light, or the browser will not switch it.')
   }
 
   const hint = engine === 'unavailable'
@@ -449,9 +472,9 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
         )}
 
         {torchAvailable && !error && (
-          <button onClick={toggleTorch} aria-label="Torch" aria-pressed={torchOn}
-            style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, width: 42, height: 42, borderRadius: 21, background: torchOn ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.3)', color: torchOn ? '#042746' : 'white', fontSize: 18, cursor: 'pointer' }}>
-            {torchOn ? '🔆' : '🔅'}
+          <button onClick={toggleTorch} aria-label="Torch" aria-pressed={torchLit}
+            style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, width: 42, height: 42, borderRadius: 21, background: torchLit ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.3)', color: torchLit ? '#042746' : 'white', fontSize: 18, cursor: 'pointer' }}>
+            {torchLit ? '🔆' : '🔅'}
           </button>
         )}
       </div>
