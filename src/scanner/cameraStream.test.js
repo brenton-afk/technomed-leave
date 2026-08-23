@@ -44,14 +44,22 @@ describe('opening the camera once', () => {
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
   })
 
-  it('asks for the rear camera at capture resolution', async () => {
+  it('hints a width but never pins the shape of the frame', async () => {
     await acquireCamera()
     const request = navigator.mediaDevices.getUserMedia.mock.calls[0][0]
     expect(request.video.facingMode).toEqual({ ideal: 'environment' })
-    // Captured large and downscaled: it reads handwriting better than capturing
-    // small does.
-    expect(request.video.width.ideal).toBeGreaterThanOrEqual(1920)
     expect(request.audio).toBe(false)
+
+    // A width on its own asks the device for its nearest mode, which is how a
+    // stream sharp enough for handwriting is obtained.
+    expect(request.video.width).toEqual({ ideal: 1920 })
+
+    // A width *and* a height asks for a shape the camera may not have, and an
+    // iPhone satisfies that by cropping the sensor or choosing a longer lens. The
+    // preview then comes back magnified with a form that will not fit in it,
+    // which is exactly what happened. Never both.
+    expect(request.video.height).toBeUndefined()
+    expect(request.video.aspectRatio).toBeUndefined()
   })
 
   it('reports whether it is already open, so no wait is shown needlessly', async () => {

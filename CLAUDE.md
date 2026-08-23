@@ -132,6 +132,24 @@ Invariants worth preserving:
   component that stops its tracks on unmount re-opens the camera for every page,
   which on iOS is a stall and a second of black each time.
 
+Two constraints here were learned the hard way and must not be undone:
+
+- **Never request a width *and* a height.** An iPhone has several rear lenses at
+  several native aspect ratios; asking for a shape it does not have is satisfied
+  by cropping the sensor or picking a longer lens, and the preview comes back
+  magnified with a form that will not fit in it. Hint one dimension (`width:
+  {ideal: 1920}`) so a sharp mode is chosen, never both.
+- **The engine must never gate the camera.** It loaded behind a full-screen
+  "Starting the scanner…", which on a hospital connection is most of a minute of
+  nothing moving and no way to take a photograph. It now downloads with a
+  progress chip and a 45s deadline while the shutter works throughout; without it
+  there is no outline and the whole photograph is kept.
+
+The first camera permission prompt is browser-enforced and cannot be removed from
+the app. What the code guarantees is one `getUserMedia` per session — the prompt
+is per page load, so on iOS a standalone PWA launch will ask again unless the site
+is set to Allow in Safari's settings.
+
 **Detection runs at 240×180 on every third frame**, and low is deliberate: a page
 border survives downscaling and a form's printed table rules do not, so the small
 frame is *more* accurate as well as four times faster (`npm run bench:scanner`

@@ -183,6 +183,7 @@ function CropReview({ capture, cv, onConfirm, onRetake }) {
 
 export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }) {
   const videoRef = useRef(null)
+  const streamRef = useRef(null)
   const detectCanvasRef = useRef(null)
   const trackerRef = useRef(null)
   const viewRef = useRef(null)
@@ -192,6 +193,10 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
   const busyRef = useRef(false)
 
   const [engine, setEngine] = useState(openCvReady() ? 'ready' : 'loading')
+  const [engineProgress, setEngineProgress] = useState(0)
+  // The video's own dimensions, so the preview can be shown whole rather than
+  // cropped to whatever shape the screen happens to be.
+  const [frame, setFrame] = useState(null)
   const [cameraState, setCameraState] = useState(cameraOpen() ? 'ready' : 'opening')
   const [error, setError] = useState('')
   const [view, setView] = useState(null)
@@ -201,11 +206,28 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
   const [flash, setFlash] = useState(false)
   const [pending, setPending] = useState(null)
 
+  /**
+   * Attaches the stream whenever a video element appears.
+   *
+   * A ref callback rather than an effect, because the element goes away and comes
+   * back: reviewing a captured page replaces this whole view, and the video that
+   * returns afterwards is a new element. An effect that ran once on mount left
+   * that new element with no source, so every page after the first showed black.
+   */
+  const attachVideo = useCallback(node => {
+    videoRef.current = node
+    if (node && streamRef.current && node.srcObject !== streamRef.current) {
+      node.srcObject = streamRef.current
+      node.play().catch(() => {})
+    }
+  }, [])
+
   // ── The camera. Acquired once for the whole session, never per page. ──
   useEffect(() => {
     let cancelled = false
     acquireCamera().then(stream => {
       if (cancelled) return
+      streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         videoRef.current.play().catch(() => {})
@@ -227,7 +249,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
   // ── The engine. ──
   useEffect(() => {
     let cancelled = false
-    loadOpenCv().then(cv => {
+    loadOpenCv(fraction => { if (!cancelled) setEngineProgress(fraction) }).then(cv => {
       if (cancelled) return
       cvRef.current = cv
       setEngine('ready')
@@ -328,34 +350,48 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
     if (worked) setTorchOn(!torchOn)
   }
 
-  if (pending) {
-    return (
+  const hint = engine === 'unavailable'
+    ? 'Edge detection unavailable — the whole photo is kept'
+    : engine === 'loading'
+      ? 'Ready to shoot — edge detection still loading'
+      : (view?.hint || 'Point at the form')
+
+  return (
+    <>
+    {/* The review sits on top rather than replacing this view, so the camera is
+        never torn down and rebuilt between pages: no black flash, no second
+        play(), nothing to re-attach. */}
+    {pending && (
       <CropReview capture={pending} cv={cvRef.current}
         onConfirm={accept}
         onRetake={() => { setPending(null); busyRef.current = false; trackerRef.current?.reset() }} />
-    )
-  }
+    )}
+    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column', visibility: pending ? 'hidden' : 'visible' }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* Sized to the camera's own aspect, so the whole field of view is on
+            screen. Filling the screen instead means cropping the picture, and a
+            cropped preview is the same problem as a zoomed one: the form will not
+            fit in it. It also lets the outline sit exactly on the video, since
+            they share one box. */}
+        <div style={{
+          position: 'relative',
+          aspectRatio: frame ? `${frame.width} / ${frame.height}` : '3 / 4',
+          maxWidth: '100%', maxHeight: '100%',
+          width: frame ? undefined : '100%',
+          background: '#000'
+        }}>
+          <video ref={attachVideo} autoPlay muted playsInline
+            onLoadedMetadata={e => setFrame({ width: e.target.videoWidth, height: e.target.videoHeight })}
+            style={{ width: '100%', height: '100%', display: error ? 'none' : 'block', objectFit: 'contain' }} />
 
-  const waiting = cameraState === 'opening' || engine === 'loading'
-  const hint = engine === 'unavailable'
-    ? 'Edge detection unavailable — the whole photo will be kept'
-    : (view?.hint || 'Point at the form')
+          {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.75 }} />}
+          <Outline view={view} countdown={view?.countdown || 0} />
+        </div>
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-        <video ref={videoRef} autoPlay muted playsInline
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: error ? 'none' : 'block' }} />
-
-        {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.75 }} />}
-        <Outline view={view} countdown={view?.countdown || 0} />
-
-        {waiting && !error && (
+        {cameraState === 'opening' && !error && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'rgba(255,255,255,0.75)', fontSize: 13.5 }}>
             <div style={{ width: 26, height: 26, borderRadius: 13, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: TEAL, animation: 'tm-spin 700ms linear infinite' }} />
-            {engine === 'loading' && cameraState === 'ready'
-              ? 'Starting the scanner…'
-              : 'Opening camera…'}
+            Opening camera…
             <style>{'@keyframes tm-spin{to{transform:rotate(360deg)}}'}</style>
           </div>
         )}
@@ -367,6 +403,19 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
             <button onClick={onFallback} style={{ padding: '11px 18px', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Choose photos instead
             </button>
+          </div>
+        )}
+
+        {/* Never over the picture. The camera works now; the outline is a few
+            seconds behind it, and saying so is better than hiding a working
+            shutter behind a loading screen. */}
+        {engine === 'loading' && cameraState === 'ready' && !error && (
+          <div style={{ position: 'absolute', top: 14, left: 14, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', borderRadius: 16, background: 'rgba(0,0,0,0.55)', color: 'rgba(255,255,255,0.85)', fontSize: 11.5 }}>
+            <span style={{ width: 12, height: 12, borderRadius: 6, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: TEAL, animation: 'tm-spin 700ms linear infinite' }} />
+            {engineProgress > 0.02
+              ? `Edge detection ${Math.round(engineProgress * 100)}%`
+              : 'Edge detection loading'}
+            <style>{'@keyframes tm-spin{to{transform:rotate(360deg)}}'}</style>
           </div>
         )}
 
@@ -418,5 +467,6 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
         </div>
       )}
     </div>
+    </>
   )
 }

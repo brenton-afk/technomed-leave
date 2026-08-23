@@ -29,8 +29,21 @@ export async function cameraPermission() {
 /**
  * The shared rear-camera stream.
  *
- * Asks for more resolution than is kept: capturing large and downscaling reads
- * handwriting better than capturing small.
+ * Deliberately asks for almost nothing: the rear camera, and that is all.
+ *
+ * It used to ask for 2560x1440, on the reasoning that capturing large and
+ * downscaling reads handwriting better. That reasoning is sound and the request
+ * was still wrong. An iPhone has several rear lenses at several native aspect
+ * ratios, and pinning both dimensions makes it satisfy the request by cropping
+ * the sensor or choosing a longer lens — so the preview came back magnified, with
+ * a form that would not fit in it at any sensible distance. Reported, accurately,
+ * as overzoomed and useless.
+ *
+ * One dimension is still hinted, because dropping resolution entirely can leave a
+ * 640x480 stream and handwriting does not survive that. Hinting a width asks the
+ * device to pick its closest *mode*; pinning a width and a height together asks it
+ * to produce a shape it may not have, which it does by cropping. Only the second
+ * causes the magnification.
  */
 export function acquireCamera() {
   if (stream?.active) return Promise.resolve(stream)
@@ -43,8 +56,9 @@ export function acquireCamera() {
   opening = navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: { ideal: 'environment' },
-      width: { ideal: 2560 },
-      height: { ideal: 1440 }
+      // Deliberately width only, and deliberately `ideal`. No height, and no
+      // aspectRatio — see above.
+      width: { ideal: 1920 }
     },
     audio: false
   }).then(granted => {
