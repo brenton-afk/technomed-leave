@@ -53,7 +53,11 @@ export async function buildUsageWorkbook(caseRecord, items) {
     const row = sheet.addRow({
       date: caseRecord.date,
       hospital: caseRecord.hospital,
-      surgeon: caseRecord.surgeonName || caseRecord.surgeonSurname,
+      // The surname first, because that is the field the review screen shows and
+      // the rep corrects — and the one the folder name and the email subject are
+      // built from. Preferring the extracted full name meant a corrected surname
+      // reached the subject line while the sheet still carried the misread one.
+      surgeon: caseRecord.surgeonSurname || caseRecord.surgeonName,
       patientSurname: caseRecord.patientSurname,
       patientFirstName: caseRecord.patientFirstName,
       patientUrNumber: caseRecord.patientUrNumber,

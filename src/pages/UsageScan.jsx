@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import CameraSheet from './scan/CameraSheet.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
+import { partitionItems } from '../usageReview.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -13,6 +14,10 @@ const TEAL = '#189a85'
 const BLUE = '#2899d4'
 const AMBER = '#fff3cd'
 const AMBER_TEXT = '#856404'
+// A resolved row keeps its place in the review list and turns this colour, so
+// ticking one off changes something you can see.
+const DONE = '#e8f6f3'
+const DONE_LINE = 'rgba(24,154,133,0.32)'
 const MUTED = '#6b7a8d'
 const BORDER = 'rgba(26,43,74,0.12)'
 
@@ -348,10 +353,28 @@ export default function UsageScan({ user }) {
     }))
   }
 
+  // Resolving used to clear the flag and the reasons, which moved the row out of
+  // "Needs review" and into "Extracted items" further down the page. The next
+  // flagged row then slid up into the space it had just left — so the screen
+  // barely changed, and it read as the tap not having registered and the same
+  // item still being in front of you.
+  //
+  // The row stays exactly where it is now and turns green. `resolved` is what
+  // keeps it in the section; `manualReview` still comes off, because that is what
+  // decides whether the item may be emailed. The reasons are kept so it is still
+  // possible to see what had been wrong with it.
   function resolveItem(id) {
     setCaseRecord(c => ({
       ...c,
-      items: c.items.map(it => it.id === id ? { ...it, manualReview: false, reviewReasons: [] } : it)
+      items: c.items.map(it => it.id === id ? { ...it, manualReview: false, resolved: true } : it)
+    }))
+  }
+
+  /** Puts a row back into review, for a tap that landed on the wrong card. */
+  function unresolveItem(id) {
+    setCaseRecord(c => ({
+      ...c,
+      items: c.items.map(it => it.id === id ? { ...it, manualReview: true, resolved: false } : it)
     }))
   }
 
@@ -447,7 +470,7 @@ export default function UsageScan({ user }) {
       <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Usage Scanning" subtitle={`${user?.name?.split(' ')[0] || 'Rep'} · scan a usage form to file and send it`} />
         <div style={{ padding: 16 }}>
-          {error && <Banner tone="error">{error}</Banner>}
+          {error && <Banner tone="danger">{error}</Banner>}
           <button onClick={startNew} style={{ width: '100%', padding: 15, background: TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 16 }}>
             📷 New Usage Scan
           </button>
@@ -489,7 +512,7 @@ export default function UsageScan({ user }) {
       <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Add pages" subtitle="Photograph or upload every page of the usage form" />
         <div style={{ padding: 16 }}>
-          {error && <Banner tone="error">{error}</Banner>}
+          {error && <Banner tone="danger">{error}</Banner>}
 
           <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }}
             onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
@@ -564,19 +587,32 @@ export default function UsageScan({ user }) {
 
   // ── Review ───────────────────────────────────────────────
   if (step === 'review' && caseRecord) {
-    const flagged = caseRecord.items.filter(it => it.manualReview && !it.excluded)
-    const clean = caseRecord.items.filter(it => !it.manualReview && !it.excluded)
-    const excluded = caseRecord.items.filter(it => it.excluded)
+    const { inReview, outstanding, clean, excluded, sendable } = partitionItems(caseRecord.items)
 
     return (
       <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Review extracted usage" subtitle="Check every field before filing and sending" />
         <div style={{ padding: 16 }}>
-          {error && <Banner tone="error">{error}</Banner>}
-          {notice && <Banner tone="warn">{notice}</Banner>}
-          {flagged.length > 0 && (
-            <Banner tone="warn">
-              <strong>{flagged.length} item{flagged.length === 1 ? '' : 's'} need{flagged.length === 1 ? 's' : ''} review.</strong> Flagged rows are not emailed until you resolve them.
+          {error && <Banner tone="danger">{error}</Banner>}
+          {notice && <Banner tone="warning">{notice}</Banner>}
+          {/* A count that goes down. Previously this said how many items needed
+              review and never changed as they were dealt with, so there was
+              nothing on the page that answered "how many are left?". */}
+          {inReview.length > 0 && (
+            <Banner tone={outstanding.length === 0 ? 'info' : 'warning'}>
+              {outstanding.length === 0 ? (
+                <><strong>All {inReview.length} flagged item{inReview.length === 1 ? '' : 's'} resolved.</strong> Nothing is being held back.</>
+              ) : (
+                <>
+                  <strong>{outstanding.length} of {inReview.length} still need{outstanding.length === 1 ? 's' : ''} review.</strong> Flagged rows are not emailed until you resolve them.
+                  <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                    {inReview.map(it => (
+                      <div key={it.id} title={it.manualReview ? 'Still to review' : 'Resolved'}
+                        style={{ flex: 1, height: 5, borderRadius: 3, background: it.manualReview ? 'rgba(133,100,4,0.25)' : TEAL }} />
+                    ))}
+                  </div>
+                </>
+              )}
             </Banner>
           )}
 
@@ -588,7 +624,7 @@ export default function UsageScan({ user }) {
               <Field label="Patient surname" value={caseRecord.patientSurname} onChange={v => updateCase('patientSurname', v)} />
               <Field label="First name" value={caseRecord.patientFirstName} onChange={v => updateCase('patientFirstName', v)} />
               <Field label="UR number" value={caseRecord.patientUrNumber} onChange={v => updateCase('patientUrNumber', v)} />
-              <Field label="Date" type="date" value={caseRecord.date} onChange={v => updateCase('date', v)} />
+              <Field label="Surgery date" type="date" value={caseRecord.date} onChange={v => updateCase('date', v)} />
               {/* A quiet confirmation, not a question.
                   Forms are always scanned in theatre on the day of surgery, so
                   today's date is right by definition and a date read off the form
@@ -602,7 +638,6 @@ export default function UsageScan({ user }) {
                   Today, from this device.
                 </div>
               )}
-              <Field label="Surgeon" value={caseRecord.surgeonName} onChange={v => updateCase('surgeonName', v)} />
               <Field label="Surgeon surname" value={caseRecord.surgeonSurname} onChange={v => updateCase('surgeonSurname', v)} />
               <Field label="Procedure" value={caseRecord.procedure} onChange={v => updateCase('procedure', v)} />
               <Field label="Hospital" value={caseRecord.hospital} onChange={v => updateCase('hospital', v)}
@@ -613,16 +648,33 @@ export default function UsageScan({ user }) {
             </div>
           </div>
 
-          {[['Needs review', flagged, true], ['Extracted items', clean, false], ['Excluded', excluded, false]].map(([title, list, isFlagged]) => (
+          {[
+            [outstanding.length ? `Needs review — ${outstanding.length} left` : 'Reviewed', inReview, true],
+            ['Extracted items', clean, false],
+            ['Excluded', excluded, false]
+          ].map(([title, list, isFlagged]) => (
             list.length === 0 ? null : (
               <div key={title}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: isFlagged ? AMBER_TEXT : MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '16px 0 10px' }}>
                   {title} ({list.length})
                 </div>
-                {list.map(item => (
-                  <div key={item.id} style={{ background: isFlagged ? AMBER : 'white', borderRadius: 12, padding: 14, marginBottom: 10, border: `1px solid ${isFlagged ? 'rgba(133,100,4,0.25)' : BORDER}`, opacity: item.excluded ? 0.6 : 1 }}>
-                    {isFlagged && item.reviewReasons?.length > 0 && (
-                      <div style={{ fontSize: 11, color: AMBER_TEXT, fontWeight: 600, marginBottom: 10 }}>⚠ {item.reviewReasons.join(' · ')}</div>
+                {list.map((item, n) => {
+                  // Three states, not two: still flagged, resolved, or an
+                  // ordinary row. The middle one is the whole point — the tap has
+                  // to leave something on screen.
+                  const needsWork = isFlagged && item.manualReview
+                  const done = isFlagged && item.resolved
+                  return (
+                  <div key={item.id} style={{ background: needsWork ? AMBER : done ? DONE : 'white', borderRadius: 12, padding: 14, marginBottom: 10, border: `1px solid ${needsWork ? 'rgba(133,100,4,0.25)' : done ? DONE_LINE : BORDER}`, opacity: item.excluded ? 0.6 : 1 }}>
+                    {isFlagged && (
+                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: done ? TEAL : AMBER_TEXT }}>
+                          {done ? '✓ Resolved' : item.reviewReasons?.length > 0 ? `⚠ ${item.reviewReasons.join(' · ')}` : '⚠ Needs review'}
+                        </div>
+                        {/* Which of them this is, so a page of near-identical
+                            amber cards is countable. */}
+                        <div style={{ fontSize: 11, color: MUTED, whiteSpace: 'nowrap' }}>{n + 1} of {list.length}</div>
+                      </div>
                     )}
                     <Field label="Product / system" value={item.productName} onChange={v => updateItem(item.id, 'productName', v)} />
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -634,10 +686,16 @@ export default function UsageScan({ user }) {
                     </div>
                     <Field label="Distributor" value={item.distributorKey || ''} onChange={v => updateItem(item.id, 'distributorKey', v)} options={DISTRIBUTOR_OPTIONS} />
                     <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                      {isFlagged && (
+                      {needsWork && (
                         <button onClick={() => resolveItem(item.id)} disabled={!item.distributorKey || !item.productName}
                           style={{ flex: 1, padding: 10, background: (!item.distributorKey || !item.productName) ? '#d9cfae' : TEAL, color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: (!item.distributorKey || !item.productName) ? 'default' : 'pointer' }}>
                           ✓ Mark resolved
+                        </button>
+                      )}
+                      {done && (
+                        <button onClick={() => unresolveItem(item.id)}
+                          style={{ flex: 1, padding: 10, background: 'transparent', color: TEAL, border: `1px solid ${DONE_LINE}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                          Undo resolve
                         </button>
                       )}
                       <button onClick={() => toggleExcluded(item.id)}
@@ -646,21 +704,22 @@ export default function UsageScan({ user }) {
                       </button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )
           ))}
 
-          <button onClick={confirmAndSend} disabled={busy || clean.length === 0}
-            style={{ width: '100%', padding: 15, background: (busy || clean.length === 0) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: (busy || clean.length === 0) ? 'default' : 'pointer', margin: '18px 0 10px' }}>
-            {busy ? 'Saving and sending…' : `Confirm — file to Dropbox & email${clean.length ? ` (${clean.length} item${clean.length === 1 ? '' : 's'})` : ''}`}
+          <button onClick={confirmAndSend} disabled={busy || sendable.length === 0}
+            style={{ width: '100%', padding: 15, background: (busy || sendable.length === 0) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', margin: '18px 0 10px' }}>
+            {busy ? 'Saving and sending…' : `Confirm — file to Dropbox & email${sendable.length ? ` (${sendable.length} item${sendable.length === 1 ? '' : 's'})` : ''}`}
           </button>
           {/* Testing the scanner should not mean emailing a distributor. This
               sends the identical message and attachment to whoever is signed in,
               and to nobody else — the address comes from the session, so there is
               no way to type one in. */}
-          <button onClick={() => confirmAndSend({ testOnly: true })} disabled={busy || clean.length === 0}
-            style={{ width: '100%', padding: 13, background: 'transparent', border: `1px solid ${TEAL}`, borderRadius: 10, fontSize: 13.5, fontWeight: 600, color: TEAL, cursor: (busy || clean.length === 0) ? 'default' : 'pointer', marginBottom: 10 }}>
+          <button onClick={() => confirmAndSend({ testOnly: true })} disabled={busy || sendable.length === 0}
+            style={{ width: '100%', padding: 13, background: 'transparent', border: `1px solid ${TEAL}`, borderRadius: 10, fontSize: 13.5, fontWeight: 600, color: TEAL, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', marginBottom: 10 }}>
             {busy ? 'Sending…' : `Send a test to me only (${user?.email || 'your address'})`}
           </button>
           <button onClick={() => setStep('capture')} disabled={busy} style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 13, color: MUTED, cursor: 'pointer' }}>
@@ -681,15 +740,15 @@ export default function UsageScan({ user }) {
           subtitle={result.record.folderName} />
         <div style={{ padding: 16 }}>
           {result.test && (
-            <Banner tone="warn">
+            <Banner tone="warning">
               Test only. Everything went to {result.sentTo} and nothing to any distributor —
               and the case is not recorded as sent, so the real send is still there to do.
             </Banner>
           )}
-          {error && <Banner tone="error">{error}</Banner>}
-          {result.emailError && <Banner tone="error">{result.emailError}</Banner>}
+          {error && <Banner tone="danger">{error}</Banner>}
+          {result.emailError && <Banner tone="danger">{result.emailError}</Banner>}
           {result.heldBackCount > 0 && (
-            <Banner tone="warn">{result.heldBackCount} unresolved item{result.heldBackCount === 1 ? ' was' : 's were'} saved to the sheet but not emailed.</Banner>
+            <Banner tone="warning">{result.heldBackCount} unresolved item{result.heldBackCount === 1 ? ' was' : 's were'} saved to the sheet but not emailed.</Banner>
           )}
 
           <div style={{ background: 'white', borderRadius: 12, padding: 15, marginBottom: 12, border: `1px solid ${BORDER}` }}>

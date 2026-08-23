@@ -10,7 +10,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.test.{js,jsx}'],
+    // api/ had no tests at all: it is checked by an esbuild pass that resolves
+    // every import, which catches a missing export and nothing about behaviour.
+    include: ['src/**/*.test.{js,jsx}', 'api/**/*.test.js'],
     // A fixed clock, so snapshots of anything date-derived stay stable.
     setupFiles: ['./src/test/setup.js']
   }

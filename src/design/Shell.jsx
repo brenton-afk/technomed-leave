@@ -155,13 +155,21 @@ export function Card({ children, style, onClick }) {
   )
 }
 
+// The names people reach for. Every Banner in the usage scanner asked for
+// "error" or "warn", which are not tones — so an unknown name fell through to
+// `info` and a failed distributor email was drawn as a friendly teal notice, in
+// the same colour as the tips beside it. A silent fallback to the mildest
+// possible styling is the wrong default for a component whose whole job is to
+// say how much something matters, so the words are accepted instead.
+const TONE_ALIASES = { warn: 'warning', error: 'danger', success: 'info' }
+
 export function Banner({ tone = 'info', children, action }) {
   const tones = {
     info: { bg: colour.accentSoft, fg: colour.accentDeep, line: 'rgba(24,154,133,0.28)' },
     warning: { bg: colour.warningSoft, fg: colour.warning, line: colour.warningLine },
     danger: { bg: colour.dangerSoft, fg: colour.danger, line: colour.dangerLine }
   }
-  const t = tones[tone] || tones.info
+  const t = tones[tone] || tones[TONE_ALIASES[tone]] || tones.info
   return (
     <div style={{
       background: t.bg, border: `1px solid ${t.line}`, color: t.fg,
