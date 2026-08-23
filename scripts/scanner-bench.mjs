@@ -59,7 +59,10 @@ for (const scene of cases) {
 
   const shown = result ? `${error.toFixed(1)}px`.padStart(8) : '   —    '
   console.log(`  ${ok ? '✓' : '✗'} ${scene.name.padEnd(26)}${shown}` +
-    (result ? `  area ${result.areaFraction.toFixed(2)}  contrast ${result.contrast.toFixed(2)}` : '  not found'))
+    (result
+      ? `  area ${result.areaFraction.toFixed(2)}  fill ${result.fill.toFixed(2)}` +
+        `  contrast ${result.contrast.toFixed(2)}${result.fill >= 0.6 ? '  auto' : ''}`
+      : '  not found'))
 }
 
 console.log(`\n  ${passed}/${cases.length} within ${TOLERANCE}px · ${found} found · ` +

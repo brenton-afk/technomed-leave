@@ -164,13 +164,42 @@ describe('deciding when to capture on its own', () => {
 
   it('will not fire on a page too far away to read once cropped', () => {
     const tracker = new DocumentTracker()
-    const small = Array.from({ length: 12 }, () => detection(quad(0.1), { areaFraction: 0.3 }))
+    const small = Array.from({ length: 12 }, () => detection(quad(0.1), { fill: 0.3 }))
     const view = feed(tracker, small)
     expect(view.readyToCapture).toBe(false)
     expect(view.reason).toBe('small')
     expect(view.hint).toBe('Move closer')
     // The outline is still drawn — it is guidance, not a refusal.
     expect(view.corners).not.toBeNull()
+  })
+
+  it('fires for a portrait page filling a landscape frame', () => {
+    // The bug this exists for. A portrait A4 page inside a 16:9 landscape camera
+    // frame covers at most 39.8% of it however close the phone is held, so a
+    // threshold of "60% of the frame" could not be met at any distance: the
+    // scanner advised "Move closer" indefinitely and never fired. Judged against
+    // what is *achievable*, a page filling the frame's height is ready.
+    const tracker = new DocumentTracker()
+    const nearlyFull = Array.from({ length: 12 },
+      () => detection(quad(0.1), { areaFraction: 0.37, fill: 0.93 }))
+    const view = feed(tracker, nearlyFull, 1000, 100)
+    expect(view.reason).toBe('ready')
+    expect(view.readyToCapture).toBe(true)
+  })
+
+  it('tolerates the movement of a hand holding a phone', () => {
+    // Nobody holds a phone still to within 1.5% of the frame, which is what the
+    // stillness test used to demand, so the wait never completed.
+    const tracker = new DocumentTracker()
+    let at = 1000
+    let view
+    for (let i = 0; i < 20; i++) {
+      // A page wandering by about 1% of the frame, as a held phone does.
+      const wobble = 0.005 * Math.sin(i)
+      view = tracker.update(detection(quad(0.1 + wobble), { fill: 0.9 }), at)
+      at += 100
+    }
+    expect(view.readyToCapture).toBe(true)
   })
 
   it('will not fire in light too poor to read the form', () => {

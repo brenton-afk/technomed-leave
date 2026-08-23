@@ -55,6 +55,33 @@ function isConvex(corners) {
  * Opposite sides of a rectangle stay comparable under perspective. A shape whose
  * sides are wildly different lengths is a shadow or a bench edge, not paper.
  */
+/**
+ * How much of the frame the page covers, as a fraction of the most it *could*
+ * cover — which is not the same as the fraction of the frame it covers, and
+ * conflating the two made auto-capture impossible to satisfy.
+ *
+ * A portrait A4 page inside a 16:9 landscape camera frame can occupy at most
+ * 39.8% of it, however close the phone is held: the page's height is limited by
+ * the frame's height, and its width is then fixed by the paper. So asking for
+ * "60% of the frame" asked for something no distance could produce — the scanner
+ * sat there advising "Move closer" indefinitely and never fired.
+ *
+ * Measuring against the achievable maximum asks the question that was meant: does
+ * the page nearly fill the frame?
+ */
+function fillFraction(corners, areaFraction, frameAspect) {
+  const side = (a, b) => Math.hypot(corners[a].x - corners[b].x, corners[a].y - corners[b].y)
+  const pageWidth = (side(0, 1) + side(3, 2)) / 2
+  const pageHeight = (side(0, 3) + side(1, 2)) / 2
+  if (!pageWidth || !pageHeight || !frameAspect) return 0
+  // Corners are normalised, so their aspect has to be put back into the frame's
+  // proportions before it can be compared with it.
+  const pageAspect = (pageWidth * frameAspect) / pageHeight
+  const most = Math.min(pageAspect / frameAspect, frameAspect / pageAspect)
+  if (!(most > 0)) return 0
+  return Math.min(1, areaFraction / most)
+}
+
 function squareness(corners) {
   const side = (a, b) => Math.hypot(corners[a].x - corners[b].x, corners[a].y - corners[b].y)
   const top = side(0, 1), right = side(1, 2), bottom = side(2, 3), left = side(3, 0)
@@ -251,9 +278,12 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
     }
 
     if (!best) return null
+    const normalised = best.corners.map(c => ({ x: c.x / width, y: c.y / height }))
     return {
-      corners: best.corners.map(c => ({ x: c.x / width, y: c.y / height })),
+      corners: normalised,
       areaFraction: best.areaFraction,
+      // What "close enough to capture" is actually judged on.
+      fill: fillFraction(normalised, best.areaFraction, width / height),
       squareness: best.squareness,
       contrast
     }

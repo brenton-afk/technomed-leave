@@ -69,12 +69,16 @@ export class DocumentTracker {
       // enough to ride out the former, short enough that the latter does not
       // leave a stale outline sitting on screen.
       holdMs = 500,
-      // How still counts as still, and for how long.
-      stillTolerance = 0.015,
+      // How still counts as still, and for how long. A hand holding a phone is
+      // never actually still, and at 1.5% of frame width it never qualified.
+      stillTolerance = 0.022,
       stillForMs = 800,
-      // A page smaller than this is too far away to read once cropped.
-      minCaptureArea = 0.6,
-      minContrast = 0.3
+      // As a fraction of the *most* of the frame this page could ever cover, not
+      // of the frame. See fillFraction: a portrait page in a landscape frame
+      // cannot exceed 40% of it, so a threshold expressed against the frame was
+      // unreachable and the scanner advised "Move closer" indefinitely.
+      minFill = 0.6,
+      minContrast = 0.22
     } = options
 
     this.historyLength = historyLength
@@ -82,7 +86,7 @@ export class DocumentTracker {
     this.holdMs = holdMs
     this.stillTolerance = stillTolerance
     this.stillForMs = stillForMs
-    this.minCaptureArea = minCaptureArea
+    this.minFill = minFill
     this.minContrast = minContrast
     this.reset()
   }
@@ -145,10 +149,13 @@ export class DocumentTracker {
     const settled = Boolean(corners) && this.history.length >= this.historyLength
     const area = this.latest?.areaFraction ?? 0
     const contrast = this.latest?.contrast ?? 0
+    // Falls back to the raw area only for callers that do not supply a fill,
+    // which is tests and nothing else.
+    const fill = this.latest?.fill ?? area
 
     let reason = 'searching'
     if (corners) {
-      if (area < this.minCaptureArea) reason = 'small'
+      if (fill < this.minFill) reason = 'small'
       else if (contrast < this.minContrast) reason = 'dark'
       else reason = settled && stillFor > 0 ? 'ready' : 'moving'
     }
@@ -165,6 +172,7 @@ export class DocumentTracker {
       reason,
       hint: HOLD_REASONS[reason],
       areaFraction: area,
+      fill,
       contrast
     }
   }
