@@ -247,3 +247,53 @@ describe('the torch', () => {
     expect(torchOn()).toBe(false)
   })
 })
+
+
+describe('escaping the app shell', () => {
+  // "Notice how the Done button is stuck behind the tabs at the bottom. I can't
+  // hit Done when it is scanned now."
+  //
+  // The sheet is rendered from a screen inside `.tm-scroll`, which on iOS is a
+  // stacking context of its own because of `-webkit-overflow-scrolling: touch`.
+  // A fixed child of it is ranked only against that region's own contents, so
+  // zIndex 3100 could not clear a tab bar of 100 — the number was never the
+  // problem. It stopped working the moment the tab bar became a row of the
+  // layout instead of a fixed element in the same context.
+  function inScrollRegion(props = {}) {
+    const host = document.createElement('div')
+    host.className = 'tm-scroll'
+    document.body.appendChild(host)
+    const view = render(
+      <CameraSheet pageCount={1} onCapture={noop} onDone={noop} onFallback={noop} {...props} />,
+      { container: host })
+    return { host, view }
+  }
+
+  it('renders the camera on the body, not inside the scrolling region', async () => {
+    const { host } = inScrollRegion()
+    const video = await waitFor(() => {
+      const found = document.querySelector('video')
+      expect(found).not.toBeNull()
+      return found
+    })
+    // The whole guarantee: nothing between this layer and the document can put
+    // it in a stacking context, so nothing can rank the tab bar above it.
+    expect(host.contains(video)).toBe(false)
+    expect(document.body.contains(video)).toBe(true)
+  })
+
+  it('keeps Done out of the scrolling region too', async () => {
+    const { host } = inScrollRegion()
+    const done = await waitFor(() => screen.getByText(/Done · 1/))
+    expect(host.contains(done)).toBe(false)
+  })
+
+  it('takes the sheet away with it when it closes', async () => {
+    const { view } = inScrollRegion()
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+    // A portal that outlived its component would leave a black screen over the
+    // app with no way back.
+    view.unmount()
+    expect(document.querySelector('video')).toBeNull()
+  })
+})

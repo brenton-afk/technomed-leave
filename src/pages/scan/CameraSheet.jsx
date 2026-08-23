@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Overlay } from '../../design/Shell.jsx'
 import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument } from '../../scanner/documentDetect.js'
 import { DocumentTracker } from '../../scanner/documentTracker.js'
@@ -405,7 +406,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
       : (view?.hint || 'Point at the form')
 
   return (
-    <>
+    <Overlay>
     {/* The review sits on top rather than replacing this view, so the camera is
         never torn down and rebuilt between pages: no black flash, no second
         play(), nothing to re-attach. */}
@@ -519,6 +520,6 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
         </div>
       )}
     </div>
-    </>
+    </Overlay>
   )
 }

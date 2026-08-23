@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { colour, text, space, radius, border, font, card } from './tokens.js'
 import { IconChevron, IconBack } from './icons.jsx'
 
@@ -8,6 +9,29 @@ import { IconChevron, IconBack } from './icons.jsx'
 // on purpose: a second tab bar inside a tab is what makes an app feel clunky.
 
 /** The dark page header. `onBack` turns it into a sub-view header. */
+/**
+ * A layer that covers the whole screen, rendered outside the app shell.
+ *
+ * The portal is the entire point, and it is not tidiness. `.tm-scroll` carries
+ * `-webkit-overflow-scrolling: touch`, which on iOS makes it a stacking context
+ * of its own — so a `position: fixed` child of it with `zIndex: 3100` is ranked
+ * only against its siblings *inside* that region, and cannot be raised above the
+ * tab bar by any number at all. The camera's Retake and Use page buttons ended up
+ * behind the tab bar with the scan finished and no way to accept it.
+ *
+ * It worked until the tab bar stopped being `position: fixed`, which is what
+ * makes this worth a component: nothing about the overlay changed, and no z-index
+ * in it was wrong. A layer rendered on `document.body` has no ancestor that can
+ * scope it, so this cannot come back the next time the shell is rearranged.
+ *
+ * The child keeps its own `position: fixed` and background — this only decides
+ * where in the document it lands.
+ */
+export function Overlay({ children }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(children, document.body)
+}
+
 export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
   return (
     <div style={{

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { Overlay } from '../../design/Shell.jsx'
 
 const NAVY = '#042746'
 const TEAL = '#189a85'
@@ -168,6 +169,7 @@ export default function TimesheetApprovals({ user }) {
       </button>
 
       {rejectFor && (
+        <Overlay>
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 22, width: '100%', maxWidth: 400 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 6 }}>Return this timesheet</div>
@@ -187,6 +189,7 @@ export default function TimesheetApprovals({ user }) {
             </div>
           </div>
         </div>
+        </Overlay>
       )}
     </div>
   )

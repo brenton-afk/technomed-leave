@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import { Page, Header } from '../design/Shell.jsx'
+import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 
 // Points at the shared tokens rather than redefining them, so this screen
@@ -60,6 +60,7 @@ function NumberPad({ cell, categories, onSet, onClose }) {
   const quick = isCount ? [1, 2, 3] : [STANDARD_DAY, 4, 8, 12]
 
   return (
+    <Overlay>
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.55)', zIndex: 2000, display: 'flex', alignItems: 'flex-end' }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
@@ -106,6 +107,7 @@ function NumberPad({ cell, categories, onSet, onClose }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -126,6 +128,7 @@ function OnCallModal({ days, onApply, onClose }) {
   }, [from, to])
 
   return (
+    <Overlay>
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: '100%', maxWidth: 380 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>On-call calculator</div>
@@ -155,6 +158,7 @@ function OnCallModal({ days, onApply, onClose }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 
@@ -170,6 +174,7 @@ function SplitModal({ days, onApply, onClose }) {
   const scientific = round2(total - admin)
 
   return (
+    <Overlay>
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: '100%', maxWidth: 380 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Split a day</div>
@@ -208,6 +213,7 @@ function SplitModal({ days, onApply, onClose }) {
         </div>
       </div>
     </div>
+    </Overlay>
   )
 }
 

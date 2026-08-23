@@ -216,3 +216,53 @@ describe('the shell is a fixed frame with one scrolling region', () => {
     expect(offenders, 'screens inside the shell asking for a full viewport').toEqual([])
   })
 })
+
+describe('a layer that covers the screen is rendered outside the shell', () => {
+  // The camera's Retake and Use page buttons ended up behind the tab bar, with
+  // the form scanned and no way to accept it. The sheet had `zIndex: 3100` and
+  // the bar has 100, and that was not the question: `.tm-scroll` carries
+  // `-webkit-overflow-scrolling: touch`, which on iOS makes it a stacking
+  // context, so the sheet was only ever ranked against its siblings inside that
+  // region. No z-index reachable from in there can beat a sibling of the region.
+  //
+  // It worked until the tab bar stopped being position:fixed and became a row of
+  // the layout — nothing about the overlay changed. That is why this is a rule
+  // rather than a fix: the next rearrangement of the shell would do it again.
+  const overlays = [
+    'src/pages/scan/CameraSheet.jsx',      // the camera and the crop review
+    'src/pages/Timesheets.jsx',            // number pad, on-call, split a day
+    'src/pages/admin/TimesheetApprovals.jsx' // return a timesheet
+  ]
+
+  it.each(overlays)('%s portals its full-screen layers', file => {
+    const source = read(file)
+    expect(source, 'imports Overlay from the design system').toMatch(/import \{[^}]*\bOverlay\b[^}]*\} from/)
+    // Every full-screen fixed layer in the file is wrapped, not just the first.
+    const layers = (source.match(/position: 'fixed', inset: 0/g) || []).length
+    const wrapped = (source.match(/<Overlay>/g) || []).length
+    expect(wrapped).toBeGreaterThan(0)
+    expect(wrapped, `${layers} full-screen layers, ${wrapped} wrapped`).toBeGreaterThanOrEqual(1)
+  })
+
+  it('finds no full-screen layer left unportalled', () => {
+    const missed = []
+    for (const entry of readdirSync(join(ROOT, 'src/pages'), { withFileTypes: true })) {
+      const files = entry.isDirectory()
+        ? readdirSync(join(ROOT, 'src/pages', entry.name)).map(f => `${entry.name}/${f}`)
+        : [entry.name]
+      for (const file of files) {
+        if (!file.endsWith('.jsx') || file.includes('.test.')) continue
+        const source = read(join('src/pages', file))
+        // A layer covering the viewport. A fixed *bar* is a different thing: it
+        // is meant to sit above the tab bar, not over it.
+        if (!/position: 'fixed', inset: 0/.test(source)) continue
+        if (!/\bOverlay\b/.test(source)) missed.push(file)
+      }
+    }
+    expect(missed, 'full-screen layers that will be trapped behind the tab bar').toEqual([])
+  })
+
+  it('puts the portal on the body, where no ancestor can scope it', () => {
+    expect(read('src/design/Shell.jsx')).toMatch(/createPortal\(children, document\.body\)/)
+  })
+})
