@@ -156,9 +156,13 @@ function folderPreview(c) {
 
 // ─── Shared bits of chrome ───────────────────────────────────
 
+// Its own header rather than the design system's, because this screen predates it.
+// The top padding is the safe-area inset plus normal spacing, not the fixed 56px it
+// used to be: that number is one particular iPhone's status bar, and it is wrong on
+// a desktop and on the newest phones alike.
 function Header({ title, subtitle, children }) {
   return (
-    <div style={{ background: NAVY, paddingTop: 56, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }}>
+    <div style={{ background: NAVY, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)', paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }}>
       <img src="/logo.png" alt="TechnoMed" style={{ height: 36, width: 'auto', marginBottom: 4 }} />
       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 }}>Usage Scanning</div>
       <div style={{ fontSize: 19, fontWeight: 700, color: 'white' }}>{title}</div>

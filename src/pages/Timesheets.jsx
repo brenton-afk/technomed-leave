@@ -572,7 +572,7 @@ export default function Timesheets({ user, onBack }) {
       </div>
 
       {/* Running total bar, above the app's bottom nav */}
-      <div className="tm-fixed" style={{ position: 'fixed', bottom: 70, background: NAVY, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 90 }}>
+      <div className="tm-fixed" style={{ position: 'fixed', bottom: 'calc(70px + env(safe-area-inset-bottom, 0px))', background: NAVY, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 90 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Fortnight total</div>
           <div style={{ fontSize: 19, fontWeight: 700, color: 'white', lineHeight: 1.15 }}>

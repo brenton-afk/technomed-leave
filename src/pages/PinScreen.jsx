@@ -286,7 +286,9 @@ export default function PinScreen({ onLogin }) {
   const currentPin = step === 'confirm' ? confirmPin : pin
 
   const w = { minHeight:'100vh', display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif', width:'100%', maxWidth:460, margin:'0 auto' }
-  const top = { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'40px 24px 20px', width:'100%', maxWidth:360, margin:'0 auto', boxSizing:'border-box' }
+  // Insets on the outer padding: the content is centred so the notch rarely
+  // troubles it, but the build stamp at the foot sits on the home indicator.
+  const top = { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'calc(env(safe-area-inset-top, 0px) + 40px) 24px calc(env(safe-area-inset-bottom, 0px) + 20px)', width:'100%', maxWidth:360, margin:'0 auto', boxSizing:'border-box' }
   const keyStyle = { background:'rgba(255,255,255,0.1)', border:'none', borderRadius:'50%', width:'72px', height:'72px', fontSize:'24px', color:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }
   const btnStyle = { width:'100%', padding:'14px', background:'#2ab5a0', border:'none', borderRadius:'10px', color:'white', fontSize:'16px', fontWeight:'600', cursor:'pointer' }
   const desktopInputStyle = { width:'100%', padding:'16px', border:'2px solid rgba(255,255,255,0.2)', borderRadius:'12px', fontSize:'32px', background:'rgba(255,255,255,0.08)', color:'white', outline:'none', textAlign:'center', letterSpacing:'16px', boxSizing:'border-box', fontFamily:'monospace', WebkitTextSecurity: step === 'pin' ? 'disc' : 'disc' }

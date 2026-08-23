@@ -149,7 +149,7 @@ function CropReview({ capture, cv, onConfirm, onRetake }) {
   }, [dragging, move])
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3100, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3100, display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>
         <img src={preview} alt="The page as it will be saved"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -183,7 +183,7 @@ function CropReview({ capture, cv, onConfirm, onRetake }) {
         ))}
       </div>
 
-      <div style={{ padding: 16, display: 'flex', gap: 10 }}>
+      <div style={{ padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))', display: 'flex', gap: 10 }}>
         <button onClick={onRetake}
           style={{ flex: 1, padding: '13px 0', background: 'transparent', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}>
           Retake
@@ -450,14 +450,14 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
 
         {torchAvailable && !error && (
           <button onClick={toggleTorch} aria-label="Torch" aria-pressed={torchOn}
-            style={{ position: 'absolute', top: 14, right: 14, width: 42, height: 42, borderRadius: 21, background: torchOn ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.3)', color: torchOn ? '#042746' : 'white', fontSize: 18, cursor: 'pointer' }}>
+            style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, width: 42, height: 42, borderRadius: 21, background: torchOn ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.3)', color: torchOn ? '#042746' : 'white', fontSize: 18, cursor: 'pointer' }}>
             {torchOn ? '🔆' : '🔅'}
           </button>
         )}
       </div>
 
       {!error && (
-        <div style={{ padding: '12px 16px 20px', background: 'rgba(0,0,0,0.55)' }}>
+        <div style={{ padding: '12px 16px calc(20px + env(safe-area-inset-bottom, 0px))', background: 'rgba(0,0,0,0.55)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)' }}>{hint}</div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', cursor: 'pointer' }}>

@@ -186,7 +186,12 @@ export default function App() {
         </button>
       )}
 
-      <div style={{ flex: 1, paddingBottom: 76 }}>{renderContent()}</div>
+      {/* The tab bar grows by the bottom inset, so what has to clear it grows
+          too — otherwise the last row of any list hides behind it on a phone
+          with a home indicator. */}
+      <div style={{ flex: 1, paddingBottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}>
+        {renderContent()}
+      </div>
 
       <nav className="tm-fixed" aria-label="Main"
         style={{

@@ -88,7 +88,9 @@ export default function AdminPortal({ user }) {
 
   return (
     <div style={{ minHeight:'100vh', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
-      <div style={{ background:'#042746', paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:20 }}>
+      {/* Safe-area inset plus normal spacing. It was a fixed 56px, which is one
+          iPhone's status bar and wrong everywhere else. */}
+      <div style={{ background:'#042746', paddingTop:'calc(env(safe-area-inset-top, 0px) + 20px)', paddingLeft:20, paddingRight:20, paddingBottom:20 }}>
         <img src="/logo.png" alt="TechnoMed" style={{ height:40, width:'auto', marginBottom:4 }} />
         <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:8 }}>Admin Portal</div>
         <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:4 }}>Leave Applications</div>

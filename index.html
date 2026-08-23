@@ -2,7 +2,14 @@
 <html lang="en" style="background:#042746">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) report real
+         numbers. Without it they are all zero, so every bit of safe-area
+         handling in the app silently does nothing and headers sit under the
+         clock on a notched iPhone.
+         maximum-scale and user-scalable are gone with it: blocking pinch-zoom
+         on an app used to read case detail and handwritten forms is not a
+         trade worth making. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#042746" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

@@ -12,7 +12,12 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
   return (
     <div style={{
       background: colour.navy,
-      padding: `calc(${space.xl}px + env(safe-area-inset-top, 34px)) ${space.lg}px ${space.lg}px`
+      // The inset first, then the normal spacing on top of it, so the eyebrow
+      // always sits a clear 20px below the clock rather than at the very top of
+      // the screen. The fallback is 0, not a guess at a notch: where env() is
+      // unsupported there is no notch to avoid, and a guess would put a band of
+      // empty navy across every desktop browser.
+      padding: `calc(env(safe-area-inset-top, 0px) + ${space.xl}px) ${space.lg}px ${space.lg}px`
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: space.md }}>
         {onBack && (
