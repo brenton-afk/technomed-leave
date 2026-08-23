@@ -134,7 +134,23 @@ Invariants worth preserving:
   login. A test is also not written to `emailsSent`, so it cannot make a case look
   sent when the distributor has had nothing.
 - **Nothing uncertain is ever sent.** `groupByDistributor` skips anything excluded, flagged, or without a resolved distributor. Held-back rows still appear on the Dropbox sheet marked `YES` in Manual Review Flag; they just do not leave the building.
-- **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending. Emails record a per-distributor outcome and a single failure can be retried with `{ only: [key] }`.
+- **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
+- **The distributor email carries two attachments**: the 20-column sheet of their
+  own items, and the scanned form with every page merged into one PDF
+  (`buildScanPdf`). Most distributors need the signed original for traceability,
+  not only the transcription.
+
+  The pages come **with the email request**, not out of storage, because nothing
+  stores them — the record holds the transcription, not the photographs, and the
+  PDF built during save goes to Dropbox and is discarded. So the scan reaches the
+  distributor whether or not Dropbox is connected. A retry after the app has been
+  reloaded has no pages to resend: the sheet still goes and `scanError` says the
+  form did not, rather than leaving its absence to be noticed at the other end.
+
+  Note what this means: the scanned form is one hospital sheet listing every
+  system used, so **every distributor sees the whole form**. The *sheet* is still
+  split — a distributor never sees another's line items, and there is a test for
+  that — but the scan is not splittable. Raised and accepted deliberately. Emails record a per-distributor outcome and a single failure can be retried with `{ only: [key] }`.
 - **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 

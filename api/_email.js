@@ -317,15 +317,26 @@ export async function sendTimesheetDecisionEmail(record, decision, reason = '') 
 // subject is the case folder name so the distributor's filing matches ours.
 // Deliberately plain: distributors reconcile from the attachment, and the body
 // must not carry patient identifiers to an external party.
-export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, xlsxFilename, test, sender }) {
+/**
+ * @param {object} o
+ * @param {Buffer} o.xlsx            the distributor's own items
+ * @param {Buffer} [o.scanPdf]       the scanned form, all pages merged into one
+ * @param {string} [o.scanPdfFilename]
+ */
+export async function sendUsageEmail({
+  to, cc, subject, distributorLabel, xlsx, xlsxFilename,
+  scanPdf, scanPdfFilename, test, sender
+}) {
   // A test send goes to the person testing and nowhere else, and has to be
   // impossible to mistake for the real thing — in the inbox list, in the subject,
   // and at the top of the body. Someone forwarding one on by accident is the
   // failure being designed against.
   const body = test
-    ? 'This is a test. Nothing has been sent to the distributor. The attached sheet '
-      + 'is the one that would have gone to them.'
-    : 'Please find usage attached.'
+    ? 'This is a test. Nothing has been sent to the distributor. The attachments are '
+      + 'the ones that would have gone to them.'
+    : (scanPdf
+      ? 'Please find the usage sheet and a scan of the signed form attached.'
+      : 'Please find usage attached.')
   const signoff = 'Warm regards,<br>TechnoMed'
   const heading = test ? `[TEST] ${subject}` : subject
   const wouldHaveGone = test && to.length
@@ -356,7 +367,12 @@ export async function sendUsageEmail({ to, cc, subject, distributorLabel, xlsx, 
     subject: heading,
     html,
     text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${body}\n\nWarm regards,\nTechnoMed`,
-    attachments: [{ filename: xlsxFilename, content: xlsx.toString('base64') }],
+    attachments: [
+      { filename: xlsxFilename, content: xlsx.toString('base64') },
+      // The scanned form, where the pages were supplied. Most distributors need
+      // the signed original for traceability, not only the transcription of it.
+      ...(scanPdf ? [{ filename: scanPdfFilename || 'Scan.pdf', content: scanPdf.toString('base64') }] : [])
+    ],
     // From the rep who scanned it, so a distributor replying reaches the person
     // who was in the theatre rather than a shared inbox.
     sender,

@@ -298,7 +298,7 @@ async function handleSave(req, res, session) {
 async function handleEmail(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { usageId, only, testOnly } = req.body || {}
+  const { usageId, only, testOnly, pages } = req.body || {}
   if (!usageId) throw badRequest('No usage record specified')
 
   const record = await getUsageRecord(usageId)
@@ -326,6 +326,31 @@ async function handleEmail(req, res, session) {
   // way to name a recipient here — only to say "me".
   const test = Boolean(testOnly)
   const cc = test ? [] : ccFor(session.email)
+
+  // The scanned form, merged into one PDF, built here from the pages sent with
+  // this request.
+  //
+  // They come with the request rather than out of storage because nothing stores
+  // them: the record holds the transcription, not the photographs, and the PDF
+  // built during save goes to Dropbox and is discarded. Sending them again is a
+  // second upload of a payload the app has already sized for, and it means the
+  // scan reaches the distributor whether or not Dropbox is connected — which was
+  // the point of asking.
+  //
+  // Absent, the sheet still goes out on its own. A retry after the app has been
+  // reloaded has no pages to send, and a usage sheet with no scan is worth more
+  // than no email at all — but the result says which was sent, so nobody assumes
+  // the form went when it did not.
+  let scanPdf = null
+  let scanError = ''
+  if (Array.isArray(pages) && pages.length) {
+    try {
+      scanPdf = await buildScanPdf(validatePages(pages))
+    } catch (err) {
+      scanError = err.message
+    }
+  }
+
   const results = []
 
   for (const key of targets) {
@@ -341,11 +366,16 @@ async function handleEmail(req, res, session) {
         distributorLabel: distributor.name,
         xlsx,
         xlsxFilename: `${record.folderName}_Usage_Sheet.xlsx`,
+        scanPdf,
+        scanPdfFilename: `${record.folderName}_Scan.pdf`,
         test: test ? { wouldSendTo: distributor.to } : undefined,
         // Sent as the rep, and replies come back to them.
         sender: { name: session.name, email: session.email }
       })
-      results.push({ key, name: distributor.name, to, itemCount: items.length, ok: true, test, from: session.email, sentAt: new Date().toISOString() })
+      results.push({
+        key, name: distributor.name, to, itemCount: items.length, ok: true, test,
+        from: session.email, scanAttached: Boolean(scanPdf), sentAt: new Date().toISOString()
+      })
     } catch (err) {
       results.push({ key, name: distributor.name, to, itemCount: items.length, ok: false, test, error: err.message })
     }
@@ -367,6 +397,10 @@ async function handleEmail(req, res, session) {
   return res.status(failed.length && failed.length === results.length ? 502 : 200).json({
     results,
     test,
+    scanAttached: Boolean(scanPdf),
+    // Said out loud when the form could not be attached, rather than leaving its
+    // absence to be noticed by the distributor.
+    scanError: scanError || (scanPdf ? '' : 'the scanned pages were not sent with this request'),
     // Said back explicitly, so the app can show where it actually went rather
     // than assume.
     sentTo: test ? session.email : undefined,

@@ -381,7 +381,15 @@ export default function UsageScan({ user }) {
       const emailRes = await fetch('/api/usage/agent?action=email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ usageId: saved.record.id, testOnly })
+        body: JSON.stringify({
+          usageId: saved.record.id,
+          testOnly,
+          // The pages again, so the merged scan can be attached. Nothing stores
+          // them server-side — the record holds the transcription, not the
+          // photographs — and this is what lets the distributor get the signed
+          // form whether or not Dropbox is connected.
+          pages: pages.map(p => ({ mediaType: p.mediaType, data: p.data }))
+        })
       })
       const emailed = await emailRes.json()
 
@@ -394,6 +402,8 @@ export default function UsageScan({ user }) {
         attendance: saved.attendance,
         emails: emailed.results || [],
         emailError: emailed.error || '',
+        scanAttached: Boolean(emailed.scanAttached),
+        scanError: emailed.scanError || '',
         test: Boolean(emailed.test),
         sentTo: emailed.sentTo
       })
@@ -413,7 +423,13 @@ export default function UsageScan({ user }) {
       const res = await fetch('/api/usage/agent?action=email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ usageId: result.record.id, only: failedKeys })
+        body: JSON.stringify({
+          usageId: result.record.id,
+          only: failedKeys,
+          // Still in memory unless the app has been reloaded, in which case the
+          // retry sends the sheet without the scan and says so.
+          pages: pages.map(p => ({ mediaType: p.mediaType, data: p.data }))
+        })
       })
       const data = await res.json()
       const byKey = new Map((data.results || []).map(r => [r.key, r]))
@@ -720,6 +736,14 @@ export default function UsageScan({ user }) {
             {result.emails.some(e => e.from) && (
               <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>
                 Sent from {result.emails.find(e => e.from)?.from}
+                {result.scanAttached
+                  ? ' · usage sheet and scanned form attached'
+                  : ' · usage sheet only'}
+              </div>
+            )}
+            {!result.scanAttached && result.scanError && (
+              <div style={{ fontSize: 11, color: '#856404', marginBottom: 8, lineHeight: 1.5 }}>
+                The scanned form was not attached — {result.scanError}.
               </div>
             )}
             {result.emails.length === 0 && <div style={{ fontSize: 13, color: MUTED }}>No emails were sent.</div>}
