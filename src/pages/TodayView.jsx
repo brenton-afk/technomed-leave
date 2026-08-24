@@ -6,6 +6,7 @@ import { accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import { surgeonForColourName, colourNameFor, colourHexFor } from '../clinicalPlan/colours.js'
 import { hospitalCode } from '../clinicalPlan/labelledFields.js'
 import { readBooking, isCancelled } from '../clinicalPlan/parse.js'
+import { classifyItem } from '../clinicalPlan/itemKind.js'
 
 // The palette lives in clinicalPlan/colours.js, so this screen and the case plan
 // cannot drift apart. It used to be a second copy here, and three of its entries
@@ -36,7 +37,16 @@ function describe(event) {
   const navigation = NAVIGATION_PATTERN.test(`${event.title || ''}\n${event.description || ''}`)
   const border = navigation ? NAVIGATION_ACCENT : getColor(event.colorId)
   const cancelled = isCancelled(event.title, event.description)
-  if (!read) return { isCase: false, border, cancelled }
+  if (!read) {
+    // Leave, a meeting, rostered hours, a reminder. All of it used to be drawn
+    // as a title and a time, so a week's planning information read as one
+    // undifferentiated list and the things that change what a day asks of the
+    // team looked exactly like the things that do not.
+    const { kind, label } = classifyItem({
+      title: event.title, description: event.description, colourName: colourNameFor(event.colorId)
+    })
+    return { isCase: false, border, cancelled, kind, kindLabel: label }
+  }
   // The surgeon's name in the booking's own colour — darkened only as far as it
   // must be to read on white. Blueberry for a navigation case, so the name and
   // the border agree.
@@ -101,6 +111,88 @@ function CaseCard({ described, compact = false }) {
   )
 }
 
+/**
+ * Anything on the calendar that is not a theatre case.
+ *
+ * Deliberately quieter than a case rather than a different colour. The palette is
+ * one accent by design, and giving leave, meetings, hours and reminders a hue each
+ * would turn the day into a chart — five new colours competing with the surgeon
+ * colours, which are the ones that carry real meaning.
+ *
+ * So the hierarchy does the work: a case is a white card with a thick coloured
+ * bar, and everything else sits on the page ground with a thin one and says what
+ * it is. Cases read first, at a glance, and the rest is still there to be read.
+ */
+function ItemCard({ event, described }) {
+  const { kindLabel, cancelled } = described
+  const time = formatTime(event.start)
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{
+          ...text('bodyStrong'), color: cancelled ? colour.inkFaint : colour.ink, minWidth: 0,
+          ...(cancelled ? { textDecoration: 'line-through' } : {})
+        }}>
+          {event.title}
+        </div>
+        <span style={{
+          ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
+          background: colour.lineSoft, borderRadius: radius.pill, padding: '2px 7px', flexShrink: 0
+        }}>
+          {cancelled ? 'Cancelled' : kindLabel}
+        </span>
+      </div>
+      {(time || event.location) && (
+        <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>
+          {[time && `${time}${formatTime(event.end) ? ` – ${formatTime(event.end)}` : ''}`,
+            event.location].filter(Boolean).join(' · ')}
+        </div>
+      )}
+    </>
+  )
+}
+
+/** The repeated uppercase group label. */
+function SectionHeading({ children }) {
+  return (
+    <div style={{
+      // `micro` is the scale's token for exactly this: an uppercase eyebrow
+      // label. These were 12.5px bold with their own letter-spacing, which is a
+      // size the scale does not have.
+      ...text('micro'), color: colour.inkFaint, textTransform: 'uppercase', marginBottom: 8
+    }}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * One row of the day, case or otherwise.
+ *
+ * The coloured panel down the left is the thing worth keeping from this screen —
+ * it is what makes a day scannable — so both shapes have one, taken from the
+ * calendar's own colour. What separates them is weight: a case is a white card
+ * with a thick bar, and everything else sits on the page ground with a thin one.
+ */
+function ItemRow({ event, described }) {
+  const { isCase } = described
+  return (
+    <div style={{
+      background: isCase ? colour.surface : 'transparent',
+      borderRadius: radius.card, marginBottom: 10, overflow: 'hidden', display: 'flex',
+      border: `1px solid ${isCase ? colour.line : colour.lineSoft}`
+    }}>
+      <div aria-hidden="true"
+        style={{ width: isCase ? 5 : 3, background: described.border, flexShrink: 0 }} />
+      <div style={{ padding: isCase ? '12px 14px' : '10px 13px', flex: 1, minWidth: 0 }}>
+        {isCase
+          ? <CaseCard described={described} />
+          : <ItemCard event={event} described={described} />}
+      </div>
+    </div>
+  )
+}
+
 // RHH first, matching the order the case plan and the emailed document use.
 const HOSPITAL_RANK = { RHH: 0, CLV: 1 }
 
@@ -157,7 +249,7 @@ function eventOnDate(event, dateStr) {
   return event.start.split('T')[0] === dateStr
 }
 
-export default function TodayView({ user, onBack }) {
+export default function TodayView({ user, switcher }) {
   const [view, setView] = useState('day')
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [weekBase, setWeekBase] = useState(new Date())
@@ -220,8 +312,9 @@ export default function TodayView({ user, onBack }) {
 
   return (
     <Page style={{ display:'flex', flexDirection:'column' }}>
-      <Header eyebrow="Case support" title="Calendar" subtitle="Bookings and leave, week by week" onBack={onBack}>
-        {/* View toggle */}
+      <Header eyebrow="This week" title="Calendar" subtitle="Everything the bookings calendar holds">
+        {switcher}
+        {/* Day or week, within the calendar view */}
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={() => setView('day')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='day'?'white':'rgba(255,255,255,0.12)', color: view==='day'?colour.navy:'white', fontSize:14, fontWeight:600, cursor:'pointer' }}>Day</button>
           <button onClick={() => setView('week')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='week'?'white':'rgba(255,255,255,0.12)', color: view==='week'?colour.navy:'white', fontSize:14, fontWeight:600, cursor:'pointer' }}>Week</button>
@@ -327,49 +420,31 @@ export default function TodayView({ user, onBack }) {
 
           {!loading && allDayEvents.length > 0 && (
             <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:12.5, fontWeight:600, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>All day</div>
-              {allDayEvents.map(e => (
-                <div key={e.id} style={{ background:getColor(e.colorId), borderRadius:10, padding:'10px 14px', marginBottom:8 }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:'white' }}>{e.title}</div>
-                  {e.location && <div style={{ fontSize:12.5, color:'rgba(255,255,255,0.75)', marginTop:2 }}>📍 {e.location}</div>}
-                </div>
-              ))}
+              <SectionHeading>All day</SectionHeading>
+              {/* These were solid blocks of the calendar's colour with white text
+                  on them, which made leave the loudest thing on a day full of
+                  operating. Same card as everything else now, so the day reads in
+                  order of what it asks of you. */}
+              {allDayEvents.map(e => <ItemRow key={e.id} event={e} described={describe(e)} />)}
             </div>
           )}
 
           {!loading && timedEvents.length > 0 && (() => {
             const { groups, other } = groupByHospital(timedEvents)
             const card = ({ event, described }) => (
-              <div key={event.id} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', display:'flex', border:'1px solid rgba(26,43,74,0.06)' }}>
-                <div style={{ width:5, background:described.border, flexShrink:0 }} />
-                <div style={{ padding:'12px 14px', flex:1 }}>
-                  {described.isCase ? <CaseCard described={described} /> : (
-                    <>
-                      <div style={{ fontSize:14, fontWeight:600, color:colour.navy, marginBottom:3 }}>{event.title}</div>
-                      {/* Meetings and handovers keep their times: unlike a
-                          theatre list, those do not move. */}
-                      {formatTime(event.start) && <div style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:event.location?3:0 }}>🕐 {formatTime(event.start)}{formatTime(event.end)?` – ${formatTime(event.end)}`:''}</div>}
-                      {event.location && <div style={{ fontSize:12.5, color:colour.inkFaint }}>📍 {event.location}</div>}
-                    </>
-                  )}
-                </div>
-              </div>
+              <ItemRow key={event.id} event={event} described={described} />
             )
             return (
               <div>
                 {groups.map(([code, items]) => (
                   <div key={code} style={{ marginBottom:6 }}>
-                    <div style={{ fontSize:12.5, fontWeight:700, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>
-                      {code} · {items.length} case{items.length === 1 ? '' : 's'}
-                    </div>
+                    <SectionHeading>{code} · {items.length} case{items.length === 1 ? '' : 's'}</SectionHeading>
                     {items.map(card)}
                   </div>
                 ))}
                 {other.length > 0 && (
                   <div>
-                    <div style={{ fontSize:12.5, fontWeight:700, color:colour.inkFaint, letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>
-                      {groups.length ? 'Also on' : 'Schedule'}
-                    </div>
+                    <SectionHeading>{groups.length ? 'Also on' : 'Schedule'}</SectionHeading>
                     {other.map(card)}
                   </div>
                 )}

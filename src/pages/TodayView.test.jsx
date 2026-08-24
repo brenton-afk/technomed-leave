@@ -279,3 +279,62 @@ describe('everything that is not a case', () => {
     expect(container.textContent).not.toMatch(/4457821|1958/)
   })
 })
+
+// ─── Telling cases apart from everything else ────────────────────────────────
+// "I'd love you to play around with how it's displayed to really define and
+// delineate between cases and other information that is relevant to the week
+// ahead — reminders, people's work hours, annual leave."
+//
+// Delineation by hierarchy rather than by hue. The palette is one accent by
+// design, and giving leave, meetings, hours and reminders a colour each would put
+// five new colours up against the surgeon colours, which are the ones carrying
+// real meaning.
+
+describe('cases against everything else', () => {
+  const leave = {
+    id: 'leave-1', title: 'Aimee Vulinovich — Annual Leave', description: '',
+    location: null, allDay: true, start: '2026-08-24', end: '2026-08-25', colorId: '3'
+  }
+  const meeting = {
+    id: 'meet-1', title: 'Team meeting', description: '', location: null,
+    allDay: false, start: at(9), end: at(10), colorId: '7'
+  }
+  const surgical = booking('c1', notes({
+    Surgeon: 'Fowler', Patient: 'Jackson', Procedure: 'C5/6 ACDF',
+    Kit: 'Dakota (Consignment)', Hospital: 'RHH'
+  }))
+
+  it('labels what a non-case actually is', async () => {
+    await show([leave, meeting])
+    expect(await screen.findByText('Leave')).toBeInTheDocument()
+    expect(screen.getByText('Meeting')).toBeInTheDocument()
+  })
+
+  it('stops drawing leave as a solid block of colour', async () => {
+    // It used to be white text on a filled panel of the calendar's colour, which
+    // made a day's leave the loudest thing on a day full of operating.
+    const { container } = await show([leave])
+    await screen.findByText('Leave')
+    const filled = [...container.querySelectorAll('div')].filter(el => {
+      const style = el.getAttribute('style') || ''
+      return style.includes(asRgb(GRAPE)) && /padding/.test(style)
+    })
+    expect(filled).toHaveLength(0)
+  })
+
+  it('gives a case more weight than the rest of the day', async () => {
+    const { container } = await show([surgical, meeting])
+    await waitFor(() => expect(screen.getByText('Jackson')).toBeInTheDocument())
+    // Both keep a coloured panel down the left — that is what makes a day
+    // scannable — but a case's is thicker.
+    const bars = [...container.querySelectorAll('div[aria-hidden="true"]')]
+      .map(el => el.style.width).filter(Boolean)
+    expect(bars).toContain('5px')
+    expect(bars).toContain('3px')
+  })
+
+  it('marks a cancelled booking on the day as well', async () => {
+    await show([{ ...meeting, title: 'Team meeting — cancelled' }])
+    expect(await screen.findByText('Cancelled')).toBeInTheDocument()
+  })
+})

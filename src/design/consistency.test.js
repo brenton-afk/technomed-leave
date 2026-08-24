@@ -13,7 +13,8 @@ const PAGES_DIR = 'src/pages'
 // Screens migrated onto the design system. New screens should be added here.
 const MIGRATED = [
   'TodayView.jsx', 'KitRoom.jsx', 'Projects.jsx', 'Timesheets.jsx',
-  'LeaveForm.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx'
+  'LeaveForm.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx',
+  'Cases.jsx'
 ]
 
 // The clinical plan components deliberately replicate the emailed Word

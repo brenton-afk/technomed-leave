@@ -71,23 +71,54 @@ describe('bottom navigation', () => {
     expect(screen.getByText('Stock take')).toBeInTheDocument()
   })
 
-  it('opens straight onto the case plan, with no Today screen', async () => {
+  it('opens straight onto the week, with no Today screen and no hub of cards', async () => {
     signIn(REP)
     render(<App />)
-    // The plan is the front door: a view switcher, not a hub of cards.
-    await waitFor(() => expect(screen.getByRole('radiogroup', { name: 'Plan view' })).toBeInTheDocument())
+    // The bookings calendar is the front door. Both readings of it live here —
+    // the calendar view used to be two tabs away, in Kit.
+    await waitFor(() => expect(screen.getByRole('tablist', { name: 'How to view the week' })).toBeInTheDocument())
     expect(screen.queryByText(/Scan a usage form/)).not.toBeInTheDocument()
+  })
+
+  it('offers the calendar and the case plan in one place', async () => {
+    signIn(REP)
+    render(<App />)
+    const tabs = await waitFor(() => screen.getByRole('tablist', { name: 'How to view the week' }))
+    expect(tabs).toHaveTextContent('Calendar')
+    expect(tabs).toHaveTextContent('Case plan')
+  })
+
+  it('switches to the case plan and back', async () => {
+    signIn(REP)
+    render(<App />)
+    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Case plan' })))
+    // The plan's own daily/weekly control, which it keeps: the two views answer
+    // different questions and are read at different moments.
+    await waitFor(() => expect(screen.getByRole('radiogroup', { name: 'Plan view' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }))
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Plan view' })).not.toBeInTheDocument())
   })
 })
 
 describe('hub contents (the agreed structure)', () => {
-  it('Kit carries kit, stock, resources, projects and the calendar view', async () => {
+  it('Kit carries kit, stock, resources and projects', async () => {
     signIn(REP)
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
-    for (const label of ['Kit Room', 'Stock take', 'Resources', 'Projects & actions', 'Calendar view']) {
+    for (const label of ['Kit Room', 'Stock take', 'Resources', 'Projects & actions']) {
       await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument())
     }
+  })
+
+  it('does not keep the calendar in Kit', async () => {
+    // It is not kit, and having it here meant the two readings of the same week
+    // were two tabs apart with nothing to say they were the same data.
+    signIn(REP)
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
+    await waitFor(() => expect(screen.getByText('Kit Room')).toBeInTheDocument())
+    expect(screen.queryByText('Calendar view')).not.toBeInTheDocument()
   })
 
   it('Me carries timesheets, leave, payslips, files and account', async () => {

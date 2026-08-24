@@ -11,7 +11,6 @@ import {
 } from '../clinicalPlan/week.js'
 import { fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature } from '../clinicalPlan/provider.js'
 import { useLiveRefresh } from '../liveRefresh.js'
-import { planToText, dayToText } from '../clinicalPlan/exportText.js'
 import { DOCX_FILENAME } from '../clinicalPlan/exportMeta.js'
 
 const NAVY = colour.navy
@@ -26,7 +25,7 @@ function defaultView() {
   return wide ? 'weekly' : 'daily'
 }
 
-export default function ClinicalPlan({ user, onBack, promptBanner }) {
+export default function ClinicalPlan({ user, promptBanner, switcher }) {
   const prefs = useMemo(() => readPrefs(), [])
   const [view, setView] = useState(prefs.view || defaultView())
   const [window_, setWindow] = useState(() =>
@@ -36,7 +35,6 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
   const [status, setStatus] = useState('loading') // loading | ready | empty | error
   const [staleInfo, setStaleInfo] = useState(null)
   const [errorText, setErrorText] = useState('')
-  const [copied, setCopied] = useState('')
   const [docxNotice, setDocxNotice] = useState('')
   const [showReadings, setShowReadings] = useState(false)
 
@@ -133,16 +131,6 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
     setSelectedDay(direction > 0 ? nextWindow.days[0] : nextWindow.days[6])
   }
 
-  async function copyText() {
-    const text = view === 'weekly' ? planToText(plan) : dayToText(plan, selectedDay)
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied('Copied')
-    } catch {
-      setCopied('Copy failed — select and copy manually')
-    }
-    setTimeout(() => setCopied(''), 2500)
-  }
 
   async function downloadDocx() {
     setDocxNotice('')
@@ -179,7 +167,8 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
       `}</style>
 
       <div className="tm-noprint">
-      <Header eyebrow="Case plan" title="Cases" onBack={onBack}>
+      <Header eyebrow="This week" title="Case plan" subtitle="Operations, systems and kit, day by day">
+        {switcher}
         {/* View switcher — keyboard operable as a radio group */}
         <div role="radiogroup" aria-label="Plan view" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {[['weekly', 'Weekly'], ['daily', 'Daily']].map(([id, label]) => (
@@ -207,7 +196,6 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
               <button onClick={goThisWeek} style={chipStyle}>This week</button>
               <button onClick={downloadDocx} disabled={!plan} style={chipStyle}>Download .docx</button>
-              <button onClick={copyText} disabled={!plan} style={chipStyle}>{copied || 'Copy as text'}</button>
               <button onClick={() => setShowReadings(v => !v)} disabled={!plan}
                 aria-pressed={showReadings} style={chipStyle}>
                 {showReadings ? 'Hide what was read' : 'Check bookings'}
@@ -225,7 +213,6 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
             </div>
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
               <button onClick={goThisWeek} style={chipStyle}>Today</button>
-              <button onClick={copyText} disabled={!plan} style={chipStyle}>{copied || 'Copy as text'}</button>
             </div>
           </>
         )}

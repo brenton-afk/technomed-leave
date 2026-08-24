@@ -2,7 +2,7 @@ import React from 'react'
 import { Page, Header, Body, NavCard, SectionLabel, Banner } from '../design/Shell.jsx'
 import { colour, text, space } from '../design/tokens.js'
 import {
-  IconCalendar, IconKit, IconStock, IconFolder, IconTasks,
+  IconKit, IconStock, IconFolder, IconTasks,
   IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout
 } from '../design/icons.jsx'
 
@@ -33,9 +33,6 @@ export function KitHub({ user, onNavigate }) {
         <NavCard icon={IconTasks} label="Projects & actions"
           detail="Meeting notes and the shared worklist"
           onClick={() => onNavigate({ tab: 'kit', sub: 'projects' })} />
-        <NavCard icon={IconCalendar} label="Calendar view"
-          detail="Day and week strip, all bookings"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'calendar' })} />
       </Body>
     </Page>
   )

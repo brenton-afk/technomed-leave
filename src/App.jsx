@@ -2,11 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import PinScreen from './pages/PinScreen.jsx'
 import LeaveForm from './pages/LeaveForm.jsx'
 import Success from './pages/Success.jsx'
-import TodayView from './pages/TodayView.jsx'
 import KitRoom from './pages/KitRoom.jsx'
 import Projects from './pages/Projects.jsx'
 import UsageScan from './pages/UsageScan.jsx'
-import ClinicalPlan from './pages/ClinicalPlan.jsx'
+import Cases from './pages/Cases.jsx'
 import Timesheets from './pages/Timesheets.jsx'
 import AdminPortal from './pages/admin/AdminPortal.jsx'
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
@@ -44,7 +43,7 @@ const TABS = [
 const SELF_BACK = new Set([
   'resources', 'stock', 'usagefiles', 'security', 'payslips',
   // Migrated to design/Shell.jsx's Header, so they draw their own.
-  'calendar', 'kitroom', 'projects', 'timesheets', 'leave'
+  'kitroom', 'projects', 'timesheets', 'leave'
 ])
 
 // Matches the server-side session TTL in api/_auth.js.
@@ -124,13 +123,13 @@ export default function App() {
     const { tab, sub } = renderTarget(nav, user)
 
     if (tab === 'cases') {
-      // The plan *is* the tab. It already carries every booking — cases,
-      // flags, meetings, the Other line and anything unreadable — so there is
-      // nothing left for a separate Today screen to add.
+      // Both readings of the bookings calendar, and the switch between them.
+      // The calendar view used to sit in the Kit tab, which is neither where
+      // anyone looked for it nor anything to do with kit.
       return (
         <>
           <FaceIdSetup user={user} />
-          <ClinicalPlan user={user} promptBanner={<PromptBanner user={user} onNavigate={navigate} />} />
+          <Cases user={user} promptBanner={<PromptBanner user={user} onNavigate={navigate} />} />
         </>
       )
     }
@@ -140,7 +139,6 @@ export default function App() {
     if (tab === 'kit') {
       switch (sub) {
         case 'kitroom': return <KitRoom user={user} onBack={back} />
-        case 'calendar': return <TodayView user={user} onBack={back} />
         case 'projects': return <Projects user={user} onBack={back} />
         case 'resources':
           return <FileBrowser user={user} root="resources" eyebrow="Kit and reference" title="Resources" onBack={back} />

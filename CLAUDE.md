@@ -71,6 +71,41 @@ All six pages behind the hubs are migrated onto `Header`/`Page` and the token sc
 
 That test also fails the build if an off-scale font size or a hardcoded brand hex reappears in a migrated page — the drift it guards against is invisible in review, because each screen looks fine on its own.
 
+`src/pages/Cases.jsx` is the Cases tab: two readings of the bookings calendar and
+a switch between them — **Calendar** (`TodayView.jsx`, day or week, everything the
+calendar holds) and **Case plan** (`ClinicalPlan.jsx`, the week as a briefing).
+The calendar view used to live under Kit, which is neither where anyone looked for
+it nor anything to do with kit, and it meant the two views of the same week were
+two tabs apart with nothing to say they were the same data.
+
+Each keeps its own period control. That is deliberate: the switch chooses *how* to
+read the week, the control inside chooses *which part*. Collapsing them into one
+three-way toggle would put "Week" and "Plan" side by side as though they were
+alternatives of the same kind.
+
+**Both screens poll via `useLiveRefresh` in `src/liveRefresh.js`** — a minute while
+visible, nothing while hidden, and an immediate recheck on becoming visible or
+regaining focus. The calendar view previously fetched once on mount and never
+again, which is how the app came to be showing a case that had been cancelled for
+the next day. A test asserts both use the hook and that neither sets its own
+interval.
+
+A cancellation reaches the app two ways. Deleting the booking needs nothing —
+`singleEvents=true` means Google stops returning it. A **rename** is the common
+one, because deleting leaves no record that the theatre time was held: `isCancelled`
+in `parse.js` spots it, the case is kept and struck through rather than dropped,
+its colour goes grey, and it is excluded from the case count. `readBooking` strips
+the marker first — a title reads `{Patient} {procedure} - {Surgeon}`, so "CANCELLED
+- Streets ACDF" otherwise produced a patient called Cancelled.
+
+`src/clinicalPlan/itemKind.js` classifies what is *not* a case — leave, hours,
+meeting, reminder — so the calendar can label it. Grape settles leave before any
+wording does, since that is the colour this app's own approval path writes it in.
+Delineation is by **hierarchy, not hue**: a case is a white card with a 5px
+coloured bar, everything else sits on the page ground with a 3px one and a kind
+chip. Giving each kind its own colour would put five new hues against the surgeon
+colours, which are the ones carrying real meaning.
+
 `src/pages/TodayFeed.jsx` is the home screen: a scrolling feed, not a dashboard. It surfaces today's cases, the day's flags, the signed-in user's action items and an unsubmitted-timesheet prompt. Every item is a pointer into a section — the feed never becomes a place to do work.
 
 `src/pages/FileBrowser.jsx` serves both Resources and filed usage sheets from Dropbox, since they are the same problem. Paths are constrained server-side to the usage and resources roots (`assertAllowedPath` in `api/usage/agent.js`); without that, any signed-in user could read the whole Dropbox account. Temporary links are fetched per tap and never stored — a persisted one would be a public URL to patient data.
