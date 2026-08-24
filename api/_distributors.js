@@ -3,6 +3,8 @@
 // never belongs on a usage sheet at all. This is the module to edit when a
 // distributor changes contacts or TechnoMed picks up a new system.
 
+import { STAFF } from '../src/staffConfig.js'
+
 export const DISTRIBUTORS = {
   signus: {
     name: 'Signus',
@@ -34,14 +36,19 @@ export const DISTRIBUTORS = {
   }
 }
 
+// Not a staff member — a shared mailbox, so it has no roster entry to carry.
+const ADMIN_MAILBOX = 'admin@technomed.com.au'
+
 // CC'd on every usage email. The sender is removed at send time so nobody is
 // CC'd on their own message.
+//
+// Read off the roster rather than written out again here. It was a hardcoded list
+// of five addresses, which is one of two places a clinical rep's email was
+// written down — so correcting someone's address in staffConfig.js would have
+// left them silently off every usage email, with nothing failing anywhere.
 export const CLINICAL_TEAM_CC = [
-  'brenton@technomed.com.au',
-  'ben@technomed.com.au',
-  'aimee@technomed.com.au',
-  'mat@technomed.com.au',
-  'admin@technomed.com.au'
+  ...STAFF.filter(s => s.isClinicalTeam).map(s => s.email),
+  ADMIN_MAILBOX
 ]
 
 // Haemostatic agents and other peripherals are recorded by the hospital on the
