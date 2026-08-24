@@ -472,3 +472,48 @@ describe('a colour-attributed case reaches the plan', () => {
     expect(plan.days[4].flags.some(f => /on call/i.test(f.text))).toBe(true)
   })
 })
+
+describe('a cancelled booking', () => {
+  const week = weekWindowFor('2026-08-24')
+  const event = (title, extra = {}) => ({
+    id: title, summary: title, description: 'Kit: Shoreline',
+    start: { dateTime: '2026-08-25T08:00:00+10:00' },
+    end: { dateTime: '2026-08-25T10:00:00+10:00' },
+    location: 'Royal Hobart Hospital', ...extra
+  })
+
+  const dayFor = plan => plan.days.find(d => d.date === '2026-08-25')
+  const casesOf = day => (day.casesByHospital || []).flatMap(g => g.cases)
+
+  it('stays on the day rather than disappearing', () => {
+    // A case vanishing from a plan somebody printed this morning is worse than
+    // one shown crossed out: the theatre time was held, and that it is now free
+    // is information the week needs.
+    const plan = buildWeekPlan([event('CANCELLED - Streets ACDF - JPW')], week)
+    const cases = casesOf(dayFor(plan))
+    expect(cases).toHaveLength(1)
+    expect(cases[0].patient).toBe('Streets')
+    expect(cases[0].cancelled).toBe(true)
+  })
+
+  it('is not counted as a case', () => {
+    const plan = buildWeekPlan([
+      event('Jackson C4/5 ACDF SHORELINE - JPW'),
+      event('CANCELLED - Streets ACDF - JPW')
+    ], week)
+    const day = dayFor(plan)
+    // Counting it would have the plan promise two cases on a day with one.
+    expect(day.caseCountLine).toMatch(/^1 case/)
+    expect(day.caseCountLine).toMatch(/1 cancelled/)
+  })
+
+  it('says so on a day where everything came off', () => {
+    const plan = buildWeekPlan([event('CANCELLED - Streets ACDF - JPW')], week)
+    expect(dayFor(plan).caseCountLine).toBe('No surgical cases — 1 cancelled')
+  })
+
+  it('leaves a live case unmarked', () => {
+    const plan = buildWeekPlan([event('Jackson C4/5 ACDF SHORELINE - JPW')], week)
+    expect(casesOf(dayFor(plan))[0].cancelled).toBeUndefined()
+  })
+})

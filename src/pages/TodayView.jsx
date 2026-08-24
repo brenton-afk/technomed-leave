@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useLiveRefresh } from '../liveRefresh.js'
 import { Page, Header, Body } from '../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../design/tokens.js'
-import { readBooking } from '../clinicalPlan/parse.js'
 import { accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import { surgeonForColourName, colourNameFor, colourHexFor } from '../clinicalPlan/colours.js'
 import { hospitalCode } from '../clinicalPlan/labelledFields.js'
+import { readBooking, isCancelled } from '../clinicalPlan/parse.js'
 
 // The palette lives in clinicalPlan/colours.js, so this screen and the case plan
 // cannot drift apart. It used to be a second copy here, and three of its entries
@@ -34,13 +35,16 @@ function describe(event) {
   // calibrated, which changes what the day asks of whoever is covering it.
   const navigation = NAVIGATION_PATTERN.test(`${event.title || ''}\n${event.description || ''}`)
   const border = navigation ? NAVIGATION_ACCENT : getColor(event.colorId)
-  if (!read) return { isCase: false, border }
+  const cancelled = isCancelled(event.title, event.description)
+  if (!read) return { isCase: false, border, cancelled }
   // The surgeon's name in the booking's own colour — darkened only as far as it
   // must be to read on white. Blueberry for a navigation case, so the name and
   // the border agree.
   const surgeonColour = accentTextForCase(
     { ...read, colourHex: colourHexFor(event.colorId) })
-  return { isCase: true, read, border, surgeonColour }
+  // A cancelled booking is drawn grey whatever colour it was. The colour means
+  // "this surgeon, this day"; keeping it would say the day is still committed.
+  return { isCase: true, read, cancelled, surgeonColour, border: cancelled ? colour.line : border }
 }
 
 const NAVIGATION_PATTERN = /vario\s*guide|brain\s*lab|\bairo\b/i
@@ -59,15 +63,32 @@ function systemLine(read) {
  * second reading to work out that the app did not understand the booking.
  */
 function CaseCard({ described, compact = false }) {
-  const { read, surgeonColour } = described
+  const { read, surgeonColour, cancelled } = described
   const system = systemLine(read)
   return (
     <>
-      <div style={{ fontSize: 14, fontWeight: 600, color: colour.navy }}>
+      <div style={{
+        fontSize: 14, fontWeight: 600, color: cancelled ? colour.inkFaint : colour.navy,
+        // Struck through rather than removed. The slot was booked and is now
+        // free, which is information — and a case vanishing from a plan somebody
+        // printed this morning is worse than one shown crossed out.
+        textDecoration: cancelled ? 'line-through' : 'none'
+      }}>
         {read.patient}
         <span style={{ color: colour.inkFainter, fontWeight: 400 }}> / </span>
-        <span style={{ color: surgeonColour }}>{read.surgeon}</span>
+        <span style={{ color: cancelled ? colour.inkFaint : surgeonColour }}>{read.surgeon}</span>
       </div>
+      {cancelled && (
+        <div style={{
+          display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: radius.pill,
+          background: colour.dangerSoft, color: colour.danger,
+          // `micro` is the scale's uppercase label size. The type scale is closed
+          // and a test enforces it — see design/consistency.test.js.
+          ...text('micro'), textTransform: 'uppercase'
+        }}>
+          Cancelled
+        </div>
+      )}
       {read.operation && (
         <div style={{ fontSize: 12.5, color: colour.ink, marginTop: 2 }}>{read.operation}</div>
       )}
@@ -144,18 +165,35 @@ export default function TodayView({ user, onBack }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => { loadEvents() }, [])
+  const [syncedAt, setSyncedAt] = useState(null)
 
-  async function loadEvents() {
-    setLoading(true); setError(null)
+  // `quiet` is a poll rather than a first load: it must not put a spinner over
+  // real content, and a failure must not blank it. Someone standing in a corridor
+  // reading today's list should keep the list when the wifi drops.
+  const loadEvents = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) { setLoading(true); setError(null) }
     try {
-      const res = await fetch('/api/calendar/today')
+      const res = await fetch('/api/calendar/today', {
+        headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+      })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setEvents(data.events || [])
-    } catch(err) { setError(err.message) }
-    setLoading(false)
-  }
+      setSyncedAt(Date.now())
+      setError(null)
+    } catch (err) {
+      if (!quiet) setError(err.message)
+    }
+    if (!quiet) setLoading(false)
+  }, [user?.token])
+
+  useEffect(() => { loadEvents() }, [loadEvents])
+
+  // This screen used to fetch once on mount and never again, so it showed
+  // whatever the calendar said when it was opened — which is how a case
+  // cancelled for the next day was still on it. The week plan already polled;
+  // this did not, and nothing connected the two.
+  useLiveRefresh(useCallback(() => loadEvents({ quiet: true }), [loadEvents]), [loadEvents])
 
   const today = new Date()
   const weekDates = getWeekDates(weekBase)

@@ -13,8 +13,11 @@ import { formatDayHeading } from '../../clinicalPlan/week.js'
 // place they are kept up to date, and meetings below do keep theirs.
 export function CaseBlock({ surgicalCase, dark }) {
   const t = tokens(dark)
-  const accent = accentForCase(surgicalCase, dark)          // the bar
-  const accentText = accentTextForCase(surgicalCase, dark)  // the same, legible as text
+  const off = Boolean(surgicalCase.cancelled)
+  // Grey whatever colour it was. The colour means "this surgeon, this day", and
+  // keeping it would say the day is still committed.
+  const accent = off ? t.inkFaint : accentForCase(surgicalCase, dark)   // the bar
+  const accentText = off ? t.inkFaint : accentTextForCase(surgicalCase, dark)
 
   return (
     <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
@@ -23,11 +26,32 @@ export function CaseBlock({ surgicalCase, dark }) {
       <div style={{ minWidth: 0, flex: 1 }}>
         {/* Surgeon colour is never the only carrier of meaning — the name is
             always present as text (§10 accessibility). */}
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.ink, lineHeight: 1.35 }}>
+        <div style={{
+          fontSize: 14, fontWeight: 700, color: off ? t.inkFaint : t.ink, lineHeight: 1.35,
+          // Struck through, not removed. The theatre time was held and is now
+          // free, and a case vanishing from a plan somebody printed this morning
+          // is worse than one shown crossed out.
+          //
+          // Spread rather than set to 'none', so a case that is going ahead
+          // renders exactly the markup it did before. The document snapshots are
+          // what lock this block to the emailed Word file, and they should only
+          // move when something visible actually moves.
+          ...(off ? { textDecoration: 'line-through' } : {})
+        }}>
           {surgicalCase.patient}
           <span style={{ color: t.inkFaint, fontWeight: 400 }}> / </span>
           <span style={{ color: accentText }}>{surgicalCase.surgeon}</span>
         </div>
+        {off && (
+          <div style={{
+            display: 'inline-block', marginTop: 3, marginBottom: 1, padding: '1px 7px',
+            borderRadius: 999, border: `1px solid ${t.inkFaint}`,
+            fontSize: 10.5, fontWeight: 700, letterSpacing: '0.4px',
+            textTransform: 'uppercase', color: t.inkFaint
+          }}>
+            Cancelled
+          </div>
+        )}
         {/* The operation leads, in bold: "C5/6 ACDF" says more about the case
             than the implant system does. */}
         {surgicalCase.operation && (
@@ -269,7 +293,7 @@ export function BookingReadings({ readings, dark }) {
         }}>
           <span aria-hidden="true" style={{
             width: 6, height: 6, borderRadius: 3, marginTop: 6, flexShrink: 0,
-            background: r.read ? 'rgba(24,154,133,0.9)' : t.inkFainter
+            background: r.read ? 'rgba(24,154,133,0.9)' : t.inkFaint
           }} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, color: t.ink, lineHeight: 1.4, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
@@ -306,8 +330,8 @@ export function BookingReadings({ readings, dark }) {
 function Read({ label, value, t }) {
   return (
     <div style={{ display: 'flex', gap: 6 }}>
-      <span style={{ color: t.inkFainter, minWidth: 66, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: value ? t.ink : t.inkFainter }}>{value || '—'}</span>
+      <span style={{ color: t.inkFaint, minWidth: 66, flexShrink: 0 }}>{label}</span>
+      <span style={{ color: value ? t.ink : t.inkFaint }}>{value || '—'}</span>
     </div>
   )
 }

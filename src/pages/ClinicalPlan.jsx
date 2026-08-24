@@ -9,7 +9,8 @@ import {
   resolveDefaultWeek, weekWindowFor, stepWeek, todayStr,
   formatWeekRange, formatDayHeading, formatStamp
 } from '../clinicalPlan/week.js'
-import { fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature, LIVE_POLL_MS } from '../clinicalPlan/provider.js'
+import { fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature } from '../clinicalPlan/provider.js'
+import { useLiveRefresh } from '../liveRefresh.js'
 import { planToText, dayToText } from '../clinicalPlan/exportText.js'
 import { DOCX_FILENAME } from '../clinicalPlan/exportMeta.js'
 
@@ -100,23 +101,11 @@ export default function ClinicalPlan({ user, onBack, promptBanner }) {
 
   // Follow the calendar rather than snapshot it. Lists are still being reordered
   // while the plan is being worked from, so an edit made in Google has to appear
-  // here without anyone reloading.
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === 'visible') load(window_, { force: true, quiet: true })
-    }
-    // A tab that has been in the background is the most likely to be out of date,
-    // so coming back to it rechecks straight away rather than waiting for the
-    // next tick.
-    const timer = setInterval(refresh, LIVE_POLL_MS)
-    document.addEventListener('visibilitychange', refresh)
-    window.addEventListener('focus', refresh)
-    return () => {
-      clearInterval(timer)
-      document.removeEventListener('visibilitychange', refresh)
-      window.removeEventListener('focus', refresh)
-    }
-  }, [window_, load])
+  // here without anyone reloading. Shared with the calendar view — see
+  // src/liveRefresh.js.
+  useLiveRefresh(
+    useCallback(() => load(window_, { force: true, quiet: true }), [window_, load]),
+    [window_, load])
 
   function goWeek(direction) {
     const next = stepWeek(window_.startDate, direction)

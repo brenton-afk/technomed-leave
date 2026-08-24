@@ -22,12 +22,10 @@ const PREFS_KEY = 'tm_clinical_prefs'
 // the cache exists to avoid a blank screen rather than to avoid fetching.
 const TTL_MS = 60 * 1000
 
-// How often an open, visible tab rechecks the calendar. The plan is worked from
-// while lists are still being moved around, so it has to follow the calendar
-// rather than snapshot it. A minute is frequent enough that an edit made in
-// Google shows up before anyone would think to reload, and rare enough to be
-// nothing next to the app's other traffic. Hidden tabs do not poll at all.
-export const LIVE_POLL_MS = 60 * 1000
+// Re-exported so existing importers keep working. It lives in src/liveRefresh.js
+// with the hook that uses it, because the calendar view needs the same number and
+// having it here made it look like a property of the plan.
+export { LIVE_POLL_MS } from '../liveRefresh.js'
 
 /**
  * A fingerprint of everything the plan actually displays.

@@ -195,6 +195,52 @@ export function isSurgicalCase(title, hint) {
   return parseCaseTitle(title, hint) !== null
 }
 
+/**
+ * Whether a booking has been called off.
+ *
+ * A cancellation reaches this app two ways. Deleting the event is the clean one —
+ * Google stops returning it and it simply disappears. But the team more often
+ * *renames* it, because a deleted booking leaves no record that the theatre time
+ * was ever held, and a renamed one was still being read as a live case: same
+ * patient, same surgeon, same kit, no indication that nobody is operating.
+ *
+ * Kept as a case rather than dropped. "Cancelled" is information — the slot was
+ * booked and is now free — and a case quietly vanishing from a plan someone
+ * printed this morning is worse than one shown struck through.
+ *
+ * Deliberately narrow. `\bcancel` and `\bpostpone` only, anchored to a word
+ * start, because a substring match would catch a surgeon or a procedure and take
+ * a real case off the list.
+ */
+const CALLED_OFF = /\b(?:cancel(?:l?ed|lation)?|postponed?|abandoned)\b/i
+
+export function isCancelled(title, description) {
+  return CALLED_OFF.test(String(title || '')) || CALLED_OFF.test(String(description || ''))
+}
+
+/**
+ * The booking title without its cancellation marker.
+ *
+ * A title is read as `{Patient} {procedure} - {Surgeon}`, so "CANCELLED - Streets
+ * ACDF - JPW" put the marker exactly where the patient's name goes and the case
+ * came out belonging to a patient called Cancelled. Removing the word first means
+ * a called-off booking still reads as the case it was, which is the whole point of
+ * keeping it on the page.
+ *
+ * Leading and trailing separators go with it, along with the brackets around a
+ * parenthesised "(cancelled)".
+ */
+export function stripCancellation(title) {
+  return String(title || '')
+    // "(cancelled)" and anything else in those brackets.
+    .replace(/\([^)]*\b(?:cancel(?:l?ed|lation)?|postponed?|abandoned)\b[^)]*\)/gi, ' ')
+    // The word, together with one separator either side of it — and no others.
+    // Rewriting every separator in the title turned "L4-L5 TLIF" into "L4 L5".
+    .replace(/\s*[-–—:|]?\s*\b(?:cancel(?:l?ed|lation)?|postponed?|abandoned)\b\s*[-–—:|]?\s*/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 // The clinical procedure, from the event notes — "C5/6 ACDF" and the like.
 // This is the most clinically meaningful thing about a case and was previously
 // discarded: only the kit and the hospital were read out of the description.
@@ -550,6 +596,8 @@ export function cleanOperation(text, o = {}) {
  * through exactly as it had been typed.
  */
 export function readBooking(title, description, { colourSurgeon } = {}) {
+  // A renamed cancellation puts its marker where the patient's name goes.
+  title = stripCancellation(title)
   const everything = `${title || ''}\n${description || ''}`
   // Labelled fields first. Where the team has written "Surgeon: Fowler" there is
   // nothing to infer, and inference was only ever a way of coping without them.

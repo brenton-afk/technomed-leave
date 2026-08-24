@@ -5,7 +5,7 @@
 
 import './types.js'
 import {
-  normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking
+  normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking, isCancelled
 } from './parse.js'
 import { colourNameFor, colourHexFor, surgeonForColourName } from './colours.js'
 import {
@@ -104,10 +104,19 @@ function daysCovered(event, days, tz) {
   return [key]
 }
 
-function caseCountLine(cases, nonSurgeonItems) {
+function caseCountLine(allCases, nonSurgeonItems) {
+  // Cancelled bookings still appear in the day, struck through, but they are not
+  // cases anybody is going to. Counting them would have the plan promise four
+  // cases on a day with three.
+  const cases = allCases.filter(c => !c.cancelled)
+  const calledOff = allCases.length - cases.length
+  const suffix = calledOff ? ` · ${calledOff} cancelled` : ''
   if (cases.length === 0) {
-    if (nonSurgeonItems.length === 1) return 'No surgical cases — 1 internal meeting'
-    if (nonSurgeonItems.length > 1) return `No surgical cases — ${nonSurgeonItems.length} internal meetings`
+    if (calledOff && !nonSurgeonItems.length) {
+      return `No surgical cases — ${calledOff} cancelled`
+    }
+    if (nonSurgeonItems.length === 1) return `No surgical cases — 1 internal meeting${suffix}`
+    if (nonSurgeonItems.length > 1) return `No surgical cases — ${nonSurgeonItems.length} internal meetings${suffix}`
     return 'No surgical cases'
   }
   const byHospital = new Map()
@@ -119,7 +128,7 @@ function caseCountLine(cases, nonSurgeonItems) {
   const breakdown = [...byHospital.entries()]
     .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
     .map(([h, n]) => `${n} ${shortName(h)}`).join(', ')
-  return `${cases.length} case${cases.length === 1 ? '' : 's'} — ${breakdown}`
+  return `${cases.length} case${cases.length === 1 ? '' : 's'} — ${breakdown}${suffix}`
 }
 
 function groupByHospital(cases) {
@@ -283,6 +292,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       if (!read) continue
       allCases.push({
         id: event.id,
+        // Struck through and not counted, rather than dropped. See isCancelled.
+        cancelled: isCancelled(event.rawTitle, event.description) || undefined,
         patient: read.patient,
         surgeon: read.surgeon,
         // The title's raw middle section is not kept: it ran the operation and

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseCaseTitle, isSurgicalCase, sanitisePatient, stripIdentifiers,
-  extractKit, detectHospital, normaliseSurgeon, describeCase, HOSPITALS
+  extractKit, detectHospital, normaliseSurgeon, describeCase, HOSPITALS, isCancelled, stripCancellation, readBooking
 } from './parse.js'
 
 describe('parseCaseTitle', () => {
@@ -296,5 +296,64 @@ describe('assigning each fact to one field', () => {
   it('still strips identifiers, whichever field they were written in', () => {
     const read = describeCase('MARINER UR 4457821', 'C5/6 ACDF DOB 14/03/1958')
     expect(JSON.stringify(read)).not.toMatch(/4457821|1958/)
+  })
+})
+
+// ─── Cancellations ───────────────────────────────────────────────────────────
+// "It's currently not up to date, as patient Streets has been cancelled for
+// tomorrow." Deleting the booking is the clean way and needs nothing here —
+// Google stops returning it. But the team more often renames it, because a
+// deleted booking leaves no record that the theatre time was ever held, and a
+// renamed one was read as a live case: same patient, same surgeon, same kit, and
+// nothing to say nobody is operating.
+
+describe('spotting a booking that has been called off', () => {
+  it('reads a cancellation in the title', () => {
+    expect(isCancelled('CANCELLED - Streets ACDF - JPW', '')).toBe(true)
+    expect(isCancelled('Streets ACDF - JPW (cancelled)', '')).toBe(true)
+    expect(isCancelled('Streets ACDF - JPW', 'Cancelled by the surgeon')).toBe(true)
+  })
+
+  it('reads the other words the team uses', () => {
+    expect(isCancelled('Streets - POSTPONED', '')).toBe(true)
+    expect(isCancelled('Streets - abandoned', '')).toBe(true)
+    expect(isCancelled('Streets ACDF - cancellation', '')).toBe(true)
+  })
+
+  it('leaves a live case alone', () => {
+    expect(isCancelled('Streets C4/5 ACDF SHORELINE - JPW', 'Kit: Shoreline')).toBe(false)
+    expect(isCancelled('', '')).toBe(false)
+    expect(isCancelled(undefined, undefined)).toBe(false)
+  })
+
+  it('will not match inside another word', () => {
+    // Anchored to a word start on purpose. A substring match would take a real
+    // case off the list, which is far worse than showing one that is off.
+    expect(isCancelled('Cancellaro L4/5 TLIF - JPW', '')).toBe(false)
+  })
+})
+
+describe('reading a booking that was renamed rather than deleted', () => {
+  it('still gives the case its patient and surgeon', () => {
+    // A title reads {Patient} {procedure} - {Surgeon}, so "CANCELLED - Streets
+    // ACDF - JPW" put the marker exactly where the patient's name goes and the
+    // case came out belonging to a patient called Cancelled. Keeping a cancelled
+    // booking on the page is pointless if it does not say which case it was.
+    const read = readBooking('CANCELLED - Streets C4/5 ACDF SHORELINE - JPW', 'Kit: Shoreline')
+    expect(read.patient).toBe('Streets')
+    expect(read.surgeon).toBe('JPW')
+  })
+
+  it('handles the marker in brackets at the end', () => {
+    const read = readBooking('Streets C4/5 ACDF SHORELINE - JPW (cancelled)', 'Kit: Shoreline')
+    expect(read.patient).toBe('Streets')
+    expect(read.surgeon).toBe('JPW')
+  })
+
+  it('does not disturb a title with a hyphen in it', () => {
+    // The first attempt normalised every separator and turned "L4-L5" into
+    // "L4 L5". A vertebral level is not a separator.
+    expect(stripCancellation('Jackson L4-L5 TLIF - JPW')).toBe('Jackson L4-L5 TLIF - JPW')
+    expect(stripCancellation('CANCELLED - Jackson L4-L5 TLIF - JPW')).toBe('Jackson L4-L5 TLIF - JPW')
   })
 })
