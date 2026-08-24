@@ -92,6 +92,129 @@ function squareness(corners) {
 }
 
 /**
+ * Two brightnesses per candidate: the middle of it, and the band just inside its
+ * own border.
+ *
+ * Both are needed, and the second is the one that makes this work. The whole
+ * interior of a cutting mat with a page on it is *mostly the page* — measured over
+ * the mat's full area the mean came out at 205 against the page's own 208, so
+ * "which of these two is lighter" could not tell them apart at all. The band
+ * around the inside of the mat's border is the mat, and that reads 168.
+ *
+ * Sampled on a grid, bilinear across the corners rather than a true perspective
+ * map — which does not matter for sampling, since every point still lands inside.
+ */
+function interiorTones(grey, corners) {
+  const data = grey.data
+  const w = grey.cols, h = grey.rows
+  const N = 28
+  let coreN = 0, coreSum = 0, ringN = 0, ringSum = 0
+
+  for (let i = 0; i < N; i++) {
+    const v = 0.03 + (0.94 * i) / (N - 1)
+    for (let j = 0; j < N; j++) {
+      const u = 0.03 + (0.94 * j) / (N - 1)
+      const topX = corners[0].x + (corners[1].x - corners[0].x) * u
+      const topY = corners[0].y + (corners[1].y - corners[0].y) * u
+      const botX = corners[3].x + (corners[2].x - corners[3].x) * u
+      const botY = corners[3].y + (corners[2].y - corners[3].y) * u
+      const x = Math.round(topX + (botX - topX) * v)
+      const y = Math.round(topY + (botY - topY) * v)
+      if (x < 0 || y < 0 || x >= w || y >= h) continue
+
+      const edge = Math.min(u, 1 - u, v, 1 - v)
+      const grey8 = data[y * w + x]
+      if (edge >= 0.2) { coreSum += grey8; coreN++ }
+      else if (edge <= 0.1) { ringSum += grey8; ringN++ }
+    }
+  }
+
+  return {
+    mean: coreN < 24 ? 0 : coreSum / coreN,
+    ring: ringN < 24 ? 0 : ringSum / ringN
+  }
+}
+
+function inside(polygon, point) {
+  let within = false
+  for (let i = 0, j = 3; i < 4; j = i++) {
+    const a = polygon[i], b = polygon[j]
+    if ((a.y > point.y) !== (b.y > point.y) &&
+        point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x) {
+      within = !within
+    }
+  }
+  return within
+}
+
+const encloses = (outer, inner) => inner.every(p => inside(outer, p))
+
+/** Whether any corner sits on the edge of the picture. */
+function touchesBorder(corners, width, height, slack = 2) {
+  return corners.some(p =>
+    p.x <= slack || p.y <= slack || p.x >= width - slack || p.y >= height - slack)
+}
+
+/**
+ * Which of the frame's quadrilaterals is the page.
+ *
+ * Taking the largest is the obvious rule and it is what produced "the frame just
+ * doesn't really adjust at all to the page on the table". The surface a page is
+ * lying on is *always* a bigger quadrilateral than the page — a table shot from
+ * above, a cutting mat, a desk — and it is just as four-sided. On the reported
+ * photograph the outline sat on the table with its corners off the edges of the
+ * picture, and nothing downstream could help: the answer was confidently wrong
+ * rather than noisy.
+ *
+ * Two things separate a page from the thing it is resting on, and neither is size.
+ *
+ * ENCLOSURE, AND WHICH IS LIGHTER. A surface contains the page; the page contains
+ * nothing. So a candidate that encloses another is a surface — but only if the one
+ * it encloses is lighter than the *enclosing surface itself*, measured in the band
+ * inside its border rather than over its whole interior, which is largely the page.
+ * That is what "a sheet of paper is lying on this" looks like.
+ *
+ * The tone test is load-bearing, not a refinement: a form's inner print box is also
+ * enclosed by the page, and the band inside the page's border is paper — the same
+ * tone as the box. So this declines to prefer it. Without the test, an older bug
+ * would return where the outline snapped to the heavy rule under a form's header.
+ *
+ * BEING WHOLLY IN THE PICTURE. A quad clipped by the frame's edge cannot be a
+ * page that is fully visible, and cropping to it would cut the form off. That
+ * makes it wrong to offer whether or not it is the page, so it only wins if
+ * nothing else is available.
+ *
+ * Every tier falls back rather than rejecting outright, so a frame that contains
+ * only an awkward candidate still gets an outline instead of nothing.
+ */
+export function chooseCandidate(candidates, width, height) {
+  if (!candidates.length) return null
+
+  const surfaces = new Set()
+  for (const outer of candidates) {
+    for (const inner of candidates) {
+      if (outer === inner) continue
+      if (outer.areaFraction <= inner.areaFraction) continue
+      // Against the outer's *own* surface — the band inside its border — and not
+      // against its whole interior, which is largely the inner candidate.
+      //
+      // Eight grey levels: enough to tell paper from a bench, small enough that a
+      // dim photograph still registers it.
+      if (inner.mean <= outer.ring + 8) continue
+      if (encloses(outer.corners, inner.corners)) surfaces.add(outer)
+    }
+  }
+
+  let pool = candidates.filter(c => !surfaces.has(c))
+  if (!pool.length) pool = candidates
+
+  const whollyVisible = pool.filter(c => !touchesBorder(c.corners, width, height))
+  if (whollyVisible.length) pool = whollyVisible
+
+  return pool.reduce((best, c) => (!best || c.areaFraction > best.areaFraction) ? c : best, null)
+}
+
+/**
  * Canny thresholds, tried in order until a page is found.
  *
  * One pair cannot cover the range. A form on a dark bench has a hard boundary and
@@ -230,7 +353,11 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
     const otsu = cv.threshold(smoothed, otsuMask, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
     const ladder = [[Math.max(6, otsu * 0.33), Math.max(18, otsu)], ...CANNY_LADDER]
 
-    let best = null
+    // Every acceptable quadrilateral from every rung, ranked once at the end.
+    // Ranking as they arrive cannot work: whether a candidate is the surface under
+    // the page is a fact about it *and another candidate*, which may come from a
+    // different threshold.
+    const candidates = []
     for (const [low, high] of ladder) {
       const edges = track(new cv.Mat())
       cv.Canny(smoothed, edges, low, high, 3, false)
@@ -262,9 +389,12 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
             const shape = squareness(corners)
             if (shape < minSquareness) continue
 
-            if (!best || areaFraction > best.areaFraction) {
-              best = { corners, areaFraction, squareness: shape }
-            }
+            candidates.push({
+              corners,
+              areaFraction,
+              squareness: shape,
+              ...interiorTones(grey, corners)
+            })
           } finally {
             contour.delete()
           }
@@ -293,14 +423,16 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       // bench guards it.
     }
 
-    if (!best) return null
-    const normalised = best.corners.map(c => ({ x: c.x / width, y: c.y / height }))
+    const chosen = chooseCandidate(candidates, width, height)
+    if (!chosen) return null
+    const normalised = chosen.corners.map(c => ({ x: c.x / width, y: c.y / height }))
     return {
       corners: normalised,
-      areaFraction: best.areaFraction,
+      areaFraction: chosen.areaFraction,
+
       // What "close enough to capture" is actually judged on.
-      fill: fillFraction(normalised, best.areaFraction, width / height),
-      squareness: best.squareness,
+      fill: fillFraction(normalised, chosen.areaFraction, width / height),
+      squareness: chosen.squareness,
       contrast
     }
   } finally {

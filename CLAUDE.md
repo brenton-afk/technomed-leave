@@ -234,7 +234,30 @@ Invariants worth preserving:
   and on a phone holding a camera stream it gets the tab killed — which presents
   as the camera not opening at all.
 - **`documentDetect.js`** — Canny → `findContours` → **convex hull** →
-  `approxPolyDP`, largest 4-gon over 20% of the frame. Three details are
+  `approxPolyDP`, then `chooseCandidate` ranks every 4-gon over 20% of the frame.
+
+  **Largest does not win, and must not.** The surface a page is lying on is always
+  a larger quadrilateral than the page — a table shot from above, a cutting mat, a
+  desk — and just as four-sided, so "largest" put the outline on the table with
+  its corners off the edges of the picture. Nothing downstream could help: the
+  answer was confidently wrong rather than noisy. Two rules, each with a fallback
+  so an awkward frame still gets an outline rather than none:
+
+  1. **A candidate enclosing a lighter one is the surface, not the page** — and
+     "lighter" is judged against the enclosing candidate's *own border band*, not
+     its whole interior. Most of a mat's interior **is** the page: measured whole
+     it read 205 against the page's 208, three levels apart and useless. The band
+     inside its border is the mat, at 168. The tone test is also what stops this
+     preferring a form's inner print box, which is enclosed by the page but the
+     same tone as it — without that, an older bug returns where the outline
+     snapped to the heavy rule under a form's header.
+  2. **A quad clipped by the frame edge loses to any wholly visible one**, because
+     cropping to it would cut the form off whether or not it is the page.
+
+  `chooseCandidate` is exported and unit-tested directly in
+  `documentDetect.test.js`. The frame-edge rule has no other cover: a flat surface
+  running off the picture leaves no closed contour, so the synthetic scenes cannot
+  produce a clipped candidate at all. Three details are
   load-bearing and each fixed a real failure: the hull (print reaching a margin
   joins the border and made the outline a 16-gon), filtering on *hull* area rather
   than contour area (a border broken anywhere traces an open ribbon enclosing
@@ -342,7 +365,10 @@ Call-in detection reads after-hours bookings from the calendar, but the calendar
 ## Verifying changes
 
 `npx vitest run` is the suite. `npm run bench:scanner` measures the document
-detector against the synthetic scenes in `src/scanner/scenes.js` — the suite's own
+detector against the synthetic scenes in `src/scanner/scenes.js` — which now
+include a page on a table with the table's edge in frame, and `scene()` takes a
+`surface` quad for it. Every other scene puts the page on an infinite flat
+background, which is why none of them could produce the table failure — the suite's own
 timing checks are deliberately loose because jsdom timing swings by a factor of
 five between runs, so that script is the real figure.
 

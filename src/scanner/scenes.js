@@ -83,11 +83,39 @@ export function formContent(u, v, paper) {
  * @param {Array}  [o.clutter]  other rectangles on the surface
  * @param {boolean}[o.content]  draw form content (default true)
  */
+/**
+ * Fills an arbitrary quadrilateral with a flat shade.
+ *
+ * Used for the surface a page is lying on. Axis-aligned `clutter` rectangles
+ * cannot express that: a table photographed from above is a tilted quad whose
+ * corners run off the frame, and it being a *quad* is the whole point — it is
+ * exactly the shape the detector is looking for, which is why it gets picked
+ * instead of the page.
+ */
+function fillQuad(g, W, H, quad, shade) {
+  const inv = invert3(unitSquareTo(quad))
+  const xs = quad.map(p => p.x), ys = quad.map(p => p.y)
+  const x0 = Math.max(0, Math.floor(Math.min(...xs))), x1 = Math.min(W, Math.ceil(Math.max(...xs)))
+  const y0 = Math.max(0, Math.floor(Math.min(...ys))), y1 = Math.min(H, Math.ceil(Math.max(...ys)))
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const w = inv[6] * x + inv[7] * y + inv[8]
+      const u = (inv[0] * x + inv[1] * y + inv[2]) / w
+      const v = (inv[3] * x + inv[4] * y + inv[5]) / w
+      if (u < 0 || u > 1 || v < 0 || v > 1) continue
+      g[y * W + x] = shade
+    }
+  }
+}
+
 export function scene(o) {
   const { width: W, height: H, quad, paper, bench } = o
   const content = o.content !== false
   const g = new Uint8Array(W * H)
   for (let i = 0; i < g.length; i++) g[i] = bench
+
+  // The surface the page is on, under everything else.
+  if (o.surface) fillQuad(g, W, H, o.surface.quad, o.surface.grey)
 
   for (const c of o.clutter || []) {
     for (let y = Math.max(0, c.y0); y < Math.min(H, c.y1); y++) {
@@ -196,6 +224,38 @@ export function benchmark(W = 320, H = 240) {
     // A form whose box border runs right at the paper's edge, which some
     // hospital sheets do. There is no clear paper to measure against, so this is
     // the hardest case in the set and it is here on purpose.
-    { name: 'print to the edge', quad: rect(48, 26, 272, 214), paper: 234, bench: 198, noise: 3, tight: true }
+    { name: 'print to the edge', quad: rect(48, 26, 272, 214), paper: 234, bench: 198, noise: 3, tight: true },
+    // ── The one from the photograph ──
+    // A form on a wooden table, shot from above with the table's near edge and
+    // the floor beyond it in frame. The table is a large tilted quadrilateral
+    // running off three sides — which is to say, it is a better example of the
+    // shape being searched for than the page is, and considerably bigger.
+    //
+    // Reported as "the frame just doesn't really adjust at all to the page on the
+    // table": the outline sat on the table, corners off the edges of the picture,
+    // and no amount of smoothing or gating downstream could help because the
+    // detector's answer was confidently wrong. Every other scene here puts the
+    // page on an infinite flat background, so none of them could produce it.
+    {
+      name: 'page on a table, edge in frame',
+      // The page sits clear of the table's near edge, as it does in the
+      // photograph. Overlapping the two merges their contours under Canny and
+      // produces one ragged quad instead of two competing ones, which is a
+      // different problem and not the one being reproduced here.
+      quad: rect(104, 40, 232, 186), paper: 236, bench: 40, noise: 3,
+      surface: { grey: 138, quad: [
+        { x: -30 * k, y: -20 * k }, { x: 350 * k, y: 10 * k },
+        { x: 300 * k, y: 255 * k }, { x: -60 * k, y: 215 * k }
+      ] }
+    },
+    // The same thing without the tilt: a desk edge straight across the frame.
+    {
+      name: 'desk edge across the frame',
+      quad: rect(88, 30, 232, 180), paper: 234, bench: 52, noise: 3,
+      surface: { grey: 150, quad: [
+        { x: -10 * k, y: -10 * k }, { x: 330 * k, y: -10 * k },
+        { x: 330 * k, y: 205 * k }, { x: -10 * k, y: 205 * k }
+      ] }
+    }
   ].map(c => ({ ...c, width: W, height: H, image: scene({ ...c, width: W, height: H }) }))
 }
