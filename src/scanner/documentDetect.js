@@ -272,9 +272,25 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       } finally {
         contours.delete()
       }
-      // The first threshold that finds a page is the most selective one that
-      // could, so there is nothing to gain by going looser.
-      if (best) break
+      // Every rung is tried, and the best answer across all of them wins.
+      //
+      // This used to stop at the first rung that found anything, on the reasoning
+      // that it was the most selective one that could and there was nothing to
+      // gain by going looser. That is wrong whenever two candidates exist, and it
+      // was the largest single cause of the outline jumping about.
+      //
+      // Measured on the tilted-bench scene: one rung found the page (area 0.47,
+      // 1.3px out) and another found something 25px out (area 0.37). Which rung
+      // fired first flipped with the sensor noise, so the outline alternated
+      // between the two — a 13% jump every other frame — and once two wrong
+      // frames landed in a row the tracker confirmed the jump and sat on the
+      // wrong answer. Comparing their areas would have picked the right one
+      // every time — the wrong candidate was the *smaller* of the two — but they
+      // were never compared, because the loop had already returned.
+      //
+      // Comparing them costs the remaining rungs on frames that would have exited
+      // early. Detection is under a millisecond, so that is affordable and the
+      // bench guards it.
     }
 
     if (!best) return null

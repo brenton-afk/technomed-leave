@@ -242,10 +242,32 @@ Invariants worth preserving:
   and ladders of Canny thresholds and approx epsilons because no single value
   spans a form on a dark bench and the same form on a white one.
 - **`documentTracker.js`** — the anti-jitter, and the thing the rebuild was
-  actually for. Eight-frame weighted average, then the drawn outline is *not
-  moved at all* until the average shifts more than 3% of frame width, then a
-  500ms fade instead of blinking out. Also decides auto-capture: 800ms still,
-  ≥60% of frame, enough contrast.
+  actually for. **Rewritten once already**: the first version averaged eight
+  detections with linear weights and froze the outline below a 3% shift, and came
+  back as "still sluggish and sloppy, deviates all over the place". All three
+  faults were separate — a weighted mean puts four fifths of the outline where the
+  page *was*; a wrong detection is blended in rather than rejected; and freezing
+  then jumping is a worse artefact than the jitter it hides.
+
+  Now: exponential smoothing whose gain rises with movement, gated by a jump
+  filter, and no freeze. **The gain keys off direction, not distance** — that is
+  the whole design. Keying it off distance is the obvious thing and it is wrong,
+  because the detector's own noise moves its answer a long way *every* frame, so
+  noise scores as movement and gets followed at the fast gain. `trackDrift`
+  compares a smoothed delta *vector* against the smoothed *length* of those
+  deltas: reversing noise shrinks the first and not the second, movement in a line
+  keeps them equal. Kept per corner, because a page being brought closer moves its
+  four corners in four opposing directions and an average across them cancels
+  exactly as noise does.
+
+  `jumpTolerance` (7%) and `jumpConfirmations` (3) were **measured, not chosen** —
+  see the numbers in `documentTracker.test.js`. The detector's wrong answers land
+  8–10% out, so the original 12% gate let every one through; and its wrong answer
+  on a given scene is usually the *same* wrong answer, so at two confirmations it
+  only had to appear twice in a row to be believed, at which point the outline
+  snapped 8% onto it. Two → three took the worst jump from 8.34% to 0.10%.
+
+  Also decides auto-capture: 800ms still, ≥60% of frame, enough contrast.
 - **`cameraStream.js`** — one shared stream, module-level, held across pages. A
   component that stops its tracks on unmount re-opens the camera for every page,
   which on iOS is a stall and a second of black each time.
@@ -268,10 +290,26 @@ the app. What the code guarantees is one `getUserMedia` per session — the prom
 is per page load, so on iOS a standalone PWA launch will ask again unless the site
 is set to Allow in Safari's settings.
 
-**Detection runs at 240×180 on every third frame**, and low is deliberate: a page
+**Detection runs at 240×180 on every second frame**, and low is deliberate: a page
 border survives downscaling and a form's printed table rules do not, so the small
-frame is *more* accurate as well as four times faster (`npm run bench:scanner`
-shows 8/15 at 240 against 5/15 at 640).
+frame is *more* accurate as well as four times faster. Every third frame was a
+third more latency for very little — detection measures about 2ms.
+
+**Do not restore the early exit from the Canny ladder.** It used to stop at the
+first threshold that found any quadrilateral, reasoning that this was the most
+selective one that could and there was nothing to gain by looking further. That is
+wrong whenever a frame contains two candidates, and it was the single largest
+cause of the outline jumping about: on the tilted-bench scene one rung found the
+page (1.3px out) and another found something 25px out, whichever fired first
+flipped with the sensor noise, and comparing their *areas* would have picked
+correctly every time — the wrong candidate was the smaller. Removing the exit took
+accuracy from 8/15 to **12/15** and that scene's frame-to-frame jump from 13.5% of
+frame width to 0.06%.
+
+A previous-frame coherence bonus was tried alongside it and **deliberately
+removed**: it changed no outcome on any of the twelve scenes, and a rule that
+biases selection toward the last answer can only create stale locks. The ladder
+fix was the whole of it.
 
 Treat that bench as a regression check, not as evidence about real performance.
 The hand-written detector it replaced scored 11/15 there and was unusable on an
@@ -304,10 +342,17 @@ Call-in detection reads after-hours bookings from the calendar, but the calendar
 ## Verifying changes
 
 `npx vitest run` is the suite. `npm run bench:scanner` measures the document
-detector's accuracy and speed against the synthetic scenes in
-`src/scanner/scenes.js` — the suite's own timing checks are deliberately loose
-because jsdom timing swings by a factor of five between runs, so that script is
-the real figure.
+detector against the synthetic scenes in `src/scanner/scenes.js` — the suite's own
+timing checks are deliberately loose because jsdom timing swings by a factor of
+five between runs, so that script is the real figure.
+
+It reports two things, and the second matters more. **Accuracy** is single-frame
+corner error. **Steadiness** runs the real detector over one scene for 24 frames
+with fresh sensor noise on each and reports how far the *drawn* outline moves
+between consecutive frames; it fails the run above 2% of frame width. Single-frame
+error cannot see the fault that actually made the scanner feel broken — a detector
+can be accurate on average and still draw an outline that will not sit still — and
+it was this measurement that found the Canny early exit.
 
 Two more cheap checks worth running after touching `api/`:
 

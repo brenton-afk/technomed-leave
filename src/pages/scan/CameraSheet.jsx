@@ -42,7 +42,11 @@ function describeCameraError(err) {
   return `Could not open the camera. (${detail})`
 }
 const DETECT_WIDTH = 240
-const FRAME_INTERVAL = 3
+// Every other frame. Detection at 240x180 measures under a millisecond
+// (`npm run bench:scanner`), so a third of the frames was buying very little and
+// costing a third of the outline's latency — every skipped frame is one more
+// frame the drawn outline is behind the page.
+const FRAME_INTERVAL = 2
 const MAX_IMAGE_DIM = 1568
 
 /** The outline, drawn as SVG over the video. */

@@ -3,8 +3,12 @@ import { DocumentTracker, maxCornerShift } from './documentTracker.js'
 
 // The dancing frame was the complaint, and it was never mainly an accuracy
 // problem: detection is per-frame and independent, so its answer moves a little
-// every time even when nothing has. These are the three mechanisms that stop it,
-// tested separately because they fix three different things.
+// every time even when nothing has.
+//
+// The first attempt at this — an eight-frame weighted mean, a freeze below 3%,
+// and a fade — came back as "still sluggish and sloppy, deviates all over the
+// place". So the two things being complained about are measured here as numbers
+// rather than described: see "as numbers" at the foot of the file.
 
 const quad = (inset = 0.1, jitter = 0) => {
   const j = (i) => jitter * ((i % 2) ? 1 : -1)
@@ -28,7 +32,7 @@ function feed(tracker, frames, startAt = 1000, step = 100) {
 
 describe('averaging out the wobble', () => {
   it('draws an outline from the first frame, rather than waiting', () => {
-    // Waiting for a full history would read as a failure to detect.
+    // Waiting until the estimate had settled would read as a failure to detect.
     const tracker = new DocumentTracker()
     const view = tracker.update(detection(quad()), 1000)
     expect(view.corners).not.toBeNull()
@@ -41,48 +45,49 @@ describe('averaging out the wobble', () => {
     const tracker = new DocumentTracker()
     const truth = quad(0.1)
     // Alternating error either side of the real position.
-    const frames = Array.from({ length: 8 }, (_, i) =>
+    const frames = Array.from({ length: 20 }, (_, i) =>
       detection(quad(0.1, i % 2 ? 0.02 : -0.02)))
     const view = feed(tracker, frames)
     expect(maxCornerShift(view.corners, truth)).toBeLessThan(0.01)
   })
 })
 
-describe('not redrawing at all below a threshold', () => {
-  it('leaves the outline exactly where it is under tiny movement', () => {
+describe('moving as much as the page did, and no more', () => {
+  // There is no freeze threshold any more. Holding the outline still until the
+  // estimate had moved 3% and then moving it all at once turned smooth drift into
+  // visible steps — a worse artefact than the jitter it hid. The gain does this
+  // job instead: tiny movements are damped almost to nothing, large ones are
+  // followed at once.
+  it('barely moves for a movement too small to be real', () => {
     const tracker = new DocumentTracker()
     const settled = feed(tracker, Array.from({ length: 8 }, () => detection(quad(0.1))))
     const before = settled.corners
 
     // A page that has "moved" by a fifth of a percent of the frame.
     const after = feed(tracker, [detection(quad(0.102))], 2000)
-    // The same array object, not merely equal numbers: nothing was recomputed.
-    expect(after.corners).toBe(before)
+    // Not frozen — but a fraction of a pixel on a 400px-wide preview.
+    expect(maxCornerShift(after.corners, before)).toBeLessThan(0.001)
   })
 
   it('does move for a real movement', () => {
     const tracker = new DocumentTracker()
     feed(tracker, Array.from({ length: 8 }, () => detection(quad(0.1))))
-    const before = tracker.displayed
+    const before = tracker.estimate
     // Ten percent of the frame: the page has been picked up and moved.
     const after = feed(tracker, Array.from({ length: 8 }, () => detection(quad(0.2))), 2000)
-    expect(after.corners).not.toBe(before)
     expect(maxCornerShift(after.corners, before)).toBeGreaterThan(0.03)
   })
 
   it('accumulates a slow drift instead of ignoring it forever', () => {
-    // Each step is under the threshold, but they add up, and the outline has to
-    // follow. A threshold applied to the *drawn* position rather than to each
-    // step is what makes that work.
     const tracker = new DocumentTracker()
     feed(tracker, Array.from({ length: 8 }, () => detection(quad(0.1))))
-    const before = tracker.displayed
+    const before = tracker.estimate
     let at = 2000
     for (let step = 1; step <= 20; step++) {
       tracker.update(detection(quad(0.1 + step * 0.005)), at)
       at += 100
     }
-    expect(maxCornerShift(tracker.displayed, before)).toBeGreaterThan(0.03)
+    expect(maxCornerShift(tracker.estimate, before)).toBeGreaterThan(0.03)
   })
 })
 
@@ -134,7 +139,7 @@ describe('deciding when to capture on its own', () => {
 
   it('waits the full hold before firing', () => {
     const tracker = new DocumentTracker()
-    // Eight frames at 100ms is 700ms of history — not yet 800ms of stillness.
+    // Eight frames at 100ms is 700ms — not yet 800ms of stillness.
     const early = feed(tracker, still())
     expect(early.readyToCapture).toBe(false)
     expect(early.countdown).toBeGreaterThan(0)
@@ -221,5 +226,164 @@ describe('deciding when to capture on its own', () => {
       const t = new DocumentTracker()
       expect(feed(t, Array.from({ length: 12 }, () => detection(quad(0.1), extra))).hint).toBe(hint)
     }
+  })
+})
+
+// ─── As numbers ──────────────────────────────────────────────────────────────
+// "Sluggish and sloppy, deviates all over the place" is three measurable things,
+// and describing them in prose is how the first attempt shipped believing it had
+// fixed them. Each of these fails if the tracker regresses to the old behaviour.
+
+/** A page held by hand: still, with the detector's noise on top. */
+function noisyStill(frames, amplitude = 0.02) {
+  // Alternating, which is what detector noise looks like — and the case the
+  // first design handled worst, because a reversal is a large shift.
+  return Array.from({ length: frames }, (_, i) =>
+    detection(quad(0.1, i % 2 ? amplitude : -amplitude)))
+}
+
+describe('a page held still', () => {
+  it('barely wobbles, however much the detector does', () => {
+    const tracker = new DocumentTracker()
+    const truth = quad(0.1)
+    let worst = 0
+    noisyStill(60).forEach((frame, i) => {
+      const view = tracker.update(frame, 1000 + i * 100)
+      // Steady state only. Measuring from the start folds in the convergence
+      // from the first frame — which is worth its own test below, but is not
+      // what wobble means, and conflating them says a *lower* gain wobbles more.
+      if (i >= 45) worst = Math.max(worst, maxCornerShift(view.corners, truth))
+    })
+    // The detector is moving ±2% of frame width every frame: on a 400px preview,
+    // ±8px of raw jitter. This is what reaches the screen.
+    //
+    // Measured against the design it replaced, on this same sequence: the
+    // eight-frame weighted mean let 0.94% through, this lets 0.21% — under a
+    // pixel. The threshold is loose enough not to be a tuning trap.
+    expect(worst).toBeLessThan(0.004)
+  })
+
+  it('settles quickly enough not to look like a wrong answer', () => {
+    // The first detection is taken whole, so the outline starts wherever the
+    // detector's noise put it and has to walk in. Slowly enough and that walk is
+    // itself visible as the frame creeping.
+    const tracker = new DocumentTracker()
+    const truth = quad(0.1)
+    let view
+    noisyStill(12).forEach((frame, i) => { view = tracker.update(frame, 1000 + i * 100) })
+    expect(maxCornerShift(view.corners, truth)).toBeLessThan(0.006)
+  })
+
+  it('reports itself still, so the shutter can fire', () => {
+    const tracker = new DocumentTracker()
+    let view
+    noisyStill(40).forEach((frame, i) => { view = tracker.update(frame, 1000 + i * 100) })
+    // A tracker that passed the noise through would restart the stillness clock
+    // on every frame and auto-capture would never fire — which is the fault
+    // reported before this: "it doesn't auto scan though the box is ticked".
+    expect(view.reason).toBe('ready')
+    expect(view.readyToCapture).toBe(true)
+  })
+})
+
+describe('a page being moved', () => {
+  /** Corners marching steadily across the frame, as when aiming the phone. */
+  const panning = (frames, step = 0.02) =>
+    Array.from({ length: frames }, (_, i) => detection(
+      quad(0.1).map(c => ({ x: c.x + i * step, y: c.y }))))
+
+  it('keeps up, rather than trailing half a second behind', () => {
+    const tracker = new DocumentTracker()
+    const frames = panning(20)
+    let view
+    frames.forEach((frame, i) => { view = tracker.update(frame, 1000 + i * 100) })
+
+    // How far the drawn outline is behind where the page actually is.
+    const lag = maxCornerShift(view.corners, frames[frames.length - 1].corners)
+    // Measured on this sequence: the eight-frame weighted mean sat 4.67% of
+    // frame width behind — about 19px on a 400px preview, and plainly visible.
+    // This is 1.64%, well under one step of 2%.
+    expect(lag).toBeLessThan(0.02)
+  })
+
+  it('follows a page being brought closer', () => {
+    // The corners travel in four opposing directions, which is why the sense of
+    // direction is kept per corner: averaged across them it would cancel, and
+    // zooming in would have been damped as though it were noise.
+    const tracker = new DocumentTracker()
+    let view
+    for (let i = 0; i < 15; i++) {
+      view = tracker.update(detection(quad(0.28 - i * 0.012)), 1000 + i * 100)
+    }
+    const truth = quad(0.28 - 14 * 0.012)
+    expect(maxCornerShift(view.corners, truth)).toBeLessThan(0.02)
+  })
+})
+
+describe('a detection that is simply wrong', () => {
+  const settle = tracker => {
+    for (let i = 0; i < 12; i++) tracker.update(detection(quad(0.1)), 1000 + i * 100)
+    return tracker.estimate
+  }
+
+  it('is ignored rather than blended in', () => {
+    const tracker = new DocumentTracker()
+    const before = settle(tracker)
+
+    // One frame latching onto the block under a form's header rule.
+    const view = tracker.update(detection(quad(0.35)), 3000)
+
+    // Measured: the old mean took this at 8/36 and dragged the outline 7.86% of
+    // frame width — 31px — then needed eight more frames to crawl back. That is
+    // what "deviates all over the place" was.
+    expect(maxCornerShift(view.corners, before)).toBe(0)
+  })
+
+  it('does not delay the page it was hiding', () => {
+    const tracker = new DocumentTracker()
+    const before = settle(tracker)
+    tracker.update(detection(quad(0.35)), 3000)
+    // Good detections resume; the estimate never went anywhere.
+    const view = tracker.update(detection(quad(0.1)), 3100)
+    expect(maxCornerShift(view.corners, before)).toBeLessThan(0.002)
+  })
+
+  it('is believed once it keeps saying the same thing', () => {
+    // The phone really has been pointed at a different page. Holding out for ever
+    // would be worse than being dragged about.
+    const tracker = new DocumentTracker()
+    settle(tracker)
+    let view
+    for (let i = 0; i < 3; i++) view = tracker.update(detection(quad(0.35)), 3000 + i * 100)
+    expect(maxCornerShift(view.corners, quad(0.35))).toBe(0)
+  })
+
+  it('is not believed on two showings, because it usually gets two', () => {
+    // Measured: a detector's wrong answer on a given scene is generally the same
+    // wrong answer, so it lands twice in a row often enough to matter. Believing
+    // it at two took the worst jump on the bench from 0.10% to 8.34%.
+    const tracker = new DocumentTracker()
+    const before = settle(tracker)
+    tracker.update(detection(quad(0.35)), 3000)
+    const view = tracker.update(detection(quad(0.35)), 3100)
+    expect(maxCornerShift(view.corners, before)).toBe(0)
+  })
+
+  it('needs the repeat to agree with itself, not merely to be far away', () => {
+    // Two different wrong answers in a row are two mistakes, not a new page.
+    const tracker = new DocumentTracker()
+    const before = settle(tracker)
+    tracker.update(detection(quad(0.35)), 3000)
+    const view = tracker.update(detection(quad(0.5)), 3100)
+    expect(maxCornerShift(view.corners, before)).toBe(0)
+  })
+
+  it('holds the shutter while it is unsure', () => {
+    // Something is going on in front of the camera. Firing mid-argument would
+    // photograph whichever answer happened to be on screen.
+    const tracker = new DocumentTracker()
+    settle(tracker)
+    const view = tracker.update(detection(quad(0.35)), 3000)
+    expect(view.readyToCapture).toBe(false)
   })
 })

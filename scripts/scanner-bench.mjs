@@ -23,6 +23,7 @@ const require = createRequire(import.meta.url)
 const cv = require('../public/vendor/opencv-4.13.0.js')
 await new Promise(resolve => { cv.onRuntimeInitialized = resolve })
 const { detectDocument } = await import('../src/scanner/documentDetect.js')
+const { DocumentTracker, maxCornerShift } = await import('../src/scanner/documentTracker.js')
 
 /** The scenes are greyscale; the detector takes RGBA, as a frame would be. */
 function toRgba(grey) {
@@ -69,9 +70,81 @@ console.log(`\n  ${passed}/${cases.length} within ${TOLERANCE}px · ${found} fou
   `mean error ${passed ? (totalError / passed).toFixed(1) : '—'}px · ` +
   `${(totalMs / cases.length).toFixed(2)} ms/frame\n`)
 
-// Detection runs on every third frame, so it has three frames' budget. This is a
+// ─── Steadiness ───────────────────────────────────────────────────────────────
+// The complaint was never only accuracy: "the green dynamic frame is still a bit
+// sluggish and sloppy, deviates all over the place". Single-frame error cannot
+// see any of that — a detector can be accurate on average and still draw an
+// outline that will not sit still.
+//
+// So this runs the real detector over the same scene frame after frame with fresh
+// sensor noise on each, and measures how far the *drawn* outline moves between
+// consecutive frames. On a genuinely still scene that number should be nearly
+// zero; whatever it is, is what the eye sees as dancing.
+//
+// This is the measurement that found the real fault: the detector was stopping at
+// the first Canny threshold that found anything, so on a scene with two candidates
+// it returned whichever rung happened to fire first and the outline alternated
+// between the two. Single-frame error could not see it, because both answers were
+// individually plausible.
+
+function withNoise(grey, amount, seed) {
+  // Deterministic, so two runs of the bench are comparable.
+  let state = seed
+  const out = new Uint8ClampedArray(grey.length)
+  for (let i = 0; i < grey.length; i++) {
+    state = (state * 1103515245 + 12345) & 0x7fffffff
+    out[i] = grey[i] + ((state / 0x7fffffff) - 0.5) * 2 * amount
+  }
+  return out
+}
+
+const FRAMES = 24
+
+function steadiness(scene) {
+  const tracker = new DocumentTracker()
+  let worstStep = 0, drawn = null, detections = 0
+
+  for (let n = 0; n < FRAMES; n++) {
+    const rgba = toRgba(withNoise(scene.image, 6, n + 1))
+    const found = detectDocument(cv, rgba, width, height)
+    if (found) detections++
+    const view = tracker.update(found, n * 100)
+    if (view.corners && drawn && n > 4) {
+      worstStep = Math.max(worstStep, maxCornerShift(drawn, view.corners))
+    }
+    drawn = view.corners
+  }
+  return { worstStep, detections }
+}
+
+// The scenes the detector finds reliably — steadiness on a scene it cannot see at
+// all is not a meaningful number.
+const steady = cases.filter(scene =>
+  cornerError(detectDocument(cv, toRgba(scene.image), width, height),
+    scene.quad, width, height) * scale <= TOLERANCE)
+
+console.log(`  Steadiness over ${FRAMES} noisy frames — worst single-frame jump of`)
+console.log('  the drawn outline, as a percentage of frame width\n')
+
+let worst = 0
+for (const scene of steady) {
+  const { worstStep } = steadiness(scene)
+  worst = Math.max(worst, worstStep)
+  console.log(`  ${scene.name.padEnd(26)}${(worstStep * 100).toFixed(2).padStart(7)}%`)
+}
+
+console.log(`\n  worst single-frame jump ${(worst * 100).toFixed(2)}% of frame width\n`)
+
+// Detection runs on every second frame, so it has two frames' budget. This is a
 // backstop against an order-of-magnitude regression, not a tight bound.
-if (totalMs / cases.length > 12) {
+if (totalMs / cases.length > 8) {
   console.error('  Slower than the frame budget allows.\n')
+  process.exit(1)
+}
+
+// A drawn outline that jumps more than this between frames is visible dancing:
+// 2% of frame width is 8px on a 400px preview.
+if (worst > 0.02) {
+  console.error(`  The outline is not holding still (${(worst * 100).toFixed(2)}%).\n`)
   process.exit(1)
 }
