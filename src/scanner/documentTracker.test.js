@@ -161,7 +161,11 @@ describe('deciding when to capture on its own', () => {
     const tracker = new DocumentTracker()
     feed(tracker, still())
     tracker.update(detection(quad(0.1)), 1800)
-    const moved = tracker.update(detection(quad(0.2)), 1900)
+    // Three frames, because one frame claiming the page is somewhere else is
+    // indistinguishable from a bad detection and is treated as one. A page that
+    // has really moved keeps saying so.
+    let moved
+    for (let i = 0; i < 3; i++) moved = tracker.update(detection(quad(0.2)), 1900 + i * 100)
     expect(moved.readyToCapture).toBe(false)
     expect(moved.stillFor).toBe(0)
     expect(moved.reason).toBe('moving')
@@ -169,7 +173,7 @@ describe('deciding when to capture on its own', () => {
 
   it('will not fire on a page too far away to read once cropped', () => {
     const tracker = new DocumentTracker()
-    const small = Array.from({ length: 12 }, () => detection(quad(0.1), { fill: 0.3 }))
+    const small = Array.from({ length: 12 }, () => detection(quad(0.1), { fill: 0.15 }))
     const view = feed(tracker, small)
     expect(view.readyToCapture).toBe(false)
     expect(view.reason).toBe('small')
@@ -378,12 +382,72 @@ describe('a detection that is simply wrong', () => {
     expect(maxCornerShift(view.corners, before)).toBe(0)
   })
 
-  it('holds the shutter while it is unsure', () => {
-    // Something is going on in front of the camera. Firing mid-argument would
-    // photograph whichever answer happened to be on screen.
+  it('does not make the shutter wait for something it has decided to ignore', () => {
+    // This used to hold the shutter, and that was incoherent: the detection is
+    // rejected as noise for the purpose of drawing the outline and then trusted
+    // enough to restart the stillness clock. It also has a cost — a camera
+    // producing an outlier more often than once every stillForMs could never
+    // auto-capture at all, however still the page was being held.
     const tracker = new DocumentTracker()
-    settle(tracker)
+    for (let i = 0; i < 20; i++) tracker.update(detection(quad(0.1)), 1000 + i * 100)
     const view = tracker.update(detection(quad(0.35)), 3000)
+    expect(view.readyToCapture).toBe(true)
+    // And the outline has not budged, which is the point of rejecting it.
+    expect(maxCornerShift(view.corners, quad(0.1))).toBeLessThan(0.002)
+  })
+})
+
+describe('capturing on its own, with a camera that is not perfect', () => {
+  // "The auto scan function has switched off." Two separate reasons it could not
+  // fire, and the fix for one of them was the previous commit's own doing.
+
+  it('fires at the distance a form is actually held', () => {
+    // The gate was 0.6, which the *table* used to clear because it filled the
+    // frame. A page does not: held at a working distance in a portrait frame it
+    // covers about 28%, and there `fill` is close to the raw area. So fixing the
+    // detector to prefer the page turned auto-capture off.
+    const tracker = new DocumentTracker()
+    let view
+    for (let i = 0; i < 20; i++) {
+      view = tracker.update(detection(quad(0.1), { fill: 0.28 }), 1000 + i * 66)
+    }
+    expect(view.reason).toBe('ready')
+    expect(view.readyToCapture).toBe(true)
+  })
+
+  it('fires despite an outlier every few frames', () => {
+    // A real camera throws one of these regularly. While a rejected outlier
+    // restarted the stillness clock, one arriving more often than every 800ms
+    // meant the shutter could never fire — and the tighter jump gate made
+    // rejections more frequent, not less.
+    const tracker = new DocumentTracker()
+    let fired = false
+    for (let i = 0; i < 40; i++) {
+      const frame = i % 4 === 3
+        ? detection(quad(0.35), { fill: 0.28 })   // nonsense, and rejected
+        : detection(quad(0.1), { fill: 0.28 })
+      const view = tracker.update(frame, 1000 + i * 66)
+      if (view.readyToCapture) fired = true
+    }
+    expect(fired).toBe(true)
+  })
+
+  it('still refuses in light too poor to read the form', () => {
+    // The other gates are untouched. Lowering the distance requirement is not a
+    // reason to photograph something illegible.
+    const tracker = new DocumentTracker()
+    let view
+    for (let i = 0; i < 20; i++) {
+      view = tracker.update(detection(quad(0.1), { fill: 0.5, contrast: 0.1 }), 1000 + i * 66)
+    }
+    expect(view.reason).toBe('dark')
+    expect(view.readyToCapture).toBe(false)
+  })
+
+  it('still refuses while the outline is fading', () => {
+    const tracker = new DocumentTracker()
+    for (let i = 0; i < 20; i++) tracker.update(detection(quad(0.1), { fill: 0.5 }), 1000 + i * 66)
+    const view = tracker.update(null, 2400)
     expect(view.readyToCapture).toBe(false)
   })
 })

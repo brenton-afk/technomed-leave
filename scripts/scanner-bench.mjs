@@ -36,6 +36,9 @@ function toRgba(grey) {
 }
 
 const TOLERANCE = 10 // px at 320 wide, about 3% of the frame
+// Read off the tracker rather than repeated, so the 'auto' column cannot come to
+// mean something different from what the app actually does.
+const AUTO_FILL = new DocumentTracker().minFill
 const width = Number(process.argv[2]) || 240
 const height = Math.round(width * 0.75)
 
@@ -62,7 +65,7 @@ for (const scene of cases) {
   console.log(`  ${ok ? '✓' : '✗'} ${scene.name.padEnd(26)}${shown}` +
     (result
       ? `  area ${result.areaFraction.toFixed(2)}  fill ${result.fill.toFixed(2)}` +
-        `  contrast ${result.contrast.toFixed(2)}${result.fill >= 0.6 ? '  auto' : ''}`
+        `  contrast ${result.contrast.toFixed(2)}${result.fill >= AUTO_FILL ? '  auto' : ''}`
       : '  not found'))
 }
 

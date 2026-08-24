@@ -290,7 +290,24 @@ Invariants worth preserving:
   only had to appear twice in a row to be believed, at which point the outline
   snapped 8% onto it. Two → three took the worst jump from 8.34% to 0.10%.
 
-  Also decides auto-capture: 800ms still, ≥60% of frame, enough contrast.
+  Also decides auto-capture: 800ms still, `minFill` of the most the page could
+  cover, enough contrast — about 0.86s from acquiring a page to the shutter. The
+  toggle in the camera view stays and gates it.
+
+  **`minFill` has been wrong in both directions.** At 0.6 it worked only because
+  the detector was locking onto the *table*, which filled the frame; the moment
+  that was fixed, auto-capture stopped firing entirely, because a page held at a
+  working distance covers about 28% of a portrait frame (and there `fill` is close
+  to the raw area, since `most` is near 1.0). It is 0.25 now, consistent with the
+  detector's own 20%-of-frame floor: nearly anything detected and held still is
+  worth capturing, and a page half the frame's width is still about a thousand
+  pixels across on a 1920-wide capture.
+
+  A rejected outlier does **not** restart the stillness clock. Rejecting a
+  detection as noise for drawing and then trusting it enough to make the shutter
+  wait is incoherent, and it means a camera producing an outlier more often than
+  every `stillForMs` can never auto-capture however still the page is held. A jump
+  that is real confirms within three frames, and that path does restart it.
 - **`cameraStream.js`** — one shared stream, module-level, held across pages. A
   component that stops its tracks on unmount re-opens the camera for every page,
   which on iOS is a stall and a second of black each time.

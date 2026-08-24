@@ -118,11 +118,25 @@ export class DocumentTracker {
       // enough to fire the shutter. Replaces "the history buffer is full", which
       // is not a thing any more.
       settleFrames = 5,
-      // As a fraction of the *most* of the frame this page could ever cover, not
-      // of the frame. See fillFraction: a portrait page in a landscape frame
-      // cannot exceed 40% of it, so a threshold expressed against the frame was
-      // unreachable and the scanner advised "Move closer" indefinitely.
-      minFill = 0.6,
+      // How much of the frame the page has to cover before the shutter will fire
+      // on its own, as a fraction of the *most* it could ever cover — see
+      // fillFraction, and note a portrait page in a landscape frame cannot exceed
+      // about 40% of it, so a threshold against the raw frame area is unreachable.
+      //
+      // This has now been wrong in both directions. At 0.6 auto-capture stopped
+      // working the moment the detector was fixed to prefer the page over the
+      // table it was lying on: the table had been filling the frame, and a page
+      // does not. Held at a normal working distance in a portrait frame a page
+      // covers about 28% — and there `most` is near 1.0, so fill is roughly the
+      // raw area — which sat permanently under the old threshold and left the
+      // scanner advising "Move closer" for ever.
+      //
+      // 0.25 is just under that, and the detector will not report a page below 20%
+      // of the frame at all, so the two are consistent: nearly anything detected
+      // and held still is worth capturing. A page half the width of the frame
+      // still lands about a thousand pixels across on a 1920-wide capture, which
+      // is enough to read a lot number from.
+      minFill = 0.25,
       minContrast = 0.22
     } = options
 
@@ -274,9 +288,13 @@ export class DocumentTracker {
         this.pendingCount = 0
         this.stillSince = now
       }
-      // Unconfirmed, and the outline has not moved. Not still either: something
-      // is going on in front of the camera and the shutter should wait for it.
-      this.stillSince = now
+      // Unconfirmed, and the outline has not moved — so the stillness clock is
+      // deliberately *not* restarted. Rejecting a detection as noise for the
+      // purpose of drawing and then trusting it enough to make the shutter wait
+      // is incoherent, and it has a cost: a camera producing an outlier more often
+      // than once every `stillForMs` could never auto-capture at all, however
+      // still the page was. A jump that is real gets confirmed within three
+      // frames, and that path does restart the clock.
       return this.view(this.estimate, 1, now)
     }
 
