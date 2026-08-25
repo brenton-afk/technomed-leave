@@ -6,13 +6,16 @@ import { accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import { surgeonForColourName, colourNameFor, colourHexFor } from '../clinicalPlan/colours.js'
 import { hospitalCode } from '../clinicalPlan/labelledFields.js'
 import { readBooking, isCancelled } from '../clinicalPlan/parse.js'
+import {
+  todayStr, parseDateStr, toDateStr, addCivilDays, mondayOf, civilWeekday, zonedCivil,
+  weekdayName
+} from '../clinicalPlan/week.js'
 import { classifyItem } from '../clinicalPlan/itemKind.js'
 
 // The palette lives in clinicalPlan/colours.js, so this screen and the case plan
 // cannot drift apart. It used to be a second copy here, and three of its entries
 // were a place out — a Basil booking, which is Gupta's colour, drew pink.
-const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -228,31 +231,57 @@ function formatTime(dateStr) {
   }).toLowerCase().replace(/\s+/g, '')
 }
 
-function dateKey(date) {
-  return date.toISOString().split('T')[0]
+// ─── Days are Hobart dates, written as strings ───────────────────────────────
+// Not Date objects, and this is the fix for the app "getting the dates mixed up".
+//
+// The day was held as a `Date` and turned into a key with `toISOString()`, which
+// is UTC — while the heading beside it came from `getDay()` and `getDate()`,
+// which are the device's. In Hobart those two disagree for the first ten hours of
+// every day (eleven in summer): at 8am on a Tuesday the heading read Tuesday and
+// the events shown were Monday's. After 10am it agreed with itself again, which
+// is why it looked intermittent.
+//
+// A `YYYY-MM-DD` string in Australia/Hobart has no such ambiguity, and the plan
+// has used exactly this — `src/clinicalPlan/week.js` — all along. This screen
+// simply was not using it.
+
+/** The seven Hobart days of the week containing `dayStr`, Monday first. */
+function weekDaysOf(dayStr) {
+  const monday = mondayOf(parseDateStr(dayStr))
+  return Array.from({ length: 7 }, (_, i) => toDateStr(addCivilDays(monday, i)))
 }
 
-function getWeekDates(baseDate) {
-  const dates = []
-  const start = new Date(baseDate)
-  start.setDate(start.getDate() - start.getDay())
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start)
-    d.setDate(start.getDate() + i)
-    dates.push(d)
-  }
-  return dates
-}
+const shiftDay = (dayStr, days) => toDateStr(addCivilDays(parseDateStr(dayStr), days))
 
-function eventOnDate(event, dateStr) {
+/**
+ * Whether a booking falls on a given Hobart day.
+ *
+ * Two corrections. A timed event is placed by converting its instant into a
+ * Hobart date rather than by slicing the string it arrived as — Google returns
+ * whatever offset the calendar is set to, and taking the characters before the
+ * "T" trusts that offset to be Hobart's.
+ *
+ * An all-day event covers every day of its range, not only the first. Google's
+ * all-day end date is exclusive. Leave is entered as one all-day booking across
+ * a week, and it was appearing on the Monday and nowhere else.
+ */
+function eventOnDate(event, dayStr) {
   if (!event.start) return false
-  return event.start.split('T')[0] === dateStr
+  if (event.allDay || !String(event.start).includes('T')) {
+    const from = String(event.start).slice(0, 10)
+    const toExclusive = event.end ? String(event.end).slice(0, 10) : null
+    if (!toExclusive || toExclusive <= from) return dayStr === from
+    return dayStr >= from && dayStr < toExclusive
+  }
+  const at = new Date(event.start)
+  if (Number.isNaN(at.getTime())) return false
+  return toDateStr(zonedCivil(at)) === dayStr
 }
 
 export default function TodayView({ user, switcher }) {
   const [view, setView] = useState('day')
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [weekBase, setWeekBase] = useState(new Date())
+  const [selectedDay, setSelectedDay] = useState(() => todayStr())
+  const [weekAnchor, setWeekAnchor] = useState(() => todayStr())
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -287,28 +316,34 @@ export default function TodayView({ user, switcher }) {
   // this did not, and nothing connected the two.
   useLiveRefresh(useCallback(() => loadEvents({ quiet: true }), [loadEvents]), [loadEvents])
 
-  const today = new Date()
-  const weekDates = getWeekDates(weekBase)
-  const selectedKey = dateKey(selectedDate)
-  const dayEvents = events.filter(e => eventOnDate(e, selectedKey))
+  // Recomputed on every render rather than held in state, so a screen left open
+  // over midnight does not go on calling yesterday "Today".
+  const today = todayStr()
+  const weekDates = weekDaysOf(weekAnchor)
+  const dayEvents = events.filter(e => eventOnDate(e, selectedDay))
   const allDayEvents = dayEvents.filter(e => e.allDay)
   const timedEvents = dayEvents.filter(e => !e.allDay)
 
-  function prevWeek() { const d = new Date(weekBase); d.setDate(d.getDate()-7); setWeekBase(d) }
-  function nextWeek() { const d = new Date(weekBase); d.setDate(d.getDate()+7); setWeekBase(d) }
+  function prevWeek() { setWeekAnchor(shiftDay(weekAnchor, -7)) }
+  function nextWeek() { setWeekAnchor(shiftDay(weekAnchor, 7)) }
 
-  function selectDay(date) { setSelectedDate(date); setView('day') }
+  function selectDay(day) { setSelectedDay(day); setWeekAnchor(day); setView('day') }
 
   function goToDay(offset) {
-    const d = new Date(selectedDate)
-    d.setDate(d.getDate() + offset)
-    setSelectedDate(d)
-    setWeekBase(d)
+    const next = shiftDay(selectedDay, offset)
+    setSelectedDay(next)
+    setWeekAnchor(next)
   }
 
-  const isToday = (d) => dateKey(d) === dateKey(today)
-  const isSelected = (d) => dateKey(d) === selectedKey
-  function eventsOnDay(date) { return events.filter(e => eventOnDate(e, dateKey(date))) }
+  const isToday = day => day === today
+  const isSelected = day => day === selectedDay
+  function eventsOnDay(day) { return events.filter(e => eventOnDate(e, day)) }
+
+  /** Day-of-month, month name and weekday, all read off the Hobart date string. */
+  const dayNum = day => parseDateStr(day).day
+  const monthShort = day => MONTHS_SHORT[parseDateStr(day).month - 1]
+  const monthLong = day => MONTHS[parseDateStr(day).month - 1]
+  const weekdayShort = day => DAYS[civilWeekday(parseDateStr(day)) - 1]
 
   return (
     <Page style={{ display:'flex', flexDirection:'column' }}>
@@ -318,7 +353,7 @@ export default function TodayView({ user, switcher }) {
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={() => setView('day')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='day'?'white':'rgba(255,255,255,0.12)', color: view==='day'?colour.navy:'white', fontSize:14, fontWeight:600, cursor:'pointer' }}>Day</button>
           <button onClick={() => setView('week')} style={{ padding:'6px 16px', borderRadius:20, border:'none', background: view==='week'?'white':'rgba(255,255,255,0.12)', color: view==='week'?colour.navy:'white', fontSize:14, fontWeight:600, cursor:'pointer' }}>Week</button>
-          <button onClick={() => { setSelectedDate(new Date()); setWeekBase(new Date()); setView('day') }} style={{ padding:'6px 16px', borderRadius:20, border:'1px solid rgba(255,255,255,0.3)', background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:14, cursor:'pointer', marginLeft:'auto' }}>Today</button>
+          <button onClick={() => { const now = todayStr(); setSelectedDay(now); setWeekAnchor(now); setView('day') }} style={{ padding:'6px 16px', borderRadius:20, border:'1px solid rgba(255,255,255,0.3)', background:'transparent', color:'rgba(255,255,255,0.7)', fontSize:14, cursor:'pointer', marginLeft:'auto' }}>Today</button>
         </div>
 
         {/* Week strip */}
@@ -326,19 +361,19 @@ export default function TodayView({ user, switcher }) {
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8, padding:'0 4px' }}>
             <button onClick={prevWeek} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:19, cursor:'pointer', padding:'0 4px' }}>‹</button>
             <span style={{ fontSize:14, fontWeight:600, color:'rgba(255,255,255,0.8)' }}>
-              {MONTHS_SHORT[weekDates[0].getMonth()]} {weekDates[0].getDate()} – {MONTHS_SHORT[weekDates[6].getMonth()]} {weekDates[6].getDate()}, {weekDates[6].getFullYear()}
+              {monthShort(weekDates[0])} {dayNum(weekDates[0])} – {monthShort(weekDates[6])} {dayNum(weekDates[6])}, {parseDateStr(weekDates[6]).year}
             </span>
             <button onClick={nextWeek} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:19, cursor:'pointer', padding:'0 4px' }}>›</button>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2, paddingBottom:0 }}>
-            {weekDates.map((date, i) => {
-              const dayEvs = eventsOnDay(date)
-              const sel = isSelected(date)
-              const tod = isToday(date)
+            {weekDates.map(day => {
+              const dayEvs = eventsOnDay(day)
+              const sel = isSelected(day)
+              const tod = isToday(day)
               return (
-                <button key={i} onClick={() => selectDay(date)} style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'6px 2px 10px', background: sel?'rgba(24,154,133,0.25)':'transparent', border:'none', borderRadius:'8px 8px 0 0', cursor:'pointer', borderBottom: sel?`3px solid ${colour.accent}`:'3px solid transparent' }}>
-                  <span style={{ fontSize:10.5, color: tod?colour.accent:'rgba(255,255,255,0.5)', fontWeight: tod?'700':'400', marginBottom:4 }}>{DAYS[date.getDay()]}</span>
-                  <span style={{ fontSize:16, fontWeight: sel||tod?'700':'400', color: tod?colour.accent:'white', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{date.getDate()}</span>
+                <button key={day} onClick={() => selectDay(day)} style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'6px 2px 10px', background: sel?'rgba(24,154,133,0.25)':'transparent', border:'none', borderRadius:'8px 8px 0 0', cursor:'pointer', borderBottom: sel?`3px solid ${colour.accent}`:'3px solid transparent' }}>
+                  <span style={{ fontSize:10.5, color: tod?colour.accent:'rgba(255,255,255,0.5)', fontWeight: tod?'700':'400', marginBottom:4 }}>{weekdayShort(day)}</span>
+                  <span style={{ fontSize:16, fontWeight: sel||tod?'700':'400', color: tod?colour.accent:'white', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'50%' }}>{dayNum(day)}</span>
                   <div style={{ display:'flex', gap:2, marginTop:4, height:6 }}>
                     {dayEvs.slice(0,3).map((e,j) => <div key={j} style={{ width:5, height:5, borderRadius:'50%', background: describe(e).border }} />)}
                   </div>
@@ -353,21 +388,21 @@ export default function TodayView({ user, switcher }) {
       {view === 'week' && (
         <div style={{ flex:1, padding:'16px 16px 100px', overflowY:'auto' }}>
           <div style={{ fontSize:16, fontWeight:700, color:colour.navy, marginBottom:12 }}>
-            Week of {weekDates[0].getDate()} {MONTHS[weekDates[0].getMonth()]}
+            Week of {dayNum(weekDates[0])} {monthLong(weekDates[0])}
           </div>
           {loading && <div style={{ textAlign:'center', padding:40, color:colour.inkFaint }}>Loading...</div>}
-          {weekDates.map((date, i) => {
-            const dayEvs = eventsOnDay(date)
-            const tod = isToday(date)
+          {weekDates.map((day, i) => {
+            const dayEvs = eventsOnDay(day)
+            const tod = isToday(day)
             return (
-              <div key={i} style={{ marginBottom:12 }}>
-                <button onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:10, background:'none', border:'none', cursor:'pointer', marginBottom:6, padding:0, width:'100%', textAlign:'left' }}>
+              <div key={day} style={{ marginBottom:12 }}>
+                <button onClick={() => selectDay(day)} style={{ display:'flex', alignItems:'center', gap:10, background:'none', border:'none', cursor:'pointer', marginBottom:6, padding:0, width:'100%', textAlign:'left' }}>
                   <div style={{ width:36, height:36, borderRadius:'50%', background: tod?colour.accent:colour.navy, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <span style={{ fontSize:14, fontWeight:700, color:'white' }}>{date.getDate()}</span>
+                    <span style={{ fontSize:14, fontWeight:700, color:'white' }}>{dayNum(day)}</span>
                   </div>
                   <div>
-                    <div style={{ fontSize:14, fontWeight:700, color: tod?colour.accent:colour.navy }}>{tod ? 'Today' : DAYS_FULL[date.getDay()]}</div>
-                    <div style={{ fontSize:12.5, color:colour.inkFainter }}>{MONTHS_SHORT[date.getMonth()]} {date.getDate()}</div>
+                    <div style={{ fontSize:14, fontWeight:700, color: tod?colour.accent:colour.navy }}>{tod ? 'Today' : weekdayName(day)}</div>
+                    <div style={{ fontSize:12.5, color:colour.inkFainter }}>{monthShort(day)} {dayNum(day)}</div>
                   </div>
                   <div style={{ marginLeft:'auto', fontSize:12.5, color:colour.inkFainter }}>{dayEvs.length > 0 ? `${dayEvs.length} event${dayEvs.length>1?'s':''}` : 'No bookings'} →</div>
                 </button>
@@ -376,7 +411,7 @@ export default function TodayView({ user, switcher }) {
                     {dayEvs.slice(0,3).map(e => {
                       const d = describe(e)
                       return (
-                        <div key={e.id} onClick={() => selectDay(date)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'white', borderRadius:8, marginBottom:4, cursor:'pointer', borderLeft:`3px solid ${d.border}` }}>
+                        <div key={e.id} onClick={() => selectDay(day)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'white', borderRadius:8, marginBottom:4, cursor:'pointer', borderLeft:`3px solid ${d.border}` }}>
                           <div style={{ flex:1 }}>
                             {d.isCase ? <CaseCard described={d} compact /> : (
                               <>
@@ -389,7 +424,7 @@ export default function TodayView({ user, switcher }) {
                       )
                     })}
                     {dayEvs.length > 3 && (
-                      <div onClick={() => selectDay(date)} style={{ fontSize:12.5, color:colour.accent, padding:'4px 10px', cursor:'pointer', fontWeight:600 }}>+{dayEvs.length-3} more →</div>
+                      <div onClick={() => selectDay(day)} style={{ fontSize:12.5, color:colour.accent, padding:'4px 10px', cursor:'pointer', fontWeight:600 }}>+{dayEvs.length-3} more →</div>
                     )}
                   </div>
                 )}
@@ -406,8 +441,8 @@ export default function TodayView({ user, switcher }) {
         <div style={{ flex:1, padding:'16px 16px 100px', overflowY:'auto' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <div>
-              <div style={{ fontSize:22, fontWeight:'700', color:colour.navy }}>{isToday(selectedDate)?'Today':DAYS_FULL[selectedDate.getDay()]}</div>
-              <div style={{ fontSize:14, color:colour.inkFaint }}>{selectedDate.getDate()} {MONTHS[selectedDate.getMonth()]} {selectedDate.getFullYear()}</div>
+              <div style={{ fontSize:22, fontWeight:'700', color:colour.navy }}>{isToday(selectedDay)?'Today':weekdayName(selectedDay)}</div>
+              <div style={{ fontSize:14, color:colour.inkFaint }}>{dayNum(selectedDay)} {monthLong(selectedDay)} {parseDateStr(selectedDay).year}</div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={() => goToDay(-1)} style={{ width:36, height:36, borderRadius:'50%', background:'white', border:'1px solid rgba(26,43,74,0.12)', fontSize:16, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>

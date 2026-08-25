@@ -167,7 +167,27 @@ One mechanism, in two parts:
 
 Service-account JWT signed inline with `node:crypto` `createSign` — no `googleapis` dependency. `getGoogleToken(scope)` in `api/_googleCalendar.js` is the single signer; `api/calendar/today.js` imports it with `CALENDAR_SCOPE_READONLY` and the write path uses `CALENDAR_SCOPE_WRITE`. Approved leave becomes an all-day event on `bookings@technomed.com.au` in Grape (`colorId` 3), with `end` shifted +1 day per Google's exclusive-end convention. `TodayView.jsx` reads that same calendar back and distinguishes leave from bookings by `colorId`.
 
-Calendar times are handled with a manual `+10h` AEST offset, not a timezone library, despite `date-fns` being a dependency.
+**Every calendar day in the app is a `YYYY-MM-DD` string in Australia/Hobart,
+produced by `src/clinicalPlan/week.js`.** Not a `Date`, and never the device's
+locale. That module already anchors the week plan; the calendar view did not use
+it and rolled its own, which is the whole of the "app gets the dates mixed up"
+bug: the day was held as a `Date` and keyed with `toISOString()` (UTC) while the
+heading beside it came from `getDay()`/`getDate()` (the device). In Hobart those
+disagree for the first ten hours of every day — eleven in summer — so before 10am
+the heading named one day and the events shown were the day before, and after
+10am it agreed with itself again, which is why it read as intermittent.
+
+If you add a screen that shows a date, use `todayStr`, `parseDateStr`,
+`addCivilDays`, `mondayOf` and `weekdayName` from `week.js`. `TodayView.test.jsx`
+pins the clock to 8am Hobart and to summer AEDT specifically, and the suite is run
+under several `TZ` values — a screen that reads the device's timezone fails.
+
+The week starts **Monday** everywhere: the plan, the fortnight anchor, and now the
+calendar strip, which alone had started on Sunday.
+
+`api/calendar/today.js` uses the same helpers for its window. It previously added
+a fixed ten hours and called `setHours` on the result, which resolved against the
+server's timezone (UTC on Vercel) and was an hour out from October to April.
 
 ### Usage scanning
 

@@ -338,3 +338,121 @@ describe('cases against everything else', () => {
     expect(await screen.findByText('Cancelled')).toBeInTheDocument()
   })
 })
+
+// ─── Which day is it ─────────────────────────────────────────────────────────
+// "The calendar view says Monday but it is showing the calendar data for Sunday.
+// It's off by one day."
+//
+// The day was held as a Date and turned into a key with toISOString(), which is
+// UTC, while the heading beside it came from getDay() and getDate(), which are
+// the device's. In Hobart those disagree for the first ten hours of every day —
+// eleven in summer — so before 10am the heading said one day and the events were
+// the day before. After 10am it agreed with itself, which is why it looked
+// intermittent.
+//
+// Every test above this pins the clock to midday, which is why none of them
+// caught it. These pin it to the hours that broke.
+
+describe('the day the screen is showing', () => {
+  /** Runs the screen with the Hobart wall clock at a given instant. */
+  async function atInstant(iso, list) {
+    vi.setSystemTime(new Date(iso))
+    return show(list)
+  }
+
+  const onDay = (id, day, hour = 9) => ({
+    id, title: `Booking ${id}`, description: '', location: null, allDay: false,
+    start: `${day}T${String(hour).padStart(2, '0')}:00:00+10:00`,
+    end: `${day}T${String(hour + 1).padStart(2, '0')}:00:00+10:00`,
+    colorId: '7'
+  })
+
+  it('shows today, not yesterday, early in the morning', async () => {
+    // 8:05am on Tuesday 25 August in Hobart. The instant is still Monday in UTC.
+    await atInstant('2026-08-24T22:05:00Z', [
+      onDay('mon', '2026-08-24'), onDay('tue', '2026-08-25')
+    ])
+    // The date line under the heading, which names exactly one day.
+    await waitFor(() => expect(screen.getByText('25 August 2026')).toBeInTheDocument())
+    expect(screen.getByText('Booking tue')).toBeInTheDocument()
+    expect(screen.queryByText('Booking mon')).not.toBeInTheDocument()
+  })
+
+  it('agrees with its own heading', async () => {
+    // The failure was never that both halves were wrong — it was that they
+    // disagreed. Whatever day the heading names is the day being filtered for.
+    await atInstant('2026-08-24T22:05:00Z', [onDay('tue', '2026-08-25')])
+    await waitFor(() => expect(screen.getByText('25 August 2026')).toBeInTheDocument())
+    // Named as today, and showing today's booking — the two halves agreeing is
+    // the whole point.
+    expect(screen.getByText('Booking tue')).toBeInTheDocument()
+  })
+
+  it('is right in summer too, when Hobart is an hour further ahead', async () => {
+    // 00:30 on Monday 12 January, AEDT (+11). Tasmania observes daylight saving,
+    // so anything anchored with a fixed +10 is wrong for half the year.
+    await atInstant('2026-01-11T13:30:00Z', [
+      onDay('sun', '2026-01-11'), { ...onDay('mon', '2026-01-12'), start: '2026-01-12T09:00:00+11:00', end: '2026-01-12T10:00:00+11:00' }
+    ])
+    await waitFor(() => expect(screen.getByText('12 January 2026')).toBeInTheDocument())
+    expect(screen.queryByText('Booking sun')).not.toBeInTheDocument()
+  })
+
+  it('places a booking by its instant, not by the text it arrived as', async () => {
+    // Google returns whatever offset the calendar is set to. Slicing the
+    // characters before the "T" trusts that offset to be Hobart's.
+    await atInstant('2026-08-24T22:05:00Z', [{
+      ...onDay('late', '2026-08-24'),
+      // 11pm UTC on the 24th is 9am on the 25th in Hobart.
+      start: '2026-08-24T23:00:00Z', end: '2026-08-25T00:00:00Z'
+    }])
+    await waitFor(() => expect(screen.getByText('25 August 2026')).toBeInTheDocument())
+    expect(screen.getByText('Booking late')).toBeInTheDocument()
+  })
+})
+
+describe('an all-day booking that spans days', () => {
+  const leave = {
+    id: 'leave', title: 'Aimee Vulinovich — Annual Leave', description: '', location: null,
+    allDay: true, start: '2026-08-24', end: '2026-08-28', colorId: '3'
+  }
+
+  it('appears on every day it covers, not just the first', async () => {
+    // Leave is entered as one all-day booking across a week and was showing on
+    // the Monday and nowhere else — so a week's planning missed most of it.
+    vi.setSystemTime(new Date('2026-08-25T02:00:00Z')) // Tuesday, midday Hobart
+    await show([leave])
+    expect(await screen.findByText(/Annual Leave/)).toBeInTheDocument()
+  })
+
+  it('stops on the day named by Google\'s exclusive end', async () => {
+    // Google's all-day end date is the day *after* the last one covered.
+    vi.setSystemTime(new Date('2026-08-28T02:00:00Z')) // Friday
+    await show([leave])
+    await waitFor(() => expect(screen.getByText('28 August 2026')).toBeInTheDocument())
+    expect(screen.queryByText(/Annual Leave/)).not.toBeInTheDocument()
+  })
+})
+
+describe('the week strip', () => {
+  it('starts on Monday, as everything else in the app does', async () => {
+    // It started on Sunday, alone against the case plan's Mon–Sun week and the
+    // fortnight anchor in api/_fortnight.js. Two week shapes in one app is how a
+    // day ends up read off the wrong column.
+    vi.setSystemTime(new Date('2026-08-25T02:00:00Z')) // Tuesday
+    const { container } = await show([])
+    const strip = container.querySelector('div[style*="repeat(7"]')
+    const labels = [...strip.querySelectorAll('button')].map(b => b.textContent.slice(0, 3))
+    expect(labels).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+  })
+
+  it('is the week containing the selected day', async () => {
+    vi.setSystemTime(new Date('2026-08-25T02:00:00Z'))
+    const { container } = await show([])
+    const strip = container.querySelector('div[style*="repeat(7"]')
+    const numbers = [...strip.querySelectorAll('button')].map(b => b.textContent.replace(/^\D+/, '').slice(0, 2))
+    // Monday 24 August through Sunday 30 August.
+    expect(numbers[0]).toBe('24')
+    expect(numbers[6]).toBe('30')
+  })
+})

@@ -1,3 +1,4 @@
+import { TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr } from '../../src/clinicalPlan/week.js'
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
 
@@ -24,10 +25,17 @@ export default async function handler(req, res) {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
     const calendarId = getCalendarId()
 
-    // The UI navigates a few weeks either side of today, so fetch a window
-    // wide enough to cover it. Dates are anchored to AEST (UTC+10).
-    const aestOffset = 10 * 60 * 60 * 1000
-    const aestNow = new Date(Date.now() + aestOffset)
+    // The UI navigates a few weeks either side of today, so fetch a window wide
+    // enough to cover it.
+    //
+    // Anchored to Australia/Hobart through the same helpers the week plan uses,
+    // rather than by adding ten hours. Tasmania observes daylight saving, so a
+    // fixed +10 is an hour out from October to April; and `setHours` on the
+    // shifted date resolved against whatever timezone the server happened to be
+    // in, which on Vercel is UTC. Neither could move the window by a whole day
+    // given how wide it is, but both were quietly wrong and this is exactly the
+    // kind of arithmetic that had the day view showing the wrong date.
+    const todayCivil = zonedCivil(new Date(), TZ)
 
     // The window used to be -7/+28 days, which meant a booking more than four
     // weeks out was invisible in the app while sitting on the calendar — and
@@ -36,16 +44,12 @@ export default async function handler(req, res) {
     const daysBack = Math.min(Math.max(parseInt(req.query.back || '14', 10) || 14, 0), 90)
     const daysForward = Math.min(Math.max(parseInt(req.query.forward || '120', 10) || 120, 1), 400)
 
-    const rangeStart = new Date(aestNow)
-    rangeStart.setDate(rangeStart.getDate() - daysBack)
-    rangeStart.setHours(0, 0, 0, 0)
-
-    const rangeEnd = new Date(aestNow)
-    rangeEnd.setDate(rangeEnd.getDate() + daysForward)
-    rangeEnd.setHours(23, 59, 59, 999)
-
-    const timeMin = new Date(rangeStart.getTime() - aestOffset).toISOString()
-    const timeMax = new Date(rangeEnd.getTime() - aestOffset).toISOString()
+    // Calendar days are stepped as calendar days and only then turned into
+    // instants, so a DST change cannot gain or lose an hour at the boundary.
+    const from = addCivilDays(todayCivil, -daysBack)
+    const to = addCivilDays(todayCivil, daysForward)
+    const timeMin = zonedToInstant({ ...from, hour: 0, minute: 0, second: 0, ms: 0 }, TZ).toISOString()
+    const timeMax = zonedToInstant({ ...to, hour: 23, minute: 59, second: 59, ms: 999 }, TZ).toISOString()
 
     const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
       + `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`
@@ -70,7 +74,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       events,
-      today: aestNow.toISOString().split('T')[0],
+      today: toDateStr(todayCivil),
       window: { from: timeMin, to: timeMax, daysBack, daysForward },
       // If Google paginated, say so rather than quietly returning a partial week.
       truncated: Boolean(data.nextPageToken)
