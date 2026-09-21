@@ -80,12 +80,20 @@ describe('bottom navigation', () => {
     expect(screen.queryByText(/Scan a usage form/)).not.toBeInTheDocument()
   })
 
-  it('offers the calendar and the case plan in one place', async () => {
+  it('offers the calendar, the case plan and the team-leader guide in one place', async () => {
     signIn(REP)
     render(<App />)
     const tabs = await waitFor(() => screen.getByRole('tablist', { name: 'How to view the week' }))
     expect(tabs).toHaveTextContent('Calendar')
     expect(tabs).toHaveTextContent('Case plan')
+    expect(tabs).toHaveTextContent('Team lead')
+  })
+
+  it('opens the team leader guide on the day\'s run-sheet', async () => {
+    signIn(REP)
+    render(<App />)
+    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Team lead' })))
+    expect(await screen.findByText(/Work down this list through the day/)).toBeInTheDocument()
   })
 
   it('switches to the case plan and back', async () => {

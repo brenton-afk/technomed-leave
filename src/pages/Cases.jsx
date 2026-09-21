@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import TodayView from './TodayView.jsx'
 import ClinicalPlan from './ClinicalPlan.jsx'
+import TeamLeader from './TeamLeader.jsx'
 import { readPrefs, writePrefs } from '../clinicalPlan/provider.js'
 import { colour, text, radius } from '../design/tokens.js'
 
@@ -14,6 +15,7 @@ import { colour, text, radius } from '../design/tokens.js'
 //   Calendar   what is on, day by day or across the week, with everything the
 //              calendar holds — cases, leave, meetings, hours
 //   Case plan  the week as a briefing: operations, systems, kit, flags, notes
+//   Team lead  the duty leader's playbook, and the day's shared run-sheet
 //
 // Each keeps its own period control, and that is deliberate rather than untidy:
 // the two answer different questions and are read at different moments. The
@@ -23,7 +25,8 @@ import { colour, text, radius } from '../design/tokens.js'
 
 const MODES = [
   { id: 'calendar', label: 'Calendar' },
-  { id: 'plan', label: 'Case plan' }
+  { id: 'plan', label: 'Case plan' },
+  { id: 'lead', label: 'Team lead' }
 ]
 
 /**
@@ -57,7 +60,10 @@ function ModeSwitch({ mode, onChange }) {
 export default function Cases({ user, promptBanner }) {
   // Remembered, because which view someone reads the week in is a habit rather
   // than a decision. Stored with the plan's other preferences.
-  const [mode, setMode] = useState(() => (readPrefs().casesMode === 'plan' ? 'plan' : 'calendar'))
+  const [mode, setMode] = useState(() => {
+    const saved = readPrefs().casesMode
+    return MODES.some(m => m.id === saved) ? saved : 'calendar'
+  })
 
   const change = useCallback(next => {
     setMode(next)
@@ -66,7 +72,9 @@ export default function Cases({ user, promptBanner }) {
 
   const switcher = <ModeSwitch mode={mode} onChange={change} />
 
-  return mode === 'plan'
-    ? <ClinicalPlan user={user} promptBanner={promptBanner} switcher={switcher} />
-    : <TodayView user={user} switcher={switcher} />
+  if (mode === 'plan') {
+    return <ClinicalPlan user={user} promptBanner={promptBanner} switcher={switcher} />
+  }
+  if (mode === 'lead') return <TeamLeader user={user} switcher={switcher} />
+  return <TodayView user={user} switcher={switcher} />
 }

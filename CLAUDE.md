@@ -83,7 +83,24 @@ read the week, the control inside chooses *which part*. Collapsing them into one
 three-way toggle would put "Week" and "Plan" side by side as though they were
 alternatives of the same kind.
 
-**Both screens poll via `useLiveRefresh` in `src/liveRefresh.js`** — a minute while
+The third mode, **Team lead** (`TeamLeader.jsx`), is the Clinical Team Leader
+field guide, ported from the co-written "TM Team Leader" artifact
+(`claude.ai/code/artifact/799bedc0-…`). Three rules there:
+
+- **`src/teamLeader/guide.js` is generated, never hand-edited.** Re-sync with
+  `scripts/extract-team-leader-guide.py` and read the diff; a hand-edit is lost
+  on the next sync. `guide.source.txt` holds every phrase of the artifact and
+  `guide.source.test.js` asserts each one survives into the module — the guide is
+  an operating procedure, and a phrase dropped in transit is a duty nobody does.
+- **Inline emphasis is structured runs, never HTML.** The artifact is shared with
+  the organisation and co-written, so rendering its markup would turn an edit to
+  a shared document into script running in the portal.
+- **The day's run-sheet is shared; the new-booking checklist is not.** The
+  run-sheet is a duty rotation the team can see the state of, stored per day in
+  Redis. The booking checklist is a definition of done for *one* booking, several
+  of which run through it before lunch, so it is scratch state.
+
+**All three screens poll via `useLiveRefresh` in `src/liveRefresh.js`** — a minute while
 visible, nothing while hidden, and an immediate recheck on becoming visible or
 regaining focus. The calendar view previously fetched once on mount and never
 again, which is how the app came to be showing a case that had been cancelled for

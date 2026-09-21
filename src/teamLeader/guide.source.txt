@@ -1,0 +1,240 @@
+# Every phrase of the TM Team Leader artifact, as published.
+#
+# Not documentation — the fixture for guide.source.test.js, which asserts each
+# line below still appears in src/teamLeader/guide.js. That is what makes the
+# port checkable: the guide is an operating procedure, and a phrase quietly
+# dropped or mangled in transit is a duty nobody performs.
+#
+# Regenerate alongside guide.js when the artifact changes, and read both diffs.
+# Artifact: claude.ai/code/artifact/799bedc0-c4a8-476f-b06b-9b31e9f50ee8
+Your daily run-sheet
+Work down this list through the day. It's the whole role in action — if these are ticked, the system is running. Tap each item to check it off.
+Morning sweep
+Sweep all case-inflow groups + bookings email
+Catch anything that came in overnight.
+Update the team on anything they've missed
+Confirm today's cases each have a locked coverage plan
+Reconcile everything against the calendar
+Check restock status with both loans teams
+Through the day
+Keep WhatsApp replies prompt
+30-minute rule — if it's idle 30 min, step in.
+Log any new booking → calendar + run the booking checklist
+Delegate restock dispatch to the team
+Stay free to float
+Relieve, resupply, move trays, answer queries.
+Obtain tomorrow's theatre list orders
+Allocate staff to each list
+Skill mix, case timings, staff preferences.
+Leave room for Brent's key-surgeon attendance
+Publish list orders + allocations on Technomed Main
+Evening sweep
+Final scan of the groups + email
+Confirm who's in tomorrow
+Chase anyone whose availability is unclear.
+Confirm every case tomorrow is covered
+Fresh each day:
+keep this open through the day — the ticks reset next time you open it, ready for a new day. Overnight isn't expected; on-call just acknowledges anything urgent.
+The role in a nutshell
+You are the keeper of the system
+The team makes the clinical calls. Your job is to keep everything running smoothly around them — consistently, every day.
+It's about upkeep, not decisions
+The team handles ~95% on its own. You keep the background tight so nothing slips.
+Stay on top of the trickle
+Bookings, WhatsApp and list orders flow in constantly. Kept current daily it's easy — let it drift and it's very hard to recover.
+Be the one with the full picture
+A calm coordinator who keeps the whole team pointed the right way.
+Consistency beats instinct
+You don't need Brent's gut feel — just run the routines every day. That's a system, not a personality trait.
+How you work
+Stay free — you're the floating resource
+A coordination hub, not another pair of case hands. Where possible,
+you don't attend cases yourself
+— so you're free to:
+Relieve staff during long cases.
+Run resupply
+Move stock and trays between hospitals.
+Field the messages
+Answer queries and keep WhatsApp moving.
+Sort the logistics
+Keep things flowing quietly in the background.
+Don't get lumbered:
+if you end up covering a case, hand your team-leader duties to someone else for that time. The role must never collapse back onto one person.
+What "good" looks like
+A tidy day, every day
+Every booking in the calendar
+Standard format, entered straight away.
+Every message answered
+Hospitals always know we've got it.
+Every case covered ahead of the day
+No surprises on the morning of surgery.
+Lists out to the team each evening
+Everyone knows where they're going tomorrow.
+Nothing living only in someone's head
+It's in the calendar and the logistics group.
+Definition of done
+New booking checklist
+A booking is
+not finished when it's in the calendar
+. It's finished when every step below is done.
+Tap a row to mark it complete.
+1 · Calendar entry — first, always
+Calendar is king. Enter in the standard format the moment the booking is known.
+2 · Acknowledge on WhatsApp
+Reply on the WhatsApp group so the nursing/hospital team knows we've got it. (Bookings emails from Sharon & CNS don't need a reply.)
+3 · Case specifics — what does it need?
+Is it an extension of an existing construct? A standard consignment kit, or are there special instrument/implant requests?
+4 · Implant sufficiency
+Confirm we have sufficient implants/stock for the case.
+5 · Kit & loan set logistics
+Book loan sets and confirm timing. Arrange any kit transfer from another hospital, and sort the comms/turnaround to get kits restocked and ready in time.
+6 · Delegate case attendance
+Pivot to the Clinical Logistics group and agree who covers the case (see Lists & Staff tab).
+7 · Coverage confirmed & locked
+The assigned rep has acknowledged. The plan is in the calendar. Done.
+When Toni's not in the office:
+steps 3–5 are the ones most often missed. Do not skip them — this checklist is what replaces Toni's attentive eye on a day she's not there.
+Working with Toni:
+on Toni's booking days she liaises with the team leader on each case, so that everything is available and ready — with the team leader providing the
+clinical-knowledge support
+(right implants, sets and case specifics). Bookings admin + clinical judgement, working as a pair.
+Direct bookings by the team:
+if a clinical team member takes a booking straight from a surgeon, nurse or registrar, they
+book it in the calendar themselves
+and report it to the team leader — the first port of call for follow-up on set movements, implant requirements, etc. If the team leader is swamped, the team member carries out the follow-up themselves and updates the relevant WhatsApp group.
+Every evening · by 5pm
+List orders & theatre allocations
+A core daily duty. Get the next day's lists sorted and published so everyone walks in knowing exactly where they're going.
+Obtain the list orders
+Collect the theatre list orders for the next day from each hospital, no later than 5pm.
+Allocate staff to each list
+Assign a rep to each theatre/list based on skill mix, case timings & list order, and staff preferences.
+Publish on Technomed Main
+Post the list orders together with the staff allocation for each list, so the whole team has the plan for tomorrow.
+Key-surgeon attendance (Brent):
+when building the lists, leave room for
+Brent to personally attend our key surgeon customers at regular intervals
+. Maintaining these top relationships matters to the MD, so factor his attendance in when allocating these surgeons' cases.
+Allocating cases & resolving clashes
+Run these factors in order. The call is a judgement, but the sequence stops anything being overlooked.
+Competency (hard filter)
+Who is actually trained to cover this case type? Rules people out first. (Mat — no ortho. Brent — no ortho nailing. Aimee — learning spine. April — ortho, casual.)
+Availability
+Who is genuinely free — including personal commitments and rostered patterns.
+Timing, list order & location
+Line up start times, list order and hospitals so overlapping cases don't clash.
+Confirm commitments & availability — the step that saves you
+Before locking: does anyone already have something on that day? Is the ortho director in or out? Ask explicitly — don't assume.
+Brent's key-surgeon attendance, travel/geography, load balancing, and development opportunities (putting a learner in when it's safe).
+Why step 4 matters:
+the classic near-miss is committing a rep to a case, then discovering a director had an undisclosed case or was returning from leave unannounced. The clash is almost always an
+information gap, not a bad decision
+. Confirm before you lock.
+Ortho vs spine authority
+the team leader owns all spine allocations outright.
+Jez normally runs ortho coverage himself.
+When Jez is away
+, the team leader allocates ortho too — and checks the plan in with Jez or Brent. Remember: you can
+ortho, but a spine rep can't physically
+it — separate the two.
+Restock & inter-hospital logistics
+Keeping trays and stock flowing is a background job the team leader owns — but delegates the legwork.
+Liaise with both loans teams
+Stay in regular contact with the two loans teams regarding restock needs and tray movements.
+Delegate distribution & dispatch
+Systematically hand out the distribution and dispatch of restock to the clinical team — assign it, don't absorb it all yourself.
+Run the background logistics
+As the floating resource, move trays and run resupply between hospitals so nothing stalls a case.
+Keep restock status visible
+Keep the loans and TM Usage Case Records groups current, so tray readiness is always known at a glance.
+Delegate, don't martyr:
+restock is a team activity you coordinate, not a solo chore. Spreading it keeps you free to float — and stops the role becoming a bottleneck.
+WhatsApp groups map
+The duty team leader must have eyes on every group where bookings arrive, plus Technomed Main where the lists are published. These are non-negotiable while you hold the role.
+Clinical Logistics
+Internal hub
+Where coverage plans are agreed. Mat, Ben, Brent, Jez, Aimee.
+Synthes Ortho Trauma (RHH)
+RHH ortho trauma bookings from hospital staff. ANUMs + senior nursing, Jez, Brent, Ben.
+The duty leader must be added here.
+Technomed Neuro
+RHH Neurosurg registrars + senior nursing, Aimee, Brent, Ben, Mat.
+Max Fax AIRO Case Bookings
+Max-fax team books AIRO scanner cases.
+Technomed Main
+Internal hub
+Where the evening list orders & staff allocations are published for the whole team.
+Other groups (context, not primary inflow)
+Tasmanian Stryker
+Stryker CMF & Neuro business. Rob Gourlay, Mat, Brent.
+RHH Loans Coordinator
+Tray movements/needs at RHH. 2 loans techs, Neuro ANUM, Brent, Aimee, Ben, Mat.
+TM Usage Case Records
+Spine tray-usage photos & restock tracking. Ben, Brent, Mat, Aimee.
+Hobart Brainlab
+Vendor support
+Direct line to Brainlab tech support (Melbourne).
+Set-up note:
+because the Synthes Ortho Trauma and Technomed Neuro groups contain hospital staff, it's cleaner to make anyone who can hold this role a
+permanent member
+of the inflow groups rather than adding/removing each week.
+Coverage matrix
+Who covers what
+*Brent covers ortho except nailing cases. Toni (bookings/logistics), Emma (brand), Erin (GM) are non-clinical for case cover.
+Mat is the only rep who can cover true CMF cases — but these are extremely low volume at present.
+AIRO / Navigation:
+navigation cases where a speciality uses us for navigation but not implants (e.g. max fax for post-op spines). Covered by Aimee, Ben, Brent and Mat.
+Watch the ortho gap:
+spine is deep (Brent, Mat, Ben). Ortho depends heavily on Jez, with Brent (no nailing), a developing Ben, and April (casual, limited availability) as backup. When Jez is out, treat ortho coverage as a specific contingency — it has the least depth.
+Response, availability & teamwork standards
+Prompt response — the 30-minute rule
+WhatsApp messages are
+replied to promptly throughout the day
+— a hospital should never wonder if we saw it.
+This applies to
+WhatsApp groups that include nursing and hospital teams
+. Internal bookings emails (e.g. from Sharon & CNS) don't need a reply.
+It doesn't always have to be the team leader —
+can pick it up.
+But if a message
+sits idle for 30 minutes
+with no response, the
+team leader steps in
+: respond, make a plan, and execute the action if one is needed.
+Keep an eye on the groups from the
+sweep to the
+sweep on weeknights. Overnight is not expected; on-call acknowledges anything urgent.
+Roster & weekend handover
+The team leader role runs on a
+weekly duty rotation
+If the allocated team leader is
+the person on the weekend on-call shift, the
+weekend on-call person assumes team leader responsibilities from Friday 5pm until Monday 7am
+Team leader duties then hand back to the allocated leader on Monday morning.
+Availability & leave
+Senior staff
+keep the team informed of their movements.
+If a return-to-work date is unclear (e.g. back from illness leave), give a
+heads-up the evening before
+about whether you're in the next day.
+This is what makes the evening "who's in tomorrow?" check reliable — no assuming.
+Working with Toni (bookings days)
+On Toni's work days, Toni
+liaises with the team leader
+on the day's bookings.
+Toni handles the booking mechanics; the team leader provides the
+clinical-knowledge support
+— confirming the right implants, sets and case specifics are lined up.
+Don't get lumbered — delegate
+Where possible, stay
+so you can float as the team's flexible resource.
+If you're pulled in to cover a case,
+delegate your team-leader duties
+to someone else for that period.
+Restock, dispatch and errands are
+coordinated and shared
+, not absorbed by one person.
+When to escalate to Brent
+Rarely — the team handles ~95%. Escalate only for genuine exceptions: a case that
+cannot be covered
+by anyone available, a clash that can't be resolved within these rules, or a clinical/relationship issue with a hospital or surgeon that needs the MD. Otherwise: handle it, log it, and mention it later.
