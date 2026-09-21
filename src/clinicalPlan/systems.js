@@ -110,14 +110,26 @@ export function systemWords(text) {
  * glance rather than read for it. So these override the surgeon's colour — the
  * one thing on the plan that is allowed to.
  */
+// "Curve" as a shape rather than a platform: preceded by a region or a
+// descriptor, or followed by the thing you do to a deformity.
+const CURVE_IS_ANATOMY =
+  /\b(?:cervical|thoracic|thoracolumbar|lumbar|sagittal|coronal|scoliotic|kyphotic|lordotic|main|major|minor|primary|secondary|structural|fractional|compensatory)\s+curve\b|\bcurve\s+(?:correction|progression|magnitude)\b/i
+
 export const NAVIGATION = [
   { name: 'Varioguide', test: /vario\s*guide/i },
   { name: 'Brainlab', test: /brain\s*lab/i },
-  { name: 'AIRO', test: /\bairo\b/i }
+  { name: 'AIRO', test: /\bairo\b/i },
+  // The Brainlab Curve. Guarded, because "curve" is also ordinary spinal
+  // language — a scoliosis booking reading "correction of the thoracic curve"
+  // is not a navigation case, and colouring it blueberry would say the platform
+  // needs booking, setting up and calibrating when it does not.
+  { name: 'Curve', test: /\bcurve\b/i, notWhen: CURVE_IS_ANATOMY }
 ]
 
 /** The navigation platforms named in a piece of text. */
 export function findNavigation(text) {
   const haystack = String(text || '')
-  return NAVIGATION.filter(n => n.test.test(haystack)).map(n => n.name)
+  return NAVIGATION
+    .filter(n => n.test.test(haystack) && !(n.notWhen && n.notWhen.test(haystack)))
+    .map(n => n.name)
 }

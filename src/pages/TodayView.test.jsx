@@ -30,6 +30,7 @@ const booking = (id, description, extra = {}) => ({
 })
 
 const GRAPE = '#8e24aa'
+const BANANA = '#f6c026'
 
 /** jsdom reports colours as rgb(), so comparisons have to speak the same units. */
 function asRgb(hex) {
@@ -241,7 +242,12 @@ describe('the left border', () => {
         { title: 'Cairo conference debrief', colorId: '3' })
     ])
     await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
-    expect(borderFor(container, 'Horne')).toBe(asRgb(GRAPE))
+    // Asserted as "not navigation" rather than against whatever colour the case
+    // happens to be. It used to check for Grape — the booking's own colour —
+    // which stopped meaning anything once the surgeon started deciding the
+    // colour, and made a navigation test fail for a reason about palettes.
+    expect(borderFor(container, 'Horne')).not.toBe(asRgb(NAVIGATION_ACCENT))
+    expect(borderFor(container, 'Horne')).toBe(asRgb(BANANA))  // Ibbett
   })
 })
 

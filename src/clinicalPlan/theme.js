@@ -4,6 +4,8 @@
 // guide is for picking colours in Calendar by name (see colours.js), this is
 // for drawing. Defined once; components must not hard-code hexes.
 
+import { SURGEON_COLOUR_NAMES, GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX } from './colours.js'
+
 export const SURGEON_ACCENTS = {
   Ibbett: '#FBBC04',
   Thani: '#0D9488',
@@ -140,22 +142,44 @@ export function contrastRatio(a, b) {
 export const NAVIGATION_ACCENT = '#4a1c96'
 
 /**
- * The colour a case is drawn in: the one its booking carries in the calendar.
+ * The surgeon's colour from the booking guide, as a hex.
  *
- * The plan used to draw from its own table of surgeon accents, which meant it
- * could disagree with Google — and then reported the disagreement as a fault, in
- * a note telling the reader something they could already see. Taking the colour
- * from the booking removes both the disagreement and the note: the calendar is
- * the colour, and the guide is a booking convention the team already knows.
+ * Goes through the Google palette rather than a second table of hand-picked
+ * hexes, so "Ibbett is Banana" means the same shade the team sees in Google.
+ */
+export function guideHexFor(surgeon) {
+  const name = SURGEON_COLOUR_NAMES[surgeon]
+  if (!name) return null
+  const id = Object.keys(GOOGLE_COLOR_NAMES).find(
+    key => GOOGLE_COLOR_NAMES[key].toLowerCase() === name.toLowerCase())
+  return id ? GOOGLE_COLOR_HEX[id] : null
+}
+
+/**
+ * The colour a case is drawn in: the surgeon's, from the booking guide.
  *
- * The surgeon's own accent is the fallback for a booking with no colour set, so
- * an uncoloured case is still identifiable rather than grey.
+ * This has now been both ways round, and the surgeon wins.
+ *
+ * Taking it from the calendar was meant to stop the app disagreeing with Google.
+ * What it actually did was make the colour depend on whether whoever entered the
+ * booking remembered to set one — and when they did not, Google supplies the
+ * calendar's default. A booking for Ibbett, who is Banana, was drawn in the
+ * default blue, which in a colour scheme that exists to show surgeon allocation
+ * at a glance is not a small thing: it reads as somebody else's case.
+ *
+ * So the guide is the source. Ibbett is Banana whether the event is Banana,
+ * Peacock, or nothing at all, and the colours stay consistent however the
+ * booking was entered — which is what the scheme is for.
+ *
+ * The calendar is still the fallback, for a surgeon the guide has no colour for:
+ * better the booking's own colour than grey. A navigation case overrides
+ * everything, because what it changes about the day is not whose case it is.
  */
 export function accentForCase(surgicalCase, dark = false) {
   if (surgicalCase?.navigation) return NAVIGATION_ACCENT
-  const fromCalendar = surgicalCase?.colourHex
-  if (!fromCalendar) return accentFor(surgicalCase?.surgeon, dark)
-  return dark ? lighten(fromCalendar, 0.35) : fromCalendar
+  const fromGuide = guideHexFor(surgicalCase?.surgeon)
+  const hex = fromGuide || surgicalCase?.colourHex || accentFor(surgicalCase?.surgeon, dark)
+  return dark ? lighten(hex, 0.35) : hex
 }
 
 /**

@@ -109,7 +109,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(230, 124, 115); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -124,7 +124,7 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
                / 
             </span>
             <span
-              style="color: rgb(175, 71, 106);"
+              style="color: rgb(167, 91, 85);"
             >
               JPW
             </span>
@@ -332,7 +332,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(147, 51, 234); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(142, 36, 170); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -347,7 +347,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(147, 51, 234);"
+              style="color: rgb(142, 36, 170);"
             >
               Fowler
             </span>
@@ -493,7 +493,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       >
         <div
           aria-hidden="true"
-          style="width: 4px; border-radius: 2px; background: rgb(240, 98, 146); flex-shrink: 0;"
+          style="width: 4px; border-radius: 2px; background: rgb(230, 124, 115); flex-shrink: 0;"
         />
         <div
           style="min-width: 0px; flex: 1 1 0%;"
@@ -508,7 +508,7 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
                / 
             </span>
             <span
-              style="color: rgb(175, 71, 106);"
+              style="color: rgb(167, 91, 85);"
             >
               JPW
             </span>

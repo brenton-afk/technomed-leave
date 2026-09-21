@@ -4,7 +4,7 @@ import {
   DayBlock, SurgeonLegend, NotesCallout, KeyFlagsSection, PlanFooter, CaseBlock
 } from './PlanBlocks.jsx'
 import { FIXTURE_WEEK } from '../../clinicalPlan/fixture.js'
-import { accentFor, accentTextFor, accentForCase, accentTextForCase, TOKENS } from '../../clinicalPlan/theme.js'
+import { accentFor, accentTextFor, accentForCase, accentTextForCase, TOKENS, guideHexFor } from '../../clinicalPlan/theme.js'
 
 const MON = FIXTURE_WEEK.days[0]
 const TUE = FIXTURE_WEEK.days[1]
@@ -93,9 +93,19 @@ describe('Weekly view content (§6)', () => {
     }
   })
 
-  it('falls back to the surgeon accent for a booking with no colour set', () => {
-    const uncoloured = { ...TUE.casesByHospital[0].cases[0], calendarColorName: undefined, colourHex: undefined }
-    expect(accentForCase(uncoloured)).toBe(accentFor(uncoloured.surgeon))
+  it('uses the surgeon\'s guide colour whatever the booking carries', () => {
+    // Reported: "Imogen Ibbett's colour is banana, but patient McGinniss is
+    // still listed as a blue colour." That booking had no colorId at all, so
+    // Google served the calendar's default — and in a scheme whose whole job is
+    // to show surgeon allocation at a glance, the wrong colour reads as
+    // somebody else's case.
+    const base = TUE.casesByHospital[0].cases[0]
+    const guide = guideHexFor(base.surgeon)
+    expect(guide, `no guide colour for ${base.surgeon}`).toBeTruthy()
+
+    for (const carried of [undefined, '#3f51b5' /* default blue */, '#039be5' /* Peacock */]) {
+      expect(accentForCase({ ...base, calendarColorName: undefined, colourHex: carried })).toBe(guide)
+    }
   })
 
   it('writes each surgeon\'s name in the colour their booking carries', () => {

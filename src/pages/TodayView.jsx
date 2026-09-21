@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useLiveRefresh } from '../liveRefresh.js'
 import { Page, Header, Body } from '../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../design/tokens.js'
-import { accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
+import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import { surgeonForColourName, colourNameFor, colourHexFor } from '../clinicalPlan/colours.js'
 import { hospitalCode } from '../clinicalPlan/labelledFields.js'
 import { readBooking, isCancelled } from '../clinicalPlan/parse.js'
@@ -11,6 +11,7 @@ import {
   weekdayName
 } from '../clinicalPlan/week.js'
 import { classifyItem } from '../clinicalPlan/itemKind.js'
+import { findNavigation } from '../clinicalPlan/systems.js'
 
 // The palette lives in clinicalPlan/colours.js, so this screen and the case plan
 // cannot drift apart. It used to be a second copy here, and three of its entries
@@ -33,12 +34,10 @@ function getColor(colorId) { return colourHexFor(colorId) || colour.navy }
 function describe(event) {
   const colourSurgeon = surgeonForColourName(colourNameFor(event.colorId))
   const read = event.allDay ? null : readBooking(event.title, event.description, { colourSurgeon })
-  // The border is the calendar's own colour, so the app agrees with what the
-  // person who made the booking sees in Google. Navigation is the one exception:
-  // a Varioguide, Brainlab or AIRO case needs the platform booked, set up and
-  // calibrated, which changes what the day asks of whoever is covering it.
-  const navigation = NAVIGATION_PATTERN.test(`${event.title || ''}\n${event.description || ''}`)
-  const border = navigation ? NAVIGATION_ACCENT : getColor(event.colorId)
+  // A Varioguide, Brainlab, Curve or AIRO case needs the platform booked, set
+  // up and calibrated, which changes what the day asks of whoever covers it —
+  // so navigation overrides the surgeon's colour.
+  const navigation = findNavigation(`${event.title || ''}\n${event.description || ''}`).length > 0
   const cancelled = isCancelled(event.title, event.description)
   if (!read) {
     // Leave, a meeting, rostered hours, a reminder. All of it used to be drawn
@@ -48,19 +47,29 @@ function describe(event) {
     const { kind, label } = classifyItem({
       title: event.title, description: event.description, colourName: colourNameFor(event.colorId)
     })
-    return { isCase: false, border, cancelled, kind, kindLabel: label }
+    // Not a case, so there is no surgeon to take a colour from. The calendar's
+    // own colour is right here — leave is Grape because the leave calendar makes
+    // it Grape — and a neutral line beats navy for an entry with none.
+    return {
+      isCase: false, cancelled, kind, kindLabel: label,
+      border: navigation ? NAVIGATION_ACCENT : (colourHexFor(event.colorId) || colour.line)
+    }
   }
   // The surgeon's name in the booking's own colour — darkened only as far as it
   // must be to read on white. Blueberry for a navigation case, so the name and
   // the border agree.
-  const surgeonColour = accentTextForCase(
-    { ...read, colourHex: colourHexFor(event.colorId) })
+  // Both the bar and the name come from one call, so they cannot disagree —
+  // and the surgeon decides, not the colour the booking happens to carry. An
+  // Ibbett case entered with no colour was drawn in the calendar's default blue
+  // while the surgeon's name beside it was drawn Banana.
+  const forColour = { ...read, navigation: navigation || undefined, colourHex: colourHexFor(event.colorId) }
+  const border = accentForCase(forColour)
+  const surgeonColour = accentTextForCase(forColour)
   // A cancelled booking is drawn grey whatever colour it was. The colour means
   // "this surgeon, this day"; keeping it would say the day is still committed.
   return { isCase: true, read, cancelled, surgeonColour, border: cancelled ? colour.line : border }
 }
 
-const NAVIGATION_PATTERN = /vario\s*guide|brain\s*lab|\bairo\b/i
 
 /** The system and how it is supplied, as one line. Uppercase, as the plan shows it. */
 function systemLine(read) {
