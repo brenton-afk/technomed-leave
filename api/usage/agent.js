@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { requireSession } from '../_auth.js'
 import { markAttendance } from '../_googleCalendar.js'
-import { STAFF } from '../../src/staffConfig.js'
+import { STAFF, firstNameFor } from '../../src/staffConfig.js'
 import { saveUsageRecord, getUsageRecord, getUsageHistory } from '../_redis.js'
 import { normaliseCase, recomputeCase } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
@@ -144,11 +144,6 @@ function parseExtraction(text) {
  * Matthew is Mat, and the calendar has to match what the team already writes there
  * by hand.
  */
-function firstNameFor(email) {
-  const staff = STAFF.find(s => s.email.toLowerCase() === String(email || '').toLowerCase())
-  return staff?.firstName || ''
-}
-
 async function handleScan(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!process.env.ANTHROPIC_API_KEY) {

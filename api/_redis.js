@@ -196,3 +196,59 @@ export async function getUsageHistory(limit = 50) {
   const records = await Promise.all(ids.map(id => getUsageRecord(id)))
   return records.filter(Boolean)
 }
+
+
+// ─── TEAM LEADER RUN-SHEET ─────────────────────────────────
+// The duty leader's daily checklist, shared rather than private: the role runs
+// on a weekly rotation and the whole point of publishing it is that anyone can
+// see the day's duties are done — that the evening sweep happened, that
+// tomorrow's lists went out.
+//
+// Stored as a Redis hash, one field per checklist item, and that is a
+// correctness decision rather than a stylistic one. Reading a whole JSON blob,
+// adding a tick and writing it back loses a tick whenever two people are on the
+// run-sheet at once — which is exactly when it matters, at a handover. HSET
+// writes one field, so concurrent ticks on different items cannot collide.
+
+// Kept long enough to answer "did anyone do the evening sweep on the 3rd?" and
+// no longer. A run-sheet is a working document, not a record anyone audits.
+const RUNSHEET_TTL_SECONDS = 90 * 24 * 60 * 60
+
+const runsheetKey = date => `runsheet:${date}`
+
+/**
+ * Every tick for a Hobart day, as `{ [itemId]: { by, at } }`.
+ *
+ * Upstash returns HGETALL either as a flat [field, value, field, value] array or
+ * as an object, depending on the endpoint version. Both are handled because
+ * getting it wrong presents as an empty run-sheet, which looks exactly like a
+ * day nobody has started.
+ */
+export async function getRunsheet(date) {
+  const raw = await redis('hgetall', runsheetKey(date))
+  const ticks = {}
+  const record = (field, value) => {
+    try { ticks[field] = JSON.parse(value) } catch { /* skip a malformed field */ }
+  }
+  if (Array.isArray(raw)) {
+    for (let i = 0; i + 1 < raw.length; i += 2) record(raw[i], raw[i + 1])
+  } else if (raw && typeof raw === 'object') {
+    for (const [field, value] of Object.entries(raw)) record(field, value)
+  }
+  return ticks
+}
+
+/** Marks one item done, recording who and when. */
+export async function tickRunsheetItem(date, itemId, by, at = new Date().toISOString()) {
+  const key = runsheetKey(date)
+  await redis('hset', key, itemId, JSON.stringify({ by, at }))
+  // Refreshed on every write rather than set once, so a day being worked on
+  // cannot expire underneath the person working on it.
+  await redis('expire', key, String(RUNSHEET_TTL_SECONDS))
+  return { by, at }
+}
+
+/** Unticks one item. Mistakes happen, and a checklist you cannot correct gets ignored. */
+export async function untickRunsheetItem(date, itemId) {
+  await redis('hdel', runsheetKey(date), itemId)
+}

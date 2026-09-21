@@ -20,3 +20,16 @@ export const STAFF = [
 ]
 export function getStaffByName(name) { return STAFF.find(s => s.name === name) }
 export function getStaffByEmail(email) { return STAFF.find(s => s.email === email) }
+
+
+/**
+ * The name the team calls someone, from their work email.
+ *
+ * On the roster rather than in each API file that needs it: the usage sheet, the
+ * calendar attendance note and the team-leader run-sheet all record who did
+ * something, and they must all spell it the same way.
+ */
+export function firstNameFor(email) {
+  const person = STAFF.find(s => s.email.toLowerCase() === String(email || '').toLowerCase())
+  return person?.firstName || ''
+}

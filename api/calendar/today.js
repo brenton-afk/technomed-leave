@@ -1,6 +1,8 @@
 import { TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr } from '../../src/clinicalPlan/week.js'
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
+import { getRunsheet, tickRunsheetItem, untickRunsheetItem } from '../_redis.js'
+import { firstNameFor } from '../../src/staffConfig.js'
 
 // The Staff Leave sub-calendar. Read alongside bookings for the clinical plan
 // so leave shows up in the week without a second round trip.
@@ -20,6 +22,10 @@ export default async function handler(req, res) {
   // functions and the app is at that ceiling — same reason the meetings, usage
   // and timesheet features are single functions routed by action.
   if (req.query.action === 'week') return handleWeek(req, res)
+  // The team leader's daily run-sheet. Here for the same reason as ?action=week
+  // — the deployment is at the 12-function ceiling — and it is a fair fit: the
+  // run-sheet is a property of a calendar day.
+  if (req.query.action === 'runsheet') return handleRunsheet(req, res)
 
   try {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
@@ -144,6 +150,52 @@ async function handleWeek(req, res) {
     })
   } catch (err) {
     console.error('calendar/week failed:', err.message)
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+
+// ─── The team leader's run-sheet ──────────────────────────────────────────────
+// Shared rather than private. The role runs on a weekly duty rotation and the
+// point of the checklist is that the team can see the day's duties are done —
+// that the evening sweep happened, that tomorrow's lists went out — so the ticks
+// carry who made them.
+
+async function handleRunsheet(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  try {
+    // The Hobart day, from the server, and never from the client. A phone in a
+    // different timezone — or one whose clock is simply wrong — would otherwise
+    // tick a different day's sheet, and the tick would vanish from the day it
+    // was meant for.
+    const date = toDateStr(zonedCivil(new Date(), TZ))
+
+    if (req.method === 'GET') {
+      return res.status(200).json({ date, ticks: await getRunsheet(date) })
+    }
+
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+      const itemId = String(body.itemId || '').trim()
+      if (!itemId || itemId.length > 80) {
+        return res.status(400).json({ error: 'itemId is required' })
+      }
+
+      if (body.done === false) {
+        await untickRunsheetItem(date, itemId)
+      } else {
+        await tickRunsheetItem(date, itemId, firstNameFor(session.email) || 'Someone')
+      }
+      // The whole day's state comes back, not just this item, so a second person
+      // ticking at the same moment shows up immediately rather than on the next
+      // poll.
+      return res.status(200).json({ date, ticks: await getRunsheet(date) })
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' })
+  } catch (err) {
     return res.status(500).json({ error: err.message })
   }
 }

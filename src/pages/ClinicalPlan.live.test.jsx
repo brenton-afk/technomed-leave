@@ -37,6 +37,13 @@ beforeEach(() => {
   events = [event('c1', 'Jackson MARINER - Fowler', '24', '10:00', '11:00')]
   mockCalendar()
   vi.useFakeTimers({ shouldAdvanceTime: true })
+  // Pinned into the week these fixtures are in. Without this the clock is the
+  // real one, the plan opens on the real current week, and the August bookings
+  // are nowhere in it — so every assertion here passed in August 2026 and has
+  // failed on every run since. A test that expires quietly is worse than no
+  // test: it was green when it was written and went red on a date, not on a
+  // change, so it reads as a regression that is not there.
+  vi.setSystemTime(new Date('2026-08-24T02:00:00.000Z')) // Monday, midday Hobart
 })
 
 afterEach(() => {
