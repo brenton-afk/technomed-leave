@@ -1,8 +1,9 @@
+import { SURGEON_COLOUR_NAMES } from './colours.js'
 import { describe, it, expect, vi } from 'vitest'
 import { buildWeekPlan } from './buildWeekPlan.js'
 import { weekWindowFor } from './week.js'
 import { colourNameFor } from './colours.js'
-import { accentFor, accentTextFor, hasConfirmedAccent, contrastRatio, SURGEON_ACCENTS, TOKENS } from './theme.js'
+import { accentFor, accentTextFor, hasConfirmedAccent, contrastRatio, SURGEON_ACCENTS, TOKENS, guideHexFor } from './theme.js'
 
 const WINDOW = weekWindowFor('2026-08-24')
 const GENERATED = '2026-08-21T17:30:00+10:00'
@@ -233,7 +234,9 @@ describe('surgeons without a confirmed accent (§11.10)', () => {
   it('falls back to neutral grey and logs, rather than crashing or guessing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(hasConfirmedAccent('Hannan')).toBe(false)
-    expect(hasConfirmedAccent('Dubey')).toBe(false)
+    // Dubey is no longer in here: the booking guide gives Graphite, so there is
+    // a confirmed colour now where there was not one before.
+    expect(hasConfirmedAccent('Dubey')).toBe(true)
     expect(accentFor('Hannan')).toBe('#9CA3AF')
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('Hannan'))
     warn.mockRestore()
@@ -259,15 +262,22 @@ describe('accessibility of the accent palette (§10)', () => {
     }
   })
 
-  it('keeps the document accent for the bar, unmodified', () => {
+  it('keeps the bar at full strength, unmodified', () => {
     // Fidelity to §5.3: the bar is decoration next to a text label, so it is
-    // not held to a text contrast ratio.
-    expect(accentFor('Ibbett')).toBe('#FBBC04')
-    expect(accentFor('Gupta')).toBe('#16A34A')
+    // not held to a text contrast ratio. The hexes are the booking guide's now
+    // — Banana and Basil as Google renders them — rather than the sampled
+    // approximations, so that the screen, the legend and the Word export all
+    // show a surgeon in one colour.
+    expect(accentFor('Ibbett')).toBe(guideHexFor('Ibbett'))
+    expect(accentFor('Gupta')).toBe(guideHexFor('Gupta'))
+    expect(contrastRatio(accentFor('Ibbett'), '#FFFFFF')).toBeLessThan(4.5)
   })
 
   it('darkens only the accents that need it, and never lightens', () => {
-    for (const [surgeon, hex] of Object.entries(SURGEON_ACCENTS)) {
+    // Over every surgeon the app has a colour for, by whichever route.
+    const surgeons = new Set([...Object.keys(SURGEON_ACCENTS), ...Object.keys(SURGEON_COLOUR_NAMES)])
+    for (const surgeon of [...surgeons].filter(hasConfirmedAccent)) {
+      const hex = accentFor(surgeon)
       const text = accentTextFor(surgeon)
       if (contrastRatio(hex, '#FFFFFF') >= 4.5) {
         // Already legible — must be returned untouched.

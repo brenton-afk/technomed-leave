@@ -9,25 +9,25 @@ exports[`Daily view (snapshot) > renders a single day with the same block stylin
       Surgeons this week: 
     </span>
     <strong
-      style="color: rgb(147, 51, 234);"
+      style="color: rgb(142, 36, 170);"
     >
       Fowler
     </strong>
      
     <strong
-      style="color: rgb(149, 111, 4);"
+      style="color: rgb(145, 113, 23);"
     >
       Ibbett
     </strong>
      
     <strong
-      style="color: rgb(175, 71, 106);"
+      style="color: rgb(167, 91, 85);"
     >
       JPW
     </strong>
      
     <strong
-      style="color: rgb(18, 132, 60);"
+      style="color: rgb(11, 128, 67);"
     >
       Gupta
     </strong>
@@ -260,25 +260,25 @@ exports[`Weekly view (snapshot) > matches the document layout for the fixture we
       Surgeons this week: 
     </span>
     <strong
-      style="color: rgb(147, 51, 234);"
+      style="color: rgb(142, 36, 170);"
     >
       Fowler
     </strong>
      
     <strong
-      style="color: rgb(149, 111, 4);"
+      style="color: rgb(145, 113, 23);"
     >
       Ibbett
     </strong>
      
     <strong
-      style="color: rgb(175, 71, 106);"
+      style="color: rgb(167, 91, 85);"
     >
       JPW
     </strong>
      
     <strong
-      style="color: rgb(18, 132, 60);"
+      style="color: rgb(11, 128, 67);"
     >
       Gupta
     </strong>

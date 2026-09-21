@@ -10,7 +10,7 @@ import {
   Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle,
   Table, TableRow, TableCell, WidthType, ShadingType
 } from 'docx'
-import { SURGEON_ACCENTS, TOKENS, DOCX_FONT, accentTextFor } from './theme.js'
+import { TOKENS, DOCX_FONT, accentFor, accentTextFor, hasConfirmedAccent } from './theme.js'
 import { formatDayHeading, formatStamp } from './week.js'
 import { DOCX_FILENAME } from './exportMeta.js'
 
@@ -29,11 +29,13 @@ function para(children, opts = {}) {
 
 // The left border keeps the document's exact accent; the surgeon's name uses
 // the AA-safe variant, since Word renders it as body text on white.
+// Through accentFor, not the accent table, so the printed document and the
+// screen cannot show a surgeon in two different colours.
 function accent(surgeon) {
-  return hex(SURGEON_ACCENTS[surgeon] || TOKENS.neutralBar)
+  return hex(hasConfirmedAccent(surgeon) ? accentFor(surgeon) : TOKENS.neutralBar)
 }
 function accentText(surgeon) {
-  return hex(SURGEON_ACCENTS[surgeon] ? accentTextFor(surgeon) : TOKENS.neutralBar)
+  return hex(hasConfirmedAccent(surgeon) ? accentTextFor(surgeon) : TOKENS.neutralBar)
 }
 
 // A single-cell table is how a bordered/shaded callout is expressed in docx.

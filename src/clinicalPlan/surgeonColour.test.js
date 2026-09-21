@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { accentForCase, guideHexFor, NAVIGATION_ACCENT } from './theme.js'
+import {
+  accentForCase, accentFor, accentTextFor, guideHexFor,
+  contrastRatio, SURGEON_ACCENTS, NAVIGATION_ACCENT
+} from './theme.js'
 import { GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, SURGEON_COLOUR_NAMES } from './colours.js'
 import { findNavigation } from './systems.js'
 
@@ -94,6 +97,32 @@ describe('navigation overrides the surgeon', () => {
       'main curve 52 degrees'
     ]) {
       expect(findNavigation(text), text).toEqual([])
+    }
+  })
+})
+
+describe('one surgeon, one colour, everywhere', () => {
+  // The fix was nearly half-done: the cards were moved onto the guide while the
+  // "Surgeons this week" line and the Word export were left on the old sampled
+  // table. That would have put a JPW case and the word "JPW" in two different
+  // pinks on the same screen, and printed a third opinion — the very
+  // inconsistency this change exists to remove.
+  it('gives the card, the legend and the export the same answer', () => {
+    for (const surgeon of Object.keys(GUIDE)) {
+      const guide = guideHexFor(surgeon)
+      expect(accentForCase({ surgeon }), `card: ${surgeon}`).toBe(guide)
+      expect(accentFor(surgeon), `legend/export bar: ${surgeon}`).toBe(guide)
+      // The text variant is the same hue, only darkened enough to read on white.
+      expect(contrastRatio(accentTextFor(surgeon), '#FFFFFF')).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('has no colour left that only one surface knows about', () => {
+    // SURGEON_ACCENTS survives only for surgeons the guide has no entry for.
+    // Anyone in both must resolve to the guide, or the tables disagree again.
+    for (const surgeon of Object.keys(SURGEON_ACCENTS)) {
+      if (!SURGEON_COLOUR_NAMES[surgeon]) continue
+      expect(accentFor(surgeon), surgeon).toBe(guideHexFor(surgeon))
     }
   })
 })

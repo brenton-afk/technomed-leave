@@ -54,10 +54,25 @@ export const DOCX_FONT = 'Arial'
 const NEUTRAL = TOKENS.neutralBar
 const loggedMissing = new Set()
 
+/**
+ * A surgeon's colour: the booking guide first, then the sampled accent table.
+ *
+ * The guide goes first here rather than only in accentForCase, so that every
+ * way of asking — a case's bar, the "Surgeons this week" line, the Word export
+ * — gets the same answer. It did not, briefly: the cards were moved onto the
+ * guide and the legend and the .docx were left on the old table, which would
+ * have put a JPW case and the word "JPW" in two different pinks on one screen,
+ * and printed a third opinion. That is the very inconsistency this change was
+ * made to remove.
+ */
+function baseHexFor(surgeon) {
+  return guideHexFor(surgeon) || SURGEON_ACCENTS[surgeon] || null
+}
+
 // The accent for a surgeon, or neutral grey when no hex is confirmed. Logs each
 // unknown surgeon once so a missing colour is visible without spamming.
 export function accentFor(surgeon, dark = false) {
-  const hex = SURGEON_ACCENTS[surgeon]
+  const hex = baseHexFor(surgeon)
   if (hex) return dark ? lighten(hex, 0.25) : hex
   if (surgeon && !loggedMissing.has(surgeon)) {
     loggedMissing.add(surgeon)
@@ -67,7 +82,7 @@ export function accentFor(surgeon, dark = false) {
 }
 
 export function hasConfirmedAccent(surgeon) {
-  return Boolean(SURGEON_ACCENTS[surgeon])
+  return Boolean(baseHexFor(surgeon))
 }
 
 // Minimum contrast for normal-weight body text under WCAG AA. The surgeon name
@@ -84,7 +99,7 @@ const AA_TEXT_CONTRAST = 4.5
 const textAccentCache = new Map()
 
 export function accentTextFor(surgeon, dark = false) {
-  const base = SURGEON_ACCENTS[surgeon]
+  const base = baseHexFor(surgeon)
   if (!base) return accentFor(surgeon, dark)
   // On a dark ground the bright accent is already high-contrast.
   if (dark) return accentFor(surgeon, true)
@@ -177,9 +192,12 @@ export function guideHexFor(surgeon) {
  */
 export function accentForCase(surgicalCase, dark = false) {
   if (surgicalCase?.navigation) return NAVIGATION_ACCENT
-  const fromGuide = guideHexFor(surgicalCase?.surgeon)
-  const hex = fromGuide || surgicalCase?.colourHex || accentFor(surgicalCase?.surgeon, dark)
-  return dark ? lighten(hex, 0.35) : hex
+  // accentFor already prefers the guide, so this is only deciding what to do
+  // for a surgeon it has no colour for: the booking's own colour beats grey.
+  if (hasConfirmedAccent(surgicalCase?.surgeon)) return accentFor(surgicalCase?.surgeon, dark)
+  const carried = surgicalCase?.colourHex
+  if (!carried) return accentFor(surgicalCase?.surgeon, dark)
+  return dark ? lighten(carried, 0.35) : carried
 }
 
 /**
