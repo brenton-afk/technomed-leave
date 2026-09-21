@@ -1,3 +1,4 @@
+import { STAFF } from '../staffConfig.js'
 import { findSystems, findLoanSets, systemWords, findNavigation } from './systems.js'
 import { parseLabelledDescription, parseKitField, hospitalCode } from './labelledFields.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
@@ -76,7 +77,37 @@ export function normaliseSurgeon(raw) {
 // *locate* the surgeon, not to tokenise the whole title — slicing at the one
 // separator that matters keeps hyphens inside a kit name intact, so "DAKOTA-2"
 // survives.
-const SEPARATOR = /\s*[-–—:]\s*/g
+// ">" is in here because it is the convention the team was asked to use:
+// "Pt name>SYSTEM>Surgeon name>(REP NAME)". Without it a title in that exact
+// format split on nothing, so patient, surgeon and system all came back empty
+// and the booking rendered blank.
+const SEPARATOR = /\s*[-–—:>]\s*/g
+
+/**
+ * The rep who attended, from a "(Mat)" suffix.
+ *
+ * Written by markAttendance when a usage form is scanned, and by hand when the
+ * team notes who is covering a list. It was being thrown away: the surgeon
+ * matcher tolerates a surname "buried in a longer string", so "Fowler (Mat)"
+ * matched Fowler, the whole fragment was consumed as the surgeon, and the rep
+ * went with it — silently, which is the worst part. The name was in the
+ * calendar and simply absent from the app.
+ *
+ * Only roster first names count. A bracketed "(RHH)" or "(2 of 3)" is not a
+ * person, and guessing would put a hospital code where a rep's name goes.
+ */
+export function extractRep(title) {
+  const text = String(title || '')
+  for (const person of STAFF) {
+    const name = person.firstName
+    if (!name) continue
+    const match = new RegExp(`\\(\\s*${name}\\s*\\)`, 'i').exec(text)
+    if (match) {
+      return { rep: name, rest: (text.slice(0, match.index) + ' ' + text.slice(match.index + match[0].length)).replace(/\s{2,}/g, ' ').trim() }
+    }
+  }
+  return { rep: null, rest: text }
+}
 
 // Titles that are not cases however they are coloured. On-call and
 // reduced-hours entries are routinely coded Graphite (officially Dubey's), so
@@ -173,7 +204,11 @@ export function parseCaseTitle(title, hint = {}) {
     caseText = raw
   }
 
-  const words = String(caseText || '').trim().split(/\s+/).filter(Boolean)
+  // Whitespace, and ">" — which the team's own convention uses with no spaces
+  // around it, so "Thompson>MARINER" was read as one word and the patient came
+  // out "ThompsonMARINER". Hyphens are deliberately *not* split here: a
+  // vertebral level is written "L4-L5", and splitting it produced "L4 L5".
+  const words = String(caseText || '').trim().split(/[\s>]+/).filter(Boolean)
   if (words.length === 0) return null
 
   // Inference from colour alone is only allowed where the first word actually
@@ -214,8 +249,31 @@ export function isSurgicalCase(title, hint) {
  */
 const CALLED_OFF = /\b(?:cancel(?:l?ed|lation)?|postponed?|abandoned)\b/i
 
+/**
+ * Whether the booking itself says it is off.
+ *
+ * The title is an assertion about the booking; the description is commentary
+ * about it. Scanning both for the word anywhere conflated the two, and a live
+ * case was shown struck through and "CANCELLED" on the strength of a note that
+ * merely mentioned one — "moved, Tuesday's list cancelled", "loan set
+ * cancellation". That is the app contradicting the calendar, which is worse than
+ * showing nothing: nobody can trust a screen that invents a fact.
+ *
+ * So the title decides. A description can still mark a case off, but only by
+ * saying so on a line of its own — "CANCELLED", not a sentence containing the
+ * word. That keeps the deliberate note working and drops the incidental mention.
+ *
+ * Erring towards showing a cancelled case as live is the safer failure: the case
+ * stays on the list and the team reconciles against Google, which they do
+ * anyway. Erring the other way removes a real case from the day.
+ */
 export function isCancelled(title, description) {
-  return CALLED_OFF.test(String(title || '')) || CALLED_OFF.test(String(description || ''))
+  if (CALLED_OFF.test(String(title || ''))) return true
+  return String(description || '').split('\n').some(line => {
+    const bare = line.replace(/[^\p{L}\s]/gu, ' ').trim()
+    // The whole line is the marker, give or take punctuation and a "case".
+    return bare.length <= 24 && CALLED_OFF.test(bare)
+  })
 }
 
 /**
@@ -598,6 +656,11 @@ export function cleanOperation(text, o = {}) {
 export function readBooking(title, description, { colourSurgeon } = {}) {
   // A renamed cancellation puts its marker where the patient's name goes.
   title = stripCancellation(title)
+  // Taken off before anything else reads the title. The surgeon matcher accepts
+  // a surname buried in a longer string, so "Fowler (Mat)" was swallowed whole
+  // and the rep disappeared.
+  const { rep, rest } = extractRep(title)
+  title = rest
   const everything = `${title || ''}\n${description || ''}`
   // Labelled fields first. Where the team has written "Surgeon: Fowler" there is
   // nothing to infer, and inference was only ever a way of coping without them.
@@ -642,6 +705,9 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
       ? kitField.system : (inferred.system || kitField.system))
     : (inferred.system || kitField.system)
   const supply = kitField.type || inferred.supply
+  const operation = cleanOperation(labelled.procedure, { system, context: everything })
+    || inferred.operation
+  const kit = isLabelled ? undefined : inferred.kit
 
   return {
     patient,
@@ -650,13 +716,60 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
       : (fromTitle?.surgeonSource || undefined),
     // A labelled procedure is trusted as written, beyond having the system and
     // supply lifted out of it so they cannot appear twice.
-    operation: cleanOperation(labelled.procedure, { system, context: everything })
-      || inferred.operation,
+    operation,
     system,
     supply,
     // A labelled booking has said everything on the system line already.
-    kit: isLabelled ? undefined : inferred.kit,
+    kit,
     hospital: hospitalCode(labelled.hospital),
-    navigation: findNavigation(everything).join(' + ') || undefined
+    navigation: findNavigation(everything).join(' + ') || undefined,
+    // Who attended, or who is covering it. The calendar carries this and the
+    // app was dropping it.
+    rep,
+    // Anything in the title that reached none of the fields above — but only
+    // for a free-text booking, where the title *is* the record.
+    //
+    // Where the description carries labels, that is the record and the title is
+    // decoration: often a bare placeholder like "Booking" or "RHH Spine".
+    // Reporting those words as unread detail is exactly the raw-text noise this
+    // app was asked to stop showing. Checking `fromTitle` alone is not enough —
+    // the colour hint lets a placeholder title parse as a case.
+    unread: (!isLabelled && fromTitle)
+      ? leftoverOf(title, { patient, surgeon, system, supply, operation, kit })
+      : undefined
   }
+}
+
+/**
+ * What the title said that nothing above captured.
+ *
+ * The parser's habit is to drop whatever it cannot place, on the reasoning that
+ * a raw fragment looks like data and is worse than a clean gap. That is right
+ * for noise and wrong for everything else, and it fails silently either way: the
+ * attending rep sat in the calendar title and simply never appeared, with
+ * nothing on screen to suggest anything was missing.
+ *
+ * So the remainder is shown. A booking is a record the team relies on being
+ * complete, and a word they typed going missing is the more serious failure.
+ *
+ * Conservative on purpose — anything already displayed, any separator, any
+ * one-character scrap drops out — so an ordinary booking yields nothing here and
+ * the line appears only when the title really does hold something unplaced.
+ */
+// One tokeniser for both sides, which matters more than it looks. Splitting the
+// title one way and the shown values another made "C4/5 ACDF" report "C4/5" as
+// unread — it was on screen the whole time — and "Kennedy REFORM-JPW" report the
+// entire rest of the title. A leftover check that cries wolf gets ignored, and
+// then it is not a check.
+const tokens = value => String(value || '')
+  .split(/[\s>/(),.+·-]+/)
+  .map(word => word.trim())
+  .filter(Boolean)
+
+function leftoverOf(title, shown) {
+  const known = new Set(Object.values(shown).flatMap(tokens).map(w => w.toLowerCase()))
+  // Reported as typed. "URGENT" is shouted for a reason, and lowercasing it
+  // would quietly edit the one thing here that exists to be read literally.
+  const left = tokens(title).filter(word => word.length > 1 && !known.has(word.toLowerCase()))
+  return left.length ? left.join(' ') : undefined
 }

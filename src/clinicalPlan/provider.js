@@ -47,7 +47,13 @@ export function planSignature(plan) {
     for (const group of day.casesByHospital || []) {
       parts.push(group.hospital)
       for (const c of group.cases || []) {
+        // `rep` and `cancelled` belong here for the same reason as every other
+        // field: the plan is only replaced when this string changes, so a fact
+        // left out of it can change in Google and never reach the screen. Who
+        // attended is added to a booking *after* the case, which is precisely a
+        // mid-poll edit.
         parts.push([c.id, c.patient, c.surgeon, c.operation, c.system, c.supply, c.kit,
+          c.rep || '', c.unread || '', c.cancelled ? 'off' : '',
           (c.notes || []).map(n => n.text).join('~')].join('\u0001'))
       }
     }

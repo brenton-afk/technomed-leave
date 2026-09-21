@@ -110,6 +110,18 @@ function CaseCard({ described, compact = false }) {
           {system}
         </div>
       )}
+      {/* Anything in the title no field claimed, as typed. */}
+      {read.unread && (
+        <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: 2 }}>
+          {read.unread}
+        </div>
+      )}
+      {/* The attending rep, from the "(Mat)" the calendar carries. */}
+      {read.rep && (
+        <div style={{ ...text('caption'), color: colour.accentDeep, marginTop: 2 }}>
+          Rep: <strong style={{ fontWeight: 700 }}>{read.rep}</strong>
+        </div>
+      )}
     </>
   )
 }

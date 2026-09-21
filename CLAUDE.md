@@ -107,10 +107,42 @@ again, which is how the app came to be showing a case that had been cancelled fo
 the next day. A test asserts both use the hook and that neither sets its own
 interval.
 
+**The app must never say something the calendar does not** — by omission or by
+invention. Both failure modes have happened and both were reported from the
+live calendar:
+
+- The attending rep, written into the title as `(Mat)` by `markAttendance`, was
+  swallowed by the surgeon matcher (which accepts a surname buried in a longer
+  string, so `Fowler (Mat)` matched Fowler and took the rep with it) and never
+  displayed. `extractRep` now takes it off the title before anything else reads
+  it, matching roster first names only — `(RHH)` is not a person.
+- `>` was not a separator, so a title in the team's own documented convention,
+  `Pt>SYSTEM>Surgeon>(REP)`, split on nothing and rendered completely blank.
+- A live case was struck through as cancelled because a note *mentioned* a
+  cancellation. See `isCancelled` below.
+
+The general rule, and `leftoverOf` in `parse.js` enforces it: **the title is not
+silently discarded.** Whatever no field claimed is shown as typed. It is gated to
+free-text bookings — where the description carries labels, that is the record and
+the title is often a placeholder like "Booking" — and both sides are tokenised by
+the same function, because splitting them differently reported `C4/5` as unread
+while it was on screen, and a check that cries wolf gets ignored.
+
+Anything added to a case must also go into `planSignature` in `provider.js`. The
+plan is only replaced when that string changes, so a field left out of it can
+change in Google and never reach the screen — and the rep is added to a booking
+*after* the case, which is exactly a mid-poll edit.
+
 A cancellation reaches the app two ways. Deleting the booking needs nothing —
 `singleEvents=true` means Google stops returning it. A **rename** is the common
 one, because deleting leaves no record that the theatre time was held: `isCancelled`
-in `parse.js` spots it, the case is kept and struck through rather than dropped,
+in `parse.js` spots it — **from the title, not from a loose scan of the
+description**, which is what marked a live case cancelled over a note reading
+"moved from Tuesday, that list was cancelled". The title asserts what a booking
+is; the description is commentary about it. A description can still mark a case
+off, but only on a line of its own. Erring towards showing a cancelled case as
+live is the safer failure: the case stays on the list and the team reconciles
+against Google anyway. The case is kept and struck through rather than dropped,
 its colour goes grey, and it is excluded from the case count. `readBooking` strips
 the marker first — a title reads `{Patient} {procedure} - {Surgeon}`, so "CANCELLED
 - Streets ACDF" otherwise produced a patient called Cancelled.

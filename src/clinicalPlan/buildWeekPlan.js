@@ -302,6 +302,12 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         system: read.system,
         supply: read.supply,
         kit: read.kit,
+        // Who attended, or who is covering. Written into the title by
+        // markAttendance when a usage form is scanned.
+        rep: read.rep || undefined,
+        // Whatever the title said that no field claimed. Shown rather than
+        // dropped — see leftoverOf in parse.js.
+        unread: read.unread || undefined,
         navigation: read.navigation,
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,

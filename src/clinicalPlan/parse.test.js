@@ -357,3 +357,103 @@ describe('reading a booking that was renamed rather than deleted', () => {
     expect(stripCancellation('CANCELLED - Jackson L4-L5 TLIF - JPW')).toBe('Jackson L4-L5 TLIF - JPW')
   })
 })
+
+// ─── Two bugs reported from the live calendar ────────────────────────────────
+// "Pt Thompson, Fowler for today should have Mat's name in the title as it is
+// in the calendar, but it is not currently displayed." And: "pt Bergin has been
+// added to tomorrow's list, but is listed as cancelled in the app, but not in
+// the calendar."
+//
+// Both are the same failure wearing different clothes — the app saying
+// something the calendar does not. One by omission, one by invention.
+
+describe('the rep who attended', () => {
+  it('survives a title that also names the surgeon', () => {
+    // The bug. normaliseSurgeon tolerates a surname "buried in a longer
+    // string", so "Fowler (Mat)" matched Fowler, the whole fragment was
+    // consumed as the surgeon, and Mat went with it — silently.
+    const read = readBooking('Thompson MARINER - Fowler (Mat)', 'Kit: Mariner MIS')
+    expect(read.rep).toBe('Mat')
+    expect(read.patient).toBe('Thompson')
+    expect(read.surgeon).toBe('Fowler')
+  })
+
+  it('is read from the convention the team was given', () => {
+    // "Pt name>SYSTEM>Surgeon name>(REP NAME)". ">" was not a separator, so a
+    // title in this exact format split on nothing and the whole booking came
+    // back blank — no patient, no surgeon, no system.
+    const read = readBooking('Thompson>MARINER>Fowler>(Mat)', '')
+    expect(read.patient).toBe('Thompson')
+    expect(read.surgeon).toBe('Fowler')
+    expect(read.system).toBe('MARINER')
+    expect(read.rep).toBe('Mat')
+  })
+
+  it('is only ever a name from the roster', () => {
+    // A bracketed "(RHH)" is a hospital and "(2 of 3)" is a count. Guessing
+    // would put either where a person's name goes.
+    expect(readBooking('Thompson MARINER - Fowler (RHH)', '').rep).toBeNull()
+    expect(readBooking('Thompson MARINER - Fowler (2 of 3)', '').rep).toBeNull()
+  })
+
+  it('is absent when the calendar does not name one', () => {
+    expect(readBooking('Bergin ACDF SHORELINE - JPW', '').rep).toBeNull()
+  })
+})
+
+describe('not inventing a cancellation', () => {
+  it('leaves a live case alone when a note merely mentions one', () => {
+    // The reported bug. The description was scanned for the word anywhere, so a
+    // note *about* a cancellation struck a live case through and labelled it
+    // CANCELLED — the app contradicting the calendar, which is worse than
+    // showing nothing, because nobody can trust a screen that invents a fact.
+    for (const note of [
+      'Moved from Tuesday, that list was cancelled',
+      'Note: loan set cancellation from Stryker',
+      'Rebooked after the 8th was postponed',
+      'Check the cancellation policy for the loan kit'
+    ]) {
+      expect(isCancelled('Bergin ACDF SHORELINE - JPW', note), note).toBe(false)
+    }
+  })
+
+  it('still believes the title', () => {
+    // Renaming the booking is how the team actually marks one off.
+    expect(isCancelled('CANCELLED - Bergin ACDF - JPW', '')).toBe(true)
+    expect(isCancelled('Bergin ACDF - JPW (cancelled)', '')).toBe(true)
+  })
+
+  it('still believes a note that says only that', () => {
+    // A line of its own is a deliberate marker rather than a passing mention.
+    expect(isCancelled('Bergin ACDF - JPW', 'CANCELLED')).toBe(true)
+    expect(isCancelled('Bergin ACDF - JPW', 'Kit: Shoreline\nCancelled.')).toBe(true)
+  })
+})
+
+describe('never silently dropping what the title says', () => {
+  it('surfaces words no field claimed', () => {
+    // How the rep went missing for weeks: the parser drops what it cannot
+    // place, and says nothing about having done so.
+    const read = readBooking('Panthi ACDF - Ibbett URGENT bring extra cages', '')
+    expect(read.unread).toBe('URGENT bring extra cages')
+  })
+
+  it('says nothing when everything was placed', () => {
+    // A check that cries wolf gets ignored, and then it is not a check. These
+    // all parse completely and must produce no leftover line.
+    for (const title of [
+      'Thompson MARINER - Fowler (Mat)',
+      'Bergin C4/5 ACDF SHORELINE - JPW',
+      'Kennedy REFORM-JPW',
+      'Thompson>MARINER>Fowler>(Mat)'
+    ]) {
+      expect(readBooking(title, '').unread, title).toBeUndefined()
+    }
+  })
+
+  it('stays quiet on a labelled booking, where the title is decoration', () => {
+    // There the description is the record and the title is often a placeholder.
+    const read = readBooking('Booking', 'Patient: Jackson\nSurgeon: Fowler\nKit: Dakota (Consignment)')
+    expect(read.unread).toBeUndefined()
+  })
+})

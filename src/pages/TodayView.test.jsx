@@ -456,3 +456,40 @@ describe('the week strip', () => {
     expect(numbers[6]).toBe('30')
   })
 })
+
+describe('everything the calendar says reaches the screen', () => {
+  // "The app is useless unless it is an absolute and accurate representation of
+  // the calendar with ALL the details listed." Parsing the rep correctly is only
+  // half of it — it has to be rendered, and it was the rendering that nobody
+  // could see was missing.
+  const freeText = (title, extra = {}) => ({
+    id: 'c1', title, description: '', location: 'Royal Hobart Hospital',
+    allDay: false, start: at(10), end: at(11), colorId: '3', ...extra
+  })
+
+  it('shows the rep who attended', async () => {
+    await show([freeText('Thompson MARINER - Fowler (Mat)')])
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    expect(screen.getByText('Mat')).toBeInTheDocument()
+  })
+
+  it('shows the whole booking written in the team\'s own convention', async () => {
+    await show([freeText('Thompson>MARINER>Fowler>(Mat)')])
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    expect(screen.getByText('Fowler')).toBeInTheDocument()
+    expect(screen.getByText('MARINER')).toBeInTheDocument()
+    expect(screen.getByText('Mat')).toBeInTheDocument()
+  })
+
+  it('shows a note in the title that no field claimed', async () => {
+    await show([freeText('Panthi ACDF - Ibbett URGENT bring extra cages')])
+    expect(await screen.findByText('URGENT bring extra cages')).toBeInTheDocument()
+  })
+
+  it('does not call a case cancelled over a note that mentions one', async () => {
+    await show([freeText('Bergin ACDF SHORELINE - JPW',
+      { description: 'Moved from Tuesday, that list was cancelled' })])
+    await waitFor(() => expect(screen.getByText('Bergin')).toBeInTheDocument())
+    expect(screen.queryByText('Cancelled')).not.toBeInTheDocument()
+  })
+})

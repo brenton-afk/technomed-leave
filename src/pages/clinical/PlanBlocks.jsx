@@ -75,6 +75,21 @@ export function CaseBlock({ surgicalCase, dark }) {
         {surgicalCase.kit && (
           <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>Kit: {surgicalCase.kit}</div>
         )}
+        {/* Who attended, or who is covering. This is in the calendar title and
+            the app was dropping it on the floor. */}
+        {surgicalCase.rep && (
+          <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>
+            Rep: <span style={{ fontWeight: 700, color: t.ink }}>{surgicalCase.rep}</span>
+          </div>
+        )}
+        {/* Anything in the booking title the app could not place. Shown as
+            typed, because a word the team wrote going missing is the worse
+            failure. */}
+        {surgicalCase.unread && (
+          <div style={{ fontSize: 13, color: t.inkMuted, lineHeight: 1.45 }}>
+            {surgicalCase.unread}
+          </div>
+        )}
         {(surgicalCase.notes || []).map((note, i) => (
           <div key={i} style={{
             fontSize: 12.5, fontStyle: 'italic', lineHeight: 1.5, marginTop: 2,
