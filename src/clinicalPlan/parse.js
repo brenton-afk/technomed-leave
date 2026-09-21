@@ -698,6 +698,7 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   const isLabelled = Boolean(labelled.patient || labelled.surgeon
     || labelled.procedure || labelled.hospital)
 
+  inferred.system = closeBrackets(inferred.system)
   const system = isLabelled
     // Even here the title can have the better wording: "Kit: Mariner set" beside
     // a title reading MARINER is the same system in worse words.
@@ -765,6 +766,22 @@ const tokens = value => String(value || '')
   .split(/[\s>/(),.+·-]+/)
   .map(word => word.trim())
   .filter(Boolean)
+
+/**
+ * Drops a bracket that opens and never closes.
+ *
+ * A title like "Farr CYLOX (second LOAN kit) - Thani" is split on the dash, and
+ * the system inferred from the left-hand side came back as "CYLOX (second" —
+ * a fragment cut mid-parenthesis, shown on the card exactly like that. It reads
+ * as corruption, which as far as the person looking at it is concerned it is.
+ */
+function closeBrackets(value) {
+  const text = String(value || '')
+  const open = (text.match(/[([{]/g) || []).length
+  const close = (text.match(/[)\]}]/g) || []).length
+  if (open <= close) return value
+  return text.replace(/\s*[([{][^)\]}]*$/, '').trim() || undefined
+}
 
 function leftoverOf(title, shown) {
   const known = new Set(Object.values(shown).flatMap(tokens).map(w => w.toLowerCase()))

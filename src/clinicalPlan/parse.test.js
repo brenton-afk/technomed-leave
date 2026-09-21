@@ -457,3 +457,92 @@ describe('never silently dropping what the title says', () => {
     expect(read.unread).toBeUndefined()
   })
 })
+
+// ─── Shapes taken from the live bookings calendar ────────────────────────────
+// Every case here is a real booking from 21–22 September, reproduced exactly —
+// except the patient surnames, which are invented. The faults are all in the
+// *shape* of the entry, never in the name, so there is nothing to be gained by
+// committing real ones to the repository.
+//
+// These were found by reading the actual calendar after two were reported. The
+// synthetic fixtures had missed all of them, because they were written from what
+// the parser expected rather than from what the team types.
+
+describe('bookings as the team actually writes them', () => {
+  it('reads the rep off a labelled booking', () => {
+    // Reported: "should have Mat's name in the title as it is in the calendar,
+    // but it is not currently displayed".
+    const read = readBooking('Chalmers DIPLOMAT + E4 Cages - Fowler (Mat)',
+      'Surg: Fowler\nPt: Chalmers\nHosp: RHH\nDate: 21/9/26\n'
+      + 'Surgery: L5/S1 PSF and PLIF\nKit: Diplomat and E4 Cages (Consignment)')
+    expect(read.rep).toBe('Mat')
+    expect(read.surgeon).toBe('Fowler')
+    expect(read.system).toBe('Diplomat and E4 Cages')
+    expect(read.supply).toBe('Consignment')
+  })
+
+  it('does not call a rebooked case cancelled', () => {
+    // Reported, and this is the note verbatim. The case had been called off on
+    // the Friday and put back on for the Tuesday; the app read the word and
+    // struck out the live booking.
+    const notes = 'Surg: Atallah\nPt: Marchetti\nDate: 22/9/26\n'
+      + 'Surgery: C3-T2 cervical fixation, C4-C7 Lami \nKit: Reform Cervical (Consignment)\nHosp: RHH\n\n'
+      + 'This patient was cancelled from Friday 18/9 and rebooked to Tuesday 22/9\n\n'
+      + 'Notification received from Toby at 1318hrs Monday 21/9/26 on WA\n\nEntered/amended by Brent'
+    expect(isCancelled('Marchetti REFORM CERVICAL- Atallah', notes)).toBe(false)
+    expect(readBooking('Marchetti REFORM CERVICAL- Atallah', notes).patient).toBe('Marchetti')
+  })
+
+  it('still marks the one that really was called off', () => {
+    // Same day, same calendar: the team renames the title when they mean it.
+    expect(isCancelled('CANCELLED Sturrock LONESTAR - JPW',
+      'Surg: JPW\nPt: Sturrock\nKit: Lonestar (Consignment)')).toBe(true)
+  })
+
+  it('does not say the supply twice when two systems share one bracket', () => {
+    // "Diplomat (Consignment) / Cascadia" was read whole as the system, and the
+    // supply inferred from the same words — "DIPLOMAT (CONSIGNMENT) / CASCADIA ·
+    // Consignment" on the card.
+    const read = readBooking('Larkin DIPLOMAT / CASCADIA - Ibbett',
+      'Surgeon: Ibbett\nPatient: Larkin\nProcedure: L5/S1 PLIF\n'
+      + 'Kit: Diplomat (Consignment)  / Cascadia\nHospital: Calvary Lenah Valley')
+    expect(read.system).toBe('DIPLOMAT / CASCADIA')
+    expect(read.supply).toBe('Consignment')
+  })
+
+  it('copes with the supply written against each system', () => {
+    // "Diplomat (consignment) /Cascadia (cons)" — named twice, meant once, and
+    // "cons" is the team's own shorthand.
+    const read = readBooking('Larkin DIPLOMAT / CASCADIA - Ibbett',
+      'Surg - Dr Ibbett \nPt - Larkin \nProcedure - L4/5 PLIF/resection of facet cyst \n'
+      + 'Kit - Diplomat (consignment) /Cascadia (cons)\nHospital - Calvary Lenah Valley')
+    expect(read.system).toBe('DIPLOMAT / CASCADIA')
+    expect(read.supply).toBe('Consignment')
+  })
+
+  it('never shows a bracket cut off mid-word', () => {
+    // "Farr CYLOX (second LOAN kit) - Thani" split on the dash and the system
+    // came out "CYLOX (second", printed on the card exactly like that.
+    const read = readBooking('Dunne CYLOX (second LOAN kit) - Thani',
+      'Surgeon: Thani\nPatient: Dunne\nProcedure: C5/6 ACDF fixation decompression\n'
+      + 'Kit: CYLOX (LOAN)\nHospital: Calvary Lenah Valley')
+    expect(read.system).toBe('CYLOX')
+    expect(read.supply).toBe('Loan')
+  })
+
+  it('keeps a patient to their surname when a first name is typed in', () => {
+    // "Pt - Larkin (Jane)" appears in the calendar. Surnames only, always.
+    const read = readBooking('Larkin DIPLOMAT / CASCADIA - Ibbett',
+      'Surg - Dr Ibbett \nPt - Larkin (Jane) \nKit - Diplomat (consignment)')
+    expect(read.patient).toBe('Larkin')
+    expect(JSON.stringify(read)).not.toMatch(/Jane/i)
+  })
+
+  it('reads a surgeon the app has never been told about', () => {
+    // Atallah is not in SURGEON_KEYS. A booking must not vanish because the
+    // roster of surgeons is out of date.
+    const read = readBooking('Marchetti REFORM CERVICAL- Atallah',
+      'Surg: Atallah\nPt: Marchetti\nKit: Reform Cervical (Consignment)')
+    expect(read.surgeon).toBe('Atallah')
+  })
+})

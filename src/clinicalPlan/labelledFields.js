@@ -101,6 +101,30 @@ export function parseKitField(kit) {
   const text = String(kit || '').trim()
   if (!text) return { system: undefined, type: undefined }
 
+  // A supply marker in brackets anywhere, not only at the end.
+  //
+  // "Diplomat (Consignment) / Cascadia" is two systems with the supply written
+  // after the first. The end-anchored match below could not see it, so the
+  // whole string became the system — and the supply was *also* inferred from
+  // the same words, so the card read "DIPLOMAT (CONSIGNMENT) / CASCADIA ·
+  // Consignment". Saying it twice, which is what the system and kit lines were
+  // merged to stop.
+  const inline = [...text.matchAll(/[([{]([^)\]}]*)[)\]}]/g)]
+  const supplyMark = inline.find(m => KNOWN_SUPPLY.test(m[1]))
+  if (supplyMark && supplyMark.index + supplyMark[0].length < text.length) {
+    const withoutSupply = text
+      // Every supply bracket goes: "Diplomat (consignment) /Cascadia (cons)"
+      // names the supply twice and means it once.
+      .replace(/[([{][^)\]}]*[)\]}]/g, m => KNOWN_SUPPLY.test(m) ? ' ' : m)
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s*([/,])\s*/g, ' $1 ')
+      .replace(/^[\s,/\-–]+|[\s,/\-–]+$/g, '')
+    return {
+      system: withoutSupply || undefined,
+      type: normaliseSupply(supplyMark[1]) || undefined
+    }
+  }
+
   const bracketed = /^([^([{]*)[([{]([^)\]}]*)[)\]}]?\s*$/.exec(text)
   if (bracketed) {
     const system = bracketed[1].trim().replace(/[\s,\-–]+$/, '')
@@ -121,11 +145,15 @@ export function parseKitField(kit) {
   return { system: text, type: undefined }
 }
 
+// What counts as naming how a kit is supplied. "cons" is in here because the
+// team writes it: "Diplomat (consignment) /Cascadia (cons)".
+const KNOWN_SUPPLY = /\b(?:consign(?:ment|ed)?|cons|loan(?:ed)?)\b/i
+
 /** "on consignment", "LOAN KIT" and "Loaned" all mean one of two things. */
 function normaliseSupply(raw) {
   const text = String(raw || '').trim()
   if (!text) return undefined
-  if (/consign/i.test(text)) return 'Consignment'
+  if (/consign|^\s*cons\s*$/i.test(text)) return 'Consignment'
   if (/\bloan/i.test(text)) return 'Loan'
   // Something else in the brackets — "(PM list)", "(2 levels)". Kept as written,
   // since the team put it there on purpose.
