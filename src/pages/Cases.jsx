@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import TodayView from './TodayView.jsx'
-import ClinicalPlan from './ClinicalPlan.jsx'
+import CaseWeek from './CaseWeek.jsx'
 import TeamLeader from './TeamLeader.jsx'
 import { readPrefs, writePrefs } from '../clinicalPlan/provider.js'
 import { colour, text, radius } from '../design/tokens.js'
@@ -12,10 +11,14 @@ import { colour, text, radius } from '../design/tokens.js'
 // kit, and it meant the two views of the week were two tabs apart with no way to
 // tell they were the same data. Both are here now.
 //
-//   Calendar   what is on, day by day or across the week, with everything the
-//              calendar holds — cases, leave, meetings, hours
-//   Case plan  the week as a briefing: operations, systems, kit, flags, notes
+//   Cases      the whole week from the bookings calendar, day or week at a time
 //   Team lead  the duty leader's playbook, and the day's shared run-sheet
+//
+// There were three. Calendar and Case plan were built at different times and by
+// the end most of each was the other one: two readings of the same bookings, so
+// every improvement had to be made twice or they drifted — which is how the
+// calendar view went a month without refreshing while the plan polled fine.
+// They are one view now.
 //
 // Each keeps its own period control, and that is deliberate rather than untidy:
 // the two answer different questions and are read at different moments. The
@@ -24,8 +27,7 @@ import { colour, text, radius } from '../design/tokens.js'
 // side by side as if they were alternatives of the same kind, which they are not.
 
 const MODES = [
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'plan', label: 'Case plan' },
+  { id: 'cases', label: 'Cases' },
   { id: 'lead', label: 'Team lead' }
 ]
 
@@ -62,7 +64,9 @@ export default function Cases({ user, promptBanner }) {
   // than a decision. Stored with the plan's other preferences.
   const [mode, setMode] = useState(() => {
     const saved = readPrefs().casesMode
-    return MODES.some(m => m.id === saved) ? saved : 'calendar'
+    // 'calendar' and 'plan' are the two that merged; anyone whose saved
+    // preference is either lands on the view that replaced them.
+    return MODES.some(m => m.id === saved) ? saved : 'cases'
   })
 
   const change = useCallback(next => {
@@ -72,9 +76,6 @@ export default function Cases({ user, promptBanner }) {
 
   const switcher = <ModeSwitch mode={mode} onChange={change} />
 
-  if (mode === 'plan') {
-    return <ClinicalPlan user={user} promptBanner={promptBanner} switcher={switcher} />
-  }
   if (mode === 'lead') return <TeamLeader user={user} switcher={switcher} />
-  return <TodayView user={user} switcher={switcher} />
+  return <CaseWeek user={user} switcher={switcher} promptBanner={promptBanner} />
 }

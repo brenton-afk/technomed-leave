@@ -24,7 +24,12 @@ export const LABELS = {
   patient: ['patient', 'pt'],
   procedure: ['procedure', 'surgery', 'operation', 'op'],
   kit: ['kit'],
-  hospital: ['hospital', 'hosp']
+  hospital: ['hospital', 'hosp'],
+  // Recognised so it is consumed, and then ignored: a booking's date is the
+  // event's own start time, and the team writing "Date: 22/9/26" in the notes is
+  // restating it. Without this it survived as an unclaimed line and would have
+  // been shown back to them as a note.
+  date: ['date']
 }
 
 // Longest first, so "Procedure" is not matched as "Proc" and "Surgeon" is never
@@ -85,6 +90,55 @@ export function parseLabelledDescription(description) {
     if (value && !out[field]) out[field] = value
   }
   return out
+}
+
+/**
+ * The parts of the description no label claimed.
+ *
+ * A booking's notes carry the things that actually shape a day and that no
+ * field has a name for: "rebooked from Friday 18/9", "notification received from
+ * Toby at 1318hrs", "second loan kit ordered", "entered/amended by Brent". The
+ * labelled parser read Surgeon, Patient, Procedure, Kit and Hospital and threw
+ * every word of that away — so the app showed a tidy case and the calendar held
+ * the reason it was moved.
+ *
+ * Returned as lines rather than one blob, because that is how they are written:
+ * a paragraph per thought, often blank-line separated.
+ *
+ * Character ranges rather than whole lines, because several labels can share a
+ * line — "Surg: Fowler | Pt: Jackson" is a real shape — and dropping the line
+ * would lose anything written after them on it.
+ */
+export function descriptionNotes(description) {
+  const text = String(description || '').replace(/\r\n?/g, '\n')
+  if (!text.trim()) return []
+
+  const claimed = new Array(text.length).fill(false)
+  LABEL_PATTERN.lastIndex = 0
+  let match
+  while ((match = LABEL_PATTERN.exec(text)) !== null) {
+    const label = ALL_LABELS.find(l => l.name === match[1].toLowerCase())
+    LABEL_PATTERN.lastIndex = match.index + match[0].length
+    if (!label) continue
+    const from = match.index + match[0].length
+    const lineEnd = text.indexOf('\n', from)
+    const to = lineEnd === -1 ? text.length : lineEnd
+    for (let i = match.index; i < to; i++) claimed[i] = true
+  }
+
+  const kept = []
+  let line = ''
+  for (let i = 0; i <= text.length; i++) {
+    if (i === text.length || text[i] === '\n') {
+      const trimmed = line.replace(/\s{2,}/g, ' ').trim()
+      // Punctuation left behind by a label that shared the line is not a note.
+      if (trimmed && /\p{L}/u.test(trimmed) && trimmed.length > 2) kept.push(trimmed)
+      line = ''
+      continue
+    }
+    if (!claimed[i]) line += text[i]
+  }
+  return kept
 }
 
 /**

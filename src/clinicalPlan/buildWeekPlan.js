@@ -3,6 +3,7 @@
 // `generatedAt` that is passed in. This is what makes the same plan reusable by
 // the UI, the text copy and the .docx export without any of them diverging.
 
+import { classifyItem } from './itemKind.js'
 import './types.js'
 import {
   normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking, isCancelled
@@ -317,7 +318,10 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // Google cannot disagree about a case's colour.
         colourHex: colourHexFor(event.colorId) || undefined,
         surgeonSource: read.surgeonSource,
-        notes: [],
+        // What the team wrote in the booking that no field has a name for: why
+        // a case moved, who called it in, what still has to be ordered. The plan
+        // used to show a tidy case while the calendar held the reason it moved.
+        notes: (read.notes || []).map(text => ({ text, kind: 'booking' })),
         dayDate,
         _event: event
       })
@@ -363,6 +367,22 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       const title = stripIdentifiers(event.title) || '(untitled booking)'
 
       const timeRange = formatTimeRange(event.start, event.end, tz)
+      // Leave, rostered hours, a meeting, a reminder. The merged view shows
+      // these alongside cases and has to say which is which — a week's planning
+      // information read as one undifferentiated list otherwise.
+      const { kind, label: kindLabel } = classifyItem({
+        title: event.title, description: event.description,
+        colourName: colourNameFor(event.colorId)
+      })
+      const shared = {
+        kind,
+        kindLabel,
+        colourHex: colourHexFor(event.colorId) || undefined,
+        start: event.start || undefined,
+        end: event.end || undefined,
+        allDay: Boolean(event.allDay),
+        time: timeRange || undefined
+      }
       const asFlag = rule => {
         flags.push({ text: timeRange && !event.allDay ? `${title} · ${timeRange}` : title, kind: rule.kind, boxed: rule.boxed })
       }
@@ -371,7 +391,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       if (priority) { asFlag(priority); continue }
 
       if (!event.allDay && NON_SURGEON_BLOCK.test(title)) {
-        nonSurgeonItems.push({ text: timeRange ? `${title} · ${timeRange}` : title, start: event.start, end: event.end, allDay: false })
+        nonSurgeonItems.push({ ...shared, title, text: timeRange ? `${title} · ${timeRange}` : title })
         continue
       }
 
@@ -379,7 +399,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       if (late) { asFlag(late); continue }
       if (looksLikeMisfiledCase(event, title)) {
         needsAttention.push({
+          ...shared,
           id: event.id,
+          title,
           text: timeRange ? `${title} · ${timeRange}` : title,
           reason: /\s+[-–—]\s+/.test(title)
             ? 'Reads like a case but the surgeon was not recognised'
@@ -390,10 +412,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         continue
       }
       otherRollup.push({
-        text: event.allDay ? `${title} (all day)` : (timeRange ? `${title} ${timeRange}` : title),
-        start: event.start || undefined,
-        end: event.end || undefined,
-        allDay: event.allDay
+        ...shared,
+        title,
+        text: event.allDay ? `${title} (all day)` : (timeRange ? `${title} ${timeRange}` : title)
       })
     }
 

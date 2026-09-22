@@ -1,3 +1,10 @@
+// ─── SUPERSEDED — no longer reachable from the app ───────────────────────────
+// Replaced by src/pages/CaseWeek.jsx, which merges this screen with the other
+// one. Kept for one round so the merged view can be compared against it and
+// reverted to if something is missing; delete once that is confirmed.
+//
+// Do not fix bugs in here. Nothing renders it.
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   DayBlock, SurgeonLegend, NotesCallout, KeyFlagsSection, PlanFooter, BookingReadings

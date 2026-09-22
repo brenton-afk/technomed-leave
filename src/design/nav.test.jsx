@@ -80,13 +80,15 @@ describe('bottom navigation', () => {
     expect(screen.queryByText(/Scan a usage form/)).not.toBeInTheDocument()
   })
 
-  it('offers the calendar, the case plan and the team-leader guide in one place', async () => {
+  it('offers the week and the team-leader guide, and not two views of one week', async () => {
+    // Calendar and Case plan merged: by the end most of each was the other one,
+    // and keeping both meant every improvement had to be made twice.
     signIn(REP)
     render(<App />)
     const tabs = await waitFor(() => screen.getByRole('tablist', { name: 'How to view the week' }))
-    expect(tabs).toHaveTextContent('Calendar')
-    expect(tabs).toHaveTextContent('Case plan')
+    expect(tabs).toHaveTextContent('Cases')
     expect(tabs).toHaveTextContent('Team lead')
+    expect(tabs).not.toHaveTextContent('Case plan')
   })
 
   it('opens the team leader guide on the day\'s run-sheet', async () => {
@@ -96,16 +98,15 @@ describe('bottom navigation', () => {
     expect(await screen.findByText(/Work down this list through the day/)).toBeInTheDocument()
   })
 
-  it('switches to the case plan and back', async () => {
+  it('switches to the team leader guide and back', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Case plan' })))
-    // The plan's own daily/weekly control, which it keeps: the two views answer
-    // different questions and are read at different moments.
-    await waitFor(() => expect(screen.getByRole('radiogroup', { name: 'Plan view' })).toBeInTheDocument())
+    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Team lead' })))
+    expect(await screen.findByText(/Work down this list through the day/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }))
-    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Plan view' })).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Cases' }))
+    await waitFor(() =>
+      expect(screen.queryByText(/Work down this list through the day/)).not.toBeInTheDocument())
   })
 })
 

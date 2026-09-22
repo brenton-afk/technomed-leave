@@ -1,6 +1,6 @@
 import { STAFF } from '../staffConfig.js'
 import { findSystems, findLoanSets, systemWords, findNavigation } from './systems.js'
-import { parseLabelledDescription, parseKitField, hospitalCode } from './labelledFields.js'
+import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -727,6 +727,18 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     // Who attended, or who is covering it. The calendar carries this and the
     // app was dropping it.
     rep,
+    // What the team wrote in the notes that no field has a name for: why a case
+    // moved, who called it in, what still has to be ordered. Every line goes
+    // through stripIdentifiers, because free prose is exactly where a date of
+    // birth or a full name gets typed.
+    notes: descriptionNotes(description)
+      .map(stripIdentifiers)
+      .filter(Boolean)
+      // A note that only repeats a field already on the card is not a note. An
+      // unlabelled first line is read as the operation — "L5/S1 ALIF" above a
+      // "Kit:" line is the common shape — and it would otherwise appear twice,
+      // once in bold and once underneath as commentary on itself.
+      .filter(note => !saysOnly(note, { patient, surgeon, system, supply, operation, kit })),
     // Anything in the title that reached none of the fields above — but only
     // for a free-text booking, where the title *is* the record.
     //
@@ -781,6 +793,13 @@ function closeBrackets(value) {
   const close = (text.match(/[)\]}]/g) || []).length
   if (open <= close) return value
   return text.replace(/\s*[([{][^)\]}]*$/, '').trim() || undefined
+}
+
+/** Whether every word of `text` already appears among the shown fields. */
+function saysOnly(text, shown) {
+  const known = new Set(Object.values(shown).flatMap(tokens).map(w => w.toLowerCase()))
+  const words = tokens(text).filter(w => w.length > 1)
+  return words.length > 0 && words.every(w => known.has(w.toLowerCase()))
 }
 
 function leftoverOf(title, shown) {
