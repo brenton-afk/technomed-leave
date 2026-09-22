@@ -191,7 +191,19 @@ export function guideHexFor(surgeon) {
  * everything, because what it changes about the day is not whose case it is.
  */
 export function accentForCase(surgicalCase, dark = false) {
-  if (surgicalCase?.navigation) return NAVIGATION_ACCENT
+  // Navigation used to override the surgeon here, and that was wrong.
+  //
+  // Both rules are real — Ibbett is Banana, and an AIRO case is Blueberry — and
+  // a booking can be both: "Mitchell DIPLOMAT - Ibbett" with "Kit - Diplomat
+  // (Consignment) /Cascadia/AIRO" is an Ibbett case that happens to use the
+  // scanner. One colour channel cannot carry two facts, so making navigation win
+  // meant an Ibbett case was not drawn as one, which is the thing the scheme
+  // exists to show.
+  //
+  // The surgeon keeps the colour. Navigation is a different dimension — it
+  // changes what the day needs set up, not whose case it is — so it is shown as
+  // its own marker on the card, in NAVIGATION_ACCENT, where it can be read at
+  // the same time as the surgeon rather than instead of them.
   // accentFor already prefers the guide, so this is only deciding what to do
   // for a surgeon it has no colour for: the booking's own colour beats grey.
   if (hasConfirmedAccent(surgicalCase?.surgeon)) return accentFor(surgicalCase?.surgeon, dark)

@@ -103,6 +103,66 @@ describe('a case, in full', () => {
   })
 })
 
+describe('however the booking is written', () => {
+  // Ported from the screen this replaced. The team uses several label styles in
+  // the same calendar and every one has to read the same.
+  const variants = [
+    ['full words', { Surgeon: 'Ibbett', Patient: 'Horne', Procedure: 'L4/5 TLIF', Kit: 'Mariner (Loan)' }],
+    ['short forms', { Surg: 'Ibbett', Pt: 'Horne', Op: 'L4/5 TLIF', Kit: 'Mariner (Loan)' }],
+    ['lower case', { surgeon: 'Ibbett', patient: 'Horne', surgery: 'L4/5 TLIF', kit: 'Mariner (Loan)' }],
+    ['dashes', { 'Surg -': 'Ibbett', 'Pt -': 'Horne', 'Procedure -': 'L4/5 TLIF', 'Kit -': 'Mariner (Loan)' }]
+  ]
+
+  it.each(variants)('reads a case written with %s', async (_name, fields) => {
+    events = [ev('v1', 'Booking',
+      Object.entries(fields).map(([k, v]) => k.endsWith('-') ? `${k} ${v}` : `${k}: ${v}`).join('\n'),
+      { colorId: '5' })]
+    show()
+    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
+    expect(screen.getByText('Ibbett')).toBeInTheDocument()
+    expect(screen.getByText('L4/5 TLIF')).toBeInTheDocument()
+    expect(screen.getByText(/MARINER/i)).toBeInTheDocument()
+    expect(screen.getByText('Loan')).toBeInTheDocument()
+  })
+
+  it('shows no label text and no raw line', async () => {
+    events = [ev('v2', 'Booking', 'Surgeon: Ibbett\nPatient: Horne\nKit: Mariner (Loan)', { colorId: '5' })]
+    show()
+    await waitFor(() => expect(screen.getByText('Horne')).toBeInTheDocument())
+    expect(screen.queryByText(/Surgeon:|Patient:|Kit:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Booking')).not.toBeInTheDocument()
+  })
+})
+
+describe('a navigation case', () => {
+  // "Pt Mitchell is still blue for Ibbett, which should be banana." It was
+  // blueberry, not the default blue: the Kit line reads
+  // "Diplomat (Consignment) /Cascadia/AIRO", and navigation used to take the
+  // bar. Two real rules — Ibbett is Banana, AIRO is Blueberry — fighting over
+  // one colour channel, with the surgeon losing.
+  const mitchell = () => ev('n1', 'Mitchell DIPLOMAT  - Ibbett',
+    '\nSurg - Dr Ibbett\nPt - Mitchell (Donna)\nDate - 23/09/2026\nProcedure - L5/S1 PLIF\n'
+    + 'Kit - Diplomat (Consignment) /Cascadia/AIRO\nHospital - Calvary Lenah Valley',
+    { location: 'Calvary' })
+
+  it('keeps the surgeon\'s colour', async () => {
+    events = [mitchell()]
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Mitchell')).toBeInTheDocument())
+    const bar = [...container.querySelectorAll('span[aria-hidden="true"]')]
+      .find(el => el.style.width === '5px')
+    expect(bar.style.background).toBe('rgb(246, 192, 38)')   // Banana, not blueberry
+  })
+
+  it('still says it needs the platform', async () => {
+    // The signal is not lost, it has its own marker — so both facts are
+    // readable at once instead of one replacing the other.
+    events = [mitchell()]
+    show()
+    expect(await screen.findByText('AIRO')).toBeInTheDocument()
+  })
+})
+
 describe('the day and the week', () => {
   it('opens on today', async () => {
     show()

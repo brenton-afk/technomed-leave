@@ -12,7 +12,7 @@ const PAGES_DIR = 'src/pages'
 
 // Screens migrated onto the design system. New screens should be added here.
 const MIGRATED = [
-  'TodayView.jsx', 'KitRoom.jsx', 'Projects.jsx', 'Timesheets.jsx',
+  'KitRoom.jsx', 'Projects.jsx', 'Timesheets.jsx',
   'LeaveForm.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx',
   'Cases.jsx', 'TeamLeader.jsx', 'CaseWeek.jsx'
 ]
@@ -21,7 +21,7 @@ const MIGRATED = [
 // document, down to its own palette and sizes, and snapshot tests lock that.
 // Pulling them onto the app scale would break the thing they exist to copy.
 const EXEMPT = [
-  'clinical/PlanBlocks.jsx', 'ClinicalPlan.jsx', 'UsageScan.jsx', 'PinScreen.jsx',
+  'UsageScan.jsx', 'PinScreen.jsx',
   // A full-screen camera view over a live video feed. It has no page ground to
   // sit on and no surface to be legible against, so the app's palette does not
   // apply: everything is white or teal on whatever the camera happens to see.

@@ -94,7 +94,10 @@ describe('both calendar screens use it', () => {
   // something a test can infer. The point is that the two cannot drift apart
   // again — the calendar view was the one that did not poll, and nothing
   // connected it to the plan that did.
-  const screens = ['src/pages/TodayView.jsx', 'src/pages/ClinicalPlan.jsx']
+  // One screen now. The two that were here merged — and this list existing at
+  // all was a symptom of the problem: two readings of the same calendar, where
+  // only one of them polled.
+  const screens = ['src/pages/CaseWeek.jsx']
 
   it.each(screens)('%s follows the calendar rather than snapshotting it', file => {
     const source = readFileSync(join(process.cwd(), file), 'utf8')

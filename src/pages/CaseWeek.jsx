@@ -9,7 +9,7 @@ import {
   resolveDefaultWeek, weekWindowFor, todayStr, parseDateStr, toDateStr,
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatStamp
 } from '../clinicalPlan/week.js'
-import { accentForCase, accentTextForCase } from '../clinicalPlan/theme.js'
+import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -73,12 +73,28 @@ function CaseCard({ surgicalCase, onOpen }) {
           <span style={{ color: nameInk }}>{surgicalCase.surgeon}</span>
         </span>
 
-        {off && (
-          <span style={{
-            display: 'inline-block', marginTop: 3, padding: '1px 7px', borderRadius: radius.pill,
-            border: `1px solid ${colour.inkFainter}`, color: colour.inkFaint,
-            ...text('micro'), textTransform: 'uppercase'
-          }}>Cancelled</span>
+        {(off || surgicalCase.navigation) && (
+          <span style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+            {off && (
+              <span style={{
+                padding: '1px 7px', borderRadius: radius.pill,
+                border: `1px solid ${colour.inkFainter}`, color: colour.inkFaint,
+                ...text('micro'), textTransform: 'uppercase'
+              }}>Cancelled</span>
+            )}
+            {/* Navigation has its own marker rather than the bar's colour. It
+                used to take the bar, which meant an Ibbett case using the AIRO
+                scanner was not drawn as an Ibbett case at all — two facts
+                fighting over one colour, and the surgeon losing. Both are
+                readable at once now. */}
+            {surgicalCase.navigation && !off && (
+              <span style={{
+                padding: '1px 7px', borderRadius: radius.pill,
+                background: NAVIGATION_ACCENT, color: 'white',
+                ...text('micro'), textTransform: 'uppercase'
+              }}>{surgicalCase.navigation}</span>
+            )}
+          </span>
         )}
 
         {/* The operation leads: "C5/6 ACDF" says more about a case than the

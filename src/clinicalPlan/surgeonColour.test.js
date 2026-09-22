@@ -72,13 +72,20 @@ describe('however the booking was entered', () => {
   })
 })
 
-describe('navigation overrides the surgeon', () => {
-  it('is blueberry whoever is operating', () => {
-    // What a navigation case changes about the day is not whose case it is: the
-    // platform has to be booked, set up and calibrated.
+describe('a navigation case', () => {
+  it('still belongs to its surgeon', () => {
+    // This used to return blueberry for everyone, and that was wrong. Both rules
+    // are real — Ibbett is Banana, an AIRO case is Blueberry — and a booking can
+    // be both: "Mitchell DIPLOMAT - Ibbett" with "Kit - ... /Cascadia/AIRO".
+    // One colour channel cannot carry two facts, and making navigation win meant
+    // an Ibbett case was not drawn as one, which is what the scheme is for.
+    //
+    // The platform is shown as its own marker on the card instead, so both are
+    // readable at once. See CaseWeek.test.jsx.
     for (const surgeon of Object.keys(GUIDE)) {
-      expect(accentForCase({ surgeon, navigation: 'Curve' })).toBe(NAVIGATION_ACCENT)
+      expect(accentForCase({ surgeon, navigation: 'Curve' })).toBe(guideHexFor(surgeon))
     }
+    expect(NAVIGATION_ACCENT).toBe('#4a1c96')
   })
 
   it('recognises all four platforms', () => {
