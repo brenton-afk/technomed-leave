@@ -474,14 +474,14 @@ describe('everything the calendar says reaches the screen', () => {
   })
 
   it('shows the rep who attended', async () => {
-    await show([freeText('Thompson MARINER - Fowler (Mat)')])
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    await show([freeText('Chalmers MARINER - Fowler (Mat)')])
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
     expect(screen.getByText('Mat')).toBeInTheDocument()
   })
 
   it('shows the whole booking written in the team\'s own convention', async () => {
-    await show([freeText('Thompson>MARINER>Fowler>(Mat)')])
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    await show([freeText('Chalmers>MARINER>Fowler>(Mat)')])
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
     expect(screen.getByText('Fowler')).toBeInTheDocument()
     expect(screen.getByText('MARINER')).toBeInTheDocument()
     expect(screen.getByText('Mat')).toBeInTheDocument()
@@ -493,9 +493,9 @@ describe('everything the calendar says reaches the screen', () => {
   })
 
   it('does not call a case cancelled over a note that mentions one', async () => {
-    await show([freeText('Bergin ACDF SHORELINE - JPW',
+    await show([freeText('Marchetti ACDF SHORELINE - JPW',
       { description: 'Moved from Tuesday, that list was cancelled' })])
-    await waitFor(() => expect(screen.getByText('Bergin')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Marchetti')).toBeInTheDocument())
     expect(screen.queryByText('Cancelled')).not.toBeInTheDocument()
   })
 })

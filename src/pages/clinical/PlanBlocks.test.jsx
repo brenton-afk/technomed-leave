@@ -94,7 +94,7 @@ describe('Weekly view content (§6)', () => {
   })
 
   it('uses the surgeon\'s guide colour whatever the booking carries', () => {
-    // Reported: "Imogen Ibbett's colour is banana, but patient McGinniss is
+    // Reported: "Imogen Ibbett's colour is banana, but patient Larkin is
     // still listed as a blue colour." That booking had no colorId at all, so
     // Google served the calendar's default — and in a scheme whose whole job is
     // to show surgeon allocation at a glance, the wrong colour reads as

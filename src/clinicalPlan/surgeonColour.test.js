@@ -11,7 +11,7 @@ import { findNavigation } from './systems.js'
 // sometimes the 'default colour' is selected and it messes up how they are
 // displayed."
 //
-// Exactly right, and McGinniss's booking had no colorId at all, so Google served
+// Exactly right, and Larkin's booking had no colorId at all, so Google served
 // the calendar's default. The colour scheme exists to show surgeon allocation at
 // a glance, so the wrong colour does not read as a cosmetic slip: it reads as
 // somebody else's case.
