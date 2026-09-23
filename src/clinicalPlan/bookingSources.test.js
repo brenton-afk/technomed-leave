@@ -8,6 +8,9 @@ describe('recognising where a booking came from', () => {
   it.each([
     ['tobias.long@ths.tas.gov.au', 'rhh'],
     ['bookings@cnstas.com.au', 'cns'],
+    ['bookings1@cnstas.com.au', 'cns'],
+    // The theatre lists come from a second domain, which is the one that matters.
+    ['bookings@tasmanianspineservice.com.au', 'cns'],
     ['Sharon.Ashworth@calvarycare.org.au', 'calvary'],
     ['kwatson@device.com.au', null],
     ['', null]
@@ -34,6 +37,7 @@ describe('what must never be sent back', () => {
       'Sharon.Ashworth@calvarycare.org.au',
       'tas-lvh-loansets@calvarycare.org.au',
       'bookings@cnstas.com.au',
+      'bookings@tasmanianspineservice.com.au',
       'tobias.long@ths.tas.gov.au',
       'rhhcsdloancoordinator@ths.tas.gov.au'
     ]) {

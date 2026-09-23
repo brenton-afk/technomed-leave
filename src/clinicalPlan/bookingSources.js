@@ -19,7 +19,11 @@ export const BOOKING_SOURCES = [
     id: 'cns',
     label: 'CNS',
     hospital: 'CLV',
-    from: [/@cnstas\.com\.au$/i],
+    // Two domains, one practice. The bookings desk writes from cnstas.com.au,
+    // while the theatre lists come from tasmanianspineservice.com.au — found by
+    // reading the mailbox rather than by asking, and easy to miss because the
+    // lists are the ones that matter most.
+    from: [/@cnstas\.com\.au$/i, /@tasmanianspineservice\.com\.au$/i],
     shape: 'single',
     // Usually arrives before Calvary's own copy. That is the whole reason this
     // source was added — see the note below.
