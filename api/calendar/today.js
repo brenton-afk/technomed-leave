@@ -1,7 +1,7 @@
 import { TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr } from '../../src/clinicalPlan/week.js'
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
-import { updateCalendarEvent, getCalendarEvent } from '../_googleCalendar.js'
+import { updateCalendarEvent, getCalendarEvent, createBookingEvent } from '../_googleCalendar.js'
 import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
   parseLabelledDescription, descriptionNotes
@@ -38,6 +38,7 @@ export default async function handler(req, res) {
   if (req.query.action === 'save') return handleSave(req, res)
   // One booking, read fresh when the edit sheet opens.
   if (req.query.action === 'booking') return handleBooking(req, res)
+  if (req.query.action === 'create') return handleCreate(req, res)
 
   try {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
@@ -394,4 +395,78 @@ function replaceFreeNotes(description, notes) {
   }
   const trimmed = String(notes || '').trim()
   return trimmed ? `${kept.join('\n')}\n\n${trimmed}` : kept.join('\n')
+}
+
+
+// ─── Creating a booking ───────────────────────────────────────────────────────
+
+/**
+ * The title, in the convention the team already writes by hand.
+ *
+ * "Marsh DIPLOMAT - Ibbett". The title is what shows in Google's month view and
+ * in every other calendar app the team opens, so a booking made in the portal
+ * has to be indistinguishable from one typed by a person.
+ */
+function bookingTitle({ patient, system, surgeon, rep }) {
+  const parts = [patient, system ? system.toUpperCase() : null].filter(Boolean).join(' ')
+  const head = parts || patient || 'Booking'
+  const tail = surgeon ? ` - ${surgeon}` : ''
+  return `${head}${tail}${rep ? ` (${rep})` : ''}`.replace(/\s{2,}/g, ' ').trim()
+}
+
+async function handleCreate(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const fields = body.fields || {}
+
+    const patient = String(fields.patient || '').trim()
+    const surgeon = String(fields.surgeon || '').trim()
+    const date = String(body.date || '').trim()
+    if (!patient) return res.status(400).json({ error: 'A patient surname is needed' })
+    if (!surgeon) return res.status(400).json({ error: 'A surgeon is needed' })
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'A date is needed' })
+
+    // Built through the same writer the edit sheet uses, so a booking created
+    // here reads back exactly like one the team typed.
+    let description = ''
+    for (const field of ['surgeon', 'patient', 'procedure', 'kit', 'hospital']) {
+      const value = String(fields[field] || '').trim()
+      if (value) description = setLabelledValue(description, field, value)
+    }
+    for (const line of String(body.notes || '').split('\n').map(l => l.trim()).filter(Boolean)) {
+      description += `\n\n${line}`
+    }
+
+    const kitField = parseLabelledDescription(description).kit || ''
+    const summary = bookingTitle({
+      patient,
+      system: String(kitField).replace(/\s*[([{].*$/, '').trim(),
+      surgeon,
+      rep: String(body.rep || '').trim() || null
+    })
+
+    // The colour follows the surgeon, exactly as it does on every save.
+    const colorId = body.colorId
+      || guideColorIdFor(normaliseSurgeon(surgeon) || '')
+      || null
+
+    const created = await createBookingEvent({
+      summary,
+      description: description.trim(),
+      date,
+      colorId,
+      location: String(fields.hospital || '').trim() || undefined
+    })
+
+    return res.status(200).json({
+      ok: true,
+      event: { id: created.id, summary: created.summary || '', etag: created.etag || null }
+    })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
 }

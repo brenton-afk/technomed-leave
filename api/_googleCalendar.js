@@ -243,3 +243,44 @@ export async function getCalendarEvent(eventId) {
   if (!res.ok) throw new Error(`Could not read the booking (${res.status})`)
   return res.json()
 }
+
+
+/**
+ * A new booking on the bookings calendar.
+ *
+ * Created spanning the theatre list rather than at a point in time. Case timings
+ * are not settled until the list order lands the evening before and then move
+ * several times a day, so a start time entered at booking is wrong almost
+ * immediately — and the RHH lists themselves read "List duration 08:00am to
+ * 5:00pm, All Day List", which is what this reproduces.
+ *
+ * Not an all-day event, which would be the obvious way to express "no time":
+ * the week plan skips all-day entries when looking for cases, so an all-day
+ * booking would vanish from the very screen it was created on.
+ */
+export async function createBookingEvent({ summary, description, date, colorId, location }) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const calendarId = getCalendarId()
+
+  const body = {
+    summary,
+    description,
+    start: { dateTime: `${date}T08:00:00`, timeZone: BOOKING_TZ },
+    end: { dateTime: `${date}T17:00:00`, timeZone: BOOKING_TZ }
+  }
+  if (colorId) body.colorId = String(colorId)
+  if (location) body.location = location
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+
+  if (!res.ok) throw new Error(`Could not create the booking (${res.status}): ${await res.text()}`)
+  return res.json()
+}
+
+const BOOKING_TZ = 'Australia/Hobart'

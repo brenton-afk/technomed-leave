@@ -11,6 +11,7 @@ import {
 } from '../clinicalPlan/week.js'
 import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import EditBooking from './cases/EditBooking.jsx'
+import NewBooking from './cases/NewBooking.jsx'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -249,6 +250,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   // The booking being edited, if any. Tapping a case opens the sheet; the sheet
   // loads it fresh from the calendar rather than editing what is on screen.
   const [editing, setEditing] = useState(null)
+  const [adding, setAdding] = useState(false)
   const prefs = useMemo(() => readPrefs(), [])
   const [span, setSpan] = useState(prefs.caseSpan === 'week' ? 'week' : 'day')
   const [window_, setWindow] = useState(() =>
@@ -366,6 +368,11 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
               border: '1px solid rgba(255,255,255,0.3)', background: 'transparent',
               color: 'rgba(255,255,255,0.75)', ...text('caption'), cursor: 'pointer'
             }}>Today</button>
+          <button onClick={() => setAdding(true)} aria-label="Add a booking"
+            style={{
+              padding: '6px 14px', borderRadius: radius.pill, border: 'none',
+              background: 'white', color: colour.navy, ...text('bodyStrong'), cursor: 'pointer'
+            }}>+ Booking</button>
           <button onClick={downloadDocx} disabled={!plan} aria-label="Download the week as Word"
             style={{
               padding: '6px 14px', borderRadius: radius.pill,
@@ -491,6 +498,13 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           </>
         )}
       </div>
+
+      {adding && (
+        <NewBooking
+          user={user}
+          onClose={() => setAdding(false)}
+          onCreated={() => load(window_, { quiet: true })} />
+      )}
 
       {editing && (
         <EditBooking
