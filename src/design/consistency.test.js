@@ -14,7 +14,7 @@ const PAGES_DIR = 'src/pages'
 const MIGRATED = [
   'KitRoom.jsx', 'Projects.jsx', 'Timesheets.jsx',
   'LeaveForm.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx',
-  'Cases.jsx', 'TeamLeader.jsx', 'CaseWeek.jsx'
+  'Cases.jsx', 'TeamLeader.jsx', 'CaseWeek.jsx', 'cases/EditBooking.jsx'
 ]
 
 // The clinical plan components deliberately replicate the emailed Word

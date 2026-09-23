@@ -93,6 +93,85 @@ export function parseLabelledDescription(description) {
 }
 
 /**
+ * Where each labelled field sits in the description.
+ *
+ * The same scan `parseLabelledDescription` does, but keeping the offsets instead
+ * of throwing them away — which is what makes an edit surgical. Changing the kit
+ * rewrites the characters of the kit's value and nothing else.
+ */
+export function labelledFieldSpans(description) {
+  const text = String(description || '').replace(/\r\n?/g, '\n')
+  const found = []
+  LABEL_PATTERN.lastIndex = 0
+  let match
+  while ((match = LABEL_PATTERN.exec(text)) !== null) {
+    const label = ALL_LABELS.find(l => l.name === match[1].toLowerCase())
+    LABEL_PATTERN.lastIndex = match.index + match[0].length
+    if (label) found.push({ field: label.field, at: match.index, from: match.index + match[0].length })
+  }
+
+  const spans = {}
+  for (let i = 0; i < found.length; i++) {
+    const { field, at, from } = found[i]
+    const nextLabel = i + 1 < found.length ? found[i + 1].at : text.length
+    const lineEnd = text.indexOf('\n', from)
+    const to = Math.min(nextLabel, lineEnd === -1 ? text.length : lineEnd)
+    // First one wins, matching parseLabelledDescription: a field repeated later
+    // is a correction under a heading more often than a second case.
+    if (!spans[field]) spans[field] = { at, from, to, value: text.slice(from, to) }
+  }
+  return spans
+}
+
+/**
+ * Writes one field's value, leaving every other character alone.
+ *
+ * This is the whole design of editing, and the reason it is not "rebuild the
+ * booking from what the portal knows". The portal holds a patient's surname and
+ * nothing else, by policy — so regenerating Mitchell's description would write
+ * back "Patient: Mitchell" and quietly delete the "(Donna)" that Toni recorded.
+ * More generally: the app has been wrong about what a booking contains several
+ * times already, and a writer that only touches what it was asked to touch
+ * cannot lose the parts it still misunderstands.
+ *
+ * A field with no label yet is appended on its own line rather than guessed at.
+ */
+export function setLabelledValue(description, field, value) {
+  const text = String(description || '').replace(/\r\n?/g, '\n')
+  const span = labelledFieldSpans(text)[field]
+  const clean = String(value == null ? '' : value).replace(/[\r\n]+/g, ' ').trim()
+
+  if (!span) {
+    if (!clean) return text
+    const label = LABELS[field]?.[0]
+    if (!label) return text
+    const heading = label.charAt(0).toUpperCase() + label.slice(1)
+    const separator = text && !text.endsWith('\n') ? '\n' : ''
+    return `${text}${separator}${heading}: ${clean}`
+  }
+
+  // The original value's leading whitespace is kept so "Surg:  Fowler" does not
+  // silently become "Surg: Fowler" and show up as an edit nobody made.
+  const lead = /^\s*/.exec(span.value)[0]
+  return text.slice(0, span.from) + lead + clean + text.slice(span.to)
+}
+
+/**
+ * A patient value with the surname replaced and anything else left alone.
+ *
+ * "Mitchell (Donna)" with a new surname of "Marsh" becomes "Marsh (Donna)". The
+ * portal never shows the first name and must not be the reason it disappears.
+ */
+export function replaceSurname(existing, surname) {
+  const text = String(existing || '').trim()
+  const clean = String(surname || '').trim()
+  if (!text) return clean
+  // Everything after the first token — a parenthetical, a second name, a note.
+  const rest = text.replace(/^\S+/, '').trim()
+  return rest ? `${clean} ${rest}` : clean
+}
+
+/**
  * The parts of the description no label claimed.
  *
  * A booking's notes carry the things that actually shape a day and that no

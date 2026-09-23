@@ -10,6 +10,7 @@ import {
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatStamp
 } from '../clinicalPlan/week.js'
 import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
+import EditBooking from './cases/EditBooking.jsx'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -244,7 +245,10 @@ function DayPanel({ day, onOpen }) {
   )
 }
 
-export default function CaseWeek({ user, switcher, onOpen, promptBanner }) {
+export default function CaseWeek({ user, switcher, promptBanner }) {
+  // The booking being edited, if any. Tapping a case opens the sheet; the sheet
+  // loads it fresh from the calendar rather than editing what is on screen.
+  const [editing, setEditing] = useState(null)
   const prefs = useMemo(() => readPrefs(), [])
   const [span, setSpan] = useState(prefs.caseSpan === 'week' ? 'week' : 'day')
   const [window_, setWindow] = useState(() =>
@@ -440,7 +444,7 @@ export default function CaseWeek({ user, switcher, onOpen, promptBanner }) {
               </div>
             </div>
             {dayPlan
-              ? <DayPanel day={dayPlan} onOpen={onOpen} />
+              ? <DayPanel day={dayPlan} onOpen={setEditing} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}
@@ -464,7 +468,7 @@ export default function CaseWeek({ user, switcher, onOpen, promptBanner }) {
                 </span>
               )}
             </button>
-            <DayPanel day={day} onOpen={onOpen} />
+            <DayPanel day={day} onOpen={setEditing} />
           </div>
         ))}
 
@@ -487,6 +491,17 @@ export default function CaseWeek({ user, switcher, onOpen, promptBanner }) {
           </>
         )}
       </div>
+
+      {editing && (
+        <EditBooking
+          eventId={editing.id}
+          user={user}
+          onClose={() => setEditing(null)}
+          // Straight back to the calendar for the truth, rather than patching
+          // what is on screen from the response: the plan derives a case from
+          // the whole week, and a save can change how it groups.
+          onSaved={() => load(window_, { quiet: true })} />
+      )}
     </Page>
   )
 }

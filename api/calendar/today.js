@@ -1,6 +1,11 @@
 import { TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr } from '../../src/clinicalPlan/week.js'
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
+import { updateCalendarEvent, getCalendarEvent } from '../_googleCalendar.js'
+import {
+  setLabelledValue, replaceSurname, labelledFieldSpans,
+  parseLabelledDescription, descriptionNotes
+} from '../../src/clinicalPlan/labelledFields.js'
 import { getRunsheet, tickRunsheetItem, untickRunsheetItem } from '../_redis.js'
 import { firstNameFor } from '../../src/staffConfig.js'
 
@@ -26,6 +31,11 @@ export default async function handler(req, res) {
   // — the deployment is at the 12-function ceiling — and it is a fair fit: the
   // run-sheet is a property of a calendar day.
   if (req.query.action === 'runsheet') return handleRunsheet(req, res)
+  // Amending a booking from the portal. Same file for the same reason as the
+  // others — the deployment is at the 12-function ceiling.
+  if (req.query.action === 'save') return handleSave(req, res)
+  // One booking, read fresh when the edit sheet opens.
+  if (req.query.action === 'booking') return handleBooking(req, res)
 
   try {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
@@ -133,6 +143,9 @@ async function handleWeek(req, res) {
         events: (data.items || []).map(e => ({
           id: e.id, summary: e.summary || '', description: e.description || '',
           location: e.location || '', colorId: e.colorId || null,
+          // Google's version marker, carried so an edit can be rejected when
+          // somebody else changed the booking in between.
+          etag: e.etag || null,
           start: e.start, end: e.end, source: cal.source
         }))
       }
@@ -198,4 +211,160 @@ async function handleRunsheet(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
+}
+
+
+/**
+ * One booking, as the calendar has it right now.
+ *
+ * The edit sheet loads this rather than editing the case object the week plan
+ * built, for two reasons. The plan holds *derived* values — the system
+ * uppercased, the supply lifted out of the kit line — and editing those would
+ * write the app's rendering back over what the team typed. And the version
+ * marker returned here is seconds old rather than however long the screen has
+ * been open, which is the difference between a conflict check that fires on real
+ * collisions and one that fires constantly.
+ */
+async function handleBooking(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  try {
+    const eventId = String(req.query.id || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'id is required' })
+
+    const event = await getCalendarEvent(eventId)
+    const description = event.description || ''
+    const labelled = parseLabelledDescription(description)
+
+    return res.status(200).json({
+      id: event.id,
+      etag: event.etag || null,
+      summary: event.summary || '',
+      description,
+      start: event.start?.dateTime || event.start?.date || null,
+      end: event.end?.dateTime || event.end?.date || null,
+      allDay: !event.start?.dateTime,
+      // The labelled values exactly as written, for the form to edit. The
+      // patient's is trimmed to a surname on the way out — the portal shows
+      // surnames only, and the rest is preserved on save rather than displayed.
+      fields: {
+        ...labelled,
+        patient: surnameOf(labelled.patient)
+      },
+      notes: descriptionNotes(description).join('\n')
+    })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/** The first token of a patient value: "Mitchell (Donna)" → "Mitchell". */
+function surnameOf(value) {
+  const match = /^\S+/.exec(String(value || '').trim())
+  return match ? match[0] : ''
+}
+
+// ─── Amending a booking ───────────────────────────────────────────────────────
+// The portal writes to the calendar the team relies on, so this is deliberately
+// narrow: it changes the fields it was given and nothing else.
+//
+// The alternative — rebuild the description from what the portal knows — would
+// lose whatever the app does not model. The clearest example is a patient's
+// first name: the portal holds surnames only by policy, so regenerating would
+// delete a "(Donna)" somebody recorded on purpose. The app has also simply been
+// wrong about what a booking contains more than once, and a writer that touches
+// only what it was asked to cannot lose the parts it still misunderstands.
+
+const EDITABLE = ['patient', 'surgeon', 'procedure', 'kit', 'hospital']
+
+async function handleSave(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const eventId = String(body.eventId || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' })
+
+    const current = await getCalendarEvent(eventId)
+    let description = current.description || ''
+    let summary = current.summary || ''
+
+    for (const field of EDITABLE) {
+      if (!Object.prototype.hasOwnProperty.call(body.fields || {}, field)) continue
+      const value = String(body.fields[field] ?? '')
+      description = setLabelledValue(
+        description,
+        field,
+        // A surname replaces only the first token, so anything after it — a
+        // first name, a note — stays exactly where the team put it.
+        field === 'patient'
+          ? replaceSurname((labelledFieldSpans(description).patient?.value || '').trim(), value)
+          : value)
+    }
+
+    // Free notes are the unlabelled remainder, so they are rewritten wholesale:
+    // there is no label to patch and the client edited the whole block.
+    if (typeof body.notes === 'string') {
+      description = replaceFreeNotes(description, body.notes)
+    }
+
+    // The title is only ever changed when the client asks explicitly, with the
+    // text it showed the user. Nothing is reformatted behind anyone's back.
+    if (typeof body.summary === 'string' && body.summary.trim()) {
+      summary = body.summary.trim().slice(0, 300)
+    }
+
+    const patch = { description }
+    if (summary !== (current.summary || '')) patch.summary = summary
+    if (body.start && body.end) {
+      patch.start = { dateTime: body.start, timeZone: TZ }
+      patch.end = { dateTime: body.end, timeZone: TZ }
+    }
+
+    const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })
+    return res.status(200).json({
+      ok: true,
+      event: {
+        id: saved.id, summary: saved.summary || '', description: saved.description || '',
+        etag: saved.etag || null, start: saved.start, end: saved.end
+      }
+    })
+  } catch (err) {
+    if (err.code === 'conflict') {
+      return res.status(409).json({ error: err.message, code: 'conflict' })
+    }
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * Swaps the unlabelled prose, keeping every labelled line where it is.
+ *
+ * Rebuilt rather than patched because the notes are whatever is left over, and
+ * "left over" has no offsets to write into once the user has rewritten it.
+ */
+function replaceFreeNotes(description, notes) {
+  const text = String(description || '').replace(/\r\n?/g, '\n')
+  const spans = Object.values(labelledFieldSpans(text))
+  if (!spans.length) return String(notes || '').trim()
+
+  const claimed = new Array(text.length).fill(false)
+  for (const span of spans) for (let i = span.at; i < span.to; i++) claimed[i] = true
+
+  const kept = []
+  let line = '', touched = false
+  for (let i = 0; i <= text.length; i++) {
+    if (i === text.length || text[i] === '\n') {
+      if (touched) kept.push(line)
+      line = ''; touched = false
+      continue
+    }
+    if (claimed[i]) touched = true
+    if (claimed[i]) line += text[i]
+  }
+  const trimmed = String(notes || '').trim()
+  return trimmed ? `${kept.join('\n')}\n\n${trimmed}` : kept.join('\n')
 }

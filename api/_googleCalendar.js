@@ -190,3 +190,56 @@ export async function markAttendance({ date, patientSurname, firstName }) {
   }
   return { updated: true, title }
 }
+
+
+/**
+ * Amends one booking, and refuses if it changed underneath you.
+ *
+ * `etag` is Google's version marker for the event. Sending it as If-Match means
+ * the write is rejected with a 412 when somebody else has edited since the
+ * portal loaded it — which on this calendar is a normal Tuesday, not an edge
+ * case. Without it the last save silently wins and the other person's change is
+ * gone with no trace that it existed.
+ *
+ * Only the fields passed are sent. Google's PATCH leaves the rest alone, which
+ * matters for the things the app does not model — attendees, reminders,
+ * recurrence, the colour somebody set by hand.
+ */
+export async function updateCalendarEvent(eventId, patch, { etag } = {}) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const calendarId = getCalendarId()
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`
+    + `/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(etag ? { 'If-Match': etag } : {})
+      },
+      body: JSON.stringify(patch)
+    })
+
+  if (res.status === 412) {
+    const conflict = new Error('This booking changed in Google while you had it open')
+    conflict.code = 'conflict'
+    throw conflict
+  }
+  if (!res.ok) {
+    throw new Error(`Calendar update failed (${res.status}): ${await res.text()}`)
+  }
+  return res.json()
+}
+
+/** One booking, fresh, for reloading after a conflict. */
+export async function getCalendarEvent(eventId) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+  const calendarId = getCalendarId()
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`
+    + `/events/${encodeURIComponent(eventId)}`,
+    { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`Could not read the booking (${res.status})`)
+  return res.json()
+}
