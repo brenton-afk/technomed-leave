@@ -5,6 +5,7 @@ import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
 } from '../../clinicalPlan/colours.js'
 import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
+import { ATTENDING_REPS } from '../../staffConfig.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -195,6 +196,20 @@ function ColourPicker({ value, surgeon, chosen, onChange, onClear }) {
   )
 }
 
+/**
+ * A title carrying who attended.
+ *
+ * The team writes it as a bracketed suffix — "Marsh DIPLOMAT - Ibbett
+ * (Aimee/Mat)" — so this rewrites that group rather than inventing a field. Any
+ * existing group is replaced, so choosing nobody removes it cleanly.
+ */
+export function withReps(summary, reps) {
+  const names = ATTENDING_REPS.join('|')
+  const group = new RegExp(`\\s*\\(\\s*(?:${names})(?:\\s*[/,&+]\\s*(?:${names}))*\\s*\\)`, 'i')
+  const base = String(summary || '').replace(group, '').trim()
+  return reps.length ? `${base} (${reps.join('/')})` : base
+}
+
 export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const [loaded, setLoaded] = useState(null)
   const [fields, setFields] = useState({})
@@ -210,6 +225,9 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   // Two taps, deliberately. A booking removed by accident is a case nobody
   // knows about, and the calendar keeps no undo the team can reach.
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Who was in the room. Chosen, never typed: it goes into the booking title,
+  // and a spelling the roster does not know is a rep the app cannot read back.
+  const [reps, setReps] = useState([])
 
   const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
 
@@ -228,6 +246,7 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
       setWhen({ date: from?.date || '', start: from?.time || '', end: to?.time || '' })
       setColorId(data.colorId || null)
       setColourChosen(false)
+      setReps(data.reps || [])
       setTitleFix(null)
       setStatus('ready')
     } catch (err) {
@@ -246,9 +265,11 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const movedTime = Boolean(originalWhen && when.date !== originalWhen.date)
   const recoloured = colourChosen
 
+  const repsChanged = Boolean(loaded && reps.join('/') !== (loaded.reps || []).join('/'))
+
   const changed = loaded && (
     FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields[f.key] || ''))
-    || notes !== (loaded.notes || '') || movedTime || recoloured)
+    || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged)
 
   async function save({ withTitle } = {}) {
     setStatus('saving'); setError('')
@@ -274,6 +295,9 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
             ? { start: `${when.date}T${when.start}:00`, end: `${when.date}T${when.end}:00` }
             : {}),
           ...(colourChosen ? { colorId } : {}),
+          // Who attended lives in the title — "(Aimee/Mat)" — so recording it is
+          // a title change, written from the chosen names rather than typed.
+          ...(repsChanged && !withTitle ? { summary: withReps(loaded.summary, reps) } : {}),
           ...(withTitle ? { summary: withTitle } : {})
         })
       })
@@ -473,6 +497,35 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                     Why it moved, who called it in, what still has to be ordered
                   </span>
                 </label>
+
+                <div style={{ marginBottom: space.md }}>
+                  <span style={{
+                    ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
+                    display: 'block', marginBottom: 4
+                  }}>Rep attending</span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {ATTENDING_REPS.map(name => {
+                      const on = reps.includes(name)
+                      return (
+                        <button key={name} type="button" aria-pressed={on}
+                          onClick={() => setReps(list =>
+                            on ? list.filter(r => r !== name) : [...list, name])}
+                          style={{
+                            padding: `6px ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer',
+                            ...text('bodyStrong'),
+                            background: on ? colour.accent : colour.surface,
+                            color: on ? 'white' : colour.inkMuted,
+                            border: `1px solid ${on ? colour.accent : colour.line}`
+                          }}>
+                          {name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block', marginTop: 2 }}>
+                    Goes into the booking title, as the team already writes it
+                  </span>
+                </div>
 
                 <ColourPicker
                   value={colorId}

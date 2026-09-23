@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import EditBooking, { staleTitle } from './EditBooking.jsx'
+import EditBooking, { staleTitle, withReps } from './EditBooking.jsx'
 
 // This writes to the calendar the whole team reads during a list, so the tests
 // are mostly about restraint: what it does *not* send, and what it refuses to
@@ -27,7 +27,8 @@ const BOOKING = {
   start: '2026-09-23T09:00:00+10:00',
   end: '2026-09-23T10:00:00+10:00',
   allDay: false,
-  colorId: null                  // entered with no colour, as the live one was
+  colorId: null,                 // entered with no colour, as the live one was
+  reps: []
 }
 
 let saved
@@ -365,5 +366,52 @@ describe('the colour, which nobody chooses', () => {
     fireEvent.click(screen.getByRole('button', { name: /Back to automatic/ }))
     expect(screen.getByText(/set automatically from/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Save to calendar/ })).toBeDisabled()
+  })
+})
+
+
+describe('who attended', () => {
+  // Mitchell's booking reads "… - Ibbett (Aimee/Mat)". Two reps on one case is
+  // normal, and the app was showing none of them.
+  it('is chosen, never typed', async () => {
+    show()
+    await ready()
+    for (const name of ['Ben', 'Aimee', 'Brent', 'Mat']) {
+      expect(screen.getByRole('button', { name }), name).toBeInTheDocument()
+    }
+  })
+
+  it('goes into the title the way the team writes it', async () => {
+    show()
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Aimee' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mat' }))
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.summary).toBe('Marsh DIPLOMAT  - Ibbett (Aimee/Mat)')
+  })
+
+  it('shows the reps a booking already names', async () => {
+    // Otherwise an edit would quietly drop the reps somebody recorded.
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=booking')) {
+        return { status: 200, json: async () => ({ ...BOOKING, reps: ['Aimee', 'Mat'] }) }
+      }
+      saved = JSON.parse(init.body)
+      return { status: 200, json: async () => ({ ok: true, event: BOOKING }) }
+    })
+    show()
+    await ready()
+    expect(screen.getByRole('button', { name: 'Aimee' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Ben' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('replaces the group rather than adding a second one', () => {
+    expect(withReps('Marsh DIPLOMAT - Ibbett (Aimee/Mat)', ['Ben'])).toBe('Marsh DIPLOMAT - Ibbett (Ben)')
+    expect(withReps('Marsh DIPLOMAT - Ibbett', ['Aimee', 'Mat'])).toBe('Marsh DIPLOMAT - Ibbett (Aimee/Mat)')
+  })
+
+  it('removes it cleanly when nobody is attending', () => {
+    expect(withReps('Marsh DIPLOMAT - Ibbett (Mat)', [])).toBe('Marsh DIPLOMAT - Ibbett')
   })
 })

@@ -80,7 +80,7 @@ describe('a case, in full', () => {
   it('shows the notes the team wrote, which neither old view did', async () => {
     // This is the whole reason a case moved, and it lived only in Google.
     show()
-    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Week/ })))
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Show the week/ })))
     expect(await screen.findByText(/rebooked to Tuesday 22\/9/)).toBeInTheDocument()
     expect(screen.getByText(/Notification received from Toby/)).toBeInTheDocument()
   })
@@ -97,7 +97,7 @@ describe('a case, in full', () => {
   it('keeps a patient to their surname', async () => {
     // "Pt - Larkin (Jane)" is in the live calendar. Surnames only, always.
     show()
-    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Week/ })))
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Show the week/ })))
     await screen.findByText('Larkin')
     expect(screen.queryByText(/Jane/)).not.toBeInTheDocument()
   })
@@ -179,7 +179,7 @@ describe('the day and the week', () => {
 
   it('shows the whole week in week view', async () => {
     show()
-    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Week/ })))
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Show the week/ })))
     await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
     expect(screen.getByText('Marchetti')).toBeInTheDocument()
     expect(screen.getByText('Larkin')).toBeInTheDocument()
@@ -201,7 +201,7 @@ describe('the day and the week', () => {
 describe('what the calendar says, and only that', () => {
   it('marks the booking that says cancelled', async () => {
     show()
-    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Week/ })))
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Show the week/ })))
     await screen.findByText('Sturrock')
     expect(screen.getByText('Cancelled')).toBeInTheDocument()
   })
@@ -209,7 +209,7 @@ describe('what the calendar says, and only that', () => {
   it('leaves a rebooked case alone, however its notes read', async () => {
     // Marchetti's notes say "cancelled from Friday 18/9". The case is live.
     show()
-    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Week/ })))
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Show the week/ })))
     await screen.findByText('Marchetti')
     // One Cancelled label on the week, and it belongs to Sturrock.
     expect(screen.getAllByText('Cancelled')).toHaveLength(1)
@@ -257,5 +257,37 @@ describe('what came across from the old views', () => {
   it('still shows the prompt banner it was given', async () => {
     show({ promptBanner: <div>Scan a usage form</div> })
     expect(await screen.findByText('Scan a usage form')).toBeInTheDocument()
+  })
+})
+
+describe('opening the app', () => {
+  it('always shows today, not where you were last', async () => {
+    // The app is opened to find out what is on now. Restoring a week somebody
+    // scrolled to yesterday means the first thing it shows is wrong, quietly.
+    localStorage.setItem('tm_clinical_prefs', JSON.stringify({ weekStart: '2026-08-24' }))
+    show()
+    expect(await screen.findByText('Today')).toBeInTheDocument()
+    expect(screen.getByText(/21 September 2026/)).toBeInTheDocument()
+  })
+})
+
+describe('the header', () => {
+  it('carries one row of controls above the day strip', async () => {
+    // It used to carry three — a Day/Week pair, a row of three chips, and the
+    // week range with its arrows — which on a phone left very little of the week
+    // itself on screen.
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /Previous week/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Next week/ })).toBeInTheDocument()
+    // One toggle rather than two buttons.
+    expect(screen.getByRole('button', { name: /Show the week/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Today$/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps adding a booking within thumb reach instead', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /Add a booking/ })).toBeInTheDocument()
   })
 })

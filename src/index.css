@@ -158,3 +158,18 @@ a {
     height: auto;
   }
 }
+
+
+/* ─── iOS zooms on any input under 16px ──────────────────────────────────────
+   Safari on iPhone magnifies the page when a field with a smaller font is
+   focused, and does not zoom back out afterwards. The page is then wider than
+   the screen: the header scrolls off, buttons sit half out of view, and the only
+   way back is to pinch. Reported as "the app screen moves and buttons get cut
+   off at the top".
+
+   16px is the threshold, so this is the fix rather than a workaround. The app's
+   type scale puts body text at 14px, which is right for reading and wrong for a
+   control you can type into. */
+input, select, textarea {
+  font-size: 16px;
+}

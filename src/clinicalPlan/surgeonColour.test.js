@@ -192,3 +192,31 @@ describe('a navigation case with no surgeon of ours', () => {
     }
   })
 })
+
+describe('which platform a case needs', () => {
+  // AIRO follows from what is being implanted, not from the word: every RHH
+  // case putting in pedicle or lateral mass screws has AIRO CT and navigation
+  // support by definition, and the booking rarely says so.
+  it.each([
+    ['L5/S1 MIS Pedicle Screw Fixation', 'AIRO'],
+    ['lateral mass screws C3-C6', 'AIRO'],
+    ['Kit: Reform Cervical (Consignment)', 'AIRO'],
+    ['Kit - Diplomat /Cascadia/AIRO', 'AIRO'],
+    ['Varioguide needle biopsy', 'Curve'],
+    ['Brainlab Curve cranial registration', 'Curve']
+  ])('%s → %s', (text, platform) => {
+    expect(findNavigation(text)).toContain(platform)
+  })
+
+  it('leaves an ordinary case alone', () => {
+    for (const text of ['C5/6 ACDF', 'L4/5 PLIF', 'T4-L2 correction of the thoracic curve']) {
+      expect(findNavigation(text), text).toEqual([])
+    }
+  })
+
+  it('names the platform rather than the vendor when it knows which', () => {
+    // A case should not carry both "AIRO" and "Brainlab".
+    expect(findNavigation('Brainlab AIRO spin')).toEqual(['AIRO'])
+    expect(findNavigation('Brainlab support')).toEqual(['Brainlab'])
+  })
+})

@@ -38,6 +38,18 @@ const shiftDay = (day, by) => toDateStr(addCivilDays(parseDateStr(day), by))
 
 /** The tone a non-case item is drawn in. */
 // The small header controls. One definition, so they cannot drift apart.
+const arrowStyle = {
+  background: 'none',
+  border: 'none',
+  color: 'rgba(255,255,255,0.55)',
+  // Glyphs, but the type scale is closed and a closed scale with exceptions in
+  // it is not closed.
+  ...text('title'),
+  lineHeight: 1,
+  cursor: 'pointer',
+  padding: '2px 6px'
+}
+
 const chipStyle = {
   padding: '5px 12px',
   borderRadius: radius.pill,
@@ -266,8 +278,10 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [adding, setAdding] = useState(false)
   const prefs = useMemo(() => readPrefs(), [])
   const [span, setSpan] = useState(prefs.caseSpan === 'week' ? 'week' : 'day')
-  const [window_, setWindow] = useState(() =>
-    prefs.weekStart ? weekWindowFor(prefs.weekStart) : resolveDefaultWeek())
+  // Always this week, never where you were last time. The app is opened to find
+  // out what is on now; restoring a week somebody scrolled to yesterday means
+  // the first thing it shows is wrong, and quietly so.
+  const [window_, setWindow] = useState(() => resolveDefaultWeek())
   const [selectedDay, setSelectedDay] = useState(() => todayStr())
   const [plan, setPlan] = useState(() => readCachedPlan(
     (prefs.weekStart ? weekWindowFor(prefs.weekStart) : resolveDefaultWeek()).startDate)?.plan || null)
@@ -337,7 +351,6 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     const next = weekWindowFor(shiftDay(window_.startDate, by * 7))
     setWindow(next)
     setSelectedDay(next.days.includes(today) ? today : next.days[0])
-    remember({ weekStart: next.startDate })
   }
 
   function pickDay(day) {
@@ -347,58 +360,45 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   }
 
   function goToday() {
-    const next = resolveDefaultWeek()
-    setWindow(next)
+    setWindow(resolveDefaultWeek())
     setSelectedDay(today)
-    remember({ weekStart: next.startDate })
   }
+
+  const onThisWeek = window_.days.includes(today)
 
   const caseCount = day => (day?.casesByHospital || []).reduce(
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
   return (
-    <Page style={{ display: 'flex', flexDirection: 'column' }}>
+    <Page style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <Header eyebrow="This week" title="Cases"
         subtitle={plan?.summaryLine || 'Every booking, as the calendar has it'}>
         {switcher}
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: space.sm }}>
-          {['day', 'week'].map(id => (
-            <button key={id} onClick={() => { setSpan(id); remember({ caseSpan: id }) }}
-              aria-pressed={span === id}
-              style={{
-                padding: '6px 16px', borderRadius: radius.pill, border: 'none', cursor: 'pointer',
-                ...text('bodyStrong'),
-                background: span === id ? 'white' : 'rgba(255,255,255,0.12)',
-                color: span === id ? colour.navy : 'rgba(255,255,255,0.8)'
-              }}>
-              {id === 'day' ? 'Day' : 'Week'}
-            </button>
-          ))}
-          {/* The three sit together on the right in one weight. A solid white
-              pill for "+ Booking" made it the loudest thing on the screen, above
-              the week itself, and a different height from its neighbours. */}
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            <button onClick={goToday} style={chipStyle}>Today</button>
-            <button onClick={() => setAdding(true)} aria-label="Add a booking"
-              style={chipStyle}>+ Booking</button>
-            <button onClick={downloadDocx} disabled={!plan} aria-label="Download the week as Word"
-              style={{ ...chipStyle, opacity: plan ? 1 : 0.45, cursor: plan ? 'pointer' : 'default' }}>
-              .docx
-            </button>
-          </span>
+        {/* One row: move weeks, and choose how to read them. The header used to
+            carry three rows of controls above the day strip — a Day/Week pair, a
+            row of three chips, and the week range with its arrows — which on a
+            phone left very little of the week itself on screen. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: space.sm }}>
+          <button onClick={() => goWeek(-1)} aria-label="Previous week" style={arrowStyle}>‹</button>
+          <button onClick={goToday} title="Back to this week"
+            style={{
+              ...chipStyle, flex: 1, textAlign: 'center',
+              // Nothing to go back to when you are already here.
+              border: onThisWeek ? '1px solid transparent' : chipStyle.border,
+              background: onThisWeek ? 'transparent' : chipStyle.background
+            }}>
+            {formatWeekRange(window_.startDate, window_.endDate)}
+          </button>
+          <button onClick={() => goWeek(1)} aria-label="Next week" style={arrowStyle}>›</button>
+          <button onClick={() => { const next = span === 'day' ? 'week' : 'day'; setSpan(next); remember({ caseSpan: next }) }}
+            aria-label={span === 'day' ? 'Show the week' : 'Show one day'}
+            style={{ ...chipStyle, background: 'rgba(255,255,255,0.18)' }}>
+            {span === 'day' ? 'Day' : 'Week'}
+          </button>
         </div>
 
-        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '8px 8px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
-            <button onClick={() => goWeek(-1)} aria-label="Previous week"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 19, cursor: 'pointer' }}>‹</button>
-            <span style={{ ...text('caption'), fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
-              {formatWeekRange(window_.startDate, window_.endDate)}
-            </span>
-            <button onClick={() => goWeek(1)} aria-label="Next week"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 19, cursor: 'pointer' }}>›</button>
-          </div>
+        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
             {days.map(day => {
               const dp = (plan?.days || []).find(d => d.date === day)
@@ -486,6 +486,18 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           </div>
         ))}
 
+        {plan && (
+          <button onClick={downloadDocx} aria-label="Download the week as Word"
+            style={{
+              ...text('caption'), color: colour.inkFaint, background: 'none',
+              border: `1px solid ${colour.line}`, borderRadius: radius.control,
+              padding: `${space.xs}px ${space.md}px`, cursor: 'pointer',
+              marginTop: space.lg
+            }}>
+            Download the week as Word
+          </button>
+        )}
+
         {/* The week's own notes and key flags, which only the plan used to
             carry. `notes` is one sentence, not a list — assuming otherwise
             crashed the week view outright. */}
@@ -505,6 +517,18 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           </>
         )}
       </div>
+
+      {/* Adding a booking is the one thing done often enough to deserve its own
+          target, and the one least suited to a header chip on a phone: it sits
+          where the thumb already is, clear of the tab bar. */}
+      <button onClick={() => setAdding(true)} aria-label="Add a booking"
+        style={{
+          position: 'absolute', right: space.md,
+          bottom: `calc(86px + env(safe-area-inset-bottom, 0px))`,
+          width: 52, height: 52, borderRadius: radius.pill, border: 'none',
+          background: colour.accent, color: 'white', ...text('display'), lineHeight: 1,
+          cursor: 'pointer', boxShadow: '0 4px 14px rgba(4,39,70,0.28)', zIndex: 20
+        }}>+</button>
 
       {adding && (
         <NewBooking

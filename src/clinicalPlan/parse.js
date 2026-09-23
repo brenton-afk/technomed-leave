@@ -127,15 +127,30 @@ const SEPARATOR = /\s*[-–—:>]\s*/g
  */
 export function extractRep(title) {
   const text = String(title || '')
-  for (const person of STAFF) {
-    const name = person.firstName
-    if (!name) continue
-    const match = new RegExp(`\\(\\s*${name}\\s*\\)`, 'i').exec(text)
-    if (match) {
-      return { rep: name, rest: (text.slice(0, match.index) + ' ' + text.slice(match.index + match[0].length)).replace(/\s{2,}/g, ' ').trim() }
-    }
+  const names = STAFF.map(p => p.firstName).filter(Boolean)
+
+  // Any bracketed group made only of roster names and separators. Two reps on
+  // one case is normal — "(Aimee/Mat)" is a real booking — and matching a single
+  // name in brackets missed every one of them, so the case showed no rep at all
+  // while the calendar plainly named two.
+  const group = new RegExp(
+    `\\(\\s*(${names.join('|')})(\\s*[/,&+]\\s*(?:${names.join('|')}))*\\s*\\)`, 'i')
+  const match = group.exec(text)
+  if (!match) return { rep: null, reps: [], rest: text }
+
+  const inside = match[0].slice(1, -1)
+  const reps = inside
+    .split(/[/,&+]/)
+    .map(part => names.find(n => n.toLowerCase() === part.trim().toLowerCase()))
+    .filter(Boolean)
+
+  return {
+    // Kept as written, so the card reads the way the booking does.
+    rep: reps.join('/'),
+    reps,
+    rest: (text.slice(0, match.index) + ' ' + text.slice(match.index + match[0].length))
+      .replace(/\s{2,}/g, ' ').trim()
   }
-  return { rep: null, rest: text }
 }
 
 // Titles that are not cases however they are coloured. On-call and
@@ -688,7 +703,7 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   // Taken off before anything else reads the title. The surgeon matcher accepts
   // a surname buried in a longer string, so "Fowler (Mat)" was swallowed whole
   // and the rep disappeared.
-  const { rep, rest } = extractRep(title)
+  const { rep, reps, rest } = extractRep(title)
   title = rest
   const everything = `${title || ''}\n${description || ''}`
   // Labelled fields first. Where the team has written "Surgeon: Fowler" there is
@@ -754,8 +769,9 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     hospital: hospitalCode(labelled.hospital),
     navigation: findNavigation(everything).join(' + ') || undefined,
     // Who attended, or who is covering it. The calendar carries this and the
-    // app was dropping it.
+    // app was dropping it. Two reps on one case is normal.
     rep,
+    reps,
     // What the team wrote in the notes that no field has a name for: why a case
     // moved, who called it in, what still has to be ordered. Every line goes
     // through stripIdentifiers, because free prose is exactly where a date of

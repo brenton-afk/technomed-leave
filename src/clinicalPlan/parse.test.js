@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseCaseTitle, isSurgicalCase, sanitisePatient, stripIdentifiers,
-  extractKit, detectHospital, normaliseSurgeon, describeCase, HOSPITALS, isCancelled, stripCancellation, readBooking
+  extractKit, detectHospital, normaliseSurgeon, describeCase, HOSPITALS, isCancelled, stripCancellation, readBooking, extractRep
 } from './parse.js'
 
 describe('parseCaseTitle', () => {
@@ -566,5 +566,26 @@ describe('a surgeon written the hospital\'s way', () => {
   it('does not turn an unknown name into one', () => {
     expect(normaliseSurgeon('Peterson')).toBeNull()
     expect(normaliseSurgeon('Willkes')).toBeNull()
+  })
+})
+
+describe('two reps on one case', () => {
+  it('reads both', () => {
+    // "(Aimee/Mat)" is a real booking. Matching a single bracketed name found
+    // none of them, so the case showed no rep while the calendar named two.
+    const read = readBooking('Mitchell DIPLOMAT - Ibbett (Aimee/Mat)', 'Kit: Diplomat')
+    expect(read.reps).toEqual(['Aimee', 'Mat'])
+    expect(read.rep).toBe('Aimee/Mat')
+  })
+
+  it('reads them however they are separated', () => {
+    for (const written of ['(Ben, Aimee)', '(Ben & Aimee)', '(Ben + Aimee)', '(Ben/Aimee)']) {
+      expect(extractRep(`Marsh KIT - Ibbett ${written}`).reps, written).toEqual(['Ben', 'Aimee'])
+    }
+  })
+
+  it('still ignores anything that is not a rep', () => {
+    expect(extractRep('Marsh KIT - Thani (RHH)').reps).toEqual([])
+    expect(extractRep('Marsh KIT - Thani (2 of 3)').reps).toEqual([])
   })
 })

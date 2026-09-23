@@ -269,3 +269,16 @@ describe('a layer that covers the screen is rendered outside the shell', () => {
     expect(read('src/design/Shell.jsx')).toMatch(/createPortal\(children, document\.body\)/)
   })
 })
+
+describe('typing into a field must not resize the app', () => {
+  // Safari on iPhone magnifies the page when an input with a font under 16px is
+  // focused, and does not zoom back out. The page ends up wider than the screen,
+  // the header scrolls away and buttons sit half out of view — which is exactly
+  // how it was reported: "the app screen moves and buttons get cut off at the
+  // top of the screen and I have to adjust the screen to get them back".
+  it('gives every control at least 16px', () => {
+    const css = read('src/index.css')
+    const rule = /input,\s*select,\s*textarea\s*\{[^}]*font-size:\s*16px/
+    expect(css, 'the iOS zoom threshold is 16px').toMatch(rule)
+  })
+})

@@ -116,20 +116,43 @@ const CURVE_IS_ANATOMY =
   /\b(?:cervical|thoracic|thoracolumbar|lumbar|sagittal|coronal|scoliotic|kyphotic|lordotic|main|major|minor|primary|secondary|structural|fractional|compensatory)\s+curve\b|\bcurve\s+(?:correction|progression|magnitude)\b/i
 
 export const NAVIGATION = [
-  { name: 'Varioguide', test: /vario\s*guide/i },
-  { name: 'Brainlab', test: /brain\s*lab/i },
-  { name: 'AIRO', test: /\bairo\b/i },
-  // The Brainlab Curve. Guarded, because "curve" is also ordinary spinal
-  // language — a scoliosis booking reading "correction of the thoracic curve"
-  // is not a navigation case, and colouring it blueberry would say the platform
-  // needs booking, setting up and calibrating when it does not.
-  { name: 'Curve', test: /\bcurve\b/i, notWhen: CURVE_IS_ANATOMY }
+  {
+    name: 'AIRO',
+    // Not only the word. Every RHH case putting in pedicle screws or lateral
+    // mass screws has AIRO CT and navigation support by definition, so the
+    // booking rarely says so — it says what is being implanted. Reform Cervical
+    // is lateral mass fixation, which is why it is in here as a system name.
+    test: /\bairo\b|\bpedicle\s+screws?\b|\blateral\s+mass\b|\breform\s+cervical\b/i
+  },
+  {
+    name: 'Curve',
+    // The Varioguide needle biopsies and the cranial registrations. Varioguide
+    // is a Curve application, so it earns the Curve badge rather than one of its
+    // own — the badge is meant to say which platform has to be set up.
+    test: /\bcurve\b|vario\s*guide/i,
+    // "Curve" is also ordinary spinal language. A scoliosis correction is a
+    // deformity, not a navigation platform, and painting it blueberry would say
+    // a platform needs booking when it does not. Varioguide is exempt: it names
+    // the platform outright.
+    notWhen: text => CURVE_IS_ANATOMY.test(text) && !/vario\s*guide/i.test(text)
+  },
+  {
+    name: 'Brainlab',
+    // The vendor rather than a platform. Only shown when the booking has not
+    // said which one, so a case does not carry both "AIRO" and "Brainlab".
+    test: /brain\s*lab/i,
+    onlyIfNothingElse: true
+  }
 ]
 
 /** The navigation platforms named in a piece of text. */
 export function findNavigation(text) {
   const haystack = String(text || '')
-  return NAVIGATION
-    .filter(n => n.test.test(haystack) && !(n.notWhen && n.notWhen.test(haystack)))
-    .map(n => n.name)
+  const excluded = n => {
+    if (!n.notWhen) return false
+    return typeof n.notWhen === 'function' ? n.notWhen(haystack) : n.notWhen.test(haystack)
+  }
+  const found = NAVIGATION.filter(n => n.test.test(haystack) && !excluded(n))
+  const named = found.filter(n => !n.onlyIfNothingElse)
+  return (named.length ? named : found).map(n => n.name)
 }

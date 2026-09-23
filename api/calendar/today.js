@@ -8,7 +8,7 @@ import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
   parseLabelledDescription, descriptionNotes
 } from '../../src/clinicalPlan/labelledFields.js'
-import { readBooking, normaliseSurgeon } from '../../src/clinicalPlan/parse.js'
+import { readBooking, normaliseSurgeon, extractRep } from '../../src/clinicalPlan/parse.js'
 import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import { getRunsheet, tickRunsheetItem, untickRunsheetItem } from '../_redis.js'
 import { firstNameFor } from '../../src/staffConfig.js'
@@ -247,6 +247,10 @@ async function handleBooking(req, res) {
       id: event.id,
       etag: event.etag || null,
       summary: event.summary || '',
+      // Who attended, from the bracketed suffix on the title. The calendar
+      // carries it and the sheet has to show it back, or an edit would quietly
+      // drop the reps somebody recorded.
+      reps: extractRep(event.summary || '').reps,
       description,
       start: event.start?.dateTime || event.start?.date || null,
       end: event.end?.dateTime || event.end?.date || null,

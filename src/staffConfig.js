@@ -33,3 +33,13 @@ export function firstNameFor(email) {
   const person = STAFF.find(s => s.email.toLowerCase() === String(email || '').toLowerCase())
   return person?.firstName || ''
 }
+
+
+/**
+ * The reps who attend theatre cases, in the order they are usually listed.
+ *
+ * Narrower than `isClinicalTeam`, which decides who is copied on a usage email.
+ * This is who can be recorded as having been in the room, and it is what the
+ * booking sheet offers rather than asking anybody to type a name.
+ */
+export const ATTENDING_REPS = ['Ben', 'Aimee', 'Brent', 'Mat']
