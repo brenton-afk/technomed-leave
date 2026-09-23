@@ -160,3 +160,49 @@ export function findNavigation(text) {
   const named = found.filter(n => !n.onlyIfNothingElse)
   return (named.length ? named : found).map(n => n.name)
 }
+
+
+/**
+ * Which E4 product a bare "E4" on a kit line means.
+ *
+ * The RHH lists write "Diplomat + E4" and "Mariner + E4", which names a
+ * distributor but not a product — E4 supply Global BMD PLIF, Global BMD ALIF,
+ * Dakota and Reform Cervical, and a loan request has to say which.
+ *
+ * Alongside Diplomat or Mariner it is a PLIF, so the cages are Global BMD PLIF.
+ * Both of those are posterior lumbar constructs; the E4 part is the interbody
+ * that goes with them. Confirmed by Brent, 23 September.
+ *
+ * Only where the line does not already name an E4 product, and only where one of
+ * those two systems is present. A bare "E4" on its own stays ambiguous and
+ * reaches the review queue as a question, which is the right outcome: guessing a
+ * product here means a tray arriving that nobody can use.
+ */
+const NAMES_AN_E4_PRODUCT = /global\s*bmd|dakota|reform/i
+const IMPLIES_PLIF = /\b(?:diplomat|mariner)\b/i
+
+export function resolveE4Product(kit) {
+  const text = String(kit || '')
+  if (!/\be4\b/i.test(text)) return null
+  if (NAMES_AN_E4_PRODUCT.test(text)) return null
+  return IMPLIES_PLIF.test(text) ? 'Global BMD PLIF' : null
+}
+
+/**
+ * The systems a kit line names, with a bare "E4" resolved where it can be.
+ *
+ * Used when turning an ingested booking into something orderable: the line as
+ * written is kept for display, and this is what the loan logic and the
+ * distributor routing work from.
+ */
+export function systemsInKit(kit) {
+  const text = String(kit || '')
+  // Through findSystems, which already knows every system's spellings and stops
+  // a looser pattern claiming words a more specific one matched.
+  const found = findSystems(text).map(s => s.name)
+  const e4 = resolveE4Product(text)
+  if (!e4) return found
+  // "E4 Cages" is what a bare "E4" matches; alongside Diplomat or Mariner the
+  // product is known, so name it.
+  return found.map(name => (name === 'E4 Cages' ? e4 : name))
+}
