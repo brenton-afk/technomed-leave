@@ -27,7 +27,7 @@ const show = (props = {}) =>
 const fill = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
   fireEvent.change(screen.getByLabelText(/Surgeon/), { target: { value: 'Ibbett' } })
-  fireEvent.change(screen.getByLabelText(/System/), { target: { value: 'Mariner' } })
+  fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
   fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'L5/S1 PLIF' } })
   fireEvent.change(screen.getByLabelText(/Patient surname/), { target: { value: 'Marsh' } })
 }
@@ -43,7 +43,7 @@ describe('how little has to be typed', () => {
   it('offers the surgeons and the systems rather than asking for them', () => {
     show()
     const surgeons = screen.getByLabelText(/Surgeon/)
-    const systems = screen.getByLabelText(/System/)
+    const systems = screen.getByLabelText(/Add a system/)
     expect(surgeons.querySelectorAll('option').length).toBeGreaterThan(5)
     expect([...systems.querySelectorAll('option')].map(o => o.value)).toContain('Mariner')
   })
@@ -52,7 +52,7 @@ describe('how little has to be typed', () => {
     // Cascadia is Life Health Care's. We attend those cases for the Diplomat,
     // and it is not something we would ever book a set for.
     show()
-    const systems = screen.getByLabelText(/System/)
+    const systems = screen.getByLabelText(/Add a system/)
     expect([...systems.querySelectorAll('option')].map(o => o.value)).not.toContain('Cascadia')
   })
 
@@ -68,15 +68,15 @@ describe('the question a booking raises', () => {
     // made rather than discovered later.
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/System/), { target: { value: 'Mariner' } })
-    expect((await screen.findAllByText(/A loan set has to be requested/)).length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    expect((await screen.findAllByText(/a loan set has to be requested/)).length).toBeGreaterThan(0)
     expect(screen.getByText(/Nothing consigned at CLV/)).toBeInTheDocument()
   })
 
   it('gives the arrival deadline with it', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/System/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
     // Thursday 24 September, so the kit is due the Tuesday.
     expect(await screen.findByText(/2026-09-22/)).toBeInTheDocument()
   })
@@ -84,24 +84,72 @@ describe('the question a booking raises', () => {
   it('says nothing to order for the same system at RHH', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
-    fireEvent.change(screen.getByLabelText(/System/), { target: { value: 'Mariner' } })
-    expect(await screen.findByText(/Nothing to order/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    expect(await screen.findByText(/nothing to order/)).toBeInTheDocument()
   })
 
   it('is loud about a system it does not know', async () => {
     // A quiet "nothing needed" is a case with no instruments on the day.
     show()
     fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
-    fireEvent.change(screen.getByLabelText(/System/), { target: { value: 'Lonestar' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Lonestar' } })
     // KT cover their own Calvary cases; at RHH we use their consigned set.
-    expect(await screen.findByText(/Nothing to order/)).toBeInTheDocument()
+    expect(await screen.findByText(/nothing to order/)).toBeInTheDocument()
   })
 
   it('fills the supply in from the inventory', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/System/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Loan' })).toHaveAttribute('aria-pressed', 'true'))
+  })
+})
+
+describe('a case needing two systems', () => {
+  // Real ones do: Diplomat with E4 cages, or Athlet and Ascot for a cervical
+  // corpectomy. One system per booking was simply wrong.
+  it('takes both, each with its own supply', async () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Global BMD PLIF' } })
+
+    // Diplomat is consigned at Calvary; the E4 cages are not. A single supply
+    // for the whole booking would be wrong for one of them.
+    expect(await screen.findByText('Diplomat')).toBeInTheDocument()
+    expect(screen.getByText('Global BMD PLIF')).toBeInTheDocument()
+  })
+
+  it('writes them into one kit line', async () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Athlet' } })
+    fireEvent.change(screen.getByLabelText(/Surgeon/), { target: { value: 'Ibbett' } })
+    fireEvent.change(screen.getByLabelText(/Patient surname/), { target: { value: 'Marsh' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
+
+    await waitFor(() => expect(posted).toBeTruthy())
+    expect(posted.fields.kit).toMatch(/^Diplomat \(Consignment\) \+ Athlet/)
+  })
+
+  it('gives a verdict for each of them', async () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    // One is consigned at Calvary and the other has to be ordered. A combined
+    // answer would hide the one that matters.
+    expect(await screen.findByText(/Diplomat — nothing to order/)).toBeInTheDocument()
+    expect(screen.getByText(/Mariner — a loan set has to be requested/)).toBeInTheDocument()
+  })
+
+  it('lets one be taken off again', async () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Remove Diplomat/ }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Remove Diplomat/ })).not.toBeInTheDocument())
   })
 })
 

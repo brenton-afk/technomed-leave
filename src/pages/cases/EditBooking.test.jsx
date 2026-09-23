@@ -226,19 +226,20 @@ describe('a title left behind by an edit', () => {
 
 
 describe('moving a booking', () => {
-  it('shows the Hobart date and time, not the device\'s', async () => {
+  it('shows the Hobart date, and no time at all', async () => {
+    // Case timings are not settled until the list order lands the evening
+    // before and then move several times a day, so editing a time is work with
+    // no value. Only the day moves.
     show()
     await ready()
     expect(screen.getByDisplayValue('2026-09-23')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('09:00')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('10:00')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('09:00')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Start|Finish/)).not.toBeInTheDocument()
   })
 
   it('sends a naive local time and lets the server apply the zone', async () => {
-    // Never an offset worked out here. A phone in another timezone — or one
-    // whose clock is simply wrong — must not be able to move a theatre list by
-    // an hour, which is the class of bug that had the day view a day out every
-    // morning until 10am.
+    // Never an offset worked out here. A phone in another timezone must not be
+    // able to move a theatre list.
     show()
     await ready()
     fireEvent.change(screen.getByDisplayValue('2026-09-23'), { target: { value: '2026-09-25' } })
@@ -246,24 +247,65 @@ describe('moving a booking', () => {
 
     await waitFor(() => expect(saved).toBeTruthy())
     expect(saved.start).toBe('2026-09-25T09:00:00')
-    expect(saved.end).toBe('2026-09-25T10:00:00')
     expect(saved.start).not.toMatch(/[+Z]/)
   })
 
-  it('says where it is moving the booking to', async () => {
+  it('keeps the hours the booking already had', async () => {
+    // Moving a day must not quietly restate the time as something else.
     show()
     await ready()
-    fireEvent.change(screen.getByDisplayValue('09:00'), { target: { value: '13:30' } })
-    expect(await screen.findByText(/Moving this booking to 2026-09-23 · 13:30/)).toBeInTheDocument()
+    fireEvent.change(screen.getByDisplayValue('2026-09-23'), { target: { value: '2026-09-25' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.end).toBe('2026-09-25T10:00:00')
   })
 
-  it('leaves the time out of a save that did not touch it', async () => {
+  it('says which day it is moving to', async () => {
+    show()
+    await ready()
+    fireEvent.change(screen.getByDisplayValue('2026-09-23'), { target: { value: '2026-09-25' } })
+    expect(await screen.findByText(/Moving this booking to Friday/)).toBeInTheDocument()
+  })
+
+  it('leaves the date out of a save that did not touch it', async () => {
     show()
     await ready()
     fireEvent.change(screen.getByDisplayValue('L5/S1 PLIF'), { target: { value: 'L4/5 TLIF' } })
     fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
     await waitFor(() => expect(saved).toBeTruthy())
     expect(saved.start).toBeUndefined()
+  })
+})
+
+describe('deleting a booking', () => {
+  it('asks first', async () => {
+    // A booking removed by accident is a case nobody knows about, and the
+    // calendar keeps no undo the team can reach.
+    show()
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: /Delete booking/ }))
+    expect(await screen.findByRole('button', { name: /Delete from the calendar/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Keep it/ })).toBeInTheDocument()
+  })
+
+  it('can be backed out of', async () => {
+    show()
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: /Delete booking/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Keep it/ }))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Delete from the calendar/ })).not.toBeInTheDocument())
+  })
+
+  it('sends the version marker, so it cannot delete someone else\'s edit', async () => {
+    const onClose = vi.fn()
+    show({ onClose })
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: /Delete booking/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Delete from the calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.etag).toBe('"v1"')
+    expect(saved.eventId).toBe('evt-1')
   })
 })
 

@@ -284,3 +284,30 @@ export async function createBookingEvent({ summary, description, date, colorId, 
 }
 
 const BOOKING_TZ = 'Australia/Hobart'
+
+
+/** Removes a booking. Guarded by the same version marker as an edit. */
+export async function deleteCalendarEvent(eventId, { etag } = {}) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const calendarId = getCalendarId()
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}`
+    + `/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(etag ? { 'If-Match': etag } : {})
+      }
+    })
+  if (res.status === 412) {
+    const conflict = new Error('This booking changed in Google while you had it open')
+    conflict.code = 'conflict'
+    throw conflict
+  }
+  // 410 is already gone, which is the outcome asked for.
+  if (!res.ok && res.status !== 410) {
+    throw new Error(`Could not delete the booking (${res.status}): ${await res.text()}`)
+  }
+  return { ok: true }
+}

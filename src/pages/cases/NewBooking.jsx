@@ -121,10 +121,11 @@ function LoanVerdict({ system, hospital, date }) {
       ...text('caption')
     }}>
       <strong>
-        {verdict.need === 'order' ? 'A loan set has to be requested'
-          : verdict.need === 'move' ? 'Check where the kit is'
-            : verdict.need === 'unknown' ? 'Not sure — check this one'
-              : 'Nothing to order'}
+        {system}{' — '}
+        {verdict.need === 'order' ? 'a loan set has to be requested'
+          : verdict.need === 'move' ? 'check where the kit is'
+            : verdict.need === 'unknown' ? 'not sure, check this one'
+              : 'nothing to order'}
       </strong>
       <div>{verdict.reason}</div>
       {by && (
@@ -143,22 +144,28 @@ export default function NewBooking({ user, onClose, onCreated }) {
   const [date, setDate] = useState(defaultDate)
   const [hospital, setHospital] = useState('')
   const [surgeon, setSurgeon] = useState('')
-  const [system, setSystem] = useState('')
-  const [supply, setSupply] = useState('')
+  // A list, because a real case often needs two: Diplomat with E4 cages, or
+  // Athlet and Ascot for a cervical corpectomy. Each carries its own supply —
+  // one may be consigned at that hospital while the other has to be ordered —
+  // so a single supply for the whole booking would be wrong as often as right.
+  const [systems, setSystems] = useState([])
   const [patient, setPatient] = useState('')
   const [procedure, setProcedure] = useState('')
   const [notes, setNotes] = useState('')
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
 
-  // Supply follows the inventory unless it has been chosen: a system consigned
-  // at that hospital is consignment, and anything else is a loan.
-  const suggestedSupply = useMemo(() => {
-    if (!system || !hospital) return ''
-    const need = loanNeed(system, hospital).need
+  /** What the inventory says this system is, at this hospital. */
+  const supplyFor = name => {
+    if (!hospital) return ''
+    const need = loanNeed(name, hospital).need
     return need === 'none' ? 'Consignment' : need === 'order' ? 'Loan' : ''
-  }, [system, hospital])
-  const effectiveSupply = supply || suggestedSupply
+  }
+
+  function addSystem(name) {
+    if (!name || systems.some(s => s.name === name)) return
+    setSystems(list => [...list, { name, supply: supplyFor(name) }])
+  }
 
   const colourId = guideColorIdFor(surgeon)
   const ready = patient.trim() && surgeon && date
@@ -166,7 +173,11 @@ export default function NewBooking({ user, onClose, onCreated }) {
   async function create() {
     setStatus('saving'); setError('')
     try {
-      const kit = [system, effectiveSupply ? `(${effectiveSupply})` : ''].filter(Boolean).join(' ')
+      // "Diplomat (Consignment) + Global BMD PLIF (Loan)" — each system with the
+      // supply that actually applies to it.
+      const kit = systems
+        .map(s => [s.name, s.supply ? `(${s.supply})` : ''].filter(Boolean).join(' '))
+        .join(' + ')
       const res = await fetch('/api/calendar/today?action=create', {
         method: 'POST',
         headers: {
@@ -253,21 +264,50 @@ export default function NewBooking({ user, onClose, onCreated }) {
               </select>
             </Row>
 
-            <Row label="System">
-              <select value={system} onChange={e => setSystem(e.target.value)} style={inputStyle}>
-                <option value="">Choose…</option>
-                {SYSTEMS.map(s => <option key={s} value={s}>{s}</option>)}
+            <div style={{ marginBottom: space.md }}>
+              <Label>Systems</Label>
+
+              {systems.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: space.sm }}>
+                  {systems.map(chosen => (
+                    <div key={chosen.name} style={{
+                      display: 'flex', alignItems: 'center', gap: space.sm,
+                      background: colour.surface, border: `1px solid ${colour.line}`,
+                      borderRadius: radius.control, padding: `6px ${space.sm}px 6px ${space.md}px`
+                    }}>
+                      <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0 }}>
+                        {chosen.name}
+                      </span>
+                      {/* Supply per system: one may be consigned here while the
+                          other has to be ordered. */}
+                      <Choice options={SUPPLY} value={chosen.supply}
+                        onChange={value => setSystems(list => list.map(
+                          s => s.name === chosen.name ? { ...s, supply: value } : s))} />
+                      <button type="button" aria-label={`Remove ${chosen.name}`}
+                        onClick={() => setSystems(list => list.filter(s => s.name !== chosen.name))}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          ...text('body'), color: colour.inkFainter, padding: '0 4px'
+                        }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <select value="" onChange={e => addSystem(e.target.value)} style={inputStyle}
+                aria-label="Add a system">
+                <option value="">{systems.length ? 'Add another system…' : 'Choose a system…'}</option>
+                {SYSTEMS.filter(s => !systems.some(c => c.name === s))
+                  .map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-            </Row>
+            </div>
 
-            <LoanVerdict system={system} hospital={hospital} date={date} />
-
-            {system && (
-              <div style={{ marginBottom: space.md }}>
-                <Label>Supply</Label>
-                <Choice options={SUPPLY} value={effectiveSupply} onChange={setSupply} />
-              </div>
-            )}
+            {/* One verdict per system, because they can differ: Diplomat may be
+                consigned at Calvary while the E4 cages have to come from a loan
+                set. A single combined answer would hide the one that matters. */}
+            {systems.map(chosen => (
+              <LoanVerdict key={chosen.name} system={chosen.name} hospital={hospital} date={date} />
+            ))}
 
             <Row label="Patient surname" hint="Surname only — never a first name or a date of birth">
               <input value={patient} onChange={e => setPatient(e.target.value)} style={inputStyle} />

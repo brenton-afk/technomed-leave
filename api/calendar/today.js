@@ -1,7 +1,9 @@
 import { TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr } from '../../src/clinicalPlan/week.js'
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
-import { updateCalendarEvent, getCalendarEvent, createBookingEvent } from '../_googleCalendar.js'
+import {
+  updateCalendarEvent, getCalendarEvent, createBookingEvent, deleteCalendarEvent
+} from '../_googleCalendar.js'
 import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
   parseLabelledDescription, descriptionNotes
@@ -39,6 +41,7 @@ export default async function handler(req, res) {
   // One booking, read fresh when the edit sheet opens.
   if (req.query.action === 'booking') return handleBooking(req, res)
   if (req.query.action === 'create') return handleCreate(req, res)
+  if (req.query.action === 'delete') return handleDelete(req, res)
 
   try {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
@@ -352,6 +355,7 @@ async function handleSave(req, res) {
       if (guide && String(current.colorId || '') !== guide) patch.colorId = guide
     }
 
+    patch.description = withAttribution(patch.description, firstNameFor(session.email))
     const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })
     return res.status(200).json({
       ok: true,
@@ -456,7 +460,7 @@ async function handleCreate(req, res) {
 
     const created = await createBookingEvent({
       summary,
-      description: description.trim(),
+      description: withAttribution(description.trim(), firstNameFor(session.email), { created: true }),
       date,
       colorId,
       location: String(fields.hospital || '').trim() || undefined
@@ -467,6 +471,59 @@ async function handleCreate(req, res) {
       event: { id: created.id, summary: created.summary || '', etag: created.etag || null }
     })
   } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+
+/**
+ * Who entered the booking, and who has touched it since.
+ *
+ * Google records the service account as the creator, which tells nobody
+ * anything — every booking made through the portal would look like it came from
+ * "Calendar". The team already solved this by hand: real bookings carry lines
+ * like "Entered/amended by Brent" at the foot of the notes, so this writes the
+ * same thing rather than inventing a new convention.
+ *
+ * One line, rewritten rather than appended, so a booking edited five times does
+ * not end up with five lines of signature. Who entered it is kept; who last
+ * amended it replaces the previous amender.
+ */
+const BY_LINE = /^Entered by [^\n]*$/mi
+
+function withAttribution(description, name, { created = false } = {}) {
+  const who = String(name || '').trim()
+  if (!who) return description
+  const text = String(description || '').replace(/\r\n?/g, '\n').trimEnd()
+
+  if (created || !BY_LINE.test(text)) {
+    return `${text}${text ? '\n\n' : ''}Entered by ${who}`
+  }
+  return text.replace(BY_LINE, line => {
+    const enteredBy = /^Entered by ([^·\n]+)/i.exec(line)?.[1]?.trim() || who
+    // Somebody amending their own booking is not two people.
+    return enteredBy.toLowerCase() === who.toLowerCase()
+      ? `Entered by ${enteredBy}`
+      : `Entered by ${enteredBy} · amended by ${who}`
+  })
+}
+
+async function handleDelete(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const eventId = String(body.eventId || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' })
+
+    await deleteCalendarEvent(eventId, { etag: body.etag })
+    return res.status(200).json({ ok: true })
+  } catch (err) {
+    if (err.code === 'conflict') {
+      return res.status(409).json({ error: err.message, code: 'conflict' })
+    }
     return res.status(500).json({ error: err.message })
   }
 }

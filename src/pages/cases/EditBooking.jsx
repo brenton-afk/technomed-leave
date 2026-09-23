@@ -4,7 +4,7 @@ import { colour, text, space, radius } from '../../design/tokens.js'
 import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
 } from '../../clinicalPlan/colours.js'
-import { zonedCivil, toDateStr, TZ } from '../../clinicalPlan/week.js'
+import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -207,6 +207,9 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [titleFix, setTitleFix] = useState(null)
+  // Two taps, deliberately. A booking removed by accident is a case nobody
+  // knows about, and the calendar keeps no undo the team can reach.
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
 
@@ -240,8 +243,7 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
     ? { date: civilParts(loaded.start)?.date || '', start: civilParts(loaded.start)?.time || '',
         end: civilParts(loaded.end)?.time || '' }
     : null
-  const movedTime = Boolean(originalWhen && (
-    when.date !== originalWhen.date || when.start !== originalWhen.start || when.end !== originalWhen.end))
+  const movedTime = Boolean(originalWhen && when.date !== originalWhen.date)
   const recoloured = colourChosen
 
   const changed = loaded && (
@@ -302,6 +304,30 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
     } catch (err) {
       setError(err.message)
       setStatus('ready')
+    }
+  }
+
+  async function remove() {
+    setStatus('saving'); setError('')
+    try {
+      const res = await fetch('/api/calendar/today?action=delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ eventId, etag: loaded?.etag })
+      })
+      const data = await res.json()
+      if (res.status === 409) {
+        setStatus('conflict')
+        setError('Somebody changed this booking in Google while you had it open.')
+        return
+      }
+      if (data.error) throw new Error(data.error)
+      onSaved?.()
+      onClose?.()
+    } catch (err) {
+      setError(err.message)
+      setStatus('ready')
+      setConfirmDelete(false)
     }
   }
 
@@ -407,19 +433,14 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
               <>
                 <Field label="Date" type="date" value={when.date}
                   onChange={v => setWhen(c => ({ ...c, date: v }))} />
-                <div style={{ display: 'flex', gap: space.sm }}>
-                  <div style={{ flex: 1 }}>
-                    <Field label="Start" type="time" value={when.start}
-                      onChange={v => setWhen(c => ({ ...c, start: v }))} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <Field label="Finish" type="time" value={when.end}
-                      onChange={v => setWhen(c => ({ ...c, end: v }))} />
-                  </div>
-                </div>
+                {/* No start or finish. Case timings are not settled until the
+                    list order lands the evening before and then move several
+                    times a day, so a time here is wrong almost immediately and
+                    editing it is work with no value. The booking keeps whatever
+                    hours it has; only the day moves. */}
                 {movedTime && (
                   <div style={{ ...text('caption'), color: colour.accentDeep, marginTop: -space.sm, marginBottom: space.md }}>
-                    Moving this booking to {when.date} · {when.start}–{when.end}, Hobart time.
+                    Moving this booking to {weekdayName(when.date)} {when.date}.
                   </div>
                 )}
               </>
@@ -467,6 +488,31 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
             padding: `${space.sm}px ${space.md}px calc(${space.md}px + env(safe-area-inset-bottom, 0px))`,
             borderTop: `1px solid ${colour.line}`, display: 'flex', gap: space.sm, flexShrink: 0
           }}>
+            {confirmDelete ? (
+              <>
+                <button onClick={() => setConfirmDelete(false)}
+                  style={{
+                    flex: 1, padding: space.sm, cursor: 'pointer', ...text('bodyStrong'),
+                    background: 'transparent', color: colour.inkMuted,
+                    border: `1px solid ${colour.line}`, borderRadius: radius.control
+                  }}>Keep it</button>
+                <button onClick={remove} disabled={status === 'saving'}
+                  style={{
+                    flex: 2, padding: space.sm, ...text('bodyStrong'), color: 'white',
+                    border: 'none', borderRadius: radius.control, background: colour.danger,
+                    cursor: status === 'saving' ? 'default' : 'pointer'
+                  }}>
+                  {status === 'saving' ? 'Deleting…' : 'Delete from the calendar'}
+                </button>
+              </>
+            ) : (
+              <>
+            <button onClick={() => setConfirmDelete(true)} aria-label="Delete booking"
+              style={{
+                padding: space.sm, cursor: 'pointer', ...text('bodyStrong'),
+                background: 'transparent', color: colour.danger,
+                border: `1px solid ${colour.dangerLine}`, borderRadius: radius.control
+              }}>Delete</button>
             <button onClick={onClose}
               style={{
                 flex: 1, padding: space.sm, cursor: 'pointer', ...text('bodyStrong'),
@@ -483,6 +529,8 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
               }}>
               {status === 'saving' ? 'Saving…' : 'Save to calendar'}
             </button>
+              </>
+            )}
           </div>
         </div>
       </div>

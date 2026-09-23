@@ -37,6 +37,19 @@ const monthOf = day => MONTHS[parseDateStr(day).month - 1]
 const shiftDay = (day, by) => toDateStr(addCivilDays(parseDateStr(day), by))
 
 /** The tone a non-case item is drawn in. */
+// The small header controls. One definition, so they cannot drift apart.
+const chipStyle = {
+  padding: '5px 12px',
+  borderRadius: radius.pill,
+  border: '1px solid rgba(255,255,255,0.28)',
+  background: 'rgba(255,255,255,0.08)',
+  color: 'rgba(255,255,255,0.85)',
+  ...text('caption'),
+  fontWeight: 600,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
+}
+
 const KIND_TONE = {
   leave: { bg: colour.warningSoft, ink: colour.warning },
   hours: { bg: colour.accentSoft, ink: colour.accentDeep },
@@ -362,24 +375,18 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
               {id === 'day' ? 'Day' : 'Week'}
             </button>
           ))}
-          <button onClick={goToday}
-            style={{
-              marginLeft: 'auto', padding: '6px 16px', borderRadius: radius.pill,
-              border: '1px solid rgba(255,255,255,0.3)', background: 'transparent',
-              color: 'rgba(255,255,255,0.75)', ...text('caption'), cursor: 'pointer'
-            }}>Today</button>
-          <button onClick={() => setAdding(true)} aria-label="Add a booking"
-            style={{
-              padding: '6px 14px', borderRadius: radius.pill, border: 'none',
-              background: 'white', color: colour.navy, ...text('bodyStrong'), cursor: 'pointer'
-            }}>+ Booking</button>
-          <button onClick={downloadDocx} disabled={!plan} aria-label="Download the week as Word"
-            style={{
-              padding: '6px 14px', borderRadius: radius.pill,
-              border: '1px solid rgba(255,255,255,0.3)', background: 'transparent',
-              color: 'rgba(255,255,255,0.75)', ...text('caption'),
-              cursor: plan ? 'pointer' : 'default'
-            }}>.docx</button>
+          {/* The three sit together on the right in one weight. A solid white
+              pill for "+ Booking" made it the loudest thing on the screen, above
+              the week itself, and a different height from its neighbours. */}
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <button onClick={goToday} style={chipStyle}>Today</button>
+            <button onClick={() => setAdding(true)} aria-label="Add a booking"
+              style={chipStyle}>+ Booking</button>
+            <button onClick={downloadDocx} disabled={!plan} aria-label="Download the week as Word"
+              style={{ ...chipStyle, opacity: plan ? 1 : 0.45, cursor: plan ? 'pointer' : 'default' }}>
+              .docx
+            </button>
+          </span>
         </div>
 
         <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '8px 8px 0' }}>
