@@ -66,6 +66,23 @@ const COLOUR_TO_SURGEON = Object.entries(SURGEON_COLOUR_NAMES)
     return acc
   }, {})
 
+/**
+ * The Google palette id a surgeon's booking should carry, per the guide.
+ *
+ * The app draws a case in the surgeon's colour whatever the booking says, so
+ * this is not for rendering — it is for fixing *Google*. A booking entered with
+ * no colour, or the wrong one, looks right in the portal and wrong in the
+ * calendar everyone else is reading, and this is what lets the portal offer to
+ * put it right.
+ */
+export function guideColorIdFor(surgeon) {
+  const name = SURGEON_COLOUR_NAMES[surgeon]
+  if (!name) return null
+  const id = Object.keys(GOOGLE_COLOR_NAMES).find(
+    key => GOOGLE_COLOR_NAMES[key].toLowerCase() === name.toLowerCase())
+  return id || null
+}
+
 export function colourNameFor(colorId) {
   if (colorId == null) return null
   return GOOGLE_COLOR_NAMES[Number(colorId)] || null

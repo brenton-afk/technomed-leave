@@ -23,7 +23,11 @@ const BOOKING = {
     kit: 'Diplomat (Consignment) /Cascadia/AIRO',
     hospital: 'Calvary Lenah Valley'
   },
-  notes: ''
+  notes: '',
+  start: '2026-09-23T09:00:00+10:00',
+  end: '2026-09-23T10:00:00+10:00',
+  allDay: false,
+  colorId: null                  // entered with no colour, as the live one was
 }
 
 let saved
@@ -217,5 +221,104 @@ describe('a title left behind by an edit', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave it' }))
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+
+describe('moving a booking', () => {
+  it('shows the Hobart date and time, not the device\'s', async () => {
+    show()
+    await ready()
+    expect(screen.getByDisplayValue('2026-09-23')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('09:00')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('10:00')).toBeInTheDocument()
+  })
+
+  it('sends a naive local time and lets the server apply the zone', async () => {
+    // Never an offset worked out here. A phone in another timezone — or one
+    // whose clock is simply wrong — must not be able to move a theatre list by
+    // an hour, which is the class of bug that had the day view a day out every
+    // morning until 10am.
+    show()
+    await ready()
+    fireEvent.change(screen.getByDisplayValue('2026-09-23'), { target: { value: '2026-09-25' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.start).toBe('2026-09-25T09:00:00')
+    expect(saved.end).toBe('2026-09-25T10:00:00')
+    expect(saved.start).not.toMatch(/[+Z]/)
+  })
+
+  it('says where it is moving the booking to', async () => {
+    show()
+    await ready()
+    fireEvent.change(screen.getByDisplayValue('09:00'), { target: { value: '13:30' } })
+    expect(await screen.findByText(/Moving this booking to 2026-09-23 · 13:30/)).toBeInTheDocument()
+  })
+
+  it('leaves the time out of a save that did not touch it', async () => {
+    show()
+    await ready()
+    fireEvent.change(screen.getByDisplayValue('L5/S1 PLIF'), { target: { value: 'L4/5 TLIF' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.start).toBeUndefined()
+  })
+})
+
+describe('the colour in the calendar', () => {
+  // The portal draws a case in the surgeon's colour whatever the booking
+  // carries — that is the fix for an uncoloured booking showing up blue. This is
+  // the other half: the calendar everyone else reads still shows what was set,
+  // so the portal has to be able to put it right.
+  it('offers the surgeon\'s colour when the booking has the wrong one', async () => {
+    show()
+    await ready()
+    // Ibbett is Banana, and this booking has no colour at all.
+    expect(await screen.findByText(/Set to Banana/)).toBeInTheDocument()
+  })
+
+  it('sets it in one tap, and sends Google\'s own palette id', async () => {
+    show()
+    await ready()
+    fireEvent.click(await screen.findByText(/Set to Banana/))
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.colorId).toBe('5')     // Banana
+  })
+
+  it('lets any colour be picked', async () => {
+    show()
+    await ready()
+    fireEvent.click(screen.getByLabelText('Flamingo'))
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.colorId).toBe('4')
+  })
+
+  it('reads the surgeon through their title', async () => {
+    // The calendar says "Surg - Dr Ibbett". Without stripping the honorific
+    // there is no guide colour and the suggestion never appears.
+    show()
+    await ready()
+    expect(screen.getByDisplayValue('Dr Ibbett')).toBeInTheDocument()
+    expect(screen.getByText(/Set to Banana/)).toBeInTheDocument()
+  })
+
+  it('says nothing when the colour is already right', async () => {
+    show()
+    await ready()
+    fireEvent.click(await screen.findByText(/Set to Banana/))
+    await waitFor(() => expect(screen.queryByText(/Set to Banana/)).not.toBeInTheDocument())
+  })
+
+  it('leaves the colour out of a save that did not touch it', async () => {
+    show()
+    await ready()
+    fireEvent.change(screen.getByDisplayValue('L5/S1 PLIF'), { target: { value: 'L4/5 TLIF' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved.colorId).toBeUndefined()
   })
 })

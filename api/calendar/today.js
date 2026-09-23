@@ -245,6 +245,7 @@ async function handleBooking(req, res) {
       start: event.start?.dateTime || event.start?.date || null,
       end: event.end?.dateTime || event.end?.date || null,
       allDay: !event.start?.dateTime,
+      colorId: event.colorId || null,
       // The labelled values exactly as written, for the form to edit. The
       // patient's is trimmed to a surname on the way out — the portal shows
       // surnames only, and the rest is preserved on save rather than displayed.
@@ -319,9 +320,20 @@ async function handleSave(req, res) {
 
     const patch = { description }
     if (summary !== (current.summary || '')) patch.summary = summary
+
+    // Naive local times plus the zone, never an offset computed on the client.
+    // A phone in another timezone — or one whose clock is simply wrong — would
+    // otherwise move a booking to the wrong hour, which is the class of bug that
+    // had the day view a day out for the first ten hours of every morning.
     if (body.start && body.end) {
       patch.start = { dateTime: body.start, timeZone: TZ }
       patch.end = { dateTime: body.end, timeZone: TZ }
+    }
+
+    // Google's own palette id, so the calendar and the portal agree about what
+    // colour a booking carries. Null clears it back to the calendar default.
+    if (Object.prototype.hasOwnProperty.call(body, 'colorId')) {
+      patch.colorId = body.colorId ? String(body.colorId) : null
     }
 
     const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })

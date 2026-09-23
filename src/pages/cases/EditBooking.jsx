@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
+import {
+  GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
+} from '../../clinicalPlan/colours.js'
+import { zonedCivil, toDateStr, TZ } from '../../clinicalPlan/week.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -28,7 +32,22 @@ const FIELDS = [
   { key: 'hospital', label: 'Hospital' }
 ]
 
-function Field({ label, hint, value, onChange, autoFocus }) {
+/**
+ * The Hobart date and clock time of an instant, for the form.
+ *
+ * Never the device's. A rep in Melbourne opening a booking must see the time the
+ * theatre list actually starts, and saving must not shift it by an hour.
+ */
+function civilParts(iso) {
+  if (!iso || !String(iso).includes('T')) return null
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return null
+  const c = zonedCivil(at, TZ)
+  const pad = n => String(n).padStart(2, '0')
+  return { date: toDateStr(c), time: `${pad(c.hour)}:${pad(c.minute)}` }
+}
+
+function Field({ label, hint, value, onChange, autoFocus, type = 'text' }) {
   return (
     <label style={{ display: 'block', marginBottom: space.md }}>
       <span style={{
@@ -36,6 +55,7 @@ function Field({ label, hint, value, onChange, autoFocus }) {
         display: 'block', marginBottom: 4
       }}>{label}</span>
       <input
+        type={type}
         value={value}
         autoFocus={autoFocus}
         onChange={e => onChange(e.target.value)}
@@ -93,10 +113,69 @@ export function staleTitle(summary, before, after) {
   return null
 }
 
+/**
+ * The booking's colour in Google.
+ *
+ * Not how the portal draws the case — that follows the surgeon from the booking
+ * guide whatever the event carries, which is the fix for a booking entered with
+ * no colour showing up blue. This is the other half of that: the calendar
+ * everyone else reads still shows whatever was set, so the portal has to be able
+ * to put it right.
+ *
+ * The guide's colour is marked, so correcting one is a single tap rather than a
+ * memory test about which surgeon is Banana.
+ */
+function ColourPicker({ value, surgeon, onChange }) {
+  const expected = guideColorIdFor(String(surgeon || '').replace(/^(dr|mr|mrs|ms|prof)\b\.?\s*/i, '').trim())
+  const wrong = expected && String(value || '') !== String(expected)
+
+  return (
+    <div style={{ marginBottom: space.md }}>
+      <span style={{
+        ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
+        display: 'block', marginBottom: 4
+      }}>Colour in the calendar</span>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {Object.keys(GOOGLE_COLOR_NAMES).map(id => {
+          const on = String(value || '') === id
+          return (
+            <button key={id} type="button" onClick={() => onChange(id)}
+              aria-label={GOOGLE_COLOR_NAMES[id]} aria-pressed={on}
+              title={GOOGLE_COLOR_NAMES[id] + (id === expected ? ' — the guide' : '')}
+              style={{
+                width: 30, height: 30, borderRadius: radius.pill, cursor: 'pointer',
+                background: GOOGLE_COLOR_HEX[id],
+                border: on ? `3px solid ${colour.ink}` : `1px solid ${colour.line}`,
+                // The guide's colour is ringed, so the right one is findable
+                // without knowing the table by heart.
+                outline: id === expected ? `2px dashed ${colour.inkFaint}` : 'none',
+                outlineOffset: 2
+              }} />
+          )
+        })}
+      </div>
+
+      {wrong && (
+        <button type="button" onClick={() => onChange(expected)}
+          style={{
+            ...text('caption'), marginTop: space.sm, cursor: 'pointer',
+            background: 'none', border: `1px solid ${colour.line}`,
+            borderRadius: radius.control, padding: `4px ${space.sm}px`, color: colour.inkMuted
+          }}>
+          Set to {colourNameFor(expected)} — {surgeon}'s colour
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const [loaded, setLoaded] = useState(null)
   const [fields, setFields] = useState({})
   const [notes, setNotes] = useState('')
+  const [when, setWhen] = useState({ date: '', start: '', end: '' })
+  const [colorId, setColorId] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [titleFix, setTitleFix] = useState(null)
@@ -113,6 +192,10 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
       setLoaded(data)
       setFields({ ...data.fields })
       setNotes(data.notes || '')
+      const from = civilParts(data.start)
+      const to = civilParts(data.end)
+      setWhen({ date: from?.date || '', start: from?.time || '', end: to?.time || '' })
+      setColorId(data.colorId || null)
       setTitleFix(null)
       setStatus('ready')
     } catch (err) {
@@ -124,9 +207,17 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
 
   useEffect(() => { load() }, [load])
 
+  const originalWhen = loaded
+    ? { date: civilParts(loaded.start)?.date || '', start: civilParts(loaded.start)?.time || '',
+        end: civilParts(loaded.end)?.time || '' }
+    : null
+  const movedTime = Boolean(originalWhen && (
+    when.date !== originalWhen.date || when.start !== originalWhen.start || when.end !== originalWhen.end))
+  const recoloured = Boolean(loaded && (colorId || null) !== (loaded.colorId || null))
+
   const changed = loaded && (
     FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields[f.key] || ''))
-    || notes !== (loaded.notes || ''))
+    || notes !== (loaded.notes || '') || movedTime || recoloured)
 
   async function save({ withTitle } = {}) {
     setStatus('saving'); setError('')
@@ -146,6 +237,12 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
           etag: loaded.etag,
           fields: patch,
           ...(notes !== (loaded.notes || '') ? { notes } : {}),
+          // Naive local times plus the zone on the server, never an offset
+          // worked out here: the phone's timezone must not move a theatre list.
+          ...(movedTime && when.date && when.start && when.end
+            ? { start: `${when.date}T${when.start}:00`, end: `${when.date}T${when.end}:00` }
+            : {}),
+          ...(recoloured ? { colorId } : {}),
           ...(withTitle ? { summary: withTitle } : {})
         })
       })
@@ -277,6 +374,28 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
               </div>
             )}
 
+            {loaded && status !== 'loading' && !loaded.allDay && (
+              <>
+                <Field label="Date" type="date" value={when.date}
+                  onChange={v => setWhen(c => ({ ...c, date: v }))} />
+                <div style={{ display: 'flex', gap: space.sm }}>
+                  <div style={{ flex: 1 }}>
+                    <Field label="Start" type="time" value={when.start}
+                      onChange={v => setWhen(c => ({ ...c, start: v }))} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <Field label="Finish" type="time" value={when.end}
+                      onChange={v => setWhen(c => ({ ...c, end: v }))} />
+                  </div>
+                </div>
+                {movedTime && (
+                  <div style={{ ...text('caption'), color: colour.accentDeep, marginTop: -space.sm, marginBottom: space.md }}>
+                    Moving this booking to {when.date} · {when.start}–{when.end}, Hobart time.
+                  </div>
+                )}
+              </>
+            )}
+
             {loaded && status !== 'loading' && (
               <>
                 {FIELDS.map((f, i) => (
@@ -304,6 +423,11 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                     Why it moved, who called it in, what still has to be ordered
                   </span>
                 </label>
+
+                <ColourPicker
+                  value={colorId}
+                  surgeon={fields.surgeon}
+                  onChange={setColorId} />
               </>
             )}
           </div>
