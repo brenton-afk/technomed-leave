@@ -23,7 +23,21 @@ export function getCalendarId() {
 
 // Mints a service-account access token for the requested scope. Shared by the
 // write path here and the read path in api/calendar/today.js.
-export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE) {
+/**
+ * A Google access token for the service account.
+ *
+ * `impersonate` adds the `sub` claim, which makes the token act as that user
+ * instead of as the service account itself. It is needed for Gmail and for
+ * nothing else here: a service account owns no mailbox, so reading
+ * bookings@technomed.com.au means acting as it.
+ *
+ * This requires domain-wide delegation to be granted in the Workspace admin
+ * console — the service account's client ID authorised for the Gmail scope. It
+ * is a deliberate, auditable grant and it is not something the code can arrange
+ * for itself. Without it Google refuses the token with `unauthorized_client`,
+ * which is reported as such rather than as a mysterious failure.
+ */
+export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE, { impersonate } = {}) {
   const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
   if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not configured')
 
@@ -40,7 +54,8 @@ export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE) {
     scope,
     aud: 'https://oauth2.googleapis.com/token',
     exp: now + 3600,
-    iat: now
+    iat: now,
+    ...(impersonate ? { sub: impersonate } : {})
   }
 
   const { createSign } = await import('crypto')

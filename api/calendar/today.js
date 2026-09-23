@@ -10,7 +10,16 @@ import {
 } from '../../src/clinicalPlan/labelledFields.js'
 import { readBooking, normaliseSurgeon, extractRep } from '../../src/clinicalPlan/parse.js'
 import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
-import { getRunsheet, tickRunsheetItem, untickRunsheetItem } from '../_redis.js'
+import {
+  getRunsheet, tickRunsheetItem, untickRunsheetItem,
+  bookingEmailSeen, markBookingEmailSeen, saveBookingCandidate,
+  getBookingCandidate, getBookingQueue, updateBookingCandidate
+} from '../_redis.js'
+import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
+import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
+import { readBookingDocument } from '../_readBookingDocument.js'
+import { sourceOf, isSameBooking, mergeBookings } from '../../src/clinicalPlan/bookingSources.js'
+import { systemsInKit } from '../../src/clinicalPlan/systems.js'
 import { firstNameFor } from '../../src/staffConfig.js'
 
 // The Staff Leave sub-calendar. Read alongside bookings for the clinical plan
@@ -42,6 +51,12 @@ export default async function handler(req, res) {
   if (req.query.action === 'booking') return handleBooking(req, res)
   if (req.query.action === 'create') return handleCreate(req, res)
   if (req.query.action === 'delete') return handleDelete(req, res)
+  // The booking review queue. Bookings read out of bookings@ wait here for a
+  // person before they reach the calendar — see api/_redis.js for why.
+  if (req.query.action === 'queue') return handleQueue(req, res)
+  if (req.query.action === 'ingest') return handleIngest(req, res)
+  if (req.query.action === 'accept') return handleAccept(req, res)
+  if (req.query.action === 'dismiss') return handleDismiss(req, res)
 
   try {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
@@ -422,6 +437,55 @@ function bookingTitle({ patient, system, surgeon, rep }) {
   return `${head}${tail}${rep ? ` (${rep})` : ''}`.replace(/\s{2,}/g, ' ').trim()
 }
 
+/**
+ * Writes one booking to the calendar.
+ *
+ * Shared by the +Booking sheet and by accepting something out of the review
+ * queue, so a booking that arrived by email is indistinguishable from one the
+ * team typed — same title convention, same labelled notes, same colour rule.
+ * Two writers would drift apart within a month.
+ */
+async function writeBooking({ fields = {}, date, notes, rep, colorId }, enteredBy) {
+  const patient = String(fields.patient || '').trim()
+  const surgeon = String(fields.surgeon || '').trim()
+  const day = String(date || '').trim()
+  if (!patient) throw Object.assign(new Error('A patient surname is needed'), { status: 400 })
+  if (!surgeon) throw Object.assign(new Error('A surgeon is needed'), { status: 400 })
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    throw Object.assign(new Error('A date is needed'), { status: 400 })
+  }
+
+  // Built through the same writer the edit sheet uses, so a booking created
+  // here reads back exactly like one the team typed.
+  let description = ''
+  for (const field of ['surgeon', 'patient', 'procedure', 'kit', 'hospital']) {
+    const value = String(fields[field] || '').trim()
+    if (value) description = setLabelledValue(description, field, value)
+  }
+  for (const line of String(notes || '').split('\n').map(l => l.trim()).filter(Boolean)) {
+    description += `\n\n${line}`
+  }
+
+  const kitField = parseLabelledDescription(description).kit || ''
+  const summary = bookingTitle({
+    patient,
+    system: String(kitField).replace(/\s*[([{].*$/, '').trim(),
+    surgeon,
+    rep: String(rep || '').trim() || null
+  })
+
+  // The colour follows the surgeon, exactly as it does on every save.
+  const colour = colorId || guideColorIdFor(normaliseSurgeon(surgeon) || '') || null
+
+  return createBookingEvent({
+    summary,
+    description: withAttribution(description.trim(), enteredBy, { created: true }),
+    date: day,
+    colorId: colour,
+    location: String(fields.hospital || '').trim() || undefined
+  })
+}
+
 async function handleCreate(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
@@ -429,53 +493,13 @@ async function handleCreate(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-    const fields = body.fields || {}
-
-    const patient = String(fields.patient || '').trim()
-    const surgeon = String(fields.surgeon || '').trim()
-    const date = String(body.date || '').trim()
-    if (!patient) return res.status(400).json({ error: 'A patient surname is needed' })
-    if (!surgeon) return res.status(400).json({ error: 'A surgeon is needed' })
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'A date is needed' })
-
-    // Built through the same writer the edit sheet uses, so a booking created
-    // here reads back exactly like one the team typed.
-    let description = ''
-    for (const field of ['surgeon', 'patient', 'procedure', 'kit', 'hospital']) {
-      const value = String(fields[field] || '').trim()
-      if (value) description = setLabelledValue(description, field, value)
-    }
-    for (const line of String(body.notes || '').split('\n').map(l => l.trim()).filter(Boolean)) {
-      description += `\n\n${line}`
-    }
-
-    const kitField = parseLabelledDescription(description).kit || ''
-    const summary = bookingTitle({
-      patient,
-      system: String(kitField).replace(/\s*[([{].*$/, '').trim(),
-      surgeon,
-      rep: String(body.rep || '').trim() || null
-    })
-
-    // The colour follows the surgeon, exactly as it does on every save.
-    const colorId = body.colorId
-      || guideColorIdFor(normaliseSurgeon(surgeon) || '')
-      || null
-
-    const created = await createBookingEvent({
-      summary,
-      description: withAttribution(description.trim(), firstNameFor(session.email), { created: true }),
-      date,
-      colorId,
-      location: String(fields.hospital || '').trim() || undefined
-    })
-
+    const created = await writeBooking(body, firstNameFor(session.email))
     return res.status(200).json({
       ok: true,
       event: { id: created.id, summary: created.summary || '', etag: created.etag || null }
     })
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    return res.status(err.status || 500).json({ error: err.message })
   }
 }
 
@@ -528,6 +552,195 @@ async function handleDelete(req, res) {
     if (err.code === 'conflict') {
       return res.status(409).json({ error: err.message, code: 'conflict' })
     }
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+// ─── The booking review queue ────────────────────────────────────────────────
+// Bookings arrive at bookings@technomed.com.au from three places in a dozen
+// shapes: a pasted RHH theatre table, a PDF from the spine service, a photo of a
+// printed list, a sentence in an email. They are read here, held as candidates,
+// and written to the calendar only when somebody taps accept.
+//
+// Nothing in this path replies to, acknowledges, or otherwise writes back to a
+// booking source. See the note in src/clinicalPlan/bookingSources.js — it is a
+// relationship, not a technical constraint, and it matters more than the code.
+
+/** A stable id for a candidate, so reading the same email twice cannot double it. */
+function candidateId({ date, patient, surgeon }) {
+  const slug = [date, patient, surgeon].map(v =>
+    String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '')).join('-')
+  return `bk_${slug || Math.random().toString(36).slice(2, 10)}`
+}
+
+async function handleQueue(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  try {
+    const all = await getBookingQueue()
+    // Accepted and dismissed candidates stay in storage but not in the team's
+    // face. The queue is a to-do list; a cleared one should look cleared.
+    const pending = all.filter(c => c.status === 'pending')
+    return res.status(200).json({
+      ok: true,
+      pending,
+      recent: all.filter(c => c.status !== 'pending').slice(0, 20),
+      count: pending.length
+    })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * Reads unread bookings out of the mailbox and queues what it finds.
+ *
+ * The RHH weekly table is parsed deterministically — it is well formed, it is
+ * the highest volume by far, and there is no sense paying a model to read a
+ * table. Everything else goes to the vision reader, which handles PDFs, photos
+ * and freeform text alike.
+ */
+async function handleIngest(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  try {
+    // A fortnight back is enough to catch up after a quiet week without trawling
+    // the whole mailbox on every run.
+    const messageIds = await searchMailbox('newer_than:14d -in:spam', { max: 40 })
+    const existing = await getBookingQueue()
+
+    let read = 0
+    const queued = []
+
+    for (const messageId of messageIds) {
+      if (await bookingEmailSeen(messageId)) continue
+
+      const email = await readMessage(messageId)
+      const source = sourceOf(addressOf(email.from))
+      read += 1
+
+      let found = []
+      if (source?.id === 'rhh') found = parseTheatreList(email)
+      // Either it is not the RHH table, or the table was unreadable. Both are
+      // reasons to let the model look rather than to give up on the email.
+      if (!found.length) found = await readBookingDocument(email)
+
+      for (const booking of found) {
+        if (!booking.patient && !booking.surgeon) continue
+
+        const candidate = {
+          ...booking,
+          systems: booking.systems || systemsInKit(booking.kit || ''),
+          hospital: booking.hospital || source?.hospital || '',
+          id: candidateId(booking),
+          status: 'pending',
+          messageId,
+          subject: email.subject || '',
+          receivedAt: email.receivedAt,
+          sources: [source?.id || booking.source || 'email'],
+          createdAt: new Date().toISOString()
+        }
+
+        // The same case from CNS and from Calvary is one booking. Merging keeps
+        // whichever copy said more, field by field, and — deliberately — never
+        // tells either sender that the other got in first.
+        const twin = [...existing, ...queued].find(
+          c => c.status !== 'dismissed' && isSameBooking(c, candidate))
+        if (twin) {
+          const merged = mergeBookings(twin, candidate)
+          await saveBookingCandidate(merged)
+          Object.assign(twin, merged)
+          continue
+        }
+
+        // A case already dismissed stays dismissed: re-reading the email that
+        // carried it must not resurrect it.
+        const buried = existing.find(c => c.status === 'dismissed' && isSameBooking(c, candidate))
+        if (buried) continue
+
+        await saveBookingCandidate(candidate)
+        queued.push(candidate)
+      }
+
+      await markBookingEmailSeen(messageId, found.length)
+    }
+
+    const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
+    return res.status(200).json({ ok: true, read, found: queued.length, count: pending.length, pending })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/** Accept: the candidate, as edited on screen, goes to the calendar. */
+async function handleAccept(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const id = String(body.id || '').trim()
+    const candidate = await getBookingCandidate(id)
+    if (!candidate) return res.status(404).json({ error: 'That booking is no longer in the queue' })
+    if (candidate.status === 'accepted') {
+      // Two taps on a slow connection must not make two bookings.
+      return res.status(200).json({ ok: true, alreadyAccepted: true, candidate })
+    }
+
+    // What the screen shows is what gets written — the team corrects the reading
+    // in front of them, and those corrections are the point of the queue.
+    const fields = body.fields || {
+      patient: candidate.patient,
+      surgeon: candidate.surgeon,
+      procedure: candidate.procedure,
+      kit: candidate.kit,
+      hospital: candidate.hospital
+    }
+    const created = await writeBooking({
+      fields,
+      date: body.date || candidate.date,
+      notes: body.notes ?? candidate.note,
+      rep: body.rep,
+      colorId: body.colorId
+    }, firstNameFor(session.email))
+
+    const accepted = await updateBookingCandidate(id, {
+      status: 'accepted',
+      acceptedBy: firstNameFor(session.email),
+      acceptedAt: new Date().toISOString(),
+      eventId: created.id
+    })
+
+    return res.status(200).json({
+      ok: true,
+      candidate: accepted,
+      event: { id: created.id, summary: created.summary || '', etag: created.etag || null }
+    })
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message })
+  }
+}
+
+/** Dismiss: not a case, already on the calendar, or cancelled before it started. */
+async function handleDismiss(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const id = String(body.id || '').trim()
+    const dismissed = await updateBookingCandidate(id, {
+      status: 'dismissed',
+      dismissedBy: firstNameFor(session.email),
+      dismissedAt: new Date().toISOString(),
+      reason: String(body.reason || '').trim() || null
+    })
+    return res.status(200).json({ ok: true, candidate: dismissed })
+  } catch (err) {
     return res.status(500).json({ error: err.message })
   }
 }

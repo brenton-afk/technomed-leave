@@ -12,6 +12,7 @@ import {
 import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
+import BookingQueue from './cases/BookingQueue.jsx'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -397,6 +398,27 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
 
   const onThisWeek = window_.days.includes(today)
 
+  // How many bookings are waiting to be confirmed. Only the count is fetched
+  // here — the cards themselves are read when the queue is opened, so the week
+  // view does not carry patient detail it never shows.
+  const [queueCount, setQueueCount] = useState(0)
+  const [showQueue, setShowQueue] = useState(false)
+
+  const countQueue = useCallback(async () => {
+    try {
+      const res = await fetch('/api/calendar/today?action=queue', {
+        headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      setQueueCount(data.count || 0)
+    } catch {
+      // A queue that cannot be counted is not worth interrupting the week for.
+    }
+  }, [user])
+
+  useEffect(() => { countQueue() }, [countQueue])
+
   const caseCount = day => (day?.casesByHospital || []).reduce(
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
@@ -476,6 +498,29 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         {status === 'loading' && !plan && (
           <div style={{ textAlign: 'center', padding: space.xl, color: colour.inkFaint }}>Loading…</div>
         )}
+
+        {/* The bookings inbox. Always in the same place, whether or not anything
+            is waiting — an entry point that only appears when there is something
+            behind it cannot be checked, and "did that booking come through?" is
+            a question asked most often when the answer is no. */}
+        <button onClick={() => setShowQueue(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: space.sm, width: '100%',
+            textAlign: 'left', cursor: 'pointer', marginBottom: space.md,
+            background: queueCount > 0 ? colour.warningSoft : 'transparent',
+            border: `1px solid ${queueCount > 0 ? colour.warningLine : colour.line}`,
+            borderRadius: radius.card, padding: queueCount > 0 ? space.md : space.sm
+          }}>
+          <span style={{
+            ...text(queueCount > 0 ? 'bodyStrong' : 'caption'),
+            color: queueCount > 0 ? colour.ink : colour.inkFaint, flex: 1
+          }}>
+            {queueCount > 0
+              ? `${queueCount} booking${queueCount === 1 ? '' : 's'} to confirm`
+              : 'Bookings inbox — nothing waiting'}
+          </span>
+          <span style={{ ...text('body'), color: colour.inkFaint }}>›</span>
+        </button>
 
         {plan && span === 'day' && (
           <>
@@ -558,6 +603,15 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           date={adding}
           onClose={() => setAdding(null)}
           onCreated={() => load(window_, { quiet: true })} />
+      )}
+
+      {showQueue && (
+        <BookingQueue
+          user={user}
+          onClose={() => { setShowQueue(false); countQueue() }}
+          // A booking accepted here lands on the calendar, so the week has to be
+          // read again for it to appear.
+          onAccepted={() => { countQueue(); load(window_, { quiet: true }) }} />
       )}
 
       {editing && (

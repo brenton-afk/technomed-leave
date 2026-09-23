@@ -252,3 +252,65 @@ export async function tickRunsheetItem(date, itemId, by, at = new Date().toISOSt
 export async function untickRunsheetItem(date, itemId) {
   await redis('hdel', runsheetKey(date), itemId)
 }
+
+// ─── BOOKING REVIEW QUEUE ───────────────────────────────────
+// Bookings read out of the mailbox land here, never straight on the calendar.
+// A parser that is right nine times in ten still puts a wrong case in front of a
+// surgeon once a fortnight, and a wrong booking costs more than a missing one:
+// somebody drives to the wrong hospital, or the kit does not arrive. So every
+// candidate waits for a person to look at it.
+//
+// Candidates are kept after they are accepted or dismissed rather than deleted.
+// It is the only way to answer "did that booking ever come through?" when a
+// hospital says they sent one, and it is how a dismissed case stays dismissed
+// when the same email is read again.
+
+const queueKey = id => `bookingQueue:${id}`
+
+/** Whether this email has already been through the queue. */
+export async function bookingEmailSeen(messageId) {
+  if (!messageId) return false
+  return Boolean(await redis('get', `bookingQueue:seen:${messageId}`))
+}
+
+/** Remembers an email as read, so a re-scan does not queue it twice. */
+export async function markBookingEmailSeen(messageId, count = 0) {
+  if (!messageId) return
+  await redis('set', `bookingQueue:seen:${messageId}`, JSON.stringify({
+    at: new Date().toISOString(), count
+  }))
+}
+
+export async function saveBookingCandidate(candidate) {
+  await redis('set', queueKey(candidate.id), JSON.stringify(candidate))
+  // A set, not a list: the same id being saved twice must not queue it twice.
+  await redis('sadd', 'bookingQueue:all', candidate.id)
+  return candidate
+}
+
+export async function getBookingCandidate(id) {
+  const data = await redis('get', queueKey(id))
+  return data ? JSON.parse(data) : null
+}
+
+/**
+ * Everything in the queue, newest first.
+ *
+ * Accepted and dismissed candidates come back too — the caller decides what to
+ * show. The queue is small by nature (a week of bookings for one distributor),
+ * so there is nothing to gain by paging it.
+ */
+export async function getBookingQueue() {
+  const ids = await redis('smembers', 'bookingQueue:all') || []
+  const items = await Promise.all(ids.map(id => getBookingCandidate(id)))
+  return items.filter(Boolean)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+}
+
+export async function updateBookingCandidate(id, updates) {
+  const candidate = await getBookingCandidate(id)
+  if (!candidate) throw new Error('That booking is no longer in the queue')
+  const updated = { ...candidate, ...updates, updatedAt: new Date().toISOString() }
+  await redis('set', queueKey(id), JSON.stringify(updated))
+  return updated
+}
