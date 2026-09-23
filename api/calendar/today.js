@@ -58,6 +58,14 @@ export default async function handler(req, res) {
   if (req.query.action === 'accept') return handleAccept(req, res)
   if (req.query.action === 'dismiss') return handleDismiss(req, res)
 
+  // Everything below this line is the bookings calendar in full: surgeons,
+  // patient surnames, hospitals, procedures, kit. It was served to anyone who
+  // knew the URL — every ?action= handler above checks a session and this path,
+  // the oldest one, never did. Nothing in the app calls it without an action, so
+  // requiring a session here costs nothing and closes it.
+  const session = await requireSession(req, res)
+  if (!session) return
+
   try {
     const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
     const calendarId = getCalendarId()
