@@ -546,3 +546,25 @@ describe('bookings as the team actually writes them', () => {
     expect(read.surgeon).toBe('Atallah')
   })
 })
+
+describe('a surgeon written the hospital\'s way', () => {
+  it('reads PETERS-WILLKE as JPW', () => {
+    // The RHH theatre lists give surnames in full; the booking calendar uses the
+    // short form the team says out loud. Without the alias the whole booking
+    // finds no surgeon and is not read as a case at all.
+    for (const written of ['PETERS-WILLKE', 'Peters-Willke', 'Peters Willke', 'Jens Peters-Willke']) {
+      expect(normaliseSurgeon(written), written).toBe('JPW')
+    }
+  })
+
+  it('reads one out of a real booking title', () => {
+    const read = readBooking('Marsh LONESTAR - PETERS-WILLKE', 'Kit: Lonestar')
+    expect(read.surgeon).toBe('JPW')
+    expect(read.patient).toBe('Marsh')
+  })
+
+  it('does not turn an unknown name into one', () => {
+    expect(normaliseSurgeon('Peterson')).toBeNull()
+    expect(normaliseSurgeon('Willkes')).toBeNull()
+  })
+})

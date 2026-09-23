@@ -13,7 +13,31 @@ export const SURGEON_KEYS = [
   'Hannan', 'Dubey', 'Thani', 'Fowler', 'Ibbett', 'JPW', 'Gupta', 'Atallah', 'Garg'
 ]
 
-const SURGEON_LOOKUP = new Map(SURGEON_KEYS.map(k => [k.toLowerCase(), k]))
+/**
+ * The other names a surgeon is written under.
+ *
+ * The RHH theatre lists give surnames in full while the booking calendar uses
+ * the short form the team says out loud, so the same surgeon arrives as
+ * "PETERS-WILLKE" from the hospital and "JPW" from us. Without this the whole
+ * booking fails to find a surgeon and is not read as a case at all.
+ *
+ * Keys are matched after punctuation is flattened, so "Peters-Willke",
+ * "Peters Willke" and "PETERS WILLKE" all land on the same entry.
+ */
+const SURGEON_ALIASES = {
+  'peters willke': 'JPW',
+  'jens peters willke': 'JPW'
+}
+
+const SURGEON_LOOKUP = new Map([
+  ...SURGEON_KEYS.map(k => [k.toLowerCase(), k]),
+  ...Object.entries(SURGEON_ALIASES)
+])
+
+/** Hyphens, apostrophes and doubled spaces flattened, for alias matching. */
+function flattenName(value) {
+  return String(value || '').toLowerCase().replace(/[-'’.]/g, ' ').replace(/\s{2,}/g, ' ').trim()
+}
 
 // Long digit runs are MRN/UR numbers; the date shapes are DOBs. Both are
 // removed from every string that reaches the plan.
@@ -47,8 +71,13 @@ export function sanitisePatient(raw) {
 export function normaliseSurgeon(raw) {
   const cleaned = stripIdentifiers(raw).replace(/^(dr|mr|mrs|ms|prof|professor|a\/prof)\b\.?/i, '').trim()
   if (!cleaned) return null
-  const direct = SURGEON_LOOKUP.get(cleaned.toLowerCase())
+  const direct = SURGEON_LOOKUP.get(cleaned.toLowerCase()) || SURGEON_LOOKUP.get(flattenName(cleaned))
   if (direct) return direct
+  // An alias buried in a longer string — "Dr Jens Peters-Willke (RHH)".
+  const flat = flattenName(cleaned)
+  for (const [alias, key] of Object.entries(SURGEON_ALIASES)) {
+    if (new RegExp(`\\b${alias}\\b`).test(flat)) return key
+  }
   // Tolerate "Fowler (RHH)" or a surname buried in a longer string.
   for (const key of SURGEON_KEYS) {
     if (new RegExp(`\\b${key}\\b`, 'i').test(cleaned)) return key
