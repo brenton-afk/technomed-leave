@@ -24,8 +24,40 @@ async function gmail(path, { impersonate = MAILBOX } = {}) {
   const token = await getGoogleToken(GMAIL_READONLY, { impersonate })
 
   const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error(`Gmail ${path} failed (${res.status}): ${await res.text()}`)
+  if (!res.ok) throw await gmailError(res)
   return res.json()
+}
+
+/**
+ * A Google API failure as a sentence, not as a page of JSON.
+ *
+ * Google's error bodies are thorough and unreadable — the same message repeated
+ * four times inside nested `details`, wrapped around the one line that says what
+ * to do. On a phone that fills the screen and buries the instruction. So: take
+ * the message, and keep the activation link when there is one, because the fix
+ * for a disabled API is to open that link and press a button.
+ */
+async function gmailError(res) {
+  const body = await res.text()
+  let parsed
+  try {
+    parsed = JSON.parse(body)?.error
+  } catch {
+    parsed = null
+  }
+  if (!parsed?.message) {
+    return new Error(`The mailbox could not be read (${res.status}).`)
+  }
+
+  // "…visiting <url> then retry" is already in the message; no sense repeating
+  // the link underneath it.
+  const url = parsed.details
+    ?.find(d => d.metadata?.activationUrl)?.metadata.activationUrl
+  const message = parsed.message.split(/\s*If you enabled this API recently/)[0].trim()
+
+  return Object.assign(
+    new Error(url && !message.includes(url) ? `${message}\n\n${url}` : message),
+    { status: res.status })
 }
 
 /** Header value by name, case-insensitively. */
