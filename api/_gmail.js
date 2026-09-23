@@ -111,6 +111,8 @@ export async function readMessage(id, { withAttachments = true } = {}) {
           `/messages/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachment.attachmentId)}`)
         // Gmail gives URL-safe base64; the Anthropic SDK wants standard.
         attachment.data = String(body.data || '').replace(/-/g, '+').replace(/_/g, '/')
+        attachment.declaredMediaType = attachment.mediaType
+        attachment.mediaType = sniffMediaType(attachment.data, attachment.mediaType)
       } catch {
         // One unreadable attachment must not lose the rest of the email.
         attachment.data = null
@@ -129,6 +131,30 @@ export async function readMessage(id, { withAttachments = true } = {}) {
     html: parts.html,
     attachments: parts.attachments.filter(a => a.data)
   }
+}
+
+/**
+ * What an attachment actually is, from its first bytes.
+ *
+ * Mail clients declare the type in the MIME header and they are routinely wrong
+ * — a phone photo forwarded through two mail apps arrives labelled image/png and
+ * is a JPEG. Anthropic checks, and rejects the mismatch, which failed the whole
+ * run over one mislabelled photo of a theatre list.
+ *
+ * The bytes are not wrong, so read those and ignore what the email claims.
+ */
+export function sniffMediaType(base64, declared = '') {
+  const head = Buffer.from(String(base64 || '').slice(0, 32), 'base64')
+  if (head.length < 4) return declared
+
+  if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) return 'image/jpeg'
+  if (head[0] === 0x89 && head.toString('latin1', 1, 4) === 'PNG') return 'image/png'
+  if (head.toString('latin1', 0, 4) === '%PDF') return 'application/pdf'
+  if (head.toString('latin1', 0, 4) === 'RIFF' && head.toString('latin1', 8, 12) === 'WEBP') {
+    return 'image/webp'
+  }
+  if (head.toString('latin1', 0, 3) === 'GIF') return 'image/gif'
+  return declared
 }
 
 /** Just the address out of "Toni Hoppitt <toni@…>". */

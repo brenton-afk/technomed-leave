@@ -267,10 +267,17 @@ export async function untickRunsheetItem(date, itemId) {
 
 const queueKey = id => `bookingQueue:${id}`
 
+/** What is known about an email that has been looked at before. */
+export async function bookingEmailRecord(messageId) {
+  if (!messageId) return null
+  const data = await redis('get', `bookingQueue:seen:${messageId}`)
+  return data ? JSON.parse(data) : null
+}
+
 /** Whether this email has already been through the queue. */
 export async function bookingEmailSeen(messageId) {
-  if (!messageId) return false
-  return Boolean(await redis('get', `bookingQueue:seen:${messageId}`))
+  const record = await bookingEmailRecord(messageId)
+  return Boolean(record) && !record.failed
 }
 
 /** Remembers an email as read, so a re-scan does not queue it twice. */
@@ -279,6 +286,31 @@ export async function markBookingEmailSeen(messageId, count = 0) {
   await redis('set', `bookingQueue:seen:${messageId}`, JSON.stringify({
     at: new Date().toISOString(), count
   }))
+}
+
+/**
+ * Remembers that an email could not be read, and how many times.
+ *
+ * Retried rather than abandoned: a model call that fails once usually succeeds
+ * next time, and dropping the email would lose a real booking with nothing to
+ * show for it. After a few attempts it is left alone so one permanently
+ * unreadable email cannot consume a slot on every run forever — and the count is
+ * reported either way, so it stays visible rather than becoming a silent gap.
+ */
+export const MAX_READ_ATTEMPTS = 3
+
+export async function markBookingEmailFailed(messageId, message = '') {
+  if (!messageId) return 0
+  const previous = await bookingEmailRecord(messageId)
+  const attempts = (previous?.attempts || 0) + 1
+  await redis('set', `bookingQueue:seen:${messageId}`, JSON.stringify({
+    at: new Date().toISOString(),
+    failed: attempts < MAX_READ_ATTEMPTS,
+    attempts,
+    // Kept for diagnosis. Never the email's content — only why reading it broke.
+    lastError: String(message).slice(0, 200)
+  }))
+  return attempts
 }
 
 export async function saveBookingCandidate(candidate) {

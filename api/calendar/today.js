@@ -12,7 +12,7 @@ import { readBooking, normaliseSurgeon, extractRep } from '../../src/clinicalPla
 import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
-  bookingEmailSeen, markBookingEmailSeen, saveBookingCandidate,
+  bookingEmailSeen, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
@@ -629,6 +629,7 @@ async function handleIngest(req, res) {
     let read = 0
     let skipped = 0
     let remaining = 0
+    let unreadable = 0
     const queued = []
 
     for (const messageId of messageIds) {
@@ -652,10 +653,19 @@ async function handleIngest(req, res) {
       read += 1
 
       let found = []
-      if (source.id === 'rhh') found = parseTheatreList(email)
-      // Either it is not the RHH table, or the table was unreadable. Both are
-      // reasons to let the model look rather than to give up on the email.
-      if (!found.length) found = await readBookingDocument(email)
+      try {
+        if (source.id === 'rhh') found = parseTheatreList(email)
+        // Either it is not the RHH table, or the table was unreadable. Both are
+        // reasons to let the model look rather than to give up on the email.
+        if (!found.length) found = await readBookingDocument(email)
+      } catch (err) {
+        // One email that cannot be read must not cost the other four. It is
+        // retried on the next run and reported meanwhile — an email that fails
+        // quietly is a booking nobody knows was missed.
+        unreadable += 1
+        await markBookingEmailFailed(messageId, err.message)
+        continue
+      }
 
       for (const booking of found) {
         if (!booking.patient && !booking.surgeon) continue
@@ -699,7 +709,7 @@ async function handleIngest(req, res) {
 
     const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
     return res.status(200).json({
-      ok: true, read, skipped, remaining,
+      ok: true, read, skipped, remaining, unreadable,
       found: queued.length, count: pending.length, pending
     })
   } catch (err) {

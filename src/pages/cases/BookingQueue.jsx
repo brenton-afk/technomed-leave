@@ -342,6 +342,12 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
                     lastScan.skipped
                       ? `${lastScan.skipped} email${lastScan.skipped === 1 ? '' : 's'} `
                         + 'from senders that are not booking sources were left alone.'
+                      : null,
+                    // Reported rather than swallowed: these are retried, and if
+                    // the number does not fall it needs a person.
+                    lastScan.unreadable
+                      ? `${lastScan.unreadable} could not be read — they will be `
+                        + 'tried again.'
                       : null
                   ].filter(Boolean).join(' ')}
               </div>

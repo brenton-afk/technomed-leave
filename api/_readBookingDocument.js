@@ -26,7 +26,11 @@ import { systemsInKit } from '../src/clinicalPlan/systems.js'
 // health information.
 
 const MODEL = process.env.BOOKING_VISION_MODEL || 'claude-opus-5'
-export const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+// The types the model accepts. Matched against the sniffed type rather than the
+// one the email declared — see sniffMediaType in api/_gmail.js.
+export const ACCEPTED_MEDIA = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'
+]
 
 const PROMPT = `You are reading a surgical booking sent to a spinal implant distributor in Hobart, Tasmania. It may be a theatre list, a single booking, a scanned or photographed page, or a few lines in an email.
 
