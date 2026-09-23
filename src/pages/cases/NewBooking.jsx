@@ -140,8 +140,10 @@ function LoanVerdict({ system, hospital, date }) {
   )
 }
 
-export default function NewBooking({ user, onClose, onCreated }) {
-  const [date, setDate] = useState(defaultDate)
+export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
+  // Opens on the day being looked at, which is the booking most likely being
+  // made. Falls back to the next weekday when opened from nowhere in particular.
+  const [date, setDate] = useState(() => openOn || defaultDate())
   const [hospital, setHospital] = useState('')
   const [surgeon, setSurgeon] = useState('')
   // A list, because a real case often needs two: Diplomat with E4 cages, or

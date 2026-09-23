@@ -285,9 +285,24 @@ describe('the header', () => {
     expect(screen.queryByRole('button', { name: /^Today$/ })).not.toBeInTheDocument()
   })
 
-  it('keeps adding a booking within thumb reach instead', async () => {
+  it('offers adding a booking as a row, not a floating button', async () => {
+    // The circle pinned to the bottom corner drifted off with the content: it
+    // was positioned against a container that scrolls. A row cannot drift, and
+    // cannot float over the last case of a long list either.
     show()
     await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /Add a booking/ })).toBeInTheDocument()
+    const add = screen.getByRole('button', { name: /Add a booking/ })
+    expect(add).toBeInTheDocument()
+    expect(add.style.position).not.toBe('absolute')
+    expect(add.style.position).not.toBe('fixed')
+  })
+
+  it('names the day it sits under, and opens the sheet on it', async () => {
+    // One fewer thing to choose for the booking somebody is most likely making.
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    const add = screen.getByRole('button', { name: /Add a booking to Monday 21 September/ })
+    fireEvent.click(add)
+    expect(await screen.findByDisplayValue('2026-09-21')).toBeInTheDocument()
   })
 })

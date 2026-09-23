@@ -206,6 +206,36 @@ function ItemRow({ item }) {
   )
 }
 
+/**
+ * Adding a booking, as a row rather than a floating button.
+ *
+ * It was a circle pinned to the bottom corner, and it got lost: it was
+ * positioned against a container that scrolls, so it drifted off with the
+ * content. Fixing it to the viewport would have worked and would have left it
+ * floating over the last case of a long list, which is the usual complaint with
+ * that pattern.
+ *
+ * A row cannot drift and cannot cover anything. It also knows which day it sits
+ * under, so the sheet opens already set to that date — one fewer thing to choose
+ * for the booking somebody is most likely making.
+ */
+function AddBookingRow({ day, onAdd }) {
+  return (
+    <button type="button" onClick={() => onAdd(day)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: space.sm, width: '100%',
+        padding: `${space.sm}px ${space.md}px`, marginBottom: space.sm,
+        borderRadius: radius.card, cursor: 'pointer',
+        background: colour.accentSoft,
+        border: '1px dashed rgba(24,154,133,0.45)',
+        color: colour.accentDeep, ...text('bodyStrong')
+      }}>
+      <span aria-hidden="true" style={{ ...text('heading'), lineHeight: 1 }}>+</span>
+      <span>Add a booking{day ? ` to ${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}` : ''}</span>
+    </button>
+  )
+}
+
 function Heading({ children }) {
   return (
     <div style={{
@@ -275,7 +305,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   // The booking being edited, if any. Tapping a case opens the sheet; the sheet
   // loads it fresh from the calendar rather than editing what is on screen.
   const [editing, setEditing] = useState(null)
-  const [adding, setAdding] = useState(false)
+  // The day the sheet should open on, or null when it is closed.
+  const [adding, setAdding] = useState(null)
   const prefs = useMemo(() => readPrefs(), [])
   const [span, setSpan] = useState(prefs.caseSpan === 'week' ? 'week' : 'day')
   // Always this week, never where you were last time. The app is opened to find
@@ -370,7 +401,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
   return (
-    <Page style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <Page style={{ display: 'flex', flexDirection: 'column' }}>
       <Header eyebrow="This week" title="Cases"
         subtitle={plan?.summaryLine || 'Every booking, as the calendar has it'}>
         {switcher}
@@ -457,11 +488,14 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 {dayPlan?.caseCountLine ? ` · ${dayPlan.caseCountLine}` : ''}
               </div>
             </div>
+            <AddBookingRow day={activeDay} onAdd={setAdding} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}
+
+        {plan && span === 'week' && <AddBookingRow day={activeDay} onAdd={setAdding} />}
 
         {plan && span === 'week' && (plan.days || []).map(day => (
           <div key={day.date} style={{ marginBottom: space.xl }}>
@@ -518,22 +552,11 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         )}
       </div>
 
-      {/* Adding a booking is the one thing done often enough to deserve its own
-          target, and the one least suited to a header chip on a phone: it sits
-          where the thumb already is, clear of the tab bar. */}
-      <button onClick={() => setAdding(true)} aria-label="Add a booking"
-        style={{
-          position: 'absolute', right: space.md,
-          bottom: `calc(86px + env(safe-area-inset-bottom, 0px))`,
-          width: 52, height: 52, borderRadius: radius.pill, border: 'none',
-          background: colour.accent, color: 'white', ...text('display'), lineHeight: 1,
-          cursor: 'pointer', boxShadow: '0 4px 14px rgba(4,39,70,0.28)', zIndex: 20
-        }}>+</button>
-
       {adding && (
         <NewBooking
           user={user}
-          onClose={() => setAdding(false)}
+          date={adding}
+          onClose={() => setAdding(null)}
           onCreated={() => load(window_, { quiet: true })} />
       )}
 
