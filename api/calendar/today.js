@@ -6,6 +6,8 @@ import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
   parseLabelledDescription, descriptionNotes
 } from '../../src/clinicalPlan/labelledFields.js'
+import { readBooking, normaliseSurgeon } from '../../src/clinicalPlan/parse.js'
+import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import { getRunsheet, tickRunsheetItem, untickRunsheetItem } from '../_redis.js'
 import { firstNameFor } from '../../src/staffConfig.js'
 
@@ -330,10 +332,23 @@ async function handleSave(req, res) {
       patch.end = { dateTime: body.end, timeZone: TZ }
     }
 
-    // Google's own palette id, so the calendar and the portal agree about what
-    // colour a booking carries. Null clears it back to the calendar default.
+    // The colour follows the surgeon, without anybody choosing it.
+    //
+    // It is a function of who is operating — the guide says Ibbett is Banana —
+    // so asking a person to pick it is asking them to look up a table and get it
+    // right, which is exactly how bookings ended up uncoloured or wrong in the
+    // first place. Derived from the surgeon on every save instead, so any edit to
+    // a booking also puts its colour right.
+    //
+    // An explicit choice still wins. The picker is there for a booking the guide
+    // has no opinion about, and for the day somebody genuinely wants a different
+    // colour — deriving it is a default, not a lock.
     if (Object.prototype.hasOwnProperty.call(body, 'colorId')) {
       patch.colorId = body.colorId ? String(body.colorId) : null
+    } else {
+      const read = readBooking(summary, description)
+      const guide = guideColorIdFor(normaliseSurgeon(read?.surgeon || '') || '')
+      if (guide && String(current.colorId || '') !== guide) patch.colorId = guide
     }
 
     const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })

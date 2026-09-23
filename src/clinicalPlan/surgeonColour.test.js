@@ -3,8 +3,9 @@ import {
   accentForCase, accentFor, accentTextFor, guideHexFor,
   contrastRatio, SURGEON_ACCENTS, NAVIGATION_ACCENT
 } from './theme.js'
-import { GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, SURGEON_COLOUR_NAMES } from './colours.js'
+import { GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, SURGEON_COLOUR_NAMES, guideColorIdFor } from './colours.js'
 import { findNavigation } from './systems.js'
+import { readBooking, normaliseSurgeon } from './parse.js'
 
 // "Can you please make sure that the colours remain consistent in the app
 // irrespective of the way they are entered in google calendar — I think
@@ -131,5 +132,44 @@ describe('one surgeon, one colour, everywhere', () => {
       if (!SURGEON_COLOUR_NAMES[surgeon]) continue
       expect(accentFor(surgeon), surgeon).toBe(guideHexFor(surgeon))
     }
+  })
+})
+
+describe('deriving the colour a booking should carry', () => {
+  // What the save endpoint does on every write: read the booking, normalise the
+  // surgeon, look up the guide. Pure, so it is pinned here rather than through
+  // the API — and it is the chain that decides what lands in Google.
+  const colourFor = (title, description) => {
+    const read = readBooking(title, description)
+    return guideColorIdFor(normaliseSurgeon(read?.surgeon || '') || '')
+  }
+
+  it('works from a labelled booking', () => {
+    expect(colourFor('Marsh DIPLOMAT - Ibbett',
+      'Surg - Dr Ibbett\nPt - Marsh\nKit - Diplomat (Consignment)')).toBe('5')  // Banana
+  })
+
+  it('works from a title alone', () => {
+    expect(colourFor('Chalmers MARINER - Fowler', '')).toBe('3')                // Grape
+  })
+
+  it('reads through an honorific or an initial', () => {
+    // The live convention writes "Dr Ibbett" and "Mr J Fowler"; the guide is
+    // keyed on the surname.
+    expect(colourFor('Marsh DIP - Ibbett', 'Surg: Dr Ibbett\nPt: Marsh')).toBe('5')
+    expect(colourFor('Chalmers MAR - Fowler', 'Surg: Mr J Fowler\nPt: Chalmers')).toBe('3')
+  })
+
+  it('covers every surgeon in the guide', () => {
+    for (const [surgeon, name] of Object.entries(GUIDE)) {
+      expect(colourFor(`Marsh KIT - ${surgeon}`, ''), surgeon).toBe(
+        Object.keys(GOOGLE_COLOR_NAMES).find(k => GOOGLE_COLOR_NAMES[k] === name))
+    }
+  })
+
+  it('leaves a booking alone when the guide has no opinion', () => {
+    // A surgeon the app has never been told about keeps whatever colour the
+    // person who made the booking chose. Guessing would be worse than nothing.
+    expect(colourFor('Marsh KIT - Novak', 'Surg: Novak\nPt: Marsh')).toBeNull()
   })
 })

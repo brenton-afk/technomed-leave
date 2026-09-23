@@ -116,18 +116,21 @@ export function staleTitle(summary, before, after) {
 /**
  * The booking's colour in Google.
  *
- * Not how the portal draws the case — that follows the surgeon from the booking
- * guide whatever the event carries, which is the fix for a booking entered with
- * no colour showing up blue. This is the other half of that: the calendar
- * everyone else reads still shows whatever was set, so the portal has to be able
- * to put it right.
+ * Not chosen — derived. The colour is a function of who is operating (the guide
+ * says Ibbett is Banana), so asking a person to pick it is asking them to look
+ * up a table and get it right, which is how bookings ended up uncoloured or
+ * wrong to begin with. The server sets it from the surgeon on every save, so
+ * editing anything about a booking also puts its colour right.
  *
- * The guide's colour is marked, so correcting one is a single tap rather than a
- * memory test about which surgeon is Banana.
+ * This is therefore mostly a statement of what will happen. The palette is
+ * behind a tap, for a surgeon the guide has no opinion about and for the day
+ * somebody genuinely wants something else — automatic is a default, not a lock.
  */
-function ColourPicker({ value, surgeon, onChange }) {
-  const expected = guideColorIdFor(String(surgeon || '').replace(/^(dr|mr|mrs|ms|prof)\b\.?\s*/i, '').trim())
-  const wrong = expected && String(value || '') !== String(expected)
+function ColourPicker({ value, surgeon, chosen, onChange, onClear }) {
+  const [open, setOpen] = useState(false)
+  const expected = guideColorIdFor(
+    String(surgeon || '').replace(/^(dr|mr|mrs|ms|prof|a\/prof)\b\.?\s*/i, '').trim().split(/\s+/).pop())
+  const willBe = chosen ? value : (expected || value)
 
   return (
     <div style={{ marginBottom: space.md }}>
@@ -136,35 +139,57 @@ function ColourPicker({ value, surgeon, onChange }) {
         display: 'block', marginBottom: 4
       }}>Colour in the calendar</span>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {Object.keys(GOOGLE_COLOR_NAMES).map(id => {
-          const on = String(value || '') === id
-          return (
-            <button key={id} type="button" onClick={() => onChange(id)}
-              aria-label={GOOGLE_COLOR_NAMES[id]} aria-pressed={on}
-              title={GOOGLE_COLOR_NAMES[id] + (id === expected ? ' — the guide' : '')}
-              style={{
-                width: 30, height: 30, borderRadius: radius.pill, cursor: 'pointer',
-                background: GOOGLE_COLOR_HEX[id],
-                border: on ? `3px solid ${colour.ink}` : `1px solid ${colour.line}`,
-                // The guide's colour is ringed, so the right one is findable
-                // without knowing the table by heart.
-                outline: id === expected ? `2px dashed ${colour.inkFaint}` : 'none',
-                outlineOffset: 2
-              }} />
-          )
-        })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+        <span aria-hidden="true" style={{
+          width: 24, height: 24, borderRadius: radius.pill, flexShrink: 0,
+          background: GOOGLE_COLOR_HEX[willBe] || colour.line,
+          border: `1px solid ${colour.line}`
+        }} />
+        <span style={{ ...text('caption'), color: colour.inkMuted, flex: 1 }}>
+          {willBe ? colourNameFor(willBe) : 'No colour set'}
+          {!chosen && expected && (
+            <span style={{ color: colour.inkFainter }}> — set automatically from {surgeon}</span>
+          )}
+          {chosen && <span style={{ color: colour.inkFainter }}> — chosen for this booking</span>}
+        </span>
+        <button type="button" onClick={() => setOpen(o => !o)}
+          style={{
+            ...text('caption'), cursor: 'pointer', background: 'none',
+            border: `1px solid ${colour.line}`, borderRadius: radius.control,
+            padding: `4px ${space.sm}px`, color: colour.inkMuted, flexShrink: 0
+          }}>
+          {open ? 'Done' : 'Change'}
+        </button>
       </div>
 
-      {wrong && (
-        <button type="button" onClick={() => onChange(expected)}
-          style={{
-            ...text('caption'), marginTop: space.sm, cursor: 'pointer',
-            background: 'none', border: `1px solid ${colour.line}`,
-            borderRadius: radius.control, padding: `4px ${space.sm}px`, color: colour.inkMuted
-          }}>
-          Set to {colourNameFor(expected)} — {surgeon}'s colour
-        </button>
+      {open && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: space.sm }}>
+          {Object.keys(GOOGLE_COLOR_NAMES).map(id => {
+            const on = String(willBe || '') === id
+            return (
+              <button key={id} type="button" onClick={() => onChange(id)}
+                aria-label={GOOGLE_COLOR_NAMES[id]} aria-pressed={on}
+                title={GOOGLE_COLOR_NAMES[id] + (id === expected ? ' — the guide' : '')}
+                style={{
+                  width: 30, height: 30, borderRadius: radius.pill, cursor: 'pointer',
+                  background: GOOGLE_COLOR_HEX[id],
+                  border: on ? `3px solid ${colour.ink}` : `1px solid ${colour.line}`,
+                  outline: id === expected ? `2px dashed ${colour.inkFaint}` : 'none',
+                  outlineOffset: 2
+                }} />
+            )
+          })}
+          {chosen && expected && (
+            <button type="button" onClick={onClear}
+              style={{
+                ...text('caption'), cursor: 'pointer', background: 'none',
+                border: `1px solid ${colour.line}`, borderRadius: radius.control,
+                padding: `4px ${space.sm}px`, color: colour.inkMuted
+              }}>
+              Back to automatic
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -176,6 +201,9 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const [notes, setNotes] = useState('')
   const [when, setWhen] = useState({ date: '', start: '', end: '' })
   const [colorId, setColorId] = useState(null)
+  // An explicit pick. Without one the server derives the colour from the
+  // surgeon, so sending nothing is how "automatic" is expressed.
+  const [colourChosen, setColourChosen] = useState(false)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [titleFix, setTitleFix] = useState(null)
@@ -196,6 +224,7 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
       const to = civilParts(data.end)
       setWhen({ date: from?.date || '', start: from?.time || '', end: to?.time || '' })
       setColorId(data.colorId || null)
+      setColourChosen(false)
       setTitleFix(null)
       setStatus('ready')
     } catch (err) {
@@ -213,7 +242,7 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
     : null
   const movedTime = Boolean(originalWhen && (
     when.date !== originalWhen.date || when.start !== originalWhen.start || when.end !== originalWhen.end))
-  const recoloured = Boolean(loaded && (colorId || null) !== (loaded.colorId || null))
+  const recoloured = colourChosen
 
   const changed = loaded && (
     FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields[f.key] || ''))
@@ -242,7 +271,7 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
           ...(movedTime && when.date && when.start && when.end
             ? { start: `${when.date}T${when.start}:00`, end: `${when.date}T${when.end}:00` }
             : {}),
-          ...(recoloured ? { colorId } : {}),
+          ...(colourChosen ? { colorId } : {}),
           ...(withTitle ? { summary: withTitle } : {})
         })
       })
@@ -427,7 +456,9 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                 <ColourPicker
                   value={colorId}
                   surgeon={fields.surgeon}
-                  onChange={setColorId} />
+                  chosen={colourChosen}
+                  onChange={id => { setColorId(id); setColourChosen(true) }}
+                  onClear={() => { setColourChosen(false); setColorId(loaded.colorId || null) }} />
               </>
             )}
           </div>

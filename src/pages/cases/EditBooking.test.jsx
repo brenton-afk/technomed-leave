@@ -267,58 +267,61 @@ describe('moving a booking', () => {
   })
 })
 
-describe('the colour in the calendar', () => {
-  // The portal draws a case in the surgeon's colour whatever the booking
-  // carries — that is the fix for an uncoloured booking showing up blue. This is
-  // the other half: the calendar everyone else reads still shows what was set,
-  // so the portal has to be able to put it right.
-  it('offers the surgeon\'s colour when the booking has the wrong one', async () => {
+describe('the colour, which nobody chooses', () => {
+  // "Automatically allocate the colours to the surgeons so we don't have to
+  // choose them." The colour is a function of who is operating, so asking a
+  // person to pick it is asking them to look up a table and get it right —
+  // which is how bookings ended up uncoloured or wrong to begin with.
+
+  it('says which colour will be applied, and where it came from', async () => {
+    // This booking has no colour at all, and the surgeon is Dr Ibbett.
     show()
     await ready()
-    // Ibbett is Banana, and this booking has no colour at all.
-    expect(await screen.findByText(/Set to Banana/)).toBeInTheDocument()
+    expect(await screen.findByText('Banana')).toBeInTheDocument()
+    expect(screen.getByText(/set automatically from Dr Ibbett/)).toBeInTheDocument()
   })
 
-  it('sets it in one tap, and sends Google\'s own palette id', async () => {
-    show()
-    await ready()
-    fireEvent.click(await screen.findByText(/Set to Banana/))
-    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
-    await waitFor(() => expect(saved).toBeTruthy())
-    expect(saved.colorId).toBe('5')     // Banana
-  })
-
-  it('lets any colour be picked', async () => {
-    show()
-    await ready()
-    fireEvent.click(screen.getByLabelText('Flamingo'))
-    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
-    await waitFor(() => expect(saved).toBeTruthy())
-    expect(saved.colorId).toBe('4')
-  })
-
-  it('reads the surgeon through their title', async () => {
-    // The calendar says "Surg - Dr Ibbett". Without stripping the honorific
-    // there is no guide colour and the suggestion never appears.
-    show()
-    await ready()
-    expect(screen.getByDisplayValue('Dr Ibbett')).toBeInTheDocument()
-    expect(screen.getByText(/Set to Banana/)).toBeInTheDocument()
-  })
-
-  it('says nothing when the colour is already right', async () => {
-    show()
-    await ready()
-    fireEvent.click(await screen.findByText(/Set to Banana/))
-    await waitFor(() => expect(screen.queryByText(/Set to Banana/)).not.toBeInTheDocument())
-  })
-
-  it('leaves the colour out of a save that did not touch it', async () => {
+  it('does not send a colour, so the server derives it', async () => {
+    // Sending nothing is how "automatic" is expressed: the save works the colour
+    // out from the surgeon on the booking as saved, which also means a booking
+    // whose surgeon was corrected gets the right colour in the same write.
     show()
     await ready()
     fireEvent.change(screen.getByDisplayValue('L5/S1 PLIF'), { target: { value: 'L4/5 TLIF' } })
     fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
     await waitFor(() => expect(saved).toBeTruthy())
     expect(saved.colorId).toBeUndefined()
+  })
+
+  it('reads the surgeon through their title', async () => {
+    // The live convention is "Surg - Dr Ibbett" while the guide is keyed on
+    // "Ibbett". Without stripping the honorific there is no colour to apply.
+    show()
+    await ready()
+    expect(screen.getByDisplayValue('Dr Ibbett')).toBeInTheDocument()
+    expect(screen.getByText(/set automatically from/)).toBeInTheDocument()
+  })
+
+  it('keeps the palette for the day somebody wants something else', async () => {
+    show()
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+    fireEvent.click(screen.getByLabelText('Flamingo'))
+    expect(screen.getByText(/chosen for this booking/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(saved).toBeTruthy())
+    // An explicit pick wins: automatic is a default, not a lock.
+    expect(saved.colorId).toBe('4')
+  })
+
+  it('can be put back to automatic', async () => {
+    show()
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+    fireEvent.click(screen.getByLabelText('Flamingo'))
+    fireEvent.click(screen.getByRole('button', { name: /Back to automatic/ }))
+    expect(screen.getByText(/set automatically from/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Save to calendar/ })).toBeDisabled()
   })
 })
