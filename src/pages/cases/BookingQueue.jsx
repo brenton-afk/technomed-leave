@@ -237,6 +237,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
   const [pending, setPending] = useState(null)
   const [error, setError] = useState(null)
   const [scanning, setScanning] = useState(false)
+  const [lastScan, setLastScan] = useState(null)
 
   const headers = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -267,6 +268,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Could not read the mailbox')
       setPending(data.pending || [])
+      setLastScan(data)
     } catch (err) {
       setError(err.message)
     }
@@ -323,6 +325,28 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
               <div style={{ ...text('caption'), color: colour.inkFaint }}>Reading…</div>
             )}
 
+            {lastScan && !error && (
+              <div style={{
+                ...text('caption'), color: colour.inkMuted, marginBottom: space.md
+              }}>
+                {lastScan.read === 0 && lastScan.skipped === 0
+                  ? 'No new emails since the last check.'
+                  : [
+                    `Read ${lastScan.read} new booking email${lastScan.read === 1 ? '' : 's'}.`,
+                    // Never a silent cap: an email nobody looked at has to say so.
+                    lastScan.remaining
+                      ? `${lastScan.remaining} still to read — check again.`
+                      : null,
+                    // A booking from a domain the app does not know would
+                    // otherwise disappear without trace.
+                    lastScan.skipped
+                      ? `${lastScan.skipped} email${lastScan.skipped === 1 ? '' : 's'} `
+                        + 'from senders that are not booking sources were left alone.'
+                      : null
+                  ].filter(Boolean).join(' ')}
+              </div>
+            )}
+
             {pending?.length === 0 && !error && (
               <div style={{ ...text('body'), color: colour.inkMuted }}>
                 Nothing waiting. Bookings emailed to bookings@technomed.com.au
@@ -344,7 +368,9 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
               ...text('bodyStrong'), background: 'transparent', color: colour.inkMuted,
               border: `1px solid ${colour.line}`, borderRadius: radius.control
             }}>
-              {scanning ? 'Checking the mailbox…' : 'Check for new bookings'}
+              {scanning ? 'Checking the mailbox…'
+                : lastScan?.remaining ? `Check the next ${lastScan.remaining > 5 ? 5 : lastScan.remaining}`
+                  : 'Check for new bookings'}
             </button>
           </div>
         </div>

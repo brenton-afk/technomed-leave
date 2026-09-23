@@ -609,6 +609,13 @@ async function handleQueue(req, res) {
  * table. Everything else goes to the vision reader, which handles PDFs, photos
  * and freeform text alike.
  */
+// How many new emails one run will read. A booking that arrives as a photo
+// costs a model call to read, and a mailbox with a fortnight of backlog would
+// otherwise run past the function's time limit and return nothing at all. Five
+// at a time finishes well inside it; the response says how many are left so the
+// team can tap again rather than wonder.
+const PER_RUN = 5
+
 async function handleIngest(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
@@ -616,21 +623,36 @@ async function handleIngest(req, res) {
   try {
     // A fortnight back is enough to catch up after a quiet week without trawling
     // the whole mailbox on every run.
-    const messageIds = await searchMailbox('newer_than:14d -in:spam', { max: 40 })
+    const messageIds = await searchMailbox('newer_than:14d -in:spam', { max: 60 })
     const existing = await getBookingQueue()
 
     let read = 0
+    let skipped = 0
+    let remaining = 0
     const queued = []
 
     for (const messageId of messageIds) {
       if (await bookingEmailSeen(messageId)) continue
+      if (read >= PER_RUN) { remaining += 1; continue }
 
       const email = await readMessage(messageId)
       const source = sourceOf(addressOf(email.from))
+
+      // Only the addresses bookings actually come from are read. Everything else
+      // in the mailbox — a newsletter, a delivery receipt, a reply to one of our
+      // own emails — is not worth a model call, and worse, asking a model to
+      // find surgical cases in a newsletter invites it to find some. Skipped
+      // emails are counted and reported rather than quietly dropped: a booking
+      // from a domain nobody has told the app about would otherwise vanish.
+      if (!source) {
+        skipped += 1
+        await markBookingEmailSeen(messageId, 0)
+        continue
+      }
       read += 1
 
       let found = []
-      if (source?.id === 'rhh') found = parseTheatreList(email)
+      if (source.id === 'rhh') found = parseTheatreList(email)
       // Either it is not the RHH table, or the table was unreadable. Both are
       // reasons to let the model look rather than to give up on the email.
       if (!found.length) found = await readBookingDocument(email)
@@ -641,13 +663,13 @@ async function handleIngest(req, res) {
         const candidate = {
           ...booking,
           systems: booking.systems || systemsInKit(booking.kit || ''),
-          hospital: booking.hospital || source?.hospital || '',
+          hospital: booking.hospital || source.hospital || '',
           id: candidateId(booking),
           status: 'pending',
           messageId,
           subject: email.subject || '',
           receivedAt: email.receivedAt,
-          sources: [source?.id || booking.source || 'email'],
+          sources: [source.id],
           createdAt: new Date().toISOString()
         }
 
@@ -676,7 +698,10 @@ async function handleIngest(req, res) {
     }
 
     const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
-    return res.status(200).json({ ok: true, read, found: queued.length, count: pending.length, pending })
+    return res.status(200).json({
+      ok: true, read, skipped, remaining,
+      found: queued.length, count: pending.length, pending
+    })
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }

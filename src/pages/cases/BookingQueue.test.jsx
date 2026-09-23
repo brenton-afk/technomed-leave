@@ -157,3 +157,48 @@ describe('reading the mailbox', () => {
     await waitFor(() => expect(screen.getByText(/cannot read bookings@/)).toBeInTheDocument())
   })
 })
+
+describe('what a scan says it did', () => {
+  function scanning(result) {
+    global.fetch = vi.fn(async (url, init) => {
+      const text = String(url)
+      calls.push({ url: text, body: init?.body ? JSON.parse(init.body) : null })
+      if (text.includes('action=ingest')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, pending: [], ...result }) }
+      }
+      return respond(text, init)
+    })
+  }
+
+  it('owns up to the emails it did not get to', async () => {
+    // A cap that is not reported reads as "covered everything", and the booking
+    // sitting in the unread half is the one that gets missed.
+    scanning({ read: 5, skipped: 0, remaining: 7 })
+    show()
+    await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
+    await waitFor(() => expect(screen.getByText(/7 still to read/)).toBeInTheDocument())
+    // And says so on the button, so tapping again is the obvious next move.
+    expect(screen.getByRole('button', { name: /Check the next 5/ })).toBeInTheDocument()
+  })
+
+  it('says when it left an email alone rather than skipping it silently', async () => {
+    // A booking from a domain nobody has told the app about would otherwise
+    // vanish without trace.
+    scanning({ read: 2, skipped: 9, remaining: 0 })
+    show()
+    await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
+    await waitFor(() =>
+      expect(screen.getByText(/9 emails from senders that are not booking sources/))
+        .toBeInTheDocument())
+  })
+
+  it('distinguishes a quiet mailbox from a failed check', async () => {
+    scanning({ read: 0, skipped: 0, remaining: 0 })
+    show()
+    await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
+    await waitFor(() => expect(screen.getByText(/No new emails/)).toBeInTheDocument())
+  })
+})
