@@ -8,27 +8,20 @@ import { getGoogleToken } from './_googleCalendar.js'
 // than a promise in a comment.
 //
 // Acting as bookings@ requires domain-wide delegation, granted once in the
-// Workspace admin console. Until that is done every call here fails with
-// `unauthorized_client`, which is surfaced as an instruction rather than an
-// error code.
+// Workspace admin console. Until that is done Google refuses the token, and
+// getGoogleToken turns that refusal into the exact client ID and scope to
+// authorise — the error a person actually needs, rather than the one Google
+// sends.
 
 const GMAIL_READONLY = 'https://www.googleapis.com/auth/gmail.readonly'
 const MAILBOX = process.env.BOOKINGS_MAILBOX || 'bookings@technomed.com.au'
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me'
 
 async function gmail(path, { impersonate = MAILBOX } = {}) {
-  let token
-  try {
-    token = await getGoogleToken(GMAIL_READONLY, { impersonate })
-  } catch (err) {
-    if (/unauthorized_client/i.test(err.message)) {
-      throw new Error(
-        `The app cannot read ${MAILBOX} yet. In Google Workspace admin, under `
-        + 'Security → API controls → Domain-wide delegation, add the service '
-        + `account's client ID with the scope ${GMAIL_READONLY}.`)
-    }
-    throw err
-  }
+  // getGoogleToken already turns a refused impersonation into instructions
+  // naming the client ID and the scope to authorise, so let it through as it is
+  // rather than replacing it with a vaguer version of the same thing.
+  const token = await getGoogleToken(GMAIL_READONLY, { impersonate })
 
   const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) throw new Error(`Gmail ${path} failed (${res.status}): ${await res.text()}`)

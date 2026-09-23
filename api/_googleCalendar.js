@@ -79,6 +79,22 @@ export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE, { impersonate
 
   const tokenData = await tokenRes.json()
   if (!tokenData.access_token) {
+    // Impersonation refused means domain-wide delegation has not been granted
+    // for this scope. Google says so as "unauthorized_client", which tells
+    // nobody what to do about it — so say what to do, and include the client ID
+    // the admin console asks for rather than sending somebody to dig it out of
+    // the service-account JSON.
+    const refused = /unauthorized_client|not authorized for any of the scopes/i
+    if (impersonate && refused.test(`${tokenData.error} ${tokenData.error_description}`)) {
+      throw Object.assign(new Error(
+        `The app is not yet allowed to act as ${impersonate}.\n\n`
+        + 'In Google Workspace admin → Security → Access and data control → '
+        + 'API controls → Domain-wide delegation, add:\n\n'
+        + `Client ID: ${serviceAccount.client_id}\n`
+        + `Scope: ${scope}\n\n`
+        + 'Then try again — it can take a few minutes to take effect.'),
+        { code: 'delegation' })
+    }
     throw new Error(`Google auth failed: ${tokenData.error_description || tokenData.error || 'unknown error'}`)
   }
   return tokenData.access_token

@@ -310,7 +310,12 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
               <div style={{
                 background: colour.dangerSoft, border: `1px solid ${colour.dangerLine}`,
                 color: colour.danger, borderRadius: radius.control,
-                padding: space.sm, marginBottom: space.md, ...text('caption')
+                padding: space.sm, marginBottom: space.md, ...text('caption'),
+                // The delegation error is several lines and names a client ID to
+                // paste into the admin console, so keep its shape and let it be
+                // selected — a wrapped, unselectable wall of text is unusable on
+                // a phone, which is where this will be read.
+                whiteSpace: 'pre-wrap', userSelect: 'text', WebkitUserSelect: 'text'
               }}>{error}</div>
             )}
 
