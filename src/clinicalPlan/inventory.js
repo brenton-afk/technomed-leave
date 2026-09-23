@@ -88,7 +88,8 @@ export const INVENTORY = [
   {
     system: 'Reform Cervical', distributor: 'e4',
     consigned: { RHH: 1 },
-    note: 'POCT. RHH only — a Calvary case has to have a loan kit requested.'
+    note: 'POCT. Lateral mass screws — the two names are the same product. '
+      + 'RHH only, so a Calvary case has to have a loan kit requested.'
   },
 
   // ── KT Medical ──

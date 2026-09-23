@@ -120,8 +120,12 @@ export const NAVIGATION = [
     name: 'AIRO',
     // Not only the word. Every RHH case putting in pedicle screws or lateral
     // mass screws has AIRO CT and navigation support by definition, so the
-    // booking rarely says so — it says what is being implanted. Reform Cervical
-    // is lateral mass fixation, which is why it is in here as a system name.
+    // booking rarely says so — it says what is being implanted.
+    //
+    // "Lateral mass" and "Reform Cervical" are the same thing: Reform Cervical
+    // screws *are* lateral mass screws. They are both listed because a booking
+    // may name the anatomy or the product, not because they are two signals —
+    // so neither is redundant and removing one would lose half the bookings.
     test: /\bairo\b|\bpedicle\s+screws?\b|\blateral\s+mass\b|\breform\s+cervical\b/i
   },
   {

@@ -220,3 +220,14 @@ describe('which platform a case needs', () => {
     expect(findNavigation('Brainlab support')).toEqual(['Brainlab'])
   })
 })
+
+describe('lateral mass and Reform Cervical', () => {
+  it('are the same product under two names', () => {
+    // Reform Cervical screws *are* lateral mass screws. A booking may name the
+    // anatomy or the product, so both have to be recognised — and neither is
+    // redundant, which is worth pinning before somebody tidies one away.
+    expect(findNavigation('C3-C6 lateral mass screws')).toEqual(['AIRO'])
+    expect(findNavigation('Kit: Reform Cervical (Consignment)')).toEqual(['AIRO'])
+    expect(findNavigation('C4-C7 lateral mass fixation, Reform Cervical')).toEqual(['AIRO'])
+  })
+})
