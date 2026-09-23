@@ -44,3 +44,12 @@ describe('reading a sender', () => {
     expect(addressOf(null)).toBe('')
   })
 })
+
+describe('base64 as it actually arrives', () => {
+  it('reads a signature through wrapped lines', () => {
+    // MIME bodies are wrapped at 76 columns, and newlines inside the first few
+    // characters leave too few bytes to match anything.
+    const wrapped = JPEG.slice(0, 4) + '\r\n' + JPEG.slice(4)
+    expect(sniffMediaType(wrapped, 'image/png')).toBe('image/jpeg')
+  })
+})

@@ -144,7 +144,9 @@ export async function readMessage(id, { withAttachments = true } = {}) {
  * The bytes are not wrong, so read those and ignore what the email claims.
  */
 export function sniffMediaType(base64, declared = '') {
-  const head = Buffer.from(String(base64 || '').slice(0, 32), 'base64')
+  // Whitespace first: base64 out of a MIME body is often wrapped at 76 columns,
+  // and newlines inside the first 32 characters leave too few bytes to match.
+  const head = Buffer.from(String(base64 || '').replace(/\s+/g, '').slice(0, 32), 'base64')
   if (head.length < 4) return declared
 
   if (head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF) return 'image/jpeg'

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { stripIdentifiers, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
 import { systemsInKit } from '../src/clinicalPlan/systems.js'
+import { sniffMediaType } from './_gmail.js'
 
 // ─── Reading a booking out of whatever arrived ───────────────────────────────
 // Bookings turn up as a pasted theatre-list table, a PDF from the spine service,
@@ -96,7 +97,17 @@ export async function readBookingDocument(email = {}) {
     throw new Error('Reading booking attachments needs ANTHROPIC_API_KEY')
   }
 
-  const attachments = (email.attachments || []).filter(a => ACCEPTED_MEDIA.includes(a.mediaType))
+  // Typed from the bytes here as well as at the door. Anthropic rejects a
+  // media type that disagrees with the data and fails the whole request, so the
+  // one place that has to be right is the one that builds it — whoever assembled
+  // the email, and whatever the sender's mail client claimed.
+  const attachments = (email.attachments || [])
+    .map(a => {
+      const data = String(a.data || '').replace(/\s+/g, '')
+      return { ...a, data, mediaType: sniffMediaType(data, a.mediaType) }
+    })
+    .filter(a => a.data && ACCEPTED_MEDIA.includes(a.mediaType))
+
   const content = attachments.map(a => (a.mediaType === 'application/pdf'
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.data } }
     : { type: 'image', source: { type: 'base64', media_type: a.mediaType, data: a.data } }))
