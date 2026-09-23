@@ -173,3 +173,22 @@ describe('deriving the colour a booking should carry', () => {
     expect(colourFor('Marsh KIT - Novak', 'Surg: Novak\nPt: Marsh')).toBeNull()
   })
 })
+
+describe('a navigation case with no surgeon of ours', () => {
+  // The refinement: blueberry belongs to the max fax AIRO spins, the Varioguide
+  // needle biopsies and the cranial registrations for other specialties. Those
+  // have no spine surgeon, so there is no colour to inherit.
+  it('is blueberry', () => {
+    expect(accentForCase({ surgeon: 'Wilson', navigation: 'AIRO' })).toBe(NAVIGATION_ACCENT)
+    expect(accentForCase({ navigation: 'Varioguide' })).toBe(NAVIGATION_ACCENT)
+    expect(accentForCase({ surgeon: '', navigation: 'Curve' })).toBe(NAVIGATION_ACCENT)
+  })
+
+  it('but one of ours keeps their colour', () => {
+    // An RHH pedicle screw case has AIRO and Brainlab support by definition, and
+    // it is still Ibbett's case. The platform shows as a badge instead.
+    for (const surgeon of Object.keys(GUIDE)) {
+      expect(accentForCase({ surgeon, navigation: 'AIRO' }), surgeon).toBe(guideHexFor(surgeon))
+    }
+  })
+})

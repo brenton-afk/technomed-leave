@@ -191,6 +191,17 @@ export function guideHexFor(surgeon) {
  * everything, because what it changes about the day is not whose case it is.
  */
 export function accentForCase(surgicalCase, dark = false) {
+  // A navigation case with no surgeon of ours is blueberry.
+  //
+  // The refinement Brent asked for: max fax AIRO spins, Varioguide needle
+  // biopsies, cranial registrations for other specialties. Those have no spine
+  // surgeon, so there is no colour to inherit, and blueberry is what the team
+  // already reads as "this is a navigation job". Where the case *does* belong to
+  // one of our surgeons — an RHH pedicle screw case with AIRO support — the
+  // surgeon's colour holds and the platform shows as a badge instead.
+  if (surgicalCase?.navigation && !hasConfirmedAccent(surgicalCase?.surgeon)) {
+    return NAVIGATION_ACCENT
+  }
   // Navigation used to override the surgeon here, and that was wrong.
   //
   // Both rules are real — Ibbett is Banana, and an AIRO case is Blueberry — and
