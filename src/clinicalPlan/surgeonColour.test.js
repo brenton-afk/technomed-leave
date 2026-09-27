@@ -283,9 +283,28 @@ describe('what earns an AIRO badge', () => {
     expect(airo('Craniotomy for tumour resection')).toBe(false)
   })
 
-  it('matches whole words, not fragments', () => {
+  it('catches PLIF however it is written', () => {
+    // "Any reference to PLIF means the case requires AIRO. This can't be
+    // missed." A plural or a missing space is not a different procedure.
+    for (const text of [
+      'L4/5 PLIF', 'PLIFs at two levels', 'PLIFS', 'L4/5PLIF', 'plif',
+      '(PLIF)', 'PLIF/TLIF', 'Kit: Global BMD PLIF',
+      'posterior lumbar interbody fusion'
+    ]) {
+      expect(airo(text), text).toBe(true)
+    }
+  })
+
+  it('does not fire on a word that merely contains the letters', () => {
+    // The character before has to be something other than a letter, which is
+    // what keeps "uplift" out without a trailing boundary that would lose
+    // "PLIFs".
+    expect(airo('uplifting news from the ward')).toBe(false)
     expect(airo('transplifting the graft')).toBe(false)
     expect(airo('PSFL')).toBe(false)
-    expect(airo('TLIFS')).toBe(false)
+  })
+
+  it('keeps anterior approaches out when spelled in full', () => {
+    expect(airo('anterior lumbar interbody fusion')).toBe(false)
   })
 })

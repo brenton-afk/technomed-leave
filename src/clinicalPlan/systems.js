@@ -115,35 +115,52 @@ export function systemWords(text) {
 const CURVE_IS_ANATOMY =
   /\b(?:cervical|thoracic|thoracolumbar|lumbar|sagittal|coronal|scoliotic|kyphotic|lordotic|main|major|minor|primary|secondary|structural|fractional|compensatory)\s+curve\b|\bcurve\s+(?:correction|progression|magnitude)\b/i
 
+// ─── What means a case needs the AIRO ────────────────────────────────────────
+// "Any reference to PLIF means the case requires AIRO. This can't be missed."
+//
+// So each signal is listed separately rather than crammed into one expression,
+// because the ones that matter are easy to lose in a wall of alternation.
+//
+// A missed badge and a wrongly added one are not equally bad. A wrong badge
+// books a scanner and a radiographer nobody needs, and somebody notices that
+// morning. A missed one means the surgeon has no navigation for screws already
+// in a patient. These lean towards catching it.
+const AIRO_SIGNALS = [
+  // The platform, named outright.
+  /\bairo\b/,
+
+  // What is being implanted. "Lateral mass" and "Reform Cervical" are the same
+  // thing — Reform Cervical screws *are* lateral mass screws — and both are
+  // listed because a booking may name the anatomy or the product.
+  /\bpedicle\s+screws?\b/,
+  /\blateral\s+mass\b/,
+  /\breform\s+cervical\b/,
+
+  // The procedures that go in over pedicle screws, whether or not the booking
+  // ever says "screws". One that reads "L4/5 PLIF" usually does not — the
+  // screws are assumed by anyone reading it clinically.
+  //
+  // `[pt]lif` takes PLIF and TLIF and leaves ALIF and DLIF, which are
+  // approached from the front and the side and are not instrumented from
+  // behind. One letter apart, and the wrong call is an AIRO nobody needs.
+  //
+  // Deliberately NOT \b-anchored at either end. A trailing boundary loses
+  // "PLIFs" and "TLIFS"; a leading one loses "L4/5PLIF", written without the
+  // space. Instead the character before must not be a letter, which still
+  // excludes a word like "uplift" that merely contains the letters.
+  /(?:^|[^a-z])[pt]lif/,
+  /\bpsf\b/,
+
+  // The same three spelled out. A booking written in full words is still a
+  // booking for screws, and the abbreviations are not guaranteed.
+  /posterior\s+spinal\s+fusion/,
+  /(?:posterior|transforaminal)\s+(?:lumbar\s+)?interbody/
+]
+
 export const NAVIGATION = [
   {
     name: 'AIRO',
-    // Not only the word. Every RHH case putting in pedicle screws or lateral
-    // mass screws has AIRO CT and navigation support by definition, so the
-    // booking rarely says so — it says what is being implanted.
-    //
-    // "Lateral mass" and "Reform Cervical" are the same thing: Reform Cervical
-    // screws *are* lateral mass screws. They are both listed because a booking
-    // may name the anatomy or the product, not because they are two signals —
-    // so neither is redundant and removing one would lose half the bookings.
-    //
-    // PSF, PLIF and TLIF are the same argument one step further out. A
-    // posterior spinal fusion and a posterior or transforaminal lumbar
-    // interbody fusion all go in over pedicle screws, so all three need the CT,
-    // but a booking that says "L4/5 PLIF" often never writes the word "screws"
-    // anywhere — the screws are assumed by anyone reading it clinically, and
-    // were invisible to this test.
-    //
-    // The anterior and lateral approaches stay out: an ALIF or a DLIF is not
-    // instrumented from behind, and badging one books an AIRO and a
-    // radiographer that nobody needs.
-    //
-    // "Pedicle screw fixation" already matched: `screws?` covers the singular.
-    //
-    // Note this also badges a case whose kit is the *product* "Global BMD PLIF",
-    // which is correct for the same reason — that cage goes in with pedicle
-    // screw fixation.
-    test: /\bairo\b|\bpedicle\s+screws?\b|\blateral\s+mass\b|\breform\s+cervical\b|\bpsf\b|\b[pt]lif\b/i
+    test: new RegExp(AIRO_SIGNALS.map(r => r.source).join('|'), 'i')
   },
   {
     name: 'Curve',
