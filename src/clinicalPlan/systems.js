@@ -132,9 +132,27 @@ const AIRO_SIGNALS = [
   // What is being implanted. "Lateral mass" and "Reform Cervical" are the same
   // thing — Reform Cervical screws *are* lateral mass screws — and both are
   // listed because a booking may name the anatomy or the product.
-  /\bpedicle\s+screws?\b/,
+  //
+  // `pedicle` on its own, not `pedicle screws`. Cramond's booking on 28
+  // September read "T10-L2 Pedicle Fixation for T12 Fracture" and carried no
+  // badge, because the pattern insisted on the word "screws" and the surgeon
+  // had no reason to write it. Nothing gets fixed to a pedicle without screws,
+  // so the anatomy alone is the signal.
+  /\bpedicle\b/,
   /\blateral\s+mass\b/,
   /\breform\s+cervical\b/,
+
+  // Screws named by their type rather than their site. The same booking said
+  // "Kit: Mariner (Monoaxial Screws)" — a second missed signal on one case.
+  /\b(?:mono|poly)axial\s+screws?\b/,
+
+  // The system, where the system *is* a pedicle screw system. A booking always
+  // names its kit, even when the procedure line is a fracture level and nothing
+  // else, so this is the signal most likely to still be there when the others
+  // are not.
+  /\bmariner\b/,
+  /\bdiplomat\b/,
+  /\bfirebird\b/,
 
   // The procedures that go in over pedicle screws, whether or not the booking
   // ever says "screws". One that reads "L4/5 PLIF" usually does not — the

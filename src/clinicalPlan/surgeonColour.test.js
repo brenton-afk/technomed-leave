@@ -307,4 +307,40 @@ describe('what earns an AIRO badge', () => {
   it('keeps anterior approaches out when spelled in full', () => {
     expect(airo('anterior lumbar interbody fusion')).toBe(false)
   })
+
+  it('badges a fixation that never says the word screws', () => {
+    // Cramond, 28 September. Three signals on one booking and the matcher
+    // caught none of them: "Pedicle Fixation" without "screws", "Monoaxial
+    // Screws" without "pedicle", and a Mariner kit, which is a pedicle screw
+    // system by definition.
+    const cramond = [
+      'Crammond MARINER - Atallah',
+      'Procedure: T10-L2 Pedicle Fixation for T12 Fracture',
+      'Kit: Mariner (Monoaxial Screws)',
+      'Hospital: RHH'
+    ].join('\n')
+    expect(airo(cramond)).toBe(true)
+
+    // Each on its own, since any one of them may be all a booking says.
+    expect(airo('T10-L2 Pedicle Fixation for T12 Fracture')).toBe(true)
+    expect(airo('Kit: Mariner (Monoaxial Screws)')).toBe(true)
+    expect(airo('Kit: Mariner')).toBe(true)
+  })
+
+  it('treats a pedicle screw system as enough on its own', () => {
+    // A booking always names its kit, even when the procedure line is a
+    // fracture level and nothing else. This is the signal most likely to still
+    // be there when the others are not.
+    for (const kit of ['Mariner', 'Diplomat (Consignment)', 'Orthofix Firebird']) {
+      expect(airo(`Kit: ${kit}`), kit).toBe(true)
+    }
+  })
+
+  it('leaves the systems that put in no screws alone', () => {
+    // Cages, plates and a retractor. Badging these would book a scanner for an
+    // anterior cervical case that needs no navigation at all.
+    for (const kit of ['Dakota', 'CYLOX', 'Athlet + Ascot', 'Lonestar', 'Shoreline']) {
+      expect(airo(`Kit: ${kit}`), kit).toBe(false)
+    }
+  })
 })
