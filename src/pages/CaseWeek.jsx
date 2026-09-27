@@ -559,7 +559,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           <div style={{ textAlign: 'center', padding: space.xl, color: colour.inkFaint }}>Loading…</div>
         )}
 
-        {sourceErrors.map(({ source, error }) => (
+        {sourceErrors.map(({ source, error, shareWith }) => (
           <Banner key={source} tone="warning">
             <strong>
               {source === 'leave'
@@ -568,9 +568,22 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             </strong>
             <br />
             {source === 'leave'
-              ? 'The Staff Leave calendar could not be read, so nobody will appear as on leave '
-                + 'even if they are. Share it with the app\u2019s service account to fix it.'
+              ? 'Nobody will appear as on leave even if they are.'
               : error}
+            {shareWith && (
+              <>
+                <br /><br />
+                In Google Calendar, open{' '}
+                {source === 'leave' ? 'Staff Leave' : 'the calendar'} → Settings and sharing →
+                Share with specific people, and add:
+                {/* Selectable, because this is meant to be copied on a phone. */}
+                <span style={{
+                  display: 'block', marginTop: 4, wordBreak: 'break-all',
+                  userSelect: 'text', WebkitUserSelect: 'text', fontWeight: 600
+                }}>{shareWith}</span>
+                with “See all event details”.
+              </>
+            )}
           </Banner>
         ))}
 

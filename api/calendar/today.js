@@ -1,5 +1,7 @@
 import { TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr } from '../../src/clinicalPlan/week.js'
-import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
+import {
+  getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY, serviceAccountEmail
+} from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
 import {
   updateCalendarEvent, getCalendarEvent, createBookingEvent, deleteCalendarEvent
@@ -172,7 +174,18 @@ async function handleWeek(req, res) {
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       const data = await r.json()
       // A missing or unshared sub-calendar must not fail the whole week.
-      if (data.error) return { source: cal.source, events: [], error: data.error.message }
+      if (data.error) {
+        // Named, so the fix is a paste rather than a hunt through Vercel's
+        // settings for the service account's address.
+        const who = serviceAccountEmail()
+        return {
+          source: cal.source,
+          events: [],
+          error: data.error.message,
+          calendarId: cal.id,
+          shareWith: who || null
+        }
+      }
       return {
         source: cal.source,
         truncated: Boolean(data.nextPageToken),
@@ -194,7 +207,9 @@ async function handleWeek(req, res) {
     }))
 
     const events = results.flatMap(r => r.events)
-    const sourceErrors = results.filter(r => r.error).map(r => ({ source: r.source, error: r.error }))
+    const sourceErrors = results.filter(r => r.error).map(r => ({
+      source: r.source, error: r.error, calendarId: r.calendarId, shareWith: r.shareWith
+    }))
 
     return res.status(200).json({
       events,

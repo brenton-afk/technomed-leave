@@ -37,6 +37,21 @@ export function getCalendarId() {
  * for itself. Without it Google refuses the token with `unauthorized_client`,
  * which is reported as such rather than as a mysterious failure.
  */
+/**
+ * The address a calendar has to be shared with for the app to read it.
+ *
+ * Returned so a failure can name it. "Share it with the service account" sends
+ * somebody hunting through a JSON blob in Vercel's settings; the address itself
+ * is one paste into Google Calendar's sharing box.
+ */
+export function serviceAccountEmail() {
+  try {
+    return JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}').client_email || ''
+  } catch {
+    return ''
+  }
+}
+
 export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE, { impersonate } = {}) {
   const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
   if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not configured')

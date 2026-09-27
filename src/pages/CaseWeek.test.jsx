@@ -350,7 +350,10 @@ describe('when a sub-calendar cannot be read', () => {
       json: async () => ({
         events,
         syncedAt: '2026-09-21T02:00:00.000Z',
-        sourceErrors: [{ source: 'leave', error: 'Not Found' }]
+        sourceErrors: [{
+          source: 'leave', error: 'Not Found',
+          shareWith: 'technomed-portal@technomed-portal.iam.gserviceaccount.com'
+        }]
       })
     }))
   }
@@ -362,7 +365,9 @@ describe('when a sub-calendar cannot be read', () => {
     show()
     await waitFor(() =>
       expect(screen.getByText(/Leave is not showing this week/)).toBeInTheDocument())
-    expect(screen.getByText(/Staff Leave calendar could not be read/)).toBeInTheDocument()
+    // Named, so the fix is a paste rather than a hunt through Vercel's settings.
+    expect(screen.getByText(/technomed-portal@.*iam\.gserviceaccount\.com/)).toBeInTheDocument()
+    expect(screen.getByText(/See all event details/)).toBeInTheDocument()
   })
 
   it('still shows the bookings it did get', async () => {
