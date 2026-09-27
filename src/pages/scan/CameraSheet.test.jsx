@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import CameraSheet from './CameraSheet.jsx'
+import CameraSheet, { Outline } from './CameraSheet.jsx'
 import { resetCameraForTests, torchOn, acquireCamera, setTorch }
   from '../../scanner/cameraStream.js'
 import { resetOpenCvForTests } from '../../scanner/opencvLoader.js'
@@ -295,5 +295,59 @@ describe('escaping the app shell', () => {
     // app with no way back.
     view.unmount()
     expect(document.querySelector('video')).toBeNull()
+  })
+})
+
+describe('the outline over the camera', () => {
+  const VIEW = {
+    opacity: 1,
+    corners: [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.12 }, { x: 0.88, y: 0.9 }, { x: 0.12, y: 0.88 }]
+  }
+
+  it('is white, not the brand colour', async () => {
+    // "I don't like that the frame is green either." Anything drawn over the
+    // camera is part of the viewfinder; the brand colour belongs to the app's
+    // own chrome, and mixing the two made it look like a widget pasted onto a
+    // video rather than the edge of the page itself.
+    const { container } = render(<Outline view={VIEW} countdown={0} />)
+    const stroked = [...container.querySelectorAll('[stroke]')]
+      .map(el => el.getAttribute('stroke'))
+      .filter(v => v && v !== 'none')
+    expect(stroked.length).toBeGreaterThan(0)
+    for (const stroke of stroked) expect(stroke).toBe('#fff')
+  })
+
+  it('eases towards the detection rather than jumping to it', async () => {
+    // Detection runs at around ten frames a second and the video at sixty. The
+    // outline used to redraw only when a detection finished, which is what made
+    // it lag behind the picture. It now eases towards the last detection on its
+    // own animation frame.
+    const { container } = render(<Outline view={VIEW} countdown={0} />)
+    const polygon = container.querySelector('polygon')
+    // Nothing in the markup: the points arrive from the animation loop.
+    expect(polygon.getAttribute('points')).toBeNull()
+    await waitFor(() => expect(polygon.getAttribute('points')).toBeTruthy())
+    // First frame lands part of the way, not all of it: 10% eased by 0.35.
+    const firstX = Number(polygon.getAttribute('points').split(',')[0])
+    expect(firstX).toBeGreaterThan(0)
+    expect(firstX).toBeLessThanOrEqual(10)
+  })
+
+  it('draws a bracket at each corner', async () => {
+    const { container } = render(<Outline view={VIEW} countdown={0} />)
+    const path = container.querySelector('path[stroke]')
+    await waitFor(() => expect(path.getAttribute('d')).toBeTruthy())
+    // Four corners, each an L of two segments.
+    expect(path.getAttribute('d').match(/M /g)).toHaveLength(4)
+  })
+
+  it('hides itself when no page is found', async () => {
+    // The element stays mounted — the animation loop lives in it, and unmounting
+    // on every lost frame would restart the easing from nowhere each time a page
+    // came back. It fades instead.
+    const { container } = render(<Outline view={null} countdown={0} />)
+    const svg = container.querySelector('svg')
+    await waitFor(() => expect(svg.style.opacity).toBe('0'))
+    expect(container.querySelector('polygon').getAttribute('points')).toBeNull()
   })
 })

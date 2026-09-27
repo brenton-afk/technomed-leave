@@ -50,43 +50,126 @@ const FRAME_INTERVAL = 2
 const MAX_IMAGE_DIM = 1568
 
 /** The outline, drawn as SVG over the video. */
-function Outline({ view, countdown }) {
-  if (!view?.corners) return null
-  const points = view.corners.map(c => `${c.x * 100},${c.y * 100}`).join(' ')
+/** The bracket at one corner, turned towards the two edges that meet there. */
+function bracket(c, prev, next, len = 5) {
+  const toward = (from, to) => {
+    const dx = to.x - from.x, dy = to.y - from.y
+    const d = Math.hypot(dx, dy) || 1
+    // Never longer than a third of the side, or the brackets meet on a small
+    // page and the whole thing reads as a plain rectangle again.
+    const reach = Math.min(len, d / 3)
+    return `${from.x + dx / d * reach},${from.y + dy / d * reach}`
+  }
+  return `M ${toward(c, prev)} L ${c.x},${c.y} L ${toward(c, next)}`
+}
+
+/**
+ * The tracked outline, drawn every frame rather than every detection.
+ *
+ * Detection runs at perhaps ten frames a second — it is several OpenCV passes
+ * over the frame — and the outline used to be redrawn only when one finished.
+ * That is what made it feel laggy: the video moves at sixty, the box moved at
+ * ten, and a box that lurches behind the picture reads as broken however good
+ * the detection underneath it is.
+ *
+ * So the last detection is a *target*, and this eases towards it on every
+ * animation frame, writing straight to the DOM. No React render per frame: at
+ * sixty a second that costs more than the detection does.
+ */
+export function Outline({ view, countdown }) {
+  const svgRef = useRef(null)
+  const fillRef = useRef(null)
+  const lineRef = useRef(null)
+  const cornerRef = useRef(null)
+  const shown = useRef(null)      // where the outline is drawn right now
+  const target = useRef(null)     // where the last detection says it should be
+
+  target.current = view?.corners
+    ? { corners: view.corners, opacity: view.opacity ?? 1 }
+    : null
+
+  useEffect(() => {
+    let raf = 0
+    const draw = () => {
+      raf = requestAnimationFrame(draw)
+      const svg = svgRef.current
+      if (!svg) return
+
+      const to = target.current
+      if (!to) {
+        shown.current = null
+        svg.style.opacity = '0'
+        return
+      }
+
+      // Eased towards, not snapped to. The tracker has already rejected the
+      // jitter; this is only about the gap between detections.
+      if (!shown.current || shown.current.length !== to.corners.length) {
+        shown.current = to.corners.map(c => ({ ...c }))
+      } else {
+        for (let i = 0; i < to.corners.length; i++) {
+          shown.current[i].x += (to.corners[i].x - shown.current[i].x) * 0.35
+          shown.current[i].y += (to.corners[i].y - shown.current[i].y) * 0.35
+        }
+      }
+
+      const pts = shown.current.map(c => `${c.x * 100},${c.y * 100}`)
+      const scaled = shown.current.map(c => ({ x: c.x * 100, y: c.y * 100 }))
+      const joined = pts.join(' ')
+
+      svg.style.opacity = String(to.opacity)
+      fillRef.current?.setAttribute('points', joined)
+      lineRef.current?.setAttribute('points', joined)
+      cornerRef.current?.setAttribute('d', scaled
+        .map((c, i) => bracket(c, scaled[(i + 3) % 4], scaled[(i + 1) % 4]))
+        .join(' '))
+    }
+    raf = requestAnimationFrame(draw)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
   const firing = countdown > 0
+
+  // Only the lock state goes through React, and only when it changes.
+  useEffect(() => {
+    fillRef.current?.style.setProperty('fill-opacity', firing ? '0.18' : '0.06')
+    lineRef.current?.style.setProperty('stroke-width', firing ? '1.2' : '0.7')
+    cornerRef.current?.style.setProperty('stroke-width', firing ? '2.2' : '1.6')
+  }, [firing])
 
   return (
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
+      ref={svgRef}
       style={{
         position: 'absolute', inset: 0, width: '100%', height: '100%',
-        opacity: view.opacity,
-        // The outline moves between measured positions, and easing that movement
-        // is what makes it read as tracking the page rather than being recomputed.
         transition: 'opacity 180ms ease-out',
         pointerEvents: 'none'
       }}>
       <defs>
-        <filter id="outline-glow" x="-20%" y="-20%" width="140%" height="140%">
-          {/* A page can be any colour against any bench, so the line needs to
-              carry its own contrast rather than rely on what is behind it. */}
-          <feDropShadow dx="0" dy="0" stdDeviation="0.6" floodColor="#000" floodOpacity="0.55" />
+        {/* The page is lit from the front and the bench behind it is not, so the
+            line has to carry its own contrast rather than borrow any. */}
+        <filter id="outline-glow" x="-25%" y="-25%" width="150%" height="150%">
+          <feDropShadow dx="0" dy="0" stdDeviation="0.7" floodColor="#000" floodOpacity="0.5" />
         </filter>
       </defs>
 
-      <polygon points={points} fill={TEAL} fillOpacity={firing ? 0.16 : 0.07}
-        style={{ transition: 'fill-opacity 200ms ease-out' }} />
-      <polygon points={points} fill="none" stroke={TEAL}
-        strokeWidth={firing ? 1.1 : 0.9}
-        strokeDasharray={firing ? 'none' : '2.6 2'}
-        strokeLinejoin="round"
+      {/* White, not teal. A coloured outline reads as a decoration laid over the
+          picture; white reads as the edge of the thing itself, which is what
+          every scanner worth copying does. The fill is a barely-there wash that
+          lifts on lock, so the moment of recognition is visible without the
+          outline changing colour and shouting about it. */}
+      <polygon ref={fillRef} fill="#fff" fillOpacity={0.06}
+        style={{ transition: 'fill-opacity 160ms ease-out' }} />
+      <polygon ref={lineRef} fill="none" stroke="#fff"
+        strokeWidth={0.7} strokeLinejoin="round" strokeLinecap="round"
         filter="url(#outline-glow)"
-        style={{ transition: 'stroke-width 200ms ease-out' }} />
-
-      {view.corners.map((c, i) => (
-        <circle key={i} cx={c.x * 100} cy={c.y * 100} r={2.4}
-          fill="rgba(255,255,255,0.85)" stroke={TEAL} strokeWidth={0.7}
-          filter="url(#outline-glow)" />
-      ))}
+        style={{ transition: 'stroke-width 160ms ease-out' }} />
+      {/* Corner brackets rather than dots. They say which way the page is
+          oriented, and they hold their shape while the quad moves. */}
+      <path ref={cornerRef} fill="none" stroke="#fff" strokeWidth={1.6}
+        strokeLinecap="round" strokeLinejoin="round"
+        filter="url(#outline-glow)"
+        style={{ transition: 'stroke-width 160ms ease-out' }} />
     </svg>
   )
 }
@@ -98,7 +181,11 @@ function Countdown({ progress }) {
   return (
     <svg width="76" height="76" viewBox="0 0 76 76" aria-hidden="true"
       style={{ position: 'absolute', inset: -3, pointerEvents: 'none' }}>
-      <circle cx="38" cy="38" r="31" fill="none" stroke={TEAL} strokeWidth="4"
+      {/* White, like the outline it sits inside. Anything drawn over the camera
+          is part of the viewfinder; the brand colour belongs to the app's own
+          chrome, and mixing the two is what made this look like a widget pasted
+          on top of a video. */}
+      <circle cx="38" cy="38" r="31" fill="none" stroke="#fff" strokeWidth="4"
         strokeLinecap="round"
         strokeDasharray={circumference}
         strokeDashoffset={circumference * (1 - progress)}
