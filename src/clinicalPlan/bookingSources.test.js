@@ -145,3 +145,36 @@ describe('a distributor is not a booking source', () => {
     expect(isDistributorEmail('jlagoon@globusmedical.com')).toBe(true)
   })
 })
+
+describe('a case already on the calendar', () => {
+  // The first real mailbox check offered a queue of bookings that were, all but
+  // one, already entered. isSameBooking is what the cross-check leans on, so it
+  // has to hold against a calendar booking as the calendar actually writes it —
+  // parsed out of a title and a labelled description, not typed by the parser
+  // that made the candidate.
+  const fromEmail = { patient: 'Cooper', surgeon: 'Ibbett', date: '2026-10-02' }
+
+  it('matches however the two were written', () => {
+    expect(isSameBooking(fromEmail, { patient: 'cooper', surgeon: 'Ibbett', date: '2026-10-02' }))
+      .toBe(true)
+    expect(isSameBooking(fromEmail, { patient: 'Cooper ', surgeon: 'ibbett', date: '2026-10-02' }))
+      .toBe(true)
+  })
+
+  it('does not match a different day', () => {
+    // A case moved to another day is a different booking, and the app must
+    // offer it rather than assume the old one covers it.
+    expect(isSameBooking(fromEmail, { ...fromEmail, date: '2026-10-05' })).toBe(false)
+  })
+
+  it('does not match a different patient or surgeon', () => {
+    expect(isSameBooking(fromEmail, { ...fromEmail, patient: 'Marsh' })).toBe(false)
+    expect(isSameBooking(fromEmail, { ...fromEmail, surgeon: 'Fowler' })).toBe(false)
+  })
+
+  it('will not match when the candidate has no date at all', () => {
+    // A dateless candidate must reach the queue. Treating it as already booked
+    // because the names happen to match would lose a real case.
+    expect(isSameBooking({ patient: 'Cooper', surgeon: 'Ibbett' }, fromEmail)).toBe(false)
+  })
+})

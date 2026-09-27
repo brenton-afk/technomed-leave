@@ -201,4 +201,26 @@ describe('what a scan says it did', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() => expect(screen.getByText(/No new emails/)).toBeInTheDocument())
   })
+
+  it('says when the emails were bookings already entered', async () => {
+    // The first real mailbox check found outstanding emails and every one but
+    // a single case was already in the app. Without this the run reads as
+    // "found nothing", and the next thing anybody would do is accept the
+    // duplicates it offered.
+    scanning({ read: 6, skipped: 0, remaining: 0, already: 5 })
+    show()
+    await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
+    await waitFor(() =>
+      expect(screen.getByText(/5 were already on the calendar/)).toBeInTheDocument())
+  })
+
+  it('counts one already-booked case in the singular', async () => {
+    scanning({ read: 2, skipped: 0, remaining: 0, already: 1 })
+    show()
+    await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
+    await waitFor(() =>
+      expect(screen.getByText(/1 was already on the calendar/)).toBeInTheDocument())
+  })
 })

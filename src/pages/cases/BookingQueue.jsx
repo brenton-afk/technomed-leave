@@ -346,6 +346,13 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
                       ? `${lastScan.skipped} email${lastScan.skipped === 1 ? '' : 's'} `
                         + 'from senders that are not booking sources were left alone.'
                       : null,
+                    // The ordinary outcome, and the one that would otherwise
+                    // read as "found nothing": most emails confirm a case
+                    // somebody already entered.
+                    lastScan.already
+                      ? `${lastScan.already} ${lastScan.already === 1 ? 'was' : 'were'} `
+                        + 'already on the calendar.'
+                      : null,
                     // Reported rather than swallowed: these are retried, and if
                     // the number does not fall it needs a person.
                     lastScan.unreadable

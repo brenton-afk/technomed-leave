@@ -493,9 +493,23 @@ async function writeBooking({ fields = {}, date, notes, rep, colorId }, enteredB
 
   // Built through the same writer the edit sheet uses, so a booking created
   // here reads back exactly like one the team typed.
+  //
+  // The date is written into the notes along with everything else. The event
+  // already carries its own start time, so as data this repeats itself — but a
+  // booking is read as a block of text, in an email, in a screenshot, pasted
+  // into a message, and a block that names the surgeon and the patient and not
+  // the day is missing the thing it is most often being checked for. The team
+  // writes it by hand for exactly that reason, which is why the parser already
+  // knows to consume the line and not report it as a note.
+  //
+  // The order is the order it is read in: who, whom, when, where, what.
+  const written = {
+    ...fields,
+    date: `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`
+  }
   let description = ''
-  for (const field of ['surgeon', 'patient', 'procedure', 'kit', 'hospital']) {
-    const value = String(fields[field] || '').trim()
+  for (const field of ['surgeon', 'patient', 'date', 'hospital', 'procedure', 'kit']) {
+    const value = String(written[field] || '').trim()
     if (value) description = setLabelledValue(description, field, value)
   }
   for (const line of String(notes || '').split('\n').map(l => l.trim()).filter(Boolean)) {
@@ -602,6 +616,47 @@ async function handleDelete(req, res) {
 // booking source. See the note in src/clinicalPlan/bookingSources.js — it is a
 // relationship, not a technical constraint, and it matters more than the code.
 
+/**
+ * Bookings already on the calendar over a span of days.
+ *
+ * The queue used to compare a new candidate only against other candidates, so
+ * it caught the same case arriving twice by email and missed the far commoner
+ * thing: a case somebody already entered. The first real mailbox check offered
+ * a queue of bookings that were, all but one, already on the calendar.
+ *
+ * Read once for the whole span rather than per candidate — a theatre list is a
+ * week of cases and that would be a week of round trips.
+ */
+async function bookingsOnCalendar(from, to) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
+    + `?timeMin=${encodeURIComponent(`${from}T00:00:00+11:00`)}`
+    + `&timeMax=${encodeURIComponent(`${to}T23:59:59+10:00`)}`
+    + '&singleEvents=true&orderBy=startTime&maxResults=2500'
+    + `&timeZone=${encodeURIComponent(QUERY_TZ)}`
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+
+  return (data.items || [])
+    .filter(e => !isDistributorEmail(e.organizer?.email))
+    .map(e => {
+      const read = readBooking(e.summary || '', e.description || '')
+      if (!read?.patient) return null
+      const start = e.start?.dateTime || e.start?.date || ''
+      return {
+        id: e.id,
+        summary: e.summary || '',
+        patient: read.patient,
+        surgeon: read.surgeon || '',
+        date: start.slice(0, 10),
+        cancelled: Boolean(read.cancelled)
+      }
+    })
+    .filter(Boolean)
+}
+
 /** A stable id for a candidate, so reading the same email twice cannot double it. */
 function candidateId({ date, patient, surgeon }) {
   const slug = [date, patient, surgeon].map(v =>
@@ -615,8 +670,9 @@ async function handleQueue(req, res) {
 
   try {
     const all = await getBookingQueue()
-    // Accepted and dismissed candidates stay in storage but not in the team's
-    // face. The queue is a to-do list; a cleared one should look cleared.
+    // Accepted, dismissed and already-booked candidates stay in storage but not
+    // in the team's face. The queue is a to-do list; a cleared one should look
+    // cleared, and a case already on the calendar is not a thing to do.
     const pending = all.filter(c => c.status === 'pending')
     return res.status(200).json({
       ok: true,
@@ -659,7 +715,28 @@ async function handleIngest(req, res) {
     let remaining = 0
     let unreadable = 0
     let echoes = 0
+    let already = 0
     const queued = []
+    // Filled lazily, once something with a date is actually found. Most runs
+    // read nothing new and should not touch the calendar at all.
+    let onCalendar = null
+    const calendarFor = async date => {
+      if (!onCalendar) {
+        // A fortnight either side: theatre lists arrive well ahead, and a case
+        // already entered may sit anywhere in that span.
+        const from = toDateStr(addCivilDays(parseDateStr(date), -14))
+        const to = toDateStr(addCivilDays(parseDateStr(date), 21))
+        try {
+          onCalendar = await bookingsOnCalendar(from, to)
+        } catch {
+          // A calendar that cannot be read is a reason to show the candidate,
+          // not to hide it. Better a duplicate somebody can dismiss than a
+          // booking nobody ever sees.
+          onCalendar = []
+        }
+      }
+      return onCalendar
+    }
 
     for (const messageId of messageIds) {
       if (await bookingEmailSeen(messageId)) continue
@@ -723,6 +800,28 @@ async function handleIngest(req, res) {
           createdAt: new Date().toISOString()
         }
 
+        // Already on the calendar. This is the ordinary case, not the rare one:
+        // the team enters bookings as they hear about them, and the email
+        // confirming a case usually arrives after somebody has already put it
+        // in. Offering it again is how the app would create the second booking.
+        //
+        // Kept rather than dropped, marked as already booked, so a run can say
+        // what it saw and nothing disappears without trace.
+        if (candidate.date) {
+          const twinOnCalendar = (await calendarFor(candidate.date))
+            .find(c => !c.cancelled && isSameBooking(c, candidate))
+          if (twinOnCalendar) {
+            already += 1
+            await saveBookingCandidate({
+              ...candidate,
+              status: 'onCalendar',
+              matchedEventId: twinOnCalendar.id,
+              matchedSummary: twinOnCalendar.summary
+            })
+            continue
+          }
+        }
+
         // The same case from CNS and from Calvary is one booking. Merging keeps
         // whichever copy said more, field by field, and — deliberately — never
         // tells either sender that the other got in first.
@@ -749,7 +848,7 @@ async function handleIngest(req, res) {
 
     const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
     return res.status(200).json({
-      ok: true, read, skipped, remaining, unreadable, echoes,
+      ok: true, read, skipped, remaining, unreadable, echoes, already,
       found: queued.length, count: pending.length, pending
     })
   } catch (err) {
