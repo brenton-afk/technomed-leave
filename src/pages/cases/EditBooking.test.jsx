@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import EditBooking, { staleTitle, withReps } from './EditBooking.jsx'
+import { extractRep } from '../../clinicalPlan/parse.js'
 
 // This writes to the calendar the whole team reads during a list, so the tests
 // are mostly about restraint: what it does *not* send, and what it refuses to
@@ -413,5 +414,46 @@ describe('who attended', () => {
 
   it('removes it cleanly when nobody is attending', () => {
     expect(withReps('Marsh DIPLOMAT - Ibbett (Mat)', [])).toBe('Marsh DIPLOMAT - Ibbett')
+  })
+})
+
+describe('reps go back to the calendar the way they came', () => {
+  it('replaces a rep group it did not write itself', () => {
+    // withReps used to carry its own pattern that knew only the four names in
+    // ATTENDING_REPS. Editing a booking that said "(Aimee/Brenton)" would have
+    // left that group alone and appended a second one beside it.
+    expect(withReps('Bonney DIPLOMAT (Calvary Loan) - Gupta (Aimee/Brenton)', ['Aimee']))
+      .toBe('Bonney DIPLOMAT (Calvary Loan) - Gupta (Aimee)')
+  })
+
+  it('leaves a supply bracket alone', () => {
+    // The supply note is in brackets too, and stripping it would quietly change
+    // what the booking says about the kit.
+    expect(withReps('Rowe DIPLOMAT (Consignment) - Dubey', ['Mat']))
+      .toBe('Rowe DIPLOMAT (Consignment) - Dubey (Mat)')
+    expect(withReps('Petrusma REFORM CERVICAL (LOAN) - Thani', []))
+      .toBe('Petrusma REFORM CERVICAL (LOAN) - Thani')
+  })
+
+  it('takes the reps off when nobody is attending', () => {
+    expect(withReps('Mitchell AIRO - Ibbett (Aimee/Mat)', []))
+      .toBe('Mitchell AIRO - Ibbett')
+  })
+
+  it('round-trips what it wrote', () => {
+    // What the app writes must read back as the same people, or a save would
+    // change the booking a little each time.
+    for (const reps of [['Aimee'], ['Aimee', 'Mat'], ['Ben', 'Brent', 'Mat']]) {
+      const title = withReps('Chalmers MARINER - Fowler', reps)
+      expect(extractRep(title).reps, title).toEqual(reps)
+    }
+  })
+
+  it('keeps a name that is not on the roster through a round trip', () => {
+    // A locum, or somebody from another company. Losing them on save is how the
+    // calendar and the app drift apart.
+    const title = withReps('Chalmers MARINER - Fowler', ['Sarah'])
+    expect(title).toBe('Chalmers MARINER - Fowler (Sarah)')
+    expect(extractRep(title).reps).toEqual(['Sarah'])
   })
 })

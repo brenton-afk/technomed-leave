@@ -389,11 +389,21 @@ describe('the rep who attended', () => {
     expect(read.rep).toBe('Mat')
   })
 
-  it('is only ever a name from the roster', () => {
-    // A bracketed "(RHH)" is a hospital and "(2 of 3)" is a count. Guessing
-    // would put either where a person's name goes.
+  it('is whoever the calendar names, roster or not', () => {
+    // It used to accept only the roster, which meant one unfamiliar name threw
+    // the whole bracket away — "(Aimee/Brenton)" showed no rep at all. The app's
+    // job here is to show what the calendar says.
+    expect(readBooking('Chalmers MARINER - Fowler (Sarah)', '').rep).toBe('Sarah')
+    expect(readBooking('Chalmers MARINER - Fowler (Aimee/Brenton)', '').rep).toBe('Aimee/Brent')
+  })
+
+  it('is not a place, a kit or a count in brackets', () => {
+    // A bracketed "(RHH)" is a hospital and "(2 of 3)" is a count. Reading
+    // either as a person puts a rep called Rhh on the case.
     expect(readBooking('Chalmers MARINER - Fowler (RHH)', '').rep).toBeNull()
     expect(readBooking('Chalmers MARINER - Fowler (2 of 3)', '').rep).toBeNull()
+    expect(readBooking('Chalmers MARINER - Fowler (Loan set)', '').rep).toBeNull()
+    expect(readBooking('Chalmers MARINER - Fowler (Calvary)', '').rep).toBeNull()
   })
 
   it('is absent when the calendar does not name one', () => {

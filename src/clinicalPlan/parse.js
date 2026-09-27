@@ -126,21 +126,12 @@ const SEPARATOR = /\s*[-–—:>]\s*/g
  * person, and guessing would put a hospital code where a rep's name goes.
  */
 /**
- * Every way a rep's name is written in a booking, mapped to the one the app
- * shows.
+ * Every way a rep's name is written, mapped to the one the app shows.
  *
- * People are not consistent about their own names. Bonney's case read
- * "(Aimee/Brenton)" and showed no rep at all, because the roster calls him
- * Brent: the bracket has to be made *entirely* of known names, so one longer
- * form threw the whole group away and took Aimee with it.
- *
- * The longer forms come free from the full name already on the roster —
- * "Brenton Lovering" gives Brenton, "Matthew Usher" gives Matthew — so this
- * does not become a list somebody has to remember to update. `aka` is for the
- * ones no record contains, like Matt.
- *
- * Sorted longest first so "Brenton" is tried before "Brent" and the match does
- * not stop halfway through a name.
+ * Only used to tidy a name the roster recognises — "Brenton" is shown as Brent
+ * so the picker lights up and two spellings do not read as two people. A name
+ * nobody recognises is kept exactly as written. The longer forms come free from
+ * the full name already on the roster, so this is not a list to maintain.
  */
 function repNameForms() {
   const forms = []
@@ -156,26 +147,59 @@ function repNameForms() {
   return forms.sort((a, b) => b.form.length - a.form.length)
 }
 
+// A trailing bracket that is about the kit rather than about people. The team's
+// title convention is "Patient SYSTEM (supply) - Surgeon (Rep)", so the supply
+// note normally sits earlier — but not always, and "- Thani (LOAN)" must not
+// put a rep called Loan on the case.
+const NOT_A_PERSON = new RegExp([
+  // Kit and supply.
+  'loans?', 'consignment', 'consign', 'kits?', 'sets?', 'trial', 'stock', 'self\\s*funding',
+  // Places. "(RHH)" on the end of a title is a hospital, not somebody called Rhh.
+  'rhh', 'clv', 'calvary', 'lenah', 'royal\\s*hobart', 'theatre', 'offsite',
+  // Navigation platforms.
+  'airo', 'curve', 'brainlab', 'vario\\s*guide',
+  // Status.
+  'tbc', 'tba', 'cancelled', 'postponed'
+].map(w => `\\b${w}\\b`).join('|') + '|\\d', 'i')
+
+/**
+ * Who attended, taken from the end of the title and read as written.
+ *
+ * This used to match only names on the roster, which meant the bracket had to
+ * be made *entirely* of known names or it was thrown away whole. Bonney's case
+ * read "(Aimee/Brenton)" and showed no rep at all — not even Aimee — because
+ * the roster calls him Brent.
+ *
+ * So it no longer asks permission. Whatever is in the last bracket is who
+ * attended, because that is what the calendar says and the app's job here is to
+ * show the calendar. A locum, a new starter, someone from Brainlab, a name
+ * misspelled in a hurry — all of it comes through rather than disappearing.
+ *
+ * The only thing filtered out is a bracket that is plainly about the kit, since
+ * those appear in the same position often enough to matter.
+ */
 export function extractRep(title) {
   const text = String(title || '')
-  const forms = repNameForms()
-  const names = forms.map(f => f.form)
-  if (!names.length) return { rep: null, reps: [], rest: text }
-
-  // Any bracketed group made only of roster names and separators. Two reps on
-  // one case is normal — "(Aimee/Mat)" is a real booking — and matching a single
-  // name in brackets missed every one of them, so the case showed no rep at all
-  // while the calendar plainly named two.
-  const group = new RegExp(
-    `\\(\\s*(${names.join('|')})(\\s*[/,&+]\\s*(?:${names.join('|')}))*\\s*\\)`, 'i')
-  const match = group.exec(text)
+  // The last bracket, at the very end. A supply note sits beside the system
+  // earlier in the title, which is what separates the two without a word list.
+  const match = /\(([^()]*)\)\s*$/.exec(text)
   if (!match) return { rep: null, reps: [], rest: text }
 
-  const inside = match[0].slice(1, -1)
-  const reps = [...new Set(inside
-    .split(/[/,&+]/)
-    .map(part => forms.find(f => f.form.toLowerCase() === part.trim().toLowerCase())?.canonical)
-    .filter(Boolean))]
+  const inside = match[1].trim()
+  if (!inside || NOT_A_PERSON.test(inside)) return { rep: null, reps: [], rest: text }
+
+  const forms = repNameForms()
+  const reps = []
+  for (const part of inside.split(/[/,&+]| and /i)) {
+    const written = part.trim()
+    if (!written) continue
+    // Tidied to the roster's spelling where we know the person, kept verbatim
+    // where we do not.
+    const known = forms.find(f => f.form.toLowerCase() === written.toLowerCase())
+    const name = known ? known.canonical : written
+    if (!reps.includes(name)) reps.push(name)
+  }
+  if (!reps.length) return { rep: null, reps: [], rest: text }
 
   return {
     // Kept as written, so the card reads the way the booking does.
@@ -185,7 +209,6 @@ export function extractRep(title) {
       .replace(/\s{2,}/g, ' ').trim()
   }
 }
-
 // Titles that are not cases however they are coloured. On-call and
 // reduced-hours entries are routinely coded Graphite (officially Dubey's), so
 // without this guard colour inference would invent a Dubey case every week.

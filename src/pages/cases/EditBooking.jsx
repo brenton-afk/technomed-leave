@@ -5,6 +5,7 @@ import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
 } from '../../clinicalPlan/colours.js'
 import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
+import { extractRep } from '../../clinicalPlan/parse.js'
 import { ATTENDING_REPS } from '../../staffConfig.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
@@ -203,10 +204,16 @@ function ColourPicker({ value, surgeon, chosen, onChange, onClear }) {
  * (Aimee/Mat)" — so this rewrites that group rather than inventing a field. Any
  * existing group is replaced, so choosing nobody removes it cleanly.
  */
+/**
+ * The title with its rep group replaced.
+ *
+ * Uses the same reader the app displays from, rather than a second pattern of
+ * its own. The two had already drifted: this one only recognised the four names
+ * in ATTENDING_REPS, so editing a booking that said "(Aimee/Brenton)" would
+ * have left that group in place and appended a second one.
+ */
 export function withReps(summary, reps) {
-  const names = ATTENDING_REPS.join('|')
-  const group = new RegExp(`\\s*\\(\\s*(?:${names})(?:\\s*[/,&+]\\s*(?:${names}))*\\s*\\)`, 'i')
-  const base = String(summary || '').replace(group, '').trim()
+  const base = extractRep(String(summary || '')).rest
   return reps.length ? `${base} (${reps.join('/')})` : base
 }
 
@@ -505,7 +512,11 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                     display: 'block', marginBottom: 4
                   }}>Rep attending</span>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {ATTENDING_REPS.map(name => {
+                    {/* The roster, plus anyone already on this booking who is
+                        not on it. A locum or a name from another company would
+                        otherwise be invisible here and quietly dropped the next
+                        time somebody saved. */}
+                    {[...ATTENDING_REPS, ...reps.filter(r => !ATTENDING_REPS.includes(r))].map(name => {
                       const on = reps.includes(name)
                       return (
                         <button key={name} type="button" aria-pressed={on}
