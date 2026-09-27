@@ -116,7 +116,9 @@ describe('no screen is left out', () => {
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',
     // Chooses between two screens and renders its switcher inside whichever
     // one's Header is showing. It draws no chrome of its own to inset.
-    'Cases.jsx'
+    'Cases.jsx',
+    // A panel inside the New booking sheet, which already carries the insets.
+    'cases/DictateBooking.jsx'
   ])
 
   it('accounts for every screen that does not use the shared header', () => {

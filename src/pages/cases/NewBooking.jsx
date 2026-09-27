@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
+import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_COLOUR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
 import { INVENTORY, loanNeed, kitArrivalBy } from '../../clinicalPlan/inventory.js'
@@ -158,6 +159,31 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
   const [notes, setNotes] = useState('')
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
+  const [dictating, setDictating] = useState(false)
+
+  /**
+   * What was dictated, written into the form.
+   *
+   * Only fields that were actually heard are applied — a booking spoken without
+   * a hospital must not blank one the user already chose. The systems come back
+   * as names and go through addSystem so each picks up its own supply, exactly
+   * as if it had been tapped.
+   */
+  function applyDictation(f) {
+    if (f.patient) setPatient(f.patient)
+    if (f.surgeon) setSurgeon(f.surgeon)
+    if (f.date) setDate(f.date)
+    if (f.hospital) setHospital(f.hospital)
+    if (f.procedure) setProcedure(f.procedure)
+    if (f.note) setNotes(n => [n, f.note].filter(Boolean).join('\n'))
+    for (const name of f.systems || []) addSystem(name)
+    // The kit was named but matched nothing we stock — worth keeping as a note
+    // rather than dropping, since it may be a competitor's or a new product.
+    if (f.kit && !(f.systems || []).length) {
+      setNotes(n => [n, `Kit as dictated: ${f.kit}`].filter(Boolean).join('\n'))
+    }
+    setDictating(false)
+  }
 
   /** What the inventory says this system is, at this hospital. */
   const supplyFor = name => {
@@ -230,6 +256,16 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
             display: 'flex', alignItems: 'center', gap: space.sm
           }}>
             <span style={{ ...text('heading'), color: colour.ink, flex: 1 }}>New booking</span>
+            {!dictating && (
+              <button onClick={() => setDictating(true)} aria-label="Speak the booking"
+                style={{
+                  background: 'none', border: `1px solid ${colour.line}`,
+                  borderRadius: radius.pill, padding: `4px ${space.sm}px`,
+                  cursor: 'pointer', ...text('caption'), color: colour.inkMuted
+                }}>
+                🎤 Speak
+              </button>
+            )}
             {colourId && (
               <span aria-label="Colour" style={{
                 width: 18, height: 18, borderRadius: radius.pill,
@@ -243,6 +279,12 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
           </div>
 
           <div style={{ padding: space.md, overflowY: 'auto', flex: 1 }}>
+            {dictating && (
+              <DictateBooking
+                user={user}
+                onFilled={applyDictation}
+                onClose={() => setDictating(false)} />
+            )}
             {error && (
               <div style={{
                 background: colour.dangerSoft, border: `1px solid ${colour.dangerLine}`,

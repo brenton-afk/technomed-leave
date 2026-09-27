@@ -18,6 +18,7 @@ import {
 import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
+import { readDictatedBooking } from '../_readDictatedBooking.js'
 import {
   sourceOf, isSameBooking, mergeBookings, isDistributorEmail
 } from '../../src/clinicalPlan/bookingSources.js'
@@ -59,6 +60,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'ingest') return handleIngest(req, res)
   if (req.query.action === 'accept') return handleAccept(req, res)
   if (req.query.action === 'dismiss') return handleDismiss(req, res)
+  // A booking spoken into the phone. Fills the form; does not make the booking.
+  if (req.query.action === 'dictate') return handleDictate(req, res)
 
   // Everything below this line is the bookings calendar in full: surgeons,
   // patient surnames, hospitals, procedures, kit. It was served to anyone who
@@ -807,5 +810,34 @@ async function handleDismiss(req, res) {
     return res.status(200).json({ ok: true, candidate: dismissed })
   } catch (err) {
     return res.status(500).json({ error: err.message })
+  }
+}
+
+
+/**
+ * A booking dictated out loud, turned into fields for the form.
+ *
+ * Deliberately does not create anything. Speech recognition is good at English
+ * and bad at surnames — "Petrusma", "Ibbett" and "Bewg" are in no language
+ * model — so what comes back is a filled form for a person to glance at, along
+ * with the raw transcript so a misheard word is visible rather than buried in a
+ * field that looks confidently correct.
+ */
+async function handleDictate(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const result = await readDictatedBooking({
+      audio: body.audio,
+      contentType: body.contentType
+    })
+    return res.status(200).json({ ok: true, ...result })
+  } catch (err) {
+    // The message is written to be read by somebody holding a phone, so it goes
+    // through as it is rather than becoming "something went wrong".
+    return res.status(400).json({ error: err.message })
   }
 }
