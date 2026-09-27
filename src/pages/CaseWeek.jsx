@@ -289,12 +289,37 @@ function Heading({ children }) {
 /** One day, whole: cases by hospital, then everything else. */
 function DayPanel({ day, onOpen }) {
   const groups = day.casesByHospital || []
-  const others = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
+  const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
+  // Who is away is read before the list, not after it. It changes who covers
+  // what, and it was sitting under the cases where you had to scroll past a
+  // whole day's theatre list to find it.
+  const away = everythingElse.filter(item => item.kind === 'leave')
+  const others = everythingElse.filter(item => item.kind !== 'leave')
   const attention = day.needsAttention || []
-  const empty = !groups.length && !others.length && !attention.length && !(day.flags || []).length
+  const empty = !groups.length && !others.length && !away.length
+    && !attention.length && !(day.flags || []).length
 
   return (
     <>
+      {away.length > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: space.sm
+        }}>
+          {away.map((item, i) => (
+            <span key={i} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+              borderRadius: radius.pill, padding: `4px ${space.md}px`,
+              ...text('bodyStrong'), color: colour.ink
+            }}>
+              {/* The title already reads "Ben - ANNUAL LEAVE", so the kind
+                  label the row form carries would only say it twice. */}
+              {item.title || item.text}
+            </span>
+          ))}
+        </div>
+      )}
+
       {(day.flags || []).length > 0 && (
         <div style={{ marginBottom: space.sm }}>
           {day.flags.map((flag, i) => (

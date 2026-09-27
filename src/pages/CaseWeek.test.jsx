@@ -383,3 +383,43 @@ describe('when a sub-calendar cannot be read', () => {
     expect(screen.queryByText(/Leave is not showing/)).not.toBeInTheDocument()
   })
 })
+
+describe('who is away', () => {
+  const LEAVE = {
+    id: 'lv1',
+    summary: 'Ben - ANNUAL LEAVE',
+    description: '',
+    location: '',
+    start: { date: '2026-09-21' },
+    end: { date: '2026-09-23' }
+  }
+
+  it('shows leave above the cases, not below them', async () => {
+    // It sat under the theatre list, so on a busy day you had to scroll past
+    // every case to find out who was not in. Leave changes who covers what, so
+    // it is read before the list rather than after it.
+    events = [...BOOKINGS, LEAVE]
+    show()
+    const leave = await screen.findByText('Ben - ANNUAL LEAVE')
+    const firstCase = screen.getByText('Chalmers')
+    // Node.compareDocumentPosition: 4 means the argument follows in the document.
+    expect(leave.compareDocumentPosition(firstCase) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
+  })
+
+  it('does not also repeat it at the bottom', async () => {
+    events = [...BOOKINGS, LEAVE]
+    show()
+    await waitFor(() => expect(screen.getAllByText('Ben - ANNUAL LEAVE')).toHaveLength(1))
+  })
+
+  it('leaves the other odds and ends where they were', async () => {
+    // Only leave is promoted. A team meeting is not a reason to look up.
+    events = [...BOOKINGS, LEAVE]
+    show()
+    const leave = await screen.findByText('Ben - ANNUAL LEAVE')
+    const meeting = screen.getByText('Team meeting')
+    expect(leave.compareDocumentPosition(meeting) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
+  })
+})
