@@ -191,7 +191,8 @@ function Header({ title, subtitle, children }) {
 
 const inputStyle = {
   width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8,
-  fontSize: 14, background: 'white', color: NAVY, outline: 'none', boxSizing: 'border-box',
+  // 16, not 14: below 16px iOS zooms the page on focus and does not zoom back.
+  fontSize: 16, background: 'white', color: NAVY, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit', appearance: 'none', WebkitAppearance: 'none'
 }
 const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }

@@ -62,7 +62,9 @@ function Row({ label, hint, children }) {
 const inputStyle = {
   width: '100%', padding: `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
   border: `1px solid ${colour.line}`, borderRadius: radius.control,
-  ...text('body'), color: colour.ink, background: colour.surface, outline: 'none'
+  // `field`, not `body` — see the token. An inline 14px here is what makes
+  // iOS zoom the whole app on focus.
+  ...text('field'), color: colour.ink, background: colour.surface, outline: 'none'
 }
 
 /** A row of choices. Cheaper than a dropdown when there are only a few. */
@@ -215,10 +217,11 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
       }}>
         <div onClick={e => e.stopPropagation()} role="dialog" aria-label="New booking"
+          className="tm-sheet"
           style={{
             background: colour.canvas, width: '100%', maxWidth: 460,
             borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
-            maxHeight: '90vh', display: 'flex', flexDirection: 'column'
+            display: 'flex', flexDirection: 'column'
           }}>
 
           <div style={{

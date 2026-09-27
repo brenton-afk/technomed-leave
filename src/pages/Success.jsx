@@ -2,7 +2,7 @@ import React from 'react'
 
 export default function Success({ form, onReset }) {
   return (
-    <div style={{ minHeight:'100vh', maxWidth:'430px', margin:'0 auto', display:'flex', flexDirection:'column', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
+    <div style={{ minHeight:'100%', maxWidth:'430px', margin:'0 auto', display:'flex', flexDirection:'column', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
       <div style={{ background:'#042746', padding:'52px 20px 32px', textAlign:'center' }}>
         <img src="/logo.png" alt="TechnoMed" style={{ height:44, width:'auto', marginBottom:6 }} />
         <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:20 }}>Staff Portal</div>

@@ -207,7 +207,7 @@ describe('icon set', () => {
 describe('design tokens', () => {
   it('keeps the type scale closed — this is what stops sizes multiplying', () => {
     expect(Object.keys(type)).toEqual(
-      ['display', 'title', 'heading', 'body', 'bodyStrong', 'caption', 'micro'])
+      ['display', 'title', 'heading', 'body', 'field', 'bodyStrong', 'caption', 'micro'])
   })
 
   it('has exactly one accent, with the rest neutral or semantic', () => {

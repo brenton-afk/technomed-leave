@@ -173,3 +173,33 @@ a {
 input, select, textarea {
   font-size: 16px;
 }
+
+/* A bottom sheet, never taller than the screen actually is.
+
+   `dvh` rather than `vh`, for the same reason as #root above: on iOS `100vh`
+   is the *large* viewport — the one you get with the toolbar collapsed — so a
+   `90vh` sheet is taller than what you can see. Its footer buttons sit below
+   the fold, and the only way to reach them is to pinch out and pan, which is
+   exactly the "window is too big for the screen" complaint.
+
+   A class rather than an inline style because the `vh` fallback needs the
+   property declared twice, and React cannot do that in a style object. */
+.tm-sheet {
+  max-height: 90vh;
+  max-height: 90dvh;
+}
+
+/* A full-height screen. `min-height: 100%` rather than a viewport unit: #root
+   is already exactly the visible height, so measuring against the viewport a
+   second time only reintroduces the mismatch. */
+.tm-page {
+  min-height: 100%;
+}
+
+/* Nothing may make the page wider than the phone. A single over-wide child —
+   an unbroken word, a fixed-width table — turns the whole app into something
+   you have to pan sideways. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}

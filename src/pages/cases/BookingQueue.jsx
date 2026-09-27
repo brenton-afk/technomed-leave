@@ -36,7 +36,9 @@ function prettyDate(date) {
 const inputStyle = {
   width: '100%', padding: `${space.xs}px ${space.sm}px`, boxSizing: 'border-box',
   border: `1px solid ${colour.line}`, borderRadius: radius.control,
-  ...text('body'), color: colour.ink, background: colour.surface, outline: 'none'
+  // `field`, not `body` — see the token. An inline 14px here is what makes
+  // iOS zoom the whole app on focus.
+  ...text('field'), color: colour.ink, background: colour.surface, outline: 'none'
 }
 
 /**
@@ -287,10 +289,11 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
       }}>
         <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Bookings to confirm"
+          className="tm-sheet"
           style={{
             background: colour.canvas, width: '100%', maxWidth: 460,
             borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
-            maxHeight: '90vh', display: 'flex', flexDirection: 'column'
+            display: 'flex', flexDirection: 'column'
           }}>
 
           <div style={{

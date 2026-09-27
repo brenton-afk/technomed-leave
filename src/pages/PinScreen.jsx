@@ -316,7 +316,9 @@ export default function PinScreen({ onLogin }) {
 
   const currentPin = step === 'confirm' ? confirmPin : pin
 
-  const w = { minHeight:'100vh', display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif', width:'100%', maxWidth:460, margin:'0 auto' }
+  // 100% of #root, which is already exactly the visible height. A viewport
+  // unit here measures the *large* iOS viewport and overshoots the screen.
+  const w = { minHeight:'100%', display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif', width:'100%', maxWidth:460, margin:'0 auto' }
   // Insets on the outer padding: the content is centred so the notch rarely
   // troubles it, but the build stamp at the foot sits on the home indicator.
   const top = { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'calc(env(safe-area-inset-top, 0px) + 40px) 24px calc(env(safe-area-inset-bottom, 0px) + 20px)', width:'100%', maxWidth:360, margin:'0 auto', boxSizing:'border-box' }

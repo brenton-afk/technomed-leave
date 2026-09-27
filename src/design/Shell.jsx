@@ -75,7 +75,10 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
 
 export function Page({ children, style }) {
   return (
-    <div style={{ minHeight: '100vh', background: colour.canvas, fontFamily: font, ...style }}>
+    // `tm-page` is min-height:100%, not 100vh. #root is already exactly the
+    // visible height, and measuring against the viewport a second time makes
+    // every screen taller than the phone.
+    <div className="tm-page" style={{ background: colour.canvas, fontFamily: font, ...style }}>
       {children}
     </div>
   )

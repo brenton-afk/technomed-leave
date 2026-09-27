@@ -1,5 +1,6 @@
 .container {
-  min-height: 100vh;
+  /* 100% of #root, not the iOS large viewport. */
+  min-height: 100%;
   background: #f0f3f7;
   max-width: 430px;
   margin: 0 auto;

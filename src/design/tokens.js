@@ -47,6 +47,18 @@ export const type = {
   title: { size: 19, line: 1.25, weight: 700, spacing: '-0.2px' },
   heading: { size: 16, line: 1.3, weight: 650, spacing: '-0.1px' },
   body: { size: 14, line: 1.5, weight: 400, spacing: '0' },
+  // Anything you can type into. 16px is not a design choice — below it, iOS
+  // Safari zooms the page on focus and never zooms back, leaving the app wider
+  // than the screen with the buttons off the edge.
+  //
+  // There is a matching `input, select, textarea { font-size: 16px }` rule in
+  // index.css, and it was useless: every field here is styled inline, and an
+  // inline style beats a stylesheet rule. The rule stays as a backstop for any
+  // control nobody styled, but this token is what actually does the work.
+  //
+  // Do not reduce this to match the body scale. It will look tidier and the
+  // screen will start jumping again.
+  field: { size: 16, line: 1.4, weight: 400, spacing: '0' },
   bodyStrong: { size: 14, line: 1.5, weight: 600, spacing: '0' },
   caption: { size: 12.5, line: 1.45, weight: 400, spacing: '0' },
   // Uppercase eyebrow labels

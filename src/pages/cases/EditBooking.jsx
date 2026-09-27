@@ -367,10 +367,11 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
           onClick={e => e.stopPropagation()}
           role="dialog"
           aria-label="Edit booking"
+          className="tm-sheet"
           style={{
             background: colour.canvas, width: '100%', maxWidth: 460,
             borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
-            maxHeight: '88vh', display: 'flex', flexDirection: 'column'
+            display: 'flex', flexDirection: 'column'
           }}>
 
           <div style={{
