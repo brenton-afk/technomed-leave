@@ -341,7 +341,7 @@ export async function createBookingEvent({ summary, description, date, colorId, 
   return res.json()
 }
 
-const BOOKING_TZ = 'Australia/Hobart'
+export const BOOKING_TZ = 'Australia/Hobart'
 
 
 /** Removes a booking. Guarded by the same version marker as an edit. */

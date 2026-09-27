@@ -98,3 +98,38 @@ describe('the time written to the calendar', () => {
     expect(hourToTime(13)).toBe('13:00:00')
   })
 })
+
+describe('a day that keeps itself tidy', () => {
+  // Placing a new booking well is not enough. Delete the 9am case and there is
+  // a hole; move one to another day and there is a hole behind it. The admin
+  // assistant was packing them by hand afterwards, which is the app's job.
+  const day = (...surgeons) => surgeons.map(s => ({ surgeon: s }))
+
+  it('closes the gap when a case is taken out', () => {
+    const after = day('Ibbett', 'Thani')          // the middle one deleted
+    expect(layOutDay(after).map(s => s.hour)).toEqual([8, 9])
+  })
+
+  it('leaves no hour unused in the middle', () => {
+    const used = layOutDay(day('A', 'B', 'C', 'D')).map(s => s.hour).sort((a, b) => a - b)
+    for (let i = 1; i < used.length; i++) expect(used[i] - used[i - 1]).toBe(1)
+  })
+
+  it('is stable — tidying a tidy day changes nothing', () => {
+    // Otherwise every save would rewrite every booking on the day, and the
+    // calendar would show a dozen edits nobody made.
+    const cases = day('Ibbett', 'Ibbett', 'Thani')
+    const once = layOutDay(cases).map(s => s.hour)
+    const twice = layOutDay(cases).map(s => s.hour)
+    expect(twice).toEqual(once)
+  })
+
+  it('regroups a surgeon whose cases were scattered', () => {
+    // A booking moved onto a day lands at the end; the next tidy pulls it back
+    // beside the rest of that surgeon's list.
+    const scattered = day('Ibbett', 'Thani', 'Ibbett')
+    const slots = layOutDay(scattered)
+    expect(slots.filter(s => s.surgeon === 'Ibbett').map(s => s.hour)).toEqual([8, 9])
+    expect(slots.filter(s => s.surgeon === 'Thani').map(s => s.hour)).toEqual([10])
+  })
+})

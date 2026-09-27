@@ -4,7 +4,7 @@ import {
 } from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
 import {
-  updateCalendarEvent, getCalendarEvent, createBookingEvent, deleteCalendarEvent
+  updateCalendarEvent, getCalendarEvent, createBookingEvent, deleteCalendarEvent, BOOKING_TZ
 } from '../_googleCalendar.js'
 import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
@@ -25,6 +25,9 @@ import {
   sourceOf, isSameBooking, mergeBookings, isDistributorEmail
 } from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit } from '../../src/clinicalPlan/systems.js'
+import {
+  hourForNewCase, layOutDay, hourToTime
+} from '../../src/clinicalPlan/dayLayout.js'
 import { firstNameFor } from '../../src/staffConfig.js'
 
 // The Staff Leave sub-calendar. Read alongside bookings for the clinical plan
@@ -411,7 +414,17 @@ async function handleSave(req, res) {
     }
 
     patch.description = withAttribution(patch.description, firstNameFor(session.email))
+    const wasOn = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
     const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })
+
+    // Both days, when a booking moves: the one it left has a hole and the one it
+    // arrived on has two cases in one hour. Tidying only the destination leaves
+    // the gap behind it, which is how a calendar drifts back to needing a person.
+    const nowOn = (saved.start?.dateTime || saved.start?.date || '').slice(0, 10)
+    for (const day of [...new Set([wasOn, nowOn].filter(Boolean))]) {
+      await tidyDay(day).catch(() => {})
+    }
+
     return res.status(200).json({
       ok: true,
       event: {
@@ -538,7 +551,7 @@ async function writeBooking({ fields = {}, date, notes, rep, colorId }, enteredB
     hour = 8
   }
 
-  return createBookingEvent({
+  const created = await createBookingEvent({
     summary,
     description: withAttribution(description.trim(), enteredBy, { created: true }),
     date: day,
@@ -546,6 +559,12 @@ async function writeBooking({ fields = {}, date, notes, rep, colorId }, enteredB
     location: String(fields.hospital || '').trim() || undefined,
     hour
   })
+
+  // Packed here rather than in each handler, so every route that makes a
+  // booking — the sheet, dictation, accepting one out of the queue — leaves the
+  // day tidy without having to remember to.
+  await tidyDay(day).catch(() => {})
+  return created
 }
 
 async function handleCreate(req, res) {
@@ -608,7 +627,18 @@ async function handleDelete(req, res) {
     const eventId = String(body.eventId || '').trim()
     if (!eventId) return res.status(400).json({ error: 'eventId is required' })
 
+    // Read before it goes, so the day it was on can be closed up after.
+    let wasOn = null
+    try {
+      const doomed = await getCalendarEvent(eventId)
+      wasOn = (doomed?.start?.dateTime || doomed?.start?.date || '').slice(0, 10) || null
+    } catch {
+      wasOn = null
+    }
+
     await deleteCalendarEvent(eventId, { etag: body.etag })
+    // Otherwise the day keeps the hole where the case was.
+    if (wasOn) await tidyDay(wasOn).catch(() => {})
     return res.status(200).json({ ok: true })
   } catch (err) {
     if (err.code === 'conflict') {
@@ -670,6 +700,67 @@ async function bookingsOnCalendar(from, to) {
       }
     })
     .filter(Boolean)
+}
+
+/**
+ * Re-lays a day's cases into consecutive one-hour blocks.
+ *
+ * Run after anything that changes a day. Placing a *new* booking well is not
+ * enough to keep a calendar tidy: delete the 9am case and there is a hole;
+ * move one to another day and there is a hole behind it and a collision in
+ * front. The admin assistant was going through afterwards and packing them by
+ * hand, which is the app's job and the reason this exists.
+ *
+ * Only cases are touched. Leave, office days, the run-sheet reminder and the
+ * distributors' own invites are not part of the column and are left exactly as
+ * they are. Nothing is moved that is already where it should be, so a day that
+ * is already tidy costs one read and no writes.
+ *
+ * Times here mean nothing about when anyone operates — they did not before
+ * either, when every booking claimed 08:00 to 17:00. See dayLayout.js.
+ */
+async function tidyDay(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return { moved: 0 }
+
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
+    + `?timeMin=${encodeURIComponent(`${date}T00:00:00+11:00`)}`
+    + `&timeMax=${encodeURIComponent(`${date}T23:59:59+10:00`)}`
+    + '&singleEvents=true&orderBy=startTime&maxResults=250'
+    + `&timeZone=${encodeURIComponent(QUERY_TZ)}`
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+
+  const cases = (data.items || [])
+    // All-day entries are leave, office days and reminders — not a column.
+    .filter(e => e.start?.dateTime)
+    .filter(e => !isDistributorEmail(e.organizer?.email))
+    .map(e => {
+      const read = readBooking(e.summary || '', e.description || '')
+      return read?.patient
+        ? { id: e.id, etag: e.etag, surgeon: read.surgeon || '', from: e.start.dateTime.slice(11, 16) }
+        : null
+    })
+    .filter(Boolean)
+
+  const slots = layOutDay(cases)
+  let moved = 0
+  for (let i = 0; i < cases.length; i++) {
+    const want = String(slots[i].hour).padStart(2, '0')
+    if (cases[i].from === `${want}:00`) continue
+    try {
+      await updateCalendarEvent(cases[i].id, {
+        start: { dateTime: `${date}T${hourToTime(slots[i].hour)}`, timeZone: BOOKING_TZ },
+        end: { dateTime: `${date}T${hourToTime(slots[i].hour + 1)}`, timeZone: BOOKING_TZ }
+      })
+      moved += 1
+    } catch {
+      // One event that will not move is not a reason to leave the rest ragged.
+    }
+  }
+  return { moved }
 }
 
 /** A stable id for a candidate, so reading the same email twice cannot double it. */
