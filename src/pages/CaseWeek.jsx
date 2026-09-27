@@ -39,28 +39,68 @@ const shiftDay = (day, by) => toDateStr(addCivilDays(parseDateStr(day), by))
 
 /** The tone a non-case item is drawn in. */
 // The small header controls. One definition, so they cannot drift apart.
+// 44px, which is Apple's minimum tap target and not a round number chosen for
+// looks. These were 2px of padding around a 19px glyph — about 23 by 22 — and
+// reported as "the arrows to cycle through the weeks are very small". They are
+// also the most-used control on the screen.
+const TAP = 44
+
 const arrowStyle = {
-  background: 'none',
-  border: 'none',
-  color: 'rgba(255,255,255,0.55)',
+  width: TAP,
+  height: TAP,
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: radius.pill,
+  border: '1px solid rgba(255,255,255,0.18)',
+  background: 'rgba(255,255,255,0.10)',
+  color: 'white',
   // Glyphs, but the type scale is closed and a closed scale with exceptions in
   // it is not closed.
   ...text('title'),
   lineHeight: 1,
   cursor: 'pointer',
-  padding: '2px 6px'
+  padding: 0
 }
 
-const chipStyle = {
-  padding: '5px 12px',
-  borderRadius: radius.pill,
-  border: '1px solid rgba(255,255,255,0.28)',
-  background: 'rgba(255,255,255,0.08)',
-  color: 'rgba(255,255,255,0.85)',
-  ...text('caption'),
-  fontWeight: 600,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap'
+/**
+ * Day or week, as a segmented control rather than a button that changes its own
+ * label.
+ *
+ * The old one read "Day" when you were in week view and "Week" when you were in
+ * day view — it named the destination, not the state — so there was no way to
+ * tell which you were looking at without reading the list below. Two segments
+ * with one lit says where you are and where you can go at the same time, and
+ * costs no more room beside the title.
+ */
+function SpanToggle({ span, onChange }) {
+  return (
+    <div role="tablist" aria-label="How much of the week to show"
+      style={{
+        display: 'flex', flexShrink: 0, padding: 3, gap: 2,
+        background: 'rgba(0,0,0,0.22)', borderRadius: radius.pill
+      }}>
+      {['day', 'week'].map(id => {
+        const on = span === id
+        return (
+          <button key={id} role="tab" aria-selected={on}
+            onClick={() => onChange(id)}
+            style={{
+              // Short of 44 because it sits beside the title rather than in the
+              // run of controls, and making it that tall would push the week
+              // itself further down the screen than the toggle is worth.
+              minWidth: 46, height: 34, border: 'none', borderRadius: radius.pill,
+              background: on ? 'white' : 'transparent',
+              color: on ? colour.navy : 'rgba(255,255,255,0.7)',
+              ...text('bodyStrong'), cursor: 'pointer'
+            }}>
+            {id === 'day' ? 'Day' : 'Week'}
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 const KIND_TONE = {
@@ -424,31 +464,47 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
 
   return (
     <Page style={{ display: 'flex', flexDirection: 'column' }}>
-      <Header eyebrow="This week" title="Cases"
-        subtitle={plan?.summaryLine || 'Every booking, as the calendar has it'}>
+      {/* No "This week" eyebrow any more: it said the same thing as the week
+          range two rows below it, and the top of the screen had four things
+          competing before the week itself appeared. */}
+      <Header title="Cases"
+        subtitle={plan?.summaryLine || 'Every booking, as the calendar has it'}
+        right={
+          <SpanToggle span={span} onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />
+        }>
         {switcher}
 
-        {/* One row: move weeks, and choose how to read them. The header used to
-            carry three rows of controls above the day strip — a Day/Week pair, a
-            row of three chips, and the week range with its arrows — which on a
-            phone left very little of the week itself on screen. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: space.sm }}>
+        {/* Moving between weeks is the most-used control here and was the
+            smallest thing on the screen. Three items now, not four — the
+            Day/Week pair moved up beside the title — so the range has room to
+            be read and the arrows have room to be hit. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
           <button onClick={() => goWeek(-1)} aria-label="Previous week" style={arrowStyle}>‹</button>
-          <button onClick={goToday} title="Back to this week"
+          <button onClick={goToday}
+            aria-label={onThisWeek ? 'This week' : 'Back to this week'}
             style={{
-              ...chipStyle, flex: 1, textAlign: 'center',
-              // Nothing to go back to when you are already here.
-              border: onThisWeek ? '1px solid transparent' : chipStyle.border,
-              background: onThisWeek ? 'transparent' : chipStyle.background
+              flex: 1, minWidth: 0, height: TAP, padding: `0 ${space.sm}px`,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              borderRadius: radius.pill, cursor: 'pointer',
+              ...text('heading'), color: 'white',
+              // Nothing to go back to when you are already here, so it stops
+              // looking like a button.
+              border: `1px solid ${onThisWeek ? 'transparent' : 'rgba(255,255,255,0.28)'}`,
+              background: onThisWeek ? 'transparent' : 'rgba(255,255,255,0.10)'
             }}>
-            {formatWeekRange(window_.startDate, window_.endDate)}
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+              {formatWeekRange(window_.startDate, window_.endDate)}
+            </span>
+            {/* Tapping the range to come back was an affordance nobody could
+                see. It only appears when there is somewhere to go back to. */}
+            {!onThisWeek && (
+              <span style={{ ...text('micro'), color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase' }}>
+                Back to today
+              </span>
+            )}
           </button>
           <button onClick={() => goWeek(1)} aria-label="Next week" style={arrowStyle}>›</button>
-          <button onClick={() => { const next = span === 'day' ? 'week' : 'day'; setSpan(next); remember({ caseSpan: next }) }}
-            aria-label={span === 'day' ? 'Show the week' : 'Show one day'}
-            style={{ ...chipStyle, background: 'rgba(255,255,255,0.18)' }}>
-            {span === 'day' ? 'Day' : 'Week'}
-          </button>
         </div>
 
         <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
