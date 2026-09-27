@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import CameraSheet, { Outline } from './CameraSheet.jsx'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import CameraSheet, { Outline, CropReview } from './CameraSheet.jsx'
 import { resetCameraForTests, torchOn, acquireCamera, setTorch }
   from '../../scanner/cameraStream.js'
 import { resetOpenCvForTests } from '../../scanner/opencvLoader.js'
@@ -349,5 +349,51 @@ describe('the outline over the camera', () => {
     const svg = container.querySelector('svg')
     await waitFor(() => expect(svg.style.opacity).toBe('0'))
     expect(container.querySelector('polygon').getAttribute('points')).toBeNull()
+  })
+})
+
+describe('what the review screen offers', () => {
+  const CAPTURE = {
+    source: { width: 800, height: 600 },
+    corners: [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.9 }, { x: 0.1, y: 0.9 }],
+    flattened: 'data:image/jpeg;base64,AAA',
+    preview: 'data:image/jpeg;base64,BBB',
+    original: 'data:image/jpeg;base64,CCC'
+  }
+
+  const review = (props = {}) => render(
+    <CropReview capture={CAPTURE} cv={null}
+      pageCount={0} onConfirm={() => {}} onRetake={() => {}}
+      onAddAnother={() => {}} onCancel={() => {}} {...props} />
+  )
+
+  it('offers a way out of the scanner', async () => {
+    // Auto-capture fires on its own. Landing in a review whose only exits are
+    // Retake and keep-this-page is a trap.
+    const onCancel = vi.fn()
+    review({ onCancel })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCancel).toHaveBeenCalled()
+  })
+
+  it('reads the page without a second confirmation', async () => {
+    // It used to take three more taps: keep the page, close the camera, then
+    // find "Read usage document" behind it.
+    const onConfirm = vi.fn()
+    review({ onConfirm })
+    fireEvent.click(screen.getByRole('button', { name: 'Read this page' }))
+    expect(onConfirm).toHaveBeenCalled()
+  })
+
+  it('still allows a second page', async () => {
+    const onAddAnother = vi.fn()
+    review({ onAddAnother })
+    fireEvent.click(screen.getByRole('button', { name: 'Add a page' }))
+    expect(onAddAnother).toHaveBeenCalled()
+  })
+
+  it('counts the pages already taken in what it offers to read', async () => {
+    review({ pageCount: 1 })
+    expect(screen.getByRole('button', { name: 'Read 2 pages' })).toBeInTheDocument()
   })
 })

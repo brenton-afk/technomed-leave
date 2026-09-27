@@ -244,6 +244,11 @@ export default function UsageScan({ user }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [showCamera, setShowCamera] = useState(false)
+  // Set when the scanner asks to go straight to reading. The page it just
+  // captured arrives through setState, so the read has to wait a render for it
+  // to actually be in `pages` — reading here and now would read the page before
+  // this one, or none at all.
+  const [readWhenReady, setReadWhenReady] = useState(false)
 
   const uploadRef = useRef(null)
 
@@ -314,6 +319,13 @@ export default function UsageScan({ user }) {
     setPages([]); setCaseRecord(null); setResult(null)
     setError(''); setNotice(''); setStep('capture'); setShowCamera(true)
   }
+
+  useEffect(() => {
+    if (!readWhenReady || !pages.length || busy) return
+    setReadWhenReady(false)
+    processScan()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readWhenReady, pages.length, busy])
 
   async function processScan() {
     if (!pages.length) return
@@ -563,6 +575,10 @@ export default function UsageScan({ user }) {
             pageCount={pages.length}
             onCapture={page => addPages([pageFromPreview(page, pages.length + 1)])}
             onDone={() => setShowCamera(false)}
+            // Straight from the scanner's review into reading, rather than back
+            // to a screen with a button that says the same thing.
+            onRead={() => { setShowCamera(false); setReadWhenReady(true) }}
+            onCancel={() => setShowCamera(false)}
             onFallback={() => { setShowCamera(false); uploadRef.current?.click() }}
           />
         )}

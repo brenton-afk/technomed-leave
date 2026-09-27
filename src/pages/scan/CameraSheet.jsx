@@ -203,7 +203,7 @@ function Countdown({ progress }) {
  * mean dragging a point whose relationship to the paper is exactly what is in
  * question.
  */
-function CropReview({ capture, cv, onConfirm, onRetake }) {
+export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onCancel, pageCount }) {
   const [corners, setCorners] = useState(
     capture.corners || [{ x: 0.06, y: 0.06 }, { x: 0.94, y: 0.06 }, { x: 0.94, y: 0.94 }, { x: 0.06, y: 0.94 }])
   const [preview, setPreview] = useState(capture.preview)
@@ -287,28 +287,46 @@ function CropReview({ capture, cv, onConfirm, onRetake }) {
         ))}
       </div>
 
-      <div style={{ padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))', display: 'flex', gap: 10 }}>
-        <button onClick={onRetake}
-          style={{ flex: 1, padding: '13px 0', background: 'transparent', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}>
-          Retake
-        </button>
+      {/* Reading is one tap from here, not three. It used to take "Use this
+          page", then "Done", then "Read usage document" on the screen behind —
+          four taps after framing the page, for the ordinary case of scanning one
+          form and reading it. */}
+      <div style={{ padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {dirty ? (
           <button onClick={reflatten}
-            style={{ flex: 1.4, padding: '13px 0', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ width: '100%', padding: '14px 0', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
             Redo crop
           </button>
         ) : (
           <button onClick={() => onConfirm(preview)}
-            style={{ flex: 1.4, padding: '13px 0', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-            Use this page
+            style={{ width: '100%', padding: '14px 0', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+            {pageCount > 0 ? `Read ${pageCount + 1} pages` : 'Read this page'}
           </button>
         )}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onRetake}
+            style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontSize: 13.5, cursor: 'pointer' }}>
+            Retake
+          </button>
+          {/* Still here, because a two-page form is normal. It is just no longer
+              the thing standing between one page and reading it. */}
+          <button onClick={() => onAddAnother(preview)}
+            style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontSize: 13.5, cursor: 'pointer' }}>
+            Add a page
+          </button>
+          {/* Out of the scanner altogether. Auto-capture fires on its own, and
+              landing in a review with no way back but Retake is a trap. */}
+          <button onClick={onCancel}
+            style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 10, fontSize: 13.5, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }) {
+export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCancel, onFallback }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const detectCanvasRef = useRef(null)
@@ -485,6 +503,24 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
     return () => { stop = true; cancelAnimationFrame(rafRef.current) }
   }, [cameraState, engine, autoCapture, pending, capture])
 
+  /** Keeps the page and returns to the camera, for a form that runs to two. */
+  function keepAndContinue(preview) {
+    const page = { preview, flattened: pending.flattened }
+    setPending(null)
+    busyRef.current = false
+    trackerRef.current?.reset()
+    setView(null)
+    onCapture(page)
+  }
+
+  /**
+   * Keeps the page and goes straight to reading it.
+   *
+   * This used to be three more taps: keep the page, close the camera, then find
+   * "Read usage document" on the screen behind. For the ordinary case — one
+   * form, read it — that was four taps after the page was already framed and
+   * recognised.
+   */
   function accept(preview) {
     const page = { preview, flattened: pending.flattened }
     setPending(null)
@@ -492,6 +528,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
     trackerRef.current?.reset()
     setView(null)
     onCapture(page)
+    onRead?.()
   }
 
   async function toggleTorch() {
@@ -514,7 +551,10 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onFallback }
         play(), nothing to re-attach. */}
     {pending && (
       <CropReview capture={pending} cv={cvRef.current}
+        pageCount={pageCount}
         onConfirm={accept}
+        onAddAnother={keepAndContinue}
+        onCancel={onCancel}
         onRetake={() => { setPending(null); busyRef.current = false; trackerRef.current?.reset() }} />
     )}
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column', visibility: pending ? 'hidden' : 'visible' }}>
