@@ -10,11 +10,16 @@ import { colour, text, space, radius } from '../../design/tokens.js'
 // So: hold the button, say the whole thing in one go, let go. The fields fill
 // in and you check them.
 //
-// It fills the form rather than making the booking, and that is not timidity.
 // Speech recognition has never heard of Petrusma, Ibbett or Bewg, and gets them
-// wrong in the one field where being wrong matters most. What comes back is
-// always shown next to what was actually heard, so a mangled surname is obvious
-// rather than sitting in a box looking confident.
+// wrong in the one field where being wrong matters most. So the transcript and
+// the reading taken from it are both shown, side by side: a mangled surname is
+// obvious as a quotation and invisible once it sits in a form box.
+//
+// Having shown both, there is no reason to make somebody re-enter them. The
+// first version only filled the form and called that a review — which from the
+// outside looked exactly like tapping a button and nothing happening. Now the
+// reading is on screen to be read, and either it is right and you book it, or
+// it is not and you open it in the form.
 
 const MAX_SECONDS = 60
 
@@ -124,6 +129,9 @@ export default function DictateBooking({ user, onFilled, onClose }) {
   }
 
   const busy = phase === 'working'
+  // The three a booking cannot be made without. Anything missing and the only
+  // way on is through the form, where it can be filled in.
+  const ready = Boolean(heard?.fields?.patient && heard?.fields?.surgeon && heard?.fields?.date)
 
   return (
     <div style={{
@@ -163,6 +171,36 @@ export default function DictateBooking({ user, onFilled, onClose }) {
           }}>
             “{heard.transcript}”
           </div>
+          {/* What it understood, not only what it heard. Without this, "Use
+              this" asked you to approve a reading you had not been shown — and
+              then only filled the form, which read as nothing happening. */}
+          <div style={{
+            marginTop: space.xs, border: `1px solid ${colour.line}`,
+            borderRadius: radius.control, overflow: 'hidden'
+          }}>
+            {[
+              ['Patient', heard.fields.patient],
+              ['Surgeon', heard.fields.surgeon],
+              ['Date', heard.fields.date],
+              ['Hospital', heard.fields.hospital],
+              ['Procedure', heard.fields.procedure],
+              ['Kit', heard.fields.kit]
+            ].map(([label, value]) => (
+              <div key={label} style={{
+                display: 'flex', gap: space.sm, padding: `4px ${space.sm}px`,
+                borderBottom: `1px solid ${colour.lineSoft}`
+              }}>
+                <span style={{ ...text('caption'), color: colour.inkFaint, width: 76, flexShrink: 0 }}>
+                  {label}
+                </span>
+                <span style={{
+                  ...text('body'),
+                  color: value ? colour.ink : colour.inkFainter
+                }}>{value || 'not said'}</span>
+              </div>
+            ))}
+          </div>
+
           {heard.unclear && (
             <div style={{
               ...text('caption'), color: colour.ink, background: colour.warningSoft,
@@ -198,12 +236,31 @@ export default function DictateBooking({ user, onFilled, onClose }) {
           )}
 
         {heard && phase !== 'recording' && !busy && (
-          <button type="button" onClick={() => onFilled(heard.fields)} style={{
-            flex: 1, padding: space.sm, border: 'none', borderRadius: radius.control,
-            background: colour.accentDeep, color: 'white', ...text('bodyStrong'), cursor: 'pointer'
-          }}>
-            Use this
-          </button>
+          <>
+            {/* Two ways on, because the reading above is either right or it is
+                not. "Use this" alone filled the form and looked like nothing
+                had happened. */}
+            <button type="button" onClick={() => onFilled(heard.fields)} style={{
+              flex: 1, padding: space.sm, borderRadius: radius.control,
+              border: `1px solid ${colour.line}`, background: 'transparent',
+              color: colour.inkMuted, ...text('bodyStrong'), cursor: 'pointer'
+            }}>
+              Check it first
+            </button>
+            <button type="button"
+              disabled={!ready}
+              onClick={() => onFilled(heard.fields, { andCreate: true })}
+              style={{
+                flex: 2, padding: space.sm, border: 'none', borderRadius: radius.control,
+                background: ready ? colour.accentDeep : colour.inkFainter,
+                color: 'white', ...text('bodyStrong'), cursor: ready ? 'pointer' : 'default'
+              }}>
+              {/* Not "Add to calendar": the sheet's own footer button says that,
+                  and two of them on screen at once is a guess about which one
+                  acts on what. */}
+              Book it
+            </button>
+          </>
         )}
 
         {onClose && phase !== 'recording' && (

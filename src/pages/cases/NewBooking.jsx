@@ -169,26 +169,52 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
    * as names and go through addSystem so each picks up its own supply, exactly
    * as if it had been tapped.
    */
-  function applyDictation(f) {
+  function applyDictation(f, { andCreate = false } = {}) {
+    const spokenSystems = (f.systems || [])
+      .filter(name => !systems.some(s => s.name === name))
+      .map(name => ({ name, supply: supplyFor(name, f.hospital || hospital) }))
+
+    const extraNotes = [
+      f.note,
+      // The kit was named but matched nothing we stock — kept as a note rather
+      // than dropped, since it may be a competitor's or a new product.
+      f.kit && !spokenSystems.length ? `Kit as dictated: ${f.kit}` : null
+    ].filter(Boolean)
+
     if (f.patient) setPatient(f.patient)
     if (f.surgeon) setSurgeon(f.surgeon)
     if (f.date) setDate(f.date)
     if (f.hospital) setHospital(f.hospital)
     if (f.procedure) setProcedure(f.procedure)
-    if (f.note) setNotes(n => [n, f.note].filter(Boolean).join('\n'))
-    for (const name of f.systems || []) addSystem(name)
-    // The kit was named but matched nothing we stock — worth keeping as a note
-    // rather than dropping, since it may be a competitor's or a new product.
-    if (f.kit && !(f.systems || []).length) {
-      setNotes(n => [n, `Kit as dictated: ${f.kit}`].filter(Boolean).join('\n'))
-    }
+    if (extraNotes.length) setNotes(n => [n, ...extraNotes].filter(Boolean).join('\n'))
+    if (spokenSystems.length) setSystems(list => [...list, ...spokenSystems])
     setDictating(false)
+
+    if (andCreate) {
+      // Sent from the values in hand rather than from state, which has not
+      // re-rendered yet.
+      create({
+        patient: f.patient || patient,
+        surgeon: f.surgeon || surgeon,
+        date: f.date || date,
+        hospital: f.hospital || hospital,
+        procedure: f.procedure || procedure,
+        notes: [notes, ...extraNotes].filter(Boolean).join('\n'),
+        systems: [...systems, ...spokenSystems]
+      })
+    }
   }
 
-  /** What the inventory says this system is, at this hospital. */
-  const supplyFor = name => {
-    if (!hospital) return ''
-    const need = loanNeed(name, hospital).need
+  /**
+   * What the inventory says this system is, at this hospital.
+   *
+   * `at` overrides the chosen hospital, which dictation needs: it sets the
+   * hospital and the systems in the same tick, so reading the hospital from
+   * state here would still see the old one and leave the supply blank.
+   */
+  const supplyFor = (name, at = hospital) => {
+    if (!at) return ''
+    const need = loanNeed(name, at).need
     return need === 'none' ? 'Consignment' : need === 'order' ? 'Loan' : ''
   }
 
@@ -200,12 +226,22 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
   const colourId = guideColorIdFor(surgeon)
   const ready = patient.trim() && surgeon && date
 
-  async function create() {
+  /**
+   * @param {object} [over] values to send instead of what is on screen.
+   *
+   * Dictation needs this: setting six pieces of state and then reading them
+   * back in the same tick returns the old ones, so a spoken booking sent
+   * straight from the panel would post an empty form.
+   */
+  async function create(over = {}) {
     setStatus('saving'); setError('')
     try {
+      const use = {
+        date, notes, patient, surgeon, procedure, hospital, systems, ...over
+      }
       // "Diplomat (Consignment) + Global BMD PLIF (Loan)" — each system with the
       // supply that actually applies to it.
-      const kit = systems
+      const kit = use.systems
         .map(s => [s.name, s.supply ? `(${s.supply})` : ''].filter(Boolean).join(' '))
         .join(' + ')
       const res = await fetch('/api/calendar/today?action=create', {
@@ -215,14 +251,14 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
           ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {})
         },
         body: JSON.stringify({
-          date,
-          notes,
+          date: use.date,
+          notes: use.notes,
           fields: {
-            patient: patient.trim(),
-            surgeon,
-            procedure: procedure.trim(),
+            patient: String(use.patient || '').trim(),
+            surgeon: use.surgeon,
+            procedure: String(use.procedure || '').trim(),
             kit,
-            hospital
+            hospital: use.hospital
           }
         })
       })

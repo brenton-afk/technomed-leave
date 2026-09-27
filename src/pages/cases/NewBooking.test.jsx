@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import NewBooking from './NewBooking.jsx'
 
 // Creating a booking has to beat typing it into Google, which is the thing it
@@ -193,5 +193,95 @@ describe('what gets created', () => {
     fill()
     fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
     await waitFor(() => expect(onCreated).toHaveBeenCalled())
+  })
+})
+
+describe('a booking dictated out loud', () => {
+  const FIELDS = {
+    patient: 'Cooper', surgeon: 'Ibbett', date: '2026-10-02', hospital: 'RHH',
+    procedure: 'L4/5 PLIF', kit: 'Diplomat + LHC cage', systems: ['Diplomat'], note: ''
+  }
+
+  function recorded(fields = FIELDS) {
+    tracks = [{ stop: vi.fn() }]
+    global.navigator.mediaDevices = { getUserMedia: vi.fn(async () => ({ getTracks: () => tracks })) }
+    global.MediaRecorder = FakeRecorder
+    global.Blob = class { constructor(p, o) { this.size = 50000; this.type = o?.type } }
+    global.FileReader = class {
+      readAsDataURL() { setTimeout(() => this.onload({ target: this }), 0) }
+      get result() { return 'data:audio/webm;base64,QUJD' }
+    }
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=dictate')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, transcript: 'Cooper, Ibbett…', unclear: '', fields }) }
+      }
+      posted = JSON.parse(init.body)
+      return { status: 200, json: async () => ({ ok: true, event: { id: 'new-1' } }) }
+    })
+  }
+
+  let tracks
+  class FakeRecorder {
+    constructor(stream, options) { this.mimeType = options?.mimeType || 'audio/webm'; this.state = 'inactive' }
+    start() { this.state = 'recording' }
+    stop() { this.state = 'inactive'; this.ondataavailable?.({ data: { size: 50000 } }); this.onstop?.() }
+  }
+
+  async function dictate() {
+    fireEvent.click(screen.getByRole('button', { name: /Speak/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Start speaking/ }))
+    // getUserMedia is awaited before recording starts, so wait for the button
+    // to actually turn into Stop rather than clicking where it used to be.
+    const stop = await screen.findByRole('button', { name: /Stop/ })
+    await act(async () => { fireEvent.click(stop) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Check it first' }))
+  }
+
+  beforeEach(() => { FakeRecorder.isTypeSupported = () => true })
+
+  it('writes what was heard into the form', async () => {
+    recorded()
+    show()
+    await dictate()
+    // The point of "Use this": every field the dictation heard is now in the
+    // form, ready to check.
+    await waitFor(() => expect(screen.getByDisplayValue('Cooper')).toBeInTheDocument())
+    expect(screen.getByDisplayValue('L4/5 PLIF')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('2026-10-02')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Surgeon/).value).toBe('Ibbett')
+  })
+
+  it('books it straight from the panel', async () => {
+    // What was actually tried: speak, read the transcript, tap the button,
+    // expect a booking. "Use this" only filled the form, which looked exactly
+    // like nothing happening.
+    recorded()
+    show()
+    fireEvent.click(screen.getByRole('button', { name: /Speak/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Start speaking/ }))
+    const stop = await screen.findByRole('button', { name: /Stop/ })
+    await act(async () => { fireEvent.click(stop) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Book it' }))
+
+    await waitFor(() => expect(posted).not.toBeNull())
+    expect(posted.fields.patient).toBe('Cooper')
+    expect(posted.fields.surgeon).toBe('Ibbett')
+    expect(posted.date).toBe('2026-10-02')
+    // The system was heard and carries its supply for the hospital that was
+    // heard in the same breath — read from state, both would have been blank.
+    expect(posted.fields.kit).toBe('Diplomat (Consignment)')
+  })
+
+  it('creates the booking when the form is then submitted', async () => {
+    recorded()
+    show()
+    await dictate()
+    await waitFor(() => expect(screen.getByDisplayValue('Cooper')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
+    await waitFor(() => expect(posted).not.toBeNull())
+    expect(posted.fields.patient).toBe('Cooper')
+    expect(posted.fields.surgeon).toBe('Ibbett')
+    expect(posted.date).toBe('2026-10-02')
   })
 })

@@ -102,17 +102,60 @@ describe('what came back', () => {
     await waitFor(() => expect(screen.getByText(/Cooper, Ibbett, RHH/)).toBeInTheDocument())
   })
 
-  it('does not fill the form until the person says so', async () => {
+  it('shows what it understood, not only what it heard', async () => {
+    // "Use this" used to ask you to approve a reading you had not been shown.
+    show()
+    await speak()
+    await waitFor(() => expect(screen.getByText('Cooper')).toBeInTheDocument())
+    expect(screen.getByText('Ibbett')).toBeInTheDocument()
+    expect(screen.getByText('2026-10-02')).toBeInTheDocument()
+    expect(screen.getByText('L4/5 PLIF')).toBeInTheDocument()
+  })
+
+  it('does nothing until the person chooses', async () => {
     const onFilled = vi.fn()
     show({ onFilled })
     await speak()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Use this' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Book it' })).toBeInTheDocument())
     expect(onFilled).not.toHaveBeenCalled()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Use this' }))
-    expect(onFilled).toHaveBeenCalledWith(expect.objectContaining({
-      patient: 'Cooper', surgeon: 'Ibbett', date: '2026-10-02'
+  it('can add it straight away', async () => {
+    // What was actually wanted: speak, glance, book.
+    const onFilled = vi.fn()
+    show({ onFilled })
+    await speak()
+    fireEvent.click(await screen.findByRole('button', { name: 'Book it' }))
+    expect(onFilled).toHaveBeenCalledWith(
+      expect.objectContaining({ patient: 'Cooper' }),
+      { andCreate: true })
+  })
+
+  it('can open it in the form first', async () => {
+    const onFilled = vi.fn()
+    show({ onFilled })
+    await speak()
+    fireEvent.click(await screen.findByRole('button', { name: 'Check it first' }))
+    expect(onFilled).toHaveBeenCalledWith(expect.objectContaining({ patient: 'Cooper' }))
+    expect(onFilled.mock.calls[0][1]).toBeUndefined()
+  })
+
+  it('will not add one that is missing a surname', async () => {
+    // Three things a booking cannot be made without. Missing any, the only way
+    // on is through the form where it can be typed in.
+    global.fetch = vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({
+        ok: true, transcript: 'Ibbett, Friday', unclear: 'No patient surname was said.',
+        fields: { patient: '', surgeon: 'Ibbett', date: '2026-10-02', hospital: '', procedure: '', kit: '', systems: [] }
+      })
     }))
+    show()
+    await speak()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Book it' })).toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Check it first' })).not.toBeDisabled()
   })
 
   it('sends the audio rather than anything identifying', async () => {
