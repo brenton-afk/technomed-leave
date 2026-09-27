@@ -295,6 +295,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         id: event.id,
         // Struck through and not counted, rather than dropped. See isCancelled.
         cancelled: isCancelled(event.rawTitle, event.description) || undefined,
+        // Carried through to the card. It was being read and then left behind.
+        selfFunding: read.selfFunding,
         patient: read.patient,
         surgeon: read.surgeon,
         // The title's raw middle section is not kept: it ran the operation and

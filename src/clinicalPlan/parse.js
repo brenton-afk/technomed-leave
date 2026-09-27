@@ -388,6 +388,32 @@ export function isCancelled(title, description) {
  * Leading and trailing separators go with it, along with the brackets around a
  * parenthesised "(cancelled)".
  */
+// A patient paying for their own implants. Written at the front of the title,
+// like a cancellation, and it was not recognised — so "SELF FUNDING Russell
+// CYLOX - Thani" parsed its system as "FUNDING Russell CYLOX" and the card
+// showed the word FUNDING sitting in front of the surname.
+//
+// It matters commercially and it matters on the day, so it is lifted out and
+// shown rather than swallowed or dropped.
+const SELF_FUNDING = /\bself[\s-]*fund(?:ing|ed)?\b/i
+
+/** Whether the patient is paying for their own implants. */
+export function isSelfFunding(title, description) {
+  return SELF_FUNDING.test(`${title || ''}\n${description || ''}`)
+}
+
+/** The title without the self-funding marker, so the rest of it parses. */
+export function stripSelfFunding(title) {
+  return String(title || '')
+    .replace(/\([^)]*\bself[\s-]*fund(?:ing|ed)?\b[^)]*\)/gi, ' ')
+    // The phrase with at most one separator either side, the same way
+    // cancellations are taken off: rewriting every separator in a title turns
+    // "L4-L5 TLIF" into "L4 L5".
+    .replace(/\s*[-–—:|]?\s*\bself[\s-]*fund(?:ing|ed)?\b\s*[-–—:|]?\s*/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 export function stripCancellation(title) {
   return String(title || '')
     // "(cancelled)" and anything else in those brackets.
@@ -801,8 +827,11 @@ export function cleanOperation(text, o = {}) {
  * through exactly as it had been typed.
  */
 export function readBooking(title, description, { colourSurgeon } = {}) {
-  // A renamed cancellation puts its marker where the patient's name goes.
-  title = stripCancellation(title)
+  // Both markers are read before anything else and taken off the title, because
+  // both sit where the patient's name goes and both otherwise end up inside
+  // whatever field parses next.
+  const selfFunding = isSelfFunding(title, description)
+  title = stripSelfFunding(stripCancellation(title))
   // Taken off before anything else reads the title. The surgeon matcher accepts
   // a surname buried in a longer string, so "Fowler (Mat)" was swallowed whole
   // and the rep disappeared.
@@ -875,6 +904,9 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     // app was dropping it. Two reps on one case is normal.
     rep,
     reps,
+    // The patient is paying for their own implants. Shown on the card, because
+    // it changes what happens on the day and it was being lost in the parse.
+    selfFunding: selfFunding || undefined,
     // What the team wrote in the notes that no field has a name for: why a case
     // moved, who called it in, what still has to be ordered. Every line goes
     // through stripIdentifiers, because free prose is exactly where a date of

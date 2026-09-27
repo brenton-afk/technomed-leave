@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parseCaseTitle, isSurgicalCase, sanitisePatient, stripIdentifiers,
-  extractKit, detectHospital, normaliseSurgeon, describeCase, HOSPITALS, isCancelled, stripCancellation, readBooking, extractRep
+  parseCaseTitle, isSurgicalCase, sanitisePatient, stripIdentifiers, extractKit,
+  detectHospital, normaliseSurgeon, describeCase, HOSPITALS, isCancelled,
+  stripCancellation, readBooking, extractRep, isSelfFunding, stripSelfFunding
 } from './parse.js'
 
 describe('parseCaseTitle', () => {
@@ -708,5 +709,53 @@ describe('reps written the way people actually write them', () => {
   it('takes the reps out of the title so the rest still reads', () => {
     const { rest } = extractRep('Bonney DIPLOMAT (Calvary Loan) - Gupta (Aimee/Brenton)')
     expect(rest).toBe('Bonney DIPLOMAT (Calvary Loan) - Gupta')
+  })
+})
+
+describe('a self-funding patient', () => {
+  // Russell, Tuesday: "SELF FUNDING Russell CYLOX - Thani". The card showed the
+  // word FUNDING in front of the surname, because the marker was not
+  // recognised and the system parsed as "FUNDING Russell CYLOX".
+  it('does not end up inside the system', () => {
+    const read = readBooking('SELF FUNDING Russell CYLOX - Thani',
+      'Surg: Thani\nPt: Russell\nHosp: CLV\nKit: CYLOX')
+    expect(read.patient).toBe('Russell')
+    expect(read.system).toBe('CYLOX')
+    expect(read.selfFunding).toBe(true)
+  })
+
+  it('is read from a title with no labels at all', () => {
+    // Where the title is the whole record, the marker used to take the
+    // patient's place: the surname came out as "SELF".
+    const read = readBooking('SELF FUNDING Russell CYLOX - Thani', '')
+    expect(read.patient).toBe('Russell')
+    expect(read.system).toBe('CYLOX')
+  })
+
+  it('reads the ways people write it', () => {
+    for (const written of ['SELF FUNDING', 'Self funding', 'self-funded', 'Self Funded']) {
+      expect(isSelfFunding(`${written} Holmes CYLOX - Gupta`, ''), written).toBe(true)
+    }
+    // And from the notes, where it is just as likely to be written.
+    expect(isSelfFunding('Holmes CYLOX - Gupta', 'Self funding patient')).toBe(true)
+  })
+
+  it('leaves an ordinary booking alone', () => {
+    const read = readBooking('Marsh DIPLOMAT - Fowler', 'Pt: Marsh')
+    expect(read.selfFunding).toBeUndefined()
+    expect(read.system).toBe('DIPLOMAT')
+  })
+
+  it('does not eat the separators around it', () => {
+    // Taking the phrase off must not rewrite every dash in the title, or
+    // "L4-L5 TLIF" becomes "L4 L5".
+    expect(stripSelfFunding('SELF FUNDING Marsh L4-L5 TLIF - Fowler'))
+      .toBe('Marsh L4-L5 TLIF - Fowler')
+  })
+
+  it('survives alongside a cancellation', () => {
+    const read = readBooking('CANCELLED SELF FUNDING Russell CYLOX - Thani', '')
+    expect(read.patient).toBe('Russell')
+    expect(read.selfFunding).toBe(true)
   })
 })

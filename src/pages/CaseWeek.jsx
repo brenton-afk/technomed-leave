@@ -141,7 +141,7 @@ function CaseCard({ surgicalCase, onOpen }) {
           <span style={{ color: nameInk }}>{surgicalCase.surgeon}</span>
         </span>
 
-        {(off || surgicalCase.navigation) && (
+        {(off || surgicalCase.navigation || surgicalCase.selfFunding) && (
           <span style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
             {off && (
               <span style={{
@@ -149,6 +149,17 @@ function CaseCard({ surgicalCase, onOpen }) {
                 border: `1px solid ${colour.inkFainter}`, color: colour.inkFaint,
                 ...text('micro'), textTransform: 'uppercase'
               }}>Cancelled</span>
+            )}
+            {/* Written at the front of the title, where it used to be swallowed
+                into whatever parsed next — the card showed "FUNDING" sitting in
+                front of the surname. It is a badge now, said in full. */}
+            {surgicalCase.selfFunding && !off && (
+              <span style={{
+                padding: '1px 7px', borderRadius: radius.pill,
+                background: colour.warningSoft, color: colour.ink,
+                border: `1px solid ${colour.warningLine}`,
+                ...text('micro'), textTransform: 'uppercase'
+              }}>Self funding</span>
             )}
             {/* Navigation has its own marker rather than the bar's colour. It
                 used to take the bar, which meant an Ibbett case using the AIRO
