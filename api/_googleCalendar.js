@@ -304,15 +304,27 @@ export async function getCalendarEvent(eventId) {
  * the week plan skips all-day entries when looking for cases, so an all-day
  * booking would vanish from the very screen it was created on.
  */
-export async function createBookingEvent({ summary, description, date, colorId, location }) {
+/**
+ * @param {object} o
+ * @param {number} [o.hour]  the hour the booking occupies, 24h. One hour long.
+ *
+ * Bookings used to span 08:00 to 17:00, which is honest about how little anyone
+ * knows of the real timing — and unreadable, because in Google's week view a
+ * nine-hour block is the whole column and six cases are six slabs of colour on
+ * top of one another. An hour each, laid out end to end, says the same nothing
+ * about timing and shows the day. See src/clinicalPlan/dayLayout.js.
+ */
+export async function createBookingEvent({ summary, description, date, colorId, location, hour = 8 }) {
   const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
   const calendarId = getCalendarId()
 
+  const from = String(Math.floor(hour)).padStart(2, '0')
+  const to = String(Math.floor(hour) + 1).padStart(2, '0')
   const body = {
     summary,
     description,
-    start: { dateTime: `${date}T08:00:00`, timeZone: BOOKING_TZ },
-    end: { dateTime: `${date}T17:00:00`, timeZone: BOOKING_TZ }
+    start: { dateTime: `${date}T${from}:00:00`, timeZone: BOOKING_TZ },
+    end: { dateTime: `${date}T${to}:00:00`, timeZone: BOOKING_TZ }
   }
   if (colorId) body.colorId = String(colorId)
   if (location) body.location = location

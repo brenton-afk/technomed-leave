@@ -527,12 +527,24 @@ async function writeBooking({ fields = {}, date, notes, rep, colorId }, enteredB
   // The colour follows the surgeon, exactly as it does on every save.
   const colour = colorId || guideColorIdFor(normaliseSurgeon(surgeon) || '') || null
 
+  // An hour of its own, after this surgeon's other cases where there is room.
+  // A calendar that cannot be read is no reason to refuse the booking; it only
+  // means this one starts the day.
+  let hour = 8
+  try {
+    const sameDay = (await bookingsOnCalendar(day, day)).filter(c => !c.cancelled)
+    hour = hourForNewCase(sameDay, surgeon)
+  } catch {
+    hour = 8
+  }
+
   return createBookingEvent({
     summary,
     description: withAttribution(description.trim(), enteredBy, { created: true }),
     date: day,
     colorId: colour,
-    location: String(fields.hospital || '').trim() || undefined
+    location: String(fields.hospital || '').trim() || undefined,
+    hour
   })
 }
 
@@ -651,6 +663,9 @@ async function bookingsOnCalendar(from, to) {
         patient: read.patient,
         surgeon: read.surgeon || '',
         date: start.slice(0, 10),
+        // The hour it occupies, for laying out a new case beside it. All-day
+        // entries have no hour and are not part of the column.
+        hour: e.start?.dateTime ? Number(e.start.dateTime.slice(11, 13)) : null,
         cancelled: Boolean(read.cancelled)
       }
     })
