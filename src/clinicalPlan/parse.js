@@ -125,9 +125,42 @@ const SEPARATOR = /\s*[-–—:>]\s*/g
  * Only roster first names count. A bracketed "(RHH)" or "(2 of 3)" is not a
  * person, and guessing would put a hospital code where a rep's name goes.
  */
+/**
+ * Every way a rep's name is written in a booking, mapped to the one the app
+ * shows.
+ *
+ * People are not consistent about their own names. Bonney's case read
+ * "(Aimee/Brenton)" and showed no rep at all, because the roster calls him
+ * Brent: the bracket has to be made *entirely* of known names, so one longer
+ * form threw the whole group away and took Aimee with it.
+ *
+ * The longer forms come free from the full name already on the roster —
+ * "Brenton Lovering" gives Brenton, "Matthew Usher" gives Matthew — so this
+ * does not become a list somebody has to remember to update. `aka` is for the
+ * ones no record contains, like Matt.
+ *
+ * Sorted longest first so "Brenton" is tried before "Brent" and the match does
+ * not stop halfway through a name.
+ */
+function repNameForms() {
+  const forms = []
+  for (const person of STAFF) {
+    if (!person.firstName) continue
+    const written = new Set([
+      person.firstName,
+      String(person.name || '').trim().split(/\s+/)[0],
+      ...(person.aka || [])
+    ].filter(Boolean))
+    for (const form of written) forms.push({ form, canonical: person.firstName })
+  }
+  return forms.sort((a, b) => b.form.length - a.form.length)
+}
+
 export function extractRep(title) {
   const text = String(title || '')
-  const names = STAFF.map(p => p.firstName).filter(Boolean)
+  const forms = repNameForms()
+  const names = forms.map(f => f.form)
+  if (!names.length) return { rep: null, reps: [], rest: text }
 
   // Any bracketed group made only of roster names and separators. Two reps on
   // one case is normal — "(Aimee/Mat)" is a real booking — and matching a single
@@ -139,10 +172,10 @@ export function extractRep(title) {
   if (!match) return { rep: null, reps: [], rest: text }
 
   const inside = match[0].slice(1, -1)
-  const reps = inside
+  const reps = [...new Set(inside
     .split(/[/,&+]/)
-    .map(part => names.find(n => n.toLowerCase() === part.trim().toLowerCase()))
-    .filter(Boolean)
+    .map(part => forms.find(f => f.form.toLowerCase() === part.trim().toLowerCase())?.canonical)
+    .filter(Boolean))]
 
   return {
     // Kept as written, so the card reads the way the booking does.

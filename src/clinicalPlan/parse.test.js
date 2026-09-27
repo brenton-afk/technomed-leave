@@ -661,3 +661,42 @@ Entered by Brent`
     expect(detectHospital('', 'RHH theatre 11')).toBe(HOSPITALS.RHH)
   })
 })
+
+describe('reps written the way people actually write them', () => {
+  it('reads a rep called by their full first name', () => {
+    // Bonney, 25 September: "(Aimee/Brenton)" and the app showed no rep at all.
+    // The roster calls him Brent, and the bracket has to be made entirely of
+    // known names — so one longer form threw the whole group away and took
+    // Aimee with it.
+    const { rep, reps } = extractRep('Bonney DIPLOMAT (Calvary Loan) - Gupta (Aimee/Brenton)')
+    expect(rep).toBe('Aimee/Brent')
+    expect(reps).toEqual(['Aimee', 'Brent'])
+  })
+
+  it('accepts either form of a name, and shows the one the team uses', () => {
+    // The longer forms come free from the full name already on the roster.
+    for (const written of ['Brent', 'Brenton']) {
+      expect(extractRep(`Case - Surgeon (${written})`).rep, written).toBe('Brent')
+    }
+    for (const written of ['Mat', 'Matt', 'Matthew']) {
+      expect(extractRep(`Case - Surgeon (${written})`).rep, written).toBe('Mat')
+    }
+  })
+
+  it('does not take a bracket that is not about people', () => {
+    // "(Calvary Loan)" sits in the same title and is a supply note.
+    expect(extractRep('Bonney DIPLOMAT (Calvary Loan) - Gupta').rep).toBe(null)
+    expect(extractRep('Petrusma REFORM CERVICAL (LOAN) - Thani').rep).toBe(null)
+    expect(extractRep('Rowe DIPLOMAT (Consignment) - Dubey').rep).toBe(null)
+  })
+
+  it('names one person once, however they were written', () => {
+    // "(Brent/Brenton)" is one rep, not two.
+    expect(extractRep('Case - Surgeon (Brent/Brenton)').reps).toEqual(['Brent'])
+  })
+
+  it('takes the reps out of the title so the rest still reads', () => {
+    const { rest } = extractRep('Bonney DIPLOMAT (Calvary Loan) - Gupta (Aimee/Brenton)')
+    expect(rest).toBe('Bonney DIPLOMAT (Calvary Loan) - Gupta')
+  })
+})
