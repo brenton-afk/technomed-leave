@@ -341,3 +341,40 @@ describe('the header', () => {
     expect(await screen.findByDisplayValue('2026-09-21')).toBeInTheDocument()
   })
 })
+
+describe('when a sub-calendar cannot be read', () => {
+  // Leave lives on its own calendar, fetched alongside the bookings. One
+  // failing must not fail the week — but it must not pass unmentioned either.
+  function withLeaveUnreadable() {
+    global.fetch = vi.fn(async () => ({
+      json: async () => ({
+        events,
+        syncedAt: '2026-09-21T02:00:00.000Z',
+        sourceErrors: [{ source: 'leave', error: 'Not Found' }]
+      })
+    }))
+  }
+
+  it('says so rather than showing a week with nobody on leave', async () => {
+    // An unreadable leave calendar looks exactly like a week where nobody is
+    // away, which is a difference worth knowing before planning around it.
+    withLeaveUnreadable()
+    show()
+    await waitFor(() =>
+      expect(screen.getByText(/Leave is not showing this week/)).toBeInTheDocument())
+    expect(screen.getByText(/Staff Leave calendar could not be read/)).toBeInTheDocument()
+  })
+
+  it('still shows the bookings it did get', async () => {
+    withLeaveUnreadable()
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+  })
+
+  it('says nothing when both calendars read fine', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    expect(screen.queryByText(/could not be read/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Leave is not showing/)).not.toBeInTheDocument()
+  })
+})

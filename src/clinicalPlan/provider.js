@@ -156,7 +156,12 @@ export async function fetchWeekPlan(window, { token, force = false, useFixture =
     // backs the view, the text copy and the .docx.
     const plan = buildWeekPlan(data.events || [], window, { generatedAt: data.syncedAt })
     writeCachedPlan(window.startDate, plan)
-    return { plan, fromCache: false }
+    // One calendar failing must not fail the week — a missing sub-calendar
+    // should not hide the bookings. But it must not pass unmentioned either:
+    // the leave calendar going unreadable looks exactly like nobody being on
+    // leave, and that is a difference worth knowing about before you plan a
+    // week around it.
+    return { plan, fromCache: false, sourceErrors: data.sourceErrors || [] }
   } catch (err) {
     if (cached) {
       return { plan: cached.plan, fromCache: true, cachedAt: cached.cachedAt, error: err.message }

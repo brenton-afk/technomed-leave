@@ -361,6 +361,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
   const [exportNote, setExportNote] = useState('')
+  // Sub-calendars the week could not read. Leave lives on one of them, and an
+  // unreadable leave calendar is indistinguishable from an empty one.
+  const [sourceErrors, setSourceErrors] = useState([])
   const signature = useRef('')
 
   const token = user?.token
@@ -370,6 +373,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     try {
       const result = await fetchWeekPlan(win, { token, force: quiet })
       setCheckedAt(Date.now())
+      setSourceErrors(result.sourceErrors || [])
       setStale(Boolean(result.error))
       // Replaced only when something visible changed, so a poll does not rebuild
       // the page every minute and lose the reader's place.
@@ -554,6 +558,21 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         {status === 'loading' && !plan && (
           <div style={{ textAlign: 'center', padding: space.xl, color: colour.inkFaint }}>Loading…</div>
         )}
+
+        {sourceErrors.map(({ source, error }) => (
+          <Banner key={source} tone="warning">
+            <strong>
+              {source === 'leave'
+                ? 'Leave is not showing this week.'
+                : `The ${source} calendar could not be read.`}
+            </strong>
+            <br />
+            {source === 'leave'
+              ? 'The Staff Leave calendar could not be read, so nobody will appear as on leave '
+                + 'even if they are. Share it with the app\u2019s service account to fix it.'
+              : error}
+          </Banner>
+        ))}
 
         {/* The bookings inbox. Always in the same place, whether or not anything
             is waiting — an entry point that only appears when there is something
