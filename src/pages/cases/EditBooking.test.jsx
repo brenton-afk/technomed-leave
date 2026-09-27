@@ -457,3 +457,82 @@ describe('reps go back to the calendar the way they came', () => {
     expect(extractRep(title).reps).toEqual(['Sarah'])
   })
 })
+
+describe('moving a booking onto a day whose kit is spoken for', () => {
+  // The same clash as booking a second one there: it does not matter whether
+  // the case is new or arrived from Tuesday, the kit is still one kit.
+  const BOOKING = {
+    summary: 'Marsh DIPLOMAT - Fowler',
+    fields: { patient: 'Marsh', surgeon: 'Fowler', kit: 'Diplomat (Consignment)', hospital: 'RHH' },
+    notes: '', reps: [], colorId: '3', etag: 'e1',
+    start: '2026-09-29T08:00:00+10:00',
+    end: '2026-09-29T17:00:00+10:00'
+  }
+
+  // Friday already has a Diplomat at RHH; Tuesday has nothing.
+  const DAYS = {
+    '2026-10-02': [{ id: 'other', hospital: 'RHH', system: 'DIPLOMAT', kit: 'Diplomat (Consignment)' }],
+    '2026-09-29': []
+  }
+
+  function serving() {
+    global.fetch = vi.fn(async url => {
+      const text = String(url)
+      const day = /start=(\d{4}-\d{2}-\d{2})/.exec(text)?.[1]
+      if (day) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            events: (DAYS[day] || []).map(c => ({
+              id: c.id, summary: `Other ${c.system} - Ibbett`,
+              description: `Pt: Other\nKit: ${c.kit}\nHosp: ${c.hospital}`,
+              location: c.hospital, start: {}, end: {}, source: 'bookings'
+            }))
+          })
+        }
+      }
+      return { ok: true, status: 200, json: async () => BOOKING }
+    })
+  }
+
+  it('says nothing while the booking sits on a clear day', async () => {
+    serving()
+    render(<EditBooking eventId="mine" user={{ token: 't' }} onClose={() => {}} />)
+    await waitFor(() => expect(screen.getByDisplayValue('Marsh')).toBeInTheDocument())
+    expect(screen.queryByText(/Borrow a Diplomat kit/)).not.toBeInTheDocument()
+  })
+
+  it('warns as soon as it is moved onto the committed day', async () => {
+    serving()
+    render(<EditBooking eventId="mine" user={{ token: 't' }} onClose={() => {}} />)
+    await waitFor(() => expect(screen.getByDisplayValue('Marsh')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByDisplayValue('2026-09-29'), { target: { value: '2026-10-02' } })
+    await waitFor(() =>
+      expect(screen.getByText(/Borrow a Diplomat kit from Calvary/)).toBeInTheDocument())
+  })
+
+  it('does not count the booking against itself', async () => {
+    // Reloading a booking that is already on a day must not read its own entry
+    // as a second case and cry clash at a day that is fine.
+    global.fetch = vi.fn(async url => {
+      const text = String(url)
+      if (/start=/.test(text)) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            events: [{
+              id: 'mine', summary: 'Marsh DIPLOMAT - Fowler',
+              description: 'Pt: Marsh\nKit: Diplomat (Consignment)\nHosp: RHH',
+              location: 'RHH', start: {}, end: {}, source: 'bookings'
+            }]
+          })
+        }
+      }
+      return { ok: true, status: 200, json: async () => BOOKING }
+    })
+    render(<EditBooking eventId="mine" user={{ token: 't' }} onClose={() => {}} />)
+    await waitFor(() => expect(screen.getByDisplayValue('Marsh')).toBeInTheDocument())
+    expect(screen.queryByText(/Borrow a Diplomat kit/)).not.toBeInTheDocument()
+  })
+})

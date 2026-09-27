@@ -4,6 +4,7 @@
 // which it is looking at.
 
 import { buildWeekPlan } from './buildWeekPlan.js'
+import { readBooking, detectHospital } from './parse.js'
 import { FIXTURE_WEEK } from './fixture.js'
 
 // The cache holds a *derived* plan — the notes, the flags, the case lines — not
@@ -134,6 +135,40 @@ export function writePrefs(prefs) {
  *
  * @returns {Promise<{plan: import('./types.js').WeekPlan, fromCache: boolean, cachedAt?: number, error?: string}>}
  */
+/**
+ * The cases already booked on one day, as hospital and systems.
+ *
+ * Wanted when a booking is being moved onto a day: a kit already spoken for is
+ * a clash whether the second case is new or was dragged there from Tuesday. The
+ * week on screen cannot answer it, because the day moved to is often not in it.
+ *
+ * Deliberately thin — no plan, no grouping, no notes. It answers one question,
+ * and it is asked every time somebody touches the date field.
+ */
+export async function fetchDayCases(date, { token } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return []
+  const res = await fetch(
+    `/api/calendar/today?action=week&start=${date}&end=${date}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  const data = await res.json()
+  if (data.error) throw new Error(data.error)
+
+  return (data.events || [])
+    .filter(e => e.source !== 'leave')
+    .map(e => {
+      const read = readBooking(e.summary || '', e.description || '')
+      if (!read?.patient) return null
+      return {
+        id: e.id,
+        hospital: detectHospital(e.location, e.description, { caseEvent: true }),
+        system: read.system || '',
+        kit: read.kit || '',
+        cancelled: Boolean(read.cancelled)
+      }
+    })
+    .filter(c => c && !c.cancelled)
+}
+
 export async function fetchWeekPlan(window, { token, force = false, useFixture = false } = {}) {
   if (useFixture) {
     return { plan: FIXTURE_WEEK, fromCache: false, fixture: true }

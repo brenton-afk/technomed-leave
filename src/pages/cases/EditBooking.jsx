@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import {
@@ -6,6 +6,9 @@ import {
 } from '../../clinicalPlan/colours.js'
 import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
 import { extractRep } from '../../clinicalPlan/parse.js'
+import { fetchDayCases } from '../../clinicalPlan/provider.js'
+import { dayShortfall } from '../../clinicalPlan/inventory.js'
+import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { ATTENDING_REPS } from '../../staffConfig.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
@@ -235,6 +238,10 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   // Who was in the room. Chosen, never typed: it goes into the booking title,
   // and a spelling the roster does not know is a rep the app cannot read back.
   const [reps, setReps] = useState([])
+  // What else is booked on the day this booking is headed for. Refetched when
+  // the date changes, because moving a booking onto a day whose kit is already
+  // committed is the same clash as booking a second one there.
+  const [dayCases, setDayCases] = useState([])
 
   const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
 
@@ -265,12 +272,50 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    let current = true
+    if (!when.date) { setDayCases([]); return undefined }
+    fetchDayCases(when.date, { token: user?.token })
+      .then(cases => { if (current) setDayCases(cases) })
+      // A day that cannot be read is not a reason to block an edit; it only
+      // means this one check cannot be made.
+      .catch(() => { if (current) setDayCases([]) })
+    return () => { current = false }
+  }, [when.date, user?.token])
+
   const originalWhen = loaded
     ? { date: civilParts(loaded.start)?.date || '', start: civilParts(loaded.start)?.time || '',
         end: civilParts(loaded.end)?.time || '' }
     : null
   const movedTime = Boolean(originalWhen && when.date !== originalWhen.date)
   const recoloured = colourChosen
+
+  /** RHH or CLV, from any of the ways a hospital is written. */
+  const siteOf = text => {
+    const t = String(text || '').toUpperCase()
+    if (/\bCLV\b|CALVARY|LENAH/.test(t)) return 'CLV'
+    if (/\bRHH\b|ROYAL\s*HOBART/.test(t)) return 'RHH'
+    return null
+  }
+
+  /**
+   * Kit this booking needs that its day does not have enough of.
+   *
+   * Counted against the day it is going to, not the day it came from, and with
+   * this booking's own entry taken out so it is not counted twice.
+   */
+  const shortfalls = useMemo(() => {
+    const site = siteOf(fields.hospital)
+    if (!site) return []
+    const mine = systemsInKit(fields.kit || '')
+    const others = dayCases.filter(c => c.id !== eventId)
+    return mine.map(system => {
+      const alsoBooked = others.filter(c =>
+        siteOf(c.hospital) === site
+        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(system)).length
+      return dayShortfall(system, site, alsoBooked + 1)
+    }).filter(Boolean)
+  }, [fields.hospital, fields.kit, dayCases, eventId])
 
   const repsChanged = Boolean(loaded && reps.join('/') !== (loaded.reps || []).join('/'))
 
@@ -406,6 +451,25 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                 Loading the booking…
               </div>
             )}
+
+            {/* Shown above everything, because it is about the day rather
+                than about this booking, and moving a case is exactly when it
+                is easiest to miss. */}
+            {shortfalls.map(short => (
+              <div key={short.system} style={{
+                background: colour.dangerSoft, border: `1px solid ${colour.dangerLine}`,
+                borderRadius: radius.control, padding: space.sm, marginBottom: space.md
+              }}>
+                <div style={{ ...text('bodyStrong'), color: colour.danger }}>
+                  {short.from
+                    ? `Borrow a ${short.system} kit from ${short.from}`
+                    : `A ${short.system} loan set is needed`}
+                </div>
+                <div style={{ ...text('caption'), color: colour.ink, marginTop: 2 }}>
+                  {short.reason}
+                </div>
+              </div>
+            ))}
 
             {error && (
               <div style={{
