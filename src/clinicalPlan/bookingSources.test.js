@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  sourceOf, mayNotifyAboutBooking, isSameBooking, mergeBookings, BOOKING_SOURCES
-} from './bookingSources.js'
+import { sourceOf, mayNotifyAboutBooking, isSameBooking, mergeBookings, BOOKING_SOURCES, isDistributorEmail } from './bookingSources.js'
 import { normaliseSurgeon } from './parse.js'
 
 describe('recognising where a booking came from', () => {
@@ -108,5 +106,42 @@ describe('the constraint is written down', () => {
     // A rule nobody can look up gets removed by the next person tidying up.
     expect(text).toMatch(/does not know we already have those bookings/i)
     expect(text).toMatch(/Never auto-reply/i)
+  })
+})
+
+describe('a distributor is not a booking source', () => {
+  it('knows the distributors that send confirmations back', () => {
+    // Globus/Nuvasive and Device are the two that do it every time — a calendar
+    // invite to bookings@, which Google then adds to the calendar by itself.
+    expect(isDistributorEmail('jlagoon@globusmedical.com')).toBe(true)
+    expect(isDistributorEmail('orthobookings@device.com.au')).toBe(true)
+    expect(isDistributorEmail('bookings@e4surgical.com')).toBe(true)
+    expect(isDistributorEmail('a.polites@signus.com.au')).toBe(true)
+  })
+
+  it('does not mistake our own address, or a hospital, for a distributor', () => {
+    // Getting this wrong would silently drop real bookings, which is the exact
+    // failure the whole review queue exists to prevent.
+    expect(isDistributorEmail('bookings@technomed.com.au')).toBe(false)
+    expect(isDistributorEmail('tobias.long@ths.tas.gov.au')).toBe(false)
+    expect(isDistributorEmail('someone@cnstas.com.au')).toBe(false)
+    expect(isDistributorEmail('')).toBe(false)
+    expect(isDistributorEmail(null)).toBe(false)
+  })
+
+  it('matches subdomains but not lookalike domains', () => {
+    expect(isDistributorEmail('rep@mail.device.com.au')).toBe(true)
+    // A domain that merely ends in the same letters is somebody else entirely.
+    expect(isDistributorEmail('rep@notdevice.com.au')).toBe(false)
+    expect(isDistributorEmail('rep@device.com.au.example.org')).toBe(false)
+  })
+
+  it('is kept separate from being an unrecognised sender', () => {
+    // sourceOf already returns null for a distributor, so the ingestion would
+    // skip one either way. The distinction is what the team is told: an
+    // unrecognised sender is reported as possibly-a-missed-booking, which
+    // invites someone to add the domain as a source and recreate the duplicate.
+    expect(sourceOf('jlagoon@globusmedical.com')).toBe(null)
+    expect(isDistributorEmail('jlagoon@globusmedical.com')).toBe(true)
   })
 })

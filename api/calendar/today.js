@@ -18,7 +18,9 @@ import {
 import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
-import { sourceOf, isSameBooking, mergeBookings } from '../../src/clinicalPlan/bookingSources.js'
+import {
+  sourceOf, isSameBooking, mergeBookings, isDistributorEmail
+} from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit } from '../../src/clinicalPlan/systems.js'
 import { firstNameFor } from '../../src/staffConfig.js'
 
@@ -104,7 +106,9 @@ export default async function handler(req, res) {
     const data = await eventsRes.json()
     if (data.error) throw new Error(data.error.message)
 
-    const events = (data.items || []).map(e => ({
+    const events = (data.items || [])
+      .filter(e => !isDistributorEmail(e.organizer?.email))
+      .map(e => ({
       id: e.id,
       title: e.summary || 'No title',
       // The day view reads the system and supply out of this. Without it the only
@@ -169,7 +173,13 @@ async function handleWeek(req, res) {
       return {
         source: cal.source,
         truncated: Boolean(data.nextPageToken),
-        events: (data.items || []).map(e => ({
+        events: (data.items || [])
+          // A distributor's confirmation invite is our own booking coming back
+          // to us. Google adds it to this calendar unasked because bookings@ is
+          // an attendee, and shown in the app it reads as a second, separate
+          // case for the same patient. See bookingSources.js.
+          .filter(e => !isDistributorEmail(e.organizer?.email))
+          .map(e => ({
           id: e.id, summary: e.summary || '', description: e.description || '',
           location: e.location || '', colorId: e.colorId || null,
           // Google's version marker, carried so an edit can be rejected when
@@ -630,6 +640,7 @@ async function handleIngest(req, res) {
     let skipped = 0
     let remaining = 0
     let unreadable = 0
+    let echoes = 0
     const queued = []
 
     for (const messageId of messageIds) {
@@ -637,7 +648,18 @@ async function handleIngest(req, res) {
       if (read >= PER_RUN) { remaining += 1; continue }
 
       const email = await readMessage(messageId)
-      const source = sourceOf(addressOf(email.from))
+      const from = addressOf(email.from)
+
+      // A distributor confirming a booking we placed. Not a booking, and not a
+      // sender anyone should later add as one — so it is dropped without being
+      // counted among the "might have been a booking" skips.
+      if (isDistributorEmail(from)) {
+        echoes += 1
+        await markBookingEmailSeen(messageId, 0)
+        continue
+      }
+
+      const source = sourceOf(from)
 
       // Only the addresses bookings actually come from are read. Everything else
       // in the mailbox — a newsletter, a delivery receipt, a reply to one of our
@@ -709,7 +731,7 @@ async function handleIngest(req, res) {
 
     const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
     return res.status(200).json({
-      ok: true, read, skipped, remaining, unreadable,
+      ok: true, read, skipped, remaining, unreadable, echoes,
       found: queued.length, count: pending.length, pending
     })
   } catch (err) {

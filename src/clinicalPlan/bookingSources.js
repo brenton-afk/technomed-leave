@@ -65,6 +65,50 @@ export const BOOKING_SOURCES = [
 // getting it wrong costs something no feature is worth.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Distributors are not a booking source ───────────────────────────────────
+// When we book a case, the distributor sends back a confirmation — usually a
+// calendar invite addressed to bookings@, which Google then adds to the
+// bookings calendar all by itself. Globus/Nuvasive and Device Technologies both
+// do it, every single time.
+//
+// That echo is not a booking. It is *our own booking coming back to us*, and
+// treating it as new produces exactly one thing: a duplicate case sitting next
+// to the real one, on the calendar the whole team reads and in the app. A
+// duplicate is worse than it sounds — two entries for one patient is how a case
+// gets prepared twice, or cancelled once and left standing once.
+//
+// So distributor mail is ignored, and ignored *by name* rather than by simply
+// not being recognised. The difference matters: an unrecognised sender is
+// reported as "left alone, might be a booking nobody told us about", which
+// invites somebody to helpfully add the domain as a source later and recreate
+// this problem. These are known, deliberate, and permanent exclusions.
+//
+// The same list filters the calendar feed, because the invites land there
+// whether or not the app ever reads the mailbox.
+
+export const DISTRIBUTOR_DOMAINS = [
+  'device.com.au',        // Device Technologies
+  'globusmedical.com',    // Globus / Nuvasive
+  'signus.com.au',
+  'e4surgical.com',
+  'ktmedical.com.au',
+  'atecspine.com',
+  'neurophys.com.au',
+  'vifm.org'              // Donor Tissue Bank
+]
+
+/**
+ * Whether an address belongs to a distributor.
+ *
+ * Matched on the domain and on `.domain` beneath it, so a subdomain cannot slip
+ * past, while `notdevice.com.au` does not match `device.com.au`.
+ */
+export function isDistributorEmail(address) {
+  const at = String(address || '').trim().toLowerCase().split('@')[1]
+  if (!at) return false
+  return DISTRIBUTOR_DOMAINS.some(domain => at === domain || at.endsWith(`.${domain}`))
+}
+
 /** Which source an email came from, or null if it is not a booking source. */
 export function sourceOf(fromAddress) {
   const address = String(fromAddress || '').trim().toLowerCase()
