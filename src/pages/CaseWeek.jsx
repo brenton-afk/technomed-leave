@@ -7,7 +7,7 @@ import {
 } from '../clinicalPlan/provider.js'
 import {
   resolveDefaultWeek, weekWindowFor, todayStr, parseDateStr, toDateStr,
-  addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatStamp
+  addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
 } from '../clinicalPlan/week.js'
 import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
 import EditBooking from './cases/EditBooking.jsx'
@@ -523,7 +523,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
               background: onThisWeek ? 'transparent' : 'rgba(255,255,255,0.10)'
             }}>
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
-              {formatWeekRange(window_.startDate, window_.endDate)}
+              {formatWeekRangeShort(window_.startDate, window_.endDate, today)}
             </span>
             {/* Tapping the range to come back was an affordance nobody could
                 see. It only appears when there is somewhere to go back to. */}
@@ -537,6 +537,16 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         </div>
 
         <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
+          {/* The badges under each date are a count of cases, and a bare number
+              under a date does not say so. Labelling it once is cheaper than
+              leaving every reader to work it out — and it is the sort of thing
+              that only looks obvious to whoever built it. */}
+          <div style={{
+            ...text('micro'), textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.4)', padding: '0 2px 3px'
+          }}>
+            Cases each day
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
             {days.map(day => {
               const dp = (plan?.days || []).find(d => d.date === day)
@@ -545,6 +555,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
               const isToday = day === today
               return (
                 <button key={day} onClick={() => pickDay(day)}
+                  aria-label={`${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}, `
+                    + `${n} case${n === 1 ? '' : 's'}`}
+                  aria-current={on ? 'date' : undefined}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                     padding: '6px 2px 8px', border: 'none', cursor: 'pointer',
@@ -560,9 +573,18 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                     ...text('bodyStrong'),
                     color: isToday ? colour.accent : 'white'
                   }}>{dayNum(day)}</span>
+                  {/* A filled badge rather than a loose digit: a number in a
+                      circle reads as a count of things, a number floating under
+                      a date reads as anybody's guess. Kept at full size when
+                      empty so the row does not jump. */}
                   <span style={{
                     ...text('micro'),
-                    color: n ? 'rgba(255,255,255,0.75)' : 'transparent'
+                    marginTop: 2,
+                    minWidth: 17, height: 17, lineHeight: '17px',
+                    borderRadius: radius.pill, textAlign: 'center',
+                    background: n ? (on ? colour.accent : 'rgba(255,255,255,0.20)') : 'transparent',
+                    color: n ? 'white' : 'transparent',
+                    fontWeight: 700
                   }}>{n || '0'}</span>
                 </button>
               )

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import CaseWeek from './CaseWeek.jsx'
+import { formatWeekRangeShort } from '../clinicalPlan/week.js'
 
 // One view replacing two. The Calendar navigated well and showed everything the
 // calendar holds; the Case plan read a case properly and knew about the week.
@@ -421,5 +422,51 @@ describe('who is away', () => {
     const meeting = screen.getByText('Team meeting')
     expect(leave.compareDocumentPosition(meeting) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy()
+  })
+})
+
+describe('the week header fits a phone', () => {
+  it('drops the year from the range when it is this year', async () => {
+    // "21 – 27 September 2026" at heading size does not fit between two 44px
+    // arrows on a 390px screen — it was being cut off mid-month.
+    show()
+    await waitFor(() => expect(screen.getByText('21 – 27 September')).toBeInTheDocument())
+    expect(screen.queryByText(/21 – 27 September 2026/)).not.toBeInTheDocument()
+  })
+
+  it('shortens the months when a week straddles two', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Next week/ }))
+    await waitFor(() => expect(screen.getByText('28 Sep – 4 Oct')).toBeInTheDocument())
+  })
+
+  it('keeps the year when the week is not in this one', async () => {
+    // Which is exactly when it is worth the room.
+    expect(formatWeekRangeShort('2027-03-01', '2027-03-07', '2026-09-21'))
+      .toBe('1 – 7 March 2027')
+    expect(formatWeekRangeShort('2026-12-28', '2027-01-03', '2026-09-21'))
+      .toBe('28 Dec 2026 – 3 Jan 2027')
+  })
+})
+
+describe('the number under each date', () => {
+  it('says what it is counting', async () => {
+    // "It wouldn't be obvious what that number means." A bare digit under a
+    // date is anybody's guess, so the strip is labelled once.
+    show()
+    await waitFor(() => expect(screen.getByText(/Cases each day/i)).toBeInTheDocument())
+  })
+
+  it('reads as a count to a screen reader too', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    // Monday 21 September carries one case in the fixtures.
+    expect(screen.getByRole('button', { name: /Monday 21 September, 1 case$/ }))
+      .toBeInTheDocument()
+    // Two, not three: Sturrock on the 22nd is cancelled, and the badge counts
+    // what is going ahead.
+    expect(screen.getByRole('button', { name: /Tuesday 22 September, 2 cases$/ }))
+      .toBeInTheDocument()
   })
 })

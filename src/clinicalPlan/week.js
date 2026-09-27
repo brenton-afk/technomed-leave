@@ -128,6 +128,37 @@ export function todayStr(now = new Date(), tz = TZ) {
 }
 
 // "24 – 30 August 2026", collapsing a shared month or year.
+const MONTHS_SHORT = MONTHS.map(m => m.slice(0, 3))
+
+/**
+ * The week range, short enough for the header of a phone.
+ *
+ * The full form is "21 – 27 September 2026", which at heading size does not fit
+ * between two 44px arrows on a 390px screen — it was being cut off mid-month.
+ *
+ * Two things go, in order of how little they are worth: the year, when it is
+ * the year we are already in, and the full month name, when the week straddles
+ * two of them and there are two to print. A week in another year keeps its
+ * year, because that is exactly when it matters.
+ */
+export function formatWeekRangeShort(startStr, endStr, todayStr_) {
+  const a = parseDateStr(startStr), b = parseDateStr(endStr)
+  const thisYear = parseDateStr(todayStr_ || todayStr()).year
+  const sameYearAsNow = a.year === thisYear && b.year === thisYear
+
+  if (a.year === b.year && a.month === b.month) {
+    const month = MONTHS[a.month - 1]
+    return sameYearAsNow
+      ? `${a.day} – ${b.day} ${month}`
+      : `${a.day} – ${b.day} ${month} ${a.year}`
+  }
+  if (a.year === b.year) {
+    const range = `${a.day} ${MONTHS_SHORT[a.month - 1]} – ${b.day} ${MONTHS_SHORT[b.month - 1]}`
+    return sameYearAsNow ? range : `${range} ${a.year}`
+  }
+  return `${a.day} ${MONTHS_SHORT[a.month - 1]} ${a.year} – ${b.day} ${MONTHS_SHORT[b.month - 1]} ${b.year}`
+}
+
 export function formatWeekRange(startStr, endStr) {
   const a = parseDateStr(startStr), b = parseDateStr(endStr)
   if (a.year === b.year && a.month === b.month) {
