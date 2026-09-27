@@ -285,3 +285,104 @@ describe('a booking dictated out loud', () => {
     expect(posted.date).toBe('2026-10-02')
   })
 })
+
+describe('a second case wanting the same kit', () => {
+  // Friday 2 October already has a Diplomat case at RHH. RHH holds one.
+  const FRIDAY_DIPLOMAT = [
+    { id: 'x1', patient: 'Cooper', surgeon: 'Ibbett', hospital: 'RHH',
+      system: 'DIPLOMAT', kit: 'Diplomat (Consignment)' }
+  ]
+
+  it('warns rather than booking a second one as consignment', async () => {
+    // Both were marked "Consignment" and booked without a murmur. One of them
+    // had no kit.
+    render(<NewBooking user={{ token: 't' }} onClose={() => {}}
+      date="2026-10-02" alreadyBooked={FRIDAY_DIPLOMAT} />)
+    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
+
+    await waitFor(() =>
+      expect(screen.getByText(/Borrow a Diplomat kit from Calvary/)).toBeInTheDocument())
+    expect(screen.getByText(/2 Diplomat cases at RHH that day and 1 kit there/))
+      .toBeInTheDocument()
+  })
+
+  it('says nothing when the day is clear', async () => {
+    render(<NewBooking user={{ token: 't' }} onClose={() => {}}
+      date="2026-10-02" alreadyBooked={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
+    await waitFor(() => expect(screen.getByText('Diplomat')).toBeInTheDocument())
+    expect(screen.queryByText(/Borrow a Diplomat kit/)).not.toBeInTheDocument()
+  })
+
+  it('does not count a case at the other hospital', async () => {
+    // Calvary's Diplomat list has no bearing on what is at RHH.
+    render(<NewBooking user={{ token: 't' }} onClose={() => {}} date="2026-10-02"
+      alreadyBooked={[{ ...FRIDAY_DIPLOMAT[0], hospital: 'CALVARY LENAH VALLEY' }]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
+    await waitFor(() => expect(screen.getByText('Diplomat')).toBeInTheDocument())
+    expect(screen.queryByText(/Borrow a Diplomat kit/)).not.toBeInTheDocument()
+  })
+})
+
+describe('a dictated booking that would leave a case without a kit', () => {
+  const FRIDAY_DIPLOMAT = [
+    { id: 'x1', patient: 'Cooper', surgeon: 'Ibbett', hospital: 'RHH',
+      system: 'DIPLOMAT', kit: 'Diplomat (Consignment)' }
+  ]
+
+  let tracks
+  class FakeRecorder {
+    constructor(stream, options) { this.mimeType = options?.mimeType || 'audio/webm'; this.state = 'inactive' }
+    start() { this.state = 'recording' }
+    stop() { this.state = 'inactive'; this.ondataavailable?.({ data: { size: 50000 } }); this.onstop?.() }
+  }
+  FakeRecorder.isTypeSupported = () => true
+
+  beforeEach(() => {
+    tracks = [{ stop: vi.fn() }]
+    global.navigator.mediaDevices = { getUserMedia: vi.fn(async () => ({ getTracks: () => tracks })) }
+    global.MediaRecorder = FakeRecorder
+    global.Blob = class { constructor(p, o) { this.size = 50000; this.type = o?.type } }
+    global.FileReader = class {
+      readAsDataURL() { setTimeout(() => this.onload({ target: this }), 0) }
+      get result() { return 'data:audio/webm;base64,QUJD' }
+    }
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=dictate')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            ok: true, transcript: 'Marsh, Fowler, RHH, Friday, L4 5 PLIF, Diplomat', unclear: '',
+            fields: {
+              patient: 'Marsh', surgeon: 'Fowler', date: '2026-10-02', hospital: 'RHH',
+              procedure: 'L4/5 PLIF', kit: 'Diplomat', systems: ['Diplomat'], note: ''
+            }
+          })
+        }
+      }
+      posted = JSON.parse(init.body)
+      return { status: 200, json: async () => ({ ok: true, event: { id: 'n1' } }) }
+    })
+  })
+
+  it('stops at the warning instead of booking it', async () => {
+    // Speaking a booking is quicker than typing it. That is not a reason to
+    // skip the one warning worth reading.
+    render(<NewBooking user={{ token: 't' }} onClose={() => {}}
+      date="2026-10-02" alreadyBooked={FRIDAY_DIPLOMAT} />)
+    fireEvent.click(screen.getByRole('button', { name: /Speak/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Start speaking/ }))
+    const stop = await screen.findByRole('button', { name: /Stop/ })
+    await act(async () => { fireEvent.click(stop) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Book it' }))
+
+    await waitFor(() =>
+      expect(screen.getByText(/Borrow a Diplomat kit from Calvary/)).toBeInTheDocument())
+    // Filled in and waiting, not written to the calendar.
+    expect(posted).toBeNull()
+    expect(screen.getByDisplayValue('Marsh')).toBeInTheDocument()
+  })
+})

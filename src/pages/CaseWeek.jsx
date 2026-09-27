@@ -736,6 +736,12 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         <NewBooking
           user={user}
           date={adding}
+          // What is already booked that day, so the sheet can tell when a
+          // second case wants a kit there is only one of. Passed from the plan
+          // already on screen rather than fetched again.
+          alreadyBooked={((plan?.days || []).find(d => d.date === adding)?.casesByHospital || [])
+            .flatMap(g => g.cases)
+            .filter(c => !c.cancelled)}
           onClose={() => setAdding(null)}
           onCreated={() => load(window_, { quiet: true })} />
       )}

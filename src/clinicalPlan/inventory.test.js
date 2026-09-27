@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY } from './inventory.js'
+import { inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY, dayShortfall } from './inventory.js'
 
 // The inventory is dictated knowledge — it lives in people's heads and nowhere
 // else — so these tests are really a written record of what was said, in a form
@@ -122,5 +122,54 @@ describe('the inventory itself', () => {
       const known = item.consigned && Object.keys(item.consigned).length > 0
       expect(known || item.floating || item.loanSets || item.competitor, item.system).toBeTruthy()
     }
+  })
+})
+
+describe('two cases, one kit, same day', () => {
+  it('catches a second Diplomat at RHH', () => {
+    // The case that prompted this: a Friday already had a Diplomat booking, a
+    // second was added by voice, and both said "Consignment". RHH holds one.
+    const short = dayShortfall('Diplomat', 'RHH', 2)
+    expect(short).toBeTruthy()
+    expect(short.held).toBe(1)
+    expect(short.short).toBe(1)
+    // Calvary has three, so moving one beats ordering one.
+    expect(short.from).toBe('Calvary')
+    expect(short.reason).toMatch(/Borrow one from Calvary, which has 3/)
+  })
+
+  it('says nothing about a single case', () => {
+    expect(dayShortfall('Diplomat', 'RHH', 1)).toBeNull()
+  })
+
+  it('knows Calvary can take three Diplomats and not four', () => {
+    expect(dayShortfall('Diplomat', 'CLV', 3)).toBeNull()
+    expect(dayShortfall('Diplomat', 'CLV', 4)).toBeTruthy()
+  })
+
+  it('asks for a loan when there is nothing to borrow', () => {
+    // Calvary holds no Mariner, so a second one at RHH cannot be covered by
+    // moving a set across.
+    const short = dayShortfall('Mariner', 'RHH', 2)
+    expect(short.from).toBeNull()
+    expect(short.reason).toMatch(/loan set has to be requested/)
+  })
+
+  it('counts the floating kit, which is a real set', () => {
+    // Dakota: one at RHH plus the floating one. Two cases are covered, three
+    // are not.
+    expect(dayShortfall('Dakota', 'RHH', 2)).toBeNull()
+    expect(dayShortfall('Dakota', 'RHH', 3)).toBeTruthy()
+  })
+
+  it('stays out of what is not ours', () => {
+    // A competitor's cage, and KT's Calvary sets, are not our problem to solve.
+    expect(dayShortfall('Cascadia', 'RHH', 3)).toBeNull()
+    expect(dayShortfall('Lonestar', 'CLV', 3)).toBeNull()
+  })
+
+  it('does not guess at an unrecognised hospital or system', () => {
+    expect(dayShortfall('Diplomat', 'Somewhere else', 3)).toBeNull()
+    expect(dayShortfall('Not a system', 'RHH', 3)).toBeNull()
   })
 })

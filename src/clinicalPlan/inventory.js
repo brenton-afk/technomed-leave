@@ -208,6 +208,57 @@ export function loanNeed(system, hospital) {
  * what goes in the request so the distributor is told the date rather than left
  * to work it out.
  */
+/**
+ * Whether there are enough sets for every case on one day.
+ *
+ * `loanNeed` asks whether a system is consigned at a hospital. That is the
+ * wrong question once a day has two of the same case: RHH holds one Diplomat,
+ * and two Diplomat cases on the same list were both marked "Consignment" and
+ * booked without a murmur. One of them had no kit.
+ *
+ * A set cannot cover two cases on one day. It can cover Wednesday and Friday —
+ * there is time to reprocess in between, which is why this counts one day
+ * rather than a week — but not a morning and an afternoon.
+ *
+ * @param {string} system
+ * @param {string} hospital  RHH or CLV, in any of the ways bookings write them
+ * @param {number} demand    cases that day needing this system, this one included
+ * @returns {null|object} null when there is no shortfall
+ */
+export function dayShortfall(system, hospital, demand) {
+  const item = inventoryFor(system)
+  if (!item || item.competitor || demand < 2) return null
+
+  const text = String(hospital || '').toUpperCase()
+  const site = /\bCLV\b|CALVARY|LENAH/.test(text) ? 'CLV'
+    : /\bRHH\b|ROYAL\s*HOBART/.test(text) ? 'RHH' : null
+  if (!site) return null
+  if (item.ours === false && item.weCover && !item.weCover[site]) return null
+
+  // The floating kit counts: it is a real set, it just has no permanent home.
+  const held = (item.consigned?.[site] || 0) + (item.floating || 0)
+  if (demand <= held) return null
+
+  const other = site === 'RHH' ? 'CLV' : 'RHH'
+  const spareElsewhere = item.consigned?.[other] || 0
+  const otherName = other === 'CLV' ? 'Calvary' : 'RHH'
+
+  return {
+    system: item.system,
+    site,
+    held,
+    demand,
+    short: demand - held,
+    // Moving one across beats ordering one in, when there is one to move.
+    from: spareElsewhere > 0 ? otherName : null,
+    reason: spareElsewhere > 0
+      ? `${demand} ${item.system} cases at ${site} that day and ${held} kit${held === 1 ? '' : 's'} there. `
+        + `Borrow one from ${otherName}, which has ${spareElsewhere}.`
+      : `${demand} ${item.system} cases at ${site} that day and ${held} kit${held === 1 ? '' : 's'} there. `
+        + 'A loan set has to be requested.'
+  }
+}
+
 export function kitArrivalBy(surgeryIso, tz = TZ) {
   if (!surgeryIso) return null
   const at = new Date(surgeryIso)

@@ -3,7 +3,8 @@ import { Overlay } from '../../design/Shell.jsx'
 import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_COLOUR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
-import { INVENTORY, loanNeed, kitArrivalBy } from '../../clinicalPlan/inventory.js'
+import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall } from '../../clinicalPlan/inventory.js'
+import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayName } from '../../clinicalPlan/week.js'
 
 // ─── Adding a booking ─────────────────────────────────────────────────────────
@@ -143,7 +144,15 @@ function LoanVerdict({ system, hospital, date }) {
   )
 }
 
-export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
+/** RHH or CLV, from any of the ways a hospital is written. */
+function siteOf(text) {
+  const t = String(text || '').toUpperCase()
+  if (/\bCLV\b|CALVARY|LENAH/.test(t)) return 'CLV'
+  if (/\bRHH\b|ROYAL\s*HOBART/.test(t)) return 'RHH'
+  return null
+}
+
+export default function NewBooking({ user, date: openOn, alreadyBooked = [], onClose, onCreated }) {
   // Opens on the day being looked at, which is the booking most likely being
   // made. Falls back to the next weekday when opened from nowhere in particular.
   const [date, setDate] = useState(() => openOn || defaultDate())
@@ -190,7 +199,18 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
     if (spokenSystems.length) setSystems(list => [...list, ...spokenSystems])
     setDictating(false)
 
-    if (andCreate) {
+    // A dictated booking that would leave a case without a kit stops here and
+    // shows the form. Speaking it is quicker than typing it; that is not a
+    // reason to skip the one warning worth reading.
+    const spokenSite = siteOf(f.hospital || hospital)
+    const wouldClash = spokenSite && [...systems, ...spokenSystems].some(chosen => {
+      const alsoBooked = alreadyBooked.filter(c =>
+        siteOf(c.hospital) === spokenSite
+        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(chosen.name)).length
+      return Boolean(dayShortfall(chosen.name, spokenSite, alsoBooked + 1))
+    })
+
+    if (andCreate && !wouldClash) {
       // Sent from the values in hand rather than from state, which has not
       // re-rendered yet.
       create({
@@ -222,6 +242,25 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
     if (!name || systems.some(s => s.name === name)) return
     setSystems(list => [...list, { name, supply: supplyFor(name) }])
   }
+
+  /**
+   * Systems this booking needs that the hospital does not have enough of on the
+   * day, counting what is already booked.
+   *
+   * The case that prompted this: a second Diplomat at RHH on a Friday, where
+   * there is one Diplomat. Both said "Consignment" and were booked without a
+   * murmur, and one of them had no kit.
+   */
+  const shortfalls = useMemo(() => {
+    const site = siteOf(hospital)
+    if (!site) return []
+    return systems.map(chosen => {
+      const alsoBooked = alreadyBooked.filter(c =>
+        siteOf(c.hospital) === site
+        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(chosen.name)).length
+      return dayShortfall(chosen.name, site, alsoBooked + 1)
+    }).filter(Boolean)
+  }, [systems, hospital, alreadyBooked])
 
   const colourId = guideColorIdFor(surgeon)
   const ready = patient.trim() && surgeon && date
@@ -390,6 +429,24 @@ export default function NewBooking({ user, date: openOn, onClose, onCreated }) {
                 set. A single combined answer would hide the one that matters. */}
             {systems.map(chosen => (
               <LoanVerdict key={chosen.name} system={chosen.name} hospital={hospital} date={date} />
+            ))}
+
+            {/* Louder than the per-system verdict, because it contradicts it: a
+                kit can be consigned at the hospital and still be spoken for. */}
+            {shortfalls.map(short => (
+              <div key={short.system} style={{
+                background: colour.dangerSoft, border: `1px solid ${colour.dangerLine}`,
+                borderRadius: radius.control, padding: space.sm, marginBottom: space.sm
+              }}>
+                <div style={{ ...text('bodyStrong'), color: colour.danger }}>
+                  {short.from
+                    ? `Borrow a ${short.system} kit from ${short.from}`
+                    : `A ${short.system} loan set is needed`}
+                </div>
+                <div style={{ ...text('caption'), color: colour.ink, marginTop: 2 }}>
+                  {short.reason}
+                </div>
+              </div>
             ))}
 
             <Row label="Patient surname" hint="Surname only — never a first name or a date of birth">
