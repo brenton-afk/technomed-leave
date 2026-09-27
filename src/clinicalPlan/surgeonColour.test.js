@@ -252,6 +252,7 @@ describe('what earns an AIRO badge', () => {
     // the screws are assumed by anyone reading it clinically, and were
     // invisible to a test that only looked for them.
     expect(airo('L4/5 PLIF')).toBe(true)
+    expect(airo('TLIF L4/5')).toBe(true)
     expect(airo('PSF T10-pelvis')).toBe(true)
     expect(airo('pedicle screw fixation L4-S1')).toBe(true)
     expect(airo('Pedicle Screw Fixations')).toBe(true)
@@ -273,6 +274,9 @@ describe('what earns an AIRO badge', () => {
   it('leaves alone the approaches that do not use pedicle screws', () => {
     // A false badge books an AIRO and a radiographer that nobody needs, which
     // is its own kind of expensive.
+    // The interbody approaches split on whether they are instrumented from
+    // behind: PLIF and TLIF are, ALIF and DLIF are not. One letter apart, and
+    // the wrong call books an AIRO and a radiographer nobody needs.
     expect(airo('L5/S1 ALIF')).toBe(false)
     expect(airo('C4/5, C5/6 ACDF')).toBe(false)
     expect(airo('Left L3/4 DLIF')).toBe(false)
@@ -282,5 +286,6 @@ describe('what earns an AIRO badge', () => {
   it('matches whole words, not fragments', () => {
     expect(airo('transplifting the graft')).toBe(false)
     expect(airo('PSFL')).toBe(false)
+    expect(airo('TLIFS')).toBe(false)
   })
 })

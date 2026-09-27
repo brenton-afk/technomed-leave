@@ -127,18 +127,23 @@ export const NAVIGATION = [
     // may name the anatomy or the product, not because they are two signals —
     // so neither is redundant and removing one would lose half the bookings.
     //
-    // PSF and PLIF are the same argument one step further out. A posterior
-    // spinal fusion and a posterior lumbar interbody fusion both go in over
-    // pedicle screws, so both need the CT, but a booking that says "L4/5 PLIF"
-    // often never writes the word "screws" anywhere — the screws are assumed by
-    // anyone reading it clinically, and were invisible to this test.
+    // PSF, PLIF and TLIF are the same argument one step further out. A
+    // posterior spinal fusion and a posterior or transforaminal lumbar
+    // interbody fusion all go in over pedicle screws, so all three need the CT,
+    // but a booking that says "L4/5 PLIF" often never writes the word "screws"
+    // anywhere — the screws are assumed by anyone reading it clinically, and
+    // were invisible to this test.
+    //
+    // The anterior and lateral approaches stay out: an ALIF or a DLIF is not
+    // instrumented from behind, and badging one books an AIRO and a
+    // radiographer that nobody needs.
     //
     // "Pedicle screw fixation" already matched: `screws?` covers the singular.
     //
     // Note this also badges a case whose kit is the *product* "Global BMD PLIF",
     // which is correct for the same reason — that cage goes in with pedicle
     // screw fixation.
-    test: /\bairo\b|\bpedicle\s+screws?\b|\blateral\s+mass\b|\breform\s+cervical\b|\bpsf\b|\bplif\b/i
+    test: /\bairo\b|\bpedicle\s+screws?\b|\blateral\s+mass\b|\breform\s+cervical\b|\bpsf\b|\b[pt]lif\b/i
   },
   {
     name: 'Curve',
