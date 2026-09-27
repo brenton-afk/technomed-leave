@@ -503,14 +503,51 @@ export const HOSPITALS = {
   OFFSITE: 'OFFSITE'
 }
 
-// Hospital from the event's location, falling back to its description. An
-// unrecognised but non-empty location is passed through, since Hospital is an
-// open string type.
+/** The hospital named in one piece of text, or null if it names none. */
+function hospitalIn(text) {
+  const value = String(text || '')
+  if (!value.trim()) return null
+  if (/\brhh\b|royal\s*hobart/i.test(value)) return HOSPITALS.RHH
+  if (/calvary|lenah/i.test(value)) return HOSPITALS.CALVARY
+  if (/offsite|off-site/i.test(value)) return HOSPITALS.OFFSITE
+  return null
+}
+
+/**
+ * Which hospital a case is at.
+ *
+ * Asked in order of authority, and the order is the whole point:
+ *
+ *   1. the event's own location field
+ *   2. a labelled "Hospital:" line in the description
+ *   3. anything else the description happens to say
+ *
+ * This used to mash the location and the description into one string and test
+ * RHH first, which meant any mention of RHH anywhere in the notes outvoted the
+ * location. A Calvary case whose notes read "Loan kit (RHH) transferred to
+ * Calvary … return kit to RHH post-case" was filed under RHH — the notes were
+ * about where the kit came from, not where the patient is.
+ *
+ * That is not a cosmetic grouping error. The hospital decides which consignment
+ * applies, whether a loan set is needed, and which building a rep drives to at
+ * seven in the morning. It has to come from the field that states it, not from
+ * whatever the notes mention in passing.
+ *
+ * An unrecognised but non-empty location is still passed through, since Hospital
+ * is an open string type and an offsite case can be anywhere.
+ */
 export function detectHospital(location, description, { caseEvent = true } = {}) {
-  const haystack = `${location || ''} ${description || ''}`
-  if (/\brhh\b|royal\s*hobart/i.test(haystack)) return HOSPITALS.RHH
-  if (/calvary|lenah/i.test(haystack)) return HOSPITALS.CALVARY
-  if (/offsite|off-site/i.test(haystack)) return HOSPITALS.OFFSITE
+  const stated = hospitalIn(location)
+  if (stated) return stated
+
+  const labelled = hospitalIn(parseLabelledDescription(description).hospital)
+  if (labelled) return labelled
+
+  // Last resort. Only reached when nothing actually says where the case is, and
+  // a guess from the notes beats no answer at all.
+  const mentioned = hospitalIn(description)
+  if (mentioned) return mentioned
+
   const trimmed = String(location || '').trim()
   if (trimmed) return stripIdentifiers(trimmed).toUpperCase()
   return caseEvent ? HOSPITALS.RHH : HOSPITALS.OFFSITE

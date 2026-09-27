@@ -589,3 +589,50 @@ describe('two reps on one case', () => {
     expect(extractRep('Marsh KIT - Thani (2 of 3)').reps).toEqual([])
   })
 })
+
+describe('which hospital a case is at', () => {
+  // Petrusma, 28 September 2026, verbatim from the calendar. A Calvary case
+  // whose notes mention RHH three times because that is where the loan kit came
+  // from and where it goes back to.
+  const PETRUSMA = `Surg - Dr Thani
+Pt - Petrusma
+Date - 28/09/2026
+Procedure - C1/2 instrumented fixation and posterior graft
+Kit - Reform Cervical (Loan set)
+Hospital - Calvary Lenah Valley
+
+Loan kit (RHH) transferred to Calvary via Smartways by Brent, Fri 25/9/26 evening.
+Kit was checked in by Belinda in CSSD on Friday evening.
+Return kit to RHH post-case.
+Case order/time TBC — placed after Norman (9am) and Bewg (10am).
+Entered by Brent`
+
+  it('takes the hospital from the location, whatever the notes mention', () => {
+    // The bug: location and description were mashed into one string and RHH was
+    // tested first, so any mention of RHH anywhere outvoted the location. This
+    // case was filed under RHH and a rep would have driven to the wrong
+    // building.
+    expect(detectHospital('Calvary', PETRUSMA)).toBe(HOSPITALS.CALVARY)
+  })
+
+  it('does not let notes about where a kit came from move the patient', () => {
+    expect(detectHospital('Calvary', 'Loan kit (RHH). Return to RHH post-case.'))
+      .toBe(HOSPITALS.CALVARY)
+    expect(detectHospital('RHH', 'Kit borrowed from Calvary Lenah Valley.'))
+      .toBe(HOSPITALS.RHH)
+  })
+
+  it('falls back to a labelled Hospital line when there is no location', () => {
+    expect(detectHospital('', PETRUSMA)).toBe(HOSPITALS.CALVARY)
+    // The label beats a passing mention in the free notes below it.
+    expect(detectHospital('', 'Hospital: Calvary\n\nKit returns to RHH after.'))
+      .toBe(HOSPITALS.CALVARY)
+  })
+
+  it('still reads the free text when nothing states the hospital', () => {
+    // Worth keeping: plenty of older bookings never had a location set, and a
+    // guess from the notes beats no answer at all.
+    expect(detectHospital('', 'theatre 4, lenah valley')).toBe(HOSPITALS.CALVARY)
+    expect(detectHospital('', 'RHH theatre 11')).toBe(HOSPITALS.RHH)
+  })
+})
