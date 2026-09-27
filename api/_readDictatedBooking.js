@@ -83,11 +83,31 @@ async function transcribe(audioBase64, contentType) {
   throw new Error('The recording took too long to transcribe. Try a shorter one.')
 }
 
-function promptFor(transcript, today) {
+/**
+ * Exported so a test can assert the obvious thing: that what the person said is
+ * actually in the prompt.
+ *
+ * It was not. The prompt announced "below is an automatic transcription" and
+ * then never included one, so the model was asked to extract a booking from
+ * nothing and said so — which surfaced to the user as "no text could be
+ * extracted" underneath a transcript that was plainly right there on screen.
+ */
+export function promptFor(transcript, today) {
+  // Refused rather than sent. A prompt that announces a transcription and
+  // carries none asks the model to invent one, and what came back instead —
+  // "no text could be extracted" — was shown to somebody looking at an accurate
+  // transcript on the same screen. There is a guard upstream too; this is the
+  // one that cannot be walked around.
+  if (!String(transcript || '').trim()) {
+    throw new Error('Nothing could be heard in that recording. Try again, closer to the phone.')
+  }
   const surgeons = Object.keys(SURGEON_COLOUR_NAMES).join(', ')
   const systems = INVENTORY.map(i => i.system).join(', ')
 
   return `A staff member at a Tasmanian spinal implant distributor has dictated a surgical booking out loud. Below is an automatic transcription of what they said. Turn it into booking fields.
+
+What they said:
+${transcript}
 
 Today is ${weekdayName(today)} ${today}, in Hobart.
 
