@@ -126,7 +126,19 @@ export const NAVIGATION = [
     // screws *are* lateral mass screws. They are both listed because a booking
     // may name the anatomy or the product, not because they are two signals —
     // so neither is redundant and removing one would lose half the bookings.
-    test: /\bairo\b|\bpedicle\s+screws?\b|\blateral\s+mass\b|\breform\s+cervical\b/i
+    //
+    // PSF and PLIF are the same argument one step further out. A posterior
+    // spinal fusion and a posterior lumbar interbody fusion both go in over
+    // pedicle screws, so both need the CT, but a booking that says "L4/5 PLIF"
+    // often never writes the word "screws" anywhere — the screws are assumed by
+    // anyone reading it clinically, and were invisible to this test.
+    //
+    // "Pedicle screw fixation" already matched: `screws?` covers the singular.
+    //
+    // Note this also badges a case whose kit is the *product* "Global BMD PLIF",
+    // which is correct for the same reason — that cage goes in with pedicle
+    // screw fixation.
+    test: /\bairo\b|\bpedicle\s+screws?\b|\blateral\s+mass\b|\breform\s+cervical\b|\bpsf\b|\bplif\b/i
   },
   {
     name: 'Curve',

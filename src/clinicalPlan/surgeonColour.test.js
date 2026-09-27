@@ -99,13 +99,18 @@ describe('a navigation case', () => {
     // "Curve" is a Brainlab platform and also ordinary spinal language. Painting
     // a deformity correction blueberry would say a navigation platform needs
     // booking when it does not.
+    // Asserted as "no Curve badge" rather than "no badges at all", which is
+    // what this test has always been about. A PSF scoliosis correction does now
+    // carry AIRO — it goes in over pedicle screws — and that is correct; it is
+    // the blueberry Curve badge that would be wrong.
     for (const text of [
       'T4-L2 PSF correction of the thoracic curve',
       'scoliotic curve correction',
       'main curve 52 degrees'
     ]) {
-      expect(findNavigation(text), text).toEqual([])
+      expect(findNavigation(text), text).not.toContain('Curve')
     }
+    expect(findNavigation('scoliotic curve correction')).toEqual([])
   })
 })
 
@@ -209,7 +214,11 @@ describe('which platform a case needs', () => {
   })
 
   it('leaves an ordinary case alone', () => {
-    for (const text of ['C5/6 ACDF', 'L4/5 PLIF', 'T4-L2 correction of the thoracic curve']) {
+    // "L4/5 PLIF" used to be listed here as an ordinary case. It is not one: a
+    // PLIF goes in over pedicle screws and now earns AIRO, which is the whole
+    // point of the rule change. Its place is taken by an anterior approach,
+    // which genuinely needs no navigation.
+    for (const text of ['C5/6 ACDF', 'L5/S1 ALIF', 'T4-L2 correction of the thoracic curve']) {
       expect(findNavigation(text), text).toEqual([])
     }
   })
@@ -229,5 +238,49 @@ describe('lateral mass and Reform Cervical', () => {
     expect(findNavigation('C3-C6 lateral mass screws')).toEqual(['AIRO'])
     expect(findNavigation('Kit: Reform Cervical (Consignment)')).toEqual(['AIRO'])
     expect(findNavigation('C4-C7 lateral mass fixation, Reform Cervical')).toEqual(['AIRO'])
+  })
+})
+
+describe('what earns an AIRO badge', () => {
+  const airo = text => findNavigation(text).includes('AIRO')
+
+  it('badges the procedures that go in over pedicle screws', () => {
+    // "All cases with references to PSF, PLIF, pedicle screws and pedicle screw
+    // fixations need an AIRO badge."
+    //
+    // A booking that says "L4/5 PLIF" often never writes the word "screws" —
+    // the screws are assumed by anyone reading it clinically, and were
+    // invisible to a test that only looked for them.
+    expect(airo('L4/5 PLIF')).toBe(true)
+    expect(airo('PSF T10-pelvis')).toBe(true)
+    expect(airo('pedicle screw fixation L4-S1')).toBe(true)
+    expect(airo('Pedicle Screw Fixations')).toBe(true)
+    expect(airo('L4/5 laminectomy and fusion with pedicle screws')).toBe(true)
+  })
+
+  it('still badges the ways it already knew about', () => {
+    expect(airo('AIRO CT support')).toBe(true)
+    expect(airo('lateral mass screws')).toBe(true)
+    expect(airo('Kit: Reform Cervical (Loan set)')).toBe(true)
+  })
+
+  it('badges a Global BMD PLIF case through its product name', () => {
+    // The cage is named after the procedure, and that cage goes in with pedicle
+    // screw fixation — so the badge is right, not an accident of the string.
+    expect(airo('Kit: Diplomat (Consignment) + Global BMD PLIF')).toBe(true)
+  })
+
+  it('leaves alone the approaches that do not use pedicle screws', () => {
+    // A false badge books an AIRO and a radiographer that nobody needs, which
+    // is its own kind of expensive.
+    expect(airo('L5/S1 ALIF')).toBe(false)
+    expect(airo('C4/5, C5/6 ACDF')).toBe(false)
+    expect(airo('Left L3/4 DLIF')).toBe(false)
+    expect(airo('Craniotomy for tumour resection')).toBe(false)
+  })
+
+  it('matches whole words, not fragments', () => {
+    expect(airo('transplifting the graft')).toBe(false)
+    expect(airo('PSFL')).toBe(false)
   })
 })
