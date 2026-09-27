@@ -109,6 +109,18 @@ describe('a quadrilateral running off the picture', () => {
     expect(choose([clipped, inside])).toBe(inside)
   })
 
+  it('does not beat a page that merely overhangs one edge', () => {
+    // Reported as the capture cutting the bottom off the paper. A page held
+    // close enough to fill the frame runs off one edge; the only thing left that
+    // touches none is the box printed inside the form, and that was winning.
+    //
+    // Edges touched is what separates the two, not size — the desk above is much
+    // the bigger and must still lose.
+    const page = at(20, 20, 220, 180, { mean: 230, ring: 232 })
+    const printedBox = at(40, 40, 200, 150, { mean: 225, ring: 225 })
+    expect(choose([page, printedBox])).toBe(page)
+  })
+
   it('is still offered when there is nothing else', () => {
     // Every tier falls back rather than rejecting. A page held so close that it
     // overfills the frame should get an outline and a "move back", not nothing —

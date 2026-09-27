@@ -225,6 +225,15 @@ export function benchmark(W = 320, H = 240) {
     // hospital sheets do. There is no clear paper to measure against, so this is
     // the hardest case in the set and it is here on purpose.
     { name: 'print to the edge', quad: rect(48, 26, 272, 214), paper: 234, bench: 198, noise: 3, tight: true },
+    // A page held close enough to fill the frame, so its bottom edge sits on the
+    // picture's own edge. This is what anyone does to get a form legible, and it
+    // is the shape that made the capture cut the bottom off: the page touched the
+    // border, the ranking preferred anything that did not, and the only thing
+    // that did not was the box printed inside the form.
+    {
+      name: 'page runs to the bottom edge', quad: rect(30, 14, 290, 239),
+      paper: 234, bench: 186, noise: 3, tight: true
+    },
     // ── The one from the photograph ──
     // A form on a wooden table, shot from above with the table's near edge and
     // the floor beyond it in frame. The table is a large tilted quadrilateral

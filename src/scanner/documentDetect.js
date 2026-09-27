@@ -150,6 +150,20 @@ function inside(polygon, point) {
 const encloses = (outer, inner) => inner.every(p => inside(outer, p))
 
 /** Whether any corner sits on the edge of the picture. */
+/**
+ * How many of the picture's four edges a candidate runs up against.
+ *
+ * One is a page held close. Three or four is the surface it is lying on.
+ */
+function edgesTouched(corners, width, height, slack = 2) {
+  return [
+    corners.some(p => p.x <= slack),
+    corners.some(p => p.y <= slack),
+    corners.some(p => p.x >= width - slack),
+    corners.some(p => p.y >= height - slack)
+  ].filter(Boolean).length
+}
+
 function touchesBorder(corners, width, height, slack = 2) {
   return corners.some(p =>
     p.x <= slack || p.y <= slack || p.x >= width - slack || p.y >= height - slack)
@@ -208,10 +222,36 @@ export function chooseCandidate(candidates, width, height) {
   let pool = candidates.filter(c => !surfaces.has(c))
   if (!pool.length) pool = candidates
 
-  const whollyVisible = pool.filter(c => !touchesBorder(c.corners, width, height))
-  if (whollyVisible.length) pool = whollyVisible
+  const biggest = list =>
+    list.reduce((best, c) => (!best || c.areaFraction > best.areaFraction) ? c : best, null)
 
-  return pool.reduce((best, c) => (!best || c.areaFraction > best.areaFraction) ? c : best, null)
+  // Preferring a candidate that sits wholly inside the picture is right when the
+  // alternative is the bench or the desk running off the edges. It is wrong when
+  // the page itself does — and the two are told apart by *how many* edges are
+  // touched, not by size.
+  //
+  // A page held close enough to fill the frame, which is what anyone does to get
+  // a form legible, overhangs one edge, usually the bottom. A table or a desk
+  // runs off three or four. Size cannot separate them: the desk is much the
+  // bigger of the two and must still lose.
+  //
+  // Without this, a page overhanging the bottom was thrown away in favour of the
+  // only thing left that touched no edge — the box printed inside the form — so
+  // the outline sat inside the paper and the capture cut the bottom off.
+  const whollyVisible = pool.filter(c => !touchesBorder(c.corners, width, height))
+  const bestVisible = biggest(whollyVisible)
+
+  if (bestVisible) {
+    const overhanging = pool.filter(c =>
+      c !== bestVisible
+      && edgesTouched(c.corners, width, height) <= 1
+      && c.areaFraction > bestVisible.areaFraction)
+    const page = biggest(overhanging)
+    if (page) return page
+    pool = whollyVisible
+  }
+
+  return biggest(pool)
 }
 
 /**

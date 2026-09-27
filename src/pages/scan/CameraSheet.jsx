@@ -258,8 +258,18 @@ function CropReview({ capture, cv, onConfirm, onRetake }) {
           style={{ width: '100%', display: 'block', opacity: 0.75 }} />
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          <defs>
+            <filter id="handle-glow" x="-25%" y="-25%" width="150%" height="150%">
+              <feDropShadow dx="0" dy="0" stdDeviation="0.7" floodColor="#000" floodOpacity="0.55" />
+            </filter>
+          </defs>
+          {/* White, like the viewfinder outline it follows on from. This was the
+              green: the outline went white and then the screen after it did not,
+              so the frame appeared to turn green at the moment of capture. The
+              shadow is what keeps it visible against white paper. */}
           <polygon points={corners.map(c => `${c.x * 100},${c.y * 100}`).join(' ')}
-            fill={TEAL} fillOpacity={0.14} stroke={TEAL} strokeWidth={0.9} strokeLinejoin="round" />
+            fill="#fff" fillOpacity={0.10} stroke="#fff" strokeWidth={0.9}
+            strokeLinejoin="round" filter="url(#handle-glow)" />
         </svg>
         {corners.map((c, i) => (
           <button key={i}
@@ -270,7 +280,8 @@ function CropReview({ capture, cv, onConfirm, onRetake }) {
               left: `calc(${c.x * 100}% - 14px)`,
               top: `calc(${c.y * 100}% - 14px)`,
               width: 28, height: 28, borderRadius: 14,
-              background: 'rgba(255,255,255,0.85)', border: `2px solid ${TEAL}`,
+              background: 'rgba(255,255,255,0.95)', border: '2px solid rgba(4,39,70,0.55)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.45)',
               padding: 0, cursor: 'grab', touchAction: 'none'
             }} />
         ))}
