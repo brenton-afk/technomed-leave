@@ -629,6 +629,31 @@ Entered by Brent`
       .toBe(HOSPITALS.CALVARY)
   })
 
+  it('collapses every way the team writes a hospital into one', () => {
+    // Tuesday showed cases under "CLV" and under "Calvary Lenah Valley" as
+    // though they were two different places. "CLV" is the shorthand typed into
+    // the location field and it was not recognised, so it fell through to the
+    // pass-through branch and became a hospital of its own.
+    //
+    // The pass-through is right for a genuinely offsite case and wrong for a
+    // name we simply failed to recognise, and the difference is invisible on
+    // screen — it just looks like another hospital. So the aliases are asserted.
+    for (const written of ['CLV', 'clv', 'Calvary', 'Calvary Lenah Valley', 'Lenah Valley']) {
+      expect(detectHospital(written, ''), written).toBe(HOSPITALS.CALVARY)
+    }
+    for (const written of ['RHH', 'rhh', 'Royal Hobart', 'Royal Hobart Hospital']) {
+      expect(detectHospital(written, ''), written).toBe(HOSPITALS.RHH)
+    }
+  })
+
+  it('groups a week of real locations into one entry per hospital', () => {
+    // The symptom was a duplicate group, so assert on the grouping rather than
+    // on each string in isolation.
+    const locations = ['Calvary', 'CLV', 'Calvary Lenah Valley', 'RHH', 'Royal Hobart Hospital']
+    const groups = new Set(locations.map(l => detectHospital(l, '')))
+    expect([...groups].sort()).toEqual([HOSPITALS.CALVARY, HOSPITALS.RHH])
+  })
+
   it('still reads the free text when nothing states the hospital', () => {
     // Worth keeping: plenty of older bookings never had a location set, and a
     // guess from the notes beats no answer at all.

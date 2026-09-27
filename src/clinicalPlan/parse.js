@@ -503,12 +503,22 @@ export const HOSPITALS = {
   OFFSITE: 'OFFSITE'
 }
 
-/** The hospital named in one piece of text, or null if it names none. */
+/**
+ * The hospital named in one piece of text, or null if it names none.
+ *
+ * Every way the team writes each one. "CLV" is the shorthand they type into the
+ * location field, and it was not listed — so those bookings fell through to the
+ * pass-through branch below and came back as a hospital called "CLV", sitting
+ * beside "CALVARY LENAH VALLEY" as though Tuesday had cases at two different
+ * places. The pass-through is useful for a genuinely offsite case and dangerous
+ * for a name we simply failed to recognise, which is why the aliases are
+ * asserted in the tests.
+ */
 function hospitalIn(text) {
   const value = String(text || '')
   if (!value.trim()) return null
   if (/\brhh\b|royal\s*hobart/i.test(value)) return HOSPITALS.RHH
-  if (/calvary|lenah/i.test(value)) return HOSPITALS.CALVARY
+  if (/\bclv\b|calvary|lenah/i.test(value)) return HOSPITALS.CALVARY
   if (/offsite|off-site/i.test(value)) return HOSPITALS.OFFSITE
   return null
 }
