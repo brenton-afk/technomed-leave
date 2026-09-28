@@ -33,9 +33,15 @@ import { requireSession } from './_auth.js'
  */
 export const GUIDES = [
   { slug: 'truprofile', name: 'Shoreline TruProfile ACS', maker: 'SeaSpine', group: 'Spine', file: 'truprofile/index.html', revision: 'D0000975C' },
+  { slug: 'dakota', name: 'Dakota ACDF', maker: 'Precision Spine', group: 'Spine', file: 'dakota/index.html', revision: 'LBL-STG-047 Rev C' },
+  { slug: 'lonestar', name: 'LONESTAR CSA', maker: 'Orthofix', group: 'Spine', file: 'lonestar/index.html', revision: 'OP-83-9901-US Rev AA' },
+  { slug: 'athlet-ascot', name: 'ATHLET + ASCOT', maker: 'SIGNUS', group: 'Spine', file: 'athlet-ascot/index.html' },
+  { slug: 'reform-poct', name: 'REFORM POCT', maker: 'Precision Spine', group: 'Spine', file: 'reform-poct/index.html', revision: 'LBL-STG-033 Rev A' },
   { slug: 'diplomat', name: 'DIPLOMAT', maker: 'SIGNUS', group: 'Spine', file: 'diplomat/index.html', revision: 'Rev. 2015-08' },
   { slug: 'mariner', name: 'MARINER MIS', maker: 'SeaSpine', group: 'Spine', file: 'mariner/index.html', revision: 'RA-15122022-GT' },
+  { slug: 'firebird-forza', name: 'Firebird NXG + Forza XP', maker: 'Orthofix', group: 'Spine', file: 'firebird-forza/index.html', revision: 'NX-1706 · FX-1704' },
   { slug: 'global-plif', name: 'Global PLIF GW', maker: 'Global Biomedica', group: 'Spine', file: 'global-plif/index.html', revision: 'Rev. 2020-05-12 v1.1' },
+  { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation', file: 'brainlab/index.html' },
   { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', file: 'clavicle-2.7/index.html', revision: 'SE_825567 AF · 2025/07' },
   {
     slug: 'surgeon-preferences',
@@ -49,13 +55,11 @@ export const GUIDES = [
 
 // Named in the hub but not yet built. Shown so the team can see what is coming
 // rather than wondering whether a guide is missing or was never made.
+//
+// ATHLET + ASCOT and Brainlab carry no revision because their own guides do not
+// state one — shown as blank rather than invented, since this line is how anyone
+// tells whether a guide still matches the manufacturer's current document.
 export const COMING = [
-  { name: 'Dakota ACDF', maker: 'Precision Spine', group: 'Spine' },
-  { name: 'LONESTAR CSA', maker: 'Orthofix', group: 'Spine' },
-  { name: 'ATHLET + ASCOT', maker: 'SIGNUS', group: 'Spine' },
-  { name: 'REFORM POCT', maker: 'Precision Spine', group: 'Spine' },
-  { name: 'Firebird NXG + Forza XP', maker: 'Orthofix', group: 'Spine' },
-  { name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation' },
   { name: 'CYLOX ST', maker: 'SIGNUS', group: 'Spine' }
 ]
 
