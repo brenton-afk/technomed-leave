@@ -25,6 +25,9 @@ export function KitHub({ user, onNavigate }) {
           onClick={() => onNavigate({ tab: 'kit', sub: 'stock' })} />
 
         <SectionLabel>Reference</SectionLabel>
+        <NavCard icon={IconFolder} label="Theatre guides"
+          detail="Field references for the systems we carry"
+          onClick={() => onNavigate({ tab: 'kit', sub: 'guides' })} />
         <NavCard icon={IconFolder} label="Resources"
           detail="Surgical templates, techniques, implant codes"
           onClick={() => onNavigate({ tab: 'kit', sub: 'resources' })} />

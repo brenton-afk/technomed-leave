@@ -6,6 +6,7 @@ import KitRoom from './pages/KitRoom.jsx'
 import Projects from './pages/Projects.jsx'
 import UsageScan from './pages/UsageScan.jsx'
 import Cases from './pages/Cases.jsx'
+import TheatreGuides from './pages/TheatreGuides.jsx'
 import Timesheets from './pages/Timesheets.jsx'
 import AdminPortal from './pages/admin/AdminPortal.jsx'
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
@@ -41,7 +42,7 @@ const TABS = [
 // predates it and gets a floating control instead, which avoids rewriting six
 // working pages just to add one button.
 const SELF_BACK = new Set([
-  'resources', 'stock', 'usagefiles', 'security', 'payslips',
+  'resources', 'guides', 'stock', 'usagefiles', 'security', 'payslips',
   // Migrated to design/Shell.jsx's Header, so they draw their own.
   'kitroom', 'projects', 'timesheets', 'leave'
 ])
@@ -142,6 +143,8 @@ export default function App() {
         case 'projects': return <Projects user={user} onBack={back} />
         case 'resources':
           return <FileBrowser user={user} root="resources" eyebrow="Kit and reference" title="Resources" onBack={back} />
+        case 'guides':
+          return <TheatreGuides user={user} onBack={back} />
         case 'stock':
           return <ComingSoonSection eyebrow="Kit and stock" title="Stock take" icon={IconStock} onBack={back}
             detail="Counting and reconciling consignment stock will live here. The section exists so the structure is right — tell me how you count today and I'll build it." />

@@ -26,6 +26,11 @@
     },
     "api/cron/timesheet-reminder.js": {
       "maxDuration": 60
+    },
+    "api/guides.js": {
+      "includeFiles": "theatre-guides/**",
+      "maxDuration": 30,
+      "memory": 1024
     }
   },
   "crons": [
