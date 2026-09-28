@@ -61,6 +61,7 @@ function lerpCorners(from, to, alpha) {
 export const HOLD_REASONS = {
   searching: 'Point at the form',
   small: 'Move closer',
+  offEdge: 'Move back — the whole page must be in frame',
   dark: 'More light needed',
   moving: 'Hold still',
   ready: 'Hold still'
@@ -328,7 +329,12 @@ export class DocumentTracker {
 
     let reason = 'searching'
     if (corners) {
-      if (fill < this.minFill) reason = 'small'
+      // Checked before size and light, because it is the one a person can do
+      // nothing about afterwards. A page photographed with its bottom off the
+      // sensor has no bottom, and dragging a corner cannot invent one — which
+      // is exactly how a capture came back with the form cut in half.
+      if (this.latest?.offEdge) reason = 'offEdge'
+      else if (fill < this.minFill) reason = 'small'
       else if (contrast < this.minContrast) reason = 'dark'
       else reason = settled && stillFor > 0 ? 'ready' : 'moving'
     }

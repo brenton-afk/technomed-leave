@@ -4,8 +4,10 @@ import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument } from '../../scanner/documentDetect.js'
 import { DocumentTracker } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
-import { acquireCamera, cameraOpen, setTorch, hasTorch, torchOn as torchIsOn, turnTorchOff }
-  from '../../scanner/cameraStream.js'
+import {
+  acquireCamera, cameraOpen, setTorch, hasTorch, torchOn as torchIsOn, turnTorchOff,
+  zoomRange, currentZoom, setZoom
+} from '../../scanner/cameraStream.js'
 
 // ─── The scanner ──────────────────────────────────────────────────────────────
 // Live outline, auto-capture, then a chance to correct the corners before the
@@ -351,6 +353,11 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
   // light became impossible to put out: the first tap sent torch:true again.
   const [torchLit, setTorchLit] = useState(() => torchIsOn())
   const [torchAvailable, setTorchAvailable] = useState(false)
+  // Asked for because a page that will not fit leaves nothing to do — the
+  // missing edge is off the sensor, and "move back" is not always possible in a
+  // corridor. Null where the camera cannot zoom, and then nothing is shown.
+  const [zoom, setZoomState] = useState(1)
+  const [zoomCaps, setZoomCaps] = useState(null)
   const [flash, setFlash] = useState(false)
   const [pending, setPending] = useState(null)
 
@@ -381,6 +388,9 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         videoRef.current.play().catch(() => {})
       }
       setTorchAvailable(hasTorch())
+      const range = zoomRange()
+      setZoomCaps(range)
+      if (range) setZoomState(currentZoom())
       setTorchLit(torchIsOn())
       setCameraState('ready')
     }).catch(err => {
@@ -422,6 +432,32 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     source.width = video.videoWidth
     source.height = video.videoHeight
     source.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0)
+
+    // The corners handed in came from a detection up to a tenth of a second
+    // ago, and this photograph was taken now. In between, a hand-held phone
+    // moves — so the outline the user watched settle was measured on a frame
+    // that no longer exists, and the crop lands slightly off the page.
+    //
+    // Detecting again on the actual photograph removes the gap entirely: the
+    // corners and the pixels are then the same instant by construction. It
+    // costs about two milliseconds. If it finds nothing — a blurred grab, a
+    // hand across the lens — the tracked corners stand, which is no worse than
+    // before.
+    try {
+      const cv = cvRef.current
+      if (cv) {
+        const small = document.createElement('canvas')
+        small.width = DETECT_WIDTH
+        small.height = Math.max(1, Math.round(DETECT_WIDTH * source.height / source.width))
+        const ctx = small.getContext('2d', { willReadFrequently: true })
+        ctx.drawImage(source, 0, 0, small.width, small.height)
+        const { data } = ctx.getImageData(0, 0, small.width, small.height)
+        const onTheStill = detectDocument(cv, data, small.width, small.height)
+        if (onTheStill?.corners) corners = onTheStill.corners
+      }
+    } catch {
+      // Keep the tracked corners.
+    }
 
     const { canvas, flattened } = flattenCapture(cvRef.current, source, corners, { maxDimension: MAX_IMAGE_DIM })
     const shrunk = document.createElement('canvas')
@@ -619,6 +655,33 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
             style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top, 0px))', right: 14, width: 42, height: 42, borderRadius: 21, background: torchLit ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.3)', color: torchLit ? '#042746' : 'white', fontSize: 18, cursor: 'pointer' }}>
             {torchLit ? '🔆' : '🔅'}
           </button>
+        )}
+
+        {/* Down the right-hand edge, where a thumb already is. Only shown when
+            the camera actually has a zoom to offer — on a phone with an
+            ultra-wide, going below 1x switches lens and genuinely sees more of
+            the page rather than cropping what is already there. */}
+        {zoomCaps && !error && cameraState === 'ready' && (
+          <div style={{
+            position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8
+          }}>
+            {[['+', Math.min(zoomCaps.max, zoom + (zoomCaps.step * 4 || 0.5))],
+              ['−', Math.max(zoomCaps.min, zoom - (zoomCaps.step * 4 || 0.5))]].map(([label, to]) => (
+              <button key={label}
+                aria-label={label === '+' ? 'Zoom in' : 'Zoom out'}
+                onClick={async () => { if (await setZoom(to)) setZoomState(currentZoom()) }}
+                style={{
+                  width: 44, height: 44, borderRadius: 22, fontSize: 21, lineHeight: '44px',
+                  background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.3)',
+                  color: 'white', cursor: 'pointer', padding: 0
+                }}>{label}</button>
+            ))}
+            <span style={{
+              ...{ fontSize: 11 }, color: 'rgba(255,255,255,0.75)',
+              background: 'rgba(0,0,0,0.45)', borderRadius: 10, padding: '2px 7px'
+            }}>{zoom.toFixed(1)}×</span>
+          </div>
         )}
       </div>
 

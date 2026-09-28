@@ -177,6 +177,47 @@ export function hasTorch() {
   return Boolean(stream?.getVideoTracks()?.[0]?.getCapabilities?.().torch)
 }
 
+// ─── Zoom ────────────────────────────────────────────────────────────────────
+// Asked for because a page that will not fit leaves nothing to do: the missing
+// edge is off the sensor, so no amount of dragging a corner brings it back, and
+// "move back" is not always possible in a theatre corridor.
+//
+// This is the camera's own zoom, not a crop of the picture — pulling below 1x on
+// a phone with an ultra-wide switches to that lens and genuinely sees more. Not
+// every device offers it, which is why everything here reports what it can do
+// rather than assuming.
+
+/** What the camera can do, or null where it cannot zoom at all. */
+export function zoomRange() {
+  const caps = stream?.getVideoTracks()?.[0]?.getCapabilities?.()
+  if (!caps || typeof caps.zoom !== 'object') return null
+  const { min = 1, max = 1, step = 0.1 } = caps.zoom
+  if (!(max > min)) return null
+  return { min, max, step: step || 0.1 }
+}
+
+export function currentZoom() {
+  return stream?.getVideoTracks()?.[0]?.getSettings?.().zoom ?? 1
+}
+
+/** Sets the zoom, clamped to what the camera says it can do. */
+export async function setZoom(value) {
+  const track = stream?.getVideoTracks()?.[0]
+  const range = zoomRange()
+  if (!track || !range) return false
+
+  const wanted = Math.min(range.max, Math.max(range.min, Number(value) || 1))
+  for (const constraints of [{ advanced: [{ zoom: wanted }] }, { zoom: wanted }]) {
+    try {
+      await track.applyConstraints(constraints)
+      return true
+    } catch {
+      // Try the other shape, as with the torch.
+    }
+  }
+  return false
+}
+
 /** For tests. */
 export function resetCameraForTests() {
   stream = null

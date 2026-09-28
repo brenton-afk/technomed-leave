@@ -155,7 +155,7 @@ const encloses = (outer, inner) => inner.every(p => inside(outer, p))
  *
  * One is a page held close. Three or four is the surface it is lying on.
  */
-function edgesTouched(corners, width, height, slack = 2) {
+export function edgesTouched(corners, width, height, slack = 2) {
   return [
     corners.some(p => p.x <= slack),
     corners.some(p => p.y <= slack),
@@ -469,6 +469,11 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
     return {
       corners: normalised,
       areaFraction: chosen.areaFraction,
+      // Whether the page runs off the picture. Detecting one that does is
+      // right — it beats locking onto the box printed inside it — but
+      // *photographing* one is not: the missing edge is missing from the sensor,
+      // so no amount of dragging a corner afterwards can bring it back.
+      offEdge: edgesTouched(chosen.corners, width, height) > 0,
 
       // What "close enough to capture" is actually judged on.
       fill: fillFraction(normalised, chosen.areaFraction, width / height),

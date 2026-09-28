@@ -451,3 +451,47 @@ describe('capturing on its own, with a camera that is not perfect', () => {
     expect(view.readyToCapture).toBe(false)
   })
 })
+
+describe('a page that runs off the picture', () => {
+  // Reported as: it auto-captures, the box shifts up, and the bottom of the
+  // page is not in the photograph — with no way to correct it, because the
+  // missing edge was never on the sensor.
+  //
+  // Detecting an overhanging page is right: it beats locking onto the box
+  // printed inside the form. Photographing one is not.
+  const corners = [
+    { x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.99 }, { x: 0.1, y: 0.99 }
+  ]
+  const detection = extra => ({
+    corners, areaFraction: 0.7, fill: 0.8, contrast: 1, ...extra
+  })
+
+  it('is never captured automatically', () => {
+    const tracker = new DocumentTracker()
+    let view
+    for (let t = 0; t <= 4000; t += 100) view = tracker.update(detection({ offEdge: true }), t)
+    expect(view.readyToCapture).toBe(false)
+    expect(view.reason).toBe('offEdge')
+  })
+
+  it('says what to do about it', () => {
+    const tracker = new DocumentTracker()
+    const view = tracker.update(detection({ offEdge: true }), 0)
+    expect(view.hint).toMatch(/move back/i)
+  })
+
+  it('is still outlined, so the page is visibly seen', () => {
+    // Losing the outline entirely would read as the scanner having broken, and
+    // would not tell anybody why.
+    const tracker = new DocumentTracker()
+    const view = tracker.update(detection({ offEdge: true }), 0)
+    expect(view.corners).toBeTruthy()
+  })
+
+  it('captures as soon as the whole page is in frame', () => {
+    const tracker = new DocumentTracker()
+    let view
+    for (let t = 0; t <= 4000; t += 100) view = tracker.update(detection({ offEdge: false }), t)
+    expect(view.readyToCapture).toBe(true)
+  })
+})
