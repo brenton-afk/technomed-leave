@@ -17,6 +17,16 @@ function respond(url, init) {
   return { ok: true, status: 200, json: async () => ({ ok: true }) }
 }
 
+const WITH_EMAIL = {
+  id: 'bk_3', status: 'pending', patient: 'Parsons', surgeon: 'Thani',
+  date: '2026-10-06', procedure: 'L4/5 PLIF', kit: 'Diplomat + Global BMD PLIF',
+  hospital: 'RHH', systems: ['Diplomat'], sources: ['rhh'], note: '',
+  from: 'tobias.long@ths.tas.gov.au',
+  subject: 'Cases for next week',
+  excerpt: 'Parsons\nImplanet + E4 cages\nL4/5 PLIF',
+  attachments: ['list.pdf']
+}
+
 const PENDING = [
   {
     id: 'bk_1', status: 'pending', patient: 'Marsh', surgeon: 'Ibbett',
@@ -222,5 +232,107 @@ describe('what a scan says it did', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() =>
       expect(screen.getByText(/1 was already on the calendar/)).toBeInTheDocument())
+  })
+})
+
+describe('checking how a booking was read', () => {
+  // A booking came back naming a system we do not carry and nobody could say
+  // whether the surgeon had written it or the reader had invented it — the
+  // email sits in a mailbox only the app can see.
+  function serving() {
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=queue')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ ok: true, count: 1, pending: [WITH_EMAIL] })
+        }
+      }
+      return respond(String(url), init)
+    })
+  }
+
+  it('shows what the email actually said', async () => {
+    serving()
+    show()
+    await waitFor(() => expect(screen.getByText('What the email said')).toBeInTheDocument())
+    expect(screen.getByText(/Implanet \+ E4 cages/)).toBeInTheDocument()
+    expect(screen.getByText(/tobias\.long@ths\.tas\.gov\.au/)).toBeInTheDocument()
+  })
+
+  it('names the attachment a booking arrived in', async () => {
+    // "The email said nothing" should not read as a fault when the booking was
+    // a photograph of a theatre list.
+    serving()
+    show()
+    await waitFor(() => expect(screen.getByText(/list\.pdf/)).toBeInTheDocument())
+  })
+
+  it('copies the email and the reading together', async () => {
+    // One tap to hand somebody both halves of the question.
+    const copied = []
+    // jsdom has no clipboard and the property is not writable, so it is defined
+    // rather than assigned.
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: text => { copied.push(text); return Promise.resolve() } },
+      configurable: true
+    })
+    serving()
+    show()
+    await waitFor(() => expect(screen.getByText('What the email said')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Copy the email/ }))
+    expect(copied[0]).toMatch(/Implanet/)
+    expect(copied[0]).toMatch(/Read as: Parsons \/ Thani/)
+  })
+
+  it('says nothing extra for a candidate with no email kept', async () => {
+    // The ones queued before this existed.
+    show()
+    await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
+    expect(screen.queryByText('What the email said')).not.toBeInTheDocument()
+  })
+})
+
+describe('the pre-operative workup in a queued booking', () => {
+  // Filtered when the email is read *and* when the card is drawn. A candidate
+  // queued before that existed has the workup baked into its note, and telling
+  // somebody to dismiss it and check the mailbox again — for a line the app
+  // should never have shown — is not a fix.
+  const NOISY = {
+    id: 'bk_4', status: 'pending', patient: 'Parsons', surgeon: 'Thani',
+    date: '2026-10-06', procedure: 'L4/5 PLIF', kit: 'Diplomat',
+    hospital: 'RHH', systems: ['Diplomat'], sources: ['rhh'],
+    note: 'Bloods and ECG completed 2 weeks prior. Patient fasting from midnight. '
+      + 'Existing fusion L5/S1 from 2021. Group and hold required.'
+  }
+
+  function serving(candidate) {
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=queue')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, count: 1, pending: [candidate] }) }
+      }
+      return respond(String(url), init)
+    })
+  }
+
+  it('drops it from a candidate already in the queue', async () => {
+    serving(NOISY)
+    show()
+    await waitFor(() => expect(screen.getAllByText('Parsons').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/Bloods and ECG/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Group and hold/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the line that actually matters', async () => {
+    // The one that says there is something already in the patient.
+    serving(NOISY)
+    show()
+    await waitFor(() => expect(screen.getByText(/Existing fusion L5\/S1/)).toBeInTheDocument())
+  })
+
+  it('shows no note at all when the workup was the whole of it', async () => {
+    serving({ ...NOISY, note: 'Bloods and ECG completed. Consent signed.' })
+    show()
+    await waitFor(() => expect(screen.getAllByText('Parsons').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/Consent signed/)).not.toBeInTheDocument()
   })
 })

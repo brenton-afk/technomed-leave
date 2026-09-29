@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
+import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
 import { loanNeed } from '../../clinicalPlan/inventory.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 
@@ -23,6 +24,21 @@ import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 // Nothing here replies to the sender. See src/clinicalPlan/bookingSources.js.
 
 const SURGEONS = SURGEON_SERVICES.flatMap(g => g.surgeons)
+
+/**
+ * The note, less the pre-operative workup.
+ *
+ * Filtered here as well as when the email is read, so a candidate queued before
+ * that existed comes good too — the alternative is telling somebody to dismiss
+ * a booking and check the mailbox again, for a line the app should never have
+ * shown.
+ */
+function noteWorthShowing(note) {
+  const kept = withoutPreOpNoise(
+    String(note || '').split(/\n|(?<=\.)\s+(?=[A-Z])/)
+  ).join(' ').trim()
+  return kept || null
+}
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
@@ -202,9 +218,61 @@ function Candidate({ candidate, user, onDone }) {
       <Value label="Kit" value={fields.kit} onChange={v => set('kit', v)} />
       <Value label="Procedure" value={fields.procedure} onChange={v => set('procedure', v)} />
 
-      {candidate.note && (
+      {/* What the reader actually worked from.
+          
+          A booking came back naming a system we do not carry and nobody could
+          say whether the surgeon had written it or the reader had invented it —
+          the email sits in a mailbox only the app can see. Now it is one tap to
+          find out, and one more to hand the text to somebody who can tell. */}
+      {(candidate.excerpt || candidate.attachments?.length > 0) && (
+        <details style={{ marginTop: space.xs }}>
+          <summary style={{
+            ...text('caption'), color: colour.inkFaint, cursor: 'pointer'
+          }}>
+            What the email said
+          </summary>
+          <div style={{
+            ...text('caption'), color: colour.inkMuted, marginTop: space.xs,
+            background: colour.canvas, border: `1px solid ${colour.line}`,
+            borderRadius: radius.control, padding: space.sm,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            maxHeight: 220, overflowY: 'auto',
+            userSelect: 'text', WebkitUserSelect: 'text'
+          }}>
+            {candidate.from && <div style={{ color: colour.inkFainter }}>From {candidate.from}</div>}
+            {candidate.subject && <div style={{ color: colour.inkFainter }}>{candidate.subject}</div>}
+            {candidate.attachments?.length > 0 && (
+              <div style={{ color: colour.inkFainter }}>
+                Attached: {candidate.attachments.join(', ')}
+              </div>
+            )}
+            {candidate.excerpt || '(the booking was in an attachment, not the message)'}
+          </div>
+          <button type="button"
+            onClick={() => navigator.clipboard?.writeText([
+              candidate.from && `From ${candidate.from}`,
+              candidate.subject,
+              candidate.attachments?.length ? `Attached: ${candidate.attachments.join(', ')}` : '',
+              '',
+              candidate.excerpt || '(booking was in an attachment)',
+              '',
+              `Read as: ${candidate.patient || '?'} / ${candidate.surgeon || '?'} / `
+                + `${candidate.date || '?'} / ${candidate.kit || '?'}`
+            ].filter(Boolean).join('\n'))}
+            style={{
+              ...text('caption'), marginTop: space.xs, cursor: 'pointer',
+              background: 'transparent', color: colour.accentDeep,
+              border: `1px solid ${colour.line}`, borderRadius: radius.control,
+              padding: `4px ${space.sm}px`
+            }}>
+            Copy the email and what it was read as
+          </button>
+        </details>
+      )}
+
+      {noteWorthShowing(candidate.note) && (
         <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: space.xs }}>
-          {candidate.note}
+          {noteWorthShowing(candidate.note)}
         </div>
       )}
 

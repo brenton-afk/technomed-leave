@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { stripIdentifiers, normaliseSurgeon, normaliseSystem } from '../src/clinicalPlan/parse.js'
 import { systemsInKit, resolveE4Product } from '../src/clinicalPlan/systems.js'
+import { withoutPreOpNoise } from '../src/clinicalPlan/preOpNoise.js'
 import { sniffMediaType } from './_gmail.js'
 
 // ─── Reading a booking out of whatever arrived ───────────────────────────────
@@ -101,7 +102,12 @@ function cleanCase(raw) {
     hospital: /rhh|royal/i.test(String(raw?.hospital || '')) ? 'RHH'
       : /clv|calvary|lenah/i.test(String(raw?.hospital || '')) ? 'CLV' : '',
     theatre: String(raw?.theatre || '').replace(/\D/g, '') || null,
-    note: stripIdentifiers(String(raw?.note || ''))
+    // The pre-operative workup, out of the note as well as out of the prompt.
+    // Asking the model not to return it is not the same as not showing it, and
+    // the note is exactly where it ends up when the model is being helpful.
+    note: withoutPreOpNoise(
+      stripIdentifiers(String(raw?.note || '')).split(/\n|(?<=\.)\s+(?=[A-Z])/)
+    ).join(' ').trim()
   }
 }
 
