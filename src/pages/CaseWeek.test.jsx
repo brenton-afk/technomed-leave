@@ -72,7 +72,9 @@ describe('a case, in full', () => {
     expect(screen.getByText('Fowler')).toBeInTheDocument()
     // "and" is dropped by cleanOperation — the operation reads "L5/S1 PSF PLIF".
     expect(screen.getByText('L5/S1 PSF PLIF')).toBeInTheDocument()
-    expect(screen.getByText(/Diplomat and E4 Cages/)).toBeInTheDocument()
+    // Resolved on the way in: the booking says "E4 Cages" and the procedure is
+    // a PLIF, so the card names the cage the team actually has to bring.
+    expect(screen.getByText(/Diplomat and Global BMD PLIF/)).toBeInTheDocument()
     expect(screen.getByText('Consignment')).toBeInTheDocument()
     // The rep the old calendar view dropped on the floor.
     expect(screen.getByText('Mat')).toBeInTheDocument()

@@ -3,6 +3,7 @@ import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
 import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
+import { resolveKit } from '../../clinicalPlan/systems.js'
 import { loanNeed } from '../../clinicalPlan/inventory.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 
@@ -137,7 +138,10 @@ function Candidate({ candidate, user, onDone }) {
     surgeon: candidate.surgeon || '',
     date: candidate.date || '',
     procedure: candidate.procedure || '',
-    kit: candidate.kit || '',
+    // Resolved here as well as when the email was read, so a candidate queued
+    // before that existed shows the system somebody can actually bring rather
+    // than the name the surgeon happened to type.
+    kit: resolveKit(candidate.kit || '', candidate.procedure || ''),
     hospital: candidate.hospital || ''
   })
   const [status, setStatus] = useState('ready')

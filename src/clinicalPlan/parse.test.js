@@ -489,7 +489,9 @@ describe('bookings as the team actually writes them', () => {
       + 'Surgery: L5/S1 PSF and PLIF\nKit: Diplomat and E4 Cages (Consignment)')
     expect(read.rep).toBe('Mat')
     expect(read.surgeon).toBe('Fowler')
-    expect(read.system).toBe('Diplomat and E4 Cages')
+    // "E4 Cages" against "L5/S1 PSF and PLIF" is the Global BMD PLIF cage.
+    // The booking says E4; the team has to bring something specific.
+    expect(read.system).toBe('Diplomat and Global BMD PLIF')
     expect(read.supply).toBe('Consignment')
   })
 

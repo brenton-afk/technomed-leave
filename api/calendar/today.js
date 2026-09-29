@@ -31,7 +31,7 @@ import { readDictatedBooking } from '../_readDictatedBooking.js'
 import {
   sourceOf, isSameBooking, mergeBookings, isDistributorEmail
 } from '../../src/clinicalPlan/bookingSources.js'
-import { systemsInKit } from '../../src/clinicalPlan/systems.js'
+import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
   hourForNewCase, layOutDay, hourToTime
 } from '../../src/clinicalPlan/dayLayout.js'
@@ -511,7 +511,8 @@ function bookingTitle({ patient, system, surgeon, rep }) {
  * team typed — same title convention, same labelled notes, same colour rule.
  * Two writers would drift apart within a month.
  */
-async function writeBooking({ fields = {}, date, notes, rep, colorId }, enteredBy) {
+async function writeBooking({ fields: given = {}, date, notes, rep, colorId }, enteredBy) {
+  let fields = given
   const patient = String(fields.patient || '').trim()
   const surgeon = String(fields.surgeon || '').trim()
   const day = String(date || '').trim()
@@ -520,6 +521,12 @@ async function writeBooking({ fields = {}, date, notes, rep, colorId }, enteredB
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     throw Object.assign(new Error('A date is needed'), { status: 400 })
   }
+
+  // Aliases and a bare E4 resolved once more on the way to the calendar. The
+  // sheet and the queue both resolve before showing, but a booking can be
+  // written from a stale candidate or from a route that never drew a card, and
+  // what lands in Google has to name a system somebody can bring.
+  if (fields.kit) fields = { ...fields, kit: resolveKit(fields.kit, fields.procedure || '') }
 
   // Built through the same writer the edit sheet uses, so a booking created
   // here reads back exactly like one the team typed.

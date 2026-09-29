@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY, dayShortfall } from './inventory.js'
-import { systemsInKit, resolveE4Product } from './systems.js'
+import { systemsInKit, resolveE4Product, resolveKit } from './systems.js'
 
 // The inventory is dictated knowledge — it lives in people's heads and nowhere
 // else — so these tests are really a written record of what was said, in a form
@@ -229,5 +229,41 @@ describe('what Thani writes', () => {
   it('does not override a product that was named outright', () => {
     expect(resolveE4Product('E4 Dakota', 'L4/5 PLIF')).toBeNull()
     expect(resolveE4Product('Global BMD ALIF', 'L5/S1 PLIF')).toBeNull()
+  })
+})
+
+describe('the kit line, resolved wherever it is read', () => {
+  // The fix kept not taking: it was applied only where an email is read, so a
+  // candidate already queued — and a booking already on the calendar — went on
+  // naming a product nobody can bring. It runs in one place now and is called
+  // from every path that shows or writes a kit.
+  it('turns Implanet into Diplomat', () => {
+    // Implanet is not a pedicle screw system and we do not carry it.
+    expect(resolveKit('Implanet', 'L4/5 pedicle screw fixation')).toBe('Diplomat')
+    expect(resolveKit('IMPLANET', '')).toBe('Diplomat')
+  })
+
+  it('names the E4 cage on a PLIF', () => {
+    expect(resolveKit('E4 Cages', 'L5/S1 PLIF')).toBe('Global BMD PLIF')
+    expect(resolveKit('Implanet + E4 Cages', 'L4/5 PLIF'))
+      .toBe('Diplomat + Global BMD PLIF')
+  })
+
+  it('leaves E4 alone where the procedure does not settle it', () => {
+    expect(resolveKit('E4 Cages', 'C5/6 ACDF')).toBe('E4 Cages')
+  })
+
+  it('resolves to systems the inventory actually holds', () => {
+    // The whole point: a kit line nobody can act on is the failure.
+    const kit = resolveKit('Implanet + E4 Cages', 'L4/5 PLIF')
+    for (const system of systemsInKit(kit)) {
+      expect(inventoryFor(system), system).toBeTruthy()
+    }
+  })
+
+  it('leaves an ordinary kit line untouched', () => {
+    expect(resolveKit('Diplomat (Consignment)', 'L4/5 PLIF')).toBe('Diplomat (Consignment)')
+    expect(resolveKit('Dakota', 'C5/6 ACDF')).toBe('Dakota')
+    expect(resolveKit('', 'L4/5 PLIF')).toBe('')
   })
 })

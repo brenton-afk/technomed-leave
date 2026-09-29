@@ -1,5 +1,5 @@
 import { STAFF } from '../staffConfig.js'
-import { findSystems, findLoanSets, systemWords, findNavigation } from './systems.js'
+import { findSystems, findLoanSets, systemWords, findNavigation, resolveKit } from './systems.js'
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 import { isPreOpNoise } from './preOpNoise.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
@@ -836,12 +836,21 @@ export function cleanOperation(text, o = {}) {
   if (!text) return undefined
   const { system, context = text, requireClinical = false, truncate = requireClinical } = o
 
+  // Words that name a procedure as well as appearing in a product's name. The
+  // operation is allowed to keep them.
+  //
+  // "Global BMD PLIF" is a cage; "L5/S1 PSF and PLIF" is what is being done.
+  // Once the kit resolves to the full product name, "plif" joins the words
+  // stripped out of the operation — and the operation loses the word that says
+  // what the operation is.
+  const PROCEDURE_WORDS = new Set(['plif', 'alif', 'tlif', 'dlif', 'acdf', 'psf', 'lif'])
+
   const drop = new Set([
     ...systemWords(context),
     ...String(system || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
     // Loan sets belong on the kit line. Left in, they appeared on both.
     ...findLoanSets(context).join(' ').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-  ])
+  ].filter(word => !PROCEDURE_WORDS.has(word)))
 
   const kept = trimJoiners(
     stripSupply(text).split(/\s+/).filter(word => {
@@ -885,7 +894,9 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   // typed into "Procedure:" was not, and went straight to the screen.
   const labelled = Object.fromEntries(
     Object.entries(raw).map(([field, value]) => [field, stripIdentifiers(value)]))
-  const kitField = parseKitField(labelled.kit)
+  // Resolved before anything reads it, so a booking accepted onto the calendar
+  // with "Implanet" on it still shows the system somebody can actually bring.
+  const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
   const fromTitle = parseCaseTitle(title, { colourSurgeon })
 
   const patient = sanitisePatient(labelled.patient) || fromTitle?.patient

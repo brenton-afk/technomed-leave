@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { stripIdentifiers, normaliseSurgeon, normaliseSystem } from '../src/clinicalPlan/parse.js'
-import { systemsInKit, resolveE4Product } from '../src/clinicalPlan/systems.js'
+import { stripIdentifiers, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
+import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { withoutPreOpNoise } from '../src/clinicalPlan/preOpNoise.js'
 import { sniffMediaType } from './_gmail.js'
 
@@ -83,14 +83,7 @@ function cleanCase(raw) {
   // Aliases applied here as well as asked for in the prompt. A model told to
   // substitute a name usually does; "usually" is not a basis for which tray
   // arrives in a theatre.
-  let kit = stripIdentifiers(String(raw?.kit || ''))
-    .split(/\s*\+\s*/)
-    .map(part => normaliseSystem(part.trim()))
-    .join(' + ')
-
-  // "E4 cages" against a PLIF is the Global BMD PLIF cage and nothing else.
-  const e4 = resolveE4Product(kit, String(raw?.procedure || ''))
-  if (e4) kit = kit.replace(/\bE4(?:\s+cages?)?\b/i, e4)
+  const kit = resolveKit(stripIdentifiers(String(raw?.kit || '')), String(raw?.procedure || ''))
 
   return {
     patient: surname ? surname.charAt(0).toUpperCase() + surname.slice(1).toLowerCase() : '',

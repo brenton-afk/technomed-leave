@@ -252,6 +252,42 @@ const IMPLIES_PLIF = /\b(?:diplomat|mariner|plif)\b/i
  * use. But "E4 cages" against "L4/5 PLIF" is not ambiguous at all, and that is
  * how most of these bookings are written.
  */
+/**
+ * Systems written under another name.
+ *
+ * Thani writes "Implanet" on a pedicle screw fixation and means Diplomat.
+ * Implanet is not a pedicle screw system and we do not carry it, so a booking
+ * naming it is a booking naming a product nobody can bring.
+ */
+const SYSTEM_ALIASES = [
+  { written: /\bimplanet\b/gi, means: 'Diplomat' }
+]
+
+/**
+ * The kit line, resolved: aliases applied and a bare E4 named where the
+ * procedure settles which product it is.
+ *
+ * In one place because it has to run everywhere the kit is shown or written —
+ * reading an email, drawing the queue card, accepting onto the calendar, and
+ * reading a booking back off it. Doing it only where the email is read fixes
+ * the next booking and leaves the one on screen wrong, which is exactly what
+ * happened.
+ *
+ * @param {string} kit
+ * @param {string} [context]  the procedure, where the kit line does not say
+ */
+export function resolveKit(kit, context = '') {
+  let text = String(kit || '')
+  if (!text.trim()) return text
+
+  for (const { written, means } of SYSTEM_ALIASES) text = text.replace(written, means)
+
+  const e4 = resolveE4Product(text, context)
+  if (e4) text = text.replace(/\bE4(?:\s+(?:global\s+)?cages?)?\b/i, e4)
+
+  return text.replace(/\s{2,}/g, ' ').trim()
+}
+
 export function resolveE4Product(kit, context = '') {
   const text = String(kit || '')
   if (!/\be4\b/i.test(text)) return null
