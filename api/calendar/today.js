@@ -13,12 +13,15 @@ import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
   parseLabelledDescription, descriptionNotes
 } from '../../src/clinicalPlan/labelledFields.js'
-import { readBooking, normaliseSurgeon, extractRep } from '../../src/clinicalPlan/parse.js'
+import {
+  readBooking, normaliseSurgeon, extractRep, stripIdentifiers
+} from '../../src/clinicalPlan/parse.js'
 import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailSeen, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
-  getBookingCandidate, getBookingQueue, updateBookingCandidate
+  getBookingCandidate, getBookingQueue, updateBookingCandidate,
+  getListOrders, setListOrder, clearListOrder
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
@@ -70,6 +73,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'dismiss') return handleDismiss(req, res)
   // A booking spoken into the phone. Fills the form; does not make the booking.
   if (req.query.action === 'dictate') return handleDictate(req, res)
+  // The running order of a theatre list, taken on the evening ring-round.
+  if (req.query.action === 'listorder') return handleListOrder(req, res)
 
   // Everything below this line is the bookings calendar in full: surgeons,
   // patient surnames, hospitals, procedures, kit. It was served to anyone who
@@ -1062,5 +1067,67 @@ async function handleDictate(req, res) {
     // The message is written to be read by somebody holding a phone, so it goes
     // through as it is rather than becoming "something went wrong".
     return res.status(400).json({ error: err.message })
+  }
+}
+
+
+/**
+ * The running order of each theatre list on a day.
+ *
+ * GET returns everything recorded for that date; POST records one theatre's.
+ * Stored apart from the bookings because the order includes cases that are not
+ * ours and never reach the calendar — tomorrow's list at RHH opens with an ACDF
+ * using a competitor's cage, and that case is the whole reason our first one is
+ * not at eight.
+ */
+async function handleListOrder(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  const date = String(req.query.date || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'A date is needed' })
+  }
+
+  try {
+    if (req.method === 'GET') {
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(200).json({ ok: true, lists: await getListOrders(date) })
+    }
+
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const key = String(body.key || '').trim()
+    if (!key) return res.status(400).json({ error: 'A list is needed' })
+
+    // Clearing is how a list taken wrongly is undone. Nothing else deletes.
+    if (!Array.isArray(body.entries) || !body.entries.length) {
+      await clearListOrder(date, key)
+      return res.status(200).json({ ok: true, cleared: true })
+    }
+
+    const entries = body.entries.slice(0, 40).map(entry => (
+      entry?.kind === 'ours'
+        ? { kind: 'ours', eventId: String(entry.eventId || '') }
+        : {
+          kind: 'other',
+          // Another surgeon's case, so no patient detail is wanted or kept —
+          // what it is and whose it is, and nothing else.
+          label: stripIdentifiers(String(entry.label || '')).slice(0, 80),
+          note: stripIdentifiers(String(entry.note || '')).slice(0, 120)
+        }
+    )).filter(e => e.kind === 'other' ? e.label : e.eventId)
+
+    const saved = await setListOrder(date, key, {
+      hospital: String(body.hospital || '').trim(),
+      theatre: String(body.theatre || '').trim() || null,
+      entries,
+      updatedBy: firstNameFor(session.email),
+      updatedAt: new Date().toISOString()
+    })
+    return res.status(200).json({ ok: true, list: saved })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
   }
 }

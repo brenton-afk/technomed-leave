@@ -13,6 +13,7 @@ import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinical
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
+import ListOrders from './cases/ListOrder.jsx'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -679,6 +680,12 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 {dayPlan?.caseCountLine ? ` · ${dayPlan.caseCountLine}` : ''}
               </div>
             </div>
+            {/* Above the cases, because it is what the team reads first: it
+                answers whether anyone is on site at half seven. */}
+            <ListOrders
+              date={activeDay}
+              user={user}
+              cases={(dayPlan?.casesByHospital || []).flatMap(g => g.cases)} />
             <AddBookingRow day={activeDay} onAdd={setAdding} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing} />

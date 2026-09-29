@@ -346,3 +346,50 @@ export async function updateBookingCandidate(id, updates) {
   await redis('set', queueKey(id), JSON.stringify(updated))
   return updated
 }
+
+// ─── THEATRE LIST ORDER ─────────────────────────────────────
+// What the hospital says the running order is, taken by the team leader on the
+// ring-round the afternoon before. One record per theatre per day.
+//
+// Kept apart from the bookings rather than written onto them: the order includes
+// cases that are not ours and never appear on the calendar, and it changes on a
+// different clock — a booking is made weeks out, its position is settled the
+// evening before and sometimes again at seven the next morning.
+
+const listOrderKey = date => `listOrder:${date}`
+
+/** Every list recorded for a day, keyed by hospital and theatre. */
+export async function getListOrders(date) {
+  const all = await redis('hgetall', listOrderKey(date))
+  if (!all) return {}
+  // Upstash returns a flat array of alternating field and value.
+  const out = {}
+  if (Array.isArray(all)) {
+    for (let i = 0; i < all.length; i += 2) {
+      try { out[all[i]] = JSON.parse(all[i + 1]) } catch { /* skip a bad row */ }
+    }
+    return out
+  }
+  for (const [field, value] of Object.entries(all)) {
+    try { out[field] = JSON.parse(value) } catch { /* skip a bad row */ }
+  }
+  return out
+}
+
+/**
+ * Records one theatre's order.
+ *
+ * Written per field, so two people taking two hospitals at the same time cannot
+ * overwrite each other — which on a Tuesday afternoon is the normal case, not
+ * the unlucky one.
+ */
+export async function setListOrder(date, key, order) {
+  await redis('hset', listOrderKey(date), key, JSON.stringify(order))
+  // A list order is worthless a week later and there is no reason to keep it.
+  await redis('expire', listOrderKey(date), String(60 * 60 * 24 * 21))
+  return order
+}
+
+export async function clearListOrder(date, key) {
+  await redis('hdel', listOrderKey(date), key)
+}
