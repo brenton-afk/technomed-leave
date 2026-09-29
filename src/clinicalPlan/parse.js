@@ -1,6 +1,7 @@
 import { STAFF } from '../staffConfig.js'
 import { findSystems, findLoanSets, systemWords, findNavigation } from './systems.js'
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
+import { isPreOpNoise } from './preOpNoise.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -956,7 +957,12 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
       // unlabelled first line is read as the operation — "L5/S1 ALIF" above a
       // "Kit:" line is the common shape — and it would otherwise appear twice,
       // once in bold and once underneath as commentary on itself.
-      .filter(note => !saysOnly(note, { patient, surgeon, system, supply, operation, kit })),
+      .filter(note => !saysOnly(note, { patient, surgeon, system, supply, operation, kit }))
+      // The pre-operative workup — bloods, ECG, fasting, consent. It matters
+      // enormously and none of it to us, and left in it is most of the booking.
+      // Filtered here, where a booking is read, so the ones already on the
+      // calendar come good too.
+      .filter(note => !isPreOpNoise(note)),
     // Anything in the title that reached none of the fields above — but only
     // for a free-text booking, where the title *is* the record.
     //

@@ -921,9 +921,25 @@ async function handleIngest(req, res) {
           status: 'pending',
           messageId,
           subject: email.subject || '',
+          from: addressOf(email.from),
           receivedAt: email.receivedAt,
           sources: [source.id],
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          // What the reader actually worked from.
+          //
+          // Without this there is no way to tell a misreading from a badly
+          // written email. A booking came back naming a system we do not carry
+          // and nobody could say whether the surgeon had written it or the
+          // model had invented it — the email was in a mailbox only the app can
+          // see, and the app had thrown the text away.
+          //
+          // Identifiers stripped, like everything else that is stored, and
+          // capped: this is for checking a reading, not for keeping a copy of
+          // the correspondence.
+          excerpt: stripIdentifiers(String(email.text || '')).slice(0, 900),
+          // A booking that came in as a photograph or a PDF has little or no
+          // text, and "the email said nothing" should not read as a fault.
+          attachments: (email.attachments || []).map(a => a.filename).filter(Boolean)
         }
 
         // Already on the calendar. This is the ordinary case, not the rare one:
