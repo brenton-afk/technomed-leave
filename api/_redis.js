@@ -393,3 +393,73 @@ export async function setListOrder(date, key, order) {
 export async function clearListOrder(date, key) {
   await redis('hdel', listOrderKey(date), key)
 }
+
+// ─── CHAT ───────────────────────────────────────────────────
+// The internal channels, and a thread on each booking. Nine people, so the
+// volume is small and a list per channel is the right shape: appending is one
+// command, reading the recent end is one command, and nothing has to be sorted.
+//
+// Kept as its own store rather than hung off the bookings. A case thread
+// outlives the booking it belongs to — "why did this move?" is asked months
+// later — and a booking deleted by mistake should not take the conversation
+// about it with it.
+
+const channelKey = channel => `chat:${channel}`
+
+/** How much of a channel is kept. Nine people; this is months of talk. */
+const KEEP = 500
+
+export async function postMessage(channel, message) {
+  const stored = { ...message, at: message.at || new Date().toISOString() }
+  await redisSetBody(`chat:msg:${stored.id}`, JSON.stringify(stored))
+  await redis('lpush', channelKey(channel), stored.id)
+  await redis('ltrim', channelKey(channel), '0', String(KEEP - 1))
+  // So a case thread can be found without knowing it exists.
+  await redis('sadd', 'chat:channels', channel)
+  return stored
+}
+
+/** The most recent messages in a channel, oldest first for reading. */
+export async function readChannel(channel, limit = 80) {
+  const ids = await redis('lrange', channelKey(channel), '0', String(limit - 1)) || []
+  if (!ids.length) return []
+  const messages = await Promise.all(ids.map(async id => {
+    const raw = await redis('get', `chat:msg:${id}`)
+    try { return raw ? JSON.parse(raw) : null } catch { return null }
+  }))
+  return messages.filter(Boolean).reverse()
+}
+
+/** How many messages each channel holds, for the unread counts. */
+export async function channelSizes(channels) {
+  const sizes = {}
+  await Promise.all(channels.map(async channel => {
+    sizes[channel] = Number(await redis('llen', channelKey(channel))) || 0
+  }))
+  return sizes
+}
+
+export async function knownChannels() {
+  return await redis('smembers', 'chat:channels') || []
+}
+
+/**
+ * Where each person has read up to, so a badge means something.
+ *
+ * Stored per person as a hash of channel to message count, which is enough:
+ * "three since you last looked" is the useful answer and it costs one field.
+ */
+export async function readMarkers(email) {
+  const all = await redis('hgetall', `chat:read:${email}`)
+  if (!all) return {}
+  if (Array.isArray(all)) {
+    const out = {}
+    for (let i = 0; i < all.length; i += 2) out[all[i]] = Number(all[i + 1]) || 0
+    return out
+  }
+  return Object.fromEntries(Object.entries(all).map(([k, v]) => [k, Number(v) || 0]))
+}
+
+export async function markRead(email, channel, count) {
+  await redis('hset', `chat:read:${email}`, channel, String(count))
+}

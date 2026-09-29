@@ -33,6 +33,9 @@ export function KitHub({ user, onNavigate }) {
           onClick={() => onNavigate({ tab: 'kit', sub: 'resources' })} />
 
         <SectionLabel>Team</SectionLabel>
+        <NavCard icon={IconTasks} label="Messages"
+          detail="The group, where the bookings are"
+          onClick={() => onNavigate({ tab: 'kit', sub: 'messages' })} />
         <NavCard icon={IconTasks} label="Projects & actions"
           detail="Meeting notes and the shared worklist"
           onClick={() => onNavigate({ tab: 'kit', sub: 'projects' })} />
