@@ -14,7 +14,8 @@ import { rememberUser } from './lastUser.js'
 import FileBrowser from './pages/FileBrowser.jsx'
 import { KitHub, MeHub, ComingSoonSection } from './pages/Hubs.jsx'
 import PromptBanner from './pages/PromptBanner.jsx'
-import { colour, text, font } from './design/tokens.js'
+import { colour, text, font, radius } from './design/tokens.js'
+import { useIsDesktop } from './design/viewport.js'
 import {
   IconScan, IconCases, IconKit, IconMe, IconAdmin,
   IconStock, IconPayslip, IconLock, IconBack
@@ -59,6 +60,9 @@ function loadStoredSession() {
 }
 
 export default function App() {
+  // Called here, above the early returns for the login and the success screens,
+  // because a hook that runs on some renders and not others is not a hook.
+  const desktop = useIsDesktop()
   const [user, setUser] = useState(null)
   const [nav, setNav] = useState({ tab: 'cases', sub: null })
   const [submitted, setSubmitted] = useState(null)
@@ -198,19 +202,51 @@ export default function App() {
           nothing can scroll away and no ancestor can reparent. The blur can stay
           because there is no longer anything passing underneath it. */}
       <nav aria-label="Main"
-        style={{
+        style={desktop ? {
+          // The border and the safe-area padding are inline, so the stylesheet
+          // cannot override them — an inline style always wins. Everything the
+          // desktop needs differently has to be decided here too.
+          flexShrink: 0, background: colour.surface,
+          display: 'flex', zIndex: 100
+        } : {
           flexShrink: 0,
           background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
           borderTop: `1px solid ${colour.line}`, display: 'flex', zIndex: 100,
           paddingBottom: 'env(safe-area-inset-bottom, 0px)'
         }}>
+
+        {/* The column needs a head, or it reads as five buttons floating in a
+            margin. A phone has the app's name in the header of every screen and
+            no room to spare; a sidebar has the room and needs the anchor. */}
+        {desktop && (
+          <div style={{ padding: `4px 14px 14px`, borderBottom: `1px solid ${colour.line}`, marginBottom: 8 }}>
+            <div style={{ ...text('bodyStrong'), color: colour.navy }}>TechnoMed</div>
+            <div style={{ ...text('caption'), color: colour.inkFaint }}>
+              {user.name?.split(' ')[0] || 'Staff portal'}
+            </div>
+          </div>
+        )}
+        {/* On a phone these are five equal columns along the bottom. On a
+            desktop the same buttons become rows down a sidebar: icon beside
+            label, left-aligned, with the active one filled rather than only
+            coloured — a tint reads as a hover state when the pointer is a
+            mouse, and the row needs to say which page you are on without it.
+
+            Done here rather than in CSS because these styles are inline, and an
+            inline style cannot be overridden by a media query. */}
         {tabs.map(({ id, label, Icon }) => {
           const active = nav.tab === id
           return (
             <button key={id} onClick={() => navigate({ tab: id })}
               aria-current={active ? 'page' : undefined}
-              style={{
+              style={desktop ? {
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '11px 14px', borderRadius: radius.control,
+                background: active ? colour.accentSoft : 'transparent',
+                border: 'none', cursor: 'pointer', textAlign: 'left',
+                color: active ? colour.accentDeep : colour.inkMuted, font: 'inherit'
+              } : {
                 flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
                 justifyContent: 'center', gap: 4, padding: '9px 2px 8px',
                 background: 'transparent', border: 'none', cursor: 'pointer',
@@ -218,10 +254,11 @@ export default function App() {
               }}>
               {/* Weight, not fill, marks the active tab — it keeps the set
                   looking like one family instead of two icon styles. */}
-              <Icon size={23} strokeWidth={active ? 2.1 : 1.6} />
+              <Icon size={desktop ? 20 : 23} strokeWidth={active ? 2.1 : 1.6} />
               <span style={{
-                ...text('micro'), letterSpacing: '0.1px', textTransform: 'none',
-                fontWeight: active ? 700 : 500
+                ...text(desktop ? 'bodyStrong' : 'micro'),
+                letterSpacing: '0.1px', textTransform: 'none',
+                fontWeight: active ? 700 : desktop ? 500 : 500
               }}>
                 {label}
               </span>

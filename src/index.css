@@ -89,6 +89,86 @@ a {
   overflow: hidden;
 }
 
+/* ─── Desktop ────────────────────────────────────────────────────────────────
+   Everything below 1024px is untouched. The phone layout is the one this app
+   has to be best at, and none of these rules exist outside the query.
+
+   On a wide screen the 460px column is the whole problem: a 27-inch iMac shows
+   a phone-width strip down the middle with grey either side. The fix is not to
+   let the same column grow — a booking list at 1900px is unreadable — but to
+   give the screen a shape of its own: navigation permanently down the left,
+   where a mouse can reach it without a trip to the bottom of the window, and a
+   content column of a width somebody can actually read.
+
+   The tab bar becomes that sidebar with no change to the markup. The DOM order
+   is [scroll, nav]; `row-reverse` puts the nav first on screen while leaving the
+   phone's tab order — content, then navigation — as it was for a screen reader
+   and for the keyboard. */
+@media (min-width: 1024px) {
+  .tm-shell {
+    max-width: none;
+    flex-direction: row-reverse;
+  }
+
+  .tm-shell > nav {
+    flex-direction: column;
+    width: 232px;
+    flex-shrink: 0;
+    align-items: stretch;
+    border-top: none;
+    border-right: 1px solid rgba(26, 43, 74, 0.12);
+    padding: 14px 10px;
+    gap: 2px;
+    /* The bar's safe-area padding is for a phone's home indicator and does
+       nothing but add a gap at the foot of a sidebar. */
+    padding-bottom: 14px;
+    overflow-y: auto;
+  }
+
+  /* The scrolling region is the content area rather than the whole app. */
+  .tm-scroll {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Wide enough to lay a week of bookings out side by side, narrow enough that
+     a line of prose is still a line rather than a paragraph edge to edge. The
+     screens that genuinely want the full width opt out with `tm-wide`. */
+  .tm-page {
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+
+  .tm-page.tm-wide {
+    max-width: none;
+  }
+
+  /* Undoing the 640px block above, which dresses the app as a phone floating on
+     a dark page. That is the right picture for a narrow window on a big screen
+     and the wrong one once the app fills it. */
+  body {
+    background: var(--tm-bg);
+  }
+
+  .tm-shell {
+    box-shadow: none;
+  }
+
+  /* Anything pinned to the viewport belongs over the content, not over the
+     sidebar and not in a 460px strip down the middle of the window. */
+  .tm-fixed {
+    left: 232px;
+    right: 0;
+    transform: none;
+    width: auto;
+    max-width: none;
+    /* Its `bottom` leaves room for the phone's tab bar, which is not down there
+       any more. Overridden rather than removed, because on a phone that
+       clearance is exactly right. */
+    bottom: 0 !important;
+  }
+}
+
 /* The only thing on a screen that scrolls.
 
    `min-height: 0` is what makes it work: a flex item's default minimum size is
