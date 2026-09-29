@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { SURGEON_COLOUR_NAMES } from '../../clinicalPlan/colours.js'
+import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
 import { loanNeed } from '../../clinicalPlan/inventory.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 
@@ -22,7 +22,7 @@ import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 //
 // Nothing here replies to the sender. See src/clinicalPlan/bookingSources.js.
 
-const SURGEONS = Object.keys(SURGEON_COLOUR_NAMES).sort()
+const SURGEONS = SURGEON_SERVICES.flatMap(g => g.surgeons)
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']

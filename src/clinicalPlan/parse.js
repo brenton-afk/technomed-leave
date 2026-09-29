@@ -10,7 +10,12 @@ import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes
 // cached, exported or rendered — regardless of what a calendar event contains.
 
 export const SURGEON_KEYS = [
-  'Hannan', 'Dubey', 'Thani', 'Fowler', 'Ibbett', 'JPW', 'Gupta', 'Atallah', 'Garg'
+  // Spine
+  'Hannan', 'Dubey', 'Thani', 'Fowler', 'Ibbett', 'JPW', 'Gupta', 'Atallah',
+  // Maxillofacial. Mostly RHH, occasionally Calvary, and almost always us
+  // providing AIRO support — they like a post-operative CT once a facial
+  // fracture is reduced and fixated.
+  'Garg', 'Varidel', 'Silifent', 'Ong', 'Carter'
 ]
 
 /**

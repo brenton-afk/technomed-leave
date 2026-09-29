@@ -52,8 +52,37 @@ export const SURGEON_COLOUR_NAMES = {
   Ibbett: 'Banana',
   JPW: 'Flamingo',
   Gupta: 'Basil',
-  Atallah: 'Tangerine'
+  Atallah: 'Tangerine',
+
+  // ── Maxillofacial ──
+  //
+  // One colour between the five of them, which breaks the one-surgeon-one-colour
+  // rule on purpose. Google has eleven colours and the spine guide already uses
+  // eight; there are not five distinct ones left to give. And these cases are
+  // occasional and nearly always the same job — AIRO support for a post-operative
+  // CT — so a colour that reads "Max Fax" at a glance is worth more on a week
+  // view than five hues nobody could tell apart.
+  //
+  // Say the word and they can have their own; it is one line each once Google
+  // has the colours to spare.
+  Garg: 'Lavender',
+  Varidel: 'Lavender',
+  Silifent: 'Lavender',
+  Ong: 'Lavender',
+  Carter: 'Lavender'
 }
+
+/**
+ * Which service a surgeon belongs to, for the pickers.
+ *
+ * Grouped because the two lists are chosen from at different moments and by
+ * different people, and a flat list of thirteen names makes the common eight
+ * harder to find.
+ */
+export const SURGEON_SERVICES = [
+  { service: 'Spine', surgeons: ['Atallah', 'Dubey', 'Fowler', 'Gupta', 'Hannan', 'Ibbett', 'JPW', 'Thani'] },
+  { service: 'Max Fax', surgeons: ['Carter', 'Garg', 'Ong', 'Silifent', 'Varidel'] }
+]
 
 export const OTHER_COLOUR_NAMES = {
   Brainlab: 'Blueberry',

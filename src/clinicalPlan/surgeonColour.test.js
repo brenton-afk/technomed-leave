@@ -3,9 +3,12 @@ import {
   accentForCase, accentFor, accentTextFor, guideHexFor,
   contrastRatio, SURGEON_ACCENTS, NAVIGATION_ACCENT
 } from './theme.js'
-import { GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, SURGEON_COLOUR_NAMES, guideColorIdFor } from './colours.js'
+import {
+  GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, SURGEON_COLOUR_NAMES, guideColorIdFor,
+  SURGEON_SERVICES
+} from './colours.js'
 import { findNavigation } from './systems.js'
-import { readBooking, normaliseSurgeon } from './parse.js'
+import { readBooking, normaliseSurgeon, SURGEON_KEYS } from './parse.js'
 
 // "Can you please make sure that the colours remain consistent in the app
 // irrespective of the way they are entered in google calendar — I think
@@ -342,5 +345,50 @@ describe('what earns an AIRO badge', () => {
     for (const kit of ['Dakota', 'CYLOX', 'Athlet + Ascot', 'Lonestar', 'Shoreline']) {
       expect(airo(`Kit: ${kit}`), kit).toBe(false)
     }
+  })
+})
+
+describe('the maxillofacial surgeons', () => {
+  // Technomed supports Max Fax mostly at RHH and occasionally at Calvary, and
+  // nearly always for the same job: AIRO support for a post-operative CT once a
+  // facial fracture is reduced and fixated.
+  const MAXFAX = ['Garg', 'Varidel', 'Silifent', 'Ong', 'Carter']
+
+  it('are read as surgeons', () => {
+    // "Consultant: Dr Garg" on a forwarded booking has to find a surgeon, or
+    // the booking is not read as a case at all.
+    for (const name of MAXFAX) {
+      expect(normaliseSurgeon(name), name).toBe(name)
+      expect(normaliseSurgeon(`Dr ${name}`), name).toBe(name)
+    }
+  })
+
+  it('share one colour, deliberately', () => {
+    // Google has eleven and the spine guide already uses eight; there are not
+    // five distinct ones left. These cases are occasional and nearly always the
+    // same job, so a colour that reads "Max Fax" beats five nobody could tell
+    // apart.
+    const ids = MAXFAX.map(guideColorIdFor)
+    expect(new Set(ids).size).toBe(1)
+    expect(ids[0]).toBeTruthy()
+  })
+
+  it('do not take a colour the spine team is using', () => {
+    const spine = ['Dubey', 'Thani', 'Fowler', 'Ibbett', 'JPW', 'Gupta', 'Atallah']
+      .map(guideColorIdFor)
+    expect(spine).not.toContain(guideColorIdFor('Garg'))
+  })
+
+  it('are offered under their own heading', () => {
+    const maxfax = SURGEON_SERVICES.find(g => g.service === 'Max Fax')
+    expect(maxfax.surgeons.sort()).toEqual([...MAXFAX].sort())
+    const spine = SURGEON_SERVICES.find(g => g.service === 'Spine')
+    expect(spine.surgeons).not.toContain('Garg')
+  })
+
+  it('leaves no surgeon out of the pickers', () => {
+    // A surgeon the parser knows but no picker offers is one nobody can book.
+    const offered = new Set(SURGEON_SERVICES.flatMap(g => g.surgeons))
+    for (const key of SURGEON_KEYS) expect(offered.has(key), key).toBe(true)
   })
 })

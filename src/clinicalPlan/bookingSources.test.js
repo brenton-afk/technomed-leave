@@ -178,3 +178,29 @@ describe('a case already on the calendar', () => {
     expect(isSameBooking({ patient: 'Cooper', surgeon: 'Ibbett' }, fromEmail)).toBe(false)
   })
 })
+
+describe('a booking forwarded by the team', () => {
+  // A Max Fax booking sent to bookings@ from Brent's own address was skipped
+  // without a word, and the app looked broken when it was doing exactly what it
+  // had been told. Our own mail plainly is a booking source.
+  it('is read like any other', () => {
+    expect(sourceOf('brenton@technomed.com.au')?.id).toBe('internal')
+    expect(sourceOf('toni@technomed.com.au')?.id).toBe('internal')
+  })
+
+  it('carries no hospital of its own', () => {
+    // A forwarded booking has to say where it is; the sender cannot imply it.
+    expect(sourceOf('brenton@technomed.com.au').hospital).toBeNull()
+  })
+
+  it('is not a distributor, and does not become one', () => {
+    expect(isDistributorEmail('brenton@technomed.com.au')).toBe(false)
+  })
+
+  it('may still be written to', () => {
+    // The silence rule is about hospitals. Saying nothing to ourselves would be
+    // an odd way to honour it.
+    expect(mayNotifyAboutBooking('brenton@technomed.com.au')).toBe(true)
+    expect(mayNotifyAboutBooking('Sharon.Ashworth@calvarycare.org.au')).toBe(false)
+  })
+})

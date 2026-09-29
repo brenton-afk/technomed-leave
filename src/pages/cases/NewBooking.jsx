@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { SURGEON_COLOUR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
+import { SURGEON_SERVICES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
 import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall } from '../../clinicalPlan/inventory.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayName } from '../../clinicalPlan/week.js'
@@ -24,7 +24,8 @@ import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayN
 // to get wrong: a Mariner at Calvary needs a set ordered, and nobody should have
 // to remember that.
 
-const SURGEONS = Object.keys(SURGEON_COLOUR_NAMES).sort()
+// Grouped, not flattened. Spine and Max Fax are chosen from at different
+// moments, and one list of thirteen names makes the common eight harder to find.
 const SYSTEMS = INVENTORY.filter(i => !i.competitor).map(i => i.system)
 const HOSPITALS = [{ id: 'RHH', label: 'RHH' }, { id: 'CLV', label: 'Calvary' }]
 const SUPPLY = ['Consignment', 'Loan']
@@ -382,7 +383,11 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], onC
             <Row label="Surgeon">
               <select value={surgeon} onChange={e => setSurgeon(e.target.value)} style={inputStyle}>
                 <option value="">Choose…</option>
-                {SURGEONS.map(s => <option key={s} value={s}>{s}</option>)}
+                {SURGEON_SERVICES.map(group => (
+                  <optgroup key={group.service} label={group.service}>
+                    {group.surgeons.map(s => <option key={s} value={s}>{s}</option>)}
+                  </optgroup>
+                ))}
               </select>
             </Row>
 

@@ -35,6 +35,27 @@ export const BOOKING_SOURCES = [
     hospital: 'CLV',
     from: [/@calvarycare\.org\.au$/i],
     shape: 'single'
+  },
+  {
+    // Us. A booking forwarded into bookings@ by somebody on the team — a case
+    // phoned through, a WhatsApp message typed up, a Max Fax list that arrives
+    // by a route nobody anticipated.
+    //
+    // Left out at first, on the reasoning that our own mail is not a booking
+    // source. It plainly is: a Max Fax booking sent to bookings@ from Brent's
+    // own address was skipped without a word, and the app looked broken when it
+    // was doing exactly what it had been told.
+    //
+    // It is the one source with no hospital of its own — the email has to say —
+    // and the one that carries ordinary correspondence as well as bookings, so
+    // most of what comes through here will read as no case at all. That is
+    // fine. The reader returns nothing when there is nothing, and a candidate
+    // nobody wanted is one tap to dismiss.
+    id: 'internal',
+    label: 'Forwarded by the team',
+    hospital: null,
+    from: [/@technomed\.com\.au$/i],
+    shape: 'single'
   }
 ]
 
@@ -124,7 +145,12 @@ export function sourceOf(fromAddress) {
  * worst. See the note above.
  */
 export function mayNotifyAboutBooking(address) {
-  return sourceOf(address) === null
+  const source = sourceOf(address)
+  // Our own team is a booking source — somebody forwards a case in — but the
+  // rule above is about hospitals, and saying nothing to ourselves would be an
+  // odd way to honour it.
+  if (source?.id === 'internal') return true
+  return source === null
 }
 
 /**
