@@ -617,3 +617,101 @@ describe('calling a case off', () => {
     expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1)
   })
 })
+
+describe('what the patient already has in', () => {
+  // Hudson, 13 October: "R/O C5/6 ACDF plate — has Shoreline in-situ from
+  // 29.9.2022 with Hunn". The team has to know what is in there before the day,
+  // and the answer has been in the usage tree all along.
+  const REVISION = {
+    summary: 'Hudson SHORELINE PLATE removal - Thani',
+    fields: {
+      patient: 'Hudson', surgeon: 'Thani', hospital: 'CLV',
+      procedure: 'R/O C5/6 ACDF plate', kit: 'Shoreline (Consignment)'
+    },
+    notes: '', reps: [], colorId: '2', etag: 'e1',
+    start: '2026-10-13T08:00:00+11:00', end: '2026-10-13T09:00:00+11:00'
+  }
+  // The title counts too, not just the procedure field — this booking's own
+  // title says "removal", which is exactly where somebody would write it.
+  const ORDINARY = {
+    ...REVISION,
+    summary: 'Hudson SHORELINE - Thani',
+    fields: { ...REVISION.fields, procedure: 'C5/6 ACDF' }
+  }
+
+  let askedFor
+  function serving(booking, prior) {
+    askedFor = null
+    global.fetch = vi.fn(async url => {
+      const text = String(url)
+      if (text.includes('action=prior')) {
+        askedFor = text
+        return { ok: true, status: 200, json: async () => prior }
+      }
+      if (/start=/.test(text)) return { ok: true, status: 200, json: async () => ({ events: [] }) }
+      return { ok: true, status: 200, json: async () => booking }
+    })
+  }
+
+  const FOUND = {
+    ok: true,
+    summary: '2 earlier cases filed under this surname. 1 of them under another surgeon. Check they are the same patient.',
+    matches: [
+      { date: '2022-09-29', surgeon: 'Hunn', systems: ['Shoreline'], sameSurgeon: false, filedAs: 'Hudson 29.09.22 Hunn Shoreline ACDF CLV' },
+      { date: '2019-04-02', surgeon: 'Thani', systems: ['Diplomat'], sameSurgeon: true, filedAs: 'Hudson 02.04.19 Thani Diplomat PSF RHH' }
+    ]
+  }
+
+  const open = () => render(
+    <EditBooking eventId="e" user={{ token: 't' }} onClose={() => {}} onSaved={() => {}} />
+  )
+
+  it('looks it up when the booking asks about something existing', async () => {
+    serving(REVISION, FOUND)
+    open()
+    await waitFor(() => expect(askedFor).not.toBeNull())
+    expect(askedFor).toMatch(/patient=Hudson/)
+    expect(askedFor).toMatch(/surgeon=Thani/)
+  })
+
+  it('does not look it up on an ordinary case', async () => {
+    // A history panel on every booking is one nobody reads, and this one has to
+    // be read on the cases that have it.
+    serving(ORDINARY, FOUND)
+    open()
+    await waitFor(() => expect(screen.getByDisplayValue('Hudson')).toBeInTheDocument())
+    expect(askedFor).toBeNull()
+  })
+
+  it('shows what was put in, when, and by whom', async () => {
+    serving(REVISION, FOUND)
+    open()
+    await waitFor(() => expect(screen.getByText(/Already filed under this surname/)).toBeInTheDocument())
+    expect(screen.getByText(/Hudson 29.09.22 Hunn Shoreline ACDF CLV/)).toBeInTheDocument()
+  })
+
+  it('marks the one filed under a different surgeon', async () => {
+    // The case that would otherwise be missed: a patient who came back to
+    // somebody else.
+    serving(REVISION, FOUND)
+    open()
+    await waitFor(() => expect(screen.getByText(/different surgeon/)).toBeInTheDocument())
+  })
+
+  it('never claims it is the same patient', async () => {
+    // A surname is all the app keeps.
+    serving(REVISION, FOUND)
+    open()
+    await waitFor(() =>
+      expect(screen.getByText(/Check they are the same patient/)).toBeInTheDocument())
+  })
+
+  it('says so when the history could not be read', async () => {
+    // Silence here reads as "nothing in there", which is the worst possible
+    // answer before a removal.
+    serving(REVISION, { ok: true, matches: [], unavailable: 'Dropbox is not connected' })
+    open()
+    await waitFor(() =>
+      expect(screen.getByText(/Could not check what is already in/)).toBeInTheDocument())
+  })
+})

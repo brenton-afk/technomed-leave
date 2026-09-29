@@ -166,3 +166,56 @@ export async function temporaryLink(path) {
   }
   return { url: data.link, name: data.metadata?.name || path.split('/').pop() }
 }
+
+/**
+ * Folders under the usage tree whose name contains a surname.
+ *
+ * For answering "what has this patient already got in" before a revision or a
+ * removal. The whole tree is searched, not just the booking's surgeon: most
+ * patients come back to the same one, and the ones who do not — a Dubey patient
+ * turning up on Thani's list with a Diplomat already in — are exactly the ones
+ * that would otherwise be missed. Where it was filed is returned with it, so the
+ * app can say which surgeon put it in.
+ *
+ * `files/search_v2` rather than walking the tree: years of surgeons, months and
+ * cases is thousands of folders, and Dropbox will do the matching for nothing.
+ */
+export async function searchUsage(surname, { limit = 40 } = {}) {
+  const query = String(surname || '').trim()
+  if (!query) return []
+
+  const { ok, data, status, text } = await rpc('files/search_v2', {
+    query,
+    options: {
+      path: ROOT,
+      max_results: Math.min(limit, 100),
+      // Folders, because a case is a folder here and the files inside it repeat
+      // the same name with a suffix.
+      file_categories: [],
+      filename_only: true
+    }
+  })
+  if (!ok) {
+    const summary = data?.error_summary || text || ''
+    // A tree that is not there yet is not an error worth stopping a booking for.
+    if (String(summary).includes('not_found')) return []
+    throw new Error(`Dropbox could not search for "${query}" (${status}): ${summary}`)
+  }
+
+  const seen = new Set()
+  const out = []
+  for (const match of data.matches || []) {
+    const meta = match.metadata?.metadata || match.metadata
+    if (!meta?.name) continue
+    // Files inside a case folder carry the case's name plus a suffix, so the
+    // folder and its two files would otherwise come back as three cases.
+    const isFolder = meta['.tag'] === 'folder'
+    const name = isFolder ? meta.name : meta.name.replace(/_(?:Usage_Sheet|Scan)\.\w+$/i, '')
+    const path = meta.path_display || meta.path_lower || ''
+    const key = `${name}|${path.split('/').slice(0, -1).join('/')}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ name, path })
+  }
+  return out
+}

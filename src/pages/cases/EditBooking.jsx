@@ -6,6 +6,7 @@ import {
 } from '../../clinicalPlan/colours.js'
 import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
 import { extractRep, isCancelled } from '../../clinicalPlan/parse.js'
+import { needsPriorImplants } from '../../clinicalPlan/priorImplants.js'
 import { fetchDayCases } from '../../clinicalPlan/provider.js'
 import { dayShortfall } from '../../clinicalPlan/inventory.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
@@ -251,6 +252,27 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
 
   const calledOff = Boolean(loaded && isCancelled(loaded.summary || '', loaded.notes || ''))
+
+  // What this patient already has in — looked up only when the booking asks.
+  // A history panel on every case is a panel nobody reads, and this one has to
+  // be read on the cases that have it.
+  const [prior, setPrior] = useState(null)
+  const asksAboutExisting = needsPriorImplants(
+    `${fields.procedure || ''} ${notes || ''} ${loaded?.summary || ''}`)
+
+  useEffect(() => {
+    if (!asksAboutExisting || !fields.patient) { setPrior(null); return undefined }
+    let live = true
+    const query = new URLSearchParams({
+      action: 'prior', patient: fields.patient, surgeon: fields.surgeon || ''
+    })
+    fetch(`/api/calendar/today?${query}`, { headers: auth })
+      .then(r => r.json())
+      .then(data => { if (live) setPrior(data) })
+      .catch(() => { if (live) setPrior(null) })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asksAboutExisting, fields.patient, fields.surgeon, user?.token])
 
   /** Calls the case off, or puts it back on. */
   async function setCancelled(off) {
@@ -637,6 +659,44 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                   chosen={colourChosen}
                   onChange={id => { setColorId(id); setColourChosen(true) }}
                   onClear={() => { setColourChosen(false); setColorId(loaded.colorId || null) }} />
+
+                {prior?.matches?.length > 0 && (
+                  <div style={{
+                    marginTop: space.lg, padding: space.md,
+                    background: colour.warningSoft,
+                    border: `1px solid ${colour.warningLine}`, borderRadius: radius.control
+                  }}>
+                    <div style={{ ...text('bodyStrong'), color: colour.ink }}>
+                      Already filed under this surname
+                    </div>
+                    {/* Hedged on purpose. A surname is all this app keeps, so
+                        the honest claim is about the record, not the patient. */}
+                    <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
+                      {prior.summary}
+                    </div>
+                    {prior.matches.map((m, i) => (
+                      <div key={i} style={{
+                        ...text('caption'), color: colour.ink, marginBottom: 4
+                      }}>
+                        <strong>{m.date || 'date not in the name'}</strong>
+                        {m.surgeon ? ` · ${m.surgeon}` : ''}
+                        {m.sameSurgeon ? '' : ' (different surgeon)'}
+                        {m.systems?.length ? ` · ${m.systems.join(' + ')}` : ''}
+                        <span style={{ display: 'block', color: colour.inkFainter }}>
+                          {m.filedAs}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {prior?.unavailable && asksAboutExisting && (
+                  <div style={{
+                    marginTop: space.lg, ...text('caption'), color: colour.inkFaint
+                  }}>
+                    Could not check what is already in: {prior.unavailable}
+                  </div>
+                )}
 
                 {/* Calling the case off. Kept out of the footer, which already
                     has three buttons and would be four on a phone — and kept

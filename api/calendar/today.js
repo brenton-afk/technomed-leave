@@ -35,6 +35,10 @@ import { systemsInKit } from '../../src/clinicalPlan/systems.js'
 import {
   hourForNewCase, layOutDay, hourToTime
 } from '../../src/clinicalPlan/dayLayout.js'
+import { dropboxConfigured, searchUsage } from '../_dropbox.js'
+import {
+  readFiledCase, priorImplantsFor, describePrior
+} from '../../src/clinicalPlan/priorImplants.js'
 import { firstNameFor } from '../../src/staffConfig.js'
 
 // The Staff Leave sub-calendar. Read alongside bookings for the clinical plan
@@ -78,6 +82,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'listorder') return handleListOrder(req, res)
   // Calling a case off, and putting it back on.
   if (req.query.action === 'cancel') return handleCancel(req, res)
+  // What this patient already has in, for a revision or a removal.
+  if (req.query.action === 'prior') return handlePrior(req, res)
 
   // Everything below this line is the bookings calendar in full: surgeons,
   // patient surnames, hospitals, procedures, kit. It was served to anyone who
@@ -1211,4 +1217,44 @@ function stripCalledOffNote(description) {
     .replace(/^\s*(?:Cancelled|Reinstated) by [^\n]*$/gmi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trimEnd()
+}
+
+
+/**
+ * Earlier cases filed under a surname.
+ *
+ * Asked when a booking says revision, removal, existing or in situ. The team
+ * has to know what is in there before the day — the wrong screwdriver is in
+ * another hospital — and the answer has been sitting in the usage tree all
+ * along.
+ *
+ * Matched on surname alone, because a surname is all this app keeps. So what
+ * comes back is described as records found, never as what this patient has.
+ */
+async function handlePrior(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  const patient = stripIdentifiers(String(req.query.patient || '')).trim().split(/\s+/)[0]
+  const surgeon = String(req.query.surgeon || '').trim()
+  if (!patient) return res.status(400).json({ error: 'A surname is needed' })
+
+  try {
+    if (!dropboxConfigured()) {
+      return res.status(200).json({ ok: true, matches: [], unavailable: 'Dropbox is not connected' })
+    }
+    const found = await searchUsage(patient)
+    const filed = found.map(f => readFiledCase(f.name, f.path)).filter(Boolean)
+    const matches = priorImplantsFor(filed, patient, surgeon)
+
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    return res.status(200).json({
+      ok: true,
+      matches,
+      summary: describePrior(matches, surgeon)
+    })
+  } catch (err) {
+    // A history that cannot be read must not stop anybody opening a booking.
+    return res.status(200).json({ ok: true, matches: [], unavailable: err.message })
+  }
 }
