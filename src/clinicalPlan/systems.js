@@ -35,8 +35,13 @@ export const SYSTEMS = [
   { name: 'Athlet', test: /\bathlet\b/i },
   { name: 'Diplomat', test: /\bdiplomat\b/i },
   { name: 'Mobis', test: /\bmobis\b/i },
-  { name: 'E4 Global ALIF', test: /\be4\s*(?:global\s*)?alif\b/i },
-  { name: 'E4 Global PLIF', test: /\be4\s*(?:global\s*)?plif\b/i },
+  // Named as the inventory names them. They were "E4 Global PLIF" here and
+  // "Global BMD PLIF" there, so a booking that spelled the product out matched
+  // nothing at all — no loan verdict, no clash check, on every PLIF that named
+  // its cage properly. Two naming schemes for one product, and neither side
+  // knew about the other.
+  { name: 'Global BMD ALIF', test: /\b(?:e4\s*)?global\s*(?:bmd\s*)?alif\b/i },
+  { name: 'Global BMD PLIF', test: /\b(?:e4\s*)?global\s*(?:bmd\s*)?plif\b/i },
   { name: 'E4 Cages', test: /\be4\b(?:\s*global)?(?:\s*cages?)?/i },
   { name: 'Lonestar', test: /\blone\s*star\b/i },
   { name: 'Stryker CCI', test: /\bstryker\s*cci\b/i },
@@ -230,14 +235,28 @@ export function findNavigation(text) {
  * reaches the review queue as a question, which is the right outcome: guessing a
  * product here means a tray arriving that nobody can use.
  */
-const NAMES_AN_E4_PRODUCT = /global\s*bmd|dakota|reform/i
-const IMPLIES_PLIF = /\b(?:diplomat|mariner)\b/i
+// An E4 product named outright. Nothing to resolve, and resolving anyway would
+// turn a Dakota into a PLIF cage.
+const NAMES_AN_E4_PRODUCT = /global\s*(?:bmd\s*)?(?:plif|alif)|global\s*bmd|dakota|reform/i
+// Pedicle screws either side of it, or the procedure saying so outright. Thani
+// writes "E4 cages" and means the Global BMD PLIF cage; on a PLIF there is no
+// other E4 product it could be.
+const IMPLIES_PLIF = /\b(?:diplomat|mariner|plif)\b/i
 
-export function resolveE4Product(kit) {
+/**
+ * @param {string} kit
+ * @param {string} [context]  the procedure, where the kit line does not say
+ *
+ * "E4 cages" on its own is still ambiguous and still returns nothing — E4 make
+ * four products and picking the wrong one means a tray arriving that nobody can
+ * use. But "E4 cages" against "L4/5 PLIF" is not ambiguous at all, and that is
+ * how most of these bookings are written.
+ */
+export function resolveE4Product(kit, context = '') {
   const text = String(kit || '')
   if (!/\be4\b/i.test(text)) return null
   if (NAMES_AN_E4_PRODUCT.test(text)) return null
-  return IMPLIES_PLIF.test(text) ? 'Global BMD PLIF' : null
+  return IMPLIES_PLIF.test(`${text} ${context}`) ? 'Global BMD PLIF' : null
 }
 
 /**

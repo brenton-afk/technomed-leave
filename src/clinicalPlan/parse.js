@@ -34,6 +34,23 @@ const SURGEON_ALIASES = {
   'jens peters willke': 'JPW'
 }
 
+/**
+ * Systems written under another name.
+ *
+ * Thani writes "Implanet" on a pedicle screw fixation and means Diplomat. The
+ * app had never heard of Implanet, so it came through as the system itself and
+ * the booking named a product we do not carry.
+ */
+export const SYSTEM_ALIASES = {
+  implanet: 'Diplomat'
+}
+
+/** The system, under whichever name it was written. */
+export function normaliseSystem(name) {
+  const key = String(name || '').trim().toLowerCase()
+  return SYSTEM_ALIASES[key] || name
+}
+
 const SURGEON_LOOKUP = new Map([
   ...SURGEON_KEYS.map(k => [k.toLowerCase(), k]),
   ...Object.entries(SURGEON_ALIASES)

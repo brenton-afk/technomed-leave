@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY, dayShortfall } from './inventory.js'
+import { systemsInKit, resolveE4Product } from './systems.js'
 
 // The inventory is dictated knowledge — it lives in people's heads and nowhere
 // else — so these tests are really a written record of what was said, in a form
@@ -171,5 +172,62 @@ describe('two cases, one kit, same day', () => {
   it('does not guess at an unrecognised hospital or system', () => {
     expect(dayShortfall('Diplomat', 'Somewhere else', 3)).toBeNull()
     expect(dayShortfall('Not a system', 'RHH', 3)).toBeNull()
+  })
+})
+
+describe('the names a system is written under', () => {
+  // Two naming schemes for one product: the detector called it "E4 Global PLIF"
+  // and the inventory "Global BMD PLIF". A booking that spelled the product out
+  // properly matched nothing — no loan verdict, no clash check — on every PLIF
+  // that named its cage.
+  it('finds the inventory entry however the booking spells it', () => {
+    for (const written of ['Global BMD PLIF', 'E4 Global PLIF', 'Global PLIF', 'global bmd plif']) {
+      const found = systemsInKit(written)
+      expect(found, written).toContain('Global BMD PLIF')
+      expect(inventoryFor(found[0]), written).toBeTruthy()
+    }
+  })
+
+  it('does the same for the ALIF cage', () => {
+    for (const written of ['Global BMD ALIF', 'E4 Global ALIF']) {
+      expect(systemsInKit(written), written).toContain('Global BMD ALIF')
+    }
+  })
+
+  it('every system a kit line resolves to is one we hold', () => {
+    // The check that would have caught it. A system the app names but the
+    // inventory has never heard of gives no supply answer and no clash warning,
+    // and does so silently.
+    const kits = [
+      'Diplomat (Consignment)', 'Global BMD PLIF', 'Mariner (Monoaxial Screws)',
+      'Dakota', 'Reform Cervical (Loan set)', 'Athlet + Ascot', 'CYLOX (LOAN)',
+      'Diplomat + Global BMD PLIF', 'Shoreline', 'Lonestar (KT Medical)'
+    ]
+    const missing = []
+    for (const kit of kits) {
+      for (const system of systemsInKit(kit)) {
+        if (!inventoryFor(system)) missing.push(`${kit} → ${system}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+})
+
+describe('what Thani writes', () => {
+  it('reads "E4 cages" on a PLIF as the Global BMD PLIF cage', () => {
+    // On a PLIF there is no other E4 product it could be.
+    expect(resolveE4Product('E4 cages', 'L4/5 PLIF')).toBe('Global BMD PLIF')
+    expect(resolveE4Product('E4 cages', 'L5/S1 PLIF and PSF')).toBe('Global BMD PLIF')
+  })
+
+  it('leaves "E4 cages" alone when nothing says which', () => {
+    // E4 make four products and the wrong one is a tray nobody can use.
+    expect(resolveE4Product('E4 cages', '')).toBeNull()
+    expect(resolveE4Product('E4 cages', 'C5/6 ACDF')).toBeNull()
+  })
+
+  it('does not override a product that was named outright', () => {
+    expect(resolveE4Product('E4 Dakota', 'L4/5 PLIF')).toBeNull()
+    expect(resolveE4Product('Global BMD ALIF', 'L5/S1 PLIF')).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { stripIdentifiers, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
-import { systemsInKit } from '../src/clinicalPlan/systems.js'
+import { stripIdentifiers, normaliseSurgeon, normaliseSystem } from '../src/clinicalPlan/parse.js'
+import { systemsInKit, resolveE4Product } from '../src/clinicalPlan/systems.js'
 import { sniffMediaType } from './_gmail.js'
 
 // ─── Reading a booking out of whatever arrived ───────────────────────────────
@@ -47,6 +47,17 @@ For each case return:
   theatre     theatre number if stated, else ""
   note        anything else that matters: a second surgeon, urgency, a request
 
+Ignore the pre-operative workup entirely. ECG, blood tests, fasting, consent,
+anaesthetic review and clinic letters say nothing about the implants and are not
+wanted in any field — least of all the note, where they crowd out the one line
+somebody needed to read.
+
+Two things the surgeons write that mean something specific:
+  · "Implanet" on a pedicle screw case means Diplomat. Return "Diplomat".
+  · "E4 cages" on a PLIF means the E4 Global BMD PLIF cage. Return that in full.
+    On any other procedure, "E4" alone is ambiguous — return it as written and
+    let a person decide.
+
 NEVER return a patient's given name, initials, date of birth, UR number, MRN or
 any other identifier. If the document shows "SMITH John 12/3/1958", return only
 "Smith". This is a firm rule: the surname is the only patient detail permitted.
@@ -68,7 +79,17 @@ function cleanCase(raw) {
     // First token only, so "Smith John" cannot survive a model that ignored the
     // instruction.
     .split(/\s+/)[0] || ''
-  const kit = stripIdentifiers(String(raw?.kit || ''))
+  // Aliases applied here as well as asked for in the prompt. A model told to
+  // substitute a name usually does; "usually" is not a basis for which tray
+  // arrives in a theatre.
+  let kit = stripIdentifiers(String(raw?.kit || ''))
+    .split(/\s*\+\s*/)
+    .map(part => normaliseSystem(part.trim()))
+    .join(' + ')
+
+  // "E4 cages" against a PLIF is the Global BMD PLIF cage and nothing else.
+  const e4 = resolveE4Product(kit, String(raw?.procedure || ''))
+  if (e4) kit = kit.replace(/\bE4(?:\s+cages?)?\b/i, e4)
 
   return {
     patient: surname ? surname.charAt(0).toUpperCase() + surname.slice(1).toLowerCase() : '',
