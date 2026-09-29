@@ -414,6 +414,22 @@ export function stripSelfFunding(title) {
     .trim()
 }
 
+/**
+ * The title, marked as called off.
+ *
+ * "CANCELLED" at the front, which is what the team has always written by hand —
+ * so a booking cancelled from the app reads exactly like one cancelled the old
+ * way, and every reader of the calendar already knows what it means.
+ *
+ * Idempotent: cancelling twice does not produce "CANCELLED CANCELLED". That is
+ * not hypothetical — two people hearing the same news is the normal way a case
+ * comes off.
+ */
+export function markCancelled(title) {
+  const clean = stripCancellation(title)
+  return clean ? `CANCELLED ${clean}` : 'CANCELLED'
+}
+
 export function stripCancellation(title) {
   return String(title || '')
     // "(cancelled)" and anything else in those brackets.

@@ -536,3 +536,84 @@ describe('moving a booking onto a day whose kit is spoken for', () => {
     expect(screen.queryByText(/Borrow a Diplomat kit/)).not.toBeInTheDocument()
   })
 })
+
+describe('calling a case off', () => {
+  const ON = {
+    summary: 'Sturrock LONESTAR - JPW',
+    fields: { patient: 'Sturrock', surgeon: 'JPW', kit: 'Lonestar', hospital: 'RHH' },
+    notes: '', reps: [], colorId: '4', etag: 'e1',
+    start: '2026-10-02T08:00:00+10:00', end: '2026-10-02T09:00:00+10:00'
+  }
+  const OFF = { ...ON, summary: 'CANCELLED Sturrock LONESTAR - JPW', colorId: '8' }
+
+  let posted
+  function serving(booking) {
+    posted = null
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=cancel')) {
+        posted = JSON.parse(init.body)
+        return { ok: true, status: 200, json: async () => ({ ok: true, cancelled: posted.off }) }
+      }
+      if (/start=/.test(String(url))) {
+        return { ok: true, status: 200, json: async () => ({ events: [] }) }
+      }
+      return { ok: true, status: 200, json: async () => booking }
+    })
+  }
+
+  const open = (props = {}) => render(
+    <EditBooking eventId="e" user={{ token: 't' }} onClose={() => {}} onSaved={() => {}} {...props} />
+  )
+
+  it('takes two taps, like deleting', async () => {
+    // A case called off by accident sends nobody to a theatre that is expecting
+    // them.
+    serving(ON)
+    open()
+    await waitFor(() => expect(screen.getByDisplayValue('Sturrock')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Call this case off' }))
+    expect(posted).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Call the case off' }))
+    await waitFor(() => expect(posted).not.toBeNull())
+    expect(posted.off).toBe(true)
+  })
+
+  it('asks why, because it is the first thing anybody asks', async () => {
+    serving(ON)
+    open()
+    await waitFor(() => expect(screen.getByDisplayValue('Sturrock')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Call this case off' }))
+    const why = await screen.findByLabelText(/Reason it was called off/)
+    fireEvent.change(why, { target: { value: 'Patient unwell' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Call the case off' }))
+    await waitFor(() => expect(posted?.reason).toBe('Patient unwell'))
+  })
+
+  it('offers to put a called-off case back on', async () => {
+    // A theatre list is rearranged twice before eight in the morning.
+    serving(OFF)
+    open()
+    await waitFor(() => expect(screen.getByText(/This case is called off/)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Put the case back on' }))
+    await waitFor(() => expect(posted).not.toBeNull())
+    expect(posted.off).toBe(false)
+  })
+
+  it('does not offer to call off a case that is already off', async () => {
+    serving(OFF)
+    open()
+    await waitFor(() => expect(screen.getByText(/This case is called off/)).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Call this case off' })).not.toBeInTheDocument()
+  })
+
+  it('does not put two buttons saying cancel side by side', async () => {
+    // One would shut the sheet and one would call off surgery.
+    serving(ON)
+    open()
+    await waitFor(() => expect(screen.getByDisplayValue('Sturrock')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+    // One way out of the sheet, in the header, and it is not called Cancel.
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1)
+  })
+})

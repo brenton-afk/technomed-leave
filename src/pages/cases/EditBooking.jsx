@@ -5,7 +5,7 @@ import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
 } from '../../clinicalPlan/colours.js'
 import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
-import { extractRep } from '../../clinicalPlan/parse.js'
+import { extractRep, isCancelled } from '../../clinicalPlan/parse.js'
 import { fetchDayCases } from '../../clinicalPlan/provider.js'
 import { dayShortfall } from '../../clinicalPlan/inventory.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
@@ -235,6 +235,11 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   // Two taps, deliberately. A booking removed by accident is a case nobody
   // knows about, and the calendar keeps no undo the team can reach.
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // Calling the case off, which is not deleting it. One tap to ask, one to
+  // confirm — the same two-tap rule as delete, because a case cancelled by
+  // accident sends nobody to a theatre that is expecting them.
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [reason, setReason] = useState('')
   // Who was in the room. Chosen, never typed: it goes into the booking title,
   // and a spelling the roster does not know is a rep the app cannot read back.
   const [reps, setReps] = useState([])
@@ -244,6 +249,29 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const [dayCases, setDayCases] = useState([])
 
   const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+
+  const calledOff = Boolean(loaded && isCancelled(loaded.summary || '', loaded.notes || ''))
+
+  /** Calls the case off, or puts it back on. */
+  async function setCancelled(off) {
+    setStatus('saving'); setError('')
+    try {
+      const res = await fetch('/api/calendar/today?action=cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ eventId, off, reason, etag: loaded?.etag })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'That did not go through')
+      setConfirmCancel(false)
+      setReason('')
+      onSaved?.()
+      onClose?.()
+    } catch (err) {
+      setError(err.message)
+      setStatus('ready')
+    }
+  }
 
   const load = useCallback(async () => {
     setStatus('loading'); setError('')
@@ -609,6 +637,69 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                   chosen={colourChosen}
                   onChange={id => { setColorId(id); setColourChosen(true) }}
                   onClear={() => { setColourChosen(false); setColorId(loaded.colorId || null) }} />
+
+                {/* Calling the case off. Kept out of the footer, which already
+                    has three buttons and would be four on a phone — and kept
+                    well away from Delete, because they are not the same thing
+                    and only one of them is reversible. */}
+                <div style={{
+                  marginTop: space.lg, paddingTop: space.md,
+                  borderTop: `1px solid ${colour.line}`
+                }}>
+                  {calledOff ? (
+                    <>
+                      <div style={{
+                        ...text('bodyStrong'), color: colour.ink,
+                        background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+                        borderRadius: radius.control, padding: space.sm, marginBottom: space.sm
+                      }}>
+                        This case is called off.
+                      </div>
+                      <button onClick={() => setCancelled(false)} disabled={status === 'saving'}
+                        style={{
+                          width: '100%', padding: space.sm, cursor: 'pointer', ...text('bodyStrong'),
+                          background: 'transparent', color: colour.accentDeep,
+                          border: `1px solid ${colour.accent}`, borderRadius: radius.control
+                        }}>
+                        {status === 'saving' ? 'Putting it back…' : 'Put the case back on'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {confirmCancel && (
+                        <label style={{ display: 'block', marginBottom: space.sm }}>
+                          <span style={{
+                            ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
+                            display: 'block', marginBottom: 4
+                          }}>Why, if you know</span>
+                          <input value={reason} onChange={e => setReason(e.target.value)}
+                            placeholder="Patient unwell, list overran…"
+                            aria-label="Reason it was called off"
+                            style={{
+                              width: '100%', padding: `${space.sm}px ${space.md}px`,
+                              boxSizing: 'border-box', border: `1px solid ${colour.line}`,
+                              borderRadius: radius.control, ...text('field'),
+                              color: colour.ink, background: colour.surface, outline: 'none'
+                            }} />
+                          <span style={{ ...text('caption'), color: colour.inkFainter }}>
+                            It is the first thing anybody asks.
+                          </span>
+                        </label>
+                      )}
+                      <button onClick={() => setConfirmCancel(true)} disabled={confirmCancel}
+                        style={{
+                          width: '100%', padding: space.sm,
+                          cursor: confirmCancel ? 'default' : 'pointer', ...text('bodyStrong'),
+                          background: 'transparent',
+                          color: confirmCancel ? colour.inkFainter : colour.warning,
+                          border: `1px solid ${confirmCancel ? colour.line : colour.warningLine}`,
+                          borderRadius: radius.control
+                        }}>
+                        {confirmCancel ? 'Confirm below ↓' : 'Call this case off'}
+                      </button>
+                    </>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -617,7 +708,24 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
             padding: `${space.sm}px ${space.md}px calc(${space.md}px + env(safe-area-inset-bottom, 0px))`,
             borderTop: `1px solid ${colour.line}`, display: 'flex', gap: space.sm, flexShrink: 0
           }}>
-            {confirmDelete ? (
+            {confirmCancel ? (
+              <>
+                <button onClick={() => { setConfirmCancel(false); setReason('') }}
+                  style={{
+                    flex: 1, padding: space.sm, cursor: 'pointer', ...text('bodyStrong'),
+                    background: 'transparent', color: colour.inkMuted,
+                    border: `1px solid ${colour.line}`, borderRadius: radius.control
+                  }}>Keep it on</button>
+                <button onClick={() => setCancelled(true)} disabled={status === 'saving'}
+                  style={{
+                    flex: 2, padding: space.sm, ...text('bodyStrong'), color: 'white',
+                    border: 'none', borderRadius: radius.control, background: colour.warning,
+                    cursor: status === 'saving' ? 'default' : 'pointer'
+                  }}>
+                  {status === 'saving' ? 'Calling it off…' : 'Call the case off'}
+                </button>
+              </>
+            ) : confirmDelete ? (
               <>
                 <button onClick={() => setConfirmDelete(false)}
                   style={{
@@ -642,12 +750,11 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                 background: 'transparent', color: colour.danger,
                 border: `1px solid ${colour.dangerLine}`, borderRadius: radius.control
               }}>Delete</button>
-            <button onClick={onClose}
-              style={{
-                flex: 1, padding: space.sm, cursor: 'pointer', ...text('bodyStrong'),
-                background: 'transparent', color: colour.inkMuted,
-                border: `1px solid ${colour.line}`, borderRadius: radius.control
-              }}>Cancel</button>
+            {/* No "Cancel" here any more. The sheet has a Close in its
+                header, and this row now sits under a button that calls off an
+                operation — two controls saying cancel, one meaning "shut this
+                sheet" and one meaning "call off the surgery", is a mistake
+                waiting to happen. */}
             <button onClick={() => save()}
               disabled={!changed || status === 'saving' || status === 'loading'}
               style={{

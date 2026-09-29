@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   parseCaseTitle, isSurgicalCase, sanitisePatient, stripIdentifiers, extractKit,
   detectHospital, normaliseSurgeon, describeCase, HOSPITALS, isCancelled,
-  stripCancellation, readBooking, extractRep, isSelfFunding, stripSelfFunding
+  stripCancellation, markCancelled, readBooking, extractRep, isSelfFunding,
+  stripSelfFunding
 } from './parse.js'
 
 describe('parseCaseTitle', () => {
@@ -757,5 +758,38 @@ describe('a self-funding patient', () => {
     const read = readBooking('CANCELLED SELF FUNDING Russell CYLOX - Thani', '')
     expect(read.patient).toBe('Russell')
     expect(read.selfFunding).toBe(true)
+  })
+})
+
+describe('calling a case off', () => {
+  it('marks it the way the team always has', () => {
+    // So a booking cancelled from the app reads like one cancelled by hand, and
+    // everybody reading the calendar already knows what it means.
+    expect(markCancelled('Sturrock LONESTAR - JPW')).toBe('CANCELLED Sturrock LONESTAR - JPW')
+  })
+
+  it('does not mark it twice', () => {
+    // Two people hearing the same news is the normal way a case comes off.
+    const once = markCancelled('Sturrock LONESTAR - JPW')
+    expect(markCancelled(once)).toBe(once)
+  })
+
+  it('reads back as cancelled', () => {
+    const marked = markCancelled('Sturrock LONESTAR - JPW')
+    expect(isCancelled(marked, '')).toBe(true)
+  })
+
+  it('keeps everything else about the booking', () => {
+    // The rep group especially: it lives at the end of the title and a case can
+    // be reinstated.
+    const marked = markCancelled('Mitchell AIRO - Ibbett (Aimee/Mat)')
+    expect(readBooking(marked, '').patient).toBe('Mitchell')
+    expect(readBooking(marked, '').rep).toBe('Aimee/Mat')
+  })
+
+  it('can be undone', () => {
+    const title = 'Sturrock LONESTAR - JPW'
+    expect(stripCancellation(markCancelled(title))).toBe(title)
+    expect(isCancelled(stripCancellation(markCancelled(title)), '')).toBe(false)
   })
 })

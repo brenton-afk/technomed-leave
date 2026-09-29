@@ -14,7 +14,8 @@ import {
   parseLabelledDescription, descriptionNotes
 } from '../../src/clinicalPlan/labelledFields.js'
 import {
-  readBooking, normaliseSurgeon, extractRep, stripIdentifiers
+  readBooking, normaliseSurgeon, extractRep, stripIdentifiers,
+  markCancelled, stripCancellation, isCancelled
 } from '../../src/clinicalPlan/parse.js'
 import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import {
@@ -75,6 +76,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'dictate') return handleDictate(req, res)
   // The running order of a theatre list, taken on the evening ring-round.
   if (req.query.action === 'listorder') return handleListOrder(req, res)
+  // Calling a case off, and putting it back on.
+  if (req.query.action === 'cancel') return handleCancel(req, res)
 
   // Everything below this line is the bookings calendar in full: surgeons,
   // patient surnames, hospitals, procedures, kit. It was served to anyone who
@@ -747,7 +750,10 @@ async function tidyDay(date) {
     .filter(e => !isDistributorEmail(e.organizer?.email))
     .map(e => {
       const read = readBooking(e.summary || '', e.description || '')
-      return read?.patient
+      // A cancelled case keeps its place in the calendar but not in the
+      // running order — the day should close up around it, the same as if it
+      // had been deleted.
+      return read?.patient && !isCancelled(e.summary || '', e.description || '')
         ? { id: e.id, etag: e.etag, surgeon: read.surgeon || '', from: e.start.dateTime.slice(11, 16) }
         : null
     })
@@ -1130,4 +1136,79 @@ async function handleListOrder(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
+}
+
+
+/**
+ * Calls a case off, or puts it back on.
+ *
+ * Not a delete. A cancelled case is a fact the team needs — it was booked, kit
+ * was moved for it, somebody may already be driving — and a booking that simply
+ * vanishes leaves nobody any way to find out what happened. So the record stays
+ * and says plainly that it is off.
+ *
+ * Marked the way it has always been marked by hand: CANCELLED at the front of
+ * the title. Every reader of that calendar already knows what it means, and the
+ * app has read it that way since before it could write it.
+ */
+async function handleCancel(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const eventId = String(body.eventId || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' })
+    // `off: false` reinstates. A case coming back on is ordinary — a theatre
+    // list is rearranged twice before eight in the morning.
+    const off = body.off !== false
+
+    const current = await getCalendarEvent(eventId)
+    const summary = String(current.summary || '')
+    const who = firstNameFor(session.email)
+    const day = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
+
+    // The reason, where somebody gave one. It is the first thing anybody asks.
+    const reason = stripIdentifiers(String(body.reason || '')).trim().slice(0, 200)
+    const note = off
+      ? `Cancelled by ${who}${reason ? ` — ${reason}` : ''}`
+      : `Reinstated by ${who}`
+
+    const description = `${stripCalledOffNote(current.description || '')}\n\n${note}`.trim()
+
+    const patch = {
+      summary: off ? markCancelled(summary) : stripCancellation(summary),
+      description,
+      // Grey while it is off, so it reads as called off at a glance in Google
+      // as well as in the app. Put back to the surgeon's colour on reinstating,
+      // which is where every other save gets it from.
+      colorId: off
+        ? '8'
+        : (guideColorIdFor(normaliseSurgeon(readBooking(summary, description)?.surgeon || '') || '') || null)
+    }
+
+    const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag })
+    // The day closes up around it, and reopens when it comes back.
+    if (day) await tidyDay(day).catch(() => {})
+
+    return res.status(200).json({
+      ok: true,
+      cancelled: off,
+      event: { id: saved.id, summary: saved.summary || '', etag: saved.etag || null }
+    })
+  } catch (err) {
+    if (err.code === 'conflict') {
+      return res.status(409).json({ error: err.message, code: 'conflict' })
+    }
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/** Takes off a previous cancelled/reinstated line, so they do not stack up. */
+function stripCalledOffNote(description) {
+  return String(description || '')
+    .replace(/^\s*(?:Cancelled|Reinstated) by [^\n]*$/gmi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()
 }
