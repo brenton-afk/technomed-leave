@@ -3,7 +3,7 @@ import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
 import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
-import { resolveKit } from '../../clinicalPlan/systems.js'
+import { resolveKit, systemsInKit } from '../../clinicalPlan/systems.js'
 import { loanNeed } from '../../clinicalPlan/inventory.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 
@@ -109,8 +109,15 @@ function Value({ label, value, onChange, missing, options }) {
 
 /** The one thing a booking raises that is expensive to miss. */
 function LoanNote({ systems, hospital }) {
+  // `loanNeed` returns a verdict object, not a word. Comparing the object to
+  // 'none' was never equal, so every system on every card fell past the filter
+  // and out the bottom of the ladder below as "we do not hold this" — said
+  // about Diplomat, of which there are three at Calvary.
   const needs = (systems || [])
-    .map(system => ({ system, need: loanNeed(system, hospital) }))
+    .map(system => {
+      const verdict = loanNeed(system, hospital)
+      return { system, need: verdict.need, reason: verdict.reason }
+    })
     .filter(n => n.need && n.need !== 'none')
   if (!needs.length) return null
 
@@ -120,12 +127,15 @@ function LoanNote({ systems, hospital }) {
       background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
       borderRadius: radius.control, ...text('caption'), color: colour.ink
     }}>
-      {needs.map(({ system, need }) => (
+      {needs.map(({ system, need, reason }) => (
         <div key={system}>
           <strong>{system}</strong>
           {need === 'move' ? ' — a set has to be moved across'
             : need === 'order' ? ' — no set here, one has to be ordered'
-              : ' — we do not hold this; check before the day'}
+              // The inventory's own words. It knows why it cannot answer —
+              // "E4 supply several products, which one?" is useful where "we do
+              // not hold this" is both wrong and alarming.
+              : ` — ${reason || 'check before the day'}`}
         </div>
       ))}
     </div>
@@ -280,7 +290,11 @@ function Candidate({ candidate, user, onDone }) {
         </div>
       )}
 
-      <LoanNote systems={candidate.systems} hospital={fields.hospital} />
+      {/* Worked out from the kit on screen, not from the list stored when the
+          email was read. That stored list still said "E4 Cages" — so the card
+          named the right cage and then said underneath that we do not hold it,
+          which we do: two consignment kits of it at Calvary. */}
+      <LoanNote systems={systemsInKit(fields.kit)} hospital={fields.hospital} />
 
       {error && (
         <div style={{ ...text('caption'), color: colour.danger, marginTop: space.xs }}>{error}</div>

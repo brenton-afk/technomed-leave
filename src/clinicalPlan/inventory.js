@@ -160,7 +160,18 @@ export function loanNeed(system, hospital) {
   const site = /\bCLV\b|CALVARY|LENAH/.test(text) ? 'CLV'
     : /\bRHH\b|ROYAL\s*HOBART/.test(text) ? 'RHH' : null
 
-  if (!item) return { need: 'unknown', reason: 'System not in the inventory — check before assuming.' }
+  if (!item) {
+    // "E4 Cages" is a distributor and a shrug, not a product. Saying we do not
+    // hold it is wrong and alarming — we hold four of their products — and the
+    // real answer is that nobody has said which one yet.
+    if (/^e4\b/i.test(String(system || '').trim())) {
+      return {
+        need: 'unknown',
+        reason: 'E4 supply several products. Which one — Global BMD PLIF, ALIF, Dakota or Reform?'
+      }
+    }
+    return { need: 'unknown', reason: 'System not in the inventory — check before assuming.' }
+  }
   if (item.competitor) {
     return { need: 'none', reason: `${item.system} is ${item.competitor}'s — not ours to supply.`, item }
   }

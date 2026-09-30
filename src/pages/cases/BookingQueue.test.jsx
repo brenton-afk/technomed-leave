@@ -336,3 +336,53 @@ describe('the pre-operative workup in a queued booking', () => {
     expect(screen.queryByText(/Consent signed/)).not.toBeInTheDocument()
   })
 })
+
+describe('what the card says we hold', () => {
+  // The card named the right cage and then said underneath that we do not hold
+  // it — which we do: two consignment kits of Global BMD PLIF at Calvary, and
+  // three of Diplomat. The verdict was reading the systems list stored when the
+  // email was read, which still said "E4 Cages".
+  const STALE = {
+    id: 'bk_5', status: 'pending', patient: 'Parsons', surgeon: 'Thani',
+    date: '2026-10-06', procedure: 'L4/5 PLIF', hospital: 'CLV',
+    kit: 'Implanet + E4 Cages',
+    systems: ['E4 Cages'],          // as stored before the resolver existed
+    sources: ['rhh'], note: ''
+  }
+
+  function serving(candidate) {
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=queue')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, count: 1, pending: [candidate] }) }
+      }
+      return respond(String(url), init)
+    })
+  }
+
+  it('does not claim we lack a kit that is on the shelf', async () => {
+    serving(STALE)
+    show()
+    await waitFor(() => expect(screen.getAllByText('Parsons').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/we do not hold this/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/not in the inventory/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the resolved kit on the card', async () => {
+    serving(STALE)
+    show()
+    // Shown as text until somebody taps it, so it is read not queried by value.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Kit: Diplomat \+ Global BMD PLIF/ }))
+        .toBeInTheDocument())
+  })
+
+  it('accepts the resolved kit, not the one that was stored', async () => {
+    serving(STALE)
+    show()
+    await waitFor(() => expect(screen.getAllByText('Parsons').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Add to calendar' }))
+    await waitFor(() => expect(calls.some(c => c.url.includes('action=accept'))).toBe(true))
+    const accept = calls.find(c => c.url.includes('action=accept'))
+    expect(accept.body.fields.kit).toBe('Diplomat + Global BMD PLIF')
+  })
+})

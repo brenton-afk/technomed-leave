@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { stripIdentifiers, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
-import { systemsInKit } from '../src/clinicalPlan/systems.js'
+import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { SURGEON_COLOUR_NAMES } from '../src/clinicalPlan/colours.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
 import { TZ, zonedCivil, toDateStr, weekdayName } from '../src/clinicalPlan/week.js'
@@ -173,7 +173,11 @@ export async function readDictatedBooking({ audio, contentType } = {}) {
   // Identifiers stripped on the way out whatever the prompt asked for, and the
   // surname taken as the first token so a full name cannot survive.
   const surname = stripIdentifiers(String(parsed.surname || '')).trim().split(/\s+/)[0] || ''
-  const kit = stripIdentifiers(String(parsed.kit || ''))
+  // Through the same resolver as every other path, so a spoken "E4 cages" on a
+  // PLIF names the cage rather than the distributor.
+  const kit = resolveKit(
+    stripIdentifiers(String(parsed.kit || '')),
+    String(parsed.procedure || ''))
 
   return {
     // Shown back to the person, so a misheard word is obvious rather than
