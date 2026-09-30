@@ -133,7 +133,49 @@ function Composer({ onSend, sending }) {
  */
 function Notifications({ user }) {
   const { state, busy, toggle } = usePush(user?.token)
-  if (state === 'unknown' || state === 'on') return null
+  const [tested, setTested] = useState('')
+  if (state === 'unknown') return null
+
+  // Once they are on, this gets out of the way — but not entirely. Nine people
+  // turn this on once, and the only other way to find out whether a phone is
+  // really registered is to wait for a colleague to send something, which is a
+  // poor way to discover it never was.
+  if (state === 'on') {
+    return (
+      <div style={{
+        ...text('caption'), color: colour.inkFainter, marginBottom: space.md,
+        display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap'
+      }}>
+        <span>Notifications are on for this device.</span>
+        <button
+          onClick={async () => {
+            setTested('sending')
+            try {
+              const res = await fetch('/api/push?action=test', {
+                headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+              })
+              const data = await res.json()
+              setTested(data.sent > 0 ? 'sent' : 'none')
+            } catch {
+              setTested('none')
+            }
+          }}
+          style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            ...text('caption'), fontWeight: 700, color: colour.accentDeep
+          }}>
+          Send a test
+        </button>
+        {tested === 'sending' && <span>Sending…</span>}
+        {tested === 'sent' && <span>Sent — it should appear in a moment.</span>}
+        {tested === 'none' && (
+          <span style={{ color: colour.warning }}>
+            Nothing was sent. Try turning them off and on again.
+          </span>
+        )}
+      </div>
+    )
+  }
 
   const said = {
     // In a Safari tab there is no push at all, and saying "not supported" would
