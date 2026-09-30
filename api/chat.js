@@ -2,7 +2,8 @@ import { requireSession } from './_auth.js'
 import {
   postMessage, readChannel, channelSizes, knownChannels, readMarkers, markRead
 } from './_redis.js'
-import { firstNameFor } from '../src/staffConfig.js'
+import { firstNameFor, STAFF } from '../src/staffConfig.js'
+import { notify, preview } from './_push.js'
 
 // ─── The internal channels ───────────────────────────────────────────────────
 // What the WhatsApp group does, inside the app that already holds the bookings
@@ -107,6 +108,32 @@ async function send(req, res, session) {
     // find out later how often that happens and whether the wording is working.
     warned: Boolean(body.warned)
   })
+
+  // The part that makes the channels worth having. Everyone but the sender —
+  // being notified about a message you just typed is how an app teaches people
+  // to turn notifications off.
+  //
+  // After the message is saved and outside its success. A push service having a
+  // bad morning must not lose somebody's message, so a failure here is silent
+  // and the send still succeeded.
+  const others = STAFF.map(person => person.email)
+    .filter(email => email.toLowerCase() !== String(session.email).toLowerCase())
+
+  const where = CHANNELS.find(c => c.id === channel)
+  await notify(others, {
+    // Who and where, so a lock screen says whether this is worth stopping for.
+    title: where ? `${saved.authorName} · ${where.name}` : `${saved.authorName} · this case`,
+    // The message itself. A notification you have to open the app to read is
+    // half a notification, and the running order at four o'clock is exactly the
+    // thing somebody needs off a lock screen. What is safe to put there is
+    // whatever the channels already allow — no patient identifiers, which the
+    // composer warns about before anything is sent. See src/chat/identifiers.js.
+    body: preview(text),
+    // One per channel, replaced rather than stacked: six messages in Spine is
+    // one conversation, not six things to clear.
+    tag: channel,
+    url: '/'
+  }).catch(() => {})
 
   return res.status(200).json({ ok: true, message: saved })
 }

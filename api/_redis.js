@@ -417,3 +417,42 @@ export async function readMarkers(email) {
 export async function markRead(email, channel, count) {
   await redis('hset', `chat:read:${email}`, channel, String(count))
 }
+
+// ─── PUSH SUBSCRIPTIONS ──────────────────────────────────────
+// One person, several devices: the phone on the Home Screen, the laptop in the
+// office. Kept as a hash keyed by endpoint so re-registering the same device
+// replaces its entry rather than adding a second one — a browser reissues an
+// endpoint after it expires, and without this a phone would accumulate dead
+// subscriptions and be written to several times for one message.
+
+const pushKey = email => `push:${String(email || '').trim().toLowerCase()}`
+
+/** Every device a person has turned notifications on for. */
+export async function pushSubscriptions(email) {
+  const all = await redis('hgetall', pushKey(email))
+  if (!all) return []
+  // Upstash returns a flat [field, value, field, value] array.
+  const entries = Array.isArray(all) ? all : Object.entries(all).flat()
+  const found = []
+  for (let i = 0; i < entries.length; i += 2) {
+    try { found.push(JSON.parse(entries[i + 1])) } catch { /* a bad row is not a reason to fail */ }
+  }
+  return found
+}
+
+export async function savePushSubscription(email, subscription) {
+  if (!subscription?.endpoint) return
+  await redis('hset', pushKey(email), subscription.endpoint, JSON.stringify(subscription))
+}
+
+/**
+ * Forgets one device.
+ *
+ * Called both when somebody turns notifications off and when the push service
+ * says an endpoint is gone. A subscription that has expired will never work
+ * again, and keeping it means retrying it forever.
+ */
+export async function removePushSubscription(email, endpoint) {
+  if (!endpoint) return
+  await redis('hdel', pushKey(email), endpoint)
+}

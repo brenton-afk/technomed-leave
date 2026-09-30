@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Page, Header, Body, SectionLabel, Banner } from '../design/Shell.jsx'
+import { Page, Header, Body, SectionLabel, Banner, Button } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { identifierWarning } from '../chat/identifiers.js'
+import { usePush } from '../push.js'
 
 // ─── The internal channels ───────────────────────────────────────────────────
 // What the WhatsApp group does, in the app that already holds the bookings the
@@ -118,6 +119,63 @@ function Composer({ onSend, sending }) {
         </button>
       </div>
     </div>
+  )
+}
+
+
+/**
+ * The switch that makes this worth opening.
+ *
+ * Offered rather than asked for. iOS refuses a permission prompt that did not
+ * come from a tap, and a refusal cannot be asked for again — it has to be undone
+ * in the phone's settings, which nobody will do. So the app never asks on its
+ * own; this does, when somebody chooses.
+ */
+function Notifications({ user }) {
+  const { state, busy, toggle } = usePush(user?.token)
+  if (state === 'unknown' || state === 'on') return null
+
+  const said = {
+    // In a Safari tab there is no push at all, and saying "not supported" would
+    // be both discouraging and untrue — it is one step away.
+    'not-installed': {
+      tone: 'info',
+      text: 'To get messages on your phone, add this to your Home Screen first — '
+        + 'the share button, then “Add to Home Screen”. Then open it from there.',
+      action: null
+    },
+    blocked: {
+      tone: 'warning',
+      text: 'Notifications are blocked for this app. That can only be undone in '
+        + 'your phone’s Settings — find TechnoMed and allow notifications.',
+      action: null
+    },
+    unsupported: {
+      tone: 'info',
+      text: 'This device cannot show notifications. Messages will still be here '
+        + 'when you open the app.',
+      action: null
+    },
+    off: {
+      tone: 'info',
+      text: 'Turn on notifications and this works like the WhatsApp group — '
+        + 'a message here reaches everyone’s phone.',
+      action: busy ? 'Just a moment…' : 'Turn on notifications'
+    }
+  }[state]
+
+  if (!said) return null
+
+  return (
+    <Banner
+      tone={said.tone}
+      action={said.action
+        ? (
+          <Button onClick={toggle} disabled={busy}>{said.action}</Button>
+        )
+        : undefined}>
+      {said.text}
+    </Banner>
   )
 }
 
@@ -269,6 +327,8 @@ export default function Chat({ user, onBack }) {
     <Page>
       <Header eyebrow="Team" title="Messages" subtitle="The group, where the bookings are" onBack={onBack} />
       <Body>
+        <Notifications user={user} />
+
         <SectionLabel>Channels</SectionLabel>
         {channels.map(channel => (
           <button key={channel.id} onClick={() => setOpen(channel)}
