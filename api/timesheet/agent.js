@@ -4,7 +4,8 @@ import {
   saveTimesheetDraft, getTimesheetDraft, clearTimesheetDraft,
   saveTimesheet, getTimesheet, getAllTimesheets
 } from '../_redis.js'
-import { fetchEarningsRates, categoriesForStaff } from '../_payItems.js'
+import { fetchEarningsRates, categoriesForStaff, CATEGORY_RULES } from '../_payItems.js'
+import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import { periodFor, currentPeriod, recentPeriods, isValidPeriodStart } from '../_fortnight.js'
@@ -31,6 +32,7 @@ export default async function handler(req, res) {
     if (action === 'mine') return await handleMine(req, res, session)
     if (action === 'list') return await handleList(req, res)
     if (action === 'decide') return await handleDecide(req, res)
+    if (action === 'payaudit') return await handlePayAudit(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     console.error(`timesheet/${action} failed:`, err.message)
@@ -54,6 +56,54 @@ function resolvePeriod(raw) {
   if (!raw) return currentPeriod()
   if (!isValidPeriodStart(raw)) throw badRequest('That is not the start of a fortnight')
   return periodFor(raw)
+}
+
+
+// ─── What each person will actually be offered ───────────────────────────────
+// Which pay items somebody sees is decided in two places that have to agree:
+// the earnings rates Xero holds, and the entitlement table in src/payOptions.js.
+// When they disagree nothing breaks and nothing is said — a category simply
+// does not appear on a timesheet, which looks identical to not being entitled
+// to it, and the first anybody hears is a short payslip.
+//
+// So this says it out loud, per person, in one place: what they will be
+// offered, what the table asks for that Xero has no rate for, and what Xero
+// offers that nobody is mapped to. Admin only — it is the whole payroll
+// arrangement on one screen.
+async function handlePayAudit(req, res) {
+  const session = await requireAdmin(req, res)
+  if (!session) return
+
+  const rates = await fetchEarningsRates()
+  const rateNames = rates.map(r => r.Name || r.name).filter(Boolean)
+
+  const people = STAFF.filter(s => s.hasTimesheets).map(person => {
+    const categories = categoriesForStaff(rates, person.email)
+    const got = new Set(categories.map(c => c.key))
+    return {
+      name: person.name,
+      email: person.email,
+      role: person.role,
+      // Checked against a contract by a person, or merely inherited from the
+      // default. The difference is the point of recording it.
+      reviewed: isReviewed(person.email),
+      offered: categories.map(c => ({ key: c.key, label: c.label, xeroName: c.xeroName })),
+      // Asked for in the table and not found in Xero. This is the one that
+      // costs somebody money.
+      missing: payItemsFor(person.email)
+        .filter(key => !got.has(key))
+        .map(key => ({ key, label: PAY_ITEMS[key] || key }))
+    }
+  })
+
+  return res.status(200).json({
+    ok: true,
+    people,
+    // Rates the org has that no rule recognises. Not an error — a new earnings
+    // rate is exactly what this should surface — but worth a look.
+    unmapped: rateNames.filter(name =>
+      !CATEGORY_RULES.some(rule => rule.pattern.test(name)))
+  })
 }
 
 // ─── payitems: categories for this staff member ────────────

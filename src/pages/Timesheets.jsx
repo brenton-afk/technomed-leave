@@ -361,7 +361,7 @@ export default function Timesheets({ user, onBack }) {
 
   if (error && !categories.length) {
     return (
-      <div style={{ padding: 16 }}>
+      <div className="tm-measure" style={{ padding: 16 }}>
         <div style={{ background: '#fdecea', color: '#c0392b', padding: 14, borderRadius: 10, fontSize: 14, lineHeight: 1.5 }}>{error}</div>
         <button onClick={boot} style={{ width: '100%', marginTop: 12, padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Try again</button>
       </div>
@@ -449,7 +449,7 @@ export default function Timesheets({ user, onBack }) {
         subtitle={period ? `${period.start} to ${period.end}` : undefined}
         onBack={onBack}
       />
-      <div style={{ padding: '14px 16px 0' }}>
+      <div className="tm-measure" style={{ padding: '14px 16px 0' }}>
         {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12 }}>{error}</div>}
 
         {alreadySubmitted && (

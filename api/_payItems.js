@@ -3,20 +3,27 @@
 // which categories a staff member sees, how each is coloured, and whether it is
 // measured in hours or callouts is decided here.
 import { getXeroToken } from './_xeroClient.js'
+import { payItemsFor } from '../src/payOptions.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
 // Matched against the Xero earnings rate name, most specific first — the two
 // Toni rates must be tested before the generic "Ordinary Hours".
+//
+// These say how a rate is *shown*: its label, whether it is measured in hours
+// or callouts, what colour it takes. They no longer say who gets it. Who gets
+// what is a business question and it is answered in one reviewable table, in
+// src/payOptions.js, rather than as onlyFor/notFor flags buried in a list of
+// regular expressions where nobody could check the policy.
 export const CATEGORY_RULES = [
-  { key: 'ordinary_toni_admin', pattern: /ordinary.*toni.*admin/i, label: 'Ordinary — Admin', kind: 'ordinary', unit: 'hours', colour: 'navy', onlyFor: ['toni@technomed.com.au'] },
-  { key: 'ordinary_toni_scientific', pattern: /ordinary.*toni.*scientific/i, label: 'Ordinary — Scientific', kind: 'ordinary', unit: 'hours', colour: 'blue', onlyFor: ['toni@technomed.com.au'] },
+  { key: 'ordinary_toni_admin', pattern: /ordinary.*toni.*admin/i, label: 'Ordinary — Admin', kind: 'ordinary', unit: 'hours', colour: 'navy' },
+  { key: 'ordinary_toni_scientific', pattern: /ordinary.*toni.*scientific/i, label: 'Ordinary — Scientific', kind: 'ordinary', unit: 'hours', colour: 'blue' },
   { key: 'overtime_double', pattern: /double\s*time|overtime.*(2x|double)/i, label: 'Overtime — Double', kind: 'overtime', unit: 'hours', colour: 'amber' },
   { key: 'overtime_1_5', pattern: /overtime/i, label: 'Overtime 1.5×', kind: 'overtime', unit: 'hours', colour: 'amber' },
   { key: 'toil_accrued', pattern: /toil/i, label: 'TOIL Accrued', kind: 'toil', unit: 'hours', colour: 'teal' },
   { key: 'call_in', pattern: /call\s*in/i, label: 'Call-In Allowance', kind: 'allowance', unit: 'count', colour: 'purple', hint: '$450 per callout' },
   { key: 'on_call', pattern: /on\s*call/i, label: 'On-Call Hours', kind: 'allowance', unit: 'hours', colour: 'purple', hint: '$4.50 per hour' },
-  { key: 'ordinary', pattern: /ordinary/i, label: 'Ordinary Hours', kind: 'ordinary', unit: 'hours', colour: 'navy', notFor: ['toni@technomed.com.au'] }
+  { key: 'ordinary', pattern: /ordinary/i, label: 'Ordinary Hours', kind: 'ordinary', unit: 'hours', colour: 'navy' }
 ]
 
 function classify(rateName) {
@@ -51,9 +58,11 @@ export function categoriesForStaff(earningsRates, staffEmail) {
   const seen = new Set()
   const categories = []
 
+  // What this person may claim. See src/payOptions.js.
+  const allowed = new Set(payItemsFor(email))
+
   for (const rule of CATEGORY_RULES) {
-    if (rule.onlyFor && !rule.onlyFor.includes(email)) continue
-    if (rule.notFor && rule.notFor.includes(email)) continue
+    if (!allowed.has(rule.key)) continue
 
     const match = earningsRates.find(r => {
       const id = r.EarningsRateID || r.earningsRateID
