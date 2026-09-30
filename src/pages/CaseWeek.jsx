@@ -370,6 +370,12 @@ function DayPanel({ day, onOpen, onReorder }) {
     return cases.slice().sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
   }
 
+  // A called-off case is not in the running order. It keeps its place on the
+  // screen, because the team needs to know it was booked and who was driving to
+  // it, but the calendar closes up around it — so it takes no number here
+  // either, or the card would say third while the calendar said second.
+  const running = cases => inOrder(cases).filter(c => !c.cancelled)
+
   /**
    * Swaps a case with its neighbour in the same hospital.
    *
@@ -378,7 +384,7 @@ function DayPanel({ day, onOpen, onReorder }) {
    * day still goes to the server, since the calendar lays the day out end to end.
    */
   const moveWithin = (group, index) => (dir, probe) => {
-    const list = inOrder(group.cases)
+    const list = running(group.cases)
     const to = index + dir
     if (to < 0 || to >= list.length) return false
     if (probe) return true
@@ -387,7 +393,7 @@ function DayPanel({ day, onOpen, onReorder }) {
     next[index] = list[to]
     next[to] = list[index]
     const wanted = groups
-      .flatMap(g => (g.hospital === group.hospital ? next : inOrder(g.cases)))
+      .flatMap(g => (g.hospital === group.hospital ? next : running(g.cases)))
       .map(c => c.id)
 
     setOverride(wanted)
@@ -438,9 +444,10 @@ function DayPanel({ day, onOpen, onReorder }) {
 
       {groups.map(group => {
         const cases = inOrder(group.cases)
+        const list = running(group.cases)
         // One case is not an order, and two hospitals with one case each is not
         // an order either. The arrows appear where there is something to order.
-        const ordering = Boolean(onReorder) && cases.length > 1
+        const ordering = Boolean(onReorder) && list.length > 1
         return (
           <div key={group.hospital}>
             <Heading>{group.hospital} · {cases.length} case{cases.length === 1 ? '' : 's'}</Heading>
@@ -452,12 +459,16 @@ function DayPanel({ day, onOpen, onReorder }) {
                 In list order. Move a case with the arrows and the calendar follows.
               </div>
             )}
-            {cases.map((c, i) => (
-              <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
-                position={ordering ? i : undefined}
-                onMove={ordering ? moveWithin(group, i) : undefined}
-                busy={busy} />
-            ))}
+            {cases.map(c => {
+              const at = list.indexOf(c)
+              const numbered = ordering && at >= 0
+              return (
+                <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
+                  position={numbered ? at : undefined}
+                  onMove={numbered ? moveWithin(group, at) : undefined}
+                  busy={busy} />
+              )
+            })}
           </div>
         )
       })}

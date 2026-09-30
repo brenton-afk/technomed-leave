@@ -548,6 +548,25 @@ describe('the running order', () => {
     await waitFor(() => expect(order()).toEqual(['Pearse', 'Chalmers']))
   })
 
+  it('leaves a called-off case out of the order', async () => {
+    // It keeps its place on screen — the team needs to know it was booked and
+    // who may already be driving to it — but the calendar closes up around a
+    // cancelled case, so numbering it would have the card say third while the
+    // calendar said second.
+    const off = ev('c8', 'CANCELLED Mackey DIPLOMAT - Fowler',
+      'Surg: Fowler\nPt: Mackey\nHosp: RHH\nKit: Diplomat (Consignment)', { at: '09:30' })
+    events = [...BOOKINGS, off, second]
+    show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+
+    expect(screen.getByText('Mackey')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Mackey.*the list/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
+    await waitFor(() => expect(posted()).toBeTruthy())
+    expect(JSON.parse(posted()[1].body).order).toEqual(['c9', 'c1'])
+  })
+
   it('does not offer to reorder a hospital with one case', async () => {
     events = BOOKINGS
     show()
