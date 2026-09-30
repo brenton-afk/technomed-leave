@@ -567,6 +567,29 @@ describe('the running order', () => {
     expect(JSON.parse(posted()[1].body).order).toEqual(['c9', 'c1'])
   })
 
+  it("orders tomorrow's list from the week, which is where you look ahead", async () => {
+    // This is the case it exists for. The hospital rings about four o'clock
+    // about tomorrow, never about today, and the app opens on today — so the
+    // one thing this was built for must not be the awkward one.
+    const alsoTomorrow = ev('c7', 'Vowles DIPLOMAT - Atallah',
+      'Surg: Atallah\nPt: Vowles\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)',
+      { day: '22', at: '11:00' })
+    events = [...BOOKINGS, alsoTomorrow]
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+
+    await waitFor(() => expect(screen.getByText('Vowles')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Move Vowles up the list'))
+
+    await waitFor(() => expect(posted()).toBeTruthy())
+    // Tomorrow's date, not today's. The whole day goes, RHH reordered and
+    // Calvary behind it untouched — the calendar lays a day out end to end,
+    // even though the running order itself belongs to one hospital's list.
+    expect(posted()[0]).toContain('date=2026-09-22')
+    expect(JSON.parse(posted()[1].body).order).toEqual(['c7', 'c2', 'c3'])
+  })
+
   it('does not offer to reorder a hospital with one case', async () => {
     events = BOOKINGS
     show()

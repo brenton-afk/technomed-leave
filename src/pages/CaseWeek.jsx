@@ -856,7 +856,12 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 </span>
               )}
             </button>
-            <DayPanel day={day} onOpen={setEditing} />
+            {/* Orderable here too. The running order is always set for a day
+                that is not today — the hospital rings about four o'clock about
+                tomorrow — and the week is where anybody looks ahead. Having to
+                find the day first, in a view that had no arrows, meant the one
+                thing this was built for was the awkward one. */}
+            <DayPanel day={day} onOpen={setEditing} onReorder={reorder} />
           </div>
         ))}
 
