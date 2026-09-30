@@ -57,7 +57,12 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
 
   function submit() {
     setSubmitting(true); setError('')
-    axios.post('/api/submit', form)
+    axios.post('/api/submit', form, {
+      // The endpoint is behind the session now. The employee is taken from that
+      // session server-side rather than from this form, which only ever showed
+      // the signed-in person's own name.
+      headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+    })
       .then(() => { if (onSuccess) onSuccess(form) })
       .catch(e => { setError(e.response?.data?.error || 'Submission failed. Please try again.'); setSubmitting(false) })
   }

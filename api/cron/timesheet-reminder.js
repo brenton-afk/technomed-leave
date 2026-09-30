@@ -9,12 +9,16 @@ import { sendSms, toE164, twilioConfigured } from '../_twilio.js'
 // held in UTC because that is what Vercel accepts; shifting it seasonally would
 // need two crons and the Hobby plan allows two in total.
 export default async function handler(req, res) {
-  // Vercel signs cron invocations with CRON_SECRET when it is set. Without this
-  // the endpoint would let anyone trigger an SMS run.
+  // Vercel signs cron invocations with CRON_SECRET. This used to check the
+  // signature only when the secret happened to be set, which meant a missing
+  // environment variable silently opened the endpoint — and this endpoint texts
+  // every member of staff. An unset secret is now a refusal, not a waiver: a
+  // reminder that does not go out is a Monday morning problem, and one anybody
+  // on the internet can send at three in the morning is a worse one.
   const secret = process.env.CRON_SECRET
-  if (secret) {
-    const auth = req.headers?.authorization || ''
-    if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorised' })
+  if (!secret) return res.status(503).json({ error: 'CRON_SECRET is not configured' })
+  if ((req.headers?.authorization || '') !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'Unauthorised' })
   }
 
   try {

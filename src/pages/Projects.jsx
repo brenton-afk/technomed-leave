@@ -26,6 +26,10 @@ function formatElapsed(seconds) {
 }
 
 export default function Projects({ user, onBack }) {
+  // Every call below carries this. The endpoint behind them holds meeting
+  // recordings, their transcripts and the shared worklist, and until now none
+  // of it asked who was calling.
+  const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
   // recording state machine: idle | recording | uploading | transcribing | analyzing | reviewing | sending | sent
   const [phase, setPhase] = useState('idle')
   const [meetingTitle, setMeetingTitle] = useState('')
@@ -50,7 +54,7 @@ export default function Projects({ user, onBack }) {
   async function loadWorklist() {
     setLoadingBoard(true)
     try {
-      const res = await fetch('/api/meetings/agent?action=worklist')
+      const res = await fetch('/api/meetings/agent?action=worklist', { headers: auth })
       const data = await res.json()
       setWorklist(data.items || [])
     } catch (err) {
@@ -97,13 +101,17 @@ export default function Projects({ user, onBack }) {
     try {
       const uploaded = await upload(`meetings/${Date.now()}.webm`, blob, {
         access: 'public',
-        handleUploadUrl: '/api/meetings/agent?action=blob-upload'
+        handleUploadUrl: '/api/meetings/agent?action=blob-upload',
+        // The SDK builds its own request, so the session cannot ride on a
+        // header. This is the field that exists for it, and the server checks
+        // it before handing out an upload token.
+        clientPayload: JSON.stringify({ token: user?.token || null })
       })
 
       setPhase('transcribing')
       const startRes = await fetch('/api/meetings/agent?action=start-transcription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({ audioUrl: uploaded.url })
       })
       const startData = await startRes.json()
@@ -114,7 +122,7 @@ export default function Projects({ user, onBack }) {
       setPhase('analyzing')
       const analyzeRes = await fetch('/api/meetings/agent?action=analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({
           transcript,
           meetingTitle: meetingTitle.trim() || 'Untitled meeting',
@@ -139,7 +147,7 @@ export default function Projects({ user, onBack }) {
     return new Promise((resolve, reject) => {
       const poll = async () => {
         try {
-          const res = await fetch(`/api/meetings/agent?action=status&id=${transcriptId}`)
+          const res = await fetch(`/api/meetings/agent?action=status&id=${transcriptId}`, { headers: auth })
           const data = await res.json()
           if (data.status === 'completed') return resolve(data.transcript)
           if (data.status === 'error') return reject(new Error(data.error || 'Transcription failed'))
@@ -166,7 +174,7 @@ export default function Projects({ user, onBack }) {
     try {
       const res = await fetch('/api/meetings/agent?action=finalize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({
           meetingId,
           actionItems: draftItems.map(({ _localId, ...rest }) => rest)
@@ -204,7 +212,7 @@ export default function Projects({ user, onBack }) {
     try {
       await fetch('/api/meetings/agent?action=worklist', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({ id, status })
       })
     } catch (err) {
@@ -215,7 +223,7 @@ export default function Projects({ user, onBack }) {
   async function deleteItem(id) {
     setWorklist(items => items.filter(it => it.id !== id))
     try {
-      await fetch(`/api/meetings/agent?action=worklist&id=${id}`, { method: 'DELETE' })
+      await fetch(`/api/meetings/agent?action=worklist&id=${id}`, { method: 'DELETE', headers: auth })
     } catch (err) {
       console.error(err)
     }
