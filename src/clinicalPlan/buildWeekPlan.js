@@ -13,6 +13,7 @@ import {
   formatWeekRange, formatDayHeading, weekdayName, formatTimeRange,
   zonedCivil, parseDateStr, TZ
 } from './week.js'
+import { bySession } from './listPlace.js'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
@@ -144,7 +145,11 @@ function groupByHospital(cases) {
   order.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
   return order.map(hospital => ({
     hospital,
-    cases: map.get(hospital).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)))
+    // By the clock first, which is the order the calendar was laid out in, and
+    // then by the running order the hospital gave us where anybody has recorded
+    // one. A recorded place beats an assumed one.
+    cases: bySession(
+      map.get(hospital).slice().sort((a, b) => String(a.start).localeCompare(String(b.start))))
   }))
 }
 
@@ -312,6 +317,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // dropped — see leftoverOf in parse.js.
         unread: read.unread || undefined,
         navigation: read.navigation,
+        // Where we are on the hospital's running order, once somebody has rung
+        // and been told. The fact that decides who is on site at half seven.
+        listPlace: read.listPlace,
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,
         end: event.end,

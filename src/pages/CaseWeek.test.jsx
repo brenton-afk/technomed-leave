@@ -598,3 +598,84 @@ describe('the running order', () => {
     expect(screen.queryByLabelText(/up the list/)).not.toBeInTheDocument()
   })
 })
+
+describe('where we are on the hospital\'s list', () => {
+  // The two cases that showed the first attempt was wrong. Barr is first up but
+  // on an afternoon list. Thompson is second up on JPW's list behind a PLIF
+  // using KT Medical kit we are not at, so we are wanted about one o'clock.
+  // Neither is expressible by moving our own cases past each other, and both
+  // are the only case of ours at that hospital that day.
+
+  const barr = ev('c20', 'Barr DIPLOMAT - Dubey',
+    'Surg: Dubey\nPt: Barr\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)\n'
+    + 'List: 1st · afternoon',
+    { day: '22' })
+
+  const thompson = ev('c21', 'Thompson DIPLOMAT - JPW',
+    'Surg: JPW\nPt: Thompson\nHosp: Calvary\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)\n'
+    + 'List: 2nd · afternoon · from 1pm · after a PLIF — KT Medical, not ours',
+    { day: '22', location: 'Calvary' })
+
+  beforeEach(() => { events = [...BOOKINGS, barr, thompson] })
+
+  it('reads the place off the booking and says it on the card', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    expect(screen.getByText('1st on the list · PM')).toBeInTheDocument()
+    expect(screen.getByText('2nd on the list · PM · from 1pm')).toBeInTheDocument()
+    expect(screen.getByText('after a PLIF — KT Medical, not ours')).toBeInTheDocument()
+  })
+
+  it('does not show the line back as an unread note', async () => {
+    // Every labelled field the app understands is consumed. A "List:" line
+    // repeated underneath the card as prose is exactly the raw-text noise the
+    // app was asked to stop showing.
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    expect(screen.queryByText(/^List:/)).not.toBeInTheDocument()
+  })
+
+  it('offers to set it even where it is our only case at that hospital', async () => {
+    // The gap that made the arrows useless: nothing to move Thompson past.
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    expect(screen.getByLabelText('Set where Thompson is on the list')).toBeInTheDocument()
+    expect(screen.getByLabelText('Set where Barr is on the list')).toBeInTheDocument()
+  })
+
+  it('saves what the sheet was told, onto the booking', async () => {
+    global.fetch = vi.fn(async url => (
+      String(url).includes('action=listplace')
+        ? { ok: true, json: async () => ({ ok: true }) }
+        : { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+    ))
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Set where Thompson is on the list'))
+    await waitFor(() => expect(screen.getByText('List order')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: '3rd' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Morning' }))
+    fireEvent.click(screen.getByRole('button', { name: /Save list order/ }))
+
+    await waitFor(() => {
+      const call = global.fetch.mock.calls.find(([u]) => String(u).includes('action=listplace'))
+      expect(call).toBeTruthy()
+      expect(JSON.parse(call[1].body)).toMatchObject({
+        eventId: 'c21',
+        place: { position: 3, session: 'morning' }
+      })
+    })
+  })
+})

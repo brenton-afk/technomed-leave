@@ -15,7 +15,8 @@ const MIGRATED = [
   'KitRoom.jsx', 'Projects.jsx', 'Timesheets.jsx',
   'LeaveForm.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx',
   'Cases.jsx', 'TeamLeader.jsx', 'CaseWeek.jsx', 'cases/EditBooking.jsx', 'cases/NewBooking.jsx',
-  'cases/BookingQueue.jsx', 'cases/DictateBooking.jsx', 'TheatreGuides.jsx',
+  'cases/BookingQueue.jsx', 'cases/DictateBooking.jsx', 'cases/ListPlace.jsx',
+  'TheatreGuides.jsx',
   'Chat.jsx'
 ]
 

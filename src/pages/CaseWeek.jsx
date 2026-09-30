@@ -13,6 +13,8 @@ import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinical
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
+import ListPlace from './cases/ListPlace.jsx'
+import { describeListPlace } from '../clinicalPlan/listPlace.js'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -117,11 +119,12 @@ const KIND_TONE = {
  * Everything the booking says, in one place: who, what, with which system, how
  * it is supplied, what extra kit, and whatever the team wrote in the notes.
  */
-function CaseCard({ surgicalCase, onOpen, position, onMove, busy }) {
+function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) {
   const off = Boolean(surgicalCase.cancelled)
   const bar = off ? colour.inkFainter : accentForCase(surgicalCase)
   const nameInk = off ? colour.inkFaint : accentTextForCase(surgicalCase)
   const ordering = typeof position === 'number' && Boolean(onMove)
+  const place = describeListPlace(surgicalCase.listPlace)
 
   return (
     <div
@@ -194,6 +197,23 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy }) {
           </span>
         )}
 
+        {/* Before the operation, because it is the part that decides what time
+            somebody sets an alarm for. A case can be routine and still have the
+            team on the road at half six because it is first up. */}
+        {place && !off && (
+          <span style={{ display: 'block', marginTop: 3 }}>
+            <span style={{
+              ...text('bodyStrong'),
+              color: place.headline.includes('1st') ? colour.warning : colour.accentDeep
+            }}>{place.headline}</span>
+            {place.ahead && (
+              <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
+                {place.ahead}
+              </span>
+            )}
+          </span>
+        )}
+
         {/* The operation leads: "C5/6 ACDF" says more about a case than the
             implant system does. */}
         {surgicalCase.operation && (
@@ -244,6 +264,27 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy }) {
             {note.text}
           </span>
         ))}
+        {/* Always offered, whether or not anything is recorded — including on a
+            day where this is our only case at that hospital, which is exactly
+            where the arrows can say nothing and the list order still matters. */}
+        {onSetPlace && !off && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={`Set where ${surgicalCase.patient} is on the list`}
+            onClick={e => { e.stopPropagation(); onSetPlace(surgicalCase) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault(); e.stopPropagation(); onSetPlace(surgicalCase)
+              }
+            }}
+            style={{
+              display: 'inline-block', marginTop: space.xs, cursor: 'pointer',
+              ...text('caption'), color: colour.accentDeep, fontWeight: 600
+            }}>
+            {place ? 'Change list order' : 'Set list order'}
+          </span>
+        )}
       </button>
 
       {ordering && (
@@ -353,7 +394,7 @@ function Heading({ children }) {
  * calendar's order — moving a case here moves the calendar entry — so there is
  * one running order and everybody is reading it.
  */
-function DayPanel({ day, onOpen, onReorder }) {
+function DayPanel({ day, onOpen, onReorder, onSetPlace }) {
   const groups = day.casesByHospital || []
   // The order shown before the calendar has caught up. A round trip to Google
   // and back takes a couple of seconds on a hospital connection, and an arrow
@@ -466,6 +507,7 @@ function DayPanel({ day, onOpen, onReorder }) {
                 <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
                   position={numbered ? at : undefined}
                   onMove={numbered ? moveWithin(group, at) : undefined}
+                  onSetPlace={onSetPlace}
                   busy={busy} />
               )
             })}
@@ -522,6 +564,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
   const [notice, setNotice] = useState('')
+  // The case whose place on the hospital's list is being recorded.
+  const [placing, setPlacing] = useState(null)
   // Sub-calendars the week could not read. Leave lives on one of them, and an
   // unreadable leave calendar is indistinguishable from an empty one.
   const [sourceErrors, setSourceErrors] = useState([])
@@ -575,6 +619,23 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     } catch {
       setNotice('The order did not save. Check the connection and try again.')
     }
+  }, [token, load, window_])
+
+  /**
+   * Records where one case sits on the hospital's list.
+   *
+   * Written onto the booking, so it reads the same in Google as it does here.
+   * The day re-packs around it afterwards, which is why the plan is reloaded
+   * rather than patched in place.
+   */
+  const setListPlace = useCallback(async (eventId, place) => {
+    const res = await fetch('/api/calendar/today?action=listplace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ eventId, place })
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'That did not save')
+    await load(window_, { quiet: true })
   }, [token, load, window_])
 
   const remember = next => writePrefs({ ...readPrefs(), ...next })
@@ -830,7 +891,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             </div>
             <AddBookingRow day={activeDay} onAdd={setAdding} />
             {dayPlan
-              ? <DayPanel day={dayPlan} onOpen={setEditing} onReorder={reorder} />
+              ? <DayPanel day={dayPlan} onOpen={setEditing} onReorder={reorder}
+                  onSetPlace={setPlacing} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}
@@ -861,7 +923,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 tomorrow — and the week is where anybody looks ahead. Having to
                 find the day first, in a view that had no arrows, meant the one
                 thing this was built for was the awkward one. */}
-            <DayPanel day={day} onOpen={setEditing} onReorder={reorder} />
+            <DayPanel day={day} onOpen={setEditing} onReorder={reorder}
+              onSetPlace={setPlacing} />
           </div>
         ))}
 
@@ -896,6 +959,13 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           </>
         )}
       </div>
+
+      {placing && (
+        <ListPlace
+          surgicalCase={placing}
+          onSave={place => setListPlace(placing.id, place)}
+          onClose={() => setPlacing(null)} />
+      )}
 
       {adding && (
         <NewBooking

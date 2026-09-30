@@ -29,7 +29,11 @@ export const LABELS = {
   // event's own start time, and the team writing "Date: 22/9/26" in the notes is
   // restating it. Without this it survived as an unclaimed line and would have
   // been shown back to them as a note.
-  date: ['date']
+  date: ['date'],
+  // Where we are on the hospital's running order — "2nd · afternoon · from 1pm".
+  // Read by src/clinicalPlan/listPlace.js, which owns what the line means. Named
+  // here so it is consumed rather than repeated underneath the card as prose.
+  list: ['list']
 }
 
 // Longest first, so "Procedure" is not matched as "Proc" and "Surgeon" is never

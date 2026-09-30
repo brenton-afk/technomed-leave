@@ -34,6 +34,7 @@ import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
+import { cleanListPlace, withListPlace, bySession } from '../../src/clinicalPlan/listPlace.js'
 import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
   readFiledCase, priorImplantsFor, describePrior
@@ -79,6 +80,7 @@ export default async function handler(req, res) {
   if (req.query.action === 'dictate') return handleDictate(req, res)
   // The running order of a theatre list, taken on the evening ring-round.
   if (req.query.action === 'reorder') return handleReorder(req, res)
+  if (req.query.action === 'listplace') return handleListPlace(req, res)
   // Calling a case off, and putting it back on.
   if (req.query.action === 'cancel') return handleCancel(req, res)
   // What this patient already has in, for a revision or a removal.
@@ -766,7 +768,16 @@ async function tidyDay(date, preferred = null) {
       // running order — the day should close up around it, the same as if it
       // had been deleted.
       return read?.patient && !isCancelled(e.summary || '', e.description || '')
-        ? { id: e.id, etag: e.etag, surgeon: read.surgeon || '', from: e.start.dateTime.slice(11, 16) }
+        ? {
+          id: e.id,
+          etag: e.etag,
+          surgeon: read.surgeon || '',
+          // Where the hospital said we sit. The day is packed in that order
+          // where anybody has recorded one — that is the whole point of having
+          // rung them — and in the order it already held where nobody has.
+          listPlace: read.listPlace,
+          from: e.start.dateTime.slice(11, 16)
+        }
         : null
     })
     .filter(Boolean)
@@ -774,7 +785,7 @@ async function tidyDay(date, preferred = null) {
   // A running order, when the team has just set one. Anything the order does
   // not name keeps its place behind what it does — a case booked after the
   // hospital rang should not shove the list about on its way in.
-  const ordered = inPreferredOrder(cases, preferred)
+  const ordered = inPreferredOrder(bySession(cases), preferred)
 
   const slots = layOutDay(ordered)
   let moved = 0
@@ -1157,6 +1168,67 @@ async function handleReorder(req, res) {
     const { moved } = await tidyDay(date, order)
     return res.status(200).json({ ok: true, moved })
   } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * Records where a case sits on the hospital's running order.
+ *
+ * The one fact the team leader collects every afternoon and could not put
+ * anywhere: which number we are on that hospital's list, whether it is the
+ * morning or the afternoon list, when we are wanted, and what is ahead of us.
+ *
+ * Note the difference from reordering. Moving cases past each other can only
+ * say where ours sit relative to each other, and most days we have one case at
+ * a hospital — Thompson is second up on JPW's Thursday list behind a PLIF using
+ * KT Medical kit we are not at, and there is nothing to move him past. The
+ * number is the fact; the order is a consequence of it.
+ *
+ * Written onto the booking, not into a store beside it, so it reads the same in
+ * Google Calendar as it does in the app and there is no second copy to drift.
+ */
+async function handleListPlace(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const eventId = String(body.eventId || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' })
+
+    // Null clears it. A running order taken down wrongly at four o'clock is
+    // corrected at half past, and leaving no way back would mean the app kept
+    // insisting on something the team knows is wrong.
+    const place = body.place === null ? null : cleanListPlace(body.place || {})
+
+    const current = await getCalendarEvent(eventId)
+    // Through stripIdentifiers, because "what is ahead of us" is free prose and
+    // free prose is exactly where somebody types a patient's full name.
+    const safe = place && {
+      ...place,
+      from: stripIdentifiers(place.from),
+      ahead: stripIdentifiers(place.ahead)
+    }
+
+    const saved = await updateCalendarEvent(eventId, {
+      description: withListPlace(current.description || '', safe)
+    }, { etag: body.etag })
+
+    // The day re-packs around it: morning before afternoon, then by number.
+    const day = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
+    if (day) await tidyDay(day).catch(() => {})
+
+    return res.status(200).json({
+      ok: true,
+      place: safe,
+      event: { id: saved.id, etag: saved.etag || null }
+    })
+  } catch (err) {
+    if (err.code === 'conflict') {
+      return res.status(409).json({ error: err.message, code: 'conflict' })
+    }
     return res.status(500).json({ error: err.message })
   }
 }

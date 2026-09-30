@@ -2,6 +2,7 @@ import { STAFF } from '../staffConfig.js'
 import { findSystems, findLoanSets, systemWords, findNavigation, resolveKit } from './systems.js'
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 import { isPreOpNoise } from './preOpNoise.js'
+import { parseListPlace } from './listPlace.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -949,6 +950,10 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     // A labelled booking has said everything on the system line already.
     kit,
     hospital: hospitalCode(labelled.hospital),
+    // Where we are on that hospital's list, when somebody has rung and been
+    // told. Not inferred from anything — an invented running order is worse
+    // than a blank one, because nobody would know to check it.
+    listPlace: parseListPlace(labelled.list) || undefined,
     navigation: findNavigation(everything).join(' + ') || undefined,
     // Who attended, or who is covering it. The calendar carries this and the
     // app was dropping it. Two reps on one case is normal.
