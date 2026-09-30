@@ -3,7 +3,7 @@ import { Page, Header, Body, NavCard, SectionLabel, Banner } from '../design/She
 import { colour, text, space } from '../design/tokens.js'
 import {
   IconKit, IconStock, IconFolder, IconTasks,
-  IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout
+  IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout, IconAdmin
 } from '../design/icons.jsx'
 
 // ─── Section hubs ─────────────────────────────────────────────────────────────
@@ -33,9 +33,8 @@ export function KitHub({ user, onNavigate }) {
           onClick={() => onNavigate({ tab: 'kit', sub: 'resources' })} />
 
         <SectionLabel>Team</SectionLabel>
-        <NavCard icon={IconTasks} label="Messages"
-          detail="The group, where the bookings are"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'messages' })} />
+        {/* Messages used to be here. It has its own tab now — a conversation is
+            not something anybody goes looking for in a kit menu. */}
         <NavCard icon={IconTasks} label="Projects & actions"
           detail="Meeting notes and the shared worklist"
           onClick={() => onNavigate({ tab: 'kit', sub: 'projects' })} />
@@ -55,7 +54,21 @@ export function MeHub({ user, onNavigate, onLogout }) {
         subtitle={user?.email}
       />
       <Body>
-        <SectionLabel style={{ marginTop: 0 }}>Pay and time</SectionLabel>
+        {/* Admin moved off the bottom bar to make room for Messages. Five is
+            the limit a bottom bar stays scannable at; an admin is one of two
+            people and knows where to look, while Messages is for all nine
+            several times a day. First card here, so it is no further away
+            than a tab was. */}
+        {user?.isAdmin && (
+          <>
+            <SectionLabel style={{ marginTop: 0 }}>Administration</SectionLabel>
+            <NavCard icon={IconAdmin} label="Admin portal" tone="accent"
+              detail="Staff, PINs, approvals and system status"
+              onClick={() => onNavigate({ tab: 'admin', sub: null })} />
+            <SectionLabel>Pay and time</SectionLabel>
+          </>
+        )}
+        {!user?.isAdmin && <SectionLabel style={{ marginTop: 0 }}>Pay and time</SectionLabel>}
         <NavCard icon={IconClock} label="Timesheets" tone="accent"
           detail={hasTimesheets ? 'Fortnightly hours for payroll' : 'Not required for your role'}
           disabled={!hasTimesheets}

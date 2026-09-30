@@ -28,21 +28,47 @@ beforeEach(() => {
 })
 
 describe('bottom navigation', () => {
-  it('shows five tabs for an admin', async () => {
+  it('shows the same five tabs to everybody', async () => {
+    // Including the admin. Admin used to hold the fifth slot and now lives at
+    // the top of Me: five is the limit a bottom bar stays scannable at, an
+    // admin is one of two people, and Messages is for all nine several times a
+    // day. Everyone seeing the same bar is worth something on its own — it is
+    // one app to explain rather than two.
     signIn(ADMIN)
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Cases', 'Scan', 'Kit', 'Me', 'Admin'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Messages', 'Kit', 'Me'])
   })
 
-  it('hides Admin from everyone else', () => {
+  it('shows a rep the same bar', () => {
     signIn(REP)
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Cases', 'Scan', 'Kit', 'Me'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Messages', 'Kit', 'Me'])
     expect(labels).not.toContain('Admin')
+  })
+
+  it('still gets an admin to the admin portal, from Me', () => {
+    signIn(ADMIN)
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Me' }))
+    expect(screen.getByText('Admin portal')).toBeInTheDocument()
+  })
+
+  it('does not offer the admin portal to anybody else', () => {
+    signIn(REP)
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Me' }))
+    expect(screen.queryByText('Admin portal')).not.toBeInTheDocument()
+  })
+
+  it('opens Messages from the bar', () => {
+    signIn(REP)
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Messages' }))
+    expect(screen.getByText('Channels')).toBeInTheDocument()
   })
 
   it('never exceeds five tabs — the point of the restructure', () => {

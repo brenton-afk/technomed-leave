@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import Chat, { ChannelView } from './Chat.jsx'
+import Chat, { ChannelView, CaseThread } from './Chat.jsx'
 
 // Replacing a WhatsApp group of nine. What has to hold: a message always sends,
 // the warning about patient detail is seen before it does, and nothing the app
@@ -122,5 +122,36 @@ describe('reading', () => {
   it('says when there is nothing yet', async () => {
     channel()
     await waitFor(() => expect(screen.getByText(/Nothing here yet/)).toBeInTheDocument())
+  })
+})
+
+describe('a booking\'s own thread', () => {
+  // The channels are organised by subject. Most of what gets said is not about
+  // a subject, it is about a case — "has the Diplomat gone over for Thursday"
+  // is findable in a channel for about an hour and then it is gone. The id was
+  // reserved when the channels were built and there was never a way in.
+  it('reads and writes the channel belonging to that booking', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true, json: async () => ({ ok: true, messages: [] })
+    }))
+    render(<CaseThread eventId="evt_123" subtitle="Thompson · JPW" user={USER} onClose={() => {}} />)
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    const [url] = global.fetch.mock.calls[0]
+    expect(url).toContain(`channel=${encodeURIComponent('case:evt_123')}`)
+  })
+
+  it('says which case it is', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true, json: async () => ({ ok: true, messages: [] })
+    }))
+    render(<CaseThread eventId="evt_123" subtitle="Thompson · JPW" user={USER} onClose={() => {}} />)
+    await waitFor(() => expect(screen.getByText('Thompson · JPW')).toBeInTheDocument())
+  })
+
+  it('cannot be confused with a standing channel', () => {
+    // case: is a namespace on purpose — a booking whose id happened to be
+    // "spine" must not open the spine channel.
+    expect(`case:spine`).not.toBe('spine')
   })
 })

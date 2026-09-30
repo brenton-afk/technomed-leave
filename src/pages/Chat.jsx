@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Page, Header, Body, SectionLabel, Banner, Button } from '../design/Shell.jsx'
+import { Page, Header, Body, SectionLabel, Banner, Button, Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { identifierWarning } from '../chat/identifiers.js'
 import { usePush } from '../push.js'
@@ -444,8 +444,39 @@ export function ChannelView({ channel, title, subtitle, user, onBack }) {
   )
 }
 
+
+/**
+ * A booking's own thread, opened from the booking.
+ *
+ * The channels are organised by subject — spine, logistics, theatre lists — and
+ * most of what gets said is not about a subject, it is about a case. "Has the
+ * Diplomat gone over for Thursday", asked in a channel, is findable for about
+ * an hour and then it is gone; asked here it is still attached to the booking
+ * in six months when somebody asks why the case moved.
+ *
+ * The id was reserved when the channels were built (caseChannel in api/chat.js)
+ * and there has never been a way in. This is the way in.
+ */
+export function CaseThread({ eventId, subtitle, user, onClose }) {
+  return (
+    <Overlay>
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 3100, background: colour.canvas,
+        display: 'flex', flexDirection: 'column'
+      }}>
+        <ChannelView
+          channel={`case:${eventId}`}
+          title="Case messages"
+          subtitle={subtitle}
+          user={user}
+          onBack={onClose} />
+      </div>
+    </Overlay>
+  )
+}
+
 /** The channel list. */
-export default function Chat({ user, onBack }) {
+export default function Chat({ user, onBack, onRead }) {
   const [overview, setOverview] = useState(null)
   const [open, setOpen] = useState(null)
 
@@ -471,7 +502,7 @@ export default function Chat({ user, onBack }) {
         title={open.name}
         subtitle={open.detail}
         user={user}
-        onBack={() => { setOpen(null); load() }} />
+        onBack={() => { setOpen(null); load(); onRead?.() }} />
     )
   }
 

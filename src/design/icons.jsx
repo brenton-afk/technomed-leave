@@ -142,6 +142,15 @@ export const IconTasks = p => (
   </Svg>
 )
 
+// A speech bubble. Drawn on the same 24px grid and the same single stroke as
+// the rest, so it sits in the bottom bar as one of the family rather than as
+// something borrowed.
+export const IconChat = p => (
+  <Svg {...p}>
+    <path d="M20 12.5c0 3.6-3.6 6.5-8 6.5a9.7 9.7 0 0 1-2.6-.35L4.5 20.5l1.2-3.1A6.1 6.1 0 0 1 4 12.5C4 8.9 7.6 6 12 6s8 2.9 8 6.5Z" />
+  </Svg>
+)
+
 export const IconChevron = p => (
   <Svg {...p}><path d="M9.5 6l6 6-6 6" /></Svg>
 )
