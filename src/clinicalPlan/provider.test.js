@@ -75,3 +75,46 @@ describe('what the week now says', () => {
     expect(notes.some(n => /COLOUR-CODING/.test(n.text))).toBe(false)
   })
 })
+
+describe('what counts as the plan having changed', () => {
+  // The plan is only put on screen when this string changes, so anything left
+  // out of it can change in Google and never reach anybody. The running order
+  // is the sharpest case: recording one changes nothing else on the card, so
+  // leaving it out meant the order was written to the calendar and the app then
+  // discarded the reply as identical. The button worked and the screen did not
+  // move, which is indistinguishable from the button not working.
+  const planWith = listPlace => ({
+    days: [{
+      date: '2026-10-01',
+      casesByHospital: [{
+        hospital: 'RHH',
+        cases: [{ id: 'c1', patient: 'Thompson', surgeon: 'JPW', listPlace }]
+      }]
+    }]
+  })
+
+  it('notices a running order being recorded', () => {
+    expect(planSignature(planWith({ position: 2, session: 'afternoon' })))
+      .not.toBe(planSignature(planWith(null)))
+  })
+
+  it('notices the number changing', () => {
+    expect(planSignature(planWith({ position: 2 })))
+      .not.toBe(planSignature(planWith({ position: 3 })))
+  })
+
+  it('notices the session changing', () => {
+    expect(planSignature(planWith({ position: 1, session: 'morning' })))
+      .not.toBe(planSignature(planWith({ position: 1, session: 'afternoon' })))
+  })
+
+  it('notices a running order being cleared', () => {
+    expect(planSignature(planWith({ position: 2, session: 'afternoon' })))
+      .not.toBe(planSignature(planWith(null)))
+  })
+
+  it('still says nothing changed when nothing did', () => {
+    const place = { position: 2, session: 'afternoon', from: '1pm', ahead: 'after a PLIF' }
+    expect(planSignature(planWith(place))).toBe(planSignature(planWith({ ...place })))
+  })
+})

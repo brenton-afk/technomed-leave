@@ -762,3 +762,57 @@ describe('controls that are actually tappable', () => {
     expect(screen.queryByText('Edit booking')).not.toBeInTheDocument()
   })
 })
+
+describe('saving a list order and seeing it', () => {
+  // "I selected everything and then hit set list order and nothing changed."
+  // The write reached Google; the reply was discarded as identical, because the
+  // signature the plan is compared on did not mention the running order. The
+  // whole round trip has to be exercised, not just the request.
+  const withPlace = (id, place) => ev(id, 'Thompson DIPLOMAT - JPW',
+    'Surg: JPW\nPt: Thompson\nHosp: RHH\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)'
+    + (place ? `\nList: ${place}` : ''),
+    { day: '21', at: '11:00' })
+
+  beforeEach(() => {
+    events = [...BOOKINGS, withPlace('c40', null)]
+    global.fetch = vi.fn(async url => {
+      if (String(url).includes('action=listplace')) {
+        // What the server does: writes the line onto the booking. The next read
+        // of the calendar sees it, which is the part that was broken.
+        events = [...BOOKINGS, withPlace('c40', '2nd · afternoon · from 1pm')]
+        return { ok: true, json: async () => ({ ok: true }) }
+      }
+      return { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+    })
+  })
+
+  it('shows the order on the card once it is saved', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    expect(screen.queryByText(/on the list/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Set where Thompson is on the list'))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'List order' })).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: '2nd' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Afternoon' }))
+    fireEvent.click(screen.getByRole('button', { name: /Save list order/ }))
+
+    // The sheet goes, and the card says it.
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'List order' })).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText('2nd on the list · PM · from 1pm')).toBeInTheDocument())
+  })
+
+  it('offers to change it rather than set it, once there is one', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Set where Thompson is on the list'))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'List order' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '2nd' }))
+    fireEvent.click(screen.getByRole('button', { name: /Save list order/ }))
+
+    await waitFor(() => expect(screen.getByText('Change list order')).toBeInTheDocument())
+  })
+})

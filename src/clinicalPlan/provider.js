@@ -6,6 +6,7 @@
 import { buildWeekPlan } from './buildWeekPlan.js'
 import { readBooking, detectHospital } from './parse.js'
 import { FIXTURE_WEEK } from './fixture.js'
+import { formatListPlace } from './listPlace.js'
 
 // The cache holds a *derived* plan — the notes, the flags, the case lines — not
 // the calendar events it came from. So it is only valid for the code that derived
@@ -53,8 +54,13 @@ export function planSignature(plan) {
         // left out of it can change in Google and never reach the screen. Who
         // attended is added to a booking *after* the case, which is precisely a
         // mid-poll edit.
+        // Where we are on the hospital's list belongs here for that same
+        // reason, and is the sharpest case of it: recording one is a change to
+        // nothing else on the card, so leaving it out meant the running order
+        // reached Google and the app then threw the answer away as unchanged.
         parts.push([c.id, c.patient, c.surgeon, c.operation, c.system, c.supply, c.kit,
           c.rep || '', c.unread || '', c.cancelled ? 'off' : '',
+          formatListPlace(c.listPlace),
           (c.notes || []).map(n => n.text).join('~')].join('\u0001'))
       }
     }
