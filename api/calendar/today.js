@@ -21,8 +21,7 @@ import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailSeen, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
-  getBookingCandidate, getBookingQueue, updateBookingCandidate,
-  getListOrders, setListOrder, clearListOrder
+  getBookingCandidate, getBookingQueue, updateBookingCandidate
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
@@ -33,7 +32,7 @@ import {
 } from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
-  hourForNewCase, layOutDay, hourToTime
+  hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
@@ -79,7 +78,7 @@ export default async function handler(req, res) {
   // A booking spoken into the phone. Fills the form; does not make the booking.
   if (req.query.action === 'dictate') return handleDictate(req, res)
   // The running order of a theatre list, taken on the evening ring-round.
-  if (req.query.action === 'listorder') return handleListOrder(req, res)
+  if (req.query.action === 'reorder') return handleReorder(req, res)
   // Calling a case off, and putting it back on.
   if (req.query.action === 'cancel') return handleCancel(req, res)
   // What this patient already has in, for a revision or a removal.
@@ -743,7 +742,7 @@ async function bookingsOnCalendar(from, to) {
  * Times here mean nothing about when anyone operates — they did not before
  * either, when every booking claimed 08:00 to 17:00. See dayLayout.js.
  */
-async function tidyDay(date) {
+async function tidyDay(date, preferred = null) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return { moved: 0 }
 
   const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
@@ -772,13 +771,18 @@ async function tidyDay(date) {
     })
     .filter(Boolean)
 
-  const slots = layOutDay(cases)
+  // A running order, when the team has just set one. Anything the order does
+  // not name keeps its place behind what it does — a case booked after the
+  // hospital rang should not shove the list about on its way in.
+  const ordered = inPreferredOrder(cases, preferred)
+
+  const slots = layOutDay(ordered)
   let moved = 0
-  for (let i = 0; i < cases.length; i++) {
+  for (let i = 0; i < ordered.length; i++) {
     const want = String(slots[i].hour).padStart(2, '0')
-    if (cases[i].from === `${want}:00`) continue
+    if (ordered[i].from === `${want}:00`) continue
     try {
-      await updateCalendarEvent(cases[i].id, {
+      await updateCalendarEvent(ordered[i].id, {
         start: { dateTime: `${date}T${hourToTime(slots[i].hour)}`, timeZone: BOOKING_TZ },
         end: { dateTime: `${date}T${hourToTime(slots[i].hour + 1)}`, timeZone: BOOKING_TZ }
       })
@@ -1115,58 +1119,47 @@ async function handleDictate(req, res) {
  * using a competitor's cage, and that case is the whole reason our first one is
  * not at eight.
  */
-async function handleListOrder(req, res) {
+/**
+ * Sets the day's running order.
+ *
+ * The hospital rings the afternoon before with the order the list will run in —
+ * ours first up, or third after a craniotomy — and that order is the single most
+ * useful thing anybody learns about tomorrow: it decides who is on site at 07:30
+ * and who has a morning.
+ *
+ * It used to be posted to the WhatsApp group and read off a phone. Here it is
+ * the order the cases sit in, and setting it moves the calendar to match, so the
+ * order is visible to everyone in the thing they already have open.
+ *
+ * The body is a list of event ids, first to last. Nothing else — the order is
+ * the whole fact, and the calendar already holds the cases.
+ */
+async function handleReorder(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const date = String(req.query.date || '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: 'A date is needed' })
   }
 
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  const order = Array.isArray(body.order)
+    ? body.order.slice(0, 60).map(id => String(id || '').trim()).filter(Boolean)
+    : []
+  if (!order.length) return res.status(400).json({ error: 'An order is needed' })
+
   try {
-    if (req.method === 'GET') {
-      res.setHeader('Cache-Control', 'no-store')
-      return res.status(200).json({ ok: true, lists: await getListOrders(date) })
-    }
-
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-    const key = String(body.key || '').trim()
-    if (!key) return res.status(400).json({ error: 'A list is needed' })
-
-    // Clearing is how a list taken wrongly is undone. Nothing else deletes.
-    if (!Array.isArray(body.entries) || !body.entries.length) {
-      await clearListOrder(date, key)
-      return res.status(200).json({ ok: true, cleared: true })
-    }
-
-    const entries = body.entries.slice(0, 40).map(entry => (
-      entry?.kind === 'ours'
-        ? { kind: 'ours', eventId: String(entry.eventId || '') }
-        : {
-          kind: 'other',
-          // Another surgeon's case, so no patient detail is wanted or kept —
-          // what it is and whose it is, and nothing else.
-          label: stripIdentifiers(String(entry.label || '')).slice(0, 80),
-          note: stripIdentifiers(String(entry.note || '')).slice(0, 120)
-        }
-    )).filter(e => e.kind === 'other' ? e.label : e.eventId)
-
-    const saved = await setListOrder(date, key, {
-      hospital: String(body.hospital || '').trim(),
-      theatre: String(body.theatre || '').trim() || null,
-      entries,
-      updatedBy: firstNameFor(session.email),
-      updatedAt: new Date().toISOString()
-    })
-    return res.status(200).json({ ok: true, list: saved })
+    // Nothing is stored here. The calendar is the record — the order a case
+    // sits in is its start time, and there is no second copy to disagree with
+    // it the next time somebody moves a booking in Google directly.
+    const { moved } = await tidyDay(date, order)
+    return res.status(200).json({ ok: true, moved })
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
 }
-
 
 /**
  * Calls a case off, or puts it back on.

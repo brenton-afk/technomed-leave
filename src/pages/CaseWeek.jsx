@@ -13,7 +13,6 @@ import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinical
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
-import ListOrders from './cases/ListOrder.jsx'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -118,21 +117,39 @@ const KIND_TONE = {
  * Everything the booking says, in one place: who, what, with which system, how
  * it is supplied, what extra kit, and whatever the team wrote in the notes.
  */
-function CaseCard({ surgicalCase, onOpen }) {
+function CaseCard({ surgicalCase, onOpen, position, onMove, busy }) {
   const off = Boolean(surgicalCase.cancelled)
   const bar = off ? colour.inkFainter : accentForCase(surgicalCase)
   const nameInk = off ? colour.inkFaint : accentTextForCase(surgicalCase)
+  const ordering = typeof position === 'number' && Boolean(onMove)
 
   return (
-    <button type="button" onClick={() => onOpen?.(surgicalCase)}
+    <div
       style={{
-        display: 'flex', width: '100%', textAlign: 'left', gap: 0, padding: 0,
+        display: 'flex', width: '100%', gap: 0, padding: 0, alignItems: 'stretch',
         background: colour.surface, border: `1px solid ${colour.line}`,
         borderRadius: radius.card, marginBottom: space.sm, overflow: 'hidden',
-        cursor: onOpen ? 'pointer' : 'default'
+        opacity: busy ? 0.55 : 1, transition: 'opacity 120ms'
       }}>
       <span aria-hidden="true" style={{ width: 5, background: bar, flexShrink: 0 }} />
-      <span style={{ padding: `${space.sm}px ${space.md}px`, flex: 1, minWidth: 0 }}>
+
+      {/* Where it sits in the list the hospital read out. Shown beside the case
+          rather than as a time, because it is a position and not a time — the
+          third case starts when the second one finishes. */}
+      {ordering && (
+        <span style={{
+          flexShrink: 0, width: 26, display: 'flex', alignItems: 'center',
+          justifyContent: 'center', ...text('bodyStrong'),
+          color: off ? colour.inkFainter : colour.inkFaint
+        }}>{position + 1}</span>
+      )}
+
+      <button type="button" onClick={() => onOpen?.(surgicalCase)}
+        style={{
+          padding: `${space.sm}px ${space.md}px`, flex: 1, minWidth: 0,
+          textAlign: 'left', background: 'none', border: 'none', font: 'inherit',
+          cursor: onOpen ? 'pointer' : 'default'
+        }}>
         <span style={{
           ...text('bodyStrong'), display: 'block', color: off ? colour.inkFaint : colour.ink,
           ...(off ? { textDecoration: 'line-through' } : {})
@@ -227,7 +244,37 @@ function CaseCard({ surgicalCase, onOpen }) {
             {note.text}
           </span>
         ))}
-      </span>
+      </button>
+
+      {ordering && (
+        <span style={{
+          flexShrink: 0, display: 'flex', flexDirection: 'column',
+          borderLeft: `1px solid ${colour.lineSoft}`
+        }}>
+          <MoveButton dir={-1} onMove={onMove} busy={busy} label={`Move ${surgicalCase.patient} up the list`} />
+          <MoveButton dir={1} onMove={onMove} busy={busy} label={`Move ${surgicalCase.patient} down the list`} />
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** One arrow. Disabled at the ends, so the list cannot be pushed off itself. */
+function MoveButton({ dir, onMove, busy, label }) {
+  const can = onMove(dir, true)
+  return (
+    <button type="button" aria-label={label} disabled={!can || busy}
+      onClick={() => onMove(dir)}
+      style={{
+        // Wide enough to hit with a thumb in a car park, which is where the
+        // list order usually gets typed in.
+        width: 40, flex: 1, minHeight: 30, border: 'none', background: 'none',
+        borderTop: dir === 1 ? `1px solid ${colour.lineSoft}` : 'none',
+        color: can && !busy ? colour.accentDeep : colour.inkFainter,
+        cursor: can && !busy ? 'pointer' : 'default',
+        ...text('body'), lineHeight: 1
+      }}>
+      {dir === -1 ? '▲' : '▼'}
     </button>
   )
 }
@@ -298,9 +345,56 @@ function Heading({ children }) {
   )
 }
 
-/** One day, whole: cases by hospital, then everything else. */
-function DayPanel({ day, onOpen }) {
+/**
+ * One day, whole: cases by hospital, then everything else.
+ *
+ * When `onReorder` is given, the cases in each hospital can be moved up and down
+ * into the order that hospital's list will actually run in. That order is the
+ * calendar's order — moving a case here moves the calendar entry — so there is
+ * one running order and everybody is reading it.
+ */
+function DayPanel({ day, onOpen, onReorder }) {
   const groups = day.casesByHospital || []
+  // The order shown before the calendar has caught up. A round trip to Google
+  // and back takes a couple of seconds on a hospital connection, and an arrow
+  // that does nothing for two seconds gets pressed again.
+  const [override, setOverride] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const present = groups.flatMap(g => g.cases.map(c => c.id)).slice().sort().join(',')
+  useEffect(() => { setOverride(null); setBusy(false) }, [day.date, present])
+
+  /** A group's cases, in the order last asked for. */
+  const inOrder = cases => {
+    if (!override) return cases
+    const rank = new Map(override.map((id, i) => [id, i]))
+    return cases.slice().sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
+  }
+
+  /**
+   * Swaps a case with its neighbour in the same hospital.
+   *
+   * Within the hospital, because a running order belongs to a list and a list
+   * belongs to a theatre — RHH's order says nothing about Calvary's. The whole
+   * day still goes to the server, since the calendar lays the day out end to end.
+   */
+  const moveWithin = (group, index) => (dir, probe) => {
+    const list = inOrder(group.cases)
+    const to = index + dir
+    if (to < 0 || to >= list.length) return false
+    if (probe) return true
+
+    const next = list.slice()
+    next[index] = list[to]
+    next[to] = list[index]
+    const wanted = groups
+      .flatMap(g => (g.hospital === group.hospital ? next : inOrder(g.cases)))
+      .map(c => c.id)
+
+    setOverride(wanted)
+    setBusy(true)
+    Promise.resolve(onReorder(day.date, wanted)).finally(() => setBusy(false))
+    return true
+  }
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
   // what, and it was sitting under the cases where you had to scroll past a
@@ -342,12 +436,31 @@ function DayPanel({ day, onOpen }) {
         </div>
       )}
 
-      {groups.map(group => (
-        <div key={group.hospital}>
-          <Heading>{group.hospital} · {group.cases.length} case{group.cases.length === 1 ? '' : 's'}</Heading>
-          {group.cases.map(c => <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen} />)}
-        </div>
-      ))}
+      {groups.map(group => {
+        const cases = inOrder(group.cases)
+        // One case is not an order, and two hospitals with one case each is not
+        // an order either. The arrows appear where there is something to order.
+        const ordering = Boolean(onReorder) && cases.length > 1
+        return (
+          <div key={group.hospital}>
+            <Heading>{group.hospital} · {cases.length} case{cases.length === 1 ? '' : 's'}</Heading>
+            {ordering && (
+              <div style={{
+                ...text('caption'), color: colour.inkFaint,
+                margin: `-${space.xs}px 0 ${space.sm}px`
+              }}>
+                In list order. Move a case with the arrows and the calendar follows.
+              </div>
+            )}
+            {cases.map((c, i) => (
+              <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
+                position={ordering ? i : undefined}
+                onMove={ordering ? moveWithin(group, i) : undefined}
+                busy={busy} />
+            ))}
+          </div>
+        )
+      })}
 
       {attention.length > 0 && (
         <>
@@ -397,7 +510,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [status, setStatus] = useState('loading')
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
-  const [exportNote, setExportNote] = useState('')
+  const [notice, setNotice] = useState('')
   // Sub-calendars the week could not read. Leave lives on one of them, and an
   // unreadable leave calendar is indistinguishable from an empty one.
   const [sourceErrors, setSourceErrors] = useState([])
@@ -429,12 +542,36 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   useEffect(() => { load(window_) }, [window_, load])
   useLiveRefresh(useCallback(() => load(window_, { quiet: true }), [window_, load]), [window_, load])
 
+  /**
+   * Writes the day's running order to the calendar.
+   *
+   * The hospital rings about four o'clock the afternoon before with the order
+   * the list will run in. This is where that goes: the team leader moves the
+   * cases into it, the calendar entries follow into one-hour blocks in the same
+   * sequence, and everyone with the app open can see whether we are first up.
+   */
+  const reorder = useCallback(async (date, order) => {
+    try {
+      const res = await fetch(`/api/calendar/today?action=reorder&date=${date}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ order })
+      })
+      if (!res.ok) throw new Error('That did not save')
+      // Quietly, because the panel is already showing the new order — this only
+      // reconciles it with what Google ended up with.
+      await load(window_, { quiet: true })
+    } catch {
+      setNotice('The order did not save. Check the connection and try again.')
+    }
+  }, [token, load, window_])
+
   const remember = next => writePrefs({ ...readPrefs(), ...next })
 
   // The week as the Word document that gets emailed round. Loaded on demand —
   // the builder is large and most visits never export.
   async function downloadDocx() {
-    setExportNote('')
+    setNotice('')
     try {
       const [{ buildPlanDocx }, { DOCX_FILENAME }] = await Promise.all([
         import('../clinicalPlan/exportDocx.js'),
@@ -449,7 +586,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
       a.remove()
       URL.revokeObjectURL(url)
     } catch (err) {
-      setExportNote(`Word export failed (${err.message}).`)
+      setNotice(`Word export failed (${err.message}).`)
     }
   }
 
@@ -607,7 +744,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
 
       <div style={{ flex: 1, padding: `${space.md}px ${space.md}px 100px`, overflowY: 'auto' }}>
         {promptBanner}
-        {exportNote && <Banner tone="danger">{exportNote}</Banner>}
+        {notice && <Banner tone="danger">{notice}</Banner>}
         {stale && (
           <Banner tone="warning">
             Not updating — showing the last plan that loaded
@@ -680,15 +817,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 {dayPlan?.caseCountLine ? ` · ${dayPlan.caseCountLine}` : ''}
               </div>
             </div>
-            {/* Above the cases, because it is what the team reads first: it
-                answers whether anyone is on site at half seven. */}
-            <ListOrders
-              date={activeDay}
-              user={user}
-              cases={(dayPlan?.casesByHospital || []).flatMap(g => g.cases)} />
             <AddBookingRow day={activeDay} onAdd={setAdding} />
             {dayPlan
-              ? <DayPanel day={dayPlan} onOpen={setEditing} />
+              ? <DayPanel day={dayPlan} onOpen={setEditing} onReorder={reorder} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}

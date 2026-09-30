@@ -472,3 +472,87 @@ describe('the number under each date', () => {
       .toBeInTheDocument()
   })
 })
+
+describe('the running order', () => {
+  // The hospital rings about four o'clock the afternoon before and reads out
+  // the order the list will run in. Whether our case is first up or third
+  // decides whether somebody is on site at half seven or has a free morning —
+  // it was posted to the WhatsApp group and read off a phone. Here it is the
+  // order the cases sit in, and the calendar follows.
+
+  const second = ev('c9', 'Pearse DIPLOMAT - Fowler',
+    'Surg: Fowler\nPt: Pearse\nHosp: RHH\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)',
+    { at: '10:00' })
+
+  const posted = () => global.fetch.mock.calls.find(
+    ([url]) => String(url).includes('action=reorder'))
+
+  beforeEach(() => {
+    events = [...BOOKINGS, second]
+    global.fetch = vi.fn(async url => (
+      String(url).includes('action=reorder')
+        ? { ok: true, json: async () => ({ ok: true, moved: 2 }) }
+        : { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+    ))
+  })
+
+  it('numbers the cases and offers to move them', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+    expect(screen.getByText(/Move a case with the arrows/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Move Chalmers up the list')).toBeDisabled()
+    expect(screen.getByLabelText('Move Pearse down the list')).toBeDisabled()
+  })
+
+  it('sends the new order to the calendar', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
+
+    await waitFor(() => expect(posted()).toBeTruthy())
+    const [url, options] = posted()
+    expect(url).toContain('date=2026-09-21')
+    expect(JSON.parse(options.body).order).toEqual(['c9', 'c1'])
+    expect(screen.queryByText(/did not save/i)).not.toBeInTheDocument()
+  })
+
+  it('says so when the order does not save', async () => {
+    // Silently keeping a new order on screen that never reached the calendar is
+    // the worst of both: the team leader believes it is posted and nobody else
+    // can see it.
+    global.fetch = vi.fn(async url => (
+      String(url).includes('action=reorder')
+        ? { ok: false, json: async () => ({ error: 'nope' }) }
+        : { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+    ))
+    show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
+    await waitFor(() => expect(screen.getByText(/did not save/i)).toBeInTheDocument())
+  })
+
+  it('shows the new order straight away, before Google has caught up', async () => {
+    // A round trip on a hospital connection takes a couple of seconds, and an
+    // arrow that does nothing for two seconds gets pressed again.
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+
+    const order = () => [...container.querySelectorAll('button')]
+      .map(b => b.textContent)
+      .filter(t => t.includes('Chalmers') || t.includes('Pearse'))
+      .map(t => (t.includes('Chalmers') ? 'Chalmers' : 'Pearse'))
+
+    expect(order()).toEqual(['Chalmers', 'Pearse'])
+    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
+    await waitFor(() => expect(order()).toEqual(['Pearse', 'Chalmers']))
+  })
+
+  it('does not offer to reorder a hospital with one case', async () => {
+    events = BOOKINGS
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    expect(screen.queryByText(/Move a case with the arrows/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/up the list/)).not.toBeInTheDocument()
+  })
+})

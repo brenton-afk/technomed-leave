@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { layOutDay, hourForNewCase, hourToTime, FIRST_HOUR } from './dayLayout.js'
+import {
+  layOutDay, hourForNewCase, hourToTime, inPreferredOrder, FIRST_HOUR
+} from './dayLayout.js'
 
 // The times are a layout, not a schedule. Nobody knows when a case will run —
 // the list order lands the evening before and then moves all day — so what these
@@ -15,18 +17,17 @@ describe('laying out a day', () => {
       .toEqual([8, 9, 10])
   })
 
-  it("keeps a surgeon's cases together", () => {
-    // The point of the grouping: their colour reads as one run down the column
-    // rather than three bands with other people's between them.
+  it('keeps the order it was given, even when surgeons alternate', () => {
+    // A list that runs Ibbett, Thani, Ibbett is an ordinary list, and it is the
+    // order the hospital read out. This used to regroup by surgeon, which
+    // silently undid a running order somebody had just been told on the phone.
     const day = [
       { surgeon: 'Ibbett' }, { surgeon: 'Thani' },
       { surgeon: 'Ibbett' }, { surgeon: 'Thani' }, { surgeon: 'Ibbett' }
     ]
-    const slots = layOutDay(day)
-    const ibbett = slots.filter(s => s.surgeon === 'Ibbett').map(s => s.hour)
-    const thani = slots.filter(s => s.surgeon === 'Thani').map(s => s.hour)
-    expect(ibbett).toEqual([8, 9, 10])
-    expect(thani).toEqual([11, 12])
+    expect(layOutDay(day).map(s => [s.hour, s.surgeon])).toEqual([
+      [8, 'Ibbett'], [9, 'Thani'], [10, 'Ibbett'], [11, 'Thani'], [12, 'Ibbett']
+    ])
   })
 
   it('never puts two cases in the same hour', () => {
@@ -35,16 +36,16 @@ describe('laying out a day', () => {
     expect(new Set(used).size).toBe(used.length)
   })
 
-  it('lays the groups out in the order they already appear', () => {
+  it('lays them out in the order they already appear', () => {
     // So adding a booking does not reshuffle the day around it.
     expect(layOutDay([{ surgeon: 'Thani' }, { surgeon: 'Ibbett' }])[0].surgeon).toBe('Thani')
   })
 
-  it('does not give every unnamed booking a lane of its own', () => {
-    // Three unreadable bookings would otherwise take three hours between them
-    // and push the real cases out of the morning.
+  it('gives a booking with no readable surgeon its own hour', () => {
+    // It is still a case somebody has to be at, and it still has a place in the
+    // running order. Hiding it behind a named case is how one gets missed.
     const slots = layOutDay([{ surgeon: '' }, { surgeon: 'Ibbett' }, { surgeon: '' }])
-    expect(slots.map(s => s.hour)).toEqual([8, 10, 9])
+    expect(slots.map(s => s.hour)).toEqual([8, 9, 10])
   })
 
   it('runs into the evening rather than overlapping', () => {
@@ -67,8 +68,11 @@ describe('placing one new case', () => {
     expect(hourForNewCase([], 'Ibbett')).toBe(FIRST_HOUR)
   })
 
-  it("follows the surgeon's own cases", () => {
-    const day = [{ surgeon: 'Ibbett', hour: 8 }, { surgeon: 'Ibbett', hour: 9 }]
+  it('goes to the end of the day', () => {
+    // Not beside the surgeon's other cases, which is where it used to go. Where
+    // it belongs in the running order is not knowable when the booking is made;
+    // it goes last and gets moved when the hospital rings.
+    const day = [{ surgeon: 'Ibbett', hour: 8 }, { surgeon: 'Thani', hour: 9 }]
     expect(hourForNewCase(day, 'Ibbett')).toBe(10)
   })
 
@@ -124,12 +128,41 @@ describe('a day that keeps itself tidy', () => {
     expect(twice).toEqual(once)
   })
 
-  it('regroups a surgeon whose cases were scattered', () => {
-    // A booking moved onto a day lands at the end; the next tidy pulls it back
-    // beside the rest of that surgeon's list.
-    const scattered = day('Ibbett', 'Thani', 'Ibbett')
-    const slots = layOutDay(scattered)
-    expect(slots.filter(s => s.surgeon === 'Ibbett').map(s => s.hour)).toEqual([8, 9])
-    expect(slots.filter(s => s.surgeon === 'Thani').map(s => s.hour)).toEqual([10])
+  it('leaves a day alone that is already in order', () => {
+    // A booking moved onto a day lands at the end, and stays there until
+    // somebody moves it. The tidy closes gaps; it does not have opinions.
+    const slots = layOutDay(day('Ibbett', 'Thani', 'Ibbett'))
+    expect(slots.map(s => s.hour)).toEqual([8, 9, 10])
+  })
+})
+
+describe('the running order the hospital gave us', () => {
+  const day = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+
+  it('puts the cases in the order asked for', () => {
+    expect(inPreferredOrder(day, ['c', 'a', 'b']).map(c => c.id)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('leaves the day alone when no order was given', () => {
+    expect(inPreferredOrder(day, null).map(c => c.id)).toEqual(['a', 'b', 'c'])
+    expect(inPreferredOrder(day, []).map(c => c.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('keeps a case the order does not mention behind the ones it does', () => {
+    // A booking that arrived after the hospital rang has no place in that list
+    // yet. Guessing one would quietly undo what somebody was told on the phone.
+    expect(inPreferredOrder(day, ['c', 'a']).map(c => c.id)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('ignores an id for a case that is not on the day', () => {
+    // The list was set, then a case was cancelled. What is left keeps its order.
+    expect(inPreferredOrder(day, ['gone', 'c', 'b', 'a']).map(c => c.id))
+      .toEqual(['c', 'b', 'a'])
+  })
+
+  it('lays the calendar out in that order', () => {
+    const slots = layOutDay(inPreferredOrder(day, ['c', 'a', 'b']))
+    expect(slots.map(s => s.hour)).toEqual([8, 9, 10])
+    expect(inPreferredOrder(day, ['c', 'a', 'b']).map(c => c.id)).toEqual(['c', 'a', 'b'])
   })
 })
