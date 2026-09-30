@@ -679,3 +679,40 @@ describe('where we are on the hospital\'s list', () => {
     })
   })
 })
+
+describe('setting the list order on the day you are looking at', () => {
+  // Reported as "nothing has changed in the app" while looking at Thursday in
+  // the day view. Both views have to offer it, and on a day where we have one
+  // case at a hospital, which is the ordinary shape of a day.
+  const alone = ev('c30', 'Barr DIPLOMAT - Dubey',
+    'Surg: Dubey\nPt: Barr\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)',
+    { day: '24' })
+
+  beforeEach(() => { events = [...BOOKINGS, alone] })
+
+  it('offers it in the day view', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    // Thursday, where the report came from.
+    fireEvent.click(screen.getByRole('button', { name: /Thursday 24 September/ }))
+    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
+    expect(screen.getByLabelText('Set where Barr is on the list')).toBeInTheDocument()
+  })
+
+  it('offers it in the week view', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
+    expect(screen.getByLabelText('Set where Barr is on the list')).toBeInTheDocument()
+  })
+
+  it('offers it on a cancelled-free day with several hospitals', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+    await waitFor(() => expect(screen.getByText('Larkin')).toBeInTheDocument())
+    // Calvary, one case, no arrows possible — and still settable.
+    expect(screen.getByLabelText('Set where Larkin is on the list')).toBeInTheDocument()
+  })
+})

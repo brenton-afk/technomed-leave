@@ -279,10 +279,18 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
               }
             }}
             style={{
-              display: 'inline-block', marginTop: space.xs, cursor: 'pointer',
-              ...text('caption'), color: colour.accentDeep, fontWeight: 600
+              // A bordered chip rather than a text link. The first version was
+              // caption-sized and the same colour as the rest of the card, and
+              // was reported as the option not being there at all.
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              marginTop: space.sm, cursor: 'pointer', minHeight: 32,
+              padding: `0 ${space.md}px`, borderRadius: radius.pill,
+              border: `1px solid ${place ? colour.accent : colour.line}`,
+              background: place ? colour.accentSoft : colour.surface,
+              ...text('caption'), fontWeight: 700,
+              color: place ? colour.accentDeep : colour.ink
             }}>
-            {place ? 'Change list order' : 'Set list order'}
+            {place ? 'Change list order' : '＋ Set list order'}
           </span>
         )}
       </button>

@@ -21,6 +21,7 @@ import {
   IconScan, IconCases, IconKit, IconMe, IconAdmin,
   IconStock, IconPayslip, IconLock, IconBack
 } from './design/icons.jsx'
+import { useNewBuild } from './appVersion.js'
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 // Five destinations, because a bottom bar stops being scannable past about five.
@@ -64,6 +65,9 @@ export default function App() {
   // Called here, above the early returns for the login and the success screens,
   // because a hook that runs on some renders and not others is not a hook.
   const desktop = useIsDesktop()
+  // Whether a newer build has shipped since this tab was opened. Same reason for
+  // being up here: the login screen is exactly where a stale tab tends to sit.
+  const newBuild = useNewBuild()
   const [user, setUser] = useState(null)
   const [nav, setNav] = useState({ tab: 'cases', sub: null })
   const [submitted, setSubmitted] = useState(null)
@@ -192,6 +196,24 @@ export default function App() {
             cursor: 'pointer', backdropFilter: 'blur(6px)'
           }}>
           <IconBack size={19} />
+        </button>
+      )}
+
+      {/* A build shipped while this tab was open. It never reloads on its own —
+          somebody halfway through a booking should not have the page taken out
+          from under them — so it offers and they choose. See appVersion.js. */}
+      {newBuild && (
+        <button onClick={() => window.location.reload()}
+          style={{
+            position: 'fixed', zIndex: 130, left: '50%', transform: 'translateX(-50%)',
+            top: 'calc(10px + env(safe-area-inset-top, 0px))',
+            display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+            padding: '8px 16px', minHeight: 40, borderRadius: 999,
+            border: 'none', background: colour.accent, color: 'white',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
+            fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700
+          }}>
+          Update available — tap to reload
         </button>
       )}
 
