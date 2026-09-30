@@ -86,7 +86,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
         </div>
       </Header>
 
-      <div style={{ flex:1, padding:'20px 20px 100px', background:colour.canvas }}>
+      <div className="tm-measure" style={{ flex:1, padding:'20px 20px 100px', background:colour.canvas }}>
         {step === 0 && (
           <div>
             <div style={grp}><label style={lbl}>First day of leave</label><input type="date" style={inp} value={form.startDate} onChange={e => setField('startDate', e.target.value)} /></div>

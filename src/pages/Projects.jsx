@@ -233,7 +233,7 @@ export default function Projects({ user, onBack }) {
     <Page>
       <Header eyebrow="Team" title="Projects" subtitle="Meeting notes and the shared worklist" onBack={onBack} />
 
-      <div style={{ padding: 16 }}>
+      <div className="tm-measure" style={{ padding: 16 }}>
         {error && (
           <div style={{ background: colour.dangerSoft, color: colour.danger, padding: '12px 14px', borderRadius: 10, marginBottom: 12, fontSize: 14 }}>
             {error}

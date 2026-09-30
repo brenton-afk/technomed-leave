@@ -120,7 +120,7 @@ export default function KitRoom({ user, onBack }) {
       <Page style={{ display:'flex', flexDirection:'column' }}>
         <Header eyebrow="Kit and stock" title="Kit Room" subtitle="Select a location to view kits" onBack={onBack} />
 
-        <div style={{ padding:16, flex:1 }}>
+        <div className="tm-measure" style={{ padding:16, flex:1 }}>
           {LOCATIONS.map(loc => (
             <button key={loc.id} onClick={() => setSelectedLocation(loc)} style={{ width:'100%', background:'white', border:'1px solid rgba(26,43,74,0.08)', borderRadius:14, padding:0, marginBottom:12, cursor:'pointer', overflow:'hidden', textAlign:'left', display:'block' }}>
               <div style={{ background:loc.color, padding:'16px 18px', display:'flex', alignItems:'center', gap:12 }}>
@@ -173,7 +173,7 @@ export default function KitRoom({ user, onBack }) {
           </div>
         </div>
 
-        <div style={{ padding:16, flex:1 }}>
+        <div className="tm-measure" style={{ padding:16, flex:1 }}>
           {cats.map(([cat, kits]) => {
             const statusCounts = kits.reduce((acc, kit) => {
               const s = getStatus(selectedLocation.id, cat, kit)
@@ -214,7 +214,7 @@ export default function KitRoom({ user, onBack }) {
         <div style={{ fontSize:14, color:'rgba(255,255,255,0.55)' }}>{kits.length} kits</div>
       </div>
 
-      <div style={{ padding:16, flex:1, paddingBottom:100 }}>
+      <div className="tm-measure" style={{ padding:16, flex:1, paddingBottom:100 }}>
         {kits.map(kit => {
           const s = getStatus(selectedLocation.id, selectedCat, kit)
           const si = statusInfo(s)

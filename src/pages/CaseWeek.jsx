@@ -828,7 +828,10 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         </div>
       </Header>
 
-      <div style={{ flex: 1, padding: `${space.md}px ${space.md}px 100px`, overflowY: 'auto' }}>
+      {/* tm-measure keeps the week in one column on a wide screen while the
+          page and the header behind it reach both edges — see index.css. */}
+      <div className="tm-measure"
+        style={{ flex: 1, padding: `${space.md}px ${space.md}px 100px`, overflowY: 'auto' }}>
         {promptBanner}
         {notice && <Banner tone="danger">{notice}</Banner>}
         {stale && (

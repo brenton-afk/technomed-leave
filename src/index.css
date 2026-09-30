@@ -131,15 +131,37 @@ a {
     min-width: 0;
   }
 
-  /* Wide enough to lay a week of bookings out side by side, narrow enough that
-     a line of prose is still a line rather than a paragraph edge to edge. The
-     screens that genuinely want the full width opt out with `tm-wide`. */
+  /* The page fills the window; its *content* keeps a readable measure.
+     
+     These used to be the same thing — max-width: 1120px and auto margins — and
+     on a 27in screen that drew a pale panel down the middle with a darker band
+     either side, because the page is #f6f8fa and the body behind it is #f0f3f7.
+     Reported as "there are still gaps on either side of the main page", which
+     is exactly what it was.
+     
+     Capping the width was right for the reason the old comment gave: a line of
+     prose running the full width of a monitor is not a line, it is an edge. So
+     the cap stays, as padding rather than as a width. The surface reaches both
+     edges of the window and the content sits in the middle of it, which is the
+     same measure and none of the bands.
+     
+     1400 rather than 1120: a week of bookings has room to breathe on a laptop
+     now, and the padding only starts once there is more window than that. */
   .tm-page {
-    max-width: 1120px;
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
   }
 
-  .tm-page.tm-wide {
+  /* The measure. Applied to what is read rather than to the page, so the navy
+     header and the page's own surface both reach the edges of the window while
+     the words on them line up in one column. */
+  .tm-measure {
+    max-width: 1400px;
+    margin-inline: auto;
+  }
+
+  /* The screens that genuinely want every pixel — a week laid out in columns. */
+  .tm-page.tm-wide .tm-measure {
     max-width: none;
   }
 
