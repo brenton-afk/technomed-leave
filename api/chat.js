@@ -1,4 +1,5 @@
-import { requireSession } from './_auth.js'
+import { handleUpload } from '@vercel/blob/client'
+import { requireSession, getSession } from './_auth.js'
 import {
   postMessage, readChannel, channelSizes, knownChannels, readMarkers, markRead
 } from './_redis.js'
@@ -25,6 +26,21 @@ export const CHANNELS = [
 /** A booking's own thread. Namespaced, so it cannot collide with a channel. */
 export const caseChannel = eventId => `case:${String(eventId || '').trim()}`
 
+/**
+ * The photograph on a message, if the client sent one.
+ *
+ * Only a URL this app's own blob store issued is accepted. Without that check
+ * the field would render any image from anywhere inside the channel, which is
+ * both a way to smuggle a tracker into the team's chat and a way to make the
+ * app show something nobody here uploaded.
+ */
+function readPhoto(given) {
+  const url = String(given?.url || '').trim()
+  if (!/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i.test(url)) return null
+  const side = n => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : null)
+  return { url: url.slice(0, 500), width: side(given.width), height: side(given.height) }
+}
+
 function validChannel(id) {
   const channel = String(id || '').trim()
   if (CHANNELS.some(c => c.id === channel)) return channel
@@ -36,9 +52,16 @@ function validChannel(id) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store')
+
+  // Ahead of requireSession, and the only thing here that is. @vercel/blob's
+  // client builds its own request, so there is no header of ours on it — the
+  // session rides in clientPayload and is checked inside, before a write token
+  // is issued. Guarding it here would refuse every upload.
+  if (req.query.action === 'blob-upload') return photoUpload(req, res)
+
   const session = await requireSession(req, res)
   if (!session) return
-  res.setHeader('Cache-Control', 'no-store')
 
   try {
     if (req.query.action === 'overview') return overview(req, res, session)
@@ -46,6 +69,59 @@ export default async function handler(req, res) {
     return read(req, res, session)
   } catch (err) {
     return res.status(500).json({ error: err.message })
+  }
+}
+
+
+// ─── Photographs ─────────────────────────────────────────────────────────────
+// Most of what the WhatsApp group carries is a picture: the scanned booking
+// form, a tray with a part number visible, a whiteboard with tomorrow's running
+// order on it. A channel that cannot take one is not a replacement for it.
+//
+// ── What a photograph of paperwork contains ──
+//
+// A patient's full name, usually, and often a date of birth and a UR number.
+// The app has spent a lot of effort keeping those out of the text — see
+// src/chat/identifiers.js, which reads a message before it is sent — and a
+// photograph walks straight past all of it.
+//
+// It cannot be read the way text can, so the answer is the same one the team
+// already uses in theatre: say so, every time, before it is sent. The composer
+// warns on the picture rather than after it, and the warning names what to do
+// (crop the header off) rather than just disapproving.
+//
+// ── Where they are kept ──
+//
+// Vercel Blob, with a random suffix, and the URL is only ever handed to a
+// signed-in member of staff reading the channel. That is the same posture the
+// meeting recordings already have. It is worth being plain about the limit: a
+// blob URL is unguessable, not access-controlled, so anybody who is given one
+// can open it. For a cropped photograph of a tray that is the right trade; for
+// a full booking form it is the reason the warning exists.
+async function photoUpload(req, res) {
+  try {
+    const result = await handleUpload({
+      body: req.body,
+      request: req,
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        let token = null
+        try { token = JSON.parse(clientPayload || '{}').token } catch { token = null }
+        const who = await getSession(token)
+        if (!who) throw new Error('Not signed in, or your session has expired')
+        return {
+          // Images only. This endpoint mints a write token, and one that would
+          // accept anything is a place to park anything.
+          allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
+          addRandomSuffix: true,
+          maximumSizeInBytes: 8 * 1024 * 1024,
+          tokenPayload: JSON.stringify({ by: who.email })
+        }
+      },
+      onUploadCompleted: async () => {}
+    })
+    return res.status(200).json(result)
+  } catch (err) {
+    return res.status(400).json({ error: err.message })
   }
 }
 
@@ -91,7 +167,10 @@ async function send(req, res, session) {
   if (!channel) return res.status(400).json({ error: 'No such channel' })
 
   const text = String(body.text || '').trim()
-  if (!text) return res.status(400).json({ error: 'Nothing to send' })
+  // A photograph on its own is a message. "Here is the form" with nothing typed
+  // is most of what the group sends.
+  const photo = readPhoto(body.photo)
+  if (!text && !photo) return res.status(400).json({ error: 'Nothing to send' })
   if (text.length > 4000) return res.status(400).json({ error: 'That message is too long' })
 
   // Stored as written. The app warns about patient identifiers before sending
@@ -104,6 +183,7 @@ async function send(req, res, session) {
     author: session.email,
     authorName: firstNameFor(session.email) || session.email,
     text,
+    photo,
     // Recorded when the sender was warned and sent anyway, so it is possible to
     // find out later how often that happens and whether the wording is working.
     warned: Boolean(body.warned)
