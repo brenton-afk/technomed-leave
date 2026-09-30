@@ -147,9 +147,19 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
         }}>{position + 1}</span>
       )}
 
+      {/* The case, and the one control that is not the case. They are siblings
+          rather than nested: a button inside a button is invalid, and a browser
+          is entitled not to deliver the tap to the inner one — which is exactly
+          what happened. The chip did nothing on a phone while doing the right
+          thing in the tests, because jsdom dispatches straight to the element
+          and a real browser hit-tests first. */}
+      <span style={{
+        flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+        alignItems: 'flex-start', padding: `${space.sm}px ${space.md}px`
+      }}>
       <button type="button" onClick={() => onOpen?.(surgicalCase)}
         style={{
-          padding: `${space.sm}px ${space.md}px`, flex: 1, minWidth: 0,
+          padding: 0, width: '100%', minWidth: 0,
           textAlign: 'left', background: 'none', border: 'none', font: 'inherit',
           cursor: onOpen ? 'pointer' : 'default'
         }}>
@@ -264,20 +274,16 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
             {note.text}
           </span>
         ))}
+      </button>
+
         {/* Always offered, whether or not anything is recorded — including on a
             day where this is our only case at that hospital, which is exactly
             where the arrows can say nothing and the list order still matters. */}
         {onSetPlace && !off && (
-          <span
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
             aria-label={`Set where ${surgicalCase.patient} is on the list`}
-            onClick={e => { e.stopPropagation(); onSetPlace(surgicalCase) }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault(); e.stopPropagation(); onSetPlace(surgicalCase)
-              }
-            }}
+            onClick={() => onSetPlace(surgicalCase)}
             style={{
               // A bordered chip rather than a text link. The first version was
               // caption-sized and the same colour as the rest of the card, and
@@ -291,9 +297,9 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
               color: place ? colour.accentDeep : colour.ink
             }}>
             {place ? 'Change list order' : '＋ Set list order'}
-          </span>
+          </button>
         )}
-      </button>
+      </span>
 
       {ordering && (
         <span style={{

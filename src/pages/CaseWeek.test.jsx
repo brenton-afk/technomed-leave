@@ -716,3 +716,49 @@ describe('setting the list order on the day you are looking at', () => {
     expect(screen.getByLabelText('Set where Larkin is on the list')).toBeInTheDocument()
   })
 })
+
+describe('controls that are actually tappable', () => {
+  // "There's a set list order button but it won't let me do anything." It was a
+  // <span role="button"> inside the card's <button>. Nested interactive content
+  // is invalid HTML and a browser is entitled not to deliver the tap to the
+  // inner element — which is what happened on the phone, while every test
+  // passed, because jsdom dispatches straight at the element and skips the
+  // hit-testing a real browser does first.
+  //
+  // So the guard is structural, not behavioural: nothing interactive may sit
+  // inside anything else interactive. A click test cannot catch this and this
+  // cannot catch a broken click, so both are kept.
+  const NESTED = 'button button, button [role="button"], button a[href], button input, button select'
+
+  const second = ev('c9', 'Pearse DIPLOMAT - Fowler',
+    'Surg: Fowler\nPt: Pearse\nHosp: RHH\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)',
+    { at: '10:00' })
+
+  beforeEach(() => { events = [...BOOKINGS, second] })
+
+  it('never nests one control inside another, in the day view', async () => {
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+    expect([...container.querySelectorAll(NESTED)].map(el => el.outerHTML.slice(0, 120)))
+      .toEqual([])
+  })
+
+  it('never nests one control inside another, in the week view', async () => {
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+    await waitFor(() => expect(screen.getByText('Larkin')).toBeInTheDocument())
+    expect([...container.querySelectorAll(NESTED)].map(el => el.outerHTML.slice(0, 120)))
+      .toEqual([])
+  })
+
+  it('opens the list order sheet without also opening the booking', async () => {
+    // The two controls sit on one card. Tapping one must not do both.
+    show()
+    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Set where Pearse is on the list'))
+
+    await waitFor(() => expect(screen.getByText('List order')).toBeInTheDocument())
+    expect(screen.queryByText('Edit booking')).not.toBeInTheDocument()
+  })
+})
