@@ -220,6 +220,10 @@ function SplitModal({ days, onApply, onClose }) {
 // ─── Main ────────────────────────────────────────────────────
 
 export default function Timesheets({ user, onBack }) {
+  // Whether this person is one payroll expects a timesheet from. An admin can
+  // open the screen without being on it — to check it, or to sit with somebody
+  // stuck on it — but submitting posts to Xero, so it is not theirs to press.
+  const canSubmit = user?.staff?.hasTimesheets === true
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [categories, setCategories] = useState([])
@@ -423,9 +427,10 @@ export default function Timesheets({ user, onBack }) {
           </div>
         </div>
 
-        <button onClick={submit} disabled={busy}
-          style={{ width: '100%', padding: 16, background: busy ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: busy ? 'default' : 'pointer', marginBottom: 10 }}>
-          {busy ? 'Submitting to Xero…' : 'Confirm and submit'}
+        <button onClick={submit} disabled={busy || !canSubmit}
+          style={{ width: '100%', padding: 16, background: (busy || !canSubmit) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: (busy || !canSubmit) ? 'default' : 'pointer', marginBottom: 10 }}>
+          {busy ? 'Submitting to Xero…'
+            : canSubmit ? 'Confirm and submit' : 'Not yours to submit'}
         </button>
         <button onClick={() => setStage('entry')} disabled={busy}
           style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>
@@ -450,6 +455,18 @@ export default function Timesheets({ user, onBack }) {
         onBack={onBack}
       />
       <div className="tm-measure" style={{ padding: '14px 16px 0' }}>
+        {!canSubmit && (
+          <div style={{
+            background: 'rgba(4,39,70,0.05)', border: `1px solid ${BORDER}`,
+            color: MUTED, padding: 12, borderRadius: 10, fontSize: 14,
+            marginBottom: 12, lineHeight: 1.5
+          }}>
+            You are not on fortnightly timesheets, so this one will not be
+            submitted. Everything else works — fill it in, open the drawers, try
+            to break it. <strong style={{ color: NAVY }}>Confirm and submit</strong> is
+            the only thing switched off.
+          </div>
+        )}
         {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12 }}>{error}</div>}
 
         {alreadySubmitted && (

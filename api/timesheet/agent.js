@@ -46,9 +46,43 @@ function badRequest(message) {
   return err
 }
 
-function requireTimesheetStaff(session) {
+// ─── Two different questions ─────────────────────────────────────────────────
+// "May I open this?" and "may I file one?" were the same check, and they are
+// not the same question. The people payroll expects a fortnightly timesheet
+// from are one group; the people who need to be able to look at the screen —
+// to check it, to sit with somebody who is stuck on it — are a wider one.
+//
+// Keeping them joined meant an admin could not open their own timesheet at all,
+// so the only way to find a bug in it was to be told about one by the person
+// hitting it on a Sunday night.
+
+/** Anyone who may open the screen: the people on timesheets, and admins. */
+function requireTimesheetAccess(session) {
   const staff = getStaffByEmail(session.email)
-  if (!staff?.hasTimesheets) throw Object.assign(new Error('Timesheets are not enabled for your account'), { status: 403 })
+  if (!staff) throw Object.assign(new Error('Not authorised'), { status: 403 })
+  if (!staff.hasTimesheets && !staff.isAdmin) {
+    throw Object.assign(new Error('Timesheets are not enabled for your account'), { status: 403 })
+  }
+  return staff
+}
+
+/**
+ * Anyone who may actually file one.
+ *
+ * Narrower on purpose, and the reason is one line further down this file:
+ * submitting posts to Xero. An admin filling the screen in to see how it
+ * behaves must not put a draft timesheet into payroll under their own name —
+ * particularly one who is not on timesheets and has no employee record for it
+ * to attach to.
+ */
+function requireTimesheetSubmitter(session) {
+  const staff = getStaffByEmail(session.email)
+  if (!staff?.hasTimesheets) {
+    throw Object.assign(new Error(
+      'You are not on fortnightly timesheets, so this one cannot be submitted. '
+      + 'Everything else on this screen works — it is here so it can be checked.'
+    ), { status: 403 })
+  }
   return staff
 }
 
@@ -109,7 +143,7 @@ async function handlePayAudit(req, res) {
 // ─── payitems: categories for this staff member ────────────
 
 async function handlePayItems(req, res, session) {
-  const staff = requireTimesheetStaff(session)
+  const staff = requireTimesheetAccess(session)
   const rates = await fetchEarningsRates()
   const categories = categoriesForStaff(rates, staff.email)
   if (categories.length === 0) {
@@ -125,7 +159,7 @@ async function handlePayItems(req, res, session) {
 // ─── draft: save and resume ────────────────────────────────
 
 async function handleDraft(req, res, session) {
-  const staff = requireTimesheetStaff(session)
+  const staff = requireTimesheetAccess(session)
 
   if (req.method === 'GET') {
     const draft = await getTimesheetDraft(staff.email)
@@ -150,7 +184,7 @@ async function handleDraft(req, res, session) {
 
 async function handleSubmit(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const staff = requireTimesheetStaff(session)
+  const staff = requireTimesheetSubmitter(session)
   const period = resolvePeriod(req.body?.periodStart)
 
   const existing = await getTimesheet('submitted', staff.email, period.start)
@@ -209,7 +243,7 @@ async function handleSubmit(req, res, session) {
 // ─── mine: this staff member's own timesheets ──────────────
 
 async function handleMine(req, res, session) {
-  const staff = requireTimesheetStaff(session)
+  const staff = requireTimesheetAccess(session)
   const all = await getAllTimesheets(100)
   const mine = all
     .filter(r => r.email === staff.email)
@@ -223,7 +257,7 @@ async function handleMine(req, res, session) {
 // confirm whether they were called in. It cannot tell whose case it was — the
 // calendar has no rep field — so these are prompts, never auto-entered.
 async function handleCallIns(req, res, session) {
-  requireTimesheetStaff(session)
+  requireTimesheetAccess(session)
   const period = resolvePeriod(req.query.periodStart)
 
   const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)

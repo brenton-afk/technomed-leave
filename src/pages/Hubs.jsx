@@ -1,6 +1,7 @@
 import React from 'react'
 import { Page, Header, Body, NavCard, SectionLabel, Banner } from '../design/Shell.jsx'
 import { colour, text, space } from '../design/tokens.js'
+import { mayOpenTimesheets } from '../staffConfig.js'
 import {
   IconKit, IconStock, IconFolder, IconTasks,
   IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout, IconAdmin
@@ -45,6 +46,10 @@ export function KitHub({ user, onNavigate }) {
 
 export function MeHub({ user, onNavigate, onLogout }) {
   const hasTimesheets = user?.staff?.hasTimesheets === true
+  // An admin can open it without being on it — to check it, or to sit with
+  // somebody who is stuck. Filing one is a separate question and still theirs
+  // alone; see mayOpenTimesheets.
+  const canOpen = mayOpenTimesheets(user?.staff)
 
   return (
     <Page>
@@ -70,8 +75,10 @@ export function MeHub({ user, onNavigate, onLogout }) {
         )}
         {!user?.isAdmin && <SectionLabel style={{ marginTop: 0 }}>Pay and time</SectionLabel>}
         <NavCard icon={IconClock} label="Timesheets" tone="accent"
-          detail={hasTimesheets ? 'Fortnightly hours for payroll' : 'Not required for your role'}
-          disabled={!hasTimesheets}
+          detail={hasTimesheets
+            ? 'Fortnightly hours for payroll'
+            : canOpen ? 'Not yours to file — open it to check it' : 'Not required for your role'}
+          disabled={!canOpen}
           onClick={() => onNavigate({ tab: 'me', sub: 'timesheets' })} />
         <NavCard icon={IconLeave} label="Leave"
           detail="Apply for annual, personal or TOIL"
