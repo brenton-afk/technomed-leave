@@ -188,7 +188,7 @@ function Composer({ onSend, sending, user }) {
           type="file"
           accept="image/*"
           aria-label="Add a photo"
-          style={{ display: 'none' }}
+          style={{ fontSize: 16, display: 'none' }}
           onChange={e => { choose(e.target.files?.[0]); e.target.value = '' }} />
         <button type="button" onClick={() => picker.current?.click()}
           aria-label="Add a photo" disabled={blocked}

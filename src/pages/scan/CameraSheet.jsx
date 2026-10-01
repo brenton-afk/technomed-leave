@@ -693,7 +693,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
               Auto-capture
               <input type="checkbox" checked={autoCapture}
                 onChange={e => setAutoCapture(e.target.checked)}
-                style={{ width: 34, height: 20, accentColor: TEAL, cursor: 'pointer' }} />
+                style={{ fontSize: 16, width: 34, height: 20, accentColor: TEAL, cursor: 'pointer' }} />
             </label>
           </div>
 

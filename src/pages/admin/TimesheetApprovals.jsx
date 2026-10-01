@@ -178,7 +178,7 @@ export default function TimesheetApprovals({ user }) {
             </div>
             <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3}
               placeholder="e.g. Thursday overtime should be ordinary hours"
-              style={{ width: '100%', padding: '11px 13px', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, resize: 'none', outline: 'none', boxSizing: 'border-box', marginBottom: 14, fontFamily: 'inherit' }} />
+              style={{ width: '100%', padding: '11px 13px', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 16, resize: 'none', outline: 'none', boxSizing: 'border-box', marginBottom: 14, fontFamily: 'inherit' }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { setRejectFor(null); setReason('') }}
                 style={{ flex: 1, padding: 12, background: '#f0f3f7', border: 'none', borderRadius: 8, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Cancel</button>

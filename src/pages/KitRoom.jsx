@@ -266,7 +266,7 @@ export default function KitRoom({ user, onBack }) {
               ))}
             </div>
             <textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add a note (optional)..." rows={2}
-              style={{ width:'100%', padding:'10px 12px', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize:14, resize:'none', outline:'none', boxSizing:'border-box', marginBottom:14, fontFamily:'inherit' }} />
+              style={{ width:'100%', padding:'10px 12px', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize: 16, resize:'none', outline:'none', boxSizing:'border-box', marginBottom:14, fontFamily:'inherit' }} />
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => { setMoveModal(null); setMoveTarget(''); setComment('') }} style={{ flex:1, padding:12, background:colour.canvas, border:'none', borderRadius:8, fontSize:14, cursor:'pointer', color:colour.inkFaint }}>Cancel</button>
               <button onClick={handleMove} disabled={!moveTarget}

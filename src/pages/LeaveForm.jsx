@@ -114,7 +114,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
             <div style={grp}>
               <label style={lbl}>Reason for leave</label>
               <p style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:8 }}>This will appear in the notification email to management</p>
-              <textarea style={{ ...inp, minHeight:100, lineHeight:1.6, resize:'none' }} placeholder="e.g. Family holiday, medical procedure..." value={form.reason} onChange={e => setField('reason', e.target.value)} />
+              <textarea style={{ fontSize: 16, ...inp, minHeight:100, lineHeight:1.6, resize:'none' }} placeholder="e.g. Family holiday, medical procedure..." value={form.reason} onChange={e => setField('reason', e.target.value)} />
             </div>
             <div style={{ background:'rgba(42,181,160,0.07)', border:'1px solid rgba(42,181,160,0.18)', borderRadius:10, padding:'12px 14px', fontSize:14, color:colour.inkFaint, lineHeight:1.6 }}>
               🔒 Your application will be reviewed by management before anything is confirmed.

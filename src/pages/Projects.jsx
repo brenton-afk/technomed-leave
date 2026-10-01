@@ -251,13 +251,13 @@ export default function Projects({ user, onBack }) {
                   value={meetingTitle}
                   onChange={e => setMeetingTitle(e.target.value)}
                   placeholder="e.g. Spine team weekly"
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 14, marginBottom: 8, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 16, marginBottom: 8, boxSizing: 'border-box' }}
                 />
                 <input
                   type="date"
                   value={meetingDate}
                   onChange={e => setMeetingDate(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 16, marginBottom: 12, boxSizing: 'border-box' }}
                 />
                 <div style={{ fontSize: 12.5, color: colour.inkFaint, marginBottom: 12, lineHeight: 1.5 }}>
                   Keep this screen open and your phone unlocked for the whole meeting — recording stops if the screen locks.
@@ -309,22 +309,22 @@ export default function Projects({ user, onBack }) {
                     <input
                       value={it.task}
                       onChange={e => updateDraft(it._localId, 'task', e.target.value)}
-                      style={{ flex: 1, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 14, fontWeight: 500 }}
+                      style={{ flex: 1, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16, fontWeight: 500 }}
                     />
                     <button onClick={() => removeDraft(it._localId)} style={{ background: 'none', border: 'none', color: '#aab0bb', fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                     <select value={it.assignee} onChange={e => updateDraft(it._localId, 'assignee', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5 }}>
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }}>
                       <option value="Unassigned">Unassigned</option>
                       {STAFF.map(s => <option key={s.email} value={s.name}>{s.name}</option>)}
                     </select>
                     <select value={it.priority} onChange={e => updateDraft(it._localId, 'priority', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5, color: PRIORITY_COLORS[it.priority] }}>
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16, color: PRIORITY_COLORS[it.priority] }}>
                       {Object.keys(PRIORITY_LABELS).map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
                     </select>
                     <input type="date" value={it.due_date} onChange={e => updateDraft(it._localId, 'due_date', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5 }} />
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }} />
                   </div>
                   {it.notes && <div style={{ fontSize: 12.5, color: colour.inkFaint, marginTop: 6 }}>{it.notes}</div>}
                 </div>

@@ -465,7 +465,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], onC
 
             <Row label="Notes">
               <textarea value={notes} rows={2} onChange={e => setNotes(e.target.value)}
-                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+                style={{ fontSize: 16, ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
             </Row>
           </div>
 

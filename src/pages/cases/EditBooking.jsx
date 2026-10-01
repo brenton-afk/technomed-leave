@@ -66,7 +66,7 @@ function Field({ label, hint, value, onChange, autoFocus, type = 'text' }) {
         value={value}
         autoFocus={autoFocus}
         onChange={e => onChange(e.target.value)}
-        style={{
+        style={{ fontSize: 16,
           width: '100%', padding: `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
           border: `1px solid ${colour.line}`, borderRadius: radius.control,
           ...text('body'), color: colour.ink, background: colour.surface, outline: 'none'
@@ -621,7 +621,7 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                     value={notes}
                     rows={4}
                     onChange={e => setNotes(e.target.value)}
-                    style={{
+                    style={{ fontSize: 16,
                       width: '100%', padding: `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
                       border: `1px solid ${colour.line}`, borderRadius: radius.control,
                       ...text('body'), color: colour.ink, background: colour.surface,

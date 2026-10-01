@@ -173,7 +173,7 @@ export default function AdminPortal({ user }) {
             <div style={{ fontSize:17, fontWeight:700, color:'#042746', marginBottom:6 }}>Decline application</div>
             <div style={{ fontSize:13, color:'#6b7a8d', marginBottom:16 }}>Declining leave for <strong>{declineModal.name}</strong>. Please provide a reason:</div>
             <textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)} placeholder="e.g. Operational requirements..." rows={3}
-              style={{ width:'100%', padding:'12px 14px', border:'1px solid rgba(26,43,74,0.15)', borderRadius:10, fontSize:14, resize:'none', outline:'none', boxSizing:'border-box', marginBottom:16, fontFamily:'inherit' }} />
+              style={{ width:'100%', padding:'12px 14px', border:'1px solid rgba(26,43,74,0.15)', borderRadius:10, fontSize: 16, resize:'none', outline:'none', boxSizing:'border-box', marginBottom:16, fontFamily:'inherit' }} />
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => { setDeclineModal(null); setDeclineReason('') }} style={{ flex:1, padding:12, background:'#f0f3f7', border:'none', borderRadius:8, fontSize:14, cursor:'pointer', color:'#6b7a8d' }}>Cancel</button>
               <button onClick={() => handleAction(declineModal.id, 'decline', declineReason)} disabled={!declineReason.trim()}
