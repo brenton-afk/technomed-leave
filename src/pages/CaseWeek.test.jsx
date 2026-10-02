@@ -893,9 +893,19 @@ describe('a case we have been told about but are not needed at', () => {
   beforeEach(() => { events = [...BOOKINGS, notNeeded] })
 
   it('says so on the card', async () => {
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
+    const badge = [...container.querySelectorAll('span')]
+      .find(el => el.textContent === 'We are not needed' && el.style.borderRadius === '999px')
+    expect(badge).toBeTruthy()
+  })
+
+  it('is not counted as a case anybody is going to', async () => {
+    // The count line is what the day is staffed from. Chalmers is the real
+    // RHH case; Mathieson is the one we were only told about.
     show()
     await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
-    expect(screen.getByText(/We are not needed/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 case — 1 RHH · 1 we are not needed at/)).toBeInTheDocument()
   })
 
   it('keeps the case on the day, because it is still on', async () => {

@@ -284,3 +284,47 @@ describe('Reform against the shelf', () => {
     expect(loanNeed(system, 'CLV').reason).not.toMatch(/not in the inventory/i)
   })
 })
+
+describe('the three Calvary hospitals', () => {
+  // Calvary run three we see. Lenah Valley is the Hobart one we are at
+  // constantly; St John's is the other Hobart campus; St Luke's is in
+  // Launceston, two hours up the highway. They were one site here, matched on
+  // the word "Calvary" — so a St Luke's case was told the kit was already
+  // there. It is: in Hobart. Rare is not never, and the rare case is exactly
+  // the one nobody double-checks.
+  it('knows Lenah Valley holds the Diplomat kits', () => {
+    expect(loanNeed('Diplomat', 'CALVARY LENAH VALLEY').reason).toMatch(/consigned at CLV/)
+    expect(loanNeed('Diplomat', 'CLV').reason).toMatch(/consigned at CLV/)
+  })
+
+  it('does not pretend the Hobart shelf is in Launceston', () => {
+    const verdict = loanNeed('Diplomat', 'CALVARY ST LUKES')
+    expect(verdict.need).toBe('order')
+    expect(verdict.reason).toMatch(/Launceston/)
+    expect(verdict.reason).not.toMatch(/consigned/)
+  })
+
+  it('knows nothing is kept at St John\'s either', () => {
+    const verdict = loanNeed('Diplomat', 'CALVARY ST JOHNS')
+    expect(verdict.need).toBe('order')
+    expect(verdict.reason).toMatch(/St John/)
+  })
+
+  it('does not offer the floating kit to Launceston', () => {
+    // Dakota floats between the two Hobart sites. "Check it is free" is a
+    // reassuring thing to read about a tray that is not in the same city.
+    const verdict = loanNeed('Dakota', 'CALVARY ST LUKES')
+    expect(verdict.need).toBe('order')
+    expect(verdict.reason).not.toMatch(/floating/i)
+  })
+
+  it('still offers it at the Hobart sites', () => {
+    expect(loanNeed('Dakota', 'RHH').reason).toMatch(/consigned at RHH/)
+  })
+
+  it('handles the apostrophe and the full stop', () => {
+    for (const written of ["Calvary St Luke's", 'Calvary St. Lukes', 'ST LUKES', "St Luke's Launceston"]) {
+      expect(loanNeed('Diplomat', written).reason, written).toMatch(/Launceston/)
+    }
+  })
+})

@@ -527,3 +527,49 @@ describe('a cancelled booking', () => {
     expect(casesOf(dayFor(plan))[0].cancelled).toBeUndefined()
   })
 })
+
+describe('a day with a Launceston case and one we are not needed at', () => {
+  const ev = (id, summary, description, location) => ({
+    id, summary, description, location,
+    start: { dateTime: '2026-10-05T09:00:00+11:00' },
+    end: { dateTime: '2026-10-05T10:00:00+11:00' }
+  })
+  const WINDOW = {
+    startDate: '2026-10-05', endDate: '2026-10-11',
+    days: ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08',
+      '2026-10-09', '2026-10-10', '2026-10-11']
+  }
+  const day = () => buildWeekPlan([
+    ev('a', 'Singh REFORM - Ibbett', 'Surg: Ibbett\nPt: Singh\nHosp: RHH', 'RHH'),
+    ev('b', 'Lamb DIPLOMAT - Thani', 'Surg: Thani\nPt: Lamb', "Calvary St Luke's"),
+    ev('c', 'Reid DIPLOMAT - Dubey', 'Surg: Dubey\nPt: Reid', 'Calvary Lenah Valley'),
+    ev('d', 'Moss BRAINLAB - Ibbett',
+      'Surg: Ibbett\nPt: Moss\nHosp: RHH\nBrainlab F2F Not required', 'RHH')
+  ], WINDOW, { generatedAt: '2026-10-02T00:00:00Z' }).days[0]
+
+  it('counts the cases somebody is actually going to', () => {
+    // Three, not four. Moss is on the day because the theatre is busy and the
+    // surgeon is unavailable; nobody from here is driving to it.
+    expect(day().caseCountLine).toBe(
+      "3 cases — 1 RHH, 1 Calvary, 1 St Luke's · 1 we are not needed at")
+  })
+
+  it('still shows the one we are not needed at', () => {
+    const rhh = day().casesByHospital.find(g => g.hospital === 'RHH')
+    expect(rhh.cases.map(c => c.patient)).toEqual(['Singh', 'Moss'])
+  })
+
+  it('keeps St Luke\'s as its own site, not folded into Calvary', () => {
+    expect(day().casesByHospital.map(g => g.hospital)).toEqual([
+      'RHH', 'CALVARY LENAH VALLEY', 'CALVARY ST LUKES'
+    ])
+  })
+
+  it('orders the sites the way the week is read', () => {
+    // The two we are at constantly, then the occasional Hobart campus, then
+    // Launceston, then anywhere else.
+    const order = day().casesByHospital.map(g => g.hospital)
+    expect(order.indexOf('RHH')).toBeLessThan(order.indexOf('CALVARY LENAH VALLEY'))
+    expect(order.indexOf('CALVARY LENAH VALLEY')).toBeLessThan(order.indexOf('CALVARY ST LUKES'))
+  })
+})

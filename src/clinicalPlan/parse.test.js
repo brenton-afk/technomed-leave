@@ -916,3 +916,36 @@ describe('a booking Google stored as HTML', () => {
     expect(isCancelled('CANCELLED Hays - Ibbett', html)).toBe(true)
   })
 })
+
+describe('telling the Calvary hospitals apart', () => {
+  const at = where => detectHospital(where, '', { caseEvent: true })
+
+  it('keeps Lenah Valley as the Calvary everybody means', () => {
+    for (const written of ['Calvary Lenah Valley', 'Lenah Valley', 'CLV', 'Calvary']) {
+      expect(at(written), written).toBe(HOSPITALS.CALVARY)
+    }
+  })
+
+  it('reads St Luke\'s as its own hospital', () => {
+    for (const written of ["Calvary St Luke's", 'Calvary St Lukes', 'St Lukes', 'St. Luke\'s']) {
+      expect(at(written), written).toBe(HOSPITALS.ST_LUKES)
+    }
+  })
+
+  it('reads St John\'s as its own hospital', () => {
+    for (const written of ["Calvary St John's", 'Calvary St Johns', 'St Johns']) {
+      expect(at(written), written).toBe(HOSPITALS.ST_JOHNS)
+    }
+  })
+
+  it('does not let the word Calvary swallow a named campus', () => {
+    // All three contain it, so the generic test has to come last.
+    expect(at("Calvary St Luke's")).not.toBe(HOSPITALS.CALVARY)
+    expect(at("Calvary St John's")).not.toBe(HOSPITALS.CALVARY)
+  })
+
+  it('still reads RHH', () => {
+    expect(at('RHH')).toBe(HOSPITALS.RHH)
+    expect(at('Royal Hobart')).toBe(HOSPITALS.RHH)
+  })
+})

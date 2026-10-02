@@ -623,6 +623,17 @@ export function extractKit(description) {
 export const HOSPITALS = {
   RHH: 'RHH',
   CALVARY: 'CALVARY LENAH VALLEY',
+  // Calvary run three hospitals we see. Lenah Valley is the Hobart one we are
+  // at constantly; St John's is the other Hobart campus; St Luke's is in
+  // Launceston, two hours up the highway.
+  //
+  // They were all one site here, matched on the word "Calvary", which is fine
+  // until it is not: the consignment shelves are at Lenah Valley, so a St
+  // Luke's case was told the kit was already there. Nobody driving to
+  // Launceston wants to find that out on arrival. Rare is not the same as
+  // never, and the rare one is exactly the one nobody double-checks.
+  ST_JOHNS: 'CALVARY ST JOHNS',
+  ST_LUKES: 'CALVARY ST LUKES',
   OFFSITE: 'OFFSITE'
 }
 
@@ -641,6 +652,10 @@ function hospitalIn(text) {
   const value = String(text || '')
   if (!value.trim()) return null
   if (/\brhh\b|royal\s*hobart/i.test(value)) return HOSPITALS.RHH
+  // The named Calvary campuses first. Both contain the word "Calvary", so
+  // testing the generic pattern ahead of them would swallow the pair.
+  if (/st\.?\s*luke(?:'?s)?/i.test(value)) return HOSPITALS.ST_LUKES
+  if (/st\.?\s*john(?:'?s)?/i.test(value)) return HOSPITALS.ST_JOHNS
   if (/\bclv\b|calvary|lenah/i.test(value)) return HOSPITALS.CALVARY
   if (/offsite|off-site/i.test(value)) return HOSPITALS.OFFSITE
   return null
