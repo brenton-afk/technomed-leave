@@ -943,3 +943,46 @@ describe('a case we have been told about but are not needed at', () => {
     expect(screen.queryByText(/We are not needed/i)).not.toBeInTheDocument()
   })
 })
+
+describe('getting back to today from another day of this week', () => {
+  // Reported twice. The second half of it: the button asked whether today was
+  // in the week on screen, which is the right question in the week view and
+  // the wrong one in the day view. Standing on Monday of this week, the app
+  // decided you were already here — it hid the label and did nothing when the
+  // button was pressed.
+  it('offers the way back once you move off today', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    // Monday 21 September is today in these tests; move to Tuesday.
+    fireEvent.click(screen.getByRole('button', { name: /Tuesday 22 September/ }))
+    await waitFor(() => expect(screen.getByText(/Back to today/i)).toBeInTheDocument())
+  })
+
+  it('actually goes back', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Tuesday 22 September/ }))
+    await waitFor(() => expect(screen.getByText('Marchetti')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText(/Back to today/i))
+    // Monday's case is back, Tuesday's is gone.
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    expect(screen.queryByText('Marchetti')).not.toBeInTheDocument()
+  })
+
+  it('does not offer it while you are on today', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument()
+  })
+
+  it('in the week view, asks about the week rather than the day', async () => {
+    // A week view showing today does not need a way back to it — today is on
+    // screen. The question is genuinely different in each view.
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+    await waitFor(() => expect(screen.getByText('Larkin')).toBeInTheDocument())
+    expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument()
+  })
+})

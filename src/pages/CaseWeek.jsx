@@ -733,7 +733,17 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     setSelectedDay(today)
   }
 
-  const onThisWeek = window_.days.includes(today)
+  /**
+   * Whether you are already looking at today — which is a different question
+   * in each view, and asking the week's one in both is the other half of why
+   * this button did nothing.
+   *
+   * In the week view, today is on screen if the week contains it. In the day
+   * view only one day is on screen, so being in the right week is not being on
+   * the right day: standing on Monday of this week, the app decided you were
+   * already here, hid the label, and did nothing when the button was pressed.
+   */
+  const atToday = span === 'day' ? activeDay === today : window_.days.includes(today)
 
   // How many bookings are waiting to be confirmed. Only the count is fetched
   // here — the cards themselves are read when the queue is opened, so the week
@@ -778,7 +788,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
           <button onClick={() => goWeek(-1)} aria-label="Previous week" style={arrowStyle}>‹</button>
           <button onClick={goToday}
-            aria-label={onThisWeek ? 'This week' : 'Back to this week'}
+            aria-label={atToday ? 'Showing today' : 'Back to today'}
             style={{
               flex: 1, minWidth: 0, height: TAP, padding: `0 ${space.sm}px`,
               display: 'flex', flexDirection: 'column',
@@ -787,15 +797,15 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
               ...text('heading'), color: 'white',
               // Nothing to go back to when you are already here, so it stops
               // looking like a button.
-              border: `1px solid ${onThisWeek ? 'transparent' : 'rgba(255,255,255,0.28)'}`,
-              background: onThisWeek ? 'transparent' : 'rgba(255,255,255,0.10)'
+              border: `1px solid ${atToday ? 'transparent' : 'rgba(255,255,255,0.28)'}`,
+              background: atToday ? 'transparent' : 'rgba(255,255,255,0.10)'
             }}>
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
               {formatWeekRangeShort(window_.startDate, window_.endDate, today)}
             </span>
             {/* Tapping the range to come back was an affordance nobody could
                 see. It only appears when there is somewhere to go back to. */}
-            {!onThisWeek && (
+            {!atToday && (
               <span style={{ ...text('micro'), color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase' }}>
                 Back to today
               </span>
