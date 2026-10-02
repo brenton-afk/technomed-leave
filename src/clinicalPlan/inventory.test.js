@@ -267,3 +267,20 @@ describe('the kit line, resolved wherever it is read', () => {
     expect(resolveKit('', 'L4/5 PLIF')).toBe('')
   })
 })
+
+describe('Reform against the shelf', () => {
+  it('is on the shelf at RHH, however the booking spells it', () => {
+    for (const written of ['Reform', 'E4 Reform', 'Reform Cervical']) {
+      for (const system of systemsInKit(written)) {
+        expect(loanNeed(system, 'RHH').reason, written).toMatch(/consigned at RHH/)
+      }
+    }
+  })
+
+  it('needs a loan kit at Calvary, which is the real answer there', () => {
+    // RHH only. A Calvary case has to have one requested, and that is the
+    // warning worth keeping — unlike the one it was giving at RHH.
+    const [system] = systemsInKit('Reform')
+    expect(loanNeed(system, 'CLV').reason).not.toMatch(/not in the inventory/i)
+  })
+})
