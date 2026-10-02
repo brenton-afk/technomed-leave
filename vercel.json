@@ -13,6 +13,9 @@
     "api/meetings/agent.js": {
       "includeFiles": "node_modules/@vercel/blob/**"
     },
+    "api/chat.js": {
+      "includeFiles": "node_modules/@vercel/blob/**"
+    },
     "api/calendar/today.js": {
       "maxDuration": 60,
       "memory": 1024
