@@ -695,8 +695,19 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     remember({ caseSpan: 'day' })
   }
 
+  /**
+   * The week containing today, and today selected in it.
+   *
+   * Not resolveDefaultWeek(). That answers a different question — "which week
+   * should the app open on" — and from Friday onwards it answers next week, on
+   * purpose, because that is the one being planned. Using it here meant that
+   * from Friday to Sunday the button labelled "Back to today" set the window to
+   * the week it was already showing, failed to find today in it, and fell back
+   * to the first day: next Monday. It had done that every weekend since the
+   * roll-forward was added.
+   */
   function goToday() {
-    setWindow(resolveDefaultWeek())
+    setWindow(weekWindowFor(today))
     setSelectedDay(today)
   }
 
