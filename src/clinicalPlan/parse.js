@@ -875,7 +875,44 @@ export function cleanOperation(text, o = {}) {
  * screen and another way on the other, with the system and kit text showing
  * through exactly as it had been typed.
  */
+/**
+ * A booking's notes as plain text, whatever Google handed us.
+ *
+ * Google Calendar stores a description as HTML whenever it has been touched by
+ * the web interface, by Outlook, or by an invitation forwarded from a supplier.
+ * The same booking is then "Surg: Ibbett<br>Pt: Hays" rather than two lines,
+ * and every labelled field in it reads as one unbroken run — so the parser
+ * found no fields at all and the card came back blank. Not partly wrong:
+ * blank, with the booking sitting there in Google looking perfectly fine.
+ *
+ * `<br>` and `</div>`, `</p>`, `</li>` become line breaks because that is what
+ * they are to a reader; every other tag is dropped. Entities are decoded last,
+ * so a `&lt;` that was written as text does not then get treated as markup.
+ */
+export function plainDescription(description) {
+  const text = String(description || '')
+  if (!/[<&]/.test(text)) return text          // the common case, untouched
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:div|p|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    // Google wraps lines generously; three blank lines in a row is not a
+    // paragraph break anybody typed.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export function readBooking(title, description, { colourSurgeon } = {}) {
+  // Before anything reads it. See plainDescription: a booking Google stored as
+  // HTML has no line breaks the parser can see, so every labelled field runs
+  // together and the card comes back blank rather than merely imperfect.
+  description = plainDescription(description)
   // Both markers are read before anything else and taken off the title, because
   // both sit where the patient's name goes and both otherwise end up inside
   // whatever field parses next.
@@ -893,8 +930,22 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   // Identifiers are stripped on the way out of every labelled value, not only the
   // patient one. A UR number in "Patient:" was already handled; a date of birth
   // typed into "Procedure:" was not, and went straight to the screen.
+  //
+  // The cancellation marker is taken off here too, and for a sharper reason.
+  // When a case comes off, the team writes CANCELLED by hand — into the title,
+  // and often into the Pt: line as well. The title was cleaned; the labelled
+  // fields never were, and a labelled field beats the title. So a booking
+  // reading "Pt: CANCELLED Hays" came back with the patient as "CANCELLED" and
+  // the surname thrown away, which is the one thing on the card anybody uses to
+  // find the case again. A cancelled case still has to be traceable: kit was
+  // moved for it, somebody may have driven to it, and it is the case most
+  // likely to be asked about afterwards.
+  //
+  // Only the displayed value is cleaned. isCancelled still reads the raw title
+  // and description, so the strikethrough and the badge are untouched.
   const labelled = Object.fromEntries(
-    Object.entries(raw).map(([field, value]) => [field, stripIdentifiers(value)]))
+    Object.entries(raw).map(([field, value]) =>
+      [field, stripCancellation(stripSelfFunding(stripIdentifiers(value)))]))
   // Resolved before anything reads it, so a booking accepted onto the calendar
   // with "Implanet" on it still shows the system somebody can actually bring.
   const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))

@@ -795,3 +795,124 @@ describe('calling a case off', () => {
     expect(isCancelled(stripCancellation(markCancelled(title)), '')).toBe(false)
   })
 })
+
+describe('a cancelled case keeps its surname', () => {
+  // Toni's Hays booking: "CANCELLED Hays DAKOTA - Ibbett", with the marker
+  // typed into the description as well — "Pt: CANCELLED Hays".
+  //
+  // The title was cleaned and the labelled fields were not, and a labelled
+  // field beats the title. So the patient came back as "CANCELLED" and the
+  // surname was discarded — the one thing on the card anybody uses to find the
+  // case again. A cancelled case has to stay traceable: kit was moved for it,
+  // somebody may have driven to it, and it is the case most likely to be asked
+  // about afterwards.
+  //
+  // Nothing in the app writes that word. The team types it, in both places, and
+  // the convention is fine — it simply was not being read back.
+  const HAYS = {
+    title: 'CANCELLED Hays DAKOTA - Ibbett',
+    description: 'Surg: Ibbett\nPt: CANCELLED Hays\nProcedure: C5/6, C6/7 ACDF\n'
+      + 'Kit: Dakota (Consignment)\nHospital: Calvary Lenah Valley'
+  }
+
+  it('reads the patient, not the marker', () => {
+    expect(readBooking(HAYS.title, HAYS.description).patient).toBe('Hays')
+  })
+
+  it('still reads everything else off the booking', () => {
+    const read = readBooking(HAYS.title, HAYS.description)
+    expect(read.surgeon).toBe('Ibbett')
+    expect(read.operation).toMatch(/ACDF/)
+    expect(read.hospital).toBe('CLV')
+  })
+
+  it('is still cancelled', () => {
+    // Only the displayed value is cleaned. isCancelled reads the raw title and
+    // description, which still carry the word, so the strikethrough and the
+    // badge are untouched.
+    expect(isCancelled(HAYS.title, HAYS.description)).toBe(true)
+  })
+
+  for (const written of [
+    'CANCELLED Hays', 'Hays CANCELLED', 'Hays (cancelled)', 'CANCELLED - Hays',
+    'Cancelled: Hays', 'POSTPONED Hays', 'Hays (postponed)', 'Hays - CANCELLED'
+  ]) {
+    it(`reads "${written}" as Hays`, () => {
+      expect(readBooking('Hays DAKOTA - Ibbett', `Surg: Ibbett\nPt: ${written}`).patient)
+        .toBe('Hays')
+    })
+  }
+
+  it('does not invent a cancellation that nobody wrote', () => {
+    const read = readBooking('Hays DAKOTA - Ibbett', 'Surg: Ibbett\nPt: Hays')
+    expect(read.patient).toBe('Hays')
+    expect(isCancelled('Hays DAKOTA - Ibbett', 'Surg: Ibbett\nPt: Hays')).toBe(false)
+  })
+
+  it('keeps the self-funding marker out of the surname too', () => {
+    // The same bug, one field over: the title path stripped it and the
+    // labelled path did not.
+    const read = readBooking('Hays DAKOTA - Ibbett',
+      'Surg: Ibbett\nPt: SELF FUNDING Hays\nKit: Dakota')
+    expect(read.patient).toBe('Hays')
+    expect(read.selfFunding).toBe(true)
+  })
+
+  it('leaves a surname that merely looks alarming alone', () => {
+    // Nothing here is a marker, and a parser that trims real words out of a
+    // name is worse than one that occasionally leaves one in.
+    expect(readBooking('X', 'Surg: Ibbett\nPt: Canning').patient).toBe('Canning')
+    expect(readBooking('X', 'Surg: Ibbett\nPt: Postlethwaite').patient).toBe('Postlethwaite')
+  })
+})
+
+describe('a booking Google stored as HTML', () => {
+  // Google Calendar keeps a description as HTML as soon as it has been touched
+  // by the web interface, by Outlook, or by an invitation forwarded from a
+  // supplier. The labelled fields then run together with no line breaks the
+  // parser can see — so it found no fields at all and the card came back
+  // blank, while the booking sat in Google looking perfectly normal.
+  const HTML = '<b>Surg:</b> Ibbett<br>Pt: Hays<br>Procedure: C5/6 ACDF<br>'
+    + 'Kit: Dakota (Consignment)<br>Hospital: Calvary Lenah Valley'
+
+  it('reads every field out of it', () => {
+    const read = readBooking('X', HTML)
+    expect(read.patient).toBe('Hays')
+    expect(read.surgeon).toBe('Ibbett')
+    expect(read.operation).toMatch(/ACDF/)
+    expect(read.hospital).toBe('CLV')
+  })
+
+  it('reads the div-and-paragraph shape Outlook sends', () => {
+    const read = readBooking('X',
+      '<div>Surg: Ibbett</div><div>Pt: Hays</div><p>Kit: Dakota</p>')
+    expect(read.patient).toBe('Hays')
+    expect(read.surgeon).toBe('Ibbett')
+  })
+
+  it('decodes the entities rather than showing them', () => {
+    const read = readBooking('X', 'Surg: Ibbett<br>Pt: Hays<br>Kit: Dakota &amp; Reform')
+    expect(read.system || read.kit || '').not.toMatch(/&amp;/)
+  })
+
+  it('does not treat an escaped angle bracket as markup', () => {
+    // Decoded last on purpose: a &lt; that somebody wrote as text must not then
+    // be read as the start of a tag and swallow the rest of the line.
+    const read = readBooking('X', 'Surg: Ibbett<br>Pt: Hays<br>Procedure: L4&lt;L5 fusion')
+    expect(read.operation).toMatch(/L4<L5/)
+  })
+
+  it('leaves a plain description exactly as it was', () => {
+    // The common case, and it must not pay for the rare one.
+    const plain = 'Surg: Ibbett\nPt: Hays\nKit: Dakota (Consignment)'
+    const read = readBooking('X', plain)
+    expect(read.patient).toBe('Hays')
+    expect(read.surgeon).toBe('Ibbett')
+  })
+
+  it('still finds a cancellation written inside the markup', () => {
+    const html = '<div>Surg: Ibbett</div><div>Pt: CANCELLED Hays</div>'
+    expect(readBooking('CANCELLED Hays - Ibbett', html).patient).toBe('Hays')
+    expect(isCancelled('CANCELLED Hays - Ibbett', html)).toBe(true)
+  })
+})
