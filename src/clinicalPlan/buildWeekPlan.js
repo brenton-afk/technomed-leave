@@ -317,6 +317,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // dropped — see leftoverOf in parse.js.
         unread: read.unread || undefined,
         navigation: read.navigation,
+        // Told about, not attending. Drawn quietly and labelled, rather than
+        // looking like every other case on the day.
+        notRequired: read.notRequired,
         // Where we are on the hospital's running order, once somebody has rung
         // and been told. The fact that decides who is on site at half seven.
         listPlace: read.listPlace,

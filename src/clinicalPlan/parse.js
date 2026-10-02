@@ -3,6 +3,7 @@ import { findSystems, findLoanSets, systemWords, findNavigation, resolveKit } fr
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 import { isPreOpNoise } from './preOpNoise.js'
 import { parseListPlace } from './listPlace.js'
+import { attendanceNotRequired } from './attendance.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -1006,6 +1007,12 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     // than a blank one, because nobody would know to check it.
     listPlace: parseListPlace(labelled.list) || undefined,
     navigation: findNavigation(everything).join(' + ') || undefined,
+    notRequired: attendanceNotRequired(everything) || undefined,
+    // The hospital told us about the case and said nobody from here is wanted
+    // in the room. Worth having on the calendar — it is why a theatre is busy
+    // and why a surgeon is unavailable — and it must not read as a case we are
+    // attending. See attendance.js.
+
     // Who attended, or who is covering it. The calendar carries this and the
     // app was dropping it. Two reps on one case is normal.
     rep,

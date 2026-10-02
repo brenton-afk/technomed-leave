@@ -15,6 +15,7 @@ import NewBooking from './cases/NewBooking.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import ListPlace from './cases/ListPlace.jsx'
 import { describeListPlace } from '../clinicalPlan/listPlace.js'
+import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -121,6 +122,9 @@ const KIND_TONE = {
  */
 function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) {
   const off = Boolean(surgicalCase.cancelled)
+  // Told about, not attending. Drawn back like a cancelled case rather than
+  // struck through — it is still going ahead, just without us.
+  const spare = Boolean(surgicalCase.notRequired) && !off
   const bar = off ? colour.inkFainter : accentForCase(surgicalCase)
   const nameInk = off ? colour.inkFaint : accentTextForCase(surgicalCase)
   const ordering = typeof position === 'number' && Boolean(onMove)
@@ -132,7 +136,7 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
         display: 'flex', width: '100%', gap: 0, padding: 0, alignItems: 'stretch',
         background: colour.surface, border: `1px solid ${colour.line}`,
         borderRadius: radius.card, marginBottom: space.sm, overflow: 'hidden',
-        opacity: busy ? 0.55 : 1, transition: 'opacity 120ms'
+        opacity: busy ? 0.55 : spare ? 0.72 : 1, transition: 'opacity 120ms'
       }}>
       <span aria-hidden="true" style={{ width: 5, background: bar, flexShrink: 0 }} />
 
@@ -172,7 +176,7 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
           <span style={{ color: nameInk }}>{surgicalCase.surgeon}</span>
         </span>
 
-        {(off || surgicalCase.navigation || surgicalCase.selfFunding) && (
+        {(off || spare || surgicalCase.navigation || surgicalCase.selfFunding) && (
           <span style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
             {off && (
               <span style={{
@@ -180,6 +184,19 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
                 border: `1px solid ${colour.inkFainter}`, color: colour.inkFaint,
                 ...text('micro'), textTransform: 'uppercase'
               }}>Cancelled</span>
+            )}
+            {/* First, and the only strong colour on the card when it applies.
+                One of these used to read as an ordinary case with a BRAINLAB
+                badge — which everywhere else means we are there with
+                navigation — and the fact that nobody needs to go was a line of
+                grey text under the kit. The most important thing on the card
+                was the quietest thing on it. */}
+            {spare && (
+              <span style={{
+                padding: '1px 7px', borderRadius: radius.pill,
+                background: colour.inkMuted, color: 'white',
+                ...text('micro'), textTransform: 'uppercase'
+              }}>{NOT_REQUIRED_LABEL}</span>
             )}
             {/* Written at the front of the title, where it used to be swallowed
                 into whatever parsed next — the card showed "FUNDING" sitting in
@@ -200,7 +217,12 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
             {surgicalCase.navigation && !off && (
               <span style={{
                 padding: '1px 7px', borderRadius: radius.pill,
-                background: NAVIGATION_ACCENT, color: 'white',
+                // Outlined rather than filled when we are not attending. A
+                // solid navigation badge is how the card says "we are there
+                // with the AIRO", which is the opposite of what this case is.
+                background: spare ? 'transparent' : NAVIGATION_ACCENT,
+                color: spare ? colour.inkFaint : 'white',
+                border: spare ? `1px solid ${colour.line}` : 'none',
                 ...text('micro'), textTransform: 'uppercase'
               }}>{surgicalCase.navigation}</span>
             )}
