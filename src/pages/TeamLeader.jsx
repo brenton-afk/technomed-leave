@@ -392,7 +392,8 @@ export default function TeamLeader({ user, switcher }) {
         </div>
       </Header>
 
-      <div style={{ flex: 1, padding: `${space.md}px ${space.md}px 100px`, overflowY: 'auto' }}>
+      <div className="tm-measure"
+        style={{ flex: 1, padding: `${space.md}px ${space.md}px 100px`, overflowY: 'auto' }}>
         {error && <Banner tone="danger">{error}</Banner>}
 
         {isRunsheet && (

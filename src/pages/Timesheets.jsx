@@ -134,7 +134,7 @@ function OnCallModal({ days, onApply, onClose }) {
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>On-call calculator</div>
         <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 16 }}>Overnight periods roll past midnight automatically.</div>
         <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Night starting</label>
-        <select value={day} onChange={e => setDay(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, marginBottom: 12, background: 'white', color: NAVY }}>
+        <select value={day} onChange={e => setDay(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 16, marginBottom: 12, background: 'white', color: NAVY }}>
           {days.map((d, i) => <option key={d} value={d}>{DAY_NAMES[i % 7]} {d.slice(8, 10)}/{d.slice(5, 7)}</option>)}
         </select>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
@@ -142,7 +142,7 @@ function OnCallModal({ days, onApply, onClose }) {
             <div key={label} style={{ flex: 1 }}>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>{label}</label>
               <input type="time" value={val} onChange={e => set(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box', color: NAVY }} />
+                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 16, boxSizing: 'border-box', color: NAVY }} />
             </div>
           ))}
         </div>
@@ -182,18 +182,18 @@ function SplitModal({ days, onApply, onClose }) {
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 2 }}>
             <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Day</label>
-            <select value={day} onChange={e => setDay(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, background: 'white', color: NAVY }}>
+            <select value={day} onChange={e => setDay(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 16, background: 'white', color: NAVY }}>
               {days.map((d, i) => <option key={d} value={d}>{DAY_NAMES[i % 7]} {d.slice(8, 10)}/{d.slice(5, 7)}</option>)}
             </select>
           </div>
           <div style={{ flex: 1 }}>
             <label style={{ fontSize: 12.5, fontWeight: 600, color: MUTED, textTransform: 'uppercase' }}>Hours</label>
             <input type="number" step="0.1" value={hours} onChange={e => setHours(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, boxSizing: 'border-box', color: NAVY }} />
+              style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 16, boxSizing: 'border-box', color: NAVY }} />
           </div>
         </div>
         <input type="range" min="0" max="100" step="5" value={pct} onChange={e => setPct(Number(e.target.value))}
-          style={{ width: '100%', marginBottom: 8, accentColor: NAVY }} />
+          style={{ fontSize: 16, width: '100%', marginBottom: 8, accentColor: NAVY }} />
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <div style={{ flex: 1, background: '#eaeff4', color: NAVY, borderRadius: 10, padding: '11px 12px', textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.4px', opacity: 0.7 }}>Admin {pct}%</div>
@@ -220,6 +220,10 @@ function SplitModal({ days, onApply, onClose }) {
 // ─── Main ────────────────────────────────────────────────────
 
 export default function Timesheets({ user, onBack }) {
+  // Whether this person is one payroll expects a timesheet from. An admin can
+  // open the screen without being on it — to check it, or to sit with somebody
+  // stuck on it — but submitting posts to Xero, so it is not theirs to press.
+  const canSubmit = user?.staff?.hasTimesheets === true
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [categories, setCategories] = useState([])
@@ -361,7 +365,7 @@ export default function Timesheets({ user, onBack }) {
 
   if (error && !categories.length) {
     return (
-      <div style={{ padding: 16 }}>
+      <div className="tm-measure" style={{ padding: 16 }}>
         <div style={{ background: '#fdecea', color: '#c0392b', padding: 14, borderRadius: 10, fontSize: 14, lineHeight: 1.5 }}>{error}</div>
         <button onClick={boot} style={{ width: '100%', marginTop: 12, padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>Try again</button>
       </div>
@@ -423,9 +427,10 @@ export default function Timesheets({ user, onBack }) {
           </div>
         </div>
 
-        <button onClick={submit} disabled={busy}
-          style={{ width: '100%', padding: 16, background: busy ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: busy ? 'default' : 'pointer', marginBottom: 10 }}>
-          {busy ? 'Submitting to Xero…' : 'Confirm and submit'}
+        <button onClick={submit} disabled={busy || !canSubmit}
+          style={{ width: '100%', padding: 16, background: (busy || !canSubmit) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: (busy || !canSubmit) ? 'default' : 'pointer', marginBottom: 10 }}>
+          {busy ? 'Submitting to Xero…'
+            : canSubmit ? 'Confirm and submit' : 'Not yours to submit'}
         </button>
         <button onClick={() => setStage('entry')} disabled={busy}
           style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>
@@ -449,7 +454,19 @@ export default function Timesheets({ user, onBack }) {
         subtitle={period ? `${period.start} to ${period.end}` : undefined}
         onBack={onBack}
       />
-      <div style={{ padding: '14px 16px 0' }}>
+      <div className="tm-measure" style={{ padding: '14px 16px 0' }}>
+        {!canSubmit && (
+          <div style={{
+            background: 'rgba(4,39,70,0.05)', border: `1px solid ${BORDER}`,
+            color: MUTED, padding: 12, borderRadius: 10, fontSize: 14,
+            marginBottom: 12, lineHeight: 1.5
+          }}>
+            You are not on fortnightly timesheets, so this one will not be
+            submitted. Everything else works — fill it in, open the drawers, try
+            to break it. <strong style={{ color: NAVY }}>Confirm and submit</strong> is
+            the only thing switched off.
+          </div>
+        )}
         {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12 }}>{error}</div>}
 
         {alreadySubmitted && (

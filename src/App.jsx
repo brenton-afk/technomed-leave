@@ -18,10 +18,11 @@ import PromptBanner from './pages/PromptBanner.jsx'
 import { colour, text, font, radius } from './design/tokens.js'
 import { useIsDesktop } from './design/viewport.js'
 import {
-  IconScan, IconCases, IconKit, IconMe, IconAdmin,
+  IconScan, IconCases, IconKit, IconMe, IconChat,
   IconStock, IconPayslip, IconLock, IconBack
 } from './design/icons.jsx'
 import { useNewBuild } from './appVersion.js'
+import { useUnread } from './chat/unread.js'
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 // Five destinations, because a bottom bar stops being scannable past about five.
@@ -35,9 +36,16 @@ import { useNewBuild } from './appVersion.js'
 const TABS = [
   { id: 'cases', label: 'Cases', Icon: IconCases },
   { id: 'scan', label: 'Scan', Icon: IconScan },
+  // Messages earns a tab now that it can reach a phone. It spent its first
+  // weeks three taps deep inside Kit, next to stock and resources, which is
+  // nowhere to put the thing meant to replace the WhatsApp group — nobody goes
+  // looking in a kit menu for a conversation.
+  { id: 'messages', label: 'Messages', Icon: IconChat },
   { id: 'kit', label: 'Kit', Icon: IconKit },
-  { id: 'me', label: 'Me', Icon: IconMe },
-  { id: 'admin', label: 'Admin', Icon: IconAdmin, adminOnly: true }
+  { id: 'me', label: 'Me', Icon: IconMe }
+  // Admin is deliberately not here any more. Five is the limit a bottom bar
+  // stays scannable at, an admin is one of two people, and Admin has a card at
+  // the top of Me — whereas Messages is for all nine, several times a day.
 ]
 
 // Matches the server-side session TTL in api/_auth.js.
@@ -69,6 +77,9 @@ export default function App() {
   // being up here: the login screen is exactly where a stale tab tends to sit.
   const newBuild = useNewBuild()
   const [user, setUser] = useState(null)
+  // The number on the Messages tab. Below the state it reads and above every
+  // early return, which is the only place both rules are satisfied.
+  const unread = useUnread(user?.token)
   const [nav, setNav] = useState({ tab: 'cases', sub: null })
   const [submitted, setSubmitted] = useState(null)
 
@@ -146,6 +157,8 @@ export default function App() {
 
     if (tab === 'scan') return <UsageScan user={user} />
 
+    if (tab === 'messages') return <Chat user={user} onRead={unread.refresh} />
+
     if (tab === 'kit') {
       switch (sub) {
         case 'kitroom': return <KitRoom user={user} onBack={back} />
@@ -154,8 +167,6 @@ export default function App() {
           return <FileBrowser user={user} root="resources" eyebrow="Kit and reference" title="Resources" onBack={back} />
         case 'guides':
           return <TheatreGuides user={user} onBack={back} />
-        case 'messages':
-          return <Chat user={user} onBack={back} />
         case 'stock':
           return <ComingSoonSection eyebrow="Kit and stock" title="Stock take" icon={IconStock} onBack={back}
             detail="Counting and reconciling consignment stock will live here. The section exists so the structure is right — tell me how you count today and I'll build it." />
@@ -262,6 +273,8 @@ export default function App() {
             inline style cannot be overridden by a media query. */}
         {tabs.map(({ id, label, Icon }) => {
           const active = nav.tab === id
+          // Cleared by opening the tab, which is what marks the channel read.
+          const waiting = id === 'messages' && !active ? unread.count : 0
           return (
             <button key={id} onClick={() => navigate({ tab: id })}
               aria-current={active ? 'page' : undefined}
@@ -279,7 +292,22 @@ export default function App() {
               }}>
               {/* Weight, not fill, marks the active tab — it keeps the set
                   looking like one family instead of two icon styles. */}
-              <Icon size={desktop ? 20 : 23} strokeWidth={active ? 2.1 : 1.6} />
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <Icon size={desktop ? 20 : 23} strokeWidth={active ? 2.1 : 1.6} />
+                {waiting > 0 && (
+                  <span
+                    aria-label={`${waiting} unread message${waiting === 1 ? '' : 's'}`}
+                    style={{
+                      position: 'absolute', top: -5, left: '55%',
+                      minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box',
+                      borderRadius: 999, background: colour.danger, color: 'white',
+                      ...text('micro'), fontWeight: 700, lineHeight: '16px',
+                      textAlign: 'center'
+                    }}>
+                    {waiting > 9 ? '9+' : waiting}
+                  </span>
+                )}
+              </span>
               <span style={{
                 ...text(desktop ? 'bodyStrong' : 'micro'),
                 letterSpacing: '0.1px', textTransform: 'none',

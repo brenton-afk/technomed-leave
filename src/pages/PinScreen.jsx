@@ -434,7 +434,7 @@ export default function PinScreen({ onLogin }) {
         </div>
           <div style={{ position:'relative', width:'100%' }}>
             <select disabled={checking}
-              style={{ width:'100%', padding:'12px 14px', border:'1px solid rgba(255,255,255,0.2)', borderRadius:'10px', fontSize:'15px', background:'rgba(255,255,255,0.08)', color:'white', outline:'none', appearance:'none', WebkitAppearance:'none', boxSizing:'border-box', opacity: checking ? 0.6 : 1 }}
+              style={{ width:'100%', padding:'12px 14px', border:'1px solid rgba(255,255,255,0.2)', borderRadius:'10px', fontSize: 16, background:'rgba(255,255,255,0.08)', color:'white', outline:'none', appearance:'none', WebkitAppearance:'none', boxSizing:'border-box', opacity: checking ? 0.6 : 1 }}
               value={selectedEmail} onChange={e => e.target.value && handleStaffSelect(e.target.value)}>
               <option value="">Select your name...</option>
               {STAFF.map(s => <option key={s.email} value={s.email}>{s.name}</option>)}

@@ -15,7 +15,12 @@ import { zonedCivil, zonedToInstant, addCivilDays, civilWeekday, toDateStr, TZ }
 // distributor request, but it can only be in one place at a time, which is
 // exactly the clash worth surfacing.
 
+// The sites that hold consignment. St John's and St Luke's deliberately have
+// none: nothing is stocked there, so every case at one needs a kit sent.
 export const HOSPITALS = { RHH: 'RHH', CLV: 'CLV' }
+
+/** Where the floating kit can reasonably get to. Both are in Hobart. */
+const HOBART = new Set(['RHH', 'CLV'])
 
 export const INVENTORY = [
   // ── Signus ──
@@ -157,7 +162,12 @@ export function loanNeed(system, hospital) {
   // Both the code and the name, because bookings carry either: "CLV",
   // "Calvary", "Calvary Lenah Valley", "RHH", "Royal Hobart".
   const text = String(hospital || '').toUpperCase()
-  const site = /\bCLV\b|CALVARY|LENAH/.test(text) ? 'CLV'
+  // The named campuses before the generic "CALVARY", which all three contain.
+  // Matching Calvary first told a St Luke's case in Launceston that the kit
+  // was on the shelf — it is, two hours away in Hobart.
+  const site = /ST\.?\s*LUKE/.test(text) ? 'STL'
+    : /ST\.?\s*JOHN/.test(text) ? 'STJ'
+    : /\bCLV\b|CALVARY|LENAH/.test(text) ? 'CLV'
     : /\bRHH\b|ROYAL\s*HOBART/.test(text) ? 'RHH' : null
 
   if (!item) {
@@ -189,11 +199,27 @@ export function loanNeed(system, hospital) {
   if (consigned > 0) {
     return { need: 'none', reason: `${consigned} consigned at ${site}.`, item }
   }
-  if (item.movesBetweenSites) {
-    return { need: 'move', reason: `The ${item.system} kit moves between sites — check where it is.`, item }
+  // The floating kit and the kit that moves between sites both live in Hobart
+  // and both get shifted the morning of a case. Neither answer is true of
+  // Launceston, and "check it is free" is a reassuring thing to read about a
+  // tray that is not in the same city.
+  if (HOBART.has(site)) {
+    if (item.movesBetweenSites) {
+      return { need: 'move', reason: `The ${item.system} kit moves between sites — check where it is.`, item }
+    }
+    if (item.floating) {
+      return { need: 'move', reason: 'Covered by the floating TechnoMed kit — check it is free.', item }
+    }
   }
-  if (item.floating) {
-    return { need: 'move', reason: `Covered by the floating TechnoMed kit — check it is free.`, item }
+  if (site === 'STL') {
+    return {
+      need: 'order',
+      reason: `Nothing is kept at St Luke's — it is Launceston, so the kit has to be sent up.`,
+      item
+    }
+  }
+  if (site === 'STJ') {
+    return { need: 'order', reason: `Nothing is kept at St John's. A kit has to be sent.`, item }
   }
   return {
     need: 'order',
@@ -241,7 +267,12 @@ export function dayShortfall(system, hospital, demand) {
   if (!item || item.competitor || demand < 2) return null
 
   const text = String(hospital || '').toUpperCase()
-  const site = /\bCLV\b|CALVARY|LENAH/.test(text) ? 'CLV'
+  // The named campuses before the generic "CALVARY", which all three contain.
+  // Matching Calvary first told a St Luke's case in Launceston that the kit
+  // was on the shelf — it is, two hours away in Hobart.
+  const site = /ST\.?\s*LUKE/.test(text) ? 'STL'
+    : /ST\.?\s*JOHN/.test(text) ? 'STJ'
+    : /\bCLV\b|CALVARY|LENAH/.test(text) ? 'CLV'
     : /\bRHH\b|ROYAL\s*HOBART/.test(text) ? 'RHH' : null
   if (!site) return null
   if (item.ours === false && item.weCover && !item.weCover[site]) return null

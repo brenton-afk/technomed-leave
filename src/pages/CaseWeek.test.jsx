@@ -882,6 +882,68 @@ describe('getting back to today from a week that is not this one', () => {
   })
 })
 
+describe('a case we have been told about but are not needed at', () => {
+  // "Brainlab F2F Not required" — the hospital letting us know, not asking us
+  // to come. Useful on the calendar; must not look like a case anybody is
+  // driving to.
+  const notNeeded = ev('c50', 'Mathieson BRAINLAB - Ibbett',
+    'Surg: Ibbett\nPt: Mathieson\nHosp: RHH\nProcedure: L4/5 decompression\n'
+    + 'Brainlab F2F Not required')
+
+  beforeEach(() => { events = [...BOOKINGS, notNeeded] })
+
+  it('says so on the card', async () => {
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
+    const badge = [...container.querySelectorAll('span')]
+      .find(el => el.textContent === 'We are not needed' && el.style.borderRadius === '999px')
+    expect(badge).toBeTruthy()
+  })
+
+  it('is not counted as a case anybody is going to', async () => {
+    // The count line is what the day is staffed from. Chalmers is the real
+    // RHH case; Mathieson is the one we were only told about.
+    show()
+    await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
+    expect(screen.getByText(/1 case — 1 RHH · 1 we are not needed at/)).toBeInTheDocument()
+  })
+
+  it('keeps the case on the day, because it is still on', async () => {
+    // It is why the theatre is busy and why the surgeon is unavailable.
+    show()
+    await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
+    expect(screen.getByText(/L4\/5 decompression/)).toBeInTheDocument()
+  })
+
+  // Several spans on a card contain the word — the wrapper, the badge and the
+  // system line. The badge is the pill.
+  const navBadge = (container, word) => [...container.querySelectorAll('span')]
+    .find(el => el.textContent === word && el.style.borderRadius === '999px')
+
+  it('does not dress it up as a case we are attending', async () => {
+    // A filled navigation badge is how every other card says "we are there
+    // with the AIRO". On this one it is outlined.
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
+    const badge = navBadge(container, 'Brainlab')
+    expect(badge).toBeTruthy()
+    expect(badge.style.background).toBe('transparent')
+    expect(badge.style.border).not.toBe('')
+  })
+
+  it('leaves an ordinary navigation case shouting as before', async () => {
+    events = [...BOOKINGS, ev('c51', 'Nunan AIRO - Ibbett',
+      'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nProcedure: L4/5 PSF with AIRO')]
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Nunan')).toBeInTheDocument())
+    const badge = navBadge(container, 'AIRO')
+    expect(badge).toBeTruthy()
+    expect(badge.style.background).not.toBe('transparent')
+    expect(badge.style.background).not.toBe('')
+    expect(screen.queryByText(/We are not needed/i)).not.toBeInTheDocument()
+  })
+})
+
 describe('getting back to today from another day of this week', () => {
   // Reported twice. The second half of it: the button asked whether today was
   // in the week on screen, which is the right question in the week view and

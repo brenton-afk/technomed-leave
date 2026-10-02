@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
+import { CaseThread } from '../Chat.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
@@ -65,7 +66,7 @@ function Field({ label, hint, value, onChange, autoFocus, type = 'text' }) {
         value={value}
         autoFocus={autoFocus}
         onChange={e => onChange(e.target.value)}
-        style={{
+        style={{ fontSize: 16,
           width: '100%', padding: `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
           border: `1px solid ${colour.line}`, borderRadius: radius.control,
           ...text('body'), color: colour.ink, background: colour.surface, outline: 'none'
@@ -222,6 +223,9 @@ export function withReps(summary, reps) {
 }
 
 export default function EditBooking({ eventId, user, onClose, onSaved }) {
+  // The booking's own thread. Opened from here because this is where somebody
+  // already is when they think of the question.
+  const [thread, setThread] = useState(false)
   const [loaded, setLoaded] = useState(null)
   const [fields, setFields] = useState({})
   const [notes, setNotes] = useState('')
@@ -458,6 +462,14 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   }
 
   return (
+    <>
+    {thread && (
+      <CaseThread
+        eventId={eventId}
+        subtitle={[loaded?.patient, loaded?.surgeon].filter(Boolean).join(' · ')}
+        user={user}
+        onClose={() => setThread(false)} />
+    )}
     <Overlay>
       <div
         onClick={onClose}
@@ -609,7 +621,7 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                     value={notes}
                     rows={4}
                     onChange={e => setNotes(e.target.value)}
-                    style={{
+                    style={{ fontSize: 16,
                       width: '100%', padding: `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
                       border: `1px solid ${colour.line}`, borderRadius: radius.control,
                       ...text('body'), color: colour.ink, background: colour.surface,
@@ -831,5 +843,6 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
         </div>
       </div>
     </Overlay>
+    </>
   )
 }

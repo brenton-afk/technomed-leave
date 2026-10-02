@@ -106,16 +106,41 @@ function daysCovered(event, days, tz) {
   return [key]
 }
 
+/** What the team calls each site. */
+const SHORT_NAME = {
+  [HOSPITALS.CALVARY]: 'Calvary',
+  [HOSPITALS.ST_JOHNS]: "St John's",
+  [HOSPITALS.ST_LUKES]: "St Luke's"
+}
+
+// The order the week is read in: the two we are at constantly, then the Hobart
+// campus we are at occasionally, then Launceston, then anywhere else.
+const SITE_ORDER = [HOSPITALS.RHH, HOSPITALS.CALVARY, HOSPITALS.ST_JOHNS, HOSPITALS.ST_LUKES]
+const siteRank = h => {
+  const at = SITE_ORDER.indexOf(h)
+  return at === -1 ? SITE_ORDER.length : at
+}
+
 function caseCountLine(allCases, nonSurgeonItems) {
   // Cancelled bookings still appear in the day, struck through, but they are not
   // cases anybody is going to. Counting them would have the plan promise four
   // cases on a day with three.
-  const cases = allCases.filter(c => !c.cancelled)
-  const calledOff = allCases.length - cases.length
-  const suffix = calledOff ? ` · ${calledOff} cancelled` : ''
+  //
+  // Nor are the ones the hospital told us about and said we are not needed at.
+  // They stay on the day — it is why a theatre is busy and why a surgeon is
+  // unavailable — but counting them staffs the day for cases nobody is going
+  // to, which is the one thing this line is used for.
+  const onTheDay = allCases.filter(c => !c.cancelled)
+  const cases = onTheDay.filter(c => !c.notRequired)
+  const calledOff = allCases.length - onTheDay.length
+  const notNeeded = onTheDay.length - cases.length
+  const suffix = [
+    calledOff ? `${calledOff} cancelled` : '',
+    notNeeded ? `${notNeeded} we are not needed at` : ''
+  ].filter(Boolean).map(part => ` · ${part}`).join('')
   if (cases.length === 0) {
-    if (calledOff && !nonSurgeonItems.length) {
-      return `No surgical cases — ${calledOff} cancelled`
+    if ((calledOff || notNeeded) && !nonSurgeonItems.length) {
+      return `No surgical cases${suffix.replace(' · ', ' — ')}`
     }
     if (nonSurgeonItems.length === 1) return `No surgical cases — 1 internal meeting${suffix}`
     if (nonSurgeonItems.length > 1) return `No surgical cases — ${nonSurgeonItems.length} internal meetings${suffix}`
@@ -123,10 +148,10 @@ function caseCountLine(allCases, nonSurgeonItems) {
   }
   const byHospital = new Map()
   for (const c of cases) byHospital.set(c.hospital, (byHospital.get(c.hospital) || 0) + 1)
-  const shortName = h => h === HOSPITALS.CALVARY ? 'Calvary' : h
+  const shortName = h => SHORT_NAME[h] || h
   // Same order the case blocks use, so the count line reads in the order the
   // reader is about to scan.
-  const rank = h => h === HOSPITALS.RHH ? 0 : h === HOSPITALS.CALVARY ? 1 : 2
+  const rank = siteRank
   const breakdown = [...byHospital.entries()]
     .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
     .map(([h, n]) => `${n} ${shortName(h)}`).join(', ')
@@ -141,8 +166,7 @@ function groupByHospital(cases) {
     map.get(c.hospital).push(c)
   }
   // RHH first, then Calvary, then anything else — the document's order.
-  const rank = h => h === HOSPITALS.RHH ? 0 : h === HOSPITALS.CALVARY ? 1 : 2
-  order.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+  order.sort((a, b) => siteRank(a) - siteRank(b) || a.localeCompare(b))
   return order.map(hospital => ({
     hospital,
     // By the clock first, which is the order the calendar was laid out in, and
@@ -317,6 +341,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // dropped — see leftoverOf in parse.js.
         unread: read.unread || undefined,
         navigation: read.navigation,
+        // Told about, not attending. Drawn quietly and labelled, rather than
+        // looking like every other case on the day.
+        notRequired: read.notRequired,
         // Where we are on the hospital's running order, once somebody has rung
         // and been told. The fact that decides who is on site at half seven.
         listPlace: read.listPlace,

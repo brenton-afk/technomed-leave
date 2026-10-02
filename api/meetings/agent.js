@@ -5,6 +5,7 @@ import {
   saveWorklistItem, getWorklist, updateWorklistItem, deleteWorklistItem
 } from '../_redis.js'
 import { sendMeetingSummaryEmail } from '../_email.js'
+import { requireSession, getSession } from '../_auth.js'
 
 // Everything for the meeting note taker lives in this one function, routed
 // by ?action=. Vercel's Hobby plan caps a deployment at 12 serverless
@@ -12,10 +13,26 @@ import { sendMeetingSummaryEmail } from '../_email.js'
 // internal routing (same pattern as api/auth/pin.js) keeps the new feature
 // to a single function instead of six.
 
+// ─── Who may reach any of this ───────────────────────────────────────────────
+// None of it was behind a session. Meeting recordings, the transcripts made
+// from them and the shared worklist were readable, writable and deletable by
+// anyone who knew the URL — and a meeting is where the business says the things
+// it does not write down anywhere else.
+//
+// The upload handshake is the one that cannot use the header. @vercel/blob's
+// `upload()` builds its own request, so the session travels in `clientPayload`
+// instead, which is the field that exists for exactly this and is checked
+// before a token is handed out. Every other action is an ordinary fetch and
+// carries the header.
+
 export default async function handler(req, res) {
   const action = req.query.action
 
   if (action === 'blob-upload') return handleBlobUpload(req, res)
+
+  const session = await requireSession(req, res)
+  if (!session) return
+
   if (action === 'start-transcription') return handleStartTranscription(req, res)
   if (action === 'status') return handleStatus(req, res)
   if (action === 'analyze') return handleAnalyze(req, res)
@@ -32,13 +49,27 @@ async function handleBlobUpload(req, res) {
     const jsonResponse = await handleUpload({
       body: req.body,
       request: req,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/x-m4a'],
-        addRandomSuffix: true,
-        tokenPayload: JSON.stringify({})
-      }),
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        // The only place a session can be checked in this handshake: the SDK
+        // builds its own request, so there is no header of ours on it. Throwing
+        // here is what refuses the upload — handleUpload turns it into an error
+        // response rather than issuing a token.
+        let token = null
+        try { token = JSON.parse(clientPayload || '{}').token } catch { token = null }
+        const session = await getSession(token)
+        if (!session) throw new Error('Not signed in, or your session has expired')
+
+        return {
+          allowedContentTypes: ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/x-m4a'],
+          addRandomSuffix: true,
+          // Who recorded it, so an upload can be traced back to a person.
+          tokenPayload: JSON.stringify({ by: session.email })
+        }
+      },
       onUploadCompleted: async ({ blob }) => {
-        console.log('Meeting audio uploaded:', blob.url)
+        // No meeting content here on purpose — this is the one line that goes to
+        // the platform log, and what was said in a meeting does not belong in it.
+        console.log('Meeting audio uploaded:', blob.pathname)
       }
     })
     return res.status(200).json(jsonResponse)

@@ -28,9 +28,21 @@ export const SYSTEMS = [
   // Dakota-2 is a distinct set, and the hyphen is part of the name.
   { name: 'Dakota-2', test: /\bdakota\s*-?\s*2\b/i },
   { name: 'Dakota', test: /\bdakota\b/i },
-  { name: 'Reform Cervical', test: /\breform\s+cerv(?:ical)?\b/i },
+  // Reform on its own means the cervical set. E4 Reform Posterior Cervical
+  // Lateral Mass Screws is its full name and nobody writes that — it is
+  // "Reform", "Reform Cervical" or "E4 Reform" on a booking, and all three are
+  // the one consignment kit at RHH.
+  //
+  // It used to detect as a system called "Reform", which the inventory has
+  // never heard of — the inventory calls it Reform Cervical — so a booking
+  // saying "Reform" came back "not a listed system" about a kit sitting on the
+  // shelf. Same fault as E4 Global PLIF against Global BMD PLIF: two names for
+  // one thing, and the detector using the one the inventory does not.
+  //
+  // Lumbar is tested first, because it is the one case where the bare word is
+  // not the cervical set.
   { name: 'Reform Lumbar', test: /\breform\s+lumbar\b/i },
-  { name: 'Reform', test: /\breform\b/i },
+  { name: 'Reform Cervical', test: /\breform\b/i },
   { name: 'Ascot', test: /\bascot\b/i },
   { name: 'Athlet', test: /\bathlet\b/i },
   { name: 'Diplomat', test: /\bdiplomat\b/i },
@@ -306,7 +318,16 @@ export function systemsInKit(kit) {
   const text = String(kit || '')
   // Through findSystems, which already knows every system's spellings and stops
   // a looser pattern claiming words a more specific one matched.
-  const found = findSystems(text).map(s => s.name)
+  let found = findSystems(text).map(s => s.name)
+
+  // "E4 Reform" named two systems: the product, and "E4 Cages" from the bare
+  // E4 in front of it. So a kit line that said exactly which E4 product it was
+  // still asked which E4 product it was — and did it alongside the real
+  // answer. Where the line names one outright, the generic match is noise.
+  if (found.length > 1 && NAMES_AN_E4_PRODUCT.test(text)) {
+    found = found.filter(name => name !== 'E4 Cages')
+  }
+
   const e4 = resolveE4Product(text)
   if (!e4) return found
   // "E4 Cages" is what a bare "E4" matches; alongside Diplomat or Mariner the

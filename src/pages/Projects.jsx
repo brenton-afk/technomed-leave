@@ -26,6 +26,10 @@ function formatElapsed(seconds) {
 }
 
 export default function Projects({ user, onBack }) {
+  // Every call below carries this. The endpoint behind them holds meeting
+  // recordings, their transcripts and the shared worklist, and until now none
+  // of it asked who was calling.
+  const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
   // recording state machine: idle | recording | uploading | transcribing | analyzing | reviewing | sending | sent
   const [phase, setPhase] = useState('idle')
   const [meetingTitle, setMeetingTitle] = useState('')
@@ -50,7 +54,7 @@ export default function Projects({ user, onBack }) {
   async function loadWorklist() {
     setLoadingBoard(true)
     try {
-      const res = await fetch('/api/meetings/agent?action=worklist')
+      const res = await fetch('/api/meetings/agent?action=worklist', { headers: auth })
       const data = await res.json()
       setWorklist(data.items || [])
     } catch (err) {
@@ -97,13 +101,17 @@ export default function Projects({ user, onBack }) {
     try {
       const uploaded = await upload(`meetings/${Date.now()}.webm`, blob, {
         access: 'public',
-        handleUploadUrl: '/api/meetings/agent?action=blob-upload'
+        handleUploadUrl: '/api/meetings/agent?action=blob-upload',
+        // The SDK builds its own request, so the session cannot ride on a
+        // header. This is the field that exists for it, and the server checks
+        // it before handing out an upload token.
+        clientPayload: JSON.stringify({ token: user?.token || null })
       })
 
       setPhase('transcribing')
       const startRes = await fetch('/api/meetings/agent?action=start-transcription', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({ audioUrl: uploaded.url })
       })
       const startData = await startRes.json()
@@ -114,7 +122,7 @@ export default function Projects({ user, onBack }) {
       setPhase('analyzing')
       const analyzeRes = await fetch('/api/meetings/agent?action=analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({
           transcript,
           meetingTitle: meetingTitle.trim() || 'Untitled meeting',
@@ -139,7 +147,7 @@ export default function Projects({ user, onBack }) {
     return new Promise((resolve, reject) => {
       const poll = async () => {
         try {
-          const res = await fetch(`/api/meetings/agent?action=status&id=${transcriptId}`)
+          const res = await fetch(`/api/meetings/agent?action=status&id=${transcriptId}`, { headers: auth })
           const data = await res.json()
           if (data.status === 'completed') return resolve(data.transcript)
           if (data.status === 'error') return reject(new Error(data.error || 'Transcription failed'))
@@ -166,7 +174,7 @@ export default function Projects({ user, onBack }) {
     try {
       const res = await fetch('/api/meetings/agent?action=finalize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({
           meetingId,
           actionItems: draftItems.map(({ _localId, ...rest }) => rest)
@@ -204,7 +212,7 @@ export default function Projects({ user, onBack }) {
     try {
       await fetch('/api/meetings/agent?action=worklist', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body: JSON.stringify({ id, status })
       })
     } catch (err) {
@@ -215,7 +223,7 @@ export default function Projects({ user, onBack }) {
   async function deleteItem(id) {
     setWorklist(items => items.filter(it => it.id !== id))
     try {
-      await fetch(`/api/meetings/agent?action=worklist&id=${id}`, { method: 'DELETE' })
+      await fetch(`/api/meetings/agent?action=worklist&id=${id}`, { method: 'DELETE', headers: auth })
     } catch (err) {
       console.error(err)
     }
@@ -225,7 +233,7 @@ export default function Projects({ user, onBack }) {
     <Page>
       <Header eyebrow="Team" title="Projects" subtitle="Meeting notes and the shared worklist" onBack={onBack} />
 
-      <div style={{ padding: 16 }}>
+      <div className="tm-measure" style={{ padding: 16 }}>
         {error && (
           <div style={{ background: colour.dangerSoft, color: colour.danger, padding: '12px 14px', borderRadius: 10, marginBottom: 12, fontSize: 14 }}>
             {error}
@@ -243,13 +251,13 @@ export default function Projects({ user, onBack }) {
                   value={meetingTitle}
                   onChange={e => setMeetingTitle(e.target.value)}
                   placeholder="e.g. Spine team weekly"
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 14, marginBottom: 8, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 16, marginBottom: 8, boxSizing: 'border-box' }}
                 />
                 <input
                   type="date"
                   value={meetingDate}
                   onChange={e => setMeetingDate(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 16, marginBottom: 12, boxSizing: 'border-box' }}
                 />
                 <div style={{ fontSize: 12.5, color: colour.inkFaint, marginBottom: 12, lineHeight: 1.5 }}>
                   Keep this screen open and your phone unlocked for the whole meeting — recording stops if the screen locks.
@@ -301,22 +309,22 @@ export default function Projects({ user, onBack }) {
                     <input
                       value={it.task}
                       onChange={e => updateDraft(it._localId, 'task', e.target.value)}
-                      style={{ flex: 1, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 14, fontWeight: 500 }}
+                      style={{ flex: 1, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16, fontWeight: 500 }}
                     />
                     <button onClick={() => removeDraft(it._localId)} style={{ background: 'none', border: 'none', color: '#aab0bb', fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                     <select value={it.assignee} onChange={e => updateDraft(it._localId, 'assignee', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5 }}>
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }}>
                       <option value="Unassigned">Unassigned</option>
                       {STAFF.map(s => <option key={s.email} value={s.name}>{s.name}</option>)}
                     </select>
                     <select value={it.priority} onChange={e => updateDraft(it._localId, 'priority', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5, color: PRIORITY_COLORS[it.priority] }}>
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16, color: PRIORITY_COLORS[it.priority] }}>
                       {Object.keys(PRIORITY_LABELS).map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
                     </select>
                     <input type="date" value={it.due_date} onChange={e => updateDraft(it._localId, 'due_date', e.target.value)}
-                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 12.5 }} />
+                      style={{ padding: '6px 8px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }} />
                   </div>
                   {it.notes && <div style={{ fontSize: 12.5, color: colour.inkFaint, marginTop: 6 }}>{it.notes}</div>}
                 </div>

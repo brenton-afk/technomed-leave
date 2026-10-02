@@ -57,7 +57,12 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
 
   function submit() {
     setSubmitting(true); setError('')
-    axios.post('/api/submit', form)
+    axios.post('/api/submit', form, {
+      // The endpoint is behind the session now. The employee is taken from that
+      // session server-side rather than from this form, which only ever showed
+      // the signed-in person's own name.
+      headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+    })
       .then(() => { if (onSuccess) onSuccess(form) })
       .catch(e => { setError(e.response?.data?.error || 'Submission failed. Please try again.'); setSubmitting(false) })
   }
@@ -81,7 +86,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
         </div>
       </Header>
 
-      <div style={{ flex:1, padding:'20px 20px 100px', background:colour.canvas }}>
+      <div className="tm-measure" style={{ flex:1, padding:'20px 20px 100px', background:colour.canvas }}>
         {step === 0 && (
           <div>
             <div style={grp}><label style={lbl}>First day of leave</label><input type="date" style={inp} value={form.startDate} onChange={e => setField('startDate', e.target.value)} /></div>
@@ -109,7 +114,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
             <div style={grp}>
               <label style={lbl}>Reason for leave</label>
               <p style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:8 }}>This will appear in the notification email to management</p>
-              <textarea style={{ ...inp, minHeight:100, lineHeight:1.6, resize:'none' }} placeholder="e.g. Family holiday, medical procedure..." value={form.reason} onChange={e => setField('reason', e.target.value)} />
+              <textarea style={{ fontSize: 16, ...inp, minHeight:100, lineHeight:1.6, resize:'none' }} placeholder="e.g. Family holiday, medical procedure..." value={form.reason} onChange={e => setField('reason', e.target.value)} />
             </div>
             <div style={{ background:'rgba(42,181,160,0.07)', border:'1px solid rgba(42,181,160,0.18)', borderRadius:10, padding:'12px 14px', fontSize:14, color:colour.inkFaint, lineHeight:1.6 }}>
               🔒 Your application will be reviewed by management before anything is confirmed.

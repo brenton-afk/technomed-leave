@@ -3,6 +3,7 @@ import { findSystems, findLoanSets, systemWords, findNavigation, resolveKit } fr
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 import { isPreOpNoise } from './preOpNoise.js'
 import { parseListPlace } from './listPlace.js'
+import { attendanceNotRequired } from './attendance.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
 // else on the bookings calendar is a non-case item.
@@ -622,6 +623,17 @@ export function extractKit(description) {
 export const HOSPITALS = {
   RHH: 'RHH',
   CALVARY: 'CALVARY LENAH VALLEY',
+  // Calvary run three hospitals we see. Lenah Valley is the Hobart one we are
+  // at constantly; St John's is the other Hobart campus; St Luke's is in
+  // Launceston, two hours up the highway.
+  //
+  // They were all one site here, matched on the word "Calvary", which is fine
+  // until it is not: the consignment shelves are at Lenah Valley, so a St
+  // Luke's case was told the kit was already there. Nobody driving to
+  // Launceston wants to find that out on arrival. Rare is not the same as
+  // never, and the rare one is exactly the one nobody double-checks.
+  ST_JOHNS: 'CALVARY ST JOHNS',
+  ST_LUKES: 'CALVARY ST LUKES',
   OFFSITE: 'OFFSITE'
 }
 
@@ -640,6 +652,10 @@ function hospitalIn(text) {
   const value = String(text || '')
   if (!value.trim()) return null
   if (/\brhh\b|royal\s*hobart/i.test(value)) return HOSPITALS.RHH
+  // The named Calvary campuses first. Both contain the word "Calvary", so
+  // testing the generic pattern ahead of them would swallow the pair.
+  if (/st\.?\s*luke(?:'?s)?/i.test(value)) return HOSPITALS.ST_LUKES
+  if (/st\.?\s*john(?:'?s)?/i.test(value)) return HOSPITALS.ST_JOHNS
   if (/\bclv\b|calvary|lenah/i.test(value)) return HOSPITALS.CALVARY
   if (/offsite|off-site/i.test(value)) return HOSPITALS.OFFSITE
   return null
@@ -875,7 +891,44 @@ export function cleanOperation(text, o = {}) {
  * screen and another way on the other, with the system and kit text showing
  * through exactly as it had been typed.
  */
+/**
+ * A booking's notes as plain text, whatever Google handed us.
+ *
+ * Google Calendar stores a description as HTML whenever it has been touched by
+ * the web interface, by Outlook, or by an invitation forwarded from a supplier.
+ * The same booking is then "Surg: Ibbett<br>Pt: Hays" rather than two lines,
+ * and every labelled field in it reads as one unbroken run — so the parser
+ * found no fields at all and the card came back blank. Not partly wrong:
+ * blank, with the booking sitting there in Google looking perfectly fine.
+ *
+ * `<br>` and `</div>`, `</p>`, `</li>` become line breaks because that is what
+ * they are to a reader; every other tag is dropped. Entities are decoded last,
+ * so a `&lt;` that was written as text does not then get treated as markup.
+ */
+export function plainDescription(description) {
+  const text = String(description || '')
+  if (!/[<&]/.test(text)) return text          // the common case, untouched
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:div|p|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    // Google wraps lines generously; three blank lines in a row is not a
+    // paragraph break anybody typed.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export function readBooking(title, description, { colourSurgeon } = {}) {
+  // Before anything reads it. See plainDescription: a booking Google stored as
+  // HTML has no line breaks the parser can see, so every labelled field runs
+  // together and the card comes back blank rather than merely imperfect.
+  description = plainDescription(description)
   // Both markers are read before anything else and taken off the title, because
   // both sit where the patient's name goes and both otherwise end up inside
   // whatever field parses next.
@@ -893,8 +946,22 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   // Identifiers are stripped on the way out of every labelled value, not only the
   // patient one. A UR number in "Patient:" was already handled; a date of birth
   // typed into "Procedure:" was not, and went straight to the screen.
+  //
+  // The cancellation marker is taken off here too, and for a sharper reason.
+  // When a case comes off, the team writes CANCELLED by hand — into the title,
+  // and often into the Pt: line as well. The title was cleaned; the labelled
+  // fields never were, and a labelled field beats the title. So a booking
+  // reading "Pt: CANCELLED Hays" came back with the patient as "CANCELLED" and
+  // the surname thrown away, which is the one thing on the card anybody uses to
+  // find the case again. A cancelled case still has to be traceable: kit was
+  // moved for it, somebody may have driven to it, and it is the case most
+  // likely to be asked about afterwards.
+  //
+  // Only the displayed value is cleaned. isCancelled still reads the raw title
+  // and description, so the strikethrough and the badge are untouched.
   const labelled = Object.fromEntries(
-    Object.entries(raw).map(([field, value]) => [field, stripIdentifiers(value)]))
+    Object.entries(raw).map(([field, value]) =>
+      [field, stripCancellation(stripSelfFunding(stripIdentifiers(value)))]))
   // Resolved before anything reads it, so a booking accepted onto the calendar
   // with "Implanet" on it still shows the system somebody can actually bring.
   const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
@@ -955,6 +1022,12 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     // than a blank one, because nobody would know to check it.
     listPlace: parseListPlace(labelled.list) || undefined,
     navigation: findNavigation(everything).join(' + ') || undefined,
+    notRequired: attendanceNotRequired(everything) || undefined,
+    // The hospital told us about the case and said nobody from here is wanted
+    // in the room. Worth having on the calendar — it is why a theatre is busy
+    // and why a surgeon is unavailable — and it must not read as a case we are
+    // attending. See attendance.js.
+
     // Who attended, or who is covering it. The calendar carries this and the
     // app was dropping it. Two reps on one case is normal.
     rep,

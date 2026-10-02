@@ -527,7 +527,7 @@ export default function UsageScan({ user }) {
         <div style={{ padding: 16 }}>
           {error && <Banner tone="danger">{error}</Banner>}
 
-          <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none' }}
+          <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ fontSize: 16, display: 'none' }}
             onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>

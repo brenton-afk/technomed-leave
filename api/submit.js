@@ -1,15 +1,37 @@
 import { saveApplication } from './_redis.js'
 import { sendNotificationEmail } from './_email.js'
-import { getStaffByName } from '../src/staffConfig.js'
+import { getStaffByEmail } from '../src/staffConfig.js'
+import { requireSession } from './_auth.js'
+
+// ─── Filing a leave application ──────────────────────────────────────────────
+// This had no session check at all. Anyone who knew the URL could post one, and
+// the name came out of the request body — so a leave application could be filed
+// in a staff member's name by somebody who had never signed in, and it would
+// arrive looking exactly like the real thing.
+//
+// Two changes, and the second matters more than the first. Requiring a session
+// stops a stranger. Taking the employee from that session rather than from the
+// body stops everybody else: the form never let anyone type a name anyway — it
+// shows the person who is signed in — so nothing is lost by refusing to believe
+// the body, and a signed-in colleague can no longer book someone else's leave.
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { name, division, startDate, endDate, returnDate, leaveType, reason, email } = req.body
+  const session = await requireSession(req, res)
+  if (!session) return
 
-  if (!name || !division || !startDate || !endDate || !returnDate || !leaveType || !reason) {
+  const { division, startDate, endDate, returnDate, leaveType, reason } = req.body || {}
+
+  // Whose leave this is, decided here and not by the caller.
+  const staff = getStaffByEmail(session.email)
+  const name = staff?.name
+  const email = staff?.email || session.email
+  if (!name) return res.status(403).json({ error: 'Not authorised' })
+
+  if (!division || !startDate || !endDate || !returnDate || !leaveType || !reason) {
     return res.status(400).json({ error: 'All fields are required' })
   }
 
@@ -29,8 +51,10 @@ export default async function handler(req, res) {
   const application = {
     id,
     name,
-    // Persisted so approval and decline emails can reach the employee.
-    email: email || getStaffByName(name)?.email || null,
+    // Persisted so approval and decline emails can reach the employee. From the
+    // session, so the address a decision is sent to cannot be chosen by whoever
+    // filed the application.
+    email,
     division,
     startDate,
     endDate,

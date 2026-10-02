@@ -34,7 +34,12 @@ export function Overlay({ children }) {
 
 export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
   return (
-    <div style={{
+    // `tm-bleed` on the navy, `tm-measure` on what is written on it. On a wide
+    // screen the bar reaches both edges of the window while the title lines up
+    // with the content below it — a header inset from the edges reads as a
+    // floating panel, and a title that drifts away from the column under it
+    // reads as two pages.
+    <div className="tm-bleed" style={{
       background: colour.navy,
       // The inset first, then the normal spacing on top of it, so the eyebrow
       // always sits a clear 20px below the clock rather than at the very top of
@@ -43,7 +48,7 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
       // empty navy across every desktop browser.
       padding: `calc(env(safe-area-inset-top, 0px) + ${space.xl}px) ${space.lg}px ${space.lg}px`
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: space.md }}>
+      <div className="tm-measure" style={{ display: 'flex', alignItems: 'flex-start', gap: space.md }}>
         {onBack && (
           <button onClick={onBack} aria-label="Back"
             style={{
@@ -68,7 +73,7 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
         </div>
         {right}
       </div>
-      {children && <div style={{ marginTop: space.lg }}>{children}</div>}
+      {children && <div className="tm-measure" style={{ marginTop: space.lg }}>{children}</div>}
     </div>
   )
 }
@@ -85,7 +90,9 @@ export function Page({ children, style }) {
 }
 
 export function Body({ children, style }) {
-  return <div style={{ padding: space.lg, ...style }}>{children}</div>
+  return (
+    <div className="tm-measure" style={{ padding: space.lg, ...style }}>{children}</div>
+  )
 }
 
 /** Small uppercase label that separates groups of cards. */

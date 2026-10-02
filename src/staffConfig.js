@@ -18,6 +18,21 @@ export const STAFF = [
   { name: 'April Foale', email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' }
 ]
+/**
+ * Who may open the timesheet screen.
+ *
+ * Wider than `hasTimesheets`, which says who payroll expects a fortnightly
+ * timesheet from. Admins can open it without being on it: the screen has to be
+ * checkable by somebody other than the person filing at nine on a Sunday night,
+ * and until this existed the only way to find a bug in it was to be told.
+ *
+ * Filing one is a separate question — see requireTimesheetSubmitter in
+ * api/timesheet/agent.js. Submitting posts to Xero.
+ */
+export function mayOpenTimesheets(staff) {
+  return Boolean(staff?.hasTimesheets || staff?.isAdmin)
+}
+
 export function getStaffByName(name) { return STAFF.find(s => s.name === name) }
 export function getStaffByEmail(email) { return STAFF.find(s => s.email === email) }
 
