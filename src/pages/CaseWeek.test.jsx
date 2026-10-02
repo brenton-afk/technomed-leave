@@ -816,3 +816,68 @@ describe('saving a list order and seeing it', () => {
     await waitFor(() => expect(screen.getByText('Change list order')).toBeInTheDocument())
   })
 })
+
+describe('getting back to today from a week that is not this one', () => {
+  // Reported on Friday 2 October: "The back to today button at the top of the
+  // cases screen is not working. It's stuck on next monday 5/10/26."
+  //
+  // The app opens on next week from Friday onwards, deliberately — that is the
+  // week being planned. "Back to today" used the same resolver, so it set the
+  // window to the week already showing, could not find today in it, and fell
+  // back to the first day of it. Every weekend since the roll-forward landed.
+  const FRIDAY = new Date('2026-10-02T02:00:00.000Z')  // Friday, midday Hobart
+
+  const onFriday = () => {
+    vi.setSystemTime(FRIDAY)
+    events = [
+      ev('f1', 'Barr DIPLOMAT - Dubey',
+        'Surg: Dubey\nPt: Barr\nHosp: RHH\nKit: Diplomat (Consignment)',
+        { day: '02' }),
+      ev('n1', 'Kemp DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Kemp\nHosp: RHH\nKit: Diplomat (Consignment)',
+        { day: '05' })
+    ].map(e => ({
+      ...e,
+      start: { dateTime: e.start.dateTime.replace('2026-09', '2026-10') },
+      end: { dateTime: e.end.dateTime.replace('2026-09', '2026-10') }
+    }))
+  }
+
+  it('opens on next week, which is the week being planned', async () => {
+    onFriday()
+    show()
+    // Monday the 5th is the first day shown, not today.
+    await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
+    expect(screen.getByText(/Back to today/i)).toBeInTheDocument()
+  })
+
+  it('goes to the week containing today, not back to the default', async () => {
+    onFriday()
+    show()
+    await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText(/Back to today/i))
+
+    // Friday's case, not next Monday's.
+    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
+    expect(screen.queryByText('Kemp')).not.toBeInTheDocument()
+  })
+
+  it('stops offering the way back once you are on today', async () => {
+    onFriday()
+    show()
+    await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/Back to today/i))
+    await waitFor(() => expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument())
+  })
+
+  it('still works from a week reached with the arrows', async () => {
+    onFriday()
+    show()
+    await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText(/next week/i))
+    await waitFor(() => expect(screen.getByText(/Back to today/i)).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/Back to today/i))
+    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
+  })
+})
