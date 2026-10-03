@@ -259,6 +259,10 @@ export default function Timesheets({ user, onBack }) {
   // timesheets it has filed and the TOIL leave it has sent to Xero, because
   // Xero accrues nothing from a timesheet line.
   const [toil, setToil] = useState(null)
+  // Every pay item, invented, so the whole screen can be looked at. Brent's own
+  // Xero template has one rate on it, so without this the screen he checks is
+  // not the screen anybody uses.
+  const [demo, setDemo] = useState(false)
   const [savedAt, setSavedAt] = useState('')
   const [stage, setStage] = useState('entry')
   const [submitted, setSubmitted] = useState(null)
@@ -267,12 +271,16 @@ export default function Timesheets({ user, onBack }) {
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${user?.token || ''}` }), [user])
 
-  useEffect(() => { boot() }, [])
+  // Re-reads when the demo switch moves, which is the only thing that
+  // changes which pay items come back.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { boot() }, [demo])
 
   async function boot() {
     setLoading(true); setError('')
     try {
-      const res = await fetch('/api/timesheet/agent?action=payitems', { headers: authHeaders })
+      const res = await fetch(
+        `/api/timesheet/agent?action=payitems${demo ? '&demo=1' : ''}`, { headers: authHeaders })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setCategories(data.categories)
@@ -506,6 +514,34 @@ export default function Timesheets({ user, onBack }) {
         {rejected && (
           <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12, lineHeight: 1.5 }}>
             This fortnight was returned: <strong>{rejected.rejectionReason}</strong><br />Correct it below and resubmit.
+          </div>
+        )}
+
+        {/* Shown to an admin only, because it is a tool for checking the
+            screen rather than a feature of it. It announces loudly what it is:
+            a timesheet full of invented pay items is exactly the thing that
+            should never be mistaken for a real one. */}
+        {user?.staff?.isAdmin && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 10, marginBottom: 12, padding: '9px 13px', borderRadius: 10,
+            background: demo ? '#fff4e5' : 'transparent',
+            border: `1px solid ${demo ? '#f0c187' : BORDER}`
+          }}>
+            <span style={{ fontSize: 12.5, color: demo ? '#8a5200' : MUTED, lineHeight: 1.45 }}>
+              {demo
+                ? 'Demo — made-up pay items so every part of the screen shows. Nothing here can be filed.'
+                : 'Only seeing one pay item? Your Xero template has one.'}
+            </span>
+            <button onClick={() => setDemo(d => !d)}
+              style={{
+                flexShrink: 0, padding: '7px 12px', borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${demo ? '#8a5200' : BORDER}`,
+                background: 'transparent', fontSize: 12.5, fontWeight: 700,
+                color: demo ? '#8a5200' : NAVY
+              }}>
+              {demo ? 'Show mine' : 'Show them all'}
+            </button>
           </div>
         )}
 

@@ -5,7 +5,8 @@ import {
   saveTimesheet, getTimesheet, getAllTimesheets, getAllApplications
 } from '../_redis.js'
 import {
-  fetchEarningsRates, categoriesForStaff, CATEGORY_RULES, assignedRatesFor, unitMismatch
+  fetchEarningsRates, categoriesForStaff, CATEGORY_RULES, assignedRatesFor, unitMismatch,
+  demoCategories, isDemo
 } from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
@@ -167,6 +168,20 @@ async function handlePayAudit(req, res) {
 async function handlePayItems(req, res, session) {
   const staff = requireTimesheetAccess(session)
   const rates = await fetchEarningsRates()
+  // Every pay item, invented, for checking the screen. Admin only, and it
+  // announces itself — see demoCategories. Brent's own template has one rate
+  // on it, so without this the screen he checks is not the screen anybody uses.
+  if (req.query.demo === '1' && staff.isAdmin) {
+    const categories = demoCategories().map(c => ({ ...c, mismatch: unitMismatch(c) || undefined }))
+    return res.status(200).json({
+      categories,
+      period: currentPeriod(),
+      periods: recentPeriods(6).map(p => ({ start: p.start, end: p.end, index: p.index })),
+      demo: true,
+      note: 'Made-up pay items, so every part of the screen is visible. Nothing here can be filed.'
+    })
+  }
+
   const assignedRateIds = await assignedRatesFor(staff.name)
   const categories = categoriesForStaff(rates, staff.email, { assignedRateIds })
     .map(c => ({ ...c, mismatch: unitMismatch(c) || undefined }))
@@ -223,6 +238,13 @@ async function handleSubmit(req, res, session) {
   // cannot be submitted against a category the person is not assigned.
   const assignedRateIds = await assignedRatesFor(staff.name)
   const categories = categoriesForStaff(rates, staff.email, { assignedRateIds })
+  // Belt and braces. The demo set is only ever served to an admin, and an
+  // admin cannot submit — but a pay item that cannot reach a pay run should be
+  // refused by the thing that posts to the pay run, not by the two gates in
+  // front of it happening to hold.
+  if (isDemo(req.body?.categories) || isDemo(categories)) {
+    return res.status(400).json({ error: 'Those are demonstration pay items and cannot be filed.' })
+  }
   const entries = normaliseEntries(req.body?.entries, categories, period.days)
 
   const check = validate(entries, categories, period.days)

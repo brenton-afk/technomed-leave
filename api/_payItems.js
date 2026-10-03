@@ -86,6 +86,26 @@ export function unitMismatch(category) {
   return null
 }
 
+/**
+ * Pay items that must never appear on a timesheet.
+ *
+ * Commission is worked out once a month by Brent, from figures nobody else
+ * sees, and staff have no business entering their own. It is on their Xero pay
+ * template because that is where it is paid from — which became a problem the
+ * moment entitlements started coming from the template: the item would have
+ * turned up on the fortnightly timesheet with a box to type a number into.
+ *
+ * Excluded by what the rate is called rather than by who has it, because the
+ * rule is about the kind of pay and not about the person. Anything added here
+ * disappears from every timesheet at once.
+ */
+const NOT_ON_TIMESHEETS = /commission|bonus|reimbursement|expense/i
+
+/** Whether an earnings rate is one the team fills in for themselves. */
+function enterableOnATimesheet(rate) {
+  return !NOT_ON_TIMESHEETS.test(String(rate?.Name ?? rate?.name ?? ''))
+}
+
 function classify(rateName) {
   return CATEGORY_RULES.find(rule => rule.pattern.test(rateName || '')) || null
 }
@@ -113,7 +133,10 @@ export async function fetchEarningsRates() {
 // The categories one staff member should see, in display order. Anything in
 // Xero we do not recognise is returned too (as `kind: 'other'`) rather than
 // hidden, so a new earnings rate is visible instead of silently missing.
-export function categoriesForStaff(earningsRates, staffEmail, { assignedRateIds } = {}) {
+export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {}) {
+  // Taken out once, here, so neither the recognised pass nor the catch-all
+  // below can let one through.
+  const earningsRates = (allRates || []).filter(enterableOnATimesheet)
   const email = String(staffEmail || '').toLowerCase()
   const seen = new Set()
   const categories = []
@@ -207,3 +230,64 @@ export async function assignedRatesFor(staffName) {
     return null
   }
 }
+
+
+// ─── A timesheet with everything on it ───────────────────────────────────────
+// Brent's own Xero pay template has one earnings rate on it, because he does
+// not file a timesheet — so opening the screen to check it shows a single
+// column and none of the parts worth checking: the callout counter, the
+// on-call drawer, the Toni split, the TOIL balance.
+//
+// This builds the full set from CATEGORY_RULES rather than from a list written
+// out by hand, so a category added to the app appears here without anybody
+// remembering to. The rates are invented and say so: the IDs are not Xero IDs
+// and could not be posted to a pay run if anything tried.
+export const DEMO_RATE_PREFIX = 'demo-'
+
+const DEMO_RATES = {
+  ordinary: 48.5,
+  ordinary_toni_admin: 44,
+  ordinary_toni_scientific: 52,
+  overtime_1_5: 72.75,
+  overtime_double: 97,
+  toil_accrued: 0,
+  call_in: 250,
+  on_call: 4.5
+}
+
+const DEMO_UNITS = { call_in: 'Call Ins' }
+
+/**
+ * Every category the app knows how to show, as a timesheet would carry them.
+ *
+ * Not for filing anything. The earnings rate IDs are prefixed so the submit
+ * path can refuse them outright rather than relying on nobody pressing the
+ * button.
+ */
+export function demoCategories() {
+  return CATEGORY_RULES.map(rule => {
+    const typeOfUnits = DEMO_UNITS[rule.key] || (rule.unit === 'count' ? 'Each' : 'Hours')
+    const facts = {
+      rateType: 'RATEPERUNIT',
+      typeOfUnits,
+      ratePerUnit: DEMO_RATES[rule.key] ?? null,
+      paidByTheHour: /^hours?$/i.test(typeOfUnits)
+    }
+    return {
+      key: rule.key,
+      earningsRateID: `${DEMO_RATE_PREFIX}${rule.key}`,
+      xeroName: rule.label,
+      label: rule.label,
+      kind: rule.kind,
+      unit: rule.unit,
+      colour: rule.colour,
+      ...facts,
+      hint: hintFor(facts),
+      demo: true
+    }
+  })
+}
+
+/** Whether a set of categories is the invented one. */
+export const isDemo = categories =>
+  (categories || []).some(c => String(c.earningsRateID || '').startsWith(DEMO_RATE_PREFIX))
