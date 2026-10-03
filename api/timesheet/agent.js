@@ -16,6 +16,7 @@ import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import {
   onCallHoursFor, totalHours as onCallTotal
 } from '../../src/clinicalPlan/onCall.js'
+import { callInsFor, COVERED_HOURS } from '../../src/clinicalPlan/callIn.js'
 import { periodFor, currentPeriod, recentPeriods, isValidPeriodStart } from '../_fortnight.js'
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
 import { sendTimesheetSubmittedEmail, sendTimesheetDecisionEmail } from '../_email.js'
@@ -300,11 +301,20 @@ async function handleMine(req, res, session) {
   return res.status(200).json({ records: mine })
 }
 
-// ─── callins: after-hours calendar cases ───────────────────
+// ─── callins: after-hours cases, and the on-call weekend ───
 
-// Surfaces bookings that fall outside business hours so the staff member can
-// confirm whether they were called in. It cannot tell whose case it was — the
-// calendar has no rep field — so these are prompts, never auto-entered.
+/**
+ * What the person filing might need to claim.
+ *
+ * Both halves come off one read of the calendar: the cases they may have been
+ * called in to, and the weekends the roster says they were on call.
+ *
+ * The suggestions used to be every timed entry outside 7am–6pm, shown to
+ * whoever was looking. That offered "List Order" — a standing reminder for the
+ * team leader to ring the hospitals, on the calendar every weekday and never a
+ * case — as something to claim a callout for, and it offered everybody else's
+ * cases to everybody. Both are now decided in src/clinicalPlan/callIn.js.
+ */
 async function handleCallIns(req, res, session) {
   const staff = requireTimesheetAccess(session)
   const period = resolvePeriod(req.query.periodStart)
@@ -320,66 +330,32 @@ async function handleCallIns(req, res, session) {
   const data = await eventsRes.json()
   if (data.error) throw new Error(data.error.message)
 
-  const BUSINESS_START = 7
-  const BUSINESS_END = 18
-  const suggestions = []
+  const events = data.items || []
+  const onCallEntries = events
+    .map(e => ({
+      title: e.summary || '',
+      date: (e.start?.dateTime || e.start?.date || '').slice(0, 10)
+    }))
+    .filter(e => e.date)
 
-  for (const event of data.items || []) {
-    const startsAt = event.start?.dateTime
-    if (!startsAt) continue // all-day entries are leave, not callouts
-    // Read the hour in Tasmanian time regardless of the server's zone.
-    const aest = new Date(new Date(startsAt).getTime() + 10 * 3600 * 1000)
-    const hour = aest.getUTCHours()
-    const day = aest.toISOString().slice(0, 10)
-    const weekend = [0, 6].includes(aest.getUTCDay())
-    if (!weekend && hour >= BUSINESS_START && hour < BUSINESS_END) continue
-    if (!period.days.includes(day)) continue
-    suggestions.push({
-      id: event.id,
-      day,
-      title: event.summary || 'Case',
-      time: `${String(hour).padStart(2, '0')}:${String(aest.getUTCMinutes()).padStart(2, '0')}`,
-      location: event.location || null,
-      reason: weekend ? 'weekend' : 'outside 7am–6pm'
-    })
-  }
+  const suggestions = callInsFor(events, staff, period.days, { onCallEntries })
 
-  // ── The on-call weekends, off the same calendar read ──
-  //
-  // The roster lives in the calendar and that is where it is amended when
-  // somebody swaps or falls ill, so this reads it rather than working a
-  // rotation out from a start date. A computed cycle would be right until the
-  // first swap and then confidently wrong for weeks, and nobody re-checks a
-  // number that does not look like it needs checking.
-  //
-  // Offered, not filled in. It is a suggestion with the hours already worked
-  // out — 17:00 Friday to 07:00 Monday, 62 hours across four days — so the
-  // whole weekend is one tap instead of four trips through the time picker.
-  const onCall = onCallHoursFor(
-    (data.items || [])
-      .map(e => ({
-        title: e.summary || '',
-        date: (e.start?.dateTime || e.start?.date || '').slice(0, 10)
-      }))
-      .filter(e => e.date),
-    staff,
-    period.days
-  )
+  // The roster, read rather than computed — see src/clinicalPlan/onCall.js.
+  const onCall = onCallHoursFor(onCallEntries, staff, period.days)
 
   return res.status(200).json({
     suggestions,
     onCall: {
       byDay: onCall,
       hours: onCallTotal(onCall),
-      // Nobody is paid for being on call by default — Brent is on the roster
-      // and not paid for it — so whether this is offered follows the pay
-      // items Xero says the person has, not the roster.
       offered: Object.keys(onCall).length > 0
     },
+    // What a long call-in earns on top of the allowance, so the screen does
+    // not have to know the rule.
+    coveredHours: COVERED_HOURS,
     period: { start: period.start, end: period.end }
   })
 }
-
 
 // ─── The TOIL balance ────────────────────────────────────────────────────────
 // Xero accrues nothing from a timesheet — "TOIL Accrued" is an earnings rate,

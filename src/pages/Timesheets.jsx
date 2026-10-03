@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Page, Header, Overlay } from '../design/Shell.jsx'
+import { extraDoubleTime, COVERED_HOURS } from '../clinicalPlan/callIn.js'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 
 // Points at the shared tokens rather than redefining them, so this screen
@@ -250,6 +251,10 @@ export default function Timesheets({ user, onBack }) {
   const [showSplit, setShowSplit] = useState(false)
   const [callIns, setCallIns] = useState([])
   const [dismissedCallIns, setDismissedCallIns] = useState([])
+  // How long each call-in ran, keyed by the calendar event. The allowance
+  // covers five hours and double time starts after that, so the claim is not
+  // complete without it.
+  const [callInHours, setCallInHours] = useState({})
   // The on-call weekends this fortnight, read off the calendar roster with the
   // hours already worked out. Offered rather than filled in: the roster gets
   // amended and the person filing is the one who knows whether it was them.
@@ -481,6 +486,7 @@ export default function Timesheets({ user, onBack }) {
   const visibleCallIns = callIns.filter(c => !dismissedCallIns.includes(c.id))
   const callInCategory = categories.find(c => c.key === 'call_in')
   const onCallCategory = categories.find(c => c.key === 'on_call')
+  const doubleCategory = categories.find(c => c.key === 'overtime_double')
   const hasToniSplit = categories.some(c => c.key === 'ordinary_toni_admin') && categories.some(c => c.key === 'ordinary_toni_scientific')
 
   return (
@@ -645,10 +651,51 @@ export default function Timesheets({ user, onBack }) {
           <div key={c.id} style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>
             <div style={{ fontSize: 12.5, color: PURPLE, fontWeight: 700, marginBottom: 3 }}>Called in for this case?</div>
             <div style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>{c.title} · {DAY_NAMES[days.indexOf(c.day) % 7]} {c.time} ({c.reason})</div>
+
+            {/* How long it ran. The allowance covers the first five hours;
+                past that every hour or part thereof is double the ordinary
+                rate, so the hours have to be known before the claim is right.
+                Asked here rather than left to somebody to work out and enter
+                in a second place. */}
+            <div style={{ fontSize: 12.5, color: MUTED, marginTop: 9, marginBottom: 5 }}>
+              How long were you there?
+            </div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {[2, 4, 5, 6, 7, 8].map(h => {
+                const on = callInHours[c.id] === h
+                return (
+                  <button key={h} onClick={() => setCallInHours(p => ({ ...p, [c.id]: h }))}
+                    style={{
+                      minWidth: 44, minHeight: 36, padding: '0 10px', borderRadius: 8,
+                      cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                      border: `1px solid ${on ? PURPLE : BORDER}`,
+                      background: on ? PURPLE : 'transparent',
+                      color: on ? 'white' : NAVY
+                    }}>
+                    {h}h
+                  </button>
+                )
+              })}
+            </div>
+            {extraDoubleTime(callInHours[c.id]) > 0 && (
+              <div style={{ fontSize: 12.5, color: PURPLE, marginTop: 7, lineHeight: 1.45 }}>
+                Over {COVERED_HOURS} hours — <strong>{extraDoubleTime(callInHours[c.id])}h double time</strong>{' '}
+                will be added as well.
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
-              <button onClick={() => { addToCell(callInCategory.key, c.day, 1); setDismissedCallIns(p => [...p, c.id]) }}
+              <button
+                onClick={() => {
+                  addToCell(callInCategory.key, c.day, 1)
+                  const extra = extraDoubleTime(callInHours[c.id])
+                  if (extra > 0 && doubleCategory) addToCell(doubleCategory.key, c.day, extra)
+                  setDismissedCallIns(p => [...p, c.id])
+                }}
                 style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-                Add call-in allowance
+                Add call-in{extraDoubleTime(callInHours[c.id]) > 0
+                  ? ` + ${extraDoubleTime(callInHours[c.id])}h double`
+                  : ' allowance'}
               </button>
               <button onClick={() => setDismissedCallIns(p => [...p, c.id])}
                 style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, color: MUTED, cursor: 'pointer' }}>
