@@ -51,14 +51,28 @@ async function postTimesheet(payload) {
       'Content-Type': 'application/json',
       Accept: 'application/json'
     },
-    body: JSON.stringify({ Timesheets: [payload] })
+    // A bare array, not { Timesheets: [...] }.
+    //
+    // Xero's AU payroll endpoints take the collection at the root of the body.
+    // Wrapped, it answered:
+    //
+    //   Cannot deserialize the current JSON object into type
+    //   UpdateTimesheetRequest because the type requires a JSON array.
+    //   Path 'Timesheets', line 1, position 14.
+    //
+    // Position 14 being exactly where `{"Timesheets":` ends. The reply still
+    // comes back wrapped, which is the asymmetry that made this easy to get
+    // wrong — see below.
+    body: JSON.stringify([payload])
   })
   // Through readXero, because Xero answers errors with XML and `res.json()`
   // threw on the angle bracket — replacing the real message with a parse
   // error that told a staff member nothing at all.
   const { ok, data, error } = await readXero(res, 'Xero timesheet')
   if (!ok) throw new Error(error)
-  const created = data.Timesheets?.[0]
+  // The request takes a bare array and the response comes back wrapped, so
+  // both shapes are accepted rather than assuming the one we happened to see.
+  const created = Array.isArray(data) ? data[0] : data.Timesheets?.[0]
   return { timesheetID: created?.TimesheetID, status: created?.Status }
 }
 

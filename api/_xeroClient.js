@@ -231,13 +231,22 @@ export async function submitToXero({ name, startDate, endDate, leaveType, reason
   const submitRes = await fetch(`${XERO_API_BASE}/LeaveApplications`, {
     method: 'POST',
     headers: { ...xeroHeaders(token, tenantId), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ LeaveApplications: [leaveApp] })
+    // A bare array, for the same reason as the timesheet post: Xero's AU
+    // payroll endpoints take the collection at the root of the body, and the
+    // wrapped form is rejected with a deserialisation complaint.
+    //
+    // This one had never been seen to fail, because an approval catches the
+    // Xero error and carries on — the leave still reaches the calendar and
+    // the email still goes out. Worth confirming against a real approval
+    // rather than assumed from the timesheet's behaviour.
+    body: JSON.stringify([leaveApp])
   })
   const { ok, data: result, error } = await readXero(submitRes, 'Xero leave application')
   if (!ok) throw new Error(error)
 
+  const created = Array.isArray(result) ? result[0] : result.LeaveApplications?.[0]
   return {
-    leaveApplicationID: result.LeaveApplications?.[0]?.LeaveApplicationID,
+    leaveApplicationID: created?.LeaveApplicationID,
     employeeName: `${employee.FirstName} ${employee.LastName}`
   }
 }
