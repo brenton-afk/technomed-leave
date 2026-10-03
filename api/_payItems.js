@@ -21,10 +21,70 @@ export const CATEGORY_RULES = [
   { key: 'overtime_double', pattern: /double\s*time|overtime.*(2x|double)/i, label: 'Overtime — Double', kind: 'overtime', unit: 'hours', colour: 'amber' },
   { key: 'overtime_1_5', pattern: /overtime/i, label: 'Overtime 1.5×', kind: 'overtime', unit: 'hours', colour: 'amber' },
   { key: 'toil_accrued', pattern: /toil/i, label: 'TOIL Accrued', kind: 'toil', unit: 'hours', colour: 'teal' },
-  { key: 'call_in', pattern: /call\s*in/i, label: 'Call-In Allowance', kind: 'allowance', unit: 'count', colour: 'purple', hint: '$450 per callout' },
-  { key: 'on_call', pattern: /on\s*call/i, label: 'On-Call Hours', kind: 'allowance', unit: 'hours', colour: 'purple', hint: '$4.50 per hour' },
+  // No dollar figures here any more. These said "$450 per callout" and "$4.50
+  // per hour"; the callout rate is $250. A number written down in two places
+  // disagrees eventually, and the copy in the code is the one nobody updates.
+  // Both now come off the Xero rate itself — see rateFacts below.
+  { key: 'call_in', pattern: /call\s*in/i, label: 'Call-In Allowance', kind: 'allowance', unit: 'count', colour: 'purple' },
+  { key: 'on_call', pattern: /on\s*call/i, label: 'On-Call Hours', kind: 'allowance', unit: 'hours', colour: 'purple' },
   { key: 'ordinary', pattern: /ordinary/i, label: 'Ordinary Hours', kind: 'ordinary', unit: 'hours', colour: 'navy' }
 ]
+
+
+/**
+ * What Xero actually says a unit of this rate is, and what it pays.
+ *
+ * This is the difference between a call-in paying $250 and paying one hour.
+ * A timesheet line is always "units"; what a unit *means* is the earnings
+ * rate's own setup. Enter 1 against a rate Xero holds as rate-per-unit/Hours
+ * and Xero records one hour — which is exactly what has been happening to
+ * call-ins.
+ *
+ * The app cannot fix a pay item's configuration from here. What it can do is
+ * stop guessing: show the real figure, and say plainly when the unit a
+ * category is entered in is not the unit the rate is paid in.
+ */
+function rateFacts(rate) {
+  const units = String(rate?.TypeOfUnits ?? rate?.typeOfUnits ?? '').trim()
+  const amount = Number(rate?.RatePerUnit ?? rate?.ratePerUnit)
+  return {
+    rateType: String(rate?.RateType ?? rate?.rateType ?? '').trim() || null,
+    typeOfUnits: units || null,
+    ratePerUnit: Number.isFinite(amount) ? amount : null,
+    // "Hours" is the only unit type that means time. Anything else — Callouts,
+    // Each, Days — is a thing you count.
+    paidByTheHour: /^hours?$/i.test(units)
+  }
+}
+
+/** The money line under a category, from Xero rather than from memory. */
+function hintFor(facts) {
+  if (facts.ratePerUnit == null) return ''
+  const money = `$${facts.ratePerUnit.toFixed(2).replace(/\.00$/, '')}`
+  const per = facts.typeOfUnits ? facts.typeOfUnits.replace(/s$/i, '').toLowerCase() : 'unit'
+  return `${money} per ${per}`
+}
+
+/**
+ * Whether a category is entered in one unit and paid in another.
+ *
+ * A call-in is counted — one call-in, two call-ins — and if its Xero rate is
+ * set up in hours then entering 1 pays one hour instead of one call-in. That
+ * is a payroll error the app is otherwise silent about, and the person it
+ * short-changes is the one who got out of bed.
+ */
+export function unitMismatch(category) {
+  if (!category || !category.typeOfUnits) return null
+  if (category.unit === 'count' && category.paidByTheHour) {
+    return `Xero pays ${category.xeroName} by the hour, so entering 1 records one `
+      + 'hour rather than one call-in. The pay item needs its own unit in Xero.'
+  }
+  if (category.unit === 'hours' && !category.paidByTheHour) {
+    return `Xero pays ${category.xeroName} per ${category.typeOfUnits.toLowerCase()}, `
+      + 'not per hour, so hours entered here are not hours paid.'
+  }
+  return null
+}
 
 function classify(rateName) {
   return CATEGORY_RULES.find(rule => rule.pattern.test(rateName || '')) || null
@@ -96,7 +156,8 @@ export function categoriesForStaff(earningsRates, staffEmail, { assignedRateIds 
       kind: rule.kind,
       unit: rule.unit,
       colour: rule.colour,
-      hint: rule.hint || ''
+      ...rateFacts(match),
+      hint: hintFor(rateFacts(match))
     })
   }
 
@@ -114,9 +175,12 @@ export function categoriesForStaff(earningsRates, staffEmail, { assignedRateIds 
       xeroName: rate.Name || rate.name,
       label: rate.Name || rate.name,
       kind: 'other',
-      unit: 'hours',
+      // An unrecognised rate is entered in whatever Xero pays it in, rather
+      // than assumed to be hours.
+      unit: rateFacts(rate).paidByTheHour ? 'hours' : 'count',
       colour: 'navy',
-      hint: ''
+      ...rateFacts(rate),
+      hint: hintFor(rateFacts(rate))
     })
   }
 

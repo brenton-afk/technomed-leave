@@ -73,6 +73,21 @@ function NumberPad({ cell, categories, onSet, onClose }) {
           {isCount ? 'Number of callouts' : 'Hours'}{category?.hint ? ` · ${category.hint}` : ''}
         </div>
 
+        {/* Entered in one unit, paid in another. A call-in is counted; if its
+            Xero pay item is set up in hours then entering 1 records one hour
+            instead of one call-in, and the person short-changed is the one who
+            got out of bed. The app cannot fix the pay item from here, so it
+            says so where somebody is about to type the number. */}
+        {category?.mismatch && (
+          <div style={{
+            background: '#fdecea', color: '#c0392b', border: '1px solid #f5c6cb',
+            borderRadius: 10, padding: 10, fontSize: 12.5, lineHeight: 1.45,
+            marginBottom: 12
+          }}>
+            ⚠ {category.mismatch}
+          </div>
+        )}
+
         <div style={{ background: tokenColour.canvas, borderRadius: 12, padding: '16px 18px', marginBottom: 12, textAlign: 'right', fontSize: 32, fontWeight: 700, color: NAVY, minHeight: 64, boxSizing: 'border-box' }}>
           {value || '0'}<span style={{ fontSize: 16, color: MUTED, marginLeft: 6 }}>{isCount ? '' : 'h'}</span>
         </div>

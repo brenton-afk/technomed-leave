@@ -5,7 +5,7 @@ import {
   saveTimesheet, getTimesheet, getAllTimesheets
 } from '../_redis.js'
 import {
-  fetchEarningsRates, categoriesForStaff, CATEGORY_RULES, assignedRatesFor
+  fetchEarningsRates, categoriesForStaff, CATEGORY_RULES, assignedRatesFor, unitMismatch
 } from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
@@ -127,7 +127,17 @@ async function handlePayAudit(req, res) {
       // it is a payroll record to go and set up rather than a fact about them.
       source: assignedRateIds ? 'xero' : 'fallback',
       reviewed: isReviewed(person.email),
-      offered: categories.map(c => ({ key: c.key, label: c.label, xeroName: c.xeroName })),
+      offered: categories.map(c => ({
+        key: c.key,
+        label: c.label,
+        xeroName: c.xeroName,
+        // What Xero actually pays, and in what unit. Both were hardcoded in
+        // the app and one of them was wrong.
+        rate: c.ratePerUnit,
+        unitType: c.typeOfUnits,
+        // The call-in problem: entered as a count, paid by the hour.
+        mismatch: unitMismatch(c)
+      })),
       // On the fallback only. With a pay template there is nothing to be
       // missing — the template is the list.
       missing: assignedRateIds ? [] : payItemsFor(person.email)
@@ -153,6 +163,7 @@ async function handlePayItems(req, res, session) {
   const rates = await fetchEarningsRates()
   const assignedRateIds = await assignedRatesFor(staff.name)
   const categories = categoriesForStaff(rates, staff.email, { assignedRateIds })
+    .map(c => ({ ...c, mismatch: unitMismatch(c) || undefined }))
   if (categories.length === 0) {
     throw new Error('No pay categories found in Xero. Check the payroll settings scope and reconnect Xero.')
   }
