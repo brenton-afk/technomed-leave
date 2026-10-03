@@ -255,6 +255,10 @@ export default function Timesheets({ user, onBack }) {
   // amended and the person filing is the one who knows whether it was them.
   const [onCall, setOnCall] = useState(null)
   const [onCallDone, setOnCallDone] = useState(false)
+  // What this person has in the TOIL bank. Worked out by the app from the
+  // timesheets it has filed and the TOIL leave it has sent to Xero, because
+  // Xero accrues nothing from a timesheet line.
+  const [toil, setToil] = useState(null)
   const [savedAt, setSavedAt] = useState('')
   const [stage, setStage] = useState('entry')
   const [submitted, setSubmitted] = useState(null)
@@ -288,6 +292,8 @@ export default function Timesheets({ user, onBack }) {
         .then(r => r.json())
         .then(d => { setCallIns(d.suggestions || []); setOnCall(d.onCall || null) })
         .catch(() => {})
+      fetch('/api/timesheet/agent?action=toil', { headers: authHeaders })
+        .then(r => r.json()).then(d => setToil(d.me || null)).catch(() => {})
     } catch (err) {
       setError(err.message)
     }
@@ -500,6 +506,25 @@ export default function Timesheets({ user, onBack }) {
         {rejected && (
           <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12, lineHeight: 1.5 }}>
             This fortnight was returned: <strong>{rejected.rejectionReason}</strong><br />Correct it below and resubmit.
+          </div>
+        )}
+
+        {/* The bank, where somebody can see it before deciding whether to
+            claim more or take some back. It was only ever a number in Brent's
+            head and a manual adjustment in Xero. */}
+        {toil && (toil.balance !== 0 || toil.accrued !== 0) && (
+          <div style={{
+            background: '#e6f4f2', border: `1px solid rgba(42,181,160,0.3)`,
+            borderRadius: 10, padding: '10px 13px', marginBottom: 12,
+            display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10
+          }}>
+            <span style={{ fontSize: 12.5, color: NAVY }}>
+              TOIL balance
+              {toil.pending.accrued > 0 && (
+                <span style={{ color: MUTED }}> · {toil.pending.accrued}h awaiting approval</span>
+              )}
+            </span>
+            <strong style={{ fontSize: 16, color: TEAL }}>{toil.balance}h</strong>
           </div>
         )}
 

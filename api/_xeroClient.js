@@ -157,6 +157,22 @@ export async function assignedEarningsRateIds(token, tenantId, employeeId) {
   return ids.length ? [...new Set(ids)] : null
 }
 
+/**
+ * The TOIL hours Xero currently holds for somebody, or null if it holds none.
+ *
+ * Null rather than zero on purpose: "Xero has not been told" and "Xero says
+ * none" look the same as a number and are not the same fact, and only one of
+ * them means an adjustment is outstanding.
+ */
+export async function toilBalanceInXero(token, tenantId, employeeId) {
+  const employee = await getEmployee(token, tenantId, employeeId)
+  const line = (employee?.LeaveBalances || [])
+    .find(b => /toil|lieu/i.test(b.LeaveName || b.leaveName || ''))
+  if (!line) return null
+  const hours = Number(line.BalanceHours ?? line.balanceHours)
+  return Number.isFinite(hours) ? hours : null
+}
+
 export async function listLeaveTypes(token, tenantId) {
   const data = await xeroGet('/LeaveTypes', token, tenantId)
   return data.LeaveTypes || []

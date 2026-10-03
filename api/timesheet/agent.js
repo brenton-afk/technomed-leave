@@ -2,13 +2,15 @@ import { requireSession, requireAdmin } from '../_auth.js'
 import { STAFF, getStaffByEmail } from '../../src/staffConfig.js'
 import {
   saveTimesheetDraft, getTimesheetDraft, clearTimesheetDraft,
-  saveTimesheet, getTimesheet, getAllTimesheets
+  saveTimesheet, getTimesheet, getAllTimesheets, getAllApplications
 } from '../_redis.js'
 import {
   fetchEarningsRates, categoriesForStaff, CATEGORY_RULES, assignedRatesFor, unitMismatch
 } from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
+import { getXeroToken, findEmployee, toilBalanceInXero } from '../_xeroClient.js'
+import { toilBalanceFor, compareWithXero } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import {
   onCallHoursFor, totalHours as onCallTotal
@@ -38,6 +40,7 @@ export default async function handler(req, res) {
     if (action === 'list') return await handleList(req, res)
     if (action === 'decide') return await handleDecide(req, res)
     if (action === 'payaudit') return await handlePayAudit(req, res)
+    if (action === 'toil') return await handleToil(req, res, session)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     console.error(`timesheet/${action} failed:`, err.message)
@@ -353,6 +356,52 @@ async function handleCallIns(req, res, session) {
     },
     period: { start: period.start, end: period.end }
   })
+}
+
+
+// ─── The TOIL balance ────────────────────────────────────────────────────────
+// Xero accrues nothing from a timesheet — "TOIL Accrued" is an earnings rate,
+// which records hours and does not move a leave balance — so the balance has
+// been kept by hand. The app already held both halves and never put them
+// together: the TOIL on every timesheet it has filed, and every TOIL leave
+// application it has sent to Xero.
+//
+// It does not write the answer back. A number worked out here and posted into
+// payroll with nobody looking would be a poor way to find out it was wrong.
+// What it does is end the arithmetic, and say whether Xero has kept pace.
+async function handleToil(req, res, session) {
+  const staff = requireTimesheetAccess(session)
+  // An admin can ask about the whole team; everybody else gets their own.
+  const everyone = req.query.all === '1' && staff.isAdmin
+  const who = everyone ? STAFF.filter(s => s.hasTimesheets) : [staff]
+
+  const [timesheets, leave] = await Promise.all([
+    getAllTimesheets(200),
+    getAllApplications().catch(() => ({ approved: [], pending: [] }))
+  ])
+
+  const people = await Promise.all(who.map(async person => {
+    const ours = toilBalanceFor({ timesheets, leave, email: person.email })
+    // Compared, never corrected. Xero's is the number that pays people.
+    let inXero = null
+    try {
+      const { token, tenantId } = await getXeroToken()
+      const employee = await findEmployee(token, tenantId, person.name)
+      inXero = await toilBalanceInXero(token, tenantId, employee?.EmployeeID)
+    } catch {
+      // Xero unreachable, or no matching employee. The app's own balance is
+      // still worth having and is still the arithmetic nobody has to do.
+    }
+    return {
+      name: person.name,
+      email: person.email,
+      ...ours,
+      xero: inXero,
+      check: compareWithXero(ours, inXero)
+    }
+  }))
+
+  return res.status(200).json({ ok: true, people: everyone ? people : undefined, me: people[0] })
 }
 
 // ─── list / decide: admin ──────────────────────────────────
