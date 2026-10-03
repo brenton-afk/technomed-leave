@@ -16,12 +16,12 @@ const REP = {
 }
 
 function signIn(user) {
-  sessionStorage.setItem('tm_user', JSON.stringify(user))
-  sessionStorage.setItem('tm_login_time', String(Date.now()))
+  localStorage.setItem('tm_user', JSON.stringify(user))
+  localStorage.setItem('tm_login_time', String(Date.now()))
 }
 
 beforeEach(() => {
-  sessionStorage.clear()
+  localStorage.clear(); sessionStorage.clear()
   localStorage.clear()
   // Every screen in the app fetches something; nothing here depends on the data.
   global.fetch = vi.fn(() => Promise.resolve({ json: () => Promise.resolve({}) }))

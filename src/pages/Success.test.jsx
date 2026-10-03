@@ -23,9 +23,9 @@ const BEN = {
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.setSystemTime(new Date('2026-10-05T02:00:00.000Z'))
-  sessionStorage.clear()
-  sessionStorage.setItem('tm_user', JSON.stringify(BEN))
-  sessionStorage.setItem('tm_login_time', String(Date.now()))
+  localStorage.clear(); sessionStorage.clear()
+  localStorage.setItem('tm_user', JSON.stringify(BEN))
+  localStorage.setItem('tm_login_time', String(Date.now()))
   global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ me: null, events: [] }) }))
 })
 

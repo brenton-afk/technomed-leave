@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import PinScreen from './pages/PinScreen.jsx'
+import LockScreen from './pages/LockScreen.jsx'
+import { browserSupportsWebAuthn } from '@simplewebauthn/browser'
 import LeaveForm from './pages/LeaveForm.jsx'
 import Success from './pages/Success.jsx'
 import KitRoom from './pages/KitRoom.jsx'
@@ -59,11 +61,19 @@ const SELF_BACK = new Set([
 ])
 
 // Matches the server-side session TTL in api/_auth.js.
-const SESSION_MAX_AGE_MS = 60 * 60 * 1000
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
+
+// localStorage, not sessionStorage. sessionStorage is emptied when the app is
+// closed, and iOS closes an installed web app whenever it wants the memory —
+// so the one-hour expiry was never what people were hitting. Every open was a
+// fresh sign-in, which is why the app felt like it demanded a password to look
+// at a case list and people went back to the Google calendar instead.
+const STORE = 'tm_user'
+const STAMP = 'tm_login_time'
 
 function loadStoredSession() {
-  const saved = sessionStorage.getItem('tm_user')
-  const loginTime = parseInt(sessionStorage.getItem('tm_login_time') || '0', 10)
+  const saved = localStorage.getItem(STORE)
+  const loginTime = parseInt(localStorage.getItem(STAMP) || '0', 10)
   if (!saved || !loginTime) return null
   if (Date.now() - loginTime > SESSION_MAX_AGE_MS) return null
   try { return JSON.parse(saved) } catch { return null }
@@ -77,6 +87,8 @@ export default function App() {
   // being up here: the login screen is exactly where a stale tab tends to sit.
   const newBuild = useNewBuild()
   const [user, setUser] = useState(null)
+  // A session read back from the device, not yet unlocked on this launch.
+  const [locked, setLocked] = useState(false)
   // The number on the Messages tab. Below the state it reads and above every
   // early return, which is the only place both rules are satisfied.
   const unread = useUnread(user?.token)
@@ -85,8 +97,19 @@ export default function App() {
 
   useEffect(() => {
     const restored = loadStoredSession()
-    if (restored) setUser(restored)
-    else clearSession()
+    if (!restored) { clearSession(); return }
+    setUser(restored)
+    // Restored sessions start locked, where there is something to unlock with.
+    // The credential lasts a month, so what stands between a picked-up phone
+    // and the patient list is the phone's own biometric — the arrangement
+    // every banking app on the same phone uses, and the reason a month is
+    // reasonable to offer at all.
+    //
+    // A device with no biometrics is not locked. There would be nothing to
+    // unlock it with but the PIN, and demanding the PIN on every open is the
+    // exact friction this is removing. The desktops this applies to are
+    // behind an operating-system login already.
+    setLocked(browserSupportsWebAuthn())
   }, [])
 
   // The stored login time is checked, not just written, so a session really does
@@ -98,8 +121,8 @@ export default function App() {
   }, [user])
 
   function clearSession() {
-    sessionStorage.removeItem('tm_user')
-    sessionStorage.removeItem('tm_login_time')
+    localStorage.removeItem(STORE)
+    localStorage.removeItem(STAMP)
   }
 
   function handleLogin(userData) {
@@ -107,8 +130,8 @@ export default function App() {
     // Every route in — PIN, first-time setup, passkey — arrives here, so this is
     // the one place the device's person is recorded.
     rememberUser(userData.email)
-    sessionStorage.setItem('tm_user', JSON.stringify(userData))
-    sessionStorage.setItem('tm_login_time', Date.now().toString())
+    localStorage.setItem(STORE, JSON.stringify(userData))
+    localStorage.setItem(STAMP, Date.now().toString())
     setNav({ tab: 'cases', sub: null })
   }
 
@@ -137,6 +160,17 @@ export default function App() {
   const back = useCallback(() => setNav(n => ({ tab: n.tab, sub: null })), [])
 
   if (!user) return <PinScreen onLogin={handleLogin} />
+
+  // Signed in on this device, but not yet this launch. Face ID, or the PIN if
+  // the device cannot — never a dead end.
+  if (locked) {
+    return (
+      <LockScreen
+        user={user}
+        onUnlock={() => setLocked(false)}
+        onUsePin={() => { setLocked(false); handleLogout() }} />
+    )
+  }
 
   const tabs = TABS.filter(t => !t.adminOnly || user.isAdmin)
 

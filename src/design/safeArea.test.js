@@ -113,6 +113,8 @@ describe('no screen is left out', () => {
   // Drawn inside another screen's frame, so the frame's insets already apply.
   const INSIDE_ANOTHER = new Set([
     'PromptBanner.jsx', 'Success.jsx', 'FaceIdSetup.jsx', 'clinical/PlanBlocks.jsx',
+    // Full-bleed on purpose, like the PIN screen it stands in for.
+    'LockScreen.jsx',
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',
     // Chooses between two screens and renders its switcher inside whichever
     // one's Header is showing. It draws no chrome of its own to inset.
