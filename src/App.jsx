@@ -126,6 +126,10 @@ export default function App() {
   }
 
   const navigate = useCallback(target => {
+    // Going anywhere clears the leave confirmation. Without this it shows in
+    // place of whatever tab you tapped, which is the trapped screen again
+    // wearing a different hat.
+    setSubmitted(null)
     setNav(typeof target === 'string' ? { tab: target, sub: null } : { sub: null, ...target })
     window.scrollTo?.(0, 0)
   }, [])
@@ -134,13 +138,24 @@ export default function App() {
 
   if (!user) return <PinScreen onLogin={handleLogin} />
 
-  if (submitted) {
-    return <Success form={submitted} onReset={() => { setSubmitted(null); navigate({ tab: 'cases' }) }} />
-  }
-
   const tabs = TABS.filter(t => !t.adminOnly || user.isAdmin)
 
   function renderContent() {
+    // Shown in place of whatever tab you were on, rather than above the whole
+    // shell. It used to be an early return, which took the bottom navigation
+    // off the screen with it — so after filing a week's leave the only way
+    // out was one button, and that button was mislabelled. The tabs are the
+    // way out of everything else in the app; there is no reason for this to
+    // be the exception.
+    if (submitted) {
+      return (
+        <Success
+          form={submitted}
+          onDone={() => { setSubmitted(null); navigate({ tab: 'me' }) }}
+          onAnother={() => { setSubmitted(null); navigate({ tab: 'me', sub: 'leave' }) }} />
+      )
+    }
+
     const { tab, sub } = renderTarget(nav, user)
 
     if (tab === 'cases') {
