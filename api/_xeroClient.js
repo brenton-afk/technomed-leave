@@ -126,6 +126,37 @@ export async function findEmployee(token, tenantId, name) {
   return match
 }
 
+/**
+ * One employee in full, including their pay template.
+ *
+ * The list endpoint returns a summary with no PayTemplate on it, so the
+ * earnings rates somebody is actually assigned can only be had one employee at
+ * a time. Nine people, once per timesheet load — not free, and far cheaper
+ * than a table of entitlements kept by hand in the code.
+ */
+export async function getEmployee(token, tenantId, employeeId) {
+  const data = await xeroGet(`/Employees/${employeeId}`, token, tenantId)
+  // Xero wraps a single employee in the same array as the list.
+  return (data.Employees || [])[0] || null
+}
+
+/**
+ * The earnings rates an employee's pay template assigns them.
+ *
+ * This is the entitlement, maintained by whoever runs payroll, in the system
+ * that actually pays people. Returns null — not an empty list — when there is
+ * no template to read, because "nothing assigned" and "could not tell" need
+ * different answers: the first is a payroll setup to fix, the second must fall
+ * back rather than present somebody an empty timesheet.
+ */
+export async function assignedEarningsRateIds(token, tenantId, employeeId) {
+  const employee = await getEmployee(token, tenantId, employeeId)
+  const lines = employee?.PayTemplate?.EarningsLines
+  if (!Array.isArray(lines) || lines.length === 0) return null
+  const ids = lines.map(l => l.EarningsRateID || l.earningsRateID).filter(Boolean)
+  return ids.length ? [...new Set(ids)] : null
+}
+
 export async function listLeaveTypes(token, tenantId) {
   const data = await xeroGet('/LeaveTypes', token, tenantId)
   return data.LeaveTypes || []

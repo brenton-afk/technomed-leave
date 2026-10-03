@@ -2,7 +2,7 @@
 // Earnings rates come from Xero so the IDs are always the org's real ones, but
 // which categories a staff member sees, how each is coloured, and whether it is
 // measured in hours or callouts is decided here.
-import { getXeroToken } from './_xeroClient.js'
+import { getXeroToken, findEmployee, assignedEarningsRateIds } from './_xeroClient.js'
 import { payItemsFor } from '../src/payOptions.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
@@ -53,20 +53,36 @@ export async function fetchEarningsRates() {
 // The categories one staff member should see, in display order. Anything in
 // Xero we do not recognise is returned too (as `kind: 'other'`) rather than
 // hidden, so a new earnings rate is visible instead of silently missing.
-export function categoriesForStaff(earningsRates, staffEmail) {
+export function categoriesForStaff(earningsRates, staffEmail, { assignedRateIds } = {}) {
   const email = String(staffEmail || '').toLowerCase()
   const seen = new Set()
   const categories = []
 
-  // What this person may claim. See src/payOptions.js.
-  const allowed = new Set(payItemsFor(email))
+  // What this person may claim.
+  //
+  // From Xero where their pay template says — that is the entitlement, kept by
+  // whoever runs payroll, in the system that actually pays people. Add a pay
+  // item to somebody there and it appears on their timesheet; nobody has to
+  // remember to tell the app.
+  //
+  // The table in src/payOptions.js is the fallback for an employee Xero cannot
+  // be asked about: no template set up, no matching record, or Xero down. An
+  // empty timesheet is a worse answer than a reasonable default, and somebody
+  // who cannot file their hours on a Sunday night does not care why.
+  const assigned = Array.isArray(assignedRateIds) && assignedRateIds.length
+    ? new Set(assignedRateIds)
+    : null
+  const allowed = assigned ? null : new Set(payItemsFor(email))
 
   for (const rule of CATEGORY_RULES) {
-    if (!allowed.has(rule.key)) continue
+    if (allowed && !allowed.has(rule.key)) continue
 
     const match = earningsRates.find(r => {
       const id = r.EarningsRateID || r.earningsRateID
-      return !seen.has(id) && classify(r.Name || r.name)?.key === rule.key
+      if (seen.has(id)) return false
+      // When Xero has told us what this person is assigned, that decides it.
+      if (assigned && !assigned.has(id)) return false
+      return classify(r.Name || r.name)?.key === rule.key
     })
     if (!match) continue
 
@@ -87,6 +103,10 @@ export function categoriesForStaff(earningsRates, staffEmail) {
   for (const rate of earningsRates) {
     const id = rate.EarningsRateID || rate.earningsRateID
     if (seen.has(id) || !id) continue
+    // An unrecognised rate is still shown rather than hidden — a new earnings
+    // rate should be visible, not silently missing — but only to the people
+    // Xero says have it.
+    if (assigned && !assigned.has(id)) continue
     if (classify(rate.Name || rate.name)) continue // a known kind this staffer does not get
     categories.push({
       key: `other_${id}`,
@@ -101,4 +121,25 @@ export function categoriesForStaff(earningsRates, staffEmail) {
   }
 
   return categories
+}
+
+
+/**
+ * The earnings rates Xero says one of our staff is assigned.
+ *
+ * Null whenever the question cannot be answered — no matching employee, no pay
+ * template, Xero unreachable — so the caller falls back to the table rather
+ * than presenting somebody a timesheet with nothing on it. A payroll outage
+ * must not stop the team recording their hours.
+ */
+export async function assignedRatesFor(staffName) {
+  try {
+    const { token, tenantId } = await getXeroToken()
+    const employee = await findEmployee(token, tenantId, staffName)
+    const id = employee?.EmployeeID || employee?.employeeID
+    if (!id) return null
+    return await assignedEarningsRateIds(token, tenantId, id)
+  } catch {
+    return null
+  }
 }

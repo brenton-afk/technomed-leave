@@ -4,7 +4,9 @@ import {
   saveTimesheetDraft, getTimesheetDraft, clearTimesheetDraft,
   saveTimesheet, getTimesheet, getAllTimesheets
 } from '../_redis.js'
-import { fetchEarningsRates, categoriesForStaff, CATEGORY_RULES } from '../_payItems.js'
+import {
+  fetchEarningsRates, categoriesForStaff, CATEGORY_RULES, assignedRatesFor
+} from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
@@ -111,24 +113,28 @@ async function handlePayAudit(req, res) {
   const rates = await fetchEarningsRates()
   const rateNames = rates.map(r => r.Name || r.name).filter(Boolean)
 
-  const people = STAFF.filter(s => s.hasTimesheets).map(person => {
-    const categories = categoriesForStaff(rates, person.email)
+  const people = await Promise.all(STAFF.filter(s => s.hasTimesheets).map(async person => {
+    const assignedRateIds = await assignedRatesFor(person.name)
+    const categories = categoriesForStaff(rates, person.email, { assignedRateIds })
     const got = new Set(categories.map(c => c.key))
     return {
       name: person.name,
       email: person.email,
       role: person.role,
-      // Checked against a contract by a person, or merely inherited from the
-      // default. The difference is the point of recording it.
+      // Where the answer came from. "xero" means their pay template says so,
+      // which is the answer worth having; "fallback" means nobody could be
+      // asked and the table in payOptions.js decided — worth seeing, because
+      // it is a payroll record to go and set up rather than a fact about them.
+      source: assignedRateIds ? 'xero' : 'fallback',
       reviewed: isReviewed(person.email),
       offered: categories.map(c => ({ key: c.key, label: c.label, xeroName: c.xeroName })),
-      // Asked for in the table and not found in Xero. This is the one that
-      // costs somebody money.
-      missing: payItemsFor(person.email)
+      // On the fallback only. With a pay template there is nothing to be
+      // missing — the template is the list.
+      missing: assignedRateIds ? [] : payItemsFor(person.email)
         .filter(key => !got.has(key))
         .map(key => ({ key, label: PAY_ITEMS[key] || key }))
     }
-  })
+  }))
 
   return res.status(200).json({
     ok: true,
@@ -145,7 +151,8 @@ async function handlePayAudit(req, res) {
 async function handlePayItems(req, res, session) {
   const staff = requireTimesheetAccess(session)
   const rates = await fetchEarningsRates()
-  const categories = categoriesForStaff(rates, staff.email)
+  const assignedRateIds = await assignedRatesFor(staff.name)
+  const categories = categoriesForStaff(rates, staff.email, { assignedRateIds })
   if (categories.length === 0) {
     throw new Error('No pay categories found in Xero. Check the payroll settings scope and reconnect Xero.')
   }
@@ -195,7 +202,10 @@ async function handleSubmit(req, res, session) {
   }
 
   const rates = await fetchEarningsRates()
-  const categories = categoriesForStaff(rates, staff.email)
+  // The same question the screen asked when it was filled in, so a timesheet
+  // cannot be submitted against a category the person is not assigned.
+  const assignedRateIds = await assignedRatesFor(staff.name)
+  const categories = categoriesForStaff(rates, staff.email, { assignedRateIds })
   const entries = normaliseEntries(req.body?.entries, categories, period.days)
 
   const check = validate(entries, categories, period.days)
