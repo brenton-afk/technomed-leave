@@ -1,28 +1,105 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useId } from 'react'
 import axios from 'axios'
-import { Page, Header, Body } from '../design/Shell.jsx'
-import { colour, text, space, radius, border } from '../design/tokens.js'
+import { Page, Header } from '../design/Shell.jsx'
+import { colour as tokenColour } from '../design/tokens.js'
+import { workingDaysBetween } from '../clinicalPlan/toil.js'
 
+// ─── Applying for leave ──────────────────────────────────────────────────────
+// Four steps: when, what kind, why, and a look at it before it goes.
+//
+// It used to be three plain white boxes on a white page — the dates with no
+// sense of how long that actually was, the types as a bare list, and a review
+// card that looked like a different app from the timesheet next door. The
+// steps were right; everything around them was doing nothing.
+//
+// The palette is the timesheet's, pointed at the shared tokens, so the two
+// screens somebody uses in the same minute look like one app.
+
+const NAVY = tokenColour.navy
+const TEAL = tokenColour.accent
+const MUTED = tokenColour.inkFaint
+const BORDER = tokenColour.line
+const CANVAS = tokenColour.canvas
 
 const LEAVE_TYPES = [
-  { id: 'ANNUAL_LEAVE', label: 'Annual Leave', desc: 'Planned holiday or personal time off' },
-  { id: 'SICK', label: 'Personal / Sick Leave', desc: 'Illness, injury or personal circumstances' },
-  { id: 'TOIL', label: 'Time Off In Lieu (TOIL)', desc: 'Using time accrued from overtime hours' }
+  {
+    id: 'ANNUAL_LEAVE', label: 'Annual Leave', icon: '🏖',
+    desc: 'Planned holiday or time off'
+  },
+  {
+    id: 'SICK', label: 'Personal / Sick Leave', icon: '🩺',
+    desc: 'Illness, injury or personal circumstances'
+  },
+  {
+    id: 'TOIL', label: 'Time Off In Lieu', icon: '⏳',
+    desc: 'Using time accrued from overtime'
+  }
 ]
 
-const STEPS = ['Leave dates', 'Type of leave', 'Reason', 'Review & submit']
+const STEPS = ['When', 'What kind', 'Why', 'Check it']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const STANDARD_DAY = 7.6
 
 function fmt(d) {
-  if (!d) return '---'
-  const parts = d.split('-')
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return parseInt(parts[2]) + ' ' + months[parseInt(parts[1])-1] + ' ' + parts[0]
+  if (!d) return '—'
+  const [y, m, day] = d.split('-')
+  return `${parseInt(day, 10)} ${MONTHS[parseInt(m, 10) - 1]} ${y}`
+}
+
+/** The working day after a date — the obvious return date, offered not forced. */
+function nextWorkingDay(date) {
+  if (!date) return ''
+  const at = new Date(`${date}T00:00:00Z`)
+  do { at.setUTCDate(at.getUTCDate() + 1) } while ([0, 6].includes(at.getUTCDay()))
+  return at.toISOString().slice(0, 10)
+}
+
+/**
+ * A labelled control.
+ *
+ * The label is tied to the input with a real id. Before this they were simply
+ * next to each other, so tapping the word did not focus the field and a screen
+ * reader read an orphaned label followed by an unnamed date picker — on a form
+ * whose whole job is three dates.
+ */
+function Field({ label, hint, children }) {
+  const id = useId()
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label htmlFor={id}
+        style={{ display: 'block', fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: hint ? 2 : 6 }}>
+        {label}
+      </label>
+      {hint && <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 6 }}>{hint}</div>}
+      {React.cloneElement(React.Children.only(children), { id })}
+    </div>
+  )
+}
+
+const inputStyle = {
+  width: '100%', padding: '13px 14px', border: `1px solid ${BORDER}`,
+  borderRadius: 10, fontSize: 16, background: 'white', color: NAVY,
+  outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
+  appearance: 'none', WebkitAppearance: 'none'
+}
+
+/** A white card, which is the shape every other screen in the app uses. */
+function Card({ children, style }) {
+  return (
+    <div style={{
+      background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12,
+      padding: 16, marginBottom: 12, ...style
+    }}>{children}</div>
+  )
 }
 
 export default function LeaveForm({ user, onSuccess, onBack }) {
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  // What they have in the TOIL bank, so choosing TOIL is an informed choice
+  // rather than a guess followed by an email from Brent.
+  const [toil, setToil] = useState(null)
   const staffMember = user?.staff || user
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -32,18 +109,45 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
     startDate: '', endDate: '', returnDate: '', leaveType: '', reason: ''
   })
 
-  function setField(f, v) { setForm(p => ({ ...p, [f]: v })) }
+  useEffect(() => {
+    if (!user?.token) return
+    fetch('/api/timesheet/agent?action=toil', {
+      headers: { Authorization: `Bearer ${user.token}` }
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setToil(d?.me || null))
+      // Somebody not on timesheets has no TOIL and the endpoint says so. That
+      // is not an error worth showing on a leave form.
+      .catch(() => {})
+  }, [user?.token])
+
+  function setField(f, v) {
+    setForm(p => {
+      const next = { ...p, [f]: v }
+      // The return date is the working day after the last day, nine times out
+      // of ten. Filled in when the last day is chosen, and still editable —
+      // offered rather than decided.
+      if (f === 'endDate' && v && (!p.returnDate || p.returnDate <= v)) {
+        next.returnDate = nextWorkingDay(v)
+      }
+      if (f === 'startDate' && v && p.endDate && p.endDate < v) {
+        next.endDate = ''
+        next.returnDate = ''
+      }
+      return next
+    })
+  }
 
   function validate() {
     if (step === 0) {
-      if (!form.startDate) return 'Please select your first day of leave'
-      if (!form.endDate) return 'Please select your last day of leave'
-      if (!form.returnDate) return 'Please select your return to work date'
-      if (form.endDate < form.startDate) return 'Last day must be after first day'
-      if (form.returnDate <= form.endDate) return 'Return date must be after last day'
+      if (!form.startDate) return 'Pick your first day of leave'
+      if (!form.endDate) return 'Pick your last day of leave'
+      if (!form.returnDate) return 'Pick the day you are back at work'
+      if (form.endDate < form.startDate) return 'The last day cannot be before the first'
+      if (form.returnDate <= form.endDate) return 'You come back after your last day of leave'
     }
-    if (step === 1 && !form.leaveType) return 'Please select a leave type'
-    if (step === 2 && !form.reason.trim()) return 'Please enter a reason'
+    if (step === 1 && !form.leaveType) return 'Choose a type of leave'
+    if (step === 2 && !form.reason.trim()) return 'A short reason, so management know what it is for'
     return ''
   }
 
@@ -58,100 +162,249 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
   function submit() {
     setSubmitting(true); setError('')
     axios.post('/api/submit', form, {
-      // The endpoint is behind the session now. The employee is taken from that
-      // session server-side rather than from this form, which only ever showed
-      // the signed-in person's own name.
       headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
     })
       .then(() => { if (onSuccess) onSuccess(form) })
-      .catch(e => { setError(e.response?.data?.error || 'Submission failed. Please try again.'); setSubmitting(false) })
+      .catch(e => {
+        setError(e.response?.data?.error || 'That did not send. Try again in a moment.')
+        setSubmitting(false)
+      })
   }
 
-  const leaveLabel = LEAVE_TYPES.find(t => t.id === form.leaveType)?.label || '---'
-  const progress = ((step + 1) / STEPS.length * 100) + '%'
-
-  const inp = { width:'100%', padding:'12px 14px', border:'1px solid rgba(26,43,74,0.12)', borderRadius:'10px', fontSize:'16px', background:'white', color:colour.navy, outline:'none', boxSizing:'border-box', fontFamily:'inherit', appearance:'none', WebkitAppearance:'none' }
-  const grp = { marginBottom:'18px' }
-  const lbl = { display:'block', fontSize:'14px', fontWeight:'600', color:colour.navy, marginBottom:'4px' }
+  const days = form.startDate && form.endDate
+    ? workingDaysBetween(form.startDate, form.endDate)
+    : 0
+  const chosen = LEAVE_TYPES.find(t => t.id === form.leaveType)
+  const toilHours = toil?.balance ?? null
+  const toilShort = form.leaveType === 'TOIL' && toilHours != null
+    && days * STANDARD_DAY > toilHours
 
   return (
-    <Page style={{ display:'flex', flexDirection:'column' }}>
+    <Page style={{ display: 'flex', flexDirection: 'column' }}>
       <Header
-        eyebrow={`Leave application · step ${step + 1} of ${STEPS.length}`}
+        eyebrow="Leave application"
         title={STEPS[step]}
-        onBack={step === 0 ? onBack : back}
-      >
-        <div style={{ height:3, background:'rgba(255,255,255,0.14)', borderRadius:2, overflow:'hidden' }}>
-          <div style={{ height:'100%', background:colour.accent, width:progress, transition:'width 0.4s' }} />
+        onBack={step === 0 ? onBack : back}>
+        {/* Four pills rather than a progress bar. A bar says how far along you
+            are; these say what the steps are and which one you are on, which
+            is the thing somebody actually wants to know. */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {STEPS.map((label, i) => (
+            <div key={label} style={{
+              flex: 1, textAlign: 'center', padding: '5px 0', borderRadius: 999,
+              fontSize: 10.5, fontWeight: 700, letterSpacing: '0.2px',
+              background: i === step ? 'white' : i < step ? 'rgba(42,181,160,0.35)' : 'rgba(255,255,255,0.14)',
+              color: i === step ? NAVY : 'rgba(255,255,255,0.85)'
+            }}>
+              {i < step ? '✓' : label}
+            </div>
+          ))}
         </div>
       </Header>
 
-      <div className="tm-measure" style={{ flex:1, padding:'20px 20px 100px', background:colour.canvas }}>
+      <div className="tm-measure" style={{ flex: 1, padding: '16px 16px 150px', background: CANVAS }}>
+
         {step === 0 && (
-          <div>
-            <div style={grp}><label style={lbl}>First day of leave</label><input type="date" style={inp} value={form.startDate} onChange={e => setField('startDate', e.target.value)} /></div>
-            <div style={grp}><label style={lbl}>Last day of leave</label><input type="date" style={inp} value={form.endDate} min={form.startDate} onChange={e => setField('endDate', e.target.value)} /></div>
-            <div style={grp}><label style={lbl}>Return to work date</label><input type="date" style={inp} value={form.returnDate} min={form.endDate} onChange={e => setField('returnDate', e.target.value)} /></div>
-          </div>
+          <>
+            <Card>
+              <Field label="First day of leave">
+                <input type="date" style={inputStyle} value={form.startDate}
+                  onChange={e => setField('startDate', e.target.value)} />
+              </Field>
+              <Field label="Last day of leave">
+                <input type="date" style={inputStyle} value={form.endDate} min={form.startDate}
+                  onChange={e => setField('endDate', e.target.value)} />
+              </Field>
+              <Field label="Back at work" hint="Filled in for you — change it if you are back later.">
+                <input type="date" style={inputStyle} value={form.returnDate} min={form.endDate}
+                  onChange={e => setField('returnDate', e.target.value)} />
+              </Field>
+            </Card>
+
+            {/* How long that actually is. Three date boxes do not answer it,
+                and it is the number somebody is doing in their head. */}
+            {days > 0 && (
+              <div style={{
+                background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)',
+                borderRadius: 12, padding: '14px 16px', display: 'flex',
+                alignItems: 'baseline', justifyContent: 'space-between', gap: 12
+              }}>
+                <span style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
+                  {fmt(form.startDate)} — {fmt(form.endDate)}
+                  <span style={{ display: 'block', color: MUTED, fontSize: 12.5 }}>
+                    Weekends not counted
+                  </span>
+                </span>
+                <strong style={{ fontSize: 22, color: TEAL, whiteSpace: 'nowrap' }}>
+                  {days} day{days === 1 ? '' : 's'}
+                </strong>
+              </div>
+            )}
+          </>
         )}
 
         {step === 1 && (
-          <div>
-            {LEAVE_TYPES.map(t => (
-              <button key={t.id} style={{ display:'flex', alignItems:'center', gap:14, padding:14, border:`1.5px solid ${form.leaveType===t.id?colour.accent:'rgba(26,43,74,0.12)'}`, borderRadius:12, background: form.leaveType===t.id?'#e6f4f2':'white', cursor:'pointer', width:'100%', marginBottom:10, textAlign:'left', boxSizing:'border-box' }}
-                onClick={() => setField('leaveType', t.id)}>
-                <div>
-                  <div style={{ fontSize:14, fontWeight:600, color:colour.navy }}>{t.label}</div>
-                  <div style={{ fontSize:12.5, color:colour.inkFaint, marginTop:2 }}>{t.desc}</div>
-                </div>
-              </button>
-            ))}
-          </div>
+          <>
+            {LEAVE_TYPES.map(t => {
+              const on = form.leaveType === t.id
+              return (
+                <button key={t.id} onClick={() => setField('leaveType', t.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 14, width: '100%',
+                    padding: 16, marginBottom: 10, textAlign: 'left', cursor: 'pointer',
+                    boxSizing: 'border-box', borderRadius: 12,
+                    border: `1.5px solid ${on ? TEAL : BORDER}`,
+                    background: on ? '#e6f4f2' : 'white'
+                  }}>
+                  <span style={{ fontSize: 26, lineHeight: 1 }} aria-hidden="true">{t.icon}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 16, fontWeight: 700, color: NAVY }}>
+                      {t.label}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 12.5, color: MUTED, marginTop: 2 }}>
+                      {t.desc}
+                      {t.id === 'TOIL' && toilHours != null && (
+                        <> · <strong style={{ color: TEAL }}>{toilHours}h in the bank</strong></>
+                      )}
+                    </span>
+                  </span>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 999, flexShrink: 0,
+                    border: `1.5px solid ${on ? TEAL : BORDER}`,
+                    background: on ? TEAL : 'transparent', color: 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12.5, fontWeight: 700
+                  }}>{on ? '✓' : ''}</span>
+                </button>
+              )
+            })}
+
+            {/* Said here, where the choice is made, rather than discovered
+                afterwards by email. It does not block the application —
+                Brent decides, not the app. */}
+            {toilShort && (
+              <div style={{
+                background: '#fff4e5', border: '1px solid #f0c187', borderRadius: 10,
+                padding: '12px 14px', fontSize: 12.5, color: '#8a5200', lineHeight: 1.5
+              }}>
+                That is about {Math.round(days * STANDARD_DAY)} hours and you have {toilHours}h
+                accrued. You can still apply — management will sort out the difference.
+              </div>
+            )}
+          </>
         )}
 
         {step === 2 && (
-          <div>
-            <div style={grp}>
-              <label style={lbl}>Reason for leave</label>
-              <p style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:8 }}>This will appear in the notification email to management</p>
-              <textarea style={{ fontSize: 16, ...inp, minHeight:100, lineHeight:1.6, resize:'none' }} placeholder="e.g. Family holiday, medical procedure..." value={form.reason} onChange={e => setField('reason', e.target.value)} />
+          <>
+            <Card>
+              <Field label="Reason" hint="One line is plenty. It goes in the email to management.">
+                <textarea
+                  style={{ ...inputStyle, minHeight: 110, lineHeight: 1.6, resize: 'none' }}
+                  placeholder="Family holiday · medical procedure · moving house"
+                  value={form.reason}
+                  onChange={e => setField('reason', e.target.value)} />
+              </Field>
+            </Card>
+            <div style={{
+              background: 'rgba(42,181,160,0.07)', border: '1px solid rgba(42,181,160,0.18)',
+              borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: MUTED, lineHeight: 1.6
+            }}>
+              🔒 Nothing is confirmed until management review it.
             </div>
-            <div style={{ background:'rgba(42,181,160,0.07)', border:'1px solid rgba(42,181,160,0.18)', borderRadius:10, padding:'12px 14px', fontSize:14, color:colour.inkFaint, lineHeight:1.6 }}>
-              🔒 Your application will be reviewed by management before anything is confirmed.
-            </div>
-          </div>
+          </>
         )}
 
         {step === 3 && (
-          <div>
-            <div style={{ background:'white', border:'1px solid rgba(26,43,74,0.08)', borderRadius:14, overflow:'hidden', marginBottom:14 }}>
-              <div style={{ background:colour.navy, padding:'10px 14px', fontSize:12.5, fontWeight:600, color:'rgba(255,255,255,0.6)', letterSpacing:1, textTransform:'uppercase' }}>Application summary</div>
-              {[['Employee',form.name],['Division',form.division],['First day',fmt(form.startDate)],['Last day',fmt(form.endDate)],['Return date',fmt(form.returnDate)],['Reason',form.reason]].map(([l,v],i) => (
-                <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'10px 14px', borderBottom:'0.5px solid rgba(26,43,74,0.08)', gap:12, background:i%2===0?'#f8f9fc':'white' }}>
-                  <span style={{ fontSize:12.5, color:colour.inkFaint }}>{l}</span>
-                  <span style={{ fontSize:14, fontWeight:500, color:'#1a2b4a', textAlign:'right' }}>{v||'---'}</span>
+          <>
+            <div style={{
+              background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12,
+              overflow: 'hidden', marginBottom: 12
+            }}>
+              <div style={{
+                background: NAVY, padding: '12px 16px', display: 'flex',
+                alignItems: 'center', justifyContent: 'space-between', gap: 12
+              }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>
+                  {chosen?.icon} {chosen?.label}
+                </span>
+                <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)' }}>
+                  {days} day{days === 1 ? '' : 's'}
+                </span>
+              </div>
+              {[
+                ['Employee', form.name],
+                ['Division', form.division],
+                ['First day', fmt(form.startDate)],
+                ['Last day', fmt(form.endDate)],
+                ['Back at work', fmt(form.returnDate)],
+                ['Reason', form.reason]
+              ].map(([label, value]) => (
+                <div key={label} style={{
+                  display: 'flex', justifyContent: 'space-between', gap: 14,
+                  padding: '11px 16px', borderTop: `1px solid ${BORDER}`
+                }}>
+                  <span style={{ fontSize: 12.5, color: MUTED, flexShrink: 0 }}>{label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: NAVY, textAlign: 'right' }}>
+                    {value || '—'}
+                  </span>
                 </div>
               ))}
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 14px', gap:12 }}>
-                <span style={{ fontSize:12.5, color:colour.inkFaint }}>Leave type</span>
-                <span style={{ fontSize:12.5, fontWeight:600, background:'#e6f4f2', color:'#1a7a6e', padding:'3px 10px', borderRadius:20 }}>{leaveLabel}</span>
-              </div>
             </div>
-            <div style={{ background:'rgba(42,181,160,0.07)', border:'1px solid rgba(42,181,160,0.18)', borderRadius:10, padding:'12px 14px', fontSize:14, color:colour.inkFaint, lineHeight:1.6 }}>
-              📧 Management will be notified and will review your application.
+            <div style={{
+              background: 'rgba(42,181,160,0.07)', border: '1px solid rgba(42,181,160,0.18)',
+              borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: MUTED, lineHeight: 1.6
+            }}>
+              📧 Management will be notified and will review it.
             </div>
-          </div>
+          </>
         )}
 
-        {error && <div style={{ background:colour.dangerSoft, border:'1px solid rgba(192,57,43,0.2)', borderRadius:10, padding:'11px 14px', fontSize:14, color:colour.danger, marginTop:8 }}>{error}</div>}
+        {error && (
+          <div style={{
+            background: '#fdecea', border: '1px solid #f5c6cb', borderRadius: 10,
+            padding: '12px 14px', fontSize: 12.5, color: '#c0392b', marginTop: 12
+          }}>{error}</div>
+        )}
       </div>
 
-      <div style={{ position:'fixed', bottom:'70px', left:'50%', transform:'translateX(-50%)', width:'100%', maxWidth:430, display:'flex', gap:10, padding:'12px 20px', background:'white', borderTop:'0.5px solid rgba(26,43,74,0.1)', boxSizing:'border-box', zIndex:50 }}>
-        {step > 0 && <button style={{ flex:1, padding:14, borderRadius:10, border:'1.5px solid rgba(26,43,74,0.2)', background:'transparent', fontSize:16, fontWeight:500, color:colour.inkFaint, cursor:'pointer' }} onClick={back} disabled={submitting}>Back</button>}
-        {step < STEPS.length-1
-          ? <button style={{ flex:2, padding:14, borderRadius:10, border:'none', background:colour.navy, fontSize:16, fontWeight:600, color:'white', cursor:'pointer' }} onClick={next}>Continue →</button>
-          : <button style={{ flex:2, padding:14, borderRadius:10, border:'none', background:'#1a7a6e', fontSize:16, fontWeight:600, color:'white', cursor:'pointer', opacity:submitting?0.7:1 }} onClick={submit} disabled={submitting}>{submitting?'Submitting…':'Submit application ✓'}</button>
-        }
+      {/* tm-fixed, so this spans the content area on a desktop instead of
+          sitting in a 430px strip down the middle of the window. */}
+      <div className="tm-fixed" style={{
+        position: 'fixed', bottom: 'calc(70px + env(safe-area-inset-bottom, 0px))',
+        display: 'flex', gap: 10, padding: '12px 16px', background: 'white',
+        borderTop: `1px solid ${BORDER}`, boxSizing: 'border-box', zIndex: 90
+      }}>
+        {step > 0 && (
+          <button onClick={back} disabled={submitting}
+            style={{
+              flex: 1, padding: 14, borderRadius: 10, border: `1px solid ${BORDER}`,
+              background: 'transparent', fontSize: 16, fontWeight: 600,
+              color: MUTED, cursor: 'pointer'
+            }}>
+            Back
+          </button>
+        )}
+        {step < STEPS.length - 1
+          ? (
+            <button onClick={next}
+              style={{
+                flex: 2, padding: 14, borderRadius: 10, border: 'none', background: NAVY,
+                fontSize: 16, fontWeight: 700, color: 'white', cursor: 'pointer'
+              }}>
+              Continue
+            </button>
+          )
+          : (
+            <button onClick={submit} disabled={submitting}
+              style={{
+                flex: 2, padding: 14, borderRadius: 10, border: 'none',
+                background: submitting ? '#c8d2dc' : TEAL,
+                fontSize: 16, fontWeight: 700, color: 'white',
+                cursor: submitting ? 'default' : 'pointer'
+              }}>
+              {submitting ? 'Sending…' : 'Submit application'}
+            </button>
+          )}
       </div>
     </Page>
   )
