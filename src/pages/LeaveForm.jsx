@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from 'react'
+import React, { useState, useEffect, useId, useRef } from 'react'
 import axios from 'axios'
 import { Page, Header } from '../design/Shell.jsx'
 import { colour as tokenColour } from '../design/tokens.js'
@@ -62,6 +62,33 @@ function nextWorkingDay(date) {
  * reader read an orphaned label followed by an unnamed date picker — on a form
  * whose whole job is three dates.
  */
+
+/**
+ * Opens a date field's own picker.
+ *
+ * showPicker() is the only way to raise the native calendar without somebody
+ * tapping the field, and it is fussy: it needs recent user activation, and it
+ * throws rather than returning false when it does not have it. Choosing a date
+ * counts as activation on the browsers that matter, but Safari has been
+ * inconsistent about it and a thrown error would take the whole handler down —
+ * including the date that was just chosen.
+ *
+ * So every failure falls back to focusing the field, which is where somebody
+ * would have tapped anyway. The worst case is the old behaviour.
+ */
+function openDatePicker(input) {
+  if (!input) return
+  try {
+    if (typeof input.showPicker === 'function') {
+      input.showPicker()
+      return
+    }
+  } catch {
+    // No activation, or a browser that refuses. Fall through.
+  }
+  try { input.focus() } catch { /* nothing left to try */ }
+}
+
 function Field({ label, hint, children }) {
   const id = useId()
   return (
@@ -95,6 +122,9 @@ function Card({ children, style }) {
 
 export default function LeaveForm({ user, onSuccess, onBack }) {
   const [step, setStep] = useState(0)
+  // The last-day field, so choosing the first day can open its picker rather
+  // than closing one calendar and making somebody find and tap another.
+  const lastDay = useRef(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   // What they have in the TOIL bank, so choosing TOIL is an informed choice
@@ -209,10 +239,21 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
             <Card>
               <Field label="First day of leave">
                 <input type="date" style={inputStyle} value={form.startDate}
-                  onChange={e => setField('startDate', e.target.value)} />
+                  onChange={e => {
+                    setField('startDate', e.target.value)
+                    // Straight on to the last day. Nobody picks a first day of
+                    // leave and then stops — the calendar closing only to make
+                    // them hunt for the next field was two taps for nothing.
+                    if (e.target.value) {
+                      // After this render, so the field exists and any `min`
+                      // the new start date implies is already on it.
+                      requestAnimationFrame(() => openDatePicker(lastDay.current))
+                    }
+                  }} />
               </Field>
               <Field label="Last day of leave">
-                <input type="date" style={inputStyle} value={form.endDate} min={form.startDate}
+                <input ref={lastDay} type="date" style={inputStyle} value={form.endDate}
+                  min={form.startDate}
                   onChange={e => setField('endDate', e.target.value)} />
               </Field>
               <Field label="Back at work" hint="Filled in for you — change it if you are back later.">

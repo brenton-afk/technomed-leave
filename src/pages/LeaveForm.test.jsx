@@ -122,3 +122,61 @@ describe('sending it', () => {
     expect(posted).toEqual([])
   })
 })
+
+describe('picking the first day leads straight to the last', () => {
+  // "You click 13/10/26 as your first date, and as soon as you select that,
+  // the app automatically comes up with the calendar to select the last day."
+  //
+  // Nobody picks a first day of leave and then stops. The calendar closing
+  // only to make somebody find and tap the next field was two taps for
+  // nothing, on the step that is the whole point of the screen.
+  const frame = () => new Promise(r => requestAnimationFrame(() => r()))
+
+  it('opens the last-day picker', async () => {
+    show()
+    const last = screen.getByLabelText('Last day of leave')
+    last.showPicker = vi.fn()
+    pick('First day of leave', '2026-10-13')
+    await frame()
+    expect(last.showPicker).toHaveBeenCalled()
+  })
+
+  it('focuses the field when the browser has no showPicker', async () => {
+    // Older Safari. The worst case has to be the old behaviour, not nothing.
+    show()
+    const last = screen.getByLabelText('Last day of leave')
+    delete last.showPicker
+    pick('First day of leave', '2026-10-13')
+    await frame()
+    expect(document.activeElement).toBe(last)
+  })
+
+  it('survives a browser that refuses', async () => {
+    // showPicker throws rather than returning false when it has no user
+    // activation, and an unhandled throw there would take down the handler —
+    // including the date just chosen.
+    show()
+    const last = screen.getByLabelText('Last day of leave')
+    last.showPicker = vi.fn(() => { throw new Error('NotAllowedError') })
+    pick('First day of leave', '2026-10-13')
+    await frame()
+    expect(screen.getByLabelText('First day of leave').value).toBe('2026-10-13')
+    expect(document.activeElement).toBe(last)
+  })
+
+  it('does nothing when the first day is cleared', async () => {
+    show()
+    const last = screen.getByLabelText('Last day of leave')
+    last.showPicker = vi.fn()
+    pick('First day of leave', '')
+    await frame()
+    expect(last.showPicker).not.toHaveBeenCalled()
+  })
+
+  it('sets the minimum so the last day cannot precede the first', async () => {
+    show()
+    pick('First day of leave', '2026-10-13')
+    await frame()
+    expect(screen.getByLabelText('Last day of leave').min).toBe('2026-10-13')
+  })
+})
