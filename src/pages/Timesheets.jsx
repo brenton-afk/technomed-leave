@@ -250,6 +250,11 @@ export default function Timesheets({ user, onBack }) {
   const [showSplit, setShowSplit] = useState(false)
   const [callIns, setCallIns] = useState([])
   const [dismissedCallIns, setDismissedCallIns] = useState([])
+  // The on-call weekends this fortnight, read off the calendar roster with the
+  // hours already worked out. Offered rather than filled in: the roster gets
+  // amended and the person filing is the one who knows whether it was them.
+  const [onCall, setOnCall] = useState(null)
+  const [onCallDone, setOnCallDone] = useState(false)
   const [savedAt, setSavedAt] = useState('')
   const [stage, setStage] = useState('entry')
   const [submitted, setSubmitted] = useState(null)
@@ -280,7 +285,9 @@ export default function Timesheets({ user, onBack }) {
       setHistory(mineRes.records || [])
 
       fetch(`/api/timesheet/agent?action=callins&periodStart=${data.period.start}`, { headers: authHeaders })
-        .then(r => r.json()).then(d => setCallIns(d.suggestions || [])).catch(() => {})
+        .then(r => r.json())
+        .then(d => { setCallIns(d.suggestions || []); setOnCall(d.onCall || null) })
+        .catch(() => {})
     } catch (err) {
       setError(err.message)
     }
@@ -459,6 +466,7 @@ export default function Timesheets({ user, onBack }) {
   const weekDays = days.slice(activeWeek * 7, activeWeek * 7 + 7)
   const visibleCallIns = callIns.filter(c => !dismissedCallIns.includes(c.id))
   const callInCategory = categories.find(c => c.key === 'call_in')
+  const onCallCategory = categories.find(c => c.key === 'on_call')
   const hasToniSplit = categories.some(c => c.key === 'ordinary_toni_admin') && categories.some(c => c.key === 'ordinary_toni_scientific')
 
   return (
@@ -532,6 +540,45 @@ export default function Timesheets({ user, onBack }) {
             </button>
           </div>
         ))}
+
+        {/* The whole weekend in one tap. On call runs 17:00 Friday to 07:00
+            Monday — 62 hours across four days — and entering that by hand
+            meant four trips through the time picker and the arithmetic done
+            in somebody's head at the end of a fortnight.
+
+            The roster comes off the calendar, which is where it is amended
+            when somebody swaps, so this is what the calendar says rather than
+            a rotation worked out from a start date. Offered and not filled
+            in: the person filing is the one who knows whether it was really
+            them. */}
+        {onCallCategory && onCall?.offered && !onCallDone && (
+          <div style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>
+            <div style={{ fontSize: 12.5, color: PURPLE, fontWeight: 700, marginBottom: 3 }}>
+              On call this fortnight?
+            </div>
+            <div style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
+              The calendar has you on call for{' '}
+              {Object.keys(onCall.byDay).length > 4 ? 'two weekends' : 'the weekend'} —{' '}
+              <strong>{onCall.hours} hours</strong>, 17:00 Friday to 07:00 Monday.
+            </div>
+            <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
+              <button
+                onClick={() => {
+                  for (const [day, hours] of Object.entries(onCall.byDay)) {
+                    setCell(onCallCategory.key, day, hours)
+                  }
+                  setOnCallDone(true)
+                }}
+                style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                Fill in {onCall.hours} hours
+              </button>
+              <button onClick={() => setOnCallDone(true)}
+                style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, color: MUTED, cursor: 'pointer' }}>
+                No
+              </button>
+            </div>
+          </div>
+        )}
 
         {callInCategory && visibleCallIns.filter(c => days.indexOf(c.day) >= activeWeek * 7 && days.indexOf(c.day) < activeWeek * 7 + 7).map(c => (
           <div key={c.id} style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>

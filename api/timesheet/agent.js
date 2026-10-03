@@ -10,6 +10,9 @@ import {
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
+import {
+  onCallHoursFor, totalHours as onCallTotal
+} from '../../src/clinicalPlan/onCall.js'
 import { periodFor, currentPeriod, recentPeriods, isValidPeriodStart } from '../_fortnight.js'
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
 import { sendTimesheetSubmittedEmail, sendTimesheetDecisionEmail } from '../_email.js'
@@ -278,7 +281,7 @@ async function handleMine(req, res, session) {
 // confirm whether they were called in. It cannot tell whose case it was — the
 // calendar has no rep field — so these are prompts, never auto-entered.
 async function handleCallIns(req, res, session) {
-  requireTimesheetAccess(session)
+  const staff = requireTimesheetAccess(session)
   const period = resolvePeriod(req.query.periodStart)
 
   const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
@@ -316,7 +319,40 @@ async function handleCallIns(req, res, session) {
     })
   }
 
-  return res.status(200).json({ suggestions, period: { start: period.start, end: period.end } })
+  // ── The on-call weekends, off the same calendar read ──
+  //
+  // The roster lives in the calendar and that is where it is amended when
+  // somebody swaps or falls ill, so this reads it rather than working a
+  // rotation out from a start date. A computed cycle would be right until the
+  // first swap and then confidently wrong for weeks, and nobody re-checks a
+  // number that does not look like it needs checking.
+  //
+  // Offered, not filled in. It is a suggestion with the hours already worked
+  // out — 17:00 Friday to 07:00 Monday, 62 hours across four days — so the
+  // whole weekend is one tap instead of four trips through the time picker.
+  const onCall = onCallHoursFor(
+    (data.items || [])
+      .map(e => ({
+        title: e.summary || '',
+        date: (e.start?.dateTime || e.start?.date || '').slice(0, 10)
+      }))
+      .filter(e => e.date),
+    staff,
+    period.days
+  )
+
+  return res.status(200).json({
+    suggestions,
+    onCall: {
+      byDay: onCall,
+      hours: onCallTotal(onCall),
+      // Nobody is paid for being on call by default — Brent is on the roster
+      // and not paid for it — so whether this is offered follows the pay
+      // items Xero says the person has, not the roster.
+      offered: Object.keys(onCall).length > 0
+    },
+    period: { start: period.start, end: period.end }
+  })
 }
 
 // ─── list / decide: admin ──────────────────────────────────
