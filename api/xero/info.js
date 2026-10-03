@@ -44,6 +44,49 @@ export default async function handler(req, res) {
     // Which integrations are actually configured on this deployment. Reports
     // presence only — never a value — so a missing or wrongly-scoped Vercel
     // environment variable can be diagnosed from the app instead of guessed at.
+    // ── What Xero actually holds, when its own screens will not show you ──
+    //
+    // Brent's Xero timesheet page started answering 500 and the reasonable
+    // worry was that this app had written something malformed into it. Their
+    // API stayed healthy while the page did not, so the way to settle that is
+    // to read the records back rather than reason about them.
+    //
+    // Read-only and admin-only. It lists what is there, by employee and
+    // period, so a duplicate or a stray draft is visible as a fact.
+    if (action === 'timesheets') {
+      const { token, tenantId } = await getXeroToken()
+      const timesheetsRes = await fetch(
+        'https://api.xero.com/payroll.xro/1.0/Timesheets',
+        { headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' } }
+      )
+      const { ok, data, error } = await readXero(timesheetsRes, 'Xero timesheets')
+      if (!ok) return res.status(502).json({ error })
+
+      const sheets = (Array.isArray(data) ? data : data.Timesheets || []).map(t => ({
+        id: t.TimesheetID,
+        employeeID: t.EmployeeID,
+        start: String(t.StartDate || ''),
+        end: String(t.EndDate || ''),
+        status: t.Status,
+        lines: (t.TimesheetLines || []).length,
+        // The totals, so an obviously wrong one stands out without opening it.
+        hours: (t.TimesheetLines || []).reduce(
+          (n, l) => n + (l.NumberOfUnits || []).reduce((a, b) => a + (Number(b) || 0), 0), 0)
+      }))
+
+      // Same employee, same fortnight, more than once — the shape a retry
+      // after a failure would leave behind, and the thing most likely to
+      // upset a page that assumes one.
+      const seen = new Map()
+      for (const t of sheets) {
+        const key = `${t.employeeID}|${t.start}`
+        seen.set(key, (seen.get(key) || 0) + 1)
+      }
+      const duplicates = sheets.filter(t => seen.get(`${t.employeeID}|${t.start}`) > 1)
+
+      return res.status(200).json({ count: sheets.length, duplicates, timesheets: sheets })
+    }
+
     if (action === 'env') {
       const session = await requireAdmin(req, res)
       if (!session) return

@@ -78,3 +78,41 @@ describe('the timesheet itself', () => {
     expect(update.TimesheetID).toBe('ts-1')
   })
 })
+
+describe('resubmitting a fortnight Xero already has', () => {
+  // "This timesheet already exists, please provide the timesheet ID (400)".
+  //
+  // The app checked its own records for a duplicate and never asked Xero.
+  // That was fine until a submission failed in a way that left Xero holding
+  // one and the app holding nothing — which is exactly what the morning's
+  // parse error did. The post reached Xero, the reply could not be read, and
+  // the staff member was told it had failed. It had not.
+  it('looks the existing one up before posting', () => {
+    expect(SOURCE).toMatch(/async function existingTimesheet/)
+    expect(SOURCE).toMatch(/const already = await existingTimesheet/)
+  })
+
+  it('sends its ID, which turns the post into an update', () => {
+    expect(SOURCE).toMatch(/timesheetID:\s*already\?\.TimesheetID/)
+  })
+
+  it('refuses to overwrite one payroll has already approved', () => {
+    // Changing an approved timesheet is changing what somebody has been paid.
+    expect(SOURCE).toMatch(/DRAFT', 'PROCESSED'/)
+    expect(SOURCE).toMatch(/reopen it before resubmitting/)
+  })
+
+  it('treats a failed lookup as unknown, not as nothing', () => {
+    // Not being able to check is not the same as there being nothing there,
+    // and Xero gets the final say either way.
+    const fn = SOURCE.slice(SOURCE.indexOf('async function existingTimesheet'))
+    expect(fn.slice(0, fn.indexOf('\n}'))).toMatch(/return null/)
+  })
+
+  it('reads Xero\'s date format back', () => {
+    // Xero answers /Date(1234567890000+0000)/ and the comparison is against
+    // YYYY-MM-DD, so a straight string compare would never match and every
+    // resubmission would look like a first one.
+    expect(SOURCE).toMatch(/function xeroDateToIso/)
+  })
+})

@@ -41,6 +41,12 @@ export default function SystemStatus({ user }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // What Xero actually holds. Loaded on demand rather than with the page: it
+  // is a diagnostic for when something looks wrong, not a number anybody needs
+  // every time they open this screen.
+  const [sheets, setSheets] = useState(null)
+  const [sheetsBusy, setSheetsBusy] = useState(false)
+
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${user?.token || ''}` }), [user])
 
   useEffect(() => { load() }, [])
@@ -61,10 +67,83 @@ export default function SystemStatus({ user }) {
 
   const xeroBroken = xero && (!xero.connected || xero.expired)
 
+  async function loadSheets() {
+    setSheetsBusy(true)
+    try {
+      const res = await fetch('/api/xero/info?action=timesheets', { headers: authHeaders })
+      setSheets(await res.json())
+    } catch (err) {
+      setSheets({ error: err.message })
+    }
+    setSheetsBusy(false)
+  }
+
   return (
     <div>
       {error && <div style={{ background:'#fdecea', color:RED, padding:12, borderRadius:10, fontSize:13, marginBottom:12 }}>{error}</div>}
       {loading && <div style={{ textAlign:'center', padding:30, color:MUTED, fontSize:14 }}>Checking…</div>}
+
+      {/* Reading Xero's own records back.
+      
+          Xero's timesheet page started answering 500, and the reasonable worry
+          was that this app had written something malformed into it. Their API
+          stayed healthy while their page did not, so the records can be read
+          even when the screen that shows them cannot. A duplicate for one
+          person and fortnight is the shape a retry-after-failure leaves, and
+          the most likely thing to upset a page that assumes one. */}
+      {!loading && (
+        <div style={{ background:'white', border:`1px solid ${BORDER}`, borderRadius:12, padding:16, marginBottom:12 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:NAVY, marginBottom:4 }}>
+            Timesheets in Xero
+          </div>
+          <div style={{ fontSize:12.5, color:MUTED, lineHeight:1.5, marginBottom:12 }}>
+            Read straight from Xero, which answers even when its own screens do not.
+          </div>
+
+          {!sheets && (
+            <button onClick={loadSheets} disabled={sheetsBusy}
+              style={{ padding:'10px 14px', borderRadius:8, border:`1px solid ${BORDER}`, background:'transparent', fontSize:14, fontWeight:700, color:NAVY, cursor:'pointer' }}>
+              {sheetsBusy ? 'Reading…' : 'Check what is there'}
+            </button>
+          )}
+
+          {sheets?.error && (
+            <div style={{ background:'#fdecea', color:RED, padding:12, borderRadius:10, fontSize:12.5, lineHeight:1.5 }}>
+              {sheets.error}
+            </div>
+          )}
+
+          {sheets && !sheets.error && (
+            <>
+              <div style={{ fontSize:14, color:NAVY, marginBottom:10 }}>
+                <strong>{sheets.count}</strong> timesheet{sheets.count === 1 ? '' : 's'} in Xero
+                {sheets.duplicates?.length > 0 && (
+                  <span style={{ color:RED, fontWeight:700 }}>
+                    {' · '}{sheets.duplicates.length} duplicated
+                  </span>
+                )}
+              </div>
+              {(sheets.timesheets || []).map(t => (
+                <div key={t.id} style={{
+                  display:'flex', justifyContent:'space-between', gap:12,
+                  padding:'8px 0', borderTop:`1px solid ${BORDER}`, fontSize:12.5
+                }}>
+                  <span style={{ color:MUTED }}>{t.start.slice(0,10)} → {t.end.slice(0,10)}</span>
+                  <span style={{ color:NAVY, fontWeight:600 }}>
+                    {t.status} · {t.lines} line{t.lines === 1 ? '' : 's'} · {Math.round(t.hours * 100) / 100}h
+                  </span>
+                </div>
+              ))}
+              {sheets.count === 0 && (
+                <div style={{ fontSize:12.5, color:MUTED }}>
+                  Nothing. Whatever is wrong with Xero's page, this app has not
+                  written a timesheet into it.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Xero first — it lapses on a timer, so it is the most common breakage */}
       {xero && (
