@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Page, Header } from '../design/Shell.jsx'
 import { colour as tokenColour } from '../design/tokens.js'
 import { workingDaysBetween } from '../clinicalPlan/toil.js'
+import DateRange from './leave/DateRange.jsx'
 
 // ─── Applying for leave ──────────────────────────────────────────────────────
 // Four steps: when, what kind, why, and a look at it before it goes.
@@ -236,50 +237,32 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
 
         {step === 0 && (
           <>
-            <Card>
-              <Field label="First day of leave">
-                <input type="date" style={inputStyle} value={form.startDate}
-                  onChange={e => {
-                    setField('startDate', e.target.value)
-                    // Straight on to the last day. Nobody picks a first day of
-                    // leave and then stops — the calendar closing only to make
-                    // them hunt for the next field was two taps for nothing.
-                    if (e.target.value) {
-                      // After this render, so the field exists and any `min`
-                      // the new start date implies is already on it.
-                      requestAnimationFrame(() => openDatePicker(lastDay.current))
-                    }
-                  }} />
-              </Field>
-              <Field label="Last day of leave">
-                <input ref={lastDay} type="date" style={inputStyle} value={form.endDate}
-                  min={form.startDate}
-                  onChange={e => setField('endDate', e.target.value)} />
-              </Field>
-              <Field label="Back at work" hint="Filled in for you — change it if you are back later.">
-                <input type="date" style={inputStyle} value={form.returnDate} min={form.endDate}
-                  onChange={e => setField('returnDate', e.target.value)} />
-              </Field>
-            </Card>
+            {/* Ours, not the operating system's. Two native pickers could
+                not say which day they were asking for — a native picker has
+                no title — so the jump from the first day to the last was a
+                calendar blinking and reopening, and nothing else. */}
+            <DateRange
+              start={form.startDate}
+              end={form.endDate}
+              onChange={({ start, end }) => {
+                setForm(p => ({
+                  ...p,
+                  startDate: start,
+                  endDate: end,
+                  // Still offered rather than decided, and still editable.
+                  returnDate: end ? nextWorkingDay(end) : ''
+                }))
+                setError('')
+              }} />
 
-            {/* How long that actually is. Three date boxes do not answer it,
-                and it is the number somebody is doing in their head. */}
-            {days > 0 && (
-              <div style={{
-                background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)',
-                borderRadius: 12, padding: '14px 16px', display: 'flex',
-                alignItems: 'baseline', justifyContent: 'space-between', gap: 12
-              }}>
-                <span style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
-                  {fmt(form.startDate)} — {fmt(form.endDate)}
-                  <span style={{ display: 'block', color: MUTED, fontSize: 12.5 }}>
-                    Weekends not counted
-                  </span>
-                </span>
-                <strong style={{ fontSize: 22, color: TEAL, whiteSpace: 'nowrap' }}>
-                  {days} day{days === 1 ? '' : 's'}
-                </strong>
-              </div>
+            {form.endDate && (
+              <Card>
+                <Field label="Back at work" hint="Filled in for you — change it if you are back later.">
+                  <input type="date" style={inputStyle} value={form.returnDate}
+                    min={form.endDate}
+                    onChange={e => setField('returnDate', e.target.value)} />
+                </Field>
+              </Card>
             )}
           </>
         )}

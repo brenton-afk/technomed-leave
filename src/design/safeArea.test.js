@@ -119,6 +119,8 @@ describe('no screen is left out', () => {
     'Cases.jsx',
     // A panel inside the New booking sheet, which already carries the insets.
     'cases/DictateBooking.jsx',
+    // The calendar inside the leave form, which has the Header above it.
+    'leave/DateRange.jsx',
   ])
 
   it('accounts for every screen that does not use the shared header', () => {
