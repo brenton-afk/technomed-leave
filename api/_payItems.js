@@ -3,6 +3,7 @@
 // which categories a staff member sees, how each is coloured, and whether it is
 // measured in hours or callouts is decided here.
 import { getXeroToken, findEmployee, assignedEarningsRateIds } from './_xeroClient.js'
+import { readXero } from './_xeroResponse.js'
 import { payItemsFor } from '../src/payOptions.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
@@ -123,10 +124,8 @@ export async function fetchEarningsRates() {
   const res = await fetch(`${XERO_API_BASE}/PayItems`, {
     headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' }
   })
-  const data = await res.json()
-  if (!res.ok || data.ErrorNumber) {
-    throw new Error(`Xero PayItems failed (${res.status}): ${data.Message || 'unknown error'}`)
-  }
+  const { ok, data, error } = await readXero(res, 'Xero PayItems')
+  if (!ok) throw new Error(error)
   return extractEarningsRates(data)
 }
 

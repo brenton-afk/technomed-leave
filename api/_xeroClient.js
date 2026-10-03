@@ -1,4 +1,5 @@
 import { redis } from './_redis.js'
+import { readXero } from './_xeroResponse.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
@@ -78,9 +79,13 @@ export async function getXeroToken() {
     },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: stored.refresh_token })
   })
-  const refreshed = await refreshRes.json()
+  // A refresh that fails takes every other Xero call with it, so its reason
+  // has to survive. An expired refresh token answers JSON; a gateway between
+  // here and Xero answers HTML, and parsing that as JSON lost the status code
+  // that was the only useful part.
+  const { data: refreshed, error: refreshError } = await readXero(refreshRes, 'Xero token refresh')
   if (!refreshed.access_token) {
-    throw new Error(`Xero token refresh failed: ${refreshed.error_description || refreshed.error || 'unknown error'}`)
+    throw new Error(refreshError || 'Xero token refresh failed')
   }
 
   await storeXeroTokens({
@@ -99,10 +104,8 @@ function xeroHeaders(token, tenantId) {
 
 async function xeroGet(path, token, tenantId) {
   const res = await fetch(`${XERO_API_BASE}${path}`, { headers: xeroHeaders(token, tenantId) })
-  const data = await res.json()
-  if (!res.ok || data.ErrorNumber) {
-    throw new Error(`Xero ${path} failed (${res.status}): ${data.Message || 'unknown error'}`)
-  }
+  const { ok, data, error } = await readXero(res, `Xero ${path}`)
+  if (!ok) throw new Error(error)
   return data
 }
 
@@ -230,10 +233,8 @@ export async function submitToXero({ name, startDate, endDate, leaveType, reason
     headers: { ...xeroHeaders(token, tenantId), 'Content-Type': 'application/json' },
     body: JSON.stringify({ LeaveApplications: [leaveApp] })
   })
-  const result = await submitRes.json()
-  if (!submitRes.ok || result.ErrorNumber) {
-    throw new Error(result.Message || `Xero submission failed (${submitRes.status})`)
-  }
+  const { ok, data: result, error } = await readXero(submitRes, 'Xero leave application')
+  if (!ok) throw new Error(error)
 
   return {
     leaveApplicationID: result.LeaveApplications?.[0]?.LeaveApplicationID,

@@ -1,6 +1,7 @@
 // ─── Xero timesheet submission ────────────────────────────────────────────────
 import { getXeroToken, findEmployee } from './_xeroClient.js'
 import { xeroDate, FORTNIGHT_DAYS } from './_fortnight.js'
+import { readXero } from './_xeroResponse.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
@@ -52,11 +53,11 @@ async function postTimesheet(payload) {
     },
     body: JSON.stringify({ Timesheets: [payload] })
   })
-  const data = await res.json()
-  if (!res.ok || data.ErrorNumber) {
-    const detail = data.Elements?.[0]?.ValidationErrors?.map(v => v.Message).join('; ')
-    throw new Error(detail || data.Message || `Xero timesheet failed (${res.status})`)
-  }
+  // Through readXero, because Xero answers errors with XML and `res.json()`
+  // threw on the angle bracket — replacing the real message with a parse
+  // error that told a staff member nothing at all.
+  const { ok, data, error } = await readXero(res, 'Xero timesheet')
+  if (!ok) throw new Error(error)
   const created = data.Timesheets?.[0]
   return { timesheetID: created?.TimesheetID, status: created?.Status }
 }

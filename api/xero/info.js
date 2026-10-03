@@ -3,6 +3,7 @@ import {
   getXeroConnectionStatus, getXeroToken, findEmployee,
   listEmployees, listLeaveTypes
 } from '../_xeroClient.js'
+import { readXero } from '../_xeroResponse.js'
 
 // Read-only Xero lookups, routed by ?action=. These were three separate
 // functions (status, balances, debug); they were merged to stay under the
@@ -29,7 +30,8 @@ export default async function handler(req, res) {
         `https://api.xero.com/payroll.xro/1.0/Employees/${employee.EmployeeID}`,
         { headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' } }
       )
-      const data = await detailRes.json()
+      const { ok, data, error } = await readXero(detailRes, 'Xero employee')
+      if (!ok) return res.status(502).json({ error })
       const emp = data.Employees?.[0]
       if (!emp) return res.status(404).json({ error: 'Employee data not found' })
       return res.status(200).json((emp.LeaveBalances || []).map(b => ({

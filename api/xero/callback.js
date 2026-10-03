@@ -1,4 +1,5 @@
 import { storeXeroTokens } from '../_xeroClient.js'
+import { readXero } from '../_xeroResponse.js'
 
 export default async function handler(req, res) {
   const { code } = req.query
@@ -12,13 +13,14 @@ export default async function handler(req, res) {
       },
       body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: process.env.XERO_REDIRECT_URI })
     })
-    const tokens = await tokenRes.json()
-    if (!tokens.access_token) throw new Error(tokens.error_description || 'Token exchange failed')
+    const { data: tokens, error: tokenError } = await readXero(tokenRes, 'Xero token exchange')
+    if (!tokens.access_token) throw new Error(tokenError || 'Token exchange failed')
 
     const connRes = await fetch('https://api.xero.com/connections', {
       headers: { Authorization: `Bearer ${tokens.access_token}` }
     })
-    const connections = await connRes.json()
+    const { data: connections, error: connError } = await readXero(connRes, 'Xero connections')
+    if (connError) throw new Error(connError)
     const tenantId = connections[0]?.tenantId
     if (!tenantId) throw new Error('No org found')
 
