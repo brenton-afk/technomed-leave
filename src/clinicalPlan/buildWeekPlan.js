@@ -14,6 +14,7 @@ import {
   zonedCivil, parseDateStr, TZ
 } from './week.js'
 import { bySession } from './listPlace.js'
+import { STAFF } from '../staffConfig.js'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
@@ -150,6 +151,40 @@ const SITE_ORDER = [HOSPITALS.RHH, HOSPITALS.CALVARY, HOSPITALS.ST_JOHNS, HOSPIT
 const siteRank = h => {
   const at = SITE_ORDER.indexOf(h)
   return at === -1 ? SITE_ORDER.length : at
+}
+
+
+/**
+ * Who is away this week, from the leave already on the calendar.
+ *
+ * Mat was showing as Spine Team Leader through a week he spent on TOIL. Two
+ * facts the app held at the same time, neither checked against the other —
+ * and leave is the one the app is certain about, because it writes most of it
+ * itself.
+ *
+ * Matched on the names the roster knows rather than on whatever words are in
+ * the entry, so "Mat — TOIL", "Matthew Usher Annual Leave" and "Matt A/L" all
+ * reach the same person, and an entry naming nobody reaches none.
+ */
+function whoIsAway(dayPlans) {
+  const found = new Map()
+  for (const day of dayPlans) {
+    const items = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
+    for (const item of items) {
+      if (item.kind !== 'leave') continue
+      const text = String(item.text || item.title || '')
+      for (const person of STAFF) {
+        const names = [person.firstName, ...(person.aka || []), person.name.split(' ').pop()]
+        if (!names.some(n => n && new RegExp(`\\b${n}\\b`, 'i').test(text))) continue
+        const already = found.get(person.email) || { ...person, days: [] }
+        if (!already.days.includes(day.date)) already.days.push(day.date)
+        found.set(person.email, already)
+      }
+    }
+  }
+  return [...found.values()].map(p => ({
+    email: p.email, firstName: p.firstName, name: p.name, days: p.days
+  }))
 }
 
 function caseCountLine(allCases, nonSurgeonItems) {
@@ -578,6 +613,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
     surgeons,
     notes: buildNotes(dayPlans),
     days: dayPlans,
+    // Who is on leave this week, so anything that depends on somebody being
+    // here can check rather than assume. See whoIsAway.
+    away: whoIsAway(dayPlans),
     keyFlags: buildKeyFlags(allCases, dayPlans, surgeons),
     readings: buildReadings(days, buckets, allCases),
     lastGeneratedAt: generatedAt,

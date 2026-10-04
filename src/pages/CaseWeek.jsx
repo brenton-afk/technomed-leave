@@ -15,6 +15,7 @@ import NewBooking from './cases/NewBooking.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import ListPlace from './cases/ListPlace.jsx'
 import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
+import { weekOf, withinWeek } from '../clinicalPlan/teamLeader.js'
 import { describeListPlace } from '../clinicalPlan/listPlace.js'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
 
@@ -431,7 +432,7 @@ function Heading({ children }) {
  * calendar's order — moving a case here moves the calendar entry — so there is
  * one running order and everybody is reading it.
  */
-function DayPanel({ day, onOpen, onReorder, onSetPlace }) {
+function DayPanel({ day, onOpen, onReorder, onSetPlace, leader }) {
   const groups = day.casesByHospital || []
   // The order shown before the calendar has caught up. A round trip to Google
   // and back takes a couple of seconds on a hospital connection, and an arrow
@@ -486,15 +487,32 @@ function DayPanel({ day, onOpen, onReorder, onSetPlace }) {
   const away = everythingElse.filter(item => item.kind === 'leave')
   const others = everythingElse.filter(item => item.kind !== 'leave')
   const attention = day.needsAttention || []
+  // Only on the weekdays they actually hold it. Saturday and Sunday belong to
+  // the on-call rota, which is a different job and usually a different person.
+  const leaderToday = leader?.firstName && withinWeek(day.date, 12) ? leader.firstName : null
   const empty = !groups.length && !others.length && !away.length
     && !attention.length && !(day.flags || []).length
 
   return (
     <>
-      {away.length > 0 && (
+      {(away.length > 0 || leaderToday) && (
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: space.sm
         }}>
+          {/* Alongside "Brent on call" and who is away, because it is the same
+              kind of fact: who is covering what, on this day. The strip at the
+              top of the week answers it for the week; this answers it for the
+              day somebody is actually looking at. */}
+          {leaderToday && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: colour.accentSoft, border: `1px solid ${colour.accent}`,
+              borderRadius: radius.pill, padding: `4px ${space.md}px`,
+              ...text('bodyStrong'), color: colour.accentDeep
+            }}>
+              {leaderToday} — team leader
+            </span>
+          )}
           {away.map((item, i) => (
             <span key={i} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -608,6 +626,10 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [notice, setNotice] = useState('')
   // The case whose place on the hospital's list is being recorded.
   const [placing, setPlacing] = useState(null)
+  // Who is team leader for the week on screen. Held here rather than inside
+  // the strip, because the days below need it too — it belongs in the list
+  // alongside "Brent on call", which is the same kind of fact.
+  const [leader, setLeader] = useState(null)
   // Sub-calendars the week could not read. Leave lives on one of them, and an
   // unreadable leave calendar is indistinguishable from an empty one.
   const [sourceErrors, setSourceErrors] = useState([])
@@ -679,6 +701,33 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'That did not save')
     await load(window_, { quiet: true })
   }, [token, load, window_])
+
+  const leaderWeek = weekOf(window_.startDate)
+
+  const loadLeader = useCallback(async () => {
+    if (!leaderWeek) return
+    try {
+      const res = await fetch(`/api/calendar/today?action=leader&week=${leaderWeek}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      if (!res.ok) return
+      setLeader((await res.json()).leader || null)
+    } catch {
+      // A rota that will not load is not worth an error on the week view. The
+      // cases underneath are what somebody came for.
+    }
+  }, [leaderWeek, token])
+
+  useEffect(() => { loadLeader() }, [loadLeader])
+
+  const setTeamLeader = useCallback(async email => {
+    await fetch(`/api/calendar/today?action=leader&week=${leaderWeek}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ email })
+    })
+    await loadLeader()
+  }, [leaderWeek, token, loadLeader])
 
   const remember = next => writePrefs({ ...readPrefs(), ...next })
 
@@ -791,7 +840,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             duty leader works from, and "who is it this week" is asked while
             looking at the week. */}
         <TeamLeaderStrip
-          user={user}
+          leader={leader}
+          away={plan?.away || []}
+          onChange={setTeamLeader}
           week={window_.startDate}
           today={today}
           hour={new Date().getHours()} />
@@ -967,7 +1018,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             <AddBookingRow day={activeDay} onAdd={setAdding} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing} onReorder={reorder}
-                  onSetPlace={setPlacing} />
+                  onSetPlace={setPlacing} leader={leader} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}
@@ -999,7 +1050,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 find the day first, in a view that had no arrows, meant the one
                 thing this was built for was the awkward one. */}
             <DayPanel day={day} onOpen={setEditing} onReorder={reorder}
-              onSetPlace={setPlacing} />
+              onSetPlace={setPlacing} leader={leader} />
           </div>
         ))}
 

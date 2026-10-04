@@ -15,45 +15,21 @@ import { weekOf, withinWeek } from '../../clinicalPlan/teamLeader.js'
 // It sits on the week, because that is the screen the duty leader lives on and
 // the question "who is it this week" is asked while looking at the week.
 
-export default function TeamLeaderStrip({ user, week, today, hour }) {
+export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour }) {
   const monday = weekOf(week) || weekOf(today)
-  const [leader, setLeader] = useState(null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
-
-  const load = useCallback(async () => {
-    if (!monday) return
-    try {
-      const res = await fetch(`/api/calendar/today?action=leader&week=${monday}`, { headers: auth })
-      if (!res.ok) return
-      const data = await res.json()
-      setLeader(data.leader || null)
-    } catch {
-      // A rota that will not load is not worth an error on a week view. The
-      // cases underneath it are what somebody came for.
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monday, user?.token])
-
-  useEffect(() => { load() }, [load])
+  // Set as leader and on leave the same week. Two facts the app held at once
+  // and never compared, which is how Mat was Spine Team Leader through a week
+  // he spent on TOIL.
+  const isAway = email => away.some(p => p.email === email)
+  const leaderAway = leader?.email && isAway(leader.email)
 
   async function choose(email) {
     setBusy(true)
-    // Shown straight away. A rota set with a tap should feel like a tap.
-    setLeader(email ? STAFF.find(s => s.email === email) : null)
     setOpen(false)
-    try {
-      await fetch(`/api/calendar/today?action=leader&week=${monday}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...auth },
-        body: JSON.stringify({ email })
-      })
-      await load()
-    } catch {
-      await load()
-    }
+    await Promise.resolve(onChange(email)).catch(() => {})
     setBusy(false)
   }
 
@@ -85,7 +61,12 @@ export default function TeamLeaderStrip({ user, week, today, hour }) {
         {/* Only while they are actually on. Outside Monday seven to Friday
             five the weekend belongs to the on-call rota, which is a different
             job and a different person. */}
-        {onDuty && (
+        {leaderAway && (
+          <span style={{
+            ...text('micro'), textTransform: 'uppercase', color: colour.warning
+          }}>On leave</span>
+        )}
+        {onDuty && !leaderAway && (
           <span style={{
             ...text('micro'), textTransform: 'uppercase', color: colour.accent
           }}>On now</span>
@@ -117,21 +98,37 @@ export default function TeamLeaderStrip({ user, week, today, hour }) {
               </div>
 
               <div style={{ padding: space.md, overflowY: 'auto', flex: 1 }}>
+                {leaderAway && (
+                  <div style={{
+                    background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+                    borderRadius: radius.control, padding: space.sm, marginBottom: space.sm,
+                    ...text('caption'), color: colour.ink, lineHeight: 1.5
+                  }}>
+                    {leader.firstName} is on leave this week. Somebody else needs it.
+                  </div>
+                )}
+
                 {STAFF.filter(s => s.isClinicalTeam || s.division === 'Spine').map(person => {
                   const on = leader?.email === person.email
+                  const unavailable = isAway(person.email)
                   return (
                     <button key={person.email} onClick={() => choose(person.email)}
+                      // Not disabled. Somebody taking a day of their leave back
+                      // to cover is a real thing, and an app that refuses it
+                      // outright is an app people work around. It says so
+                      // instead, which is what was missing.
                       style={{
                         display: 'flex', alignItems: 'center', gap: space.md, width: '100%',
                         textAlign: 'left', cursor: 'pointer', marginBottom: space.sm,
                         minHeight: 52, padding: `0 ${space.md}px`, borderRadius: radius.card,
                         border: `1.5px solid ${on ? colour.accent : colour.line}`,
-                        background: on ? colour.accentSoft : colour.surface
+                        background: on ? colour.accentSoft : colour.surface,
+                        opacity: unavailable && !on ? 0.55 : 1
                       }}>
                       <span style={{ flex: 1, ...text('bodyStrong'), color: colour.ink }}>
                         {person.firstName}
                         <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}>
-                          {' · '}{person.role}
+                          {' · '}{unavailable ? 'on leave this week' : person.role}
                         </span>
                       </span>
                       {on && <span style={{ ...text('bodyStrong'), color: colour.accentDeep }}>✓</span>}

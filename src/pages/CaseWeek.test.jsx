@@ -1052,3 +1052,41 @@ describe('who is team leader this week', () => {
     })
   })
 })
+
+describe('the team leader on the day', () => {
+  // "The option to change the team leader at the top is good, but it should
+  // still appear in the items under 'Brent on call'." Same kind of fact — who
+  // is covering what — so it belongs beside it.
+  const leaderReplies = who => vi.fn(async (url, opts) => {
+    if (String(url).includes('action=leader')) {
+      if (opts?.method === 'POST') return { ok: true, json: async () => ({ ok: true }) }
+      return { ok: true, json: async () => ({ ok: true, leader: who }) }
+    }
+    return { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+  })
+
+  it('names them on the day, beside who is away', async () => {
+    global.fetch = leaderReplies({ email: 'ben@technomed.com.au', firstName: 'Ben' })
+    show()
+    await waitFor(() => expect(screen.getByText('Ben — team leader')).toBeInTheDocument())
+  })
+
+  it('says nothing on a day nobody has been set for', async () => {
+    global.fetch = leaderReplies(null)
+    show()
+    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    expect(screen.queryByText(/team leader$/)).not.toBeInTheDocument()
+  })
+
+  it('warns when the person set is on leave that week', async () => {
+    // Mat was Spine Team Leader through a week he spent on TOIL. Two facts the
+    // app held at once and never compared.
+    events = [...BOOKINGS, {
+      id: 'lv', summary: 'Mat - ANNUAL LEAVE', description: '',
+      start: { date: '2026-09-21' }, end: { date: '2026-09-26' }
+    }]
+    global.fetch = leaderReplies({ email: 'mat@technomed.com.au', firstName: 'Mat' })
+    show()
+    await waitFor(() => expect(screen.getByText('On leave')).toBeInTheDocument())
+  })
+})
