@@ -509,10 +509,15 @@ function DayPanel({ day, onOpen, onReorder, onSetPlace }) {
         </div>
       )}
 
+      {/* Kit on the move is drawn like an alert on purpose. It is a thing
+          somebody has to physically do, on that day, and it used to sit at the
+          foot of the page under "Also on" — below the cases, which is where a
+          task goes to be forgotten. */}
       {(day.flags || []).length > 0 && (
         <div style={{ marginBottom: space.sm }}>
           {day.flags.map((flag, i) => (
-            <Banner key={i} tone={flag.kind === 'clinicalAlert' ? 'danger' : 'warning'}>
+            <Banner key={i}
+              tone={['clinicalAlert', 'kitTask'].includes(flag.kind) ? 'danger' : 'warning'}>
               {flag.text}
             </Banner>
           ))}

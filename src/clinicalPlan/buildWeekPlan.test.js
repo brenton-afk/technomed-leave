@@ -652,3 +652,65 @@ describe('reading the day in the order it runs', () => {
     ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
   })
 })
+
+describe('kit that has to be moved', () => {
+  // "I like how the CYLOX tray transfer is in red and listed at the top on
+  // Monday. But the Ascot tray transfer on Tuesday is down the bottom under
+  // 'Also on'."
+  //
+  // Both are the same kind of thing. The Monday one only reached the top by
+  // having a word like "urgent" in it; "transfer" on its own was read as a
+  // meeting, so a job somebody has to physically do sat below the cases,
+  // which is where a task goes to be forgotten.
+  const ev = (summary) => ({
+    id: summary, summary, description: '',
+    start: { dateTime: '2026-10-05T08:00:00+11:00' },
+    end: { dateTime: '2026-10-05T09:00:00+11:00' }
+  })
+  const WINDOW = {
+    startDate: '2026-10-05', endDate: '2026-10-11',
+    days: ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08',
+      '2026-10-09', '2026-10-10', '2026-10-11']
+  }
+  const kindOf = title => {
+    const day = buildWeekPlan([ev(title)], WINDOW, { generatedAt: '2026-10-04T00:00:00Z' }).days[0]
+    if (day.flags.length) return day.flags[0].kind
+    if ((day.nonSurgeonItems || []).length) return 'block'
+    return 'rollup'
+  }
+
+  for (const title of [
+    'CYLOX tray transfer',
+    'Ascot tray transfer',
+    'Collect Mariner set from RHH',
+    'Sterilise Dakota tray',
+    'Diplomat trays to Calvary',
+    'Return trays to Lenah Valley',
+    'Courier the Reform kit to St Lukes',
+    'Pick up consignment stock'
+  ]) {
+    it(`"${title}" is a task at the top`, () => {
+      expect(kindOf(title)).toBe('kitTask')
+    })
+  }
+
+  it('leaves the words that already meant an alert alone', () => {
+    // "loan kit" has been a clinicalAlert for a long time and the week summary
+    // groups those. The new rule is last, so it only picks up what nothing
+    // else claimed.
+    expect(kindOf('Return loan kit to E4')).toBe('clinicalAlert')
+  })
+
+  for (const title of [
+    'Patient transfer to ward',
+    'Team meeting',
+    'Spine logistics meeting',
+    'Transfer of care discussion'
+  ]) {
+    it(`does not turn "${title}" into one`, () => {
+      // A patient transfer is not a tray. The rule needs a kit word near a
+      // movement word, not "transfer" on its own.
+      expect(kindOf(title)).not.toBe('kitTask')
+    })
+  }
+})

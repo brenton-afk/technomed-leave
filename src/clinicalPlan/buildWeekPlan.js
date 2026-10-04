@@ -24,6 +24,21 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
 // Checked before the meeting test: these are always flags, even when the title
 // also reads like a meeting ("Handover: ..." contains a word the meeting
 // pattern matches).
+// A kit noun near a movement word. The gap is capped so a title that happens
+// to mention a tray and, separately, a delivery does not become one task.
+const KIT_NOUN = String.raw`(?:trays?|kits?|sets?|instruments?|loan|consignment|stock|implants?)`
+const KIT_MOVE = String.raw`(?:transfer(?:s|red|ring)?|move[sd]?|moving|deliver(?:y|ed|ies)?|`
+  + String.raw`collect(?:ion|ed)?|pick\s*-?\s*up|return(?:ed|ing)?|swap(?:ped)?|`
+  + String.raw`sterilis\w*|steriliz\w*|courier(?:ed)?|drop\s*-?\s*off|send|sent|ship(?:ped|ment)?)`
+// Kit with a destination and no verb — "Diplomat trays to Calvary" — which is
+// how the team usually writes it. Anchored on a hospital rather than on "to",
+// because a tray to anywhere would catch most of the calendar.
+const SITE = String.raw`(?:RHH|Royal\s*Hobart|Calvary|Lenah|CLV|St\.?\s*Luke|St\.?\s*John|Hobart\s*Private)`
+const KIT_ON_THE_MOVE = new RegExp(
+  `\\b${KIT_NOUN}\\b[^.\\n]{0,24}\\b${KIT_MOVE}\\b`
+  + `|\\b${KIT_MOVE}\\b[^.\\n]{0,24}\\b${KIT_NOUN}\\b`
+  + `|\\b${KIT_NOUN}\\b\\s*(?:to|from|at|over\\s+to)\\s+${SITE}\\b`, 'i')
+
 const PRIORITY_FLAG_RULES = [
   { kind: 'recurringStaffing', boxed: true, test: /late start|early finish|reduced hours|boy'?s week/i },
   { kind: 'handover', boxed: false, test: /handover|team leader/i },
@@ -33,7 +48,18 @@ const PRIORITY_FLAG_RULES = [
   // and nowhere else.
   { kind: 'onCall', boxed: false, test: /on call|on-call/i },
   { kind: 'travel', boxed: false, test: /conference|offsite|off-site|travel|depart|flight/i },
-  { kind: 'clinicalAlert', boxed: false, test: /revision|loan kit|resupply|urgent|shortage|recall/i }
+  { kind: 'clinicalAlert', boxed: false, test: /revision|loan kit|resupply|urgent|shortage|recall/i },
+  // Kit on the move: something somebody has to physically do, on a day.
+  //
+  // "CYLOX tray transfer" read as a meeting — "transfer" is in the grey-block
+  // pattern — so it sat at the foot of the day under "Also on", below the
+  // cases, which is where a thing that needs doing goes to be forgotten. The
+  // one that did show in red only managed it by having "urgent" in its title.
+  //
+  // Matched as a kit word near a movement word, in either order, rather than
+  // on "transfer" alone: a patient transfer is not a tray. Last in the list,
+  // so the existing alert words keep the kind they already had.
+  { kind: 'kitTask', boxed: false, test: KIT_ON_THE_MOVE }
 ]
 
 // Checked only after the meeting test, so "Spine Logistics Meeting" renders as
@@ -302,6 +328,7 @@ function buildKeyFlags(allCases, days, surgeons) {
 
   const logistics = [
     ...byKind('logistics'),
+    ...byKind('kitTask'),
     ...[...new Set(days.flatMap(d => d.otherRollup.filter(o => /list order/i.test(o.text)).map(() => 'Daily List Order call')))]
   ]
   if (logistics.length) flags.push({ label: 'Logistics', text: listPhrase([...new Set(logistics)]) + '.' })
