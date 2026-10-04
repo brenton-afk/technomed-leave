@@ -34,6 +34,23 @@ export function caseFolderPath({ surgeonSurname, monthFolder, folderName }) {
   return `${ROOT}/${parts.join('/')}`
 }
 
+// ─── Saying what went wrong without saying who it was about ──────────────────
+// Every path in this tree has a patient's surname in it, and these messages do
+// not stay here: agent.js logs err.message to Vercel, which retains it, and
+// returns it to the browser. A failure interpolating the path would put
+// surnames into an operations log on the first bad afternoon Dropbox has.
+//
+// So nothing identifying is ever built into one. What is left — the operation,
+// the HTTP status and Dropbox's own error tag — is what actually diagnoses a
+// fault anyway: "insufficient_space", "invalid_access_token", "not_found". The
+// path adds nothing a developer needs and everything a patient would mind.
+function dropboxFault(what, status, summary) {
+  // Dropbox's error_summary is a tag like "path/not_found/..." and carries no
+  // content of ours. The raw body might, so it is deliberately not included.
+  const tag = String(summary || '').split('/')[0] || 'unknown'
+  return new Error(`Dropbox could not ${what} (${status}): ${tag}`)
+}
+
 async function rpc(endpoint, body) {
   const res = await fetch(`https://api.dropboxapi.com/2/${endpoint}`, {
     method: 'POST',
@@ -63,7 +80,7 @@ export async function ensureFolder(path) {
     if (ok) continue
     const tag = data?.error?.path?.['.tag'] || data?.error_summary || ''
     if (String(tag).includes('conflict')) continue // already there
-    throw new Error(`Dropbox could not create "${current}" (${status}): ${data?.error_summary || text}`)
+    throw dropboxFault('create a folder', status, data?.error_summary)
   }
   return path
 }
@@ -89,7 +106,7 @@ export async function uploadFile(path, buffer) {
   if (!res.ok) {
     let summary = text
     try { summary = JSON.parse(text).error_summary || text } catch { /* keep raw */ }
-    throw new Error(`Dropbox upload failed for "${path.split('/').pop()}" (${res.status}): ${summary}`)
+    throw dropboxFault('upload a file', res.status, summary)
   }
   try { return JSON.parse(text) } catch { return { path_display: path } }
 }
@@ -138,7 +155,7 @@ export async function listFolder(path) {
     const summary = data?.error_summary || text || ''
     // A folder that was never created is an empty folder as far as the UI cares.
     if (String(summary).includes('not_found')) return { entries: [], missing: true }
-    throw new Error(`Dropbox could not list "${path}" (${status}): ${summary}`)
+    throw dropboxFault('list a folder', status, summary)
   }
 
   const entries = (data.entries || []).map(e => ({
@@ -164,7 +181,7 @@ export async function listFolder(path) {
 export async function temporaryLink(path) {
   const { ok, data, status, text } = await rpc('files/get_temporary_link', { path })
   if (!ok) {
-    throw new Error(`Dropbox could not open that file (${status}): ${data?.error_summary || text}`)
+    throw dropboxFault('open that file', status, data?.error_summary)
   }
   return { url: data.link, name: data.metadata?.name || path.split('/').pop() }
 }
@@ -201,7 +218,7 @@ export async function searchUsage(surname, { limit = 40 } = {}) {
     const summary = data?.error_summary || text || ''
     // A tree that is not there yet is not an error worth stopping a booking for.
     if (String(summary).includes('not_found')) return []
-    throw new Error(`Dropbox could not search for "${query}" (${status}): ${summary}`)
+    throw dropboxFault('run that search', status, summary)
   }
 
   const seen = new Set()
