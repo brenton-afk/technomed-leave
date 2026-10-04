@@ -127,7 +127,7 @@ export function parseFolderName(name) {
     // "C5/6 ACDF" is already "C5-6-ACDF" on disk and the difference is gone.
     // Turning them back into spaces would render it "C5 6 ACDF", which reads
     // as a different operation — the same class of mistake as dropping the
-    // "+/-" from Pt Bayly's. Faithful to the folder name beats tidy.
+    // "+/-" from Pt Quintrell's. Faithful to the folder name beats tidy.
     procedure: rest.slice(1, -1).join(' '),
     hospital: rest.length > 1 ? rest[rest.length - 1].replace(/-/g, ' ') : ''
   }

@@ -5,10 +5,10 @@ import {
 } from './listPlace.js'
 
 // The running order the hospital reads out is the whole theatre list, not our
-// part of it. Thompson is second up on JPW's Thursday list, behind a PLIF using
+// part of it. Pennant is second up on JPW's Thursday list, behind a PLIF using
 // KT Medical kit that we are not at — so nobody drives in for eight o'clock.
 // That is the fact these hold, and moving our own cases past each other could
-// never say it, because Thompson is the only case of ours there that day.
+// never say it, because Pennant is the only case of ours there that day.
 
 describe('saying which number we are', () => {
   it('counts the way the team says it', () => {
@@ -132,7 +132,7 @@ describe('what the card says', () => {
   })
 
   it('says an afternoon list even when the number is not known yet', () => {
-    // Barr is first up but on the afternoon list. Knowing only that the morning
+    // Hollis is first up but on the afternoon list. Knowing only that the morning
     // is free is most of the value.
     expect(describeListPlace({ session: 'afternoon' })).toEqual({ headline: 'PM', ahead: '' })
   })
@@ -187,7 +187,7 @@ describe('the order the lists run in', () => {
 })
 
 describe('putting the line in a booking', () => {
-  const BOOKING = 'Surg: JPW\nPt: Thompson\nHosp: RHH\nKit: Diplomat (Consignment)'
+  const BOOKING = 'Surg: JPW\nPt: Pennant\nHosp: RHH\nKit: Diplomat (Consignment)'
 
   it('appends it, leaving the fields the team typed where they are', () => {
     expect(withListPlace(BOOKING, { position: 2, session: 'afternoon' }))
@@ -236,7 +236,7 @@ describe('the words somebody chose', () => {
       position: 2, session: 'afternoon', from: '1pm',
       ahead: 'after a PLIF — KT Medical, not ours'
     }
-    const written = withListPlace('Surg: JPW\nPt: Thompson', place)
+    const written = withListPlace('Surg: JPW\nPt: Pennant', place)
     expect(parseListPlace(/^List:\s*(.*)$/m.exec(written)[1])).toEqual(place)
   })
 })

@@ -25,7 +25,7 @@ describe('what it warns about', () => {
   })
 
   it('catches a full name where something says it is a patient', () => {
-    expect(warns('spoke to Mr David Thompson')).toBe(true)
+    expect(warns('spoke to Mr David Pennant')).toBe(true)
     expect(warns('Pt Rowe John second up')).toBe(true)
     expect(warns('Patient: Rowe John')).toBe(true)
   })

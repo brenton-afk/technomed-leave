@@ -83,7 +83,7 @@ function Field({ label, hint, value, onChange, autoFocus, type = 'text' }) {
 /**
  * A title that still names a value the booking no longer has.
  *
- * Changing the surgeon in the description leaves "Chalmers DIPLOMAT - Fowler"
+ * Changing the surgeon in the description leaves "Mardon DIPLOMAT - Fowler"
  * saying Fowler, and the title is what shows in Google's month view — so the
  * calendar would contradict itself. The portal proposes the corrected title and
  * waits to be told: rewriting it automatically would silently reformat titles

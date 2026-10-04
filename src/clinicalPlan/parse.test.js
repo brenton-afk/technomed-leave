@@ -361,8 +361,8 @@ describe('reading a booking that was renamed rather than deleted', () => {
 })
 
 // ─── Two bugs reported from the live calendar ────────────────────────────────
-// "Pt Chalmers, Fowler for today should have Mat's name in the title as it is
-// in the calendar, but it is not currently displayed." And: "pt Marchetti has been
+// "Pt Mardon, Fowler for today should have Mat's name in the title as it is
+// in the calendar, but it is not currently displayed." And: "pt Vellacott has been
 // added to tomorrow's list, but is listed as cancelled in the app, but not in
 // the calendar."
 //
@@ -374,9 +374,9 @@ describe('the rep who attended', () => {
     // The bug. normaliseSurgeon tolerates a surname "buried in a longer
     // string", so "Fowler (Mat)" matched Fowler, the whole fragment was
     // consumed as the surgeon, and Mat went with it — silently.
-    const read = readBooking('Chalmers MARINER - Fowler (Mat)', 'Kit: Mariner MIS')
+    const read = readBooking('Mardon MARINER - Fowler (Mat)', 'Kit: Mariner MIS')
     expect(read.rep).toBe('Mat')
-    expect(read.patient).toBe('Chalmers')
+    expect(read.patient).toBe('Mardon')
     expect(read.surgeon).toBe('Fowler')
   })
 
@@ -384,8 +384,8 @@ describe('the rep who attended', () => {
     // "Pt name>SYSTEM>Surgeon name>(REP NAME)". ">" was not a separator, so a
     // title in this exact format split on nothing and the whole booking came
     // back blank — no patient, no surgeon, no system.
-    const read = readBooking('Chalmers>MARINER>Fowler>(Mat)', '')
-    expect(read.patient).toBe('Chalmers')
+    const read = readBooking('Mardon>MARINER>Fowler>(Mat)', '')
+    expect(read.patient).toBe('Mardon')
     expect(read.surgeon).toBe('Fowler')
     expect(read.system).toBe('MARINER')
     expect(read.rep).toBe('Mat')
@@ -395,21 +395,21 @@ describe('the rep who attended', () => {
     // It used to accept only the roster, which meant one unfamiliar name threw
     // the whole bracket away — "(Aimee/Brenton)" showed no rep at all. The app's
     // job here is to show what the calendar says.
-    expect(readBooking('Chalmers MARINER - Fowler (Sarah)', '').rep).toBe('Sarah')
-    expect(readBooking('Chalmers MARINER - Fowler (Aimee/Brenton)', '').rep).toBe('Aimee/Brent')
+    expect(readBooking('Mardon MARINER - Fowler (Sarah)', '').rep).toBe('Sarah')
+    expect(readBooking('Mardon MARINER - Fowler (Aimee/Brenton)', '').rep).toBe('Aimee/Brent')
   })
 
   it('is not a place, a kit or a count in brackets', () => {
     // A bracketed "(RHH)" is a hospital and "(2 of 3)" is a count. Reading
     // either as a person puts a rep called Rhh on the case.
-    expect(readBooking('Chalmers MARINER - Fowler (RHH)', '').rep).toBeNull()
-    expect(readBooking('Chalmers MARINER - Fowler (2 of 3)', '').rep).toBeNull()
-    expect(readBooking('Chalmers MARINER - Fowler (Loan set)', '').rep).toBeNull()
-    expect(readBooking('Chalmers MARINER - Fowler (Calvary)', '').rep).toBeNull()
+    expect(readBooking('Mardon MARINER - Fowler (RHH)', '').rep).toBeNull()
+    expect(readBooking('Mardon MARINER - Fowler (2 of 3)', '').rep).toBeNull()
+    expect(readBooking('Mardon MARINER - Fowler (Loan set)', '').rep).toBeNull()
+    expect(readBooking('Mardon MARINER - Fowler (Calvary)', '').rep).toBeNull()
   })
 
   it('is absent when the calendar does not name one', () => {
-    expect(readBooking('Marchetti ACDF SHORELINE - JPW', '').rep).toBeNull()
+    expect(readBooking('Vellacott ACDF SHORELINE - JPW', '').rep).toBeNull()
   })
 })
 
@@ -425,20 +425,20 @@ describe('not inventing a cancellation', () => {
       'Rebooked after the 8th was postponed',
       'Check the cancellation policy for the loan kit'
     ]) {
-      expect(isCancelled('Marchetti ACDF SHORELINE - JPW', note), note).toBe(false)
+      expect(isCancelled('Vellacott ACDF SHORELINE - JPW', note), note).toBe(false)
     }
   })
 
   it('still believes the title', () => {
     // Renaming the booking is how the team actually marks one off.
-    expect(isCancelled('CANCELLED - Marchetti ACDF - JPW', '')).toBe(true)
-    expect(isCancelled('Marchetti ACDF - JPW (cancelled)', '')).toBe(true)
+    expect(isCancelled('CANCELLED - Vellacott ACDF - JPW', '')).toBe(true)
+    expect(isCancelled('Vellacott ACDF - JPW (cancelled)', '')).toBe(true)
   })
 
   it('still believes a note that says only that', () => {
     // A line of its own is a deliberate marker rather than a passing mention.
-    expect(isCancelled('Marchetti ACDF - JPW', 'CANCELLED')).toBe(true)
-    expect(isCancelled('Marchetti ACDF - JPW', 'Kit: Shoreline\nCancelled.')).toBe(true)
+    expect(isCancelled('Vellacott ACDF - JPW', 'CANCELLED')).toBe(true)
+    expect(isCancelled('Vellacott ACDF - JPW', 'Kit: Shoreline\nCancelled.')).toBe(true)
   })
 })
 
@@ -454,10 +454,10 @@ describe('never silently dropping what the title says', () => {
     // A check that cries wolf gets ignored, and then it is not a check. These
     // all parse completely and must produce no leftover line.
     for (const title of [
-      'Chalmers MARINER - Fowler (Mat)',
-      'Marchetti C4/5 ACDF SHORELINE - JPW',
+      'Mardon MARINER - Fowler (Mat)',
+      'Vellacott C4/5 ACDF SHORELINE - JPW',
       'Kennedy REFORM-JPW',
-      'Chalmers>MARINER>Fowler>(Mat)'
+      'Mardon>MARINER>Fowler>(Mat)'
     ]) {
       expect(readBooking(title, '').unread, title).toBeUndefined()
     }
@@ -484,8 +484,8 @@ describe('bookings as the team actually writes them', () => {
   it('reads the rep off a labelled booking', () => {
     // Reported: "should have Mat's name in the title as it is in the calendar,
     // but it is not currently displayed".
-    const read = readBooking('Chalmers DIPLOMAT + E4 Cages - Fowler (Mat)',
-      'Surg: Fowler\nPt: Chalmers\nHosp: RHH\nDate: 21/9/26\n'
+    const read = readBooking('Mardon DIPLOMAT + E4 Cages - Fowler (Mat)',
+      'Surg: Fowler\nPt: Mardon\nHosp: RHH\nDate: 21/9/26\n'
       + 'Surgery: L5/S1 PSF and PLIF\nKit: Diplomat and E4 Cages (Consignment)')
     expect(read.rep).toBe('Mat')
     expect(read.surgeon).toBe('Fowler')
@@ -499,12 +499,12 @@ describe('bookings as the team actually writes them', () => {
     // Reported, and this is the note verbatim. The case had been called off on
     // the Friday and put back on for the Tuesday; the app read the word and
     // struck out the live booking.
-    const notes = 'Surg: Atallah\nPt: Marchetti\nDate: 22/9/26\n'
+    const notes = 'Surg: Atallah\nPt: Vellacott\nDate: 22/9/26\n'
       + 'Surgery: C3-T2 cervical fixation, C4-C7 Lami \nKit: Reform Cervical (Consignment)\nHosp: RHH\n\n'
       + 'This patient was cancelled from Friday 18/9 and rebooked to Tuesday 22/9\n\n'
       + 'Notification received from Toby at 1318hrs Monday 21/9/26 on WA\n\nEntered/amended by Brent'
-    expect(isCancelled('Marchetti REFORM CERVICAL- Atallah', notes)).toBe(false)
-    expect(readBooking('Marchetti REFORM CERVICAL- Atallah', notes).patient).toBe('Marchetti')
+    expect(isCancelled('Vellacott REFORM CERVICAL- Atallah', notes)).toBe(false)
+    expect(readBooking('Vellacott REFORM CERVICAL- Atallah', notes).patient).toBe('Vellacott')
   })
 
   it('still marks the one that really was called off', () => {
@@ -555,8 +555,8 @@ describe('bookings as the team actually writes them', () => {
   it('reads a surgeon the app has never been told about', () => {
     // Atallah is not in SURGEON_KEYS. A booking must not vanish because the
     // roster of surgeons is out of date.
-    const read = readBooking('Marchetti REFORM CERVICAL- Atallah',
-      'Surg: Atallah\nPt: Marchetti\nKit: Reform Cervical (Consignment)')
+    const read = readBooking('Vellacott REFORM CERVICAL- Atallah',
+      'Surg: Atallah\nPt: Vellacott\nKit: Reform Cervical (Consignment)')
     expect(read.surgeon).toBe('Atallah')
   })
 })
@@ -951,7 +951,7 @@ describe('telling the Calvary hospitals apart', () => {
 })
 
 describe('an operation is transcribed as written', () => {
-  // Bayly, Friday 9 October: "C3/4 +/- C4/5" came out as "C3/4 C4/5".
+  // Quintrell, Friday 9 October: "C3/4 +/- C4/5" came out as "C3/4 C4/5".
   //
   // Not a tidier version of the same operation — a different one. "+/-" means
   // the second level may not be done at all, and reading it as two levels
@@ -962,8 +962,8 @@ describe('an operation is transcribed as written', () => {
   // token with no letters or digits cannot be a system name, so it was never
   // this filter's business.
   const operationOf = procedure => readBooking(
-    'Bayly DIPLOMAT - Thani',
-    `Surg: Thani\nPt: Bayly\nProcedure: ${procedure}\nKit: Diplomat (Consignment)`
+    'Quintrell DIPLOMAT - Thani',
+    `Surg: Thani\nPt: Quintrell\nProcedure: ${procedure}\nKit: Diplomat (Consignment)`
   ).operation
 
   for (const written of [

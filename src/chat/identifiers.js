@@ -50,7 +50,7 @@ const PATTERNS = [
 // number are the identifiers that actually matter, and they are matched on
 // their own shape rather than on context.
 const NAME_AFTER = [
-  // "Mr David Thompson", "Dr Jane Smith"
+  // "Mr David Pennant", "Dr Jane Smith"
   /\b(?:mr|mrs|ms|miss|master|dr)\.?\s+[A-Z][a-z]+\s+[A-Z][a-z]+/i,
   // "Pt Rowe John", "Patient: Rowe John"
   // `[\s:]+` rather than `\s*:?\s+`, which needed a space on both sides of an

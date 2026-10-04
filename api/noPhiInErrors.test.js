@@ -4,7 +4,7 @@ import { join } from 'path'
 
 // ─── Errors must not carry the patient ───────────────────────────────────────
 // Every path in the usage tree has a surname in it:
-//   /ALL SURGEON USAGE/SPINE/THANI/OCTOBER 2026/BARR_04102026_Thani_ACDF_RHH
+//   /ALL SURGEON USAGE/SPINE/THANI/OCTOBER 2026/HOLLIS_04102026_Thani_ACDF_RHH
 //
 // These messages do not stay in the function. agent.js logs err.message to
 // Vercel, which retains it and shows it to anyone with dashboard access, and
@@ -52,8 +52,8 @@ describe('what a failure actually says', () => {
       ok: false, status: 503, text: async () => JSON.stringify({ error_summary: 'too_many_requests/..' })
     }))
     const { searchUsage } = await import('./_dropbox.js')
-    const err = await searchUsage('Bayly').catch(e => e)
-    expect(err.message).not.toContain('Bayly')
+    const err = await searchUsage('Quintrell').catch(e => e)
+    expect(err.message).not.toContain('Quintrell')
     // Still diagnosable: the operation, the status, and Dropbox's own tag.
     expect(err.message).toContain('503')
     expect(err.message).toContain('too_many_requests')
@@ -64,9 +64,9 @@ describe('what a failure actually says', () => {
       ok: false, status: 401, text: async () => JSON.stringify({ error_summary: 'invalid_access_token/' })
     }))
     const { listFolder } = await import('./_dropbox.js')
-    const path = '/ALL SURGEON USAGE/SPINE/THANI/OCTOBER 2026/BAYLY_09102026_Thani_ACDF_RHH'
+    const path = '/ALL SURGEON USAGE/SPINE/THANI/OCTOBER 2026/QUINTRELL_09102026_Thani_ACDF_RHH'
     const err = await listFolder(path).catch(e => e)
-    expect(err.message).not.toMatch(/BAYLY/i)
+    expect(err.message).not.toMatch(/QUINTRELL/i)
     expect(err.message).not.toContain('THANI')
     expect(err.message).toContain('invalid_access_token')
   })
@@ -76,9 +76,9 @@ describe('what a failure actually says', () => {
       ok: false, status: 507, text: async () => JSON.stringify({ error_summary: 'insufficient_space/..' })
     }))
     const { uploadFile } = await import('./_dropbox.js')
-    const err = await uploadFile('/x/BAYLY_09102026_Thani_ACDF_RHH_Scan.pdf', Buffer.from('a'))
+    const err = await uploadFile('/x/QUINTRELL_09102026_Thani_ACDF_RHH_Scan.pdf', Buffer.from('a'))
       .catch(e => e)
-    expect(err.message).not.toMatch(/BAYLY/i)
+    expect(err.message).not.toMatch(/QUINTRELL/i)
     expect(err.message).toContain('507')
   })
 })

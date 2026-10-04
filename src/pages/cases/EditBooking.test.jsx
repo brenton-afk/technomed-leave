@@ -169,24 +169,24 @@ describe('a title left behind by an edit', () => {
   // The title is what shows in Google's month view, so a booking whose title
   // says Fowler and whose description says Ibbett contradicts itself.
   it('is spotted when the surgeon changes', () => {
-    const stale = staleTitle('Chalmers DIPLOMAT - Fowler (Mat)',
+    const stale = staleTitle('Mardon DIPLOMAT - Fowler (Mat)',
       { surgeon: 'Fowler' }, { surgeon: 'Ibbett' })
-    expect(stale.proposed).toBe('Chalmers DIPLOMAT - Ibbett (Mat)')
+    expect(stale.proposed).toBe('Mardon DIPLOMAT - Ibbett (Mat)')
   })
 
   it('is spotted when the patient changes', () => {
-    const stale = staleTitle('Chalmers DIPLOMAT - Fowler',
-      { patient: 'Chalmers' }, { patient: 'Marsh' })
+    const stale = staleTitle('Mardon DIPLOMAT - Fowler',
+      { patient: 'Mardon' }, { patient: 'Marsh' })
     expect(stale.proposed).toBe('Marsh DIPLOMAT - Fowler')
   })
 
   it('says nothing when the title already agrees', () => {
-    expect(staleTitle('Chalmers DIPLOMAT - Ibbett',
+    expect(staleTitle('Mardon DIPLOMAT - Ibbett',
       { surgeon: 'Fowler' }, { surgeon: 'Ibbett' })).toBeNull()
   })
 
   it('says nothing when nothing changed', () => {
-    expect(staleTitle('Chalmers DIPLOMAT - Fowler',
+    expect(staleTitle('Mardon DIPLOMAT - Fowler',
       { surgeon: 'Fowler' }, { surgeon: 'Fowler' })).toBeNull()
   })
 
@@ -444,7 +444,7 @@ describe('reps go back to the calendar the way they came', () => {
     // What the app writes must read back as the same people, or a save would
     // change the booking a little each time.
     for (const reps of [['Aimee'], ['Aimee', 'Mat'], ['Ben', 'Brent', 'Mat']]) {
-      const title = withReps('Chalmers MARINER - Fowler', reps)
+      const title = withReps('Mardon MARINER - Fowler', reps)
       expect(extractRep(title).reps, title).toEqual(reps)
     }
   })
@@ -452,8 +452,8 @@ describe('reps go back to the calendar the way they came', () => {
   it('keeps a name that is not on the roster through a round trip', () => {
     // A locum, or somebody from another company. Losing them on save is how the
     // calendar and the app drift apart.
-    const title = withReps('Chalmers MARINER - Fowler', ['Sarah'])
-    expect(title).toBe('Chalmers MARINER - Fowler (Sarah)')
+    const title = withReps('Mardon MARINER - Fowler', ['Sarah'])
+    expect(title).toBe('Mardon MARINER - Fowler (Sarah)')
     expect(extractRep(title).reps).toEqual(['Sarah'])
   })
 })

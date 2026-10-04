@@ -11,24 +11,24 @@ const USER = { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', toke
 
 const CASES = [
   {
-    recognised: true, raw: 'Barr_04102026_Garg_L4-5-PLIF_RHH',
-    name: 'Barr_04102026_Garg_L4-5-PLIF_RHH',
-    path: '/all surgeon usage/spine/garg/october 2026/barr_04102026_garg_l4-5-plif_rhh',
-    patientSurname: 'Barr', date: '2026-10-04', surgeonSurname: 'Garg',
+    recognised: true, raw: 'Hollis_04102026_Garg_L4-5-PLIF_RHH',
+    name: 'Hollis_04102026_Garg_L4-5-PLIF_RHH',
+    path: '/all surgeon usage/spine/garg/october 2026/hollis_04102026_garg_l4-5-plif_rhh',
+    patientSurname: 'Hollis', date: '2026-10-04', surgeonSurname: 'Garg',
     procedure: 'L4-5-PLIF', hospital: 'RHH', reviewed: null,
     files: [
-      { kind: 'file', name: 'Barr_04102026_Garg_L4-5-PLIF_RHH_Scan.pdf', path: '/a/scan.pdf' },
-      { kind: 'file', name: 'Barr_04102026_Garg_L4-5-PLIF_RHH_Usage_Sheet.xlsx', path: '/a/u.xlsx' }
+      { kind: 'file', name: 'Hollis_04102026_Garg_L4-5-PLIF_RHH_Scan.pdf', path: '/a/scan.pdf' },
+      { kind: 'file', name: 'Hollis_04102026_Garg_L4-5-PLIF_RHH_Usage_Sheet.xlsx', path: '/a/u.xlsx' }
     ]
   },
   {
-    recognised: true, raw: 'Barr_11032024_Thani_ACDF_Calvary',
-    name: 'Barr_11032024_Thani_ACDF_Calvary',
-    path: '/all surgeon usage/spine/thani/march 2024/barr_11032024_thani_acdf_calvary',
-    patientSurname: 'Barr', date: '2024-03-11', surgeonSurname: 'Thani',
+    recognised: true, raw: 'Hollis_11032024_Thani_ACDF_Calvary',
+    name: 'Hollis_11032024_Thani_ACDF_Calvary',
+    path: '/all surgeon usage/spine/thani/march 2024/hollis_11032024_thani_acdf_calvary',
+    patientSurname: 'Hollis', date: '2024-03-11', surgeonSurname: 'Thani',
     procedure: 'ACDF', hospital: 'Calvary',
     reviewed: { by: 'toni@technomed.com.au', at: '2024-03-12T00:00:00.000Z' },
-    files: [{ kind: 'file', name: 'Barr_11032024_Thani_ACDF_Calvary_Scan.pdf', path: '/b/scan.pdf' }]
+    files: [{ kind: 'file', name: 'Hollis_11032024_Thani_ACDF_Calvary_Scan.pdf', path: '/b/scan.pdf' }]
   }
 ]
 
@@ -61,7 +61,7 @@ describe('looking a patient up', () => {
   it('shows every case across surgeons and years', async () => {
     // The whole point. Two cases, two surgeons, two years, one screen — the
     // folder tree has these in places that never appear together.
-    await searchFor('Barr')
+    await searchFor('Hollis')
     expect(screen.getByText('L4-5-PLIF')).toBeInTheDocument()
     expect(screen.getByText('ACDF')).toBeInTheDocument()
     expect(screen.getByText(/4 Oct 2026 · Garg · RHH/)).toBeInTheDocument()
@@ -69,9 +69,9 @@ describe('looking a patient up', () => {
   })
 
   it('asks the server for the surname and nothing else', async () => {
-    await searchFor('Barr')
+    await searchFor('Hollis')
     const [url] = global.fetch.mock.calls.find(([u]) => String(u).includes('history'))
-    expect(String(url)).toContain('surname=Barr')
+    expect(String(url)).toContain('surname=Hollis')
   })
 
   it('refuses a single letter rather than returning half the practice', async () => {
@@ -86,7 +86,7 @@ describe('looking a patient up', () => {
   it('names the file by what it is, not by repeating the case', async () => {
     // Every file in the folder starts with the whole case name. In a row of
     // chips that is the same forty characters twice and no information.
-    await searchFor('Barr')
+    await searchFor('Hollis')
     // Both cases have a scan, which is exactly why the chip must not repeat
     // the case name — it is the suffix that distinguishes the documents.
     expect(screen.getAllByText('Scan.pdf')).toHaveLength(2)
@@ -94,19 +94,19 @@ describe('looking a patient up', () => {
   })
 
   it('opens a file through a fresh link rather than storing one', async () => {
-    await searchFor('Barr')
+    await searchFor('Hollis')
     fireEvent.click(screen.getByText('Usage_Sheet.xlsx'))
     await waitFor(() => expect(window.open).toHaveBeenCalledWith(
       'https://dl/x.pdf', '_blank', 'noopener'))
   })
 
   it('says who has already checked a case', async () => {
-    await searchFor('Barr')
+    await searchFor('Hollis')
     expect(screen.getByText('✓ Checked by Toni')).toBeInTheDocument()
   })
 
   it('ticks a case off against whoever is signed in', async () => {
-    await searchFor('Barr')
+    await searchFor('Hollis')
     fireEvent.click(screen.getAllByText('Mark checked')[0])
     await waitFor(() => {
       const call = global.fetch.mock.calls.find(([u]) => String(u).includes('reviewed'))
@@ -125,7 +125,7 @@ describe('looking a patient up', () => {
       }
       return answer({ error: 'Redis is down' })
     })
-    await searchFor('Barr')
+    await searchFor('Hollis')
     fireEvent.click(screen.getAllByText('Mark checked')[0])
     await waitFor(() => expect(screen.getByText(/did not save/)).toBeInTheDocument())
     expect(screen.getAllByText('Mark checked').length).toBe(1)
@@ -137,13 +137,13 @@ describe('looking a patient up', () => {
     global.fetch = vi.fn(async () => answer({
       configured: true,
       cases: [{
-        recognised: false, raw: 'Barr old notes', name: 'Barr old notes',
+        recognised: false, raw: 'Hollis old notes', name: 'Hollis old notes',
         path: '/x', patientSurname: '', date: '', surgeonSurname: '',
         procedure: '', hospital: '', reviewed: null, files: []
       }]
     }))
-    await searchFor('Barr')
-    expect(screen.getByText('Barr old notes')).toBeInTheDocument()
+    await searchFor('Hollis')
+    expect(screen.getByText('Hollis old notes')).toBeInTheDocument()
     expect(screen.getByText(/Filed before the app/)).toBeInTheDocument()
   })
 
@@ -159,9 +159,9 @@ describe('looking a patient up', () => {
     // Error strings travel further than screens do.
     global.fetch = vi.fn(async () => answer({ error: 'Dropbox said no' }))
     render(<PatientHistory user={USER} />)
-    fireEvent.change(screen.getByLabelText('Patient surname'), { target: { value: 'Barr' } })
+    fireEvent.change(screen.getByLabelText('Patient surname'), { target: { value: 'Hollis' } })
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     const banner = await screen.findByText(/did not work/)
-    expect(banner.textContent).not.toContain('Barr')
+    expect(banner.textContent).not.toContain('Hollis')
   })
 })

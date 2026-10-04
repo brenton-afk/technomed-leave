@@ -88,7 +88,7 @@ describe('what counts as the plan having changed', () => {
       date: '2026-10-01',
       casesByHospital: [{
         hospital: 'RHH',
-        cases: [{ id: 'c1', patient: 'Thompson', surgeon: 'JPW', listPlace }]
+        cases: [{ id: 'c1', patient: 'Pennant', surgeon: 'JPW', listPlace }]
       }]
     }]
   })

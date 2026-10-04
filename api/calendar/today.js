@@ -1184,7 +1184,7 @@ async function handleReorder(req, res) {
  *
  * Note the difference from reordering. Moving cases past each other can only
  * say where ours sit relative to each other, and most days we have one case at
- * a hospital — Thompson is second up on JPW's Thursday list behind a PLIF using
+ * a hospital — Pennant is second up on JPW's Thursday list behind a PLIF using
  * KT Medical kit we are not at, and there is nothing to move him past. The
  * number is the fact; the order is a consequence of it.
  *

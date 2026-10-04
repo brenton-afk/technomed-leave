@@ -330,8 +330,8 @@ export function parseCaseTitle(title, hint = {}) {
   }
 
   // Whitespace, and ">" — which the team's own convention uses with no spaces
-  // around it, so "Chalmers>MARINER" was read as one word and the patient came
-  // out "ChalmersMARINER". Hyphens are deliberately *not* split here: a
+  // around it, so "Mardon>MARINER" was read as one word and the patient came
+  // out "MardonMARINER". Hyphens are deliberately *not* split here: a
   // vertebral level is written "L4-L5", and splitting it produced "L4 L5".
   const words = String(caseText || '').trim().split(/[\s>]+/).filter(Boolean)
   if (words.length === 0) return null

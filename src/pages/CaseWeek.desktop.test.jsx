@@ -18,13 +18,13 @@ const ev = (id, summary, description, day) => ({
 })
 
 const EVENTS = [
-  ev('a', 'Chalmers DIPLOMAT - Fowler',
-    'Surg: Fowler\nPt: Chalmers\nHosp: RHH\n'
+  ev('a', 'Mardon DIPLOMAT - Fowler',
+    'Surg: Fowler\nPt: Mardon\nHosp: RHH\n'
     + 'Procedure: Re do transphenoidal Rathkes/pituitary abscess with drain', '21'),
-  ev('b', 'Marchetti REFORM - Atallah', 'Surg: Atallah\nPt: Marchetti\nHosp: RHH', '23'),
+  ev('b', 'Vellacott REFORM - Atallah', 'Surg: Atallah\nPt: Vellacott\nHosp: RHH', '23'),
   // A second case at the same hospital on the same day. Without one there is
   // no running order to put in order, and the arrows correctly stay away.
-  ev('c', 'Teale REFORM - Garg', 'Surg: Garg\nPt: Teale\nHosp: RHH', '21')
+  ev('c', 'Ashbury REFORM - Garg', 'Surg: Garg\nPt: Ashbury\nHosp: RHH', '21')
 ]
 
 const widthOf = px => {
@@ -57,7 +57,7 @@ const show = () => render(<CaseWeek user={USER} />)
  */
 const toWeek = async () => {
   const rendered = show()
-  await waitFor(() => expect(screen.getByText('Marchetti')).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText('Vellacott')).toBeInTheDocument())
   return rendered
 }
 
@@ -126,9 +126,9 @@ describe('the week on a phone', () => {
   // view is the one that works there.
   const toPhoneWeek = async () => {
     const rendered = show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
-    await waitFor(() => expect(screen.getByText('Marchetti')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Vellacott')).toBeInTheDocument())
     return rendered
   }
 
@@ -181,13 +181,13 @@ describe('a week column is readable, not a stretched phone card', () => {
 
   it('still names the patient and the surgeon', async () => {
     await toWeek()
-    expect(screen.getByText('Chalmers')).toBeInTheDocument()
-    expect(screen.getByText('Marchetti')).toBeInTheDocument()
+    expect(screen.getByText('Mardon')).toBeInTheDocument()
+    expect(screen.getByText('Vellacott')).toBeInTheDocument()
   })
 
   it('still opens a case', async () => {
     await toWeek()
-    fireEvent.click(screen.getByText('Chalmers'))
+    fireEvent.click(screen.getByText('Mardon'))
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: 'Edit booking' })).toBeInTheDocument())
   })

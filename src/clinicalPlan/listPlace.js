@@ -5,10 +5,10 @@
 //
 //   Mr JPW, Thursday, RHH
 //     1. PLIF — KT Medical kit, their rep, we are not needed
-//     2. Thompson — ours, so about one o'clock
+//     2. Pennant — ours, so about one o'clock
 //
 // The first thing built here let the team move our own cases past each other,
-// which cannot say that at all. Thompson is our only case at RHH that day, so
+// which cannot say that at all. Pennant is our only case at RHH that day, so
 // there is nothing to move it past, and the fact that matters — second up,
 // behind something we are not at, so nobody drives in for eight o'clock — had
 // nowhere to live.

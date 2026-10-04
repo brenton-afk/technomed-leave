@@ -11,7 +11,7 @@ const LIST_HTML = `
 <table>
 <tr><td>Monday</td><td>21st September 2026</td><td></td><td></td><td></td><td>Neurosurgery</td></tr>
 <tr><td>FOWLER</td><td>Theatre Number 11</td><td>List duration 08:00am (Anaesthetic Start) to 5:00pm - All Day List</td></tr>
-<tr><td>Diplomat + E4</td><td>CHALMERS Rebecca</td><td></td><td></td><td></td><td>L5/S1 PLIF</td></tr>
+<tr><td>Diplomat + E4</td><td>MARDON Rebecca</td><td></td><td></td><td></td><td>L5/S1 PLIF</td></tr>
 
 <tr><td>Tuesday</td><td>22nd September 2026</td><td></td><td></td><td></td><td>Neurosurgery</td></tr>
 <tr><td>PETERS-WILLKE</td><td>Theatre Number 11</td><td></td><td>List duration 08:00am (Anaesthetic Start) to 5:00pm - All Day List</td></tr>
@@ -70,7 +70,7 @@ describe('a week of cases in one email', () => {
 describe('what must not get through', () => {
   it('keeps surnames and drops given names', () => {
     expect(parsed.map(c => c.patient)).toEqual(
-      ['Chalmers', 'Sturrock', 'Lawrence', 'Farrow', 'Bennett', 'Behan'])
+      ['Mardon', 'Sturrock', 'Lawrence', 'Farrow', 'Bennett', 'Behan'])
   })
 
   it('never returns a first name or a date of birth, anywhere', () => {

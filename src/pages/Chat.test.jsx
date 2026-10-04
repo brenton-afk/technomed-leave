@@ -134,7 +134,7 @@ describe('a booking\'s own thread', () => {
     global.fetch = vi.fn(async () => ({
       ok: true, json: async () => ({ ok: true, messages: [] })
     }))
-    render(<CaseThread eventId="evt_123" subtitle="Thompson · JPW" user={USER} onClose={() => {}} />)
+    render(<CaseThread eventId="evt_123" subtitle="Pennant · JPW" user={USER} onClose={() => {}} />)
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled())
     const [url] = global.fetch.mock.calls[0]
@@ -145,8 +145,8 @@ describe('a booking\'s own thread', () => {
     global.fetch = vi.fn(async () => ({
       ok: true, json: async () => ({ ok: true, messages: [] })
     }))
-    render(<CaseThread eventId="evt_123" subtitle="Thompson · JPW" user={USER} onClose={() => {}} />)
-    await waitFor(() => expect(screen.getByText('Thompson · JPW')).toBeInTheDocument())
+    render(<CaseThread eventId="evt_123" subtitle="Pennant · JPW" user={USER} onClose={() => {}} />)
+    await waitFor(() => expect(screen.getByText('Pennant · JPW')).toBeInTheDocument())
   })
 
   it('cannot be confused with a standing channel', () => {

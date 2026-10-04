@@ -158,14 +158,14 @@ describe('deriving the colour a booking should carry', () => {
   })
 
   it('works from a title alone', () => {
-    expect(colourFor('Chalmers MARINER - Fowler', '')).toBe('3')                // Grape
+    expect(colourFor('Mardon MARINER - Fowler', '')).toBe('3')                // Grape
   })
 
   it('reads through an honorific or an initial', () => {
     // The live convention writes "Dr Ibbett" and "Mr J Fowler"; the guide is
     // keyed on the surname.
     expect(colourFor('Marsh DIP - Ibbett', 'Surg: Dr Ibbett\nPt: Marsh')).toBe('5')
-    expect(colourFor('Chalmers MAR - Fowler', 'Surg: Mr J Fowler\nPt: Chalmers')).toBe('3')
+    expect(colourFor('Mardon MAR - Fowler', 'Surg: Mr J Fowler\nPt: Mardon')).toBe('3')
   })
 
   it('covers every surgeon in the guide', () => {

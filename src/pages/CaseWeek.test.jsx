@@ -26,12 +26,12 @@ const ev = (id, summary, description, { colorId, at = '09:00', location = 'RHH',
 })
 
 const BOOKINGS = [
-  ev('c1', 'Chalmers DIPLOMAT + E4 Cages - Fowler (Mat)',
-    'Surg: Fowler\nPt: Chalmers\nHosp: RHH\nDate: 21/9/26\n'
+  ev('c1', 'Mardon DIPLOMAT + E4 Cages - Fowler (Mat)',
+    'Surg: Fowler\nPt: Mardon\nHosp: RHH\nDate: 21/9/26\n'
     + 'Surgery: L5/S1 PSF and PLIF\nKit: Diplomat and E4 Cages (Consignment)',
     { colorId: '3' }),
-  ev('c2', 'Marchetti REFORM CERVICAL- Atallah',
-    'Surg: Atallah\nPt: Marchetti\nDate: 22/9/26\nSurgery: C3-T2 cervical fixation, C4-C7 Lami\n'
+  ev('c2', 'Vellacott REFORM CERVICAL- Atallah',
+    'Surg: Atallah\nPt: Vellacott\nDate: 22/9/26\nSurgery: C3-T2 cervical fixation, C4-C7 Lami\n'
     + 'Kit: Reform Cervical (Consignment)\nHosp: RHH\n\n'
     + 'This patient was cancelled from Friday 18/9 and rebooked to Tuesday 22/9\n\n'
     + 'Notification received from Toby on WA\n\nEntered/amended by Brent',
@@ -68,7 +68,7 @@ const show = (props = {}) => render(<CaseWeek user={USER} {...props} />)
 describe('a case, in full', () => {
   it('shows everything the booking says', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.getByText('Fowler')).toBeInTheDocument()
     // "and" is dropped by cleanOperation — the operation reads "L5/S1 PSF PLIF".
     expect(screen.getByText('L5/S1 PSF PLIF')).toBeInTheDocument()
@@ -175,16 +175,16 @@ describe('the day and the week', () => {
 
   it('shows only that day in day view', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     // Tuesday's cases are not on Monday.
-    expect(screen.queryByText('Marchetti')).not.toBeInTheDocument()
+    expect(screen.queryByText('Vellacott')).not.toBeInTheDocument()
   })
 
   it('shows the whole week in week view', async () => {
     show()
     fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Week' })))
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
-    expect(screen.getByText('Marchetti')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.getByText('Vellacott')).toBeInTheDocument()
     expect(screen.getByText('Larkin')).toBeInTheDocument()
   })
 
@@ -195,7 +195,7 @@ describe('the day and the week', () => {
 
   it('separates what is not a case, and says what it is', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.getByText('Team meeting')).toBeInTheDocument()
     expect(screen.getByText('Meeting')).toBeInTheDocument()
   })
@@ -210,17 +210,17 @@ describe('what the calendar says, and only that', () => {
   })
 
   it('leaves a rebooked case alone, however its notes read', async () => {
-    // Marchetti's notes say "cancelled from Friday 18/9". The case is live.
+    // Vellacott's notes say "cancelled from Friday 18/9". The case is live.
     show()
     fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Week' })))
-    await screen.findByText('Marchetti')
+    await screen.findByText('Vellacott')
     // One Cancelled label on the week, and it belongs to Sturrock.
     expect(screen.getAllByText('Cancelled')).toHaveLength(1)
   })
 
   it('does not count a cancelled case in the day strip', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     // Tuesday has three bookings, one of them called off.
     const tuesday = screen.getByText('22').closest('button')
     expect(tuesday).toHaveTextContent('2')
@@ -230,21 +230,21 @@ describe('what the calendar says, and only that', () => {
 describe('following the calendar', () => {
   it('picks up an edit without a reload', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
 
-    events = [{ ...BOOKINGS[0], summary: 'Chalmers DIPLOMAT + E4 Cages - Fowler (Ben)' }]
+    events = [{ ...BOOKINGS[0], summary: 'Mardon DIPLOMAT + E4 Cages - Fowler (Ben)' }]
     await vi.advanceTimersByTimeAsync(61000)
     await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
   })
 
   it('keeps the week on screen when a check fails', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
 
     global.fetch = vi.fn(() => Promise.reject(new Error('offline')))
     await vi.advanceTimersByTimeAsync(61000)
     // The list survives the wifi dropping, and says it is not updating.
-    expect(screen.getByText('Chalmers')).toBeInTheDocument()
+    expect(screen.getByText('Mardon')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText(/Not updating/)).toBeInTheDocument())
   })
 })
@@ -280,7 +280,7 @@ describe('the header', () => {
     // week range with its arrows — which on a phone left very little of the week
     // itself on screen.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /Previous week/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Next week/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Today$/ })).not.toBeInTheDocument()
@@ -291,7 +291,7 @@ describe('the header', () => {
     // were a 19px glyph with 2px of padding — roughly 23 by 22 — and they are
     // the most-used control on the screen. 44 is Apple's minimum.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     for (const name of [/Previous week/, /Next week/]) {
       const { width, height } = screen.getByRole('button', { name }).style
       expect(`${name} width`, `${name}`).toBeTruthy()
@@ -304,7 +304,7 @@ describe('the header', () => {
     // The old control named its destination, not its state: it read "Day" while
     // showing the week. Two segments with one selected says both at once.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.getByRole('tab', { name: 'Day' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Week' })).toHaveAttribute('aria-selected', 'false')
 
@@ -316,7 +316,7 @@ describe('the header', () => {
   it('only offers a way back to today when you have left it', async () => {
     // Tapping the week range to come back was an affordance nobody could see.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Next week/ }))
@@ -328,7 +328,7 @@ describe('the header', () => {
     // was positioned against a container that scrolls. A row cannot drift, and
     // cannot float over the last case of a long list either.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     const add = screen.getByRole('button', { name: /Add a booking/ })
     expect(add).toBeInTheDocument()
     expect(add.style.position).not.toBe('absolute')
@@ -338,7 +338,7 @@ describe('the header', () => {
   it('names the day it sits under, and opens the sheet on it', async () => {
     // One fewer thing to choose for the booking somebody is most likely making.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     const add = screen.getByRole('button', { name: /Add a booking to Monday 21 September/ })
     fireEvent.click(add)
     expect(await screen.findByDisplayValue('2026-09-21')).toBeInTheDocument()
@@ -376,12 +376,12 @@ describe('when a sub-calendar cannot be read', () => {
   it('still shows the bookings it did get', async () => {
     withLeaveUnreadable()
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
   })
 
   it('says nothing when both calendars read fine', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.queryByText(/could not be read/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Leave is not showing/)).not.toBeInTheDocument()
   })
@@ -404,7 +404,7 @@ describe('who is away', () => {
     events = [...BOOKINGS, LEAVE]
     show()
     const leave = await screen.findByText('Ben - ANNUAL LEAVE')
-    const firstCase = screen.getByText('Chalmers')
+    const firstCase = screen.getByText('Mardon')
     // Node.compareDocumentPosition: 4 means the argument follows in the document.
     expect(leave.compareDocumentPosition(firstCase) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy()
@@ -438,7 +438,7 @@ describe('the week header fits a phone', () => {
 
   it('shortens the months when a week straddles two', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Next week/ }))
     await waitFor(() => expect(screen.getByText('28 Sep – 4 Oct')).toBeInTheDocument())
   })
@@ -462,7 +462,7 @@ describe('the number under each date', () => {
 
   it('reads as a count to a screen reader too', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     // Monday 21 September carries one case in the fixtures.
     expect(screen.getByRole('button', { name: /Monday 21 September, 1 case$/ }))
       .toBeInTheDocument()
@@ -500,7 +500,7 @@ describe('the running order', () => {
     show()
     await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
     expect(screen.getByText(/Move a case with the arrows/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Move Chalmers up the list')).toBeDisabled()
+    expect(screen.getByLabelText('Move Mardon up the list')).toBeDisabled()
     expect(screen.getByLabelText('Move Pearse down the list')).toBeDisabled()
   })
 
@@ -540,12 +540,12 @@ describe('the running order', () => {
 
     const order = () => [...container.querySelectorAll('button')]
       .map(b => b.textContent)
-      .filter(t => t.includes('Chalmers') || t.includes('Pearse'))
-      .map(t => (t.includes('Chalmers') ? 'Chalmers' : 'Pearse'))
+      .filter(t => t.includes('Mardon') || t.includes('Pearse'))
+      .map(t => (t.includes('Mardon') ? 'Mardon' : 'Pearse'))
 
-    expect(order()).toEqual(['Chalmers', 'Pearse'])
+    expect(order()).toEqual(['Mardon', 'Pearse'])
     fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
-    await waitFor(() => expect(order()).toEqual(['Pearse', 'Chalmers']))
+    await waitFor(() => expect(order()).toEqual(['Pearse', 'Mardon']))
   })
 
   it('leaves a called-off case out of the order', async () => {
@@ -576,7 +576,7 @@ describe('the running order', () => {
       { day: '22', at: '11:00' })
     events = [...BOOKINGS, alsoTomorrow]
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
 
     await waitFor(() => expect(screen.getByText('Vowles')).toBeInTheDocument())
@@ -593,37 +593,37 @@ describe('the running order', () => {
   it('does not offer to reorder a hospital with one case', async () => {
     events = BOOKINGS
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.queryByText(/Move a case with the arrows/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/up the list/)).not.toBeInTheDocument()
   })
 })
 
 describe('where we are on the hospital\'s list', () => {
-  // The two cases that showed the first attempt was wrong. Barr is first up but
-  // on an afternoon list. Thompson is second up on JPW's list behind a PLIF
+  // The two cases that showed the first attempt was wrong. Hollis is first up but
+  // on an afternoon list. Pennant is second up on JPW's list behind a PLIF
   // using KT Medical kit we are not at, so we are wanted about one o'clock.
   // Neither is expressible by moving our own cases past each other, and both
   // are the only case of ours at that hospital that day.
 
-  const barr = ev('c20', 'Barr DIPLOMAT - Dubey',
-    'Surg: Dubey\nPt: Barr\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)\n'
+  const hollis = ev('c20', 'Hollis DIPLOMAT - Dubey',
+    'Surg: Dubey\nPt: Hollis\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)\n'
     + 'List: 1st · afternoon',
     { day: '22' })
 
-  const thompson = ev('c21', 'Thompson DIPLOMAT - JPW',
-    'Surg: JPW\nPt: Thompson\nHosp: Calvary\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)\n'
+  const pennant = ev('c21', 'Pennant DIPLOMAT - JPW',
+    'Surg: JPW\nPt: Pennant\nHosp: Calvary\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)\n'
     + 'List: 2nd · afternoon · from 1pm · after a PLIF — KT Medical, not ours',
     { day: '22', location: 'Calvary' })
 
-  beforeEach(() => { events = [...BOOKINGS, barr, thompson] })
+  beforeEach(() => { events = [...BOOKINGS, hollis, pennant] })
 
   it('reads the place off the booking and says it on the card', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
 
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
     expect(screen.getByText('1st on the list · PM')).toBeInTheDocument()
     expect(screen.getByText('2nd on the list · PM · from 1pm')).toBeInTheDocument()
     expect(screen.getByText('after a PLIF — KT Medical, not ours')).toBeInTheDocument()
@@ -634,21 +634,21 @@ describe('where we are on the hospital\'s list', () => {
     // repeated underneath the card as prose is exactly the raw-text noise the
     // app was asked to stop showing.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
     expect(screen.queryByText(/^List:/)).not.toBeInTheDocument()
   })
 
   it('offers to set it even where it is our only case at that hospital', async () => {
-    // The gap that made the arrows useless: nothing to move Thompson past.
+    // The gap that made the arrows useless: nothing to move Pennant past.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
 
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
-    expect(screen.getByLabelText('Set where Thompson is on the list')).toBeInTheDocument()
-    expect(screen.getByLabelText('Set where Barr is on the list')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
+    expect(screen.getByLabelText('Set where Pennant is on the list')).toBeInTheDocument()
+    expect(screen.getByLabelText('Set where Hollis is on the list')).toBeInTheDocument()
   })
 
   it('saves what the sheet was told, onto the booking', async () => {
@@ -658,11 +658,11 @@ describe('where we are on the hospital\'s list', () => {
         : { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
     ))
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByLabelText('Set where Thompson is on the list'))
+    fireEvent.click(screen.getByLabelText('Set where Pennant is on the list'))
     await waitFor(() => expect(screen.getByText('List order')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: '3rd' }))
@@ -684,32 +684,32 @@ describe('setting the list order on the day you are looking at', () => {
   // Reported as "nothing has changed in the app" while looking at Thursday in
   // the day view. Both views have to offer it, and on a day where we have one
   // case at a hospital, which is the ordinary shape of a day.
-  const alone = ev('c30', 'Barr DIPLOMAT - Dubey',
-    'Surg: Dubey\nPt: Barr\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)',
+  const alone = ev('c30', 'Hollis DIPLOMAT - Dubey',
+    'Surg: Dubey\nPt: Hollis\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)',
     { day: '24' })
 
   beforeEach(() => { events = [...BOOKINGS, alone] })
 
   it('offers it in the day view', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     // Thursday, where the report came from.
     fireEvent.click(screen.getByRole('button', { name: /Thursday 24 September/ }))
-    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
-    expect(screen.getByLabelText('Set where Barr is on the list')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
+    expect(screen.getByLabelText('Set where Hollis is on the list')).toBeInTheDocument()
   })
 
   it('offers it in the week view', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
-    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
-    expect(screen.getByLabelText('Set where Barr is on the list')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
+    expect(screen.getByLabelText('Set where Hollis is on the list')).toBeInTheDocument()
   })
 
   it('offers it on a cancelled-free day with several hospitals', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
     await waitFor(() => expect(screen.getByText('Larkin')).toBeInTheDocument())
     // Calvary, one case, no arrows possible — and still settable.
@@ -768,8 +768,8 @@ describe('saving a list order and seeing it', () => {
   // The write reached Google; the reply was discarded as identical, because the
   // signature the plan is compared on did not mention the running order. The
   // whole round trip has to be exercised, not just the request.
-  const withPlace = (id, place) => ev(id, 'Thompson DIPLOMAT - JPW',
-    'Surg: JPW\nPt: Thompson\nHosp: RHH\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)'
+  const withPlace = (id, place) => ev(id, 'Pennant DIPLOMAT - JPW',
+    'Surg: JPW\nPt: Pennant\nHosp: RHH\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)'
     + (place ? `\nList: ${place}` : ''),
     { day: '21', at: '11:00' })
 
@@ -788,10 +788,10 @@ describe('saving a list order and seeing it', () => {
 
   it('shows the order on the card once it is saved', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
     expect(screen.queryByText(/on the list/)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText('Set where Thompson is on the list'))
+    fireEvent.click(screen.getByLabelText('Set where Pennant is on the list'))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'List order' })).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: '2nd' }))
@@ -807,8 +807,8 @@ describe('saving a list order and seeing it', () => {
 
   it('offers to change it rather than set it, once there is one', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Thompson')).toBeInTheDocument())
-    fireEvent.click(screen.getByLabelText('Set where Thompson is on the list'))
+    await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Set where Pennant is on the list'))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'List order' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: '2nd' }))
     fireEvent.click(screen.getByRole('button', { name: /Save list order/ }))
@@ -830,8 +830,8 @@ describe('getting back to today from a week that is not this one', () => {
   const onFriday = () => {
     vi.setSystemTime(FRIDAY)
     events = [
-      ev('f1', 'Barr DIPLOMAT - Dubey',
-        'Surg: Dubey\nPt: Barr\nHosp: RHH\nKit: Diplomat (Consignment)',
+      ev('f1', 'Hollis DIPLOMAT - Dubey',
+        'Surg: Dubey\nPt: Hollis\nHosp: RHH\nKit: Diplomat (Consignment)',
         { day: '02' }),
       ev('n1', 'Kemp DIPLOMAT - Thani',
         'Surg: Thani\nPt: Kemp\nHosp: RHH\nKit: Diplomat (Consignment)',
@@ -859,7 +859,7 @@ describe('getting back to today from a week that is not this one', () => {
     fireEvent.click(screen.getByText(/Back to today/i))
 
     // Friday's case, not next Monday's.
-    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
     expect(screen.queryByText('Kemp')).not.toBeInTheDocument()
   })
 
@@ -878,7 +878,7 @@ describe('getting back to today from a week that is not this one', () => {
     fireEvent.click(screen.getByLabelText(/next week/i))
     await waitFor(() => expect(screen.getByText(/Back to today/i)).toBeInTheDocument())
     fireEvent.click(screen.getByText(/Back to today/i))
-    await waitFor(() => expect(screen.getByText('Barr')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
   })
 })
 
@@ -901,7 +901,7 @@ describe('a case we have been told about but are not needed at', () => {
   })
 
   it('is not counted as a case anybody is going to', async () => {
-    // The count line is what the day is staffed from. Chalmers is the real
+    // The count line is what the day is staffed from. Mardon is the real
     // RHH case; Mathieson is the one we were only told about.
     show()
     await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
@@ -952,7 +952,7 @@ describe('getting back to today from another day of this week', () => {
   // button was pressed.
   it('offers the way back once you move off today', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     // Monday 21 September is today in these tests; move to Tuesday.
     fireEvent.click(screen.getByRole('button', { name: /Tuesday 22 September/ }))
     await waitFor(() => expect(screen.getByText(/Back to today/i)).toBeInTheDocument())
@@ -960,19 +960,19 @@ describe('getting back to today from another day of this week', () => {
 
   it('actually goes back', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Tuesday 22 September/ }))
-    await waitFor(() => expect(screen.getByText('Marchetti')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Vellacott')).toBeInTheDocument())
 
     fireEvent.click(screen.getByText(/Back to today/i))
     // Monday's case is back, Tuesday's is gone.
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
-    expect(screen.queryByText('Marchetti')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.queryByText('Vellacott')).not.toBeInTheDocument()
   })
 
   it('does not offer it while you are on today', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument()
   })
 
@@ -980,7 +980,7 @@ describe('getting back to today from another day of this week', () => {
     // A week view showing today does not need a way back to it — today is on
     // screen. The question is genuinely different in each view.
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
     await waitFor(() => expect(screen.getByText('Larkin')).toBeInTheDocument())
     expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument()
@@ -1074,7 +1074,7 @@ describe('the team leader on the day', () => {
   it('says nothing on a day nobody has been set for', async () => {
     global.fetch = leaderReplies(null)
     show()
-    await waitFor(() => expect(screen.getByText('Chalmers')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.queryByText(/team leader$/)).not.toBeInTheDocument()
   })
 

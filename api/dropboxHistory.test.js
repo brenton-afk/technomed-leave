@@ -25,7 +25,7 @@ beforeEach(() => {
           // The patient's own case.
           { metadata: { metadata: { '.tag': 'folder', name: 'Gupta_04102026_Thani_ACDF_RHH', path_display: '/p/Gupta_04102026_Thani_ACDF_RHH' } } },
           // A case belonging to the surgeon of the same name.
-          { metadata: { metadata: { '.tag': 'folder', name: 'Barr_11032024_Gupta_PLIF_Calvary', path_display: '/p/Barr_11032024_Gupta_PLIF_Calvary' } } }
+          { metadata: { metadata: { '.tag': 'folder', name: 'Hollis_11032024_Gupta_PLIF_Calvary', path_display: '/p/Hollis_11032024_Gupta_PLIF_Calvary' } } }
         ]
       })
     }
@@ -75,15 +75,15 @@ describe('patientHistory', () => {
       calls.push({ endpoint, body: JSON.parse(init.body) })
       if (endpoint === 'files/search_v2') {
         return reply({ matches: [
-          { metadata: { metadata: { '.tag': 'folder', name: 'Barr old notes', path_display: '/p/old' } } },
-          { metadata: { metadata: { '.tag': 'folder', name: 'Barr_11032024_Thani_ACDF_RHH', path_display: '/p/a' } } },
-          { metadata: { metadata: { '.tag': 'folder', name: 'Barr_04102026_Garg_PLIF_RHH', path_display: '/p/b' } } }
+          { metadata: { metadata: { '.tag': 'folder', name: 'Hollis old notes', path_display: '/p/old' } } },
+          { metadata: { metadata: { '.tag': 'folder', name: 'Hollis_11032024_Thani_ACDF_RHH', path_display: '/p/a' } } },
+          { metadata: { metadata: { '.tag': 'folder', name: 'Hollis_04102026_Garg_PLIF_RHH', path_display: '/p/b' } } }
         ] })
       }
       return reply({ entries: [] })
     })
     const { patientHistory } = await import('./_dropbox.js')
-    const { cases } = await patientHistory('Barr')
+    const { cases } = await patientHistory('Hollis')
     expect(cases.map(c => c.date)).toEqual(['2026-10-04', '2024-03-11', ''])
   })
 
@@ -95,13 +95,13 @@ describe('patientHistory', () => {
       calls.push({ endpoint, body: JSON.parse(init.body) })
       if (endpoint === 'files/search_v2') {
         return reply({ matches: [
-          { metadata: { metadata: { '.tag': 'folder', name: 'Barr_04102026_Garg_PLIF_RHH', path_display: '/p/b' } } }
+          { metadata: { metadata: { '.tag': 'folder', name: 'Hollis_04102026_Garg_PLIF_RHH', path_display: '/p/b' } } }
         ] })
       }
       return { ok: false, status: 500, text: async () => 'boom' }
     })
     const { patientHistory } = await import('./_dropbox.js')
-    const { cases } = await patientHistory('Barr')
+    const { cases } = await patientHistory('Hollis')
     expect(cases).toHaveLength(1)
     expect(cases[0].files).toEqual([])
   })
