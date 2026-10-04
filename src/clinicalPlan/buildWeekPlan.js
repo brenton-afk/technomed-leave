@@ -41,7 +41,12 @@ const KIT_ON_THE_MOVE = new RegExp(
 
 const PRIORITY_FLAG_RULES = [
   { kind: 'recurringStaffing', boxed: true, test: /late start|early finish|reduced hours|boy'?s week/i },
-  { kind: 'handover', boxed: false, test: /handover|team leader/i },
+  // "team leader" used to be in here, so a calendar entry naming one produced
+  // a claim that competed with the portal's. That is how Mat could be shown as
+  // Spine Team Leader during a week he was on TOIL: a stale entry nobody had
+  // moved, read as fact, next to a rota that said otherwise. The portal owns
+  // who the leader is; a handover is still a handover.
+  { kind: 'handover', boxed: false, test: /handover/i },
   // On-call is deliberately separate from travel. Both used to be one rule, which
   // is how "Brent on call" ended up in the week's opening paragraph beside a
   // conference in another state. It is a standing rota, so it belongs on its day
@@ -184,25 +189,43 @@ function caseCountLine(allCases, nonSurgeonItems) {
   return `${cases.length} case${cases.length === 1 ? '' : 's'} — ${breakdown}${suffix}`
 }
 
+// Morning, then anything nobody has told us about, then the afternoon.
+//
+// Not "known before unknown", which is what this did first and which read
+// backwards on a real day: Thursday has several RHH cases with no recorded
+// order and one Calvary case known to be an afternoon list, and ranking
+// unknown last put the afternoon one on top.
+//
+// An ordinary list starts in the morning and runs on, so a case nobody has
+// rung about belongs in the middle — after a list known to be first up, and
+// before one known to be after lunch.
+const MORNING = 0
+const UNKNOWN = 50
+const AFTERNOON = 100
+
 /**
  * How early a hospital's day starts, for ordering the groups.
  *
- * From the running order the team was given: morning before afternoon, then by
- * position. Only the cases somebody is actually going to count — a case we are
- * not needed at, or one called off, must not drag a hospital to the top of the
- * day on behalf of people who are not attending it.
- *
- * Infinity where nothing has been recorded, so a hospital whose order is known
- * sorts above one whose is not.
+ * Only the cases somebody is actually going to count — a case we are not
+ * needed at, or one called off, must not drag a hospital up or down the day on
+ * behalf of people who are not attending it.
  */
 function startsAt(cases) {
   const going = cases.filter(c => !c.cancelled && !c.notRequired)
+  const pool = going.length ? going : cases
+  if (!pool.length) return UNKNOWN
+
   let earliest = Infinity
-  for (const c of (going.length ? going : cases)) {
+  for (const c of pool) {
     const place = c.listPlace
-    if (!place?.session && !place?.position) continue
-    const session = place.session === 'afternoon' ? 1 : 0
-    earliest = Math.min(earliest, session * 100 + (place.position || 1))
+    const known = place?.session || place?.position
+    const base = !known ? UNKNOWN
+      : place.session === 'afternoon' ? AFTERNOON
+        : place.session === 'morning' ? MORNING
+          // A position with no session is an order within an ordinary day.
+          : UNKNOWN
+    const at = known && place.session ? base + (place.position || 1) : base
+    earliest = Math.min(earliest, at)
   }
   return earliest
 }

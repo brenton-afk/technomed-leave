@@ -714,3 +714,61 @@ describe('kit that has to be moved', () => {
     })
   }
 })
+
+describe('an afternoon list reads below one nobody has rung about', () => {
+  // Thursday: several RHH cases with no recorded order, and one Calvary case
+  // known to be an afternoon list. Ranking "known before unknown" put the
+  // afternoon one on top, which reads backwards — an ordinary list starts in
+  // the morning, so a case nobody has rung about belongs in the middle.
+  const ev = (id, summary, description, location) => ({
+    id, summary, description, location,
+    start: { dateTime: '2026-10-08T09:00:00+11:00' },
+    end: { dateTime: '2026-10-08T10:00:00+11:00' }
+  })
+  const WINDOW = {
+    startDate: '2026-10-05', endDate: '2026-10-11',
+    days: ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08',
+      '2026-10-09', '2026-10-10', '2026-10-11']
+  }
+  const order = events =>
+    buildWeekPlan(events, WINDOW, { generatedAt: '2026-10-04T00:00:00Z' })
+      .days[3].casesByHospital.map(g => g.hospital)
+
+  it('puts the known afternoon list last', () => {
+    expect(order([
+      ev('a', 'Nunan DIPLOMAT - Ibbett', 'Surg: Ibbett\nPt: Nunan\nHosp: RHH', 'RHH'),
+      ev('b', 'Reed DIPLOMAT - Ibbett', 'Surg: Ibbett\nPt: Reed\nHosp: RHH', 'RHH'),
+      ev('c', 'Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · afternoon', 'Calvary')
+    ])).toEqual(['RHH', 'CALVARY LENAH VALLEY'])
+  })
+
+  it('still puts a known morning list first', () => {
+    expect(order([
+      ev('a', 'Nunan DIPLOMAT - Ibbett', 'Surg: Ibbett\nPt: Nunan\nHosp: RHH', 'RHH'),
+      ev('c', 'Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
+  })
+
+  it('reads morning, then unknown, then afternoon', () => {
+    expect(order([
+      ev('a', 'Nunan DIPLOMAT - Ibbett',
+        'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nList: 1st · afternoon', 'RHH'),
+      ev('b', 'Lamb DIPLOMAT - Thani', 'Surg: Thani\nPt: Lamb', "Calvary St Luke's"),
+      ev('c', 'Pike DIPLOMAT - Dubey',
+        'Surg: Dubey\nPt: Pike\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'CALVARY ST LUKES', 'RHH'])
+  })
+
+  it('does not let a cancelled afternoon case sink a hospital', () => {
+    // The live case is the one that decides where the hospital reads.
+    expect(order([
+      ev('a', 'Nunan DIPLOMAT - Ibbett', 'Surg: Ibbett\nPt: Nunan\nHosp: RHH', 'RHH'),
+      ev('b', 'CANCELLED Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · afternoon', 'Calvary'),
+      ev('c', 'Reed DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Reed\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
+  })
+})
