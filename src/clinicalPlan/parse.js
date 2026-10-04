@@ -872,7 +872,15 @@ export function cleanOperation(text, o = {}) {
   const kept = trimJoiners(
     stripSupply(text).split(/\s+/).filter(word => {
       const bare = word.toLowerCase().replace(/[^a-z0-9]/g, '')
-      return bare && !drop.has(bare)
+      // A token with no letters or digits cannot be a system name, which is
+      // the only thing this filter is for — so it is kept.
+      //
+      // It used to be dropped, and "C3/4 +/- C4/5" came out as "C3/4 C4/5".
+      // That is not a tidier version of the same operation, it is a different
+      // one: +/- means the second level may not be done at all, and reading it
+      // as two levels changes what gets brought and what gets opened.
+      if (!bare) return word.length > 0
+      return !drop.has(bare)
     }))
   const rebuilt = tidy(truncate ? toLastClinical(kept.join(' ')) : kept.join(' '))
   if (!rebuilt) return undefined

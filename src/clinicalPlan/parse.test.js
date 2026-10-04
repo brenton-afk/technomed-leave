@@ -949,3 +949,45 @@ describe('telling the Calvary hospitals apart', () => {
     expect(at('Royal Hobart')).toBe(HOSPITALS.RHH)
   })
 })
+
+describe('an operation is transcribed as written', () => {
+  // Bayly, Friday 9 October: "C3/4 +/- C4/5" came out as "C3/4 C4/5".
+  //
+  // Not a tidier version of the same operation — a different one. "+/-" means
+  // the second level may not be done at all, and reading it as two levels
+  // changes what is brought and what is opened.
+  //
+  // The cause: the filter that removes system names from an operation reduces
+  // each word to its letters and digits, and dropped anything left empty. A
+  // token with no letters or digits cannot be a system name, so it was never
+  // this filter's business.
+  const operationOf = procedure => readBooking(
+    'Bayly DIPLOMAT - Thani',
+    `Surg: Thani\nPt: Bayly\nProcedure: ${procedure}\nKit: Diplomat (Consignment)`
+  ).operation
+
+  for (const written of [
+    'C3/4 +/- C4/5',
+    'C3/4 +/- C4/5 ACDF',
+    'C5/6 ACDF +/- C6/7',
+    'L4/5 PLIF ± L5/S1',
+    'L4/5 TLIF (± L5/S1)',
+    'Revision L3-L5 PSF +/- extension to S1',
+    'L5/S1 PSF and PLIF',
+    'C3-T2 cervical fixation, C4-C7 Lami'
+  ]) {
+    it(`keeps "${written}" exactly`, () => {
+      expect(operationOf(written)).toBe(written)
+    })
+  }
+
+  it('still takes the system name out of the operation', () => {
+    // Which is what the filter is for. "Diplomat" belongs on the kit line and
+    // appeared on both before it existed.
+    expect(operationOf('L4/5 PLIF Diplomat')).toBe('L4/5 PLIF')
+  })
+
+  it('still keeps a procedure word that is also a product name', () => {
+    expect(operationOf('L5/S1 PSF and PLIF')).toMatch(/PLIF/)
+  })
+})
