@@ -49,15 +49,39 @@ describe('withAlpha', () => {
     const ibbett = washFor({ surgeon: 'Ibbett' })
     const garg = washFor({ surgeon: 'Garg' })
     expect(ibbett).not.toBe(garg)
-    expect(ibbett).toMatch(/^rgba\(/)
+    // A hex now, not rgba. Fading toward white with alpha faded the
+    // saturation with it and collapsed two greens into one — see
+    // paletteDistance.test.js.
+    expect(ibbett).toMatch(/^#[0-9a-f]{6}$/i)
   })
 
-  it('stays weak enough to read dark text over', () => {
+  it('stays pale enough to read dark text over', () => {
     // Not decoration. These cards carry a surname, an operation and a kit
     // list, and a tint heavy enough to look pretty is heavy enough to hurt.
-    const alpha = Number(/, ([\d.]+)\)$/.exec(washFor({ surgeon: 'Atallah' }))[1])
-    expect(alpha).toBeLessThanOrEqual(0.14)
-    expect(alpha).toBeGreaterThan(0)
+    //
+    // Measured as contrast rather than as an alpha. The alpha was a proxy for
+    // this and a poor one — it also controlled how distinguishable two
+    // surgeons were, so the number could not be raised to separate Sage from
+    // Basil without this test deciding the text had become unreadable.
+    const luminance = hex => {
+      const n = parseInt(hex.slice(1), 16)
+      // eslint-disable-next-line no-bitwise
+      const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+        .map(v => v / 255)
+        .map(c => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const contrast = (a, b) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+      return (hi + 0.05) / (lo + 0.05)
+    }
+    for (const surgeon of ['Atallah', 'Thani', 'Gupta', 'Garg', 'JPW', 'Fowler']) {
+      const bg = washFor({ surgeon })
+      // Body ink, and the muted grey the operation line is set in. 4.5:1 is
+      // the WCAG AA floor for body text; the muted one is the tighter test.
+      expect(contrast('#111827', bg), `${surgeon} body text`).toBeGreaterThan(7)
+      expect(contrast('#4B5563', bg), `${surgeon} caption text`).toBeGreaterThan(4.5)
+    }
   })
 })
 

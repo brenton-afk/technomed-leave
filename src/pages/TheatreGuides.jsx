@@ -16,7 +16,38 @@ import { colour, text, space, radius } from '../design/tokens.js'
 // follow those. Drawing it in the app also means the search and the grouping
 // behave like the rest of the portal.
 
-const GROUP_ORDER = ['Spine', 'Orthopaedics', 'Navigation', 'Restricted']
+// ─── Grouped by who we order from ────────────────────────────────────────────
+// It used to be Spine / Orthopaedics / Navigation, which put eight of the nine
+// spine guides in one undifferentiated list. Nobody looks for "a spine guide".
+// They look for the Signus tray, or whatever KT Medical sent for Thursday —
+// the distributor is how the kit arrives, who gets rung when a tray is short,
+// and who the usage sheet goes to afterwards.
+//
+// Worth saying once: the distributor is not the manufacturer. Shoreline and
+// Mariner are SeaSpine systems bought through Device Technologies; Firebird,
+// Forza XP and LONESTAR are Orthofix through KT Medical; Dakota, REFORM and
+// Global PLIF are through E4 Surgical. The maker stays on each card, because
+// it is what the rep sees printed on the tray.
+//
+// Spine first, in the order the team lists them. Navigation, Orthopaedics and
+// Restricted keep their own sections at the end: Brainlab is a service rather
+// than a tray, and Surgeon Preferences is ours.
+const DISTRIBUTOR_ORDER = ['signus', 'device', 'e4', 'kt']
+
+const DISTRIBUTOR_NAMES = {
+  signus: 'Signus',
+  device: 'Device Technologies',
+  e4: 'E4 Surgical',
+  kt: 'KT Medical',
+  globus: 'Nuvasive/Globus'
+}
+
+// Spine stays in this list even though every spine guide is tagged with a
+// distributor today. It is the fallback: an untagged guide has to land
+// somewhere visible, and dropping Spine from here made DIPLOMAT disappear from
+// the app entirely the moment it lost its tag. A guide in the wrong section is
+// a tidying job; a guide nobody can find is a guide that does not exist.
+const GROUP_ORDER = ['Spine', 'Navigation', 'Orthopaedics', 'Restricted']
 
 /** One guide, open full-screen over the list. */
 function GuideView({ guide, user, onClose }) {
@@ -138,11 +169,22 @@ export default function TheatreGuides({ user, onBack }) {
 
   const needle = query.trim().toLowerCase()
   const matches = g => !needle
-    || `${g.name} ${g.maker} ${g.group}`.toLowerCase().includes(needle)
+    || `${g.name} ${g.maker} ${g.group} ${DISTRIBUTOR_NAMES[g.distributor] || ''}`
+      .toLowerCase().includes(needle)
 
   const guides = (data?.guides || []).filter(matches)
   const coming = (data?.coming || []).filter(matches)
-  const groups = GROUP_ORDER.filter(group => guides.some(g => g.group === group))
+  // A guide with a distributor is listed under it; everything else falls back
+  // to its old group, so adding a guide and forgetting to tag it makes it
+  // appear in the wrong place rather than disappear.
+  const byDistributor = DISTRIBUTOR_ORDER
+    .filter(key => guides.some(g => g.distributor === key))
+  const extras = [...new Set(guides
+    .map(g => g.distributor)
+    .filter(key => key && !DISTRIBUTOR_ORDER.includes(key)))]
+  const distributors = [...byDistributor, ...extras]
+  const groups = GROUP_ORDER.filter(group =>
+    guides.some(g => !g.distributor && g.group === group))
 
   return (
     <Page>
@@ -167,10 +209,19 @@ export default function TheatreGuides({ user, onBack }) {
           <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>
         )}
 
+        {distributors.map(key => (
+          <div key={key}>
+            <SectionLabel>{DISTRIBUTOR_NAMES[key] || key}</SectionLabel>
+            {guides.filter(g => g.distributor === key).map(g => (
+              <GuideCard key={g.slug} guide={g} onOpen={setOpen} />
+            ))}
+          </div>
+        ))}
+
         {groups.map(group => (
           <div key={group}>
             <SectionLabel>{group}</SectionLabel>
-            {guides.filter(g => g.group === group).map(g => (
+            {guides.filter(g => !g.distributor && g.group === group).map(g => (
               <GuideCard key={g.slug} guide={g} onOpen={setOpen} />
             ))}
           </div>

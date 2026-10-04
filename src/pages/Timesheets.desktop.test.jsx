@@ -118,3 +118,121 @@ describe('entering hours on a phone', () => {
     expect(document.querySelectorAll('input[inputmode="decimal"]').length).toBe(0)
   })
 })
+
+describe('typing a decimal, one key at a time', () => {
+  beforeEach(() => widthOf(1680))
+
+  // "I can't enter a decimal point in the desktop version, it won't let me put
+  // in 7.6 for example."
+  //
+  // The test above sets "7.6" in a single change event and passed happily,
+  // which is why this survived: nobody types a number in one event. The cell
+  // showed `value`, and the parent ran Number(raw) on every keystroke — so
+  // "7." became Number("7.") = 7, and the point was wiped on the next render.
+  // A full day is 7.6 hours, so the one number everybody needed most was the
+  // one that could not be typed.
+  const type = (box, keys) => {
+    let far = ''
+    for (const key of keys) {
+      far += key
+      fireEvent.change(box, { target: { value: far } })
+    }
+  }
+
+  const firstCell = async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ordinary Hours')).toBeInTheDocument())
+    return document.querySelectorAll('input[inputmode="decimal"]')[0]
+  }
+
+  it('keeps the point while the rest of the number is still coming', async () => {
+    const box = await firstCell()
+    type(box, '7.')
+    await waitFor(() => expect(box.value).toBe('7.'))
+  })
+
+  it('gets all the way to 7.6', async () => {
+    const box = await firstCell()
+    type(box, '7.6')
+    await waitFor(() => expect(box.value).toBe('7.6'))
+  })
+
+  it('handles a number typed with no leading digit', async () => {
+    const box = await firstCell()
+    type(box, '.5')
+    await waitFor(() => expect(box.value).toBe('.5'))
+  })
+
+  it('settles to the stored number once you leave the cell', async () => {
+    const box = await firstCell()
+    type(box, '7.60')
+    fireEvent.blur(box)
+    await waitFor(() => expect(box.value).toBe('7.6'))
+  })
+
+  it('still refuses a second point', async () => {
+    const box = await firstCell()
+    type(box, '7.6')
+    fireEvent.change(box, { target: { value: '7.6.' } })
+    await waitFor(() => expect(box.value).toBe('7.6'))
+  })
+
+  it('counts a half-typed number towards the total as the number so far', async () => {
+    // "7." is seven hours until the 6 arrives. The fortnight total keeping up
+    // while you type is the whole reason the parent still gets a number.
+    const box = await firstCell()
+    type(box, '7.')
+    await waitFor(() => expect(screen.getAllByText(/^7h?$|7\.0/).length).toBeGreaterThan(0))
+  })
+})
+
+describe('putting a wrong number back', () => {
+  beforeEach(() => widthOf(1680))
+
+  it('offers nothing to undo before anything is typed', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ordinary Hours')).toBeInTheDocument())
+    expect(screen.queryByText(/Undo last change/)).not.toBeInTheDocument()
+  })
+
+  it('puts a cell back the way it was', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ordinary Hours')).toBeInTheDocument())
+    const box = document.querySelectorAll('input[inputmode="decimal"]')[0]
+    fireEvent.change(box, { target: { value: '7.6' } })
+    fireEvent.blur(box)
+
+    fireEvent.click(await screen.findByText(/Undo last change/))
+    await waitFor(() => expect(box.value).toBe(''))
+  })
+
+  it('undoes one cell per press, not one keystroke', async () => {
+    // Typing "7.6" fires three changes. An undo that walked back through "7."
+    // and "7" would take three presses to clear one number.
+    show()
+    await waitFor(() => expect(screen.getByText('Ordinary Hours')).toBeInTheDocument())
+    const boxes = document.querySelectorAll('input[inputmode="decimal"]')
+    for (const key of ['7', '7.', '7.6']) {
+      fireEvent.change(boxes[0], { target: { value: key } })
+    }
+    fireEvent.change(boxes[1], { target: { value: '4' } })
+
+    fireEvent.click(await screen.findByText(/Undo last change/))
+    await waitFor(() => expect(boxes[1].value).toBe(''))
+    // The first cell is untouched: that was a separate step.
+    expect(boxes[0].value).toBe('7.6')
+
+    fireEvent.click(screen.getByText(/Undo last change/))
+    await waitFor(() => expect(boxes[0].value).toBe(''))
+  })
+
+  it('stops offering an undo once everything is back', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ordinary Hours')).toBeInTheDocument())
+    const box = document.querySelectorAll('input[inputmode="decimal"]')[0]
+    fireEvent.change(box, { target: { value: '7.6' } })
+    fireEvent.click(await screen.findByText(/Undo last change/))
+    await waitFor(() =>
+      expect(screen.queryByText(/Undo last change/)).not.toBeInTheDocument())
+  })
+})

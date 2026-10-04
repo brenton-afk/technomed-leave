@@ -116,3 +116,62 @@ describe('opening one', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /All guides/ })).not.toBeInTheDocument())
   })
 })
+
+describe('grouped by who we order from', () => {
+  // "Organise the theatre guides into distributors." The old grouping put
+  // eight of the nine spine guides in one undifferentiated list. Nobody looks
+  // for "a spine guide" — they look for the Signus tray, or whatever KT
+  // Medical sent for Thursday.
+  const TAGGED = {
+    guides: [
+      { slug: 'diplomat', distributor: 'signus', name: 'DIPLOMAT', maker: 'SIGNUS', group: 'Spine' },
+      { slug: 'athlet-ascot', distributor: 'signus', name: 'ATHLET + ASCOT', maker: 'SIGNUS', group: 'Spine' },
+      { slug: 'mariner', distributor: 'device', name: 'MARINER MIS', maker: 'SeaSpine', group: 'Spine' },
+      { slug: 'firebird-forza', distributor: 'kt', name: 'Firebird NXG + Forza XP', maker: 'Orthofix', group: 'Spine' },
+      { slug: 'orphan', name: 'Something Untagged', maker: 'Somebody', group: 'Spine' },
+      { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation' }
+    ],
+    coming: []
+  }
+
+  const showTagged = () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => TAGGED }))
+    return render(<TheatreGuides user={{ token: 'tok' }} onBack={() => {}} />)
+  }
+
+  it('heads each section with the distributor, not the manufacturer', async () => {
+    showTagged()
+    await waitFor(() => expect(screen.getByText('DIPLOMAT')).toBeInTheDocument())
+    // SeaSpine makes Mariner; we buy it from Device Technologies. KT Medical
+    // sells us Orthofix. The heading has to be who gets rung.
+    expect(screen.getByText('Device Technologies')).toBeInTheDocument()
+    expect(screen.getByText('KT Medical')).toBeInTheDocument()
+    expect(screen.getByText('Signus')).toBeInTheDocument()
+  })
+
+  it('puts the two Signus systems together', async () => {
+    const { container } = showTagged()
+    await waitFor(() => expect(screen.getByText('DIPLOMAT')).toBeInTheDocument())
+    const text = container.textContent
+    expect(text.indexOf('Signus')).toBeLessThan(text.indexOf('DIPLOMAT'))
+    expect(text.indexOf('DIPLOMAT')).toBeLessThan(text.indexOf('Device Technologies'))
+    expect(text.indexOf('ATHLET + ASCOT')).toBeLessThan(text.indexOf('Device Technologies'))
+  })
+
+  it('never loses a guide that has no distributor on it', async () => {
+    // The failure that actually happened while this was being written: the
+    // fallback section was removed, and every untagged guide vanished from
+    // the app rather than appearing in the wrong place.
+    showTagged()
+    await waitFor(() => expect(screen.getByText('Something Untagged')).toBeInTheDocument())
+    expect(screen.getByText('Brainlab Navigation')).toBeInTheDocument()
+  })
+
+  it('finds a guide by its distributor', async () => {
+    showTagged()
+    await waitFor(() => expect(screen.getByText('MARINER MIS')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Search the guides'), { target: { value: 'device' } })
+    expect(screen.getByText('MARINER MIS')).toBeInTheDocument()
+    expect(screen.queryByText('DIPLOMAT')).not.toBeInTheDocument()
+  })
+})

@@ -470,8 +470,12 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
       opacity: off ? 0.55 : spare ? 0.72 : 1
     }}>
     <div style={{ display: 'flex', gap: 7, alignItems: 'stretch' }}>
+      {/* Six, not three. The wash behind it has to stay pale enough to carry
+          dark text, and two close accents — Sage against Basil — survive best
+          at full strength, so the full-strength part of the card has to be
+          wide enough to actually read. */}
       <span aria-hidden="true" style={{
-        width: 3, flexShrink: 0,
+        width: 6, flexShrink: 0,
         background: off ? colour.inkFainter : accentForCase(surgicalCase)
       }} />
       <button type="button" onClick={() => onOpen?.(surgicalCase)}

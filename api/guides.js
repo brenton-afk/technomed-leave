@@ -22,6 +22,17 @@ import { requireSession } from './_auth.js'
 /**
  * The guides, by the slug used in the URL.
  *
+ * `maker` is who manufactures the system; `distributor` is who we order it
+ * from, and they are rarely the same company. Shoreline and Mariner are
+ * SeaSpine, bought through Device Technologies. Firebird and LONESTAR are
+ * Orthofix, bought through KT Medical. Dakota and REFORM are Precision Spine,
+ * bought through E4 Surgical.
+ *
+ * The team thinks in distributors — it is who gets rung when a tray is short
+ * and who the usage sheet is emailed to — so that is what the list is grouped
+ * by. The keys are the ones _distributors.js already routes usage by, rather
+ * than a second set of names that could drift away from it.
+ *
  * Listed rather than discovered from the directory. A typo in a folder name
  * should show up as a missing guide here, not as a page nobody can find, and an
  * unreviewed folder appearing on disk should not become a route.
@@ -32,15 +43,15 @@ import { requireSession } from './_auth.js'
  * accident.
  */
 export const GUIDES = [
-  { slug: 'truprofile', name: 'Shoreline TruProfile ACS', maker: 'SeaSpine', group: 'Spine', file: 'truprofile/index.html', revision: 'D0000975C' },
-  { slug: 'dakota', name: 'Dakota ACDF', maker: 'Precision Spine', group: 'Spine', file: 'dakota/index.html', revision: 'LBL-STG-047 Rev C' },
-  { slug: 'lonestar', name: 'LONESTAR CSA', maker: 'Orthofix', group: 'Spine', file: 'lonestar/index.html', revision: 'OP-83-9901-US Rev AA' },
-  { slug: 'athlet-ascot', name: 'ATHLET + ASCOT', maker: 'SIGNUS', group: 'Spine', file: 'athlet-ascot/index.html' },
-  { slug: 'reform-poct', name: 'REFORM POCT', maker: 'Precision Spine', group: 'Spine', file: 'reform-poct/index.html', revision: 'LBL-STG-033 Rev A' },
-  { slug: 'diplomat', name: 'DIPLOMAT', maker: 'SIGNUS', group: 'Spine', file: 'diplomat/index.html', revision: 'Rev. 2015-08' },
-  { slug: 'mariner', name: 'MARINER MIS', maker: 'SeaSpine', group: 'Spine', file: 'mariner/index.html', revision: 'RA-15122022-GT' },
-  { slug: 'firebird-forza', name: 'Firebird NXG + Forza XP', maker: 'Orthofix', group: 'Spine', file: 'firebird-forza/index.html', revision: 'NX-1706 · FX-1704' },
-  { slug: 'global-plif', name: 'Global PLIF GW', maker: 'Global Biomedica', group: 'Spine', file: 'global-plif/index.html', revision: 'Rev. 2020-05-12 v1.1' },
+  { slug: 'truprofile', distributor: 'device', name: 'Shoreline TruProfile ACS', maker: 'SeaSpine', group: 'Spine', file: 'truprofile/index.html', revision: 'D0000975C' },
+  { slug: 'dakota', distributor: 'e4', name: 'Dakota ACDF', maker: 'Precision Spine', group: 'Spine', file: 'dakota/index.html', revision: 'LBL-STG-047 Rev C' },
+  { slug: 'lonestar', distributor: 'kt', name: 'LONESTAR CSA', maker: 'Orthofix', group: 'Spine', file: 'lonestar/index.html', revision: 'OP-83-9901-US Rev AA' },
+  { slug: 'athlet-ascot', distributor: 'signus', name: 'ATHLET + ASCOT', maker: 'SIGNUS', group: 'Spine', file: 'athlet-ascot/index.html' },
+  { slug: 'reform-poct', distributor: 'e4', name: 'REFORM POCT', maker: 'Precision Spine', group: 'Spine', file: 'reform-poct/index.html', revision: 'LBL-STG-033 Rev A' },
+  { slug: 'diplomat', distributor: 'signus', name: 'DIPLOMAT', maker: 'SIGNUS', group: 'Spine', file: 'diplomat/index.html', revision: 'Rev. 2015-08' },
+  { slug: 'mariner', distributor: 'device', name: 'MARINER MIS', maker: 'SeaSpine', group: 'Spine', file: 'mariner/index.html', revision: 'RA-15122022-GT' },
+  { slug: 'firebird-forza', distributor: 'kt', name: 'Firebird NXG + Forza XP', maker: 'Orthofix', group: 'Spine', file: 'firebird-forza/index.html', revision: 'NX-1706 · FX-1704' },
+  { slug: 'global-plif', distributor: 'e4', name: 'Global PLIF GW', maker: 'Global Biomedica', group: 'Spine', file: 'global-plif/index.html', revision: 'Rev. 2020-05-12 v1.1' },
   { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation', file: 'brainlab/index.html' },
   { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', file: 'clavicle-2.7/index.html', revision: 'SE_825567 AF · 2025/07' },
   {
@@ -60,7 +71,7 @@ export const GUIDES = [
 // state one — shown as blank rather than invented, since this line is how anyone
 // tells whether a guide still matches the manufacturer's current document.
 export const COMING = [
-  { name: 'CYLOX ST', maker: 'SIGNUS', group: 'Spine' }
+  { name: 'CYLOX ST', maker: 'SIGNUS', group: 'Spine', distributor: 'signus' }
 ]
 
 const ROOT = join(process.cwd(), 'theatre-guides')

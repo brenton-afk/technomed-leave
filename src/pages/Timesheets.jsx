@@ -66,6 +66,32 @@ function isWeekend(index) { return index % 7 >= 5 }
  * typing replaces rather than appending to a number already in the box.
  */
 function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnter }) {
+  // What is being typed, which is not always a number yet.
+  //
+  // The bug this fixes: the cell showed `value`, and the parent turned every
+  // keystroke into Number(raw) before handing it back. Type "7", then ".", and
+  // the parent stored Number("7.") — which is 7 — so the point was wiped on
+  // the very next render. 7.6 was unreachable, and a full day is 7.6 hours, so
+  // the one number everybody needed most was the one that could not be typed.
+  //
+  // The draft holds the half-finished string while the cell has focus; the
+  // parent still gets a number, so the fortnight's total keeps up as you type.
+  //
+  // Declared above the branch below, not after it. A hook that only runs on
+  // one side of an early return changes the hook count when somebody drags a
+  // window across 1024px, and React takes the page down for it.
+  const [draft, setDraft] = useState(null)
+
+  // A value that no longer agrees with the draft came from somewhere else —
+  // an undo, or the standard-week fill — so the draft is stale and the cell
+  // would otherwise keep showing a number that has already been taken back.
+  // While typing, "7." and 7 agree, so this leaves the draft alone.
+  useEffect(() => {
+    if (draft !== null && Number(draft || 0) !== Number(value || 0)) setDraft(null)
+    // Only when the stored value moves. Watching the draft would undo typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
   if (!desktop) {
     return (
       <button onClick={onOpen}
@@ -86,17 +112,20 @@ function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnt
       ref={cellRef}
       type="text"
       inputMode="decimal"
-      value={value ?? ''}
+      value={draft ?? (value ?? '')}
       onFocus={e => e.target.select()}
+      onBlur={() => setDraft(null)}
       onKeyDown={e => {
-        if (e.key === 'Enter') { e.preventDefault(); onEnter?.() }
+        if (e.key === 'Enter') { e.preventDefault(); setDraft(null); onEnter?.() }
+        if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur() }
       }}
       onChange={e => {
         const raw = e.target.value.trim()
-        if (raw === '') return onSet('')
+        if (raw === '') { setDraft(''); return onSet('') }
         // Anything that is not a number is simply not entered — no error, no
         // flash. A stray keystroke in a grid of boxes should do nothing.
         if (!/^\d*\.?\d*$/.test(raw)) return
+        setDraft(raw)
         onSet(raw)
       }}
       style={{
@@ -387,7 +416,42 @@ export default function Timesheets({ user, onBack }) {
   const alreadySubmitted = history.find(r => r.periodStart === period?.start && r.status !== 'rejected')
   const rejected = history.find(r => r.periodStart === period?.start && r.status === 'rejected')
 
+  // ── Putting a wrong number back ──
+  // Asked for after an entry went in the wrong box. Everything here is a grid
+  // of near-identical cells and the whole thing is typed at speed, so landing
+  // a 7.6 on the wrong day or the wrong row is the normal mistake, not the
+  // rare one — and until now the only way back was to remember what had been
+  // there and retype it.
+  //
+  // One step per cell, not per keystroke. Typing "7.6" fires setCell three
+  // times, and an undo that walked back through "7." and "7" would take three
+  // presses to undo one number.
+  const past = useRef([])
+  const lastTouched = useRef('')
+  const [undoDepth, setUndoDepth] = useState(0)
+  const entriesRef = useRef(entries)
+  useEffect(() => { entriesRef.current = entries }, [entries])
+
+  const remember = useCallback(key => {
+    if (lastTouched.current === key) return   // same cell, still typing
+    lastTouched.current = key
+    past.current.push(entriesRef.current)
+    // Deep enough to cover a bad run of entries, bounded so a long session
+    // does not quietly accumulate a fortnight of snapshots.
+    if (past.current.length > 40) past.current.shift()
+    setUndoDepth(past.current.length)
+  }, [])
+
+  const undo = useCallback(() => {
+    const previous = past.current.pop()
+    setUndoDepth(past.current.length)
+    // The next edit starts a new step, even if it is the cell just restored.
+    lastTouched.current = ''
+    if (previous) setEntries(previous)
+  }, [])
+
   const setCell = useCallback((categoryKey, day, value) => {
+    remember(`${categoryKey}|${day}`)
     setEntries(prev => {
       const next = { ...prev, [categoryKey]: { ...(prev[categoryKey] || {}) } }
       if (!value) delete next[categoryKey][day]
@@ -395,7 +459,7 @@ export default function Timesheets({ user, onBack }) {
       if (!Object.keys(next[categoryKey]).length) delete next[categoryKey]
       return next
     })
-  }, [])
+  }, [remember])
 
   function addToCell(categoryKey, day, delta) {
     const current = Number(entries[categoryKey]?.[day] || 0)
@@ -656,6 +720,14 @@ export default function Timesheets({ user, onBack }) {
             style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: PURPLE, cursor: 'pointer' }}>
             🌙 On-call
           </button>
+          {/* Only once there is something to undo. A permanently greyed button
+              is a permanent invitation to wonder what it would have done. */}
+          {undoDepth > 0 && (
+            <button onClick={undo}
+              style={{ flex: '1 1 100%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: MUTED, cursor: 'pointer' }}>
+              ↩︎ Undo last change
+            </button>
+          )}
           {hasToniSplit && (
             <button onClick={() => setShowSplit(true)}
               style={{ flex: '1 1 100%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: TEAL, cursor: 'pointer' }}>

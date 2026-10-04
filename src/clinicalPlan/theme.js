@@ -266,18 +266,97 @@ function legibleOnWhite(hex) {
 // heavy enough to make them hard to read. 10% is enough to group a surgeon's
 // cases at a glance and not enough to fight the words.
 
-/** The hex a case is drawn in, as `rgba` at some strength. */
-export function washFor(surgicalCase, alpha = 0.1, dark = false) {
-  return withAlpha(accentForCase(surgicalCase, dark), alpha)
+/**
+ * The hex a case is drawn in, lightened for use as a card background.
+ *
+ * Not an alpha wash, which is what this was and why it had to change. Fading a
+ * colour toward white fades its saturation at the same rate, so at 10% every
+ * surgeon arrives at the same near-white and the hues that separate them are
+ * gone. Measured: Thani's teal and Gupta's green are 44 apart at full strength
+ * and 4 apart once washed — which is why they were reported as looking
+ * identical on a desktop. The palette was never the problem; the technique
+ * flattened it.
+ *
+ * So the lightness is raised and the saturation is deliberately held up. Same
+ * hue, so a surgeon keeps their colour and nobody learns a second palette, but
+ * the card stays a recognisable pale teal or pale green rather than a shade of
+ * white. The worst pair in the palette goes from 4 apart to 12.
+ *
+ * The lightness is mapped into a band rather than flattened to one value, and
+ * that part is load-bearing. Thani is Sage and Gupta is Basil — two greens
+ * from Google's own palette that share a hue and differ mainly in lightness.
+ * Flattening lightness to a constant threw away the only thing separating
+ * them: they came out 2.2 apart, which is why they were reported as identical.
+ * Mapping into [0.80, 0.93] keeps the order — Basil stays the darker green —
+ * and puts them 6.4 apart.
+ *
+ * That is better and it is still not much. Sage and Basil are only 20 apart at
+ * full strength, and no background pale enough to carry dark text can separate
+ * two colours that close. The durable fix is a different calendar colour for
+ * one of them; see paletteDistance.test.js, which measures this and says so.
+ *
+ * The band and the 80% saturation floor are where two things meet: as much
+ * separation as the palette allows, and body text at 10.7:1 with caption text
+ * at 4.6:1 on the darkest result — both still above the 4.5:1 floor.
+ */
+export function washFor(surgicalCase, dark = false) {
+  return paleVersionOf(accentForCase(surgicalCase, dark))
 }
 
 /**
- * A hex colour at a given opacity.
+ * A hex at high lightness with its saturation held up, as `#rrggbb`.
  *
- * Returned as rgba rather than an 8-digit hex: the cards sit on surfaces that
- * are themselves tinted, and rgba composites against whatever is behind it
- * while a hex with alpha behaves the same but reads as a typo in a diff.
+ * Distinct from lighten() above, which nudges a surgeon's accent for dark mode
+ * and must stay recognisable as the accent. This one is for backgrounds and
+ * goes much further.
  */
+export function paleVersionOf(hex, band = [0.8, 0.93], minSaturation = 0.8) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim())
+  // Anything unparseable stays transparent rather than becoming a guess. A
+  // case with no colour should look like a case with no colour.
+  if (!match) return 'transparent'
+  const n = parseInt(match[1], 16)
+  // eslint-disable-next-line no-bitwise
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => v / 255)
+  const [h, sat, light] = toHsl(rgb)
+  const [lo, hi] = band
+  return fromHsl(h, Math.max(sat, minSaturation), lo + (hi - lo) * light)
+}
+
+function toHsl([r, g, b]) {
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  if (max === min) return [0, 0, l]           // grey: no hue to keep
+  const d = max - min
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+  let h
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+  else if (max === g) h = ((b - r) / d + 2) / 6
+  else h = ((r - g) / d + 4) / 6
+  return [h, s, l]
+}
+
+function fromHsl(h, s, l) {
+  if (s === 0) {
+    const v = Math.round(l * 255)
+    return `#${[v, v, v].map(c => c.toString(16).padStart(2, '0')).join('')}`
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+  const p = 2 * l - q
+  const channel = t => {
+    let x = t
+    if (x < 0) x += 1
+    if (x > 1) x -= 1
+    if (x < 1 / 6) return p + (q - p) * 6 * x
+    if (x < 1 / 2) return q
+    if (x < 2 / 3) return p + (q - p) * (2 / 3 - x) * 6
+    return p
+  }
+  return `#${[channel(h + 1 / 3), channel(h), channel(h - 1 / 3)]
+    .map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('')}`
+}
+
 export function withAlpha(hex, alpha) {
   const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim())
   // Anything unparseable falls back to transparent rather than to a guess. A
