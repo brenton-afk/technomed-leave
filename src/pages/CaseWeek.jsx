@@ -9,7 +9,9 @@ import {
   resolveDefaultWeek, weekWindowFor, todayStr, parseDateStr, toDateStr,
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
 } from '../clinicalPlan/week.js'
-import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
+import {
+  accentForCase, accentTextForCase, NAVIGATION_ACCENT, washFor, withAlpha
+} from '../clinicalPlan/theme.js'
 import { useIsDesktop } from '../design/viewport.js'
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
@@ -129,6 +131,11 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
   // struck through — it is still going ahead, just without us.
   const spare = Boolean(surgicalCase.notRequired) && !off
   const bar = off ? colour.inkFainter : accentForCase(surgicalCase)
+  // The whole card carries the surgeon's colour, washed out, the way a
+  // calendar entry does. A 5px strip reads on a phone and disappears in a
+  // week column; a wash reads at any size. See washFor.
+  const wash = off ? 'transparent' : washFor(surgicalCase, 0.1)
+  const edge = off ? colour.line : withAlpha(bar, 0.35)
   const nameInk = off ? colour.inkFaint : accentTextForCase(surgicalCase)
   const ordering = typeof position === 'number' && Boolean(onMove)
   const place = describeListPlace(surgicalCase.listPlace)
@@ -137,7 +144,7 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
     <div
       style={{
         display: 'flex', width: '100%', gap: 0, padding: 0, alignItems: 'stretch',
-        background: colour.surface, border: `1px solid ${colour.line}`,
+        background: wash, border: `1px solid ${edge}`,
         borderRadius: radius.card, marginBottom: space.sm, overflow: 'hidden',
         opacity: busy ? 0.55 : spare ? 0.72 : 1, transition: 'opacity 120ms'
       }}>
@@ -362,13 +369,18 @@ function MoveButton({ dir, onMove, busy, label }) {
 /** Leave, hours, a meeting, a reminder — quieter than a case, and labelled. */
 function ItemRow({ item }) {
   const tone = KIND_TONE[item.kind] || KIND_TONE.other
+  // Washed in its own calendar colour, like the cases above it, so leave and
+  // kit jobs and on-call read as the same kind of object seen at a glance.
+  const hex = item.colourHex
   return (
     <div style={{
       display: 'flex', gap: 0, marginBottom: 6, overflow: 'hidden',
-      border: `1px solid ${colour.lineSoft}`, borderRadius: radius.control
+      background: hex ? withAlpha(hex, 0.09) : 'transparent',
+      border: `1px solid ${hex ? withAlpha(hex, 0.3) : colour.lineSoft}`,
+      borderRadius: radius.control
     }}>
       <span aria-hidden="true"
-        style={{ width: 3, background: item.colourHex || colour.line, flexShrink: 0 }} />
+        style={{ width: 3, background: hex || colour.line, flexShrink: 0 }} />
       <span style={{ padding: `${space.xs}px ${space.sm}px`, flex: 1, minWidth: 0 }}>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' }}>
           <span style={{ ...text('body'), color: colour.ink }}>{item.title || item.text}</span>
@@ -447,7 +459,9 @@ function WeekCase({ surgicalCase, onOpen }) {
       style={{
         display: 'flex', gap: 7, width: '100%', textAlign: 'left', cursor: 'pointer',
         padding: '6px 7px', marginBottom: 4, borderRadius: radius.control,
-        border: `1px solid ${colour.line}`, background: colour.surface,
+        // Same wash as the day card, so a surgeon looks the same in both.
+        border: `1px solid ${off ? colour.line : withAlpha(accentForCase(surgicalCase), 0.35)}`,
+        background: off ? 'transparent' : washFor(surgicalCase, 0.1),
         opacity: off ? 0.55 : spare ? 0.72 : 1
       }}>
       <span aria-hidden="true" style={{

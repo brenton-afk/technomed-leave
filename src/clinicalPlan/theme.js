@@ -249,3 +249,41 @@ function legibleOnWhite(hex) {
   legibleCache.set(hex, candidate)
   return candidate
 }
+
+// ─── Washing a card in its surgeon's colour ──────────────────────────────────
+// A booking used to say whose it was with a 5px strip down its left edge. That
+// reads at arm's length on a phone, where a card is most of the screen, and
+// stops reading at all in a week column where the strip is 5px of a 200px
+// card among forty others.
+//
+// So the whole card takes the colour, the way a calendar entry does — a wash
+// of it, not the colour itself. The shade and tone are the surgeon's; only the
+// strength changes, so Ibbett is still the same yellow and nobody has to learn
+// a second palette.
+//
+// Deliberately weak. These cards carry a patient's name, an operation and a
+// kit list in dark text, and a tint heavy enough to look decorative is a tint
+// heavy enough to make them hard to read. 10% is enough to group a surgeon's
+// cases at a glance and not enough to fight the words.
+
+/** The hex a case is drawn in, as `rgba` at some strength. */
+export function washFor(surgicalCase, alpha = 0.1, dark = false) {
+  return withAlpha(accentForCase(surgicalCase, dark), alpha)
+}
+
+/**
+ * A hex colour at a given opacity.
+ *
+ * Returned as rgba rather than an 8-digit hex: the cards sit on surfaces that
+ * are themselves tinted, and rgba composites against whatever is behind it
+ * while a hex with alpha behaves the same but reads as a typo in a diff.
+ */
+export function withAlpha(hex, alpha) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim())
+  // Anything unparseable falls back to transparent rather than to a guess. A
+  // case with no colour should look like a case with no colour.
+  if (!match) return 'transparent'
+  const n = parseInt(match[1], 16)
+  // eslint-disable-next-line no-bitwise
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+}
