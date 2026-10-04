@@ -78,12 +78,21 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
   )
 }
 
-export function Page({ children, style }) {
+/**
+ * A screen.
+ *
+ * `className="tm-wide"` turns off the reading measure for screens that
+ * genuinely want the whole window — a week laid out in columns needs every
+ * pixel, and capping it leaves exactly the bands either side that the measure
+ * was introduced to remove on screens of prose.
+ */
+export function Page({ children, style, className = '' }) {
   return (
     // `tm-page` is min-height:100%, not 100vh. #root is already exactly the
     // visible height, and measuring against the viewport a second time makes
     // every screen taller than the phone.
-    <div className="tm-page" style={{ background: colour.canvas, fontFamily: font, ...style }}>
+    <div className={`tm-page ${className}`.trim()}
+      style={{ background: colour.canvas, fontFamily: font, ...style }}>
       {children}
     </div>
   )

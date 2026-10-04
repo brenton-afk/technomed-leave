@@ -10,6 +10,7 @@ import {
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
 } from '../clinicalPlan/week.js'
 import { accentForCase, accentTextForCase, NAVIGATION_ACCENT } from '../clinicalPlan/theme.js'
+import { useIsDesktop } from '../design/viewport.js'
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
@@ -425,6 +426,72 @@ function Heading({ children }) {
 }
 
 /**
+ * The week as seven columns, for a desktop.
+ *
+ * A phone can only read a week as a list, so that is what this was everywhere —
+ * including on a 27in screen, where the same week became a very long scroll of
+ * phone-width cards with most of the glass empty beside them.
+ *
+ * Side by side, a week reads the way a calendar reads: Thursday being heavy and
+ * Tuesday being empty is visible without scrolling, which is most of what
+ * somebody opens the week to find out.
+ *
+ * The columns are the same day panels the phone uses. A column is simply
+ * narrower, and everything in it was already built for a narrow space.
+ */
+function WeekGrid({ plan, today, onPickDay, onOpen, onReorder, onSetPlace, leader }) {
+  return (
+    <div style={{
+      display: 'grid',
+      // minmax(0, 1fr), not 1fr: without it a long operation name pushes its
+      // column wider and the week stops being a grid.
+      gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+      gap: space.sm,
+      alignItems: 'start'
+    }}>
+      {(plan.days || []).map(day => {
+        const isToday = day.date === today
+        const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
+        return (
+          <div key={day.date} style={{
+            background: weekend ? 'transparent' : colour.surface,
+            border: `1px solid ${isToday ? colour.accent : colour.line}`,
+            borderRadius: radius.card,
+            overflow: 'hidden'
+          }}>
+            <button onClick={() => onPickDay(day.date)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+                border: 'none', padding: `${space.sm}px ${space.md}px`,
+                borderBottom: `1px solid ${colour.line}`,
+                background: isToday ? colour.accentSoft : 'transparent'
+              }}>
+              <span style={{
+                ...text('micro'), textTransform: 'uppercase', display: 'block',
+                color: isToday ? colour.accentDeep : colour.inkFaint
+              }}>
+                {weekdayName(day.date)}
+              </span>
+              <span style={{
+                ...text('heading'), display: 'block',
+                color: isToday ? colour.accentDeep : colour.ink
+              }}>
+                {dayNum(day.date)} {monthOf(day.date).slice(0, 3)}
+              </span>
+            </button>
+
+            <div style={{ padding: space.sm }}>
+              <DayPanel day={day} onOpen={onOpen} onReorder={onReorder}
+                onSetPlace={onSetPlace} leader={leader} />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * One day, whole: cases by hospital, then everything else.
  *
  * When `onReorder` is given, the cases in each hospital can be moved up and down
@@ -606,6 +673,9 @@ function DayPanel({ day, onOpen, onReorder, onSetPlace, leader }) {
 }
 
 export default function CaseWeek({ user, switcher, promptBanner }) {
+  // A week in columns on a desktop, a list on a phone — different shapes of
+  // screen, different right answer.
+  const desktop = useIsDesktop()
   // The booking being edited, if any. Tapping a case opens the sheet; the sheet
   // loads it fresh from the calendar rather than editing what is on screen.
   const [editing, setEditing] = useState(null)
@@ -827,7 +897,14 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
   return (
-    <Page style={{ display: 'flex', flexDirection: 'column' }}>
+    <Page
+      // tm-wide turns off the reading measure. A measure is right for a screen
+      // of prose and wrong for a week in columns — capping it is exactly what
+      // leaves the gaps either side of the content.
+      // Only the week. A single day stretched across a 27in screen is a row
+      // of 2000px-wide cards, which is a worse answer than the bands.
+      className={desktop && span === 'week' ? 'tm-wide' : ''}
+      style={{ display: 'flex', flexDirection: 'column' }}>
       {/* No "This week" eyebrow any more: it said the same thing as the week
           range two rows below it, and the top of the screen had four things
           competing before the week itself appeared. */}
@@ -942,7 +1019,12 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
       {/* tm-measure keeps the week in one column on a wide screen while the
           page and the header behind it reach both edges — see index.css. */}
       <div className="tm-measure"
-        style={{ flex: 1, padding: `${space.md}px ${space.md}px 100px`, overflowY: 'auto' }}>
+        style={{
+          flex: 1, overflowY: 'auto',
+          // Wider gutters on a big screen so the week is not glued to the
+          // glass, and the phone's 16px where 16px is most of the width.
+          padding: desktop ? `${space.md}px ${space.xl}px 100px` : `${space.md}px ${space.md}px 100px`
+        }}>
         {promptBanner}
         {notice && <Banner tone="danger">{notice}</Banner>}
         {stale && (
@@ -1027,7 +1109,21 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
 
         {plan && span === 'week' && <AddBookingRow day={activeDay} onAdd={setAdding} />}
 
-        {plan && span === 'week' && (plan.days || []).map(day => (
+        {/* Seven columns on a desktop, the familiar list on a phone. A week
+            read side by side shows which day is heavy without scrolling, which
+            is most of what somebody opens the week for. */}
+        {plan && span === 'week' && desktop && (
+          <WeekGrid
+            plan={plan}
+            today={today}
+            onPickDay={pickDay}
+            onOpen={setEditing}
+            onReorder={reorder}
+            onSetPlace={setPlacing}
+            leader={leader} />
+        )}
+
+        {plan && span === 'week' && !desktop && (plan.days || []).map(day => (
           <div key={day.date} style={{ marginBottom: space.xl }}>
             <button onClick={() => pickDay(day.date)}
               style={{
