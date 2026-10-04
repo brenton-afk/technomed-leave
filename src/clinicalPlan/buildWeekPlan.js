@@ -158,6 +158,29 @@ function caseCountLine(allCases, nonSurgeonItems) {
   return `${cases.length} case${cases.length === 1 ? '' : 's'} — ${breakdown}${suffix}`
 }
 
+/**
+ * How early a hospital's day starts, for ordering the groups.
+ *
+ * From the running order the team was given: morning before afternoon, then by
+ * position. Only the cases somebody is actually going to count — a case we are
+ * not needed at, or one called off, must not drag a hospital to the top of the
+ * day on behalf of people who are not attending it.
+ *
+ * Infinity where nothing has been recorded, so a hospital whose order is known
+ * sorts above one whose is not.
+ */
+function startsAt(cases) {
+  const going = cases.filter(c => !c.cancelled && !c.notRequired)
+  let earliest = Infinity
+  for (const c of (going.length ? going : cases)) {
+    const place = c.listPlace
+    if (!place?.session && !place?.position) continue
+    const session = place.session === 'afternoon' ? 1 : 0
+    earliest = Math.min(earliest, session * 100 + (place.position || 1))
+  }
+  return earliest
+}
+
 function groupByHospital(cases) {
   const order = []
   const map = new Map()
@@ -165,8 +188,21 @@ function groupByHospital(cases) {
     if (!map.has(c.hospital)) { map.set(c.hospital, []); order.push(c.hospital) }
     map.get(c.hospital).push(c)
   }
-  // RHH first, then Calvary, then anything else — the document's order.
-  order.sort((a, b) => siteRank(a) - siteRank(b) || a.localeCompare(b))
+  // Whichever hospital runs first is read first.
+  //
+  // This used to be a fixed rank — RHH, then Calvary, then the rest — which is
+  // the order the emailed document always used and is right on an ordinary
+  // day. It is wrong on the days that matter: a Calvary morning list sat
+  // underneath an RHH afternoon one, so the page said the opposite of the
+  // running order somebody had just entered.
+  //
+  // The fixed rank is still the tie-break, for the days nobody has rung about.
+  order.sort((a, b) => {
+    const first = startsAt(map.get(a))
+    const second = startsAt(map.get(b))
+    if (first !== second) return first - second
+    return siteRank(a) - siteRank(b) || a.localeCompare(b)
+  })
   return order.map(hospital => ({
     hospital,
     // By the clock first, which is the order the calendar was laid out in, and

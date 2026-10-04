@@ -573,3 +573,82 @@ describe('a day with a Launceston case and one we are not needed at', () => {
     expect(order.indexOf('CALVARY LENAH VALLEY')).toBeLessThan(order.indexOf('CALVARY ST LUKES'))
   })
 })
+
+describe('reading the day in the order it runs', () => {
+  // Tomorrow's day, as Brent described it: Calvary first, and at RHH one case
+  // we are not needed at plus an afternoon one. The page put RHH on top
+  // regardless, because the hospital order was a fixed rank — right on an
+  // ordinary day and wrong on the days somebody has actually rung about.
+  const ev = (id, summary, description, location) => ({
+    id, summary, description, location,
+    start: { dateTime: '2026-10-05T09:00:00+11:00' },
+    end: { dateTime: '2026-10-05T10:00:00+11:00' }
+  })
+  const WINDOW = {
+    startDate: '2026-10-05', endDate: '2026-10-11',
+    days: ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08',
+      '2026-10-09', '2026-10-10', '2026-10-11']
+  }
+  const build = events =>
+    buildWeekPlan(events, WINDOW, { generatedAt: '2026-10-04T00:00:00Z' })
+      .days[0].casesByHospital.map(g => g.hospital)
+
+  it('puts the morning list first, whichever hospital it is at', () => {
+    expect(build([
+      ev('a', 'Nunan DIPLOMAT - Ibbett',
+        'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nList: 1st · afternoon', 'RHH'),
+      ev('b', 'Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
+  })
+
+  it('keeps the old order when nobody has rung about either', () => {
+    // RHH, then Calvary — the emailed document's order, and right on an
+    // ordinary day.
+    expect(build([
+      ev('a', 'Nunan DIPLOMAT - Ibbett', 'Surg: Ibbett\nPt: Nunan\nHosp: RHH', 'RHH'),
+      ev('b', 'Pike DIPLOMAT - Thani', 'Surg: Thani\nPt: Pike\nHosp: Calvary', 'Calvary')
+    ])).toEqual(['RHH', 'CALVARY LENAH VALLEY'])
+  })
+
+  it('does not let a case we are not needed at pull a hospital to the top', () => {
+    // RHH's earliest is a case nobody from here attends. The hospital we are
+    // actually going to first should still be read first.
+    expect(build([
+      ev('a', 'Nunan BRAINLAB - Ibbett',
+        'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nList: 1st · morning\nBrainlab F2F Not required', 'RHH'),
+      ev('b', 'Reed DIPLOMAT - Ibbett',
+        'Surg: Ibbett\nPt: Reed\nHosp: RHH\nList: 2nd · afternoon', 'RHH'),
+      ev('c', 'Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
+  })
+
+  it('does not let a cancelled case do it either', () => {
+    expect(build([
+      ev('a', 'CANCELLED Nunan DIPLOMAT - Ibbett',
+        'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nList: 1st · morning', 'RHH'),
+      ev('b', 'Reed DIPLOMAT - Ibbett',
+        'Surg: Ibbett\nPt: Reed\nHosp: RHH\nList: 2nd · afternoon', 'RHH'),
+      ev('c', 'Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
+  })
+
+  it('reads a hospital with a known order above one with none', () => {
+    expect(build([
+      ev('a', 'Nunan DIPLOMAT - Ibbett', 'Surg: Ibbett\nPt: Nunan\nHosp: RHH', 'RHH'),
+      ev('b', 'Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
+  })
+
+  it('orders by position when both are the same session', () => {
+    expect(build([
+      ev('a', 'Nunan DIPLOMAT - Ibbett',
+        'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nList: 3rd · morning', 'RHH'),
+      ev('b', 'Pike DIPLOMAT - Thani',
+        'Surg: Thani\nPt: Pike\nHosp: Calvary\nList: 1st · morning', 'Calvary')
+    ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
+  })
+})
