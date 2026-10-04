@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { STAFF } from '../staffConfig.js'
+import { useIsDesktop } from '../design/viewport.js'
 import { rememberedUser, forgetUser } from '../lastUser.js'
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
 
@@ -44,6 +45,9 @@ function BuildStamp() {
 }
 
 export default function PinScreen({ onLogin }) {
+  // A sign-in screen is the one place a phone layout on a laptop is most
+  // obvious, because there is nothing else on the screen to look at.
+  const desktop = useIsDesktop()
   // Read once, before the first paint. Deciding this in an effect instead shows
   // the roster and the quote for a frame and then replaces them, which reads as
   // the app changing its mind about who you are.
@@ -318,10 +322,32 @@ export default function PinScreen({ onLogin }) {
 
   // 100% of #root, which is already exactly the visible height. A viewport
   // unit here measures the *large* iOS viewport and overshoots the screen.
-  const w = { minHeight:'100%', display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif', width:'100%', maxWidth:460, margin:'0 auto' }
+  // Full bleed. This used to be a 460px column centred on the page, which on
+  // a phone is the whole screen and on a laptop is a phone-shaped strip with
+  // the body colour showing either side of it — reported, accurately, as "it
+  // looks like a phone login". The screen is the background; only the form
+  // inside it is narrow, which is what every desktop sign-in does.
+  const w = { minHeight:'100%', display:'flex', flexDirection:'column', background:'#042746', fontFamily:'-apple-system,sans-serif', width:'100%' }
   // Insets on the outer padding: the content is centred so the notch rarely
   // troubles it, but the build stamp at the foot sits on the home indicator.
-  const top = { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'calc(env(safe-area-inset-top, 0px) + 40px) 24px calc(env(safe-area-inset-bottom, 0px) + 20px)', width:'100%', maxWidth:360, margin:'0 auto', boxSizing:'border-box' }
+  // The form keeps a form's width wherever it is. On a desktop it also gets a
+  // panel behind it, so it reads as a deliberate card rather than a column of
+  // controls adrift in a large navy field.
+  const top = {
+    flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+    padding: desktop
+      ? '40px'
+      : 'calc(env(safe-area-inset-top, 0px) + 40px) 24px calc(env(safe-area-inset-bottom, 0px) + 20px)',
+    width:'100%', maxWidth: desktop ? 440 : 360, margin:'0 auto', boxSizing:'border-box',
+    ...(desktop ? {
+      flex:'none', borderRadius:16, background:'rgba(255,255,255,0.04)',
+      border:'1px solid rgba(255,255,255,0.08)'
+    } : {})
+  }
+  // On a desktop the card is centred in the window rather than filling it.
+  const page = desktop
+    ? { ...w, alignItems:'center', justifyContent:'center', padding:'40px 24px' }
+    : w
   const keyStyle = { background:'rgba(255,255,255,0.1)', border:'none', borderRadius:'50%', width:'72px', height:'72px', fontSize:'24px', color:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }
   const btnStyle = { width:'100%', padding:'14px', background:'#2ab5a0', border:'none', borderRadius:'10px', color:'white', fontSize:'16px', fontWeight:'600', cursor:'pointer' }
   const desktopInputStyle = { width:'100%', padding:'16px', border:'2px solid rgba(255,255,255,0.2)', borderRadius:'12px', fontSize:'32px', background:'rgba(255,255,255,0.08)', color:'white', outline:'none', textAlign:'center', letterSpacing:'16px', boxSizing:'border-box', fontFamily:'monospace', WebkitTextSecurity: step === 'pin' ? 'disc' : 'disc' }
@@ -346,7 +372,7 @@ export default function PinScreen({ onLogin }) {
   if (step === 'resuming') {
     const who = STAFF.find(s => s.email === resumed)
     return (
-      <div style={w}>
+      <div style={page}>
         <div style={top}>
           <img src="/logo.png" alt="TechnoMed" style={{ height:'48px', width:'auto', marginBottom:'6px' }} />
           <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'32px' }}>Staff Portal</div>
@@ -422,7 +448,7 @@ export default function PinScreen({ onLogin }) {
 
   if (step === 'select') {
     return (
-      <div style={w}>
+      <div style={page}>
         <div style={top}>
           <img src="/logo.png" alt="TechnoMed" style={{ height:'48px', width:'auto', marginBottom:'6px' }} />
           <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'32px' }}>Staff Portal</div>
@@ -465,7 +491,7 @@ export default function PinScreen({ onLogin }) {
   }
 
   return (
-    <div style={w}>
+    <div style={page}>
       <div style={top}>
         <img src="/logo.png" alt="TechnoMed" style={{ height:'48px', width:'auto', marginBottom:'6px' }} />
         <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'32px' }}>Staff Portal</div>
