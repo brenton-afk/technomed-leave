@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import CameraSheet from './scan/CameraSheet.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { partitionItems } from '../usageReview.js'
+import { useIsDesktop } from '../design/viewport.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -229,9 +230,18 @@ function Banner({ tone, children }) {
 // ─── Main component ──────────────────────────────────────────
 
 export default function UsageScan({ user }) {
-  // Opens on capture, not history: tapping Scan means "scan something now", and
+  // Usage forms are scanned on a phone, held over the paper on a theatre bench.
+  // Nobody has ever scanned one with a laptop and nobody is going to — there is
+  // no camera pointed at the right thing and no hand free to hold it.
+  //
+  // So a desktop gets the other half of this screen: what has already been
+  // scanned, which is the part somebody at a desk actually wants. The capture
+  // path is not hidden behind a warning, it is simply not offered.
+  const desktop = useIsDesktop()
+
+  // On a phone, opens on capture: tapping Scan means "scan something now", and
   // making that three taps was the wrong default.
-  const [step, setStep] = useState('capture')
+  const [step, setStep] = useState(desktop ? 'history' : 'capture')
   const [pages, setPages] = useState([])
   // Mirrors `pages` so a capture can check the payload size and answer straight
   // away, without reading state that has not been committed yet.
@@ -481,12 +491,30 @@ export default function UsageScan({ user }) {
   if (step === 'history') {
     return (
       <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
-        <Header title="Usage Scanning" subtitle={`${user?.name?.split(' ')[0] || 'Rep'} · scan a usage form to file and send it`} />
+        <Header
+          title={desktop ? 'Filed usage' : 'Usage Scanning'}
+          subtitle={desktop
+            ? 'Every usage form the team has scanned and sent'
+            : `${user?.name?.split(' ')[0] || 'Rep'} · scan a usage form to file and send it`} />
         <div style={{ padding: 16 }}>
           {error && <Banner tone="danger">{error}</Banner>}
-          <button onClick={startNew} style={{ width: '100%', padding: 15, background: TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 16 }}>
-            📷 New Usage Scan
-          </button>
+          {!desktop && (
+            <button onClick={startNew} style={{ width: '100%', padding: 15, background: TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 16 }}>
+              📷 New Usage Scan
+            </button>
+          )}
+          {/* Said once, plainly, rather than offering a button that cannot
+              work. A laptop has no camera pointed at a usage form. */}
+          {desktop && (
+            <div style={{
+              background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12,
+              padding: '13px 15px', marginBottom: 16, fontSize: 13, color: MUTED,
+              lineHeight: 1.5
+            }}>
+              Scanning happens on a phone. This is everything that has been
+              filed, so you can check it from a desk.
+            </div>
+          )}
 
           <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Recent scans</div>
           {historyLoading && <div style={{ textAlign: 'center', padding: 30, color: MUTED, fontSize: 14 }}>Loading…</div>}

@@ -37,7 +37,10 @@ import { useUnread } from './chat/unread.js'
 
 const TABS = [
   { id: 'cases', label: 'Cases', Icon: IconCases },
-  { id: 'scan', label: 'Scan', Icon: IconScan },
+  // Named for what it does on the device you are on. A laptop cannot scan a
+  // usage form and never will — it gets the filed ones instead, which is the
+  // half somebody at a desk wants.
+  { id: 'scan', label: 'Scan', desktopLabel: 'Usage', Icon: IconScan },
   // Messages earns a tab now that it can reach a phone. It spent its first
   // weeks three taps deep inside Kit, next to stock and resources, which is
   // nowhere to put the thing meant to replace the WhatsApp group — nobody goes
@@ -346,7 +349,7 @@ export default function App() {
 
             Done here rather than in CSS because these styles are inline, and an
             inline style cannot be overridden by a media query. */}
-        {tabs.map(({ id, label, Icon }) => {
+        {tabs.map(({ id, label, desktopLabel, Icon }) => {
           const active = nav.tab === id
           // Cleared by opening the tab, which is what marks the channel read.
           const waiting = id === 'messages' && !active ? unread.count : 0
@@ -388,7 +391,7 @@ export default function App() {
                 letterSpacing: '0.1px', textTransform: 'none',
                 fontWeight: active ? 700 : desktop ? 500 : 500
               }}>
-                {label}
+                {(desktop && desktopLabel) || label}
               </span>
             </button>
           )
