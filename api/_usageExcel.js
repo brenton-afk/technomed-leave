@@ -107,9 +107,10 @@ export async function buildUsageWorkbook(caseRecord, items, opts = {}) {
   // Preferring the extracted full name meant a corrected surname reached the
   // subject line while the sheet still carried the misread one.
   detail('Surgeon', caseRecord.surgeonSurname || caseRecord.surgeonName)
+  // Surname only, on both copies. A distributor needs to know which implants
+  // went in, to whose list and on what date; they have never needed a hospital
+  // MRN, and this sheet is emailed outside the company.
   detail('Patient surname', caseRecord.patientSurname)
-  detail('Patient first name', caseRecord.patientFirstName)
-  detail('UR number', caseRecord.patientUrNumber)
   detail('Procedure', caseRecord.procedure)
   if (!perItemDistributor) detail('Distributor', distributors[0] || '')
 

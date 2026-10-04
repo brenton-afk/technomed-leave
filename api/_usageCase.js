@@ -260,8 +260,11 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
 
   const caseDetails = {
     patientSurname,
-    patientFirstName: str(extracted.patientFirstName),
-    patientUrNumber: str(extracted.patientUrNumber || extracted.urNumber),
+    // Surname only, deliberately. The first name and the UR number used to be
+    // read off the label and kept here, which put a hospital MRN into Redis,
+    // onto the review screen and into the workbook emailed to distributors.
+    // The app needs a surname — for the folder name, the email subject and the
+    // review screen — and nothing else identifies a patient to us.
     surgeonName: str(extracted.surgeonName),
     surgeonSurname,
     date,

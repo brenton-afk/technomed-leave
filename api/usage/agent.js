@@ -28,7 +28,7 @@ const VISION_MODEL = process.env.USAGE_VISION_MODEL || 'claude-opus-5'
 const MAX_PAGES = 8
 const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, patient first name, patient UR number, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. EXCLUDE: Floseal, Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON.
+const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. EXCLUDE: Floseal, Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON.
 
 The document is a "Record of Implantable/Rebatable Items Used" form from Calvary Health Care Tasmania (CLV) or Royal Hobart Hospital (RHH). It mixes printed implant stickers with handwritten quantities ("x1", "x3", "×4"), handwritten product names, a printed patient ID label, and a handwritten date, procedure and rep name.
 
@@ -37,8 +37,6 @@ Accuracy matters more than completeness of detail. Never invent a value: if a fi
 Return ONLY a JSON object (no markdown fences, no preamble, no trailing commentary) of exactly this shape:
 {
   "patientSurname": "",
-  "patientFirstName": "",
-  "patientUrNumber": "",
   "surgeonName": "",
   "date": "YYYY-MM-DD, or the raw text if you cannot resolve it",
   "hospital": "CLV or RHH or empty string",

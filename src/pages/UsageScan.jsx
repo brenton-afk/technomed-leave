@@ -667,8 +667,6 @@ export default function UsageScan({ user }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Patient surname" value={caseRecord.patientSurname} onChange={v => updateCase('patientSurname', v)} />
-              <Field label="First name" value={caseRecord.patientFirstName} onChange={v => updateCase('patientFirstName', v)} />
-              <Field label="UR number" value={caseRecord.patientUrNumber} onChange={v => updateCase('patientUrNumber', v)} />
               <Field label="Surgery date" type="date" value={caseRecord.date} onChange={v => updateCase('date', v)} />
               {/* A quiet confirmation, not a question.
                   Forms are always scanned in theatre on the day of surgery, so
