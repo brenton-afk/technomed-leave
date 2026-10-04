@@ -123,6 +123,8 @@ describe('no screen is left out', () => {
     'cases/DictateBooking.jsx',
     // The calendar inside the leave form, which has the Header above it.
     'leave/DateRange.jsx',
+    // A strip inside the Cases header, which carries the insets itself.
+    'cases/TeamLeaderStrip.jsx',
   ])
 
   it('accounts for every screen that does not use the shared header', () => {

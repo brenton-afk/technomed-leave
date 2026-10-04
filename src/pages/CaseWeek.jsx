@@ -14,6 +14,7 @@ import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import ListPlace from './cases/ListPlace.jsx'
+import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
 import { describeListPlace } from '../clinicalPlan/listPlace.js'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
 
@@ -785,6 +786,15 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           <SpanToggle span={span} onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />
         }>
         {switcher}
+
+        {/* Who is on this week. It lives here because this is the screen the
+            duty leader works from, and "who is it this week" is asked while
+            looking at the week. */}
+        <TeamLeaderStrip
+          user={user}
+          week={window_.startDate}
+          today={today}
+          hour={new Date().getHours()} />
 
         {/* Moving between weeks is the most-used control here and was the
             smallest thing on the screen. Three items now, not four — the

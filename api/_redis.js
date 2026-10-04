@@ -456,3 +456,23 @@ export async function removePushSubscription(email, endpoint) {
   if (!endpoint) return
   await redis('hdel', pushKey(email), endpoint)
 }
+
+// ─── THE TEAM LEADER ROTA ────────────────────────────────────
+// One leader per week, keyed by that week's Monday — so the same week cannot
+// have two answers however the question is asked, and last week's leader is
+// still there when somebody asks who it was.
+//
+// Kept rather than expired. It is a small record and "who was duty leader when
+// that went wrong" is a question worth being able to answer.
+
+const leaderKey = monday => `teamLeader:${monday}`
+
+export async function getTeamLeader(monday) {
+  const data = await redis('get', leaderKey(monday))
+  return data ? JSON.parse(data) : null
+}
+
+export async function setTeamLeaderFor(monday, entry) {
+  await redis('set', leaderKey(monday), JSON.stringify(entry))
+  return entry
+}

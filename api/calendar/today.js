@@ -21,7 +21,8 @@ import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailSeen, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
-  getBookingCandidate, getBookingQueue, updateBookingCandidate
+  getBookingCandidate, getBookingQueue, updateBookingCandidate,
+  getTeamLeader, setTeamLeaderFor
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
@@ -35,6 +36,7 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { cleanListPlace, withListPlace, bySession } from '../../src/clinicalPlan/listPlace.js'
+import { weekOf, cleanLeader } from '../../src/clinicalPlan/teamLeader.js'
 import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
   readFiledCase, priorImplantsFor, describePrior
@@ -81,6 +83,7 @@ export default async function handler(req, res) {
   // The running order of a theatre list, taken on the evening ring-round.
   if (req.query.action === 'reorder') return handleReorder(req, res)
   if (req.query.action === 'listplace') return handleListPlace(req, res)
+  if (req.query.action === 'leader') return handleTeamLeader(req, res)
   // Calling a case off, and putting it back on.
   if (req.query.action === 'cancel') return handleCancel(req, res)
   // What this patient already has in, for a revision or a removal.
@@ -1231,6 +1234,52 @@ async function handleListPlace(req, res) {
     }
     return res.status(500).json({ error: err.message })
   }
+}
+
+/**
+ * Who is team leader, and setting it.
+ *
+ * Anybody on the team can change it. Not admin-only on purpose: the person who
+ * knows the rota has changed is usually the person it changed to, and making
+ * them ask somebody else is how a rota goes stale — which is exactly what
+ * happened to the calendar entry this replaces.
+ *
+ * Stored against the week's Monday, so a week has one answer however the
+ * question is asked, and last week's leader is still there afterwards.
+ */
+async function handleTeamLeader(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  try {
+    const asked = String(req.query.week || '').slice(0, 10)
+    const monday = weekOf(asked) || weekOf(todayInHobart())
+    if (!monday) return res.status(400).json({ error: 'A week is needed' })
+
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+      // Clearing it is a real answer — a week nobody is covering should say so
+      // rather than keep naming whoever held it last.
+      if (!body.email) {
+        await setTeamLeaderFor(monday, null)
+        return res.status(200).json({ ok: true, week: monday, leader: null })
+      }
+      const entry = cleanLeader({ email: body.email, setBy: session.email })
+      if (!entry) return res.status(400).json({ error: 'That is not somebody on the team' })
+      await setTeamLeaderFor(monday, entry)
+      return res.status(200).json({ ok: true, week: monday, leader: entry })
+    }
+
+    const leader = await getTeamLeader(monday)
+    return res.status(200).json({ ok: true, week: monday, leader })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/** Today in Hobart, whatever zone the server thinks it is in. */
+function todayInHobart() {
+  return new Date(Date.now() + 10 * 3600 * 1000).toISOString().slice(0, 10)
 }
 
 /**

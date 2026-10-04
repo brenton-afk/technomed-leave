@@ -986,3 +986,69 @@ describe('getting back to today from another day of this week', () => {
     expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument()
   })
 })
+
+describe('who is team leader this week', () => {
+  // It was a calendar entry somebody had to remember to move, so it drifted —
+  // Mat showed as team leader through a week he spent on TOIL. The portal owns
+  // it now, and anybody on the team can change it with a tap: the person who
+  // knows the rota has changed is usually the one it changed to.
+  beforeEach(() => {
+    global.fetch = vi.fn(async (url, opts) => {
+      if (String(url).includes('action=leader')) {
+        if (opts?.method === 'POST') return { ok: true, json: async () => ({ ok: true }) }
+        return {
+          ok: true,
+          json: async () => ({ ok: true, week: '2026-09-21', leader: { email: 'ben@technomed.com.au', firstName: 'Ben' } })
+        }
+      }
+      return { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+    })
+  })
+
+  it('names them on the week', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    expect(screen.getByText('Team leader')).toBeInTheDocument()
+  })
+
+  it('opens a picker on a tap', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Change'))
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
+    expect(screen.getByText(/Monday 7am to Friday 5pm/)).toBeInTheDocument()
+  })
+
+  it('saves the person tapped, against that week', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Change'))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/^Aimee/))
+
+    await waitFor(() => {
+      const post = global.fetch.mock.calls.find(
+        ([u, o]) => String(u).includes('action=leader') && o?.method === 'POST')
+      expect(post).toBeTruthy()
+      expect(String(post[0])).toContain('week=2026-09-21')
+      expect(JSON.parse(post[1].body).email).toBe('aimee@technomed.com.au')
+    })
+  })
+
+  it('can be set to nobody', async () => {
+    // A week nobody is covering should say so, rather than keep naming
+    // whoever held it last.
+    show()
+    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Change'))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Nobody this week'))
+
+    await waitFor(() => {
+      const post = global.fetch.mock.calls.find(
+        ([u, o]) => String(u).includes('action=leader') && o?.method === 'POST')
+      expect(JSON.parse(post[1].body).email).toBe(null)
+    })
+  })
+})
