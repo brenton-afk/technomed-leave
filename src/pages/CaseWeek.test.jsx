@@ -1090,3 +1090,66 @@ describe('the team leader on the day', () => {
     await waitFor(() => expect(screen.getByText('On leave')).toBeInTheDocument())
   })
 })
+
+describe('the rota and covering for somebody', () => {
+  // "Ordinarily Mat would be team leader this coming week, but I am covering
+  // for him." A rota plus an override, and the screen has to tell them apart —
+  // "Brent is covering for Mat" and "it is Brent's turn" are different facts
+  // and only one of them is true.
+  const reply = payload => vi.fn(async (url, opts) => {
+    if (String(url).includes('action=leader')) {
+      if (opts?.method === 'POST') return { ok: true, json: async () => ({ ok: true }) }
+      return { ok: true, json: async () => ({ ok: true, ...payload }) }
+    }
+    return { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+  })
+
+  it('names whoever the rota says, with nothing saved', async () => {
+    global.fetch = reply({
+      leader: { email: 'mat@technomed.com.au', firstName: 'Mat' },
+      source: 'roster',
+      rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
+    })
+    show()
+    // Scoped to the strip: "Mat" turns up elsewhere on a week view.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Team leader/ }).textContent).toContain('Mat'))
+    expect(screen.queryByText(/covering for/)).not.toBeInTheDocument()
+  })
+
+  it('says who is covering for whom', async () => {
+    global.fetch = reply({
+      leader: { email: 'brenton@technomed.com.au', firstName: 'Brent' },
+      source: 'set',
+      rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
+    })
+    show()
+    await waitFor(() => expect(screen.getByText(/covering for Mat/)).toBeInTheDocument())
+  })
+
+  it('does not say covering when the person set is the rostered one', async () => {
+    // Confirming the rota is not a cover.
+    global.fetch = reply({
+      leader: { email: 'mat@technomed.com.au', firstName: 'Mat' },
+      source: 'set',
+      rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
+    })
+    show()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Team leader/ }).textContent).toContain('Mat'))
+    expect(screen.queryByText(/covering for/)).not.toBeInTheDocument()
+  })
+
+  it('offers to put the rota back rather than leaving nobody on', async () => {
+    global.fetch = reply({
+      leader: { email: 'brenton@technomed.com.au', firstName: 'Brent' },
+      source: 'set',
+      rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
+    })
+    show()
+    await waitFor(() => expect(screen.getByText(/covering for Mat/)).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Change'))
+    await waitFor(() =>
+      expect(screen.getByText('Back to the roster — Mat')).toBeInTheDocument())
+  })
+})

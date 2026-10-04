@@ -20,6 +20,44 @@ import { STAFF } from '../staffConfig.js'
 // morning there is no team leader at all, and the honest thing to say is who
 // is on call instead.
 
+// ─── The standing rota ───────────────────────────────────────────────────────
+// Ben and Mat alternate, a week each. Ben has the week commencing 12 October
+// 2026 and every second week after it; Mat has the ones between.
+//
+// Brent is deliberately not in the rotation. He covers when somebody is away
+// or stretched — this coming week, with Mat on TOIL — and a person who only
+// ever covers should not be in the cycle, or the cycle stops describing what
+// normally happens.
+//
+// Computed rather than stored, so the roster is right for any week anybody
+// looks at, including ones months out that nobody has thought about yet. An
+// entry saved against a week overrides it — see the handler — because the
+// whole point of a standing rota is that it says what happens unless somebody
+// says otherwise.
+export const ROTATION = ['ben@technomed.com.au', 'mat@technomed.com.au']
+
+/** The Monday Ben's turn starts from. Everything else counts out from here. */
+export const ROTATION_ANCHOR = '2026-10-12'
+
+/**
+ * Whose turn it is in the standing rota, for the week beginning `monday`.
+ *
+ * Works backwards as well as forwards: the week before the anchor is Mat's,
+ * which is what makes "ordinarily Mat, but Brent is covering" expressible as
+ * a rota plus an override rather than as two unrelated facts.
+ */
+export function rosteredLeader(monday) {
+  const week = weekOf(monday)
+  if (!week) return null
+  const days = Math.round(
+    (Date.parse(`${week}T00:00:00Z`) - Date.parse(`${ROTATION_ANCHOR}T00:00:00Z`)) / 86400000)
+  const weeks = Math.round(days / 7)
+  // Modulo that behaves for weeks before the anchor, where % alone gives -1.
+  const turn = ((weeks % ROTATION.length) + ROTATION.length) % ROTATION.length
+  const email = ROTATION[turn]
+  return STAFF.find(p => p.email === email) || null
+}
+
 /** 07:00 Monday. */
 export const STARTS_AT = 7
 /** 17:00 Friday. */

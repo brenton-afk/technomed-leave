@@ -36,7 +36,7 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { cleanListPlace, withListPlace, bySession } from '../../src/clinicalPlan/listPlace.js'
-import { weekOf, cleanLeader } from '../../src/clinicalPlan/teamLeader.js'
+import { weekOf, cleanLeader, rosteredLeader } from '../../src/clinicalPlan/teamLeader.js'
 import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
   readFiledCase, priorImplantsFor, describePrior
@@ -1261,8 +1261,14 @@ async function handleTeamLeader(req, res) {
       // Clearing it is a real answer — a week nobody is covering should say so
       // rather than keep naming whoever held it last.
       if (!body.email) {
+        // Back to whosever turn it is. "Nobody" is not a useful answer when
+        // there is a standing rota — clearing a cover means the rota resumes.
         await setTeamLeaderFor(monday, null)
-        return res.status(200).json({ ok: true, week: monday, leader: null })
+        const back = rosteredLeader(monday)
+        return res.status(200).json({
+          ok: true, week: monday, source: back ? 'roster' : 'none',
+          leader: back && { email: back.email, name: back.name, firstName: back.firstName }
+        })
       }
       const entry = cleanLeader({ email: body.email, setBy: session.email })
       if (!entry) return res.status(400).json({ error: 'That is not somebody on the team' })
@@ -1270,8 +1276,23 @@ async function handleTeamLeader(req, res) {
       return res.status(200).json({ ok: true, week: monday, leader: entry })
     }
 
-    const leader = await getTeamLeader(monday)
-    return res.status(200).json({ ok: true, week: monday, leader })
+    // The standing rota says what normally happens; a saved entry says what
+    // is happening this time. Brent covering for Mat is the second kind, and
+    // it must not quietly become the first — so both are returned and the
+    // screen can say which it is looking at.
+    const set = await getTeamLeader(monday)
+    const rostered = rosteredLeader(monday)
+    return res.status(200).json({
+      ok: true,
+      week: monday,
+      leader: set || (rostered && {
+        email: rostered.email, name: rostered.name, firstName: rostered.firstName
+      }) || null,
+      source: set ? 'set' : rostered ? 'roster' : 'none',
+      // Who it would ordinarily be, so a cover can be undone by clearing it
+      // rather than by remembering whose turn it was.
+      rostered: rostered && { email: rostered.email, firstName: rostered.firstName }
+    })
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { weekOf, withinWeek, coverNow, cleanLeader, leaderFrom } from './teamLeader.js'
+import {
+  weekOf, withinWeek, coverNow, cleanLeader, leaderFrom, rosteredLeader
+} from './teamLeader.js'
 import { STAFF } from '../staffConfig.js'
 
 // The duty leader rings the hospitals for the running orders and is the person
@@ -116,5 +118,58 @@ describe('setting it', () => {
     expect(leaderFrom({ email: BEN.email })?.firstName).toBe('Ben')
     expect(leaderFrom({ email: 'gone@technomed.com.au' })).toBe(null)
     expect(leaderFrom(null)).toBe(null)
+  })
+})
+
+describe('the standing rota', () => {
+  // Ben has the week commencing 12 October 2026 and every second week after
+  // it; Mat has the ones between. Brent is deliberately not in the cycle — he
+  // covers when somebody is away, and a person who only ever covers should not
+  // be in a rota that is meant to describe what normally happens.
+  it('gives Ben the anchor week', () => {
+    expect(rosteredLeader('2026-10-12')?.firstName).toBe('Ben')
+  })
+
+  it('alternates a week each from there', () => {
+    expect(rosteredLeader('2026-10-19')?.firstName).toBe('Mat')
+    expect(rosteredLeader('2026-10-26')?.firstName).toBe('Ben')
+    expect(rosteredLeader('2026-11-02')?.firstName).toBe('Mat')
+    expect(rosteredLeader('2026-11-09')?.firstName).toBe('Ben')
+  })
+
+  it('works backwards too', () => {
+    // The week before the anchor is Mat's, which is what makes "ordinarily
+    // Mat, but Brent is covering" a rota plus an override rather than two
+    // unrelated facts. Plain % gives -1 here and would have picked nobody.
+    expect(rosteredLeader('2026-10-05')?.firstName).toBe('Mat')
+    expect(rosteredLeader('2026-09-28')?.firstName).toBe('Ben')
+    expect(rosteredLeader('2026-09-21')?.firstName).toBe('Mat')
+  })
+
+  it('answers for any day of the week, not only the Monday', () => {
+    for (const day of ['2026-10-12', '2026-10-14', '2026-10-16', '2026-10-18']) {
+      expect(rosteredLeader(day)?.firstName, day).toBe('Ben')
+    }
+  })
+
+  it('keeps Brent out of the cycle', () => {
+    // He leads when needed, which is an override, not a turn.
+    const names = new Set()
+    for (let i = -8; i < 20; i++) {
+      const monday = new Date(Date.UTC(2026, 9, 12) + i * 7 * 86400000)
+        .toISOString().slice(0, 10)
+      names.add(rosteredLeader(monday)?.firstName)
+    }
+    expect([...names].sort()).toEqual(['Ben', 'Mat'])
+  })
+
+  it('holds up a year out', () => {
+    // 52 weeks on from an even week is the same person.
+    expect(rosteredLeader('2027-10-11')?.firstName).toBe('Ben')
+  })
+
+  it('is nothing for a date that is not one', () => {
+    expect(rosteredLeader('')).toBe(null)
+    expect(rosteredLeader('next week')).toBe(null)
   })
 })

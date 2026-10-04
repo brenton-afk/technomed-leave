@@ -711,7 +711,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       })
       if (!res.ok) return
-      setLeader((await res.json()).leader || null)
+      const data = await res.json()
+      // Both halves: who is on, and whether that is the rota or a cover.
+      setLeader(data.leader ? { ...data.leader, source: data.source, rostered: data.rostered } : null)
     } catch {
       // A rota that will not load is not worth an error on the week view. The
       // cases underneath are what somebody came for.

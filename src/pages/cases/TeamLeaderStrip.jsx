@@ -25,6 +25,9 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
   // he spent on TOIL.
   const isAway = email => away.some(p => p.email === email)
   const leaderAway = leader?.email && isAway(leader.email)
+  // Somebody other than whoever the standing rota names.
+  const covering = leader?.source === 'set'
+    && leader?.rostered && leader.rostered.email !== leader.email
 
   async function choose(email) {
     setBusy(true)
@@ -57,6 +60,13 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
         </span>
         <span style={{ ...text('bodyStrong'), color: 'white', flex: 1, minWidth: 0 }}>
           {leader?.firstName || leader?.name || 'Nobody set'}
+          {/* Said out loud, because "Brent is covering for Mat" and "it is
+              Brent's turn" are different facts and the second is not true. */}
+          {covering && (
+            <span style={{ ...text('caption'), color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>
+              {' '}covering for {leader.rostered.firstName}
+            </span>
+          )}
         </span>
         {/* Only while they are actually on. Outside Monday seven to Friday
             five the weekend belongs to the on-call rota, which is a different
@@ -94,6 +104,9 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                 <div style={{ ...text('heading'), color: colour.ink }}>Team leader</div>
                 <div style={{ ...text('caption'), color: colour.inkFaint }}>
                   Monday 7am to Friday 5pm · week of {monday}
+                  {leader?.rostered && (
+                    <> · rostered: <strong>{leader.rostered.firstName}</strong></>
+                  )}
                 </div>
               </div>
 
@@ -136,13 +149,18 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                   )
                 })}
 
+                {/* Clearing a cover puts the rota back, rather than leaving
+                    the week with nobody on it. A standing rota means there is
+                    always an answer unless somebody says otherwise. */}
                 <button onClick={() => choose(null)}
                   style={{
                     width: '100%', minHeight: 44, marginTop: space.sm, cursor: 'pointer',
                     borderRadius: radius.control, border: `1px solid ${colour.line}`,
                     background: 'transparent', ...text('caption'), color: colour.inkMuted
                   }}>
-                  Nobody this week
+                  {leader?.rostered
+                    ? `Back to the roster — ${leader.rostered.firstName}`
+                    : 'Nobody this week'}
                 </button>
               </div>
             </div>
