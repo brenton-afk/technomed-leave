@@ -15,6 +15,7 @@ import AdminPortal from './pages/admin/AdminPortal.jsx'
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
 import { rememberUser } from './lastUser.js'
 import FileBrowser from './pages/FileBrowser.jsx'
+import PatientHistory from './pages/PatientHistory.jsx'
 import { KitHub, MeHub, ComingSoonSection } from './pages/Hubs.jsx'
 import PromptBanner from './pages/PromptBanner.jsx'
 import { colour, text, font, radius } from './design/tokens.js'
@@ -58,7 +59,7 @@ const TABS = [
 // predates it and gets a floating control instead, which avoids rewriting six
 // working pages just to add one button.
 const SELF_BACK = new Set([
-  'resources', 'guides', 'messages', 'stock', 'usagefiles', 'security', 'payslips',
+  'resources', 'guides', 'messages', 'stock', 'usagefiles', 'patient', 'security', 'payslips',
   // Migrated to design/Shell.jsx's Header, so they draw their own.
   'kitroom', 'projects', 'timesheets', 'leave'
 ])
@@ -258,6 +259,8 @@ export default function App() {
         case 'leave': return <LeaveForm user={user} onSuccess={setSubmitted} onBack={back} />
         case 'usagefiles':
           return <FileBrowser user={user} root="usage" eyebrow="Your files" title="Filed usage" onBack={back} />
+        case 'patient':
+          return <PatientHistory user={user} onBack={back} />
         case 'security':
           return <ComingSoonSection eyebrow="Account" title="Sign-in & Face ID" icon={IconLock} onBack={back}
             detail="Face ID is offered on the case plan the first time you sign in on a device. Managing enrolled devices from here is next." />

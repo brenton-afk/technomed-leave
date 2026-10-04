@@ -88,6 +88,12 @@ export function MeHub({ user, onNavigate, onLogout }) {
           onClick={() => onNavigate({ tab: 'me', sub: 'payslips' })} />
 
         <SectionLabel>Your files</SectionLabel>
+        {/* Listed first because it answers the question people actually have.
+            The folder tree below is filed by surgeon and then by month, which
+            is the right way to file and the wrong way to look something up. */}
+        <NavCard icon={IconFile} label="Patient history"
+          detail="Every case filed under a surname, whichever surgeon"
+          onClick={() => onNavigate({ tab: 'me', sub: 'patient' })} />
         <NavCard icon={IconFile} label="Filed usage sheets"
           detail="Everything saved to Dropbox from a scan"
           onClick={() => onNavigate({ tab: 'me', sub: 'usagefiles' })} />

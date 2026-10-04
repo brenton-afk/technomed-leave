@@ -2,14 +2,17 @@ import Anthropic from '@anthropic-ai/sdk'
 import { requireSession } from '../_auth.js'
 import { markAttendance } from '../_googleCalendar.js'
 import { STAFF, firstNameFor } from '../../src/staffConfig.js'
-import { saveUsageRecord, getUsageRecord, getUsageHistory } from '../_redis.js'
+import {
+  saveUsageRecord, getUsageRecord, getUsageHistory,
+  setUsageReviewed, getUsageReviews
+} from '../_redis.js'
 import { normaliseCase, recomputeCase } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
-  listFolder, temporaryLink, resourcesRoot, usageRoot
+  listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory
 } from '../_dropbox.js'
 import { sendUsageEmail } from '../_email.js'
 
@@ -74,6 +77,8 @@ export default async function handler(req, res) {
     if (action === 'list') return await handleList(req, res)
     if (action === 'files') return await handleFiles(req, res)
     if (action === 'open') return await handleOpen(req, res)
+    if (action === 'history') return await handleHistory(req, res)
+    if (action === 'reviewed') return await handleReviewed(req, res, session)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     // err.message here is ours or the provider's; extracted content is never
@@ -438,6 +443,47 @@ async function handleFiles(req, res) {
     // Never send the account-absolute path any further than needed.
     entries: entries.map(e => ({ ...e, displayPath: undefined }))
   })
+}
+
+/**
+ * Everything filed under a surname, as cases rather than folders.
+ *
+ * The tree is filed by surgeon and then by month, so a patient who saw Thani
+ * in 2024 and Garg in 2026 sits in two places years apart. This is the
+ * question the admin team actually asks, and the tree cannot answer it.
+ */
+async function handleHistory(req, res) {
+  if (!dropboxConfigured()) {
+    return res.status(200).json({ configured: false, cases: [] })
+  }
+  const surname = String(req.query.surname || '').trim()
+  // Two characters, or a single letter returns a sizeable share of the
+  // practice and nobody meant to ask for that.
+  if (surname.length < 2) throw badRequest('Give at least two letters of a surname')
+
+  const { cases } = await patientHistory(surname)
+  const reviews = await getUsageReviews(cases.map(c => c.path))
+  return res.status(200).json({
+    configured: true,
+    cases: cases.map(c => ({
+      ...c,
+      reviewed: reviews[c.path] || null,
+      files: c.files.map(file => ({ ...file, displayPath: undefined }))
+    }))
+  })
+}
+
+/** Ticks a filed case off as checked, or clears the tick. */
+async function handleReviewed(req, res, session) {
+  if (req.method !== 'POST') throw badRequest('POST required')
+  const { path, reviewed } = req.body || {}
+  if (!path) throw badRequest('path is required')
+  assertAllowedPath(path)
+
+  // Whoever is signed in, not whoever the client says — the whole value of
+  // the tick is that it names a person who can be asked about it.
+  const entry = await setUsageReviewed(path, reviewed === false ? null : session.email)
+  return res.status(200).json({ ok: true, reviewed: entry })
 }
 
 async function handleOpen(req, res) {

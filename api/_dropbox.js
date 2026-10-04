@@ -3,6 +3,8 @@
 //   ALL SURGEON USAGE / SPINE / {SURGEON SURNAME} / {MONTH YEAR} / {FOLDER NAME}
 // Folders are created on demand; an existing folder is added to, never replaced.
 
+import { parseFolderName } from './_usageCase.js'
+
 const ROOT = '/ALL SURGEON USAGE/SPINE'
 
 export function dropboxConfigured() {
@@ -218,4 +220,55 @@ export async function searchUsage(surname, { limit = 40 } = {}) {
     out.push({ name, path })
   }
   return out
+}
+
+/**
+ * Everything filed under a patient's surname, newest first.
+ *
+ * The question the admin team actually asks — "what has this patient had from
+ * us, and when" — which the folder tree cannot answer on its own. The tree is
+ * filed by surgeon and then by month, so a patient who saw Thani in 2024 and
+ * Garg in 2026 is in two places years apart, and nobody finds the first one
+ * while looking at the second.
+ *
+ * Each case comes back with its files, so the history is openable rather than
+ * merely informative. The files are listed per case rather than searched for
+ * separately: a search returns the folder and its contents as three matches,
+ * and deduplicating them afterwards is guesswork where listing is certain.
+ */
+export async function patientHistory(surname, { limit = 25 } = {}) {
+  const query = String(surname || '').trim()
+  if (query.length < 2) return { cases: [], query }
+
+  const folders = await searchUsage(query, { limit })
+  const cases = []
+  for (const folder of folders) {
+    const parsed = parseFolderName(folder.name)
+    // The search matches on the whole path, so a patient whose surname is also
+    // a surgeon's — or part of a hospital's — would otherwise drag in every
+    // case that surgeon ever did. The surname has to be the patient's.
+    if (parsed.recognised
+      && !parsed.patientSurname.toLowerCase().includes(query.toLowerCase())) continue
+
+    let files = []
+    try {
+      const listed = await listFolder(folder.path)
+      files = listed.entries.filter(e => e.kind === 'file')
+    } catch {
+      // A folder that will not list is still a case that happened. Saying so
+      // with no files beats dropping it out of a clinical history.
+      files = []
+    }
+    cases.push({ ...parsed, path: folder.path, name: folder.name, files })
+  }
+
+  // Newest first, and anything undated last rather than first — an unparsed
+  // folder sorting to the top would push this year's cases off the screen.
+  cases.sort((a, b) => {
+    if (!a.date && !b.date) return a.name.localeCompare(b.name, 'en-AU')
+    if (!a.date) return 1
+    if (!b.date) return -1
+    return b.date.localeCompare(a.date)
+  })
+  return { cases, query }
 }

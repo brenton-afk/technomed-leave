@@ -66,6 +66,73 @@ export function buildFolderName({ patientSurname, date, surgeonSurname, procedur
   ].join('_')
 }
 
+/**
+ * A case folder name, read back into its parts.
+ *
+ * The inverse of buildFolderName, for showing a patient's history as cases
+ * rather than as a column of underscores. The folder name is the only record
+ * of what a filed case *was* — Dropbox holds no metadata of ours — so this is
+ * how the app knows that a 2024 folder was Thani doing an ACDF at the RHH.
+ *
+ * Deliberately forgiving. These folders go back years; some were filed by
+ * hand before the app existed, some have a procedure with an underscore in it,
+ * and a strict parser would simply hide them. Anything unrecognisable comes
+ * back with `recognised: false` and its raw name, because a case the app
+ * cannot parse still has to be findable — that is the whole point of a
+ * patient history.
+ */
+export function parseFolderName(name) {
+  const raw = str(name)
+  const bare = raw.replace(/_(?:Usage[_-]?Sheet|Scan)\.\w+$/i, '')
+  const parts = bare.split('_')
+  const unknown = {
+    recognised: false, raw, patientSurname: '', date: '',
+    surgeonSurname: '', procedure: '', hospital: ''
+  }
+  if (parts.length < 2) return unknown
+
+  // The date is the anchor: it is the one field with a fixed shape, so it is
+  // found rather than counted to. A procedure containing an underscore then
+  // cannot shift every field after it along by one, which is what counting
+  // would do.
+  const at = parts.findIndex(p => /^\d{8}$/.test(p))
+  if (at < 1) return { ...unknown, patientSurname: parts[0] || '' }
+
+  const d = parts[at]
+  const iso = `${d.slice(4, 8)}-${d.slice(2, 4)}-${d.slice(0, 2)}`
+  // A folder named with a date that is not a date — 31022026, 99999999 — is
+  // not a case we can place in time, and saying "31 Feb" would be worse than
+  // saying nothing. Built from the parts and checked for coming back out the
+  // same, because Date rolls 31 February over into 3 March rather than
+  // refusing it, and a case would file itself under the wrong month.
+  const [yy, mm, dd] = iso.split('-').map(Number)
+  const made = new Date(Date.UTC(yy, mm - 1, dd))
+  const real = mm >= 1 && mm <= 12
+    && made.getUTCFullYear() === yy
+    && made.getUTCMonth() === mm - 1
+    && made.getUTCDate() === dd
+
+  const rest = parts.slice(at + 1)
+  return {
+    recognised: true,
+    raw,
+    patientSurname: parts.slice(0, at).join(' '),
+    date: real ? iso : '',
+    surgeonSurname: rest[0] ? rest[0].replace(/-/g, ' ') : '',
+    // Everything between the surgeon and the hospital is the procedure, so an
+    // underscore in it survives instead of eating the hospital.
+    //
+    // Dashes are left alone here, unlike the surgeon and the hospital. At
+    // filing time safeSegment turns both spaces and slashes into dashes, so
+    // "C5/6 ACDF" is already "C5-6-ACDF" on disk and the difference is gone.
+    // Turning them back into spaces would render it "C5 6 ACDF", which reads
+    // as a different operation — the same class of mistake as dropping the
+    // "+/-" from Pt Bayly's. Faithful to the folder name beats tidy.
+    procedure: rest.slice(1, -1).join(' '),
+    hospital: rest.length > 1 ? rest[rest.length - 1].replace(/-/g, ' ') : ''
+  }
+}
+
 function parseQuantity(raw) {
   const s = str(raw)
   if (!s) return { quantity: 1, uncertain: true }

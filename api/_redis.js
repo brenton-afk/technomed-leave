@@ -150,6 +150,49 @@ export async function getUsageRecord(id) {
   return data ? JSON.parse(data) : null
 }
 
+// ─── Who has checked a filed case ────────────────────────────────────────────
+// The one thing the app holds about a Dropbox folder, and deliberately the
+// only thing: Dropbox owns the documents, this owns "Toni has been through
+// this one". Keyed by the Dropbox path, so moving or renaming a folder loses
+// the tick rather than attaching it to the wrong case — which is the safe way
+// round for a clinical record.
+//
+// A patient surname is in that path, so this is the same grade of data as the
+// documents themselves. It is never logged.
+
+/** Marks a filed case checked, or clears it when `by` is null. */
+export async function setUsageReviewed(path, by) {
+  const key = `usageReview:${String(path || '').toLowerCase()}`
+  if (!by) {
+    await redis('del', key)
+    return null
+  }
+  const entry = { by: String(by).toLowerCase(), at: new Date().toISOString() }
+  await redisSetBody(key, JSON.stringify(entry))
+  return entry
+}
+
+/**
+ * Who checked each of these paths, as a map.
+ *
+ * One round trip for the lot rather than one per case: a patient with eleven
+ * years of history would otherwise be eleven sequential calls before anything
+ * appeared on screen.
+ */
+export async function getUsageReviews(paths) {
+  const list = (paths || []).filter(Boolean)
+  if (!list.length) return {}
+  const keys = list.map(p => `usageReview:${String(p).toLowerCase()}`)
+  const values = await redis('mget', ...keys)
+  const out = {}
+  list.forEach((path, i) => {
+    const raw = Array.isArray(values) ? values[i] : null
+    if (!raw) return
+    try { out[path] = JSON.parse(raw) } catch { /* a value we did not write */ }
+  })
+  return out
+}
+
 // ─── TIMESHEETS ─────────────────────────────────────────────
 
 const timesheetKey = (status, email, periodStart) =>

@@ -19,7 +19,7 @@ const MIGRATED = [
   'cases/TeamLeaderStrip.jsx',
   'leave/DateRange.jsx',
   'TheatreGuides.jsx',
-  'Chat.jsx'
+  'Chat.jsx', 'PatientHistory.jsx'
 ]
 
 // The clinical plan components deliberately replicate the emailed Word
