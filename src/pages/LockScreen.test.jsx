@@ -11,22 +11,24 @@ vi.mock('@simplewebauthn/browser', () => ({
 }))
 
 import App from '../App.jsx'
-import LockScreen from './LockScreen.jsx'
 
-// The session lasts a month and lives on the device now, so the thing between
-// a picked-up phone and a list of patients is the phone's own biometric. That
-// trade is what makes a month-long session reasonable at all, and it is the
-// arrangement every banking app on the same phone already uses.
+// The app used to ask for Face ID on every cold open, which Brent kept
+// reporting as "it makes me log in every time". He was right that it bought
+// nothing: the phone or laptop is already locked by its operating system, so
+// a second check to look at a case list taxed every open to catch nothing.
+//
+// Opening the app is now free. The admin portal is not — it holds everybody's
+// pay, everybody's PINs and the system settings.
 
-const BEN = {
-  name: 'Ben Cassidy', email: 'ben@technomed.com.au',
-  isAdmin: false, token: 'tok-ben',
-  staff: { hasTimesheets: true, role: 'Clinical Support Specialist' }
+const ADMIN = {
+  name: 'Brenton Lovering', email: 'brenton@technomed.com.au',
+  isAdmin: true, token: 'tok-admin',
+  staff: { hasTimesheets: false, role: 'Managing Director', isAdmin: true }
 }
 
-const storedSession = (ageMs = 0) => {
-  localStorage.setItem('tm_user', JSON.stringify(BEN))
-  localStorage.setItem('tm_login_time', String(Date.now() - ageMs))
+const signedIn = (who = ADMIN) => {
+  localStorage.setItem('tm_user', JSON.stringify(who))
+  localStorage.setItem('tm_login_time', String(Date.now()))
 }
 
 beforeEach(() => {
@@ -38,37 +40,44 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('the session surviving the app being closed', () => {
-  it('is kept where closing the app does not wipe it', () => {
-    // sessionStorage is emptied when an installed web app is closed, and iOS
-    // closes one whenever it wants the memory. That — not the expiry — was
-    // why every open asked for a PIN.
-    storedSession()
-    expect(localStorage.getItem('tm_user')).toBeTruthy()
+describe('opening the app', () => {
+  it('goes straight in, with no prompt', () => {
+    // The whole complaint.
+    signedIn()
     render(<App />)
-    expect(screen.queryByText(/Enter your PIN|Staff Portal/i)).not.toBeTruthy()
+    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
   })
 
-  it('still expires, a month out', () => {
-    storedSession(31 * 24 * 60 * 60 * 1000)
+  it('still expires the session a month out', () => {
+    localStorage.setItem('tm_user', JSON.stringify(ADMIN))
+    localStorage.setItem('tm_login_time', String(Date.now() - 31 * 24 * 60 * 60 * 1000))
     render(<App />)
-    // Back to signing in properly.
-    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument()
   })
 })
 
-describe('unlocking on open', () => {
-  it('asks for Face ID before showing anything', async () => {
-    storedSession()
-    authenticate.mockImplementation(() => new Promise(() => {}))  // still prompting
+describe('opening the admin portal', () => {
+  const goAdmin = async () => {
+    signedIn()
     render(<App />)
-    expect(await screen.findByText(/Welcome back, Ben/)).toBeInTheDocument()
-    // The app behind it is not on screen yet.
-    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Me' }))
+    fireEvent.click(screen.getByText('Admin portal'))
+  }
+
+  it('asks before showing it', async () => {
+    authenticate.mockImplementation(() => new Promise(() => {}))
+    await goAdmin()
+    expect(await screen.findByText(/Welcome back, Brent/)).toBeInTheDocument()
   })
 
-  it('goes straight in once it takes', async () => {
-    storedSession()
+  it('says why it is asking', async () => {
+    authenticate.mockRejectedValue(new Error('cancelled'))
+    await goAdmin()
+    expect(await screen.findByText(/everybody's pay and PINs/)).toBeInTheDocument()
+  })
+
+  it('lets you in once it takes', async () => {
     authenticate.mockResolvedValue({ id: 'cred' })
     global.fetch = vi.fn(async (url, opts) => {
       const body = JSON.parse(opts?.body || '{}')
@@ -76,46 +85,24 @@ describe('unlocking on open', () => {
       if (body.action === 'passkey-login') return { ok: true, json: async () => ({ valid: true }) }
       return { ok: true, json: async () => ({ events: [] }) }
     })
-    render(<App />)
-    await waitFor(() =>
-      expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument())
+    await goAdmin()
+    await waitFor(() => expect(screen.queryByText(/Welcome back, Brent/)).not.toBeInTheDocument())
   })
 
-  it('offers another go when it does not', async () => {
-    storedSession()
+  it('has a way out that is not signing out', async () => {
+    // Somebody who tapped Admin by mistake should not have to
+    // re-authenticate to get back to the cases.
     authenticate.mockRejectedValue(new Error('cancelled'))
-    render(<App />)
-    expect(await screen.findByRole('button', { name: 'Unlock' })).toBeInTheDocument()
-  })
-
-  it('is never a dead end', async () => {
-    // A face it will not take, or a device that cannot. The PIN is always
-    // there.
-    storedSession()
-    authenticate.mockRejectedValue(new Error('no'))
-    render(<App />)
-    expect(await screen.findByRole('button', { name: 'Use my PIN instead' })).toBeInTheDocument()
-  })
-
-  it('does not lock a device that has no biometrics at all', () => {
-    // There would be nothing to unlock it with but the PIN, and demanding the
-    // PIN on every open is the friction being removed.
-    supports.mockReturnValue(false)
-    storedSession()
-    render(<App />)
-    expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
+    await goAdmin()
+    const notNow = await screen.findByRole('button', { name: 'Not now' })
+    fireEvent.click(notNow)
+    await waitFor(() => expect(screen.queryByText(/Welcome back, Brent/)).not.toBeInTheDocument())
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
   })
-})
 
-describe('what the lock screen says', () => {
-  it('does not say why the unlock failed', async () => {
-    // The difference between "no passkey here" and "that is not your face" is
-    // not actionable, and spelling it out is a hint to somebody holding a
-    // phone that is not theirs.
-    authenticate.mockRejectedValue(new Error('InvalidStateError: no credential'))
-    render(<LockScreen user={BEN} onUnlock={() => {}} onUsePin={() => {}} />)
-    await screen.findByRole('button', { name: 'Unlock' })
-    expect(screen.queryByText(/InvalidStateError|credential/i)).not.toBeInTheDocument()
+  it('always offers the PIN', async () => {
+    authenticate.mockRejectedValue(new Error('no'))
+    await goAdmin()
+    expect(await screen.findByRole('button', { name: 'Use my PIN instead' })).toBeInTheDocument()
   })
 })

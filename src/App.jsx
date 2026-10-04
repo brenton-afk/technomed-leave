@@ -63,6 +63,11 @@ const SELF_BACK = new Set([
 // Matches the server-side session TTL in api/_auth.js.
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
+// How long the admin portal stays open once unlocked. Long enough to do a
+// round of approvals without being asked again, short enough that a laptop
+// left on a bench is not an open payroll screen an hour later.
+const ADMIN_UNLOCK_MS = 15 * 60 * 1000
+
 // localStorage, not sessionStorage. sessionStorage is emptied when the app is
 // closed, and iOS closes an installed web app whenever it wants the memory —
 // so the one-hour expiry was never what people were hitting. Every open was a
@@ -88,7 +93,11 @@ export default function App() {
   const newBuild = useNewBuild()
   const [user, setUser] = useState(null)
   // A session read back from the device, not yet unlocked on this launch.
-  const [locked, setLocked] = useState(false)
+  // When the admin portal was last unlocked on this device. Everything else
+  // opens straight away; this is the one place worth a check, because it holds
+  // everybody's pay, everybody's PINs and the system settings.
+  const [adminUnlockedAt, setAdminUnlockedAt] = useState(0)
+  const [unlockingAdmin, setUnlockingAdmin] = useState(false)
   // The number on the Messages tab. Below the state it reads and above every
   // early return, which is the only place both rules are satisfied.
   const unread = useUnread(user?.token)
@@ -99,17 +108,20 @@ export default function App() {
     const restored = loadStoredSession()
     if (!restored) { clearSession(); return }
     setUser(restored)
-    // Restored sessions start locked, where there is something to unlock with.
-    // The credential lasts a month, so what stands between a picked-up phone
-    // and the patient list is the phone's own biometric — the arrangement
-    // every banking app on the same phone uses, and the reason a month is
-    // reasonable to offer at all.
+    // Straight in. No prompt.
     //
-    // A device with no biometrics is not locked. There would be nothing to
-    // unlock it with but the PIN, and demanding the PIN on every open is the
-    // exact friction this is removing. The desktops this applies to are
-    // behind an operating-system login already.
-    setLocked(browserSupportsWebAuthn())
+    // This used to ask for Face ID on every cold open, which is the thing
+    // Brent kept reporting as "it makes me log in every time" — and he was
+    // right that it buys nothing. The phone or laptop is already locked by
+    // the operating system; a second check to look at a case list is a tax on
+    // the ninety-nine opens where nothing is wrong.
+    //
+    // The session is still a session. Every endpoint still requires it, it
+    // still expires, and it can still be revoked. What has gone is the local
+    // prompt in front of it, which was never the thing protecting anything.
+    //
+    // The admin portal is different and still asks — see below. Step up where
+    // the stakes are, rather than taxing every screen equally.
   }, [])
 
   // The stored login time is checked, not just written, so a session really does
@@ -148,27 +160,41 @@ export default function App() {
     }
   }
 
+  /** Opening the admin portal asks for Face ID, unless it did so recently. */
+  const openAdmin = useCallback(() => {
+    if (Date.now() - adminUnlockedAt < ADMIN_UNLOCK_MS) return true
+    setUnlockingAdmin(true)
+    return false
+  }, [adminUnlockedAt])
+
   const navigate = useCallback(target => {
     // Going anywhere clears the leave confirmation. Without this it shows in
     // place of whatever tab you tapped, which is the trapped screen again
     // wearing a different hat.
     setSubmitted(null)
-    setNav(typeof target === 'string' ? { tab: target, sub: null } : { sub: null, ...target })
+    const next = typeof target === 'string' ? { tab: target, sub: null } : { sub: null, ...target }
+    // Asked for on the way in rather than inside, so the portal never renders
+    // behind the prompt.
+    if (next.tab === 'admin' && !openAdmin()) return
+    setNav(next)
     window.scrollTo?.(0, 0)
-  }, [])
+  }, [openAdmin])
 
   const back = useCallback(() => setNav(n => ({ tab: n.tab, sub: null })), [])
 
   if (!user) return <PinScreen onLogin={handleLogin} />
 
-  // Signed in on this device, but not yet this launch. Face ID, or the PIN if
-  // the device cannot — never a dead end.
-  if (locked) {
+  // The administration side, and only it. Face ID or the PIN, once, and then
+  // it stays open for a while — a check on every tap inside the portal would
+  // be the same mistake one level down.
+  if (unlockingAdmin) {
     return (
       <LockScreen
         user={user}
-        onUnlock={() => setLocked(false)}
-        onUsePin={() => { setLocked(false); handleLogout() }} />
+        reason="The admin portal holds everybody's pay and PINs."
+        onUnlock={() => { setAdminUnlockedAt(Date.now()); setUnlockingAdmin(false) }}
+        onUsePin={() => { setUnlockingAdmin(false); handleLogout() }}
+        onCancel={() => { setUnlockingAdmin(false); navigate({ tab: 'cases' }) }} />
     )
   }
 

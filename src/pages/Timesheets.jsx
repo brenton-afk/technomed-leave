@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { extraDoubleTime, COVERED_HOURS } from '../clinicalPlan/callIn.js'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
+import { useIsDesktop } from '../design/viewport.js'
 
 // Points at the shared tokens rather than redefining them, so this screen
 // cannot drift from the rest of the app. Amber and purple stay local: here they
@@ -46,6 +47,68 @@ function dayNumber(dateStr) { return Number(dateStr.slice(8, 10)) }
 function isWeekend(index) { return index % 7 >= 5 }
 
 // ─── Number pad ──────────────────────────────────────────────
+
+
+/**
+ * One cell of the grid.
+ *
+ * On a phone it is a button that opens the number pad: the cells are about
+ * 40px wide and typing into one is worse than tapping a big keypad.
+ *
+ * On a desktop it is an input you type into. Toni enters a fortnight on a
+ * laptop with a number pad under her hands and had to click a cell, click
+ * seven digits and click save, for every one — which is slower than the paper
+ * it replaced and was reported, fairly, as painful.
+ *
+ * Tab moves across the week, because the inputs are in day order in the
+ * document. Enter moves down to the same day in the next category, which is
+ * the other way somebody fills this in. Focusing selects what is there, so
+ * typing replaces rather than appending to a number already in the box.
+ */
+function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnter }) {
+  if (!desktop) {
+    return (
+      <button onClick={onOpen}
+        style={{
+          padding: '11px 0', borderRadius: 8, cursor: 'pointer', fontSize: 14,
+          fontWeight: value ? 700 : 400,
+          background: value ? tint : (weekend ? 'rgba(4,39,70,0.035)' : 'white'),
+          color: value ? 'white' : 'rgba(26,43,74,0.25)',
+          border: value ? 'none' : `1px solid ${BORDER}`
+        }}>
+        {value ?? '·'}
+      </button>
+    )
+  }
+
+  return (
+    <input
+      ref={cellRef}
+      type="text"
+      inputMode="decimal"
+      value={value ?? ''}
+      onFocus={e => e.target.select()}
+      onKeyDown={e => {
+        if (e.key === 'Enter') { e.preventDefault(); onEnter?.() }
+      }}
+      onChange={e => {
+        const raw = e.target.value.trim()
+        if (raw === '') return onSet('')
+        // Anything that is not a number is simply not entered — no error, no
+        // flash. A stray keystroke in a grid of boxes should do nothing.
+        if (!/^\d*\.?\d*$/.test(raw)) return
+        onSet(raw)
+      }}
+      style={{
+        width: '100%', minHeight: 42, textAlign: 'center', boxSizing: 'border-box',
+        padding: '0 2px', borderRadius: 8, fontSize: 16,
+        fontWeight: value ? 700 : 400, fontFamily: 'inherit', outline: 'none',
+        background: value ? tint : (weekend ? 'rgba(4,39,70,0.035)' : 'white'),
+        color: value ? 'white' : NAVY,
+        border: value ? `1px solid ${tint}` : `1px solid ${BORDER}`
+      }} />
+  )
+}
 
 function NumberPad({ cell, categories, onSet, onClose }) {
   const category = categories.find(c => c.key === cell.categoryKey)
@@ -247,6 +310,11 @@ export default function Timesheets({ user, onBack }) {
   const [entries, setEntries] = useState({})
   const [activeWeek, setActiveWeek] = useState(0)
   const [padCell, setPadCell] = useState(null)
+  // Every desktop cell, so Enter can move down a column.
+  const cellRefs = useRef({})
+  // Typed cells on a desktop, a tapped number pad on a phone. Different
+  // hardware, different right answer — see GridCell.
+  const desktop = useIsDesktop()
   const [showOnCall, setShowOnCall] = useState(false)
   const [showSplit, setShowSplit] = useState(false)
   const [callIns, setCallIns] = useState([])
@@ -728,16 +796,21 @@ export default function Timesheets({ user, onBack }) {
                 const value = entries[cat.key]?.[day]
                 const tint = COLOURS[cat.colour] || NAVY
                 return (
-                  <button key={day}
-                    onClick={() => setPadCell({ categoryKey: cat.key, day, dayIndex: activeWeek * 7 + i, value })}
-                    style={{
-                      padding: '11px 0', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: value ? 700 : 400,
-                      background: value ? tint : (isWeekend(activeWeek * 7 + i) ? 'rgba(4,39,70,0.035)' : 'white'),
-                      color: value ? 'white' : 'rgba(26,43,74,0.25)',
-                      border: value ? 'none' : `1px solid ${BORDER}`
-                    }}>
-                    {value ?? '·'}
-                  </button>
+                  <GridCell key={day}
+                    desktop={desktop}
+                    value={value}
+                    tint={tint}
+                    weekend={isWeekend(activeWeek * 7 + i)}
+                    onOpen={() => setPadCell({ categoryKey: cat.key, day, dayIndex: activeWeek * 7 + i, value })}
+                    onSet={raw => setCell(cat.key, day, raw === '' ? '' : Number(raw))}
+                    cellRef={el => { cellRefs.current[`${cat.key}|${day}`] = el }}
+                    onEnter={() => {
+                      // Down a row, same day — the other way a fortnight gets
+                      // filled in.
+                      const at = categories.findIndex(c => c.key === cat.key)
+                      const next = categories[at + 1]
+                      cellRefs.current[`${next?.key}|${day}`]?.focus()
+                    }} />
                 )
               })}
             </div>

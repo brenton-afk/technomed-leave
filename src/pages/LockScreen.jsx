@@ -2,21 +2,26 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
 import { colour as tokenColour } from '../design/tokens.js'
 
-// ─── Opening the app when you are already signed in ──────────────────────────
-// The session lasts a month and lives on the device, so the thing between a
-// phone somebody has picked up and a list of patients is the phone's own
-// biometric. That is the trade that makes a month-long session reasonable, and
-// it is the arrangement every banking app on the same phone already uses.
+// ─── Stepping up, for the administration side ────────────────────────────────
+// This used to stand in front of the whole app on every cold open, and it was
+// wrong: the phone or laptop is already locked by its operating system, so a
+// second check to look at a case list taxed the ninety-nine opens where
+// nothing was wrong to catch none of them.
+//
+// It guards the admin portal now, which holds everybody's pay, everybody's
+// PINs and the system settings. Step up where the stakes are, rather than
+// taxing every screen equally.
 //
 // It is never a dead end. Face ID is attempted on its own, because asking
 // somebody to tap a button to get a prompt that then asks them again is two
-// steps for one decision — but a device that cannot do it, or a person whose
-// face it will not take, always has the PIN.
+// steps for one decision — a device that cannot do it has the PIN, and
+// somebody who tapped Admin by mistake has a way back that is not signing
+// out.
 
 const NAVY = tokenColour.navy
 const TEAL = tokenColour.accent
 
-export default function LockScreen({ user, onUnlock, onUsePin }) {
+export default function LockScreen({ user, onUnlock, onUsePin, reason, onCancel }) {
   const [state, setState] = useState('trying')   // trying | failed | unsupported
   const [tries, setTries] = useState(0)
 
@@ -85,7 +90,7 @@ export default function LockScreen({ user, onUnlock, onUsePin }) {
         maxWidth: 300, marginBottom: 26
       }}>
         {state === 'trying' && 'Unlocking…'}
-        {state === 'failed' && 'Unlock to see the cases.'}
+        {state === 'failed' && (reason || 'Unlock to carry on.')}
         {state === 'unsupported' && 'This device cannot unlock with Face ID.'}
       </div>
 
@@ -108,6 +113,18 @@ export default function LockScreen({ user, onUnlock, onUsePin }) {
         }}>
         Use my PIN instead
       </button>
+
+      {/* A way out that is not signing out. Somebody who tapped Admin by
+          mistake should not have to re-authenticate to get back to the cases. */}
+      {onCancel && (
+        <button onClick={onCancel}
+          style={{
+            marginTop: 10, background: 'none', border: 'none', cursor: 'pointer',
+            color: 'rgba(255,255,255,0.5)', fontSize: 14, padding: 10
+          }}>
+          Not now
+        </button>
+      )}
     </div>
   )
 }
