@@ -67,6 +67,27 @@ export default function SystemStatus({ user }) {
 
   const xeroBroken = xero && (!xero.connected || xero.expired)
 
+  async function removeSheet(id) {
+    // Deleting a payroll record. Asked plainly, once — this is reached from a
+    // diagnostic panel by somebody already looking for something wrong, not
+    // stumbled into.
+    if (!window.confirm('Delete this timesheet from Xero? It cannot be undone from here.')) return
+    setSheetsBusy(true)
+    try {
+      const res = await fetch('/api/xero/info?action=delete-timesheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ timesheetID: id })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      await loadSheets()
+    } catch (err) {
+      setSheets(prev => ({ ...(prev || {}), error: err.message }))
+      setSheetsBusy(false)
+    }
+  }
+
   async function loadSheets() {
     setSheetsBusy(true)
     try {
@@ -129,8 +150,18 @@ export default function SystemStatus({ user }) {
                   padding:'8px 0', borderTop:`1px solid ${BORDER}`, fontSize:12.5
                 }}>
                   <span style={{ color:MUTED }}>{t.start.slice(0,10)} → {t.end.slice(0,10)}</span>
-                  <span style={{ color:NAVY, fontWeight:600 }}>
-                    {t.status} · {t.lines} line{t.lines === 1 ? '' : 's'} · {Math.round(t.hours * 100) / 100}h
+                  <span style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ color:NAVY, fontWeight:600 }}>
+                      {t.status} · {t.lines} line{t.lines === 1 ? '' : 's'} · {Math.round(t.hours * 100) / 100}h
+                    </span>
+                    <button onClick={() => removeSheet(t.id)} disabled={sheetsBusy}
+                      style={{
+                        border:`1px solid ${RED}`, background:'transparent', color:RED,
+                        borderRadius:8, padding:'4px 10px', fontSize:12.5, fontWeight:700,
+                        cursor: sheetsBusy ? 'default' : 'pointer'
+                      }}>
+                      Delete
+                    </button>
                   </span>
                 </div>
               ))}

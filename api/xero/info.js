@@ -54,6 +54,9 @@ export default async function handler(req, res) {
     // Read-only and admin-only. It lists what is there, by employee and
     // period, so a duplicate or a stray draft is visible as a fact.
     if (action === 'timesheets') {
+      // Payroll records. Admin only, like the rest of this file's write and
+      // diagnostic actions — it was added in a hurry this morning without it.
+      if (!(await requireAdmin(req, res))) return
       const { token, tenantId } = await getXeroToken()
       const timesheetsRes = await fetch(
         'https://api.xero.com/payroll.xro/1.0/Timesheets',
@@ -85,6 +88,42 @@ export default async function handler(req, res) {
       const duplicates = sheets.filter(t => seen.get(`${t.employeeID}|${t.start}`) > 1)
 
       return res.status(200).json({ count: sheets.length, duplicates, timesheets: sheets })
+    }
+
+    // ── Removing a timesheet from Xero ──
+    //
+    // Destructive, admin-only, and here because Brent's payroll is blocked
+    // and Xero's own screens will not load to let him do it there.
+    //
+    // Xero has no DELETE verb for a payroll timesheet: you post the same
+    // timesheet back with its status set to DELETED. It has to carry the ID,
+    // or it is read as a new one — which is the bug that created this mess in
+    // the first place.
+    if (action === 'delete-timesheet' && req.method === 'POST') {
+      const session = await requireAdmin(req, res)
+      if (!session) return
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+      const id = String(body.timesheetID || '').trim()
+      if (!id) return res.status(400).json({ error: 'A timesheet ID is needed' })
+
+      const { token, tenantId } = await getXeroToken()
+      const del = await fetch('https://api.xero.com/payroll.xro/1.0/Timesheets', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Xero-tenant-id': tenantId,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        // A bare array at the root, like every other AU payroll post.
+        body: JSON.stringify([{ TimesheetID: id, Status: 'DELETED' }])
+      })
+      const { ok, error } = await readXero(del, 'Xero timesheet delete')
+      if (!ok) return res.status(502).json({ error })
+      // Said out loud in the log, because deleting a payroll record should
+      // leave a trace somewhere other than the person's memory.
+      console.log(`Xero timesheet ${id} deleted by ${session.email}`)
+      return res.status(200).json({ ok: true, deleted: id })
     }
 
     if (action === 'env') {
