@@ -426,20 +426,92 @@ function Heading({ children }) {
 }
 
 /**
+ * One case in a week column.
+ *
+ * Not the full card. A week column is about 200px wide and the phone's card
+ * is built for 360 — dropped into one it wrapped to a word a line, and a
+ * fortnight of "Re do transphenoidal Rathkes/pituitary abscess with drain"
+ * came out as a vertical stack of single words.
+ *
+ * So: who, what, and the one thing that changes your morning. Everything else
+ * is a click away in the day view, which is where somebody goes when they
+ * actually need it.
+ */
+function WeekCase({ surgicalCase, onOpen }) {
+  const off = Boolean(surgicalCase.cancelled)
+  const spare = Boolean(surgicalCase.notRequired) && !off
+  const place = describeListPlace(surgicalCase.listPlace)
+
+  return (
+    <button type="button" onClick={() => onOpen?.(surgicalCase)}
+      style={{
+        display: 'flex', gap: 7, width: '100%', textAlign: 'left', cursor: 'pointer',
+        padding: '6px 7px', marginBottom: 4, borderRadius: radius.control,
+        border: `1px solid ${colour.line}`, background: colour.surface,
+        opacity: off ? 0.55 : spare ? 0.72 : 1
+      }}>
+      <span aria-hidden="true" style={{
+        width: 3, borderRadius: 2, flexShrink: 0,
+        background: off ? colour.inkFainter : accentForCase(surgicalCase)
+      }} />
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <span style={{
+          ...text('caption'), fontWeight: 700, display: 'block', color: colour.ink,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          ...(off ? { textDecoration: 'line-through' } : {})
+        }}>
+          {surgicalCase.patient}
+          <span style={{ color: colour.inkFaint, fontWeight: 400 }}> · </span>
+          <span style={{ color: off ? colour.inkFaint : accentTextForCase(surgicalCase) }}>
+            {surgicalCase.surgeon}
+          </span>
+        </span>
+
+        {place?.headline && (
+          <span style={{
+            ...text('micro'), display: 'block', textTransform: 'none',
+            color: place.headline.includes('1st') ? colour.warning : colour.accentDeep
+          }}>{place.headline}</span>
+        )}
+
+        {/* Two lines at most. A week is read by scanning down a column, and a
+            case that takes nine lines stops the column being scannable. */}
+        {surgicalCase.operation && (
+          <span style={{
+            ...text('micro'), display: '-webkit-box', WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical', overflow: 'hidden', textTransform: 'none',
+            fontWeight: 400, letterSpacing: 0, color: colour.inkMuted, lineHeight: 1.35
+          }}>{surgicalCase.operation}</span>
+        )}
+
+        {(off || spare) && (
+          <span style={{
+            ...text('micro'), display: 'block', color: colour.inkFaint
+          }}>{off ? 'Cancelled' : 'Not needed'}</span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+/**
  * The week as seven columns, for a desktop.
  *
- * A phone can only read a week as a list, so that is what this was everywhere —
- * including on a 27in screen, where the same week became a very long scroll of
- * phone-width cards with most of the glass empty beside them.
+ * A phone can only read a week as a list, so that is what this was everywhere
+ * — including on a 27in screen, where the same week became a very long scroll
+ * of phone-width cards with most of the glass empty beside them.
  *
- * Side by side, a week reads the way a calendar reads: Thursday being heavy and
- * Tuesday being empty is visible without scrolling, which is most of what
+ * Side by side, a week reads the way a calendar reads: Thursday being heavy
+ * and Tuesday being empty is visible without scrolling, which is most of what
  * somebody opens the week to find out.
  *
- * The columns are the same day panels the phone uses. A column is simply
- * narrower, and everything in it was already built for a narrow space.
+ * What is deliberately *not* in a column: the team leader, which is the same
+ * answer seven times and is already on the strip above; the "move a case with
+ * the arrows" instruction, which appeared once per hospital per day and was
+ * the single noisiest thing on the screen; and the reorder arrows themselves,
+ * which belong in the day view where there is room to use them.
  */
-function WeekGrid({ plan, today, onPickDay, onOpen, onReorder, onSetPlace, leader }) {
+function WeekGrid({ plan, today, onPickDay, onOpen }) {
   return (
     <div style={{
       display: 'grid',
@@ -452,37 +524,75 @@ function WeekGrid({ plan, today, onPickDay, onOpen, onReorder, onSetPlace, leade
       {(plan.days || []).map(day => {
         const isToday = day.date === today
         const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
+        const groups = day.casesByHospital || []
+        const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
+        const away = everythingElse.filter(i => i.kind === 'leave')
+        const alerts = (day.flags || []).filter(f =>
+          ['clinicalAlert', 'kitTask'].includes(f.kind))
+
         return (
           <div key={day.date} style={{
             background: weekend ? 'transparent' : colour.surface,
             border: `1px solid ${isToday ? colour.accent : colour.line}`,
-            borderRadius: radius.card,
-            overflow: 'hidden'
+            borderRadius: radius.card, overflow: 'hidden'
           }}>
             <button onClick={() => onPickDay(day.date)}
               style={{
                 display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
-                border: 'none', padding: `${space.sm}px ${space.md}px`,
+                border: 'none', padding: '7px 9px',
                 borderBottom: `1px solid ${colour.line}`,
                 background: isToday ? colour.accentSoft : 'transparent'
               }}>
               <span style={{
-                ...text('micro'), textTransform: 'uppercase', display: 'block',
+                ...text('micro'), display: 'block',
                 color: isToday ? colour.accentDeep : colour.inkFaint
-              }}>
-                {weekdayName(day.date)}
-              </span>
+              }}>{weekdayName(day.date)}</span>
               <span style={{
-                ...text('heading'), display: 'block',
+                ...text('bodyStrong'), display: 'block',
                 color: isToday ? colour.accentDeep : colour.ink
-              }}>
-                {dayNum(day.date)} {monthOf(day.date).slice(0, 3)}
-              </span>
+              }}>{dayNum(day.date)} {monthOf(day.date).slice(0, 3)}</span>
             </button>
 
-            <div style={{ padding: space.sm }}>
-              <DayPanel day={day} onOpen={onOpen} onReorder={onReorder}
-                onSetPlace={onSetPlace} leader={leader} />
+            <div style={{ padding: 7 }}>
+              {/* The things that change the day, first and briefly. */}
+              {alerts.map((flag, i) => (
+                <div key={i} style={{
+                  ...text('micro'), textTransform: 'none', fontWeight: 600,
+                  lineHeight: 1.35, color: colour.danger, background: colour.dangerSoft,
+                  border: `1px solid ${colour.dangerLine}`, borderRadius: radius.control,
+                  padding: '5px 7px', marginBottom: 4
+                }}>{flag.text}</div>
+              ))}
+
+              {away.map((item, i) => (
+                <div key={i} style={{
+                  ...text('micro'), textTransform: 'none', lineHeight: 1.35,
+                  color: colour.ink, background: colour.warningSoft,
+                  border: `1px solid ${colour.warningLine}`, borderRadius: radius.control,
+                  padding: '4px 7px', marginBottom: 4
+                }}>{item.title || item.text}</div>
+              ))}
+
+              {groups.map(group => (
+                <div key={group.hospital} style={{ marginBottom: 6 }}>
+                  <div style={{
+                    ...text('micro'), color: colour.inkFaint, margin: '6px 0 3px'
+                  }}>
+                    {group.hospital === 'CALVARY LENAH VALLEY' ? 'CALVARY' : group.hospital}
+                    {' · '}{group.cases.length}
+                  </div>
+                  {group.cases.map(c => (
+                    <WeekCase key={c.id} surgicalCase={c} onOpen={onOpen} />
+                  ))}
+                </div>
+              ))}
+
+              {!groups.length && !away.length && !alerts.length && (
+                <div style={{
+                  ...text('micro'), textTransform: 'none', color: colour.inkFainter,
+                  padding: '10px 0', textAlign: 'center'
+                }}>—</div>
+              )}
             </div>
           </div>
         )
@@ -1117,10 +1227,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             plan={plan}
             today={today}
             onPickDay={pickDay}
-            onOpen={setEditing}
-            onReorder={reorder}
-            onSetPlace={setPlacing}
-            leader={leader} />
+            onOpen={setEditing} />
         )}
 
         {plan && span === 'week' && !desktop && (plan.days || []).map(day => (

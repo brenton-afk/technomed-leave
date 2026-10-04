@@ -18,7 +18,9 @@ const ev = (id, summary, description, day) => ({
 })
 
 const EVENTS = [
-  ev('a', 'Chalmers DIPLOMAT - Fowler', 'Surg: Fowler\nPt: Chalmers\nHosp: RHH', '21'),
+  ev('a', 'Chalmers DIPLOMAT - Fowler',
+    'Surg: Fowler\nPt: Chalmers\nHosp: RHH\n'
+    + 'Procedure: Re do transphenoidal Rathkes/pituitary abscess with drain', '21'),
   ev('b', 'Marchetti REFORM - Atallah', 'Surg: Atallah\nPt: Marchetti\nHosp: RHH', '23')
 ]
 
@@ -101,5 +103,53 @@ describe('the week on a phone', () => {
     const grid = [...container.querySelectorAll('div')]
       .find(el => el.style.gridTemplateColumns === 'repeat(7, minmax(0, 1fr))')
     expect(grid).toBeFalsy()
+  })
+})
+
+describe('a week column is readable, not a stretched phone card', () => {
+  // "Super ugly, all stretched out and not really useful." It was: the phone's
+  // day panel dropped into a 200px column, so cards built for 360px wrapped to
+  // a word a line, and the leader chip and the "move a case with the arrows"
+  // instruction repeated seven and fifteen times respectively.
+  beforeEach(() => widthOf(1680))
+
+  it('does not repeat the instruction text in every column', async () => {
+    // Once per hospital per day — the single noisiest thing on the screen.
+    await toWeek()
+    expect(screen.queryByText(/Move a case with the arrows/)).not.toBeInTheDocument()
+  })
+
+  it('does not repeat the team leader seven times', async () => {
+    // Same answer every day, and already on the strip above the grid.
+    await toWeek()
+    expect(screen.queryByText(/— team leader/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the reorder arrows out of the columns', async () => {
+    // They belong in the day view, where there is room to use them.
+    await toWeek()
+    expect(screen.queryByLabelText(/up the list/)).not.toBeInTheDocument()
+  })
+
+  it('clamps a long operation rather than stacking it a word a line', async () => {
+    const { container } = await toWeek()
+    // Read off the attribute: jsdom does not expose -webkit-line-clamp as a
+    // property on CSSStyleDeclaration.
+    const clamped = [...container.querySelectorAll('span')]
+      .filter(el => /line-clamp:\s*2/.test(el.getAttribute('style') || ''))
+    expect(clamped.length).toBeGreaterThan(0)
+  })
+
+  it('still names the patient and the surgeon', async () => {
+    await toWeek()
+    expect(screen.getByText('Chalmers')).toBeInTheDocument()
+    expect(screen.getByText('Marchetti')).toBeInTheDocument()
+  })
+
+  it('still opens a case', async () => {
+    await toWeek()
+    fireEvent.click(screen.getByText('Chalmers'))
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Edit booking' })).toBeInTheDocument())
   })
 })
