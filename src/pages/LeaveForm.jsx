@@ -4,6 +4,7 @@ import { Page, Header } from '../design/Shell.jsx'
 import { colour as tokenColour } from '../design/tokens.js'
 import { workingDaysBetween } from '../clinicalPlan/toil.js'
 import DateRange from './leave/DateRange.jsx'
+import { useIsDesktop } from '../design/viewport.js'
 
 // ─── Applying for leave ──────────────────────────────────────────────────────
 // Four steps: when, what kind, why, and a look at it before it goes.
@@ -122,6 +123,7 @@ function Card({ children, style }) {
 }
 
 export default function LeaveForm({ user, onSuccess, onBack }) {
+  const desktop = useIsDesktop()
   const [step, setStep] = useState(0)
   // The last-day field, so choosing the first day can open its picker rather
   // than closing one calendar and making somebody find and tap another.
@@ -202,6 +204,11 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
       })
   }
 
+  // A form is not a week grid. The 1400px measure that lets seven columns
+  // breathe turns a leave application into one narrow card adrift in an acre
+  // of empty page, which is what this looked like.
+  const column = desktop ? 940 : undefined
+
   const days = form.startDate && form.endDate
     ? workingDaysBetween(form.startDate, form.endDate)
     : 0
@@ -233,7 +240,12 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
         </div>
       </Header>
 
-      <div className="tm-measure" style={{ flex: 1, padding: '16px 16px 150px', background: CANVAS }}>
+      <div className="tm-measure" style={{
+        flex: 1, background: CANVAS, maxWidth: column, boxSizing: 'border-box',
+        // No room reserved for a pinned bar on a desktop, because there is no
+        // pinned bar there — the buttons are the end of the form.
+        padding: desktop ? '20px 20px 40px' : '16px 16px 150px'
+      }}>
 
         {step === 0 && (
           <>
@@ -391,12 +403,26 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
         )}
       </div>
 
-      {/* tm-fixed, so this spans the content area on a desktop instead of
-          sitting in a 430px strip down the middle of the window. */}
-      <div className="tm-fixed" style={{
-        position: 'fixed', bottom: 'calc(70px + env(safe-area-inset-bottom, 0px))',
-        display: 'flex', gap: 10, padding: '12px 16px', background: 'white',
-        borderTop: `1px solid ${BORDER}`, boxSizing: 'border-box', zIndex: 90
+      {/* Pinned on a phone, where the form is longer than the screen and the
+          button has to be reachable with a thumb wherever you have scrolled
+          to. Not pinned on a desktop: there the whole form fits at once, and a
+          bar stuck to the foot of the window leaves Continue marooned in the
+          middle of an empty page with no visible connection to the calendar
+          it applies to. That was the complaint. */}
+      <div className={desktop ? '' : 'tm-fixed'} style={{
+        display: 'flex', gap: 10, background: 'white', boxSizing: 'border-box',
+        borderTop: `1px solid ${BORDER}`, zIndex: 90,
+        ...(desktop
+          ? {
+            maxWidth: column, margin: '0 auto 40px', width: '100%',
+            padding: '16px 20px', borderRadius: 12,
+            border: `1px solid ${BORDER}`
+          }
+          : {
+            position: 'fixed',
+            bottom: 'calc(70px + env(safe-area-inset-bottom, 0px))',
+            padding: '12px 16px'
+          })
       }}>
         {step > 0 && (
           <button onClick={back} disabled={submitting}

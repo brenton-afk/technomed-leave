@@ -104,6 +104,32 @@ a {
    is [scroll, nav]; `row-reverse` puts the nav first on screen while leaving the
    phone's tab order — content, then navigation — as it was for a screen reader
    and for the keyboard. */
+/* Narrow windows on a big screen: the app as a phone floating on a dark page.
+
+   This block has to come BEFORE the 1024 one, not after it. Both match at
+   desktop widths, their selectors have equal specificity, and the later rule
+   wins — so while it sat below, every property it names here beat the desktop
+   answer above. The Continue bar on the leave form was the visible one: the
+   1024 block puts it over the content area beside the sidebar, and this block
+   quietly put it back in a 460px strip centred on the window, a long way from
+   the form it belongs to. The comment up there described what it was supposed
+   to do rather than what it did. */
+@media (min-width: 640px) {
+  body {
+    background: #071726;
+  }
+  .tm-shell {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 22px 70px rgba(0, 0, 0, 0.45);
+  }
+  .tm-fixed {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 460px;
+  }
+}
+
 @media (min-width: 1024px) {
   .tm-shell {
     max-width: none;
@@ -218,21 +244,7 @@ a {
   right: 0;
 }
 
-@media (min-width: 640px) {
-  body {
-    background: #071726;
-  }
-  .tm-shell {
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 22px 70px rgba(0, 0, 0, 0.45);
-  }
-  .tm-fixed {
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    width: 100%;
-    max-width: 460px;
-  }
-}
+
 
 /* Printing has to see the whole document, not one screenful.
 

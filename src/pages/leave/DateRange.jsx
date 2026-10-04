@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { colour as tokenColour } from '../../design/tokens.js'
 import { workingDaysBetween } from '../../clinicalPlan/toil.js'
+import { useIsDesktop } from '../../design/viewport.js'
 
 // ─── Choosing the days off ───────────────────────────────────────────────────
 // Two native date fields, one opening the other, and no way to say which one
@@ -14,6 +15,12 @@ import { workingDaysBetween } from '../../clinicalPlan/toil.js'
 // looks at it — which is the question they are answering anyway. It also
 // behaves the same on a phone, a Mac and a PC, which two native pickers did
 // not.
+//
+// On a desktop it shows two months at once. Leave crosses a month boundary
+// more often than not — the Christmas fortnight, a week either side of Easter
+// — and picking a first day in one month and a last day in another meant
+// paging forward and losing sight of where the range started. There is room
+// for both on a laptop, so both are shown.
 
 const NAVY = tokenColour.navy
 const TEAL = tokenColour.accent
@@ -52,6 +59,7 @@ function monthGrid(year, month) {
  * @param {(range: {start: string, end: string}) => void} onChange
  */
 export default function DateRange({ start, end, onChange }) {
+  const desktop = useIsDesktop()
   const today = new Date()
   const anchor = start ? parse(start) : today
   const [shown, setShown] = useState({
@@ -81,7 +89,13 @@ export default function DateRange({ start, end, onChange }) {
     })
   }
 
-  const cells = monthGrid(shown.year, shown.month)
+  // Two months on a desktop, one on a phone where a second would halve every
+  // target to about 20px.
+  const panels = [{ ...shown }]
+  if (desktop) {
+    const next = new Date(Date.UTC(shown.year, shown.month + 1, 1))
+    panels.push({ year: next.getUTCFullYear(), month: next.getUTCMonth() })
+  }
   const days = start && end ? workingDaysBetween(start, end) : 0
 
   return (
@@ -120,55 +134,69 @@ export default function DateRange({ start, end, onChange }) {
         )}
       </div>
 
+      {/* One pair of arrows however many months are shown: they move the
+          window, not a month, so "next" from Oct–Nov gives Nov–Dec. */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '10px 10px 4px'
       }}>
         <button type="button" onClick={() => step(-1)} aria-label="Previous month"
           style={monthArrow}>‹</button>
-        <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>
-          {MONTHS[shown.month]} {shown.year}
+        <span style={{
+          fontSize: 16, fontWeight: 700, color: NAVY, display: 'flex', gap: 10
+        }}>
+          {panels.map(p => (
+            <span key={`${p.year}-${p.month}`} style={{ flex: 1, textAlign: 'center' }}>
+              {MONTHS[p.month]} {p.year}
+            </span>
+          ))}
         </span>
         <button type="button" onClick={() => step(1)} aria-label="Next month"
           style={monthArrow}>›</button>
       </div>
 
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
-        padding: '0 8px', gap: 2
+        display: 'grid', gap: desktop ? 24 : 0, padding: '0 8px',
+        gridTemplateColumns: `repeat(${panels.length}, minmax(0, 1fr))`
       }}>
-        {DAY_INITIALS.map((d, i) => (
-          <div key={i} style={{
-            textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: MUTED,
-            textTransform: 'uppercase', padding: '4px 0'
-          }}>{d}</div>
-        ))}
+        {panels.map(panel => (
+          <div key={`${panel.year}-${panel.month}`} style={{
+            display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2
+          }}>
+            {DAY_INITIALS.map((d, i) => (
+              <div key={i} style={{
+                textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: MUTED,
+                textTransform: 'uppercase', padding: '4px 0'
+              }}>{d}</div>
+            ))}
 
-        {cells.map((date, i) => {
-          if (!date) return <div key={i} />
-          const value = iso(date)
-          const isStart = value === start
-          const isEnd = value === end
-          const inRange = start && end && value > start && value < end
-          const selected = isStart || isEnd
-          const weekend = isWeekend(date)
-          return (
-            <button key={i} type="button" onClick={() => tap(date)}
-              aria-label={`${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`}
-              aria-pressed={selected}
-              style={{
-                // 40px: this is tapped with a thumb, and a calendar is the
-                // densest grid of targets in the app.
-                minHeight: 40, border: 'none', cursor: 'pointer', padding: 0,
-                borderRadius: selected ? 9 : inRange ? 0 : 9,
-                background: selected ? TEAL : inRange ? '#e6f4f2' : 'transparent',
-                color: selected ? 'white' : weekend ? MUTED : NAVY,
-                fontSize: 14, fontWeight: selected ? 700 : weekend ? 400 : 600
-              }}>
-              {date.getUTCDate()}
-            </button>
-          )
-        })}
+            {monthGrid(panel.year, panel.month).map((date, i) => {
+              if (!date) return <div key={i} />
+              const value = iso(date)
+              const isStart = value === start
+              const isEnd = value === end
+              const inRange = start && end && value > start && value < end
+              const selected = isStart || isEnd
+              const weekend = isWeekend(date)
+              return (
+                <button key={i} type="button" onClick={() => tap(date)}
+                  aria-label={`${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`}
+                  aria-pressed={selected}
+                  style={{
+                    // 40px: this is tapped with a thumb, and a calendar is the
+                    // densest grid of targets in the app.
+                    minHeight: 40, border: 'none', cursor: 'pointer', padding: 0,
+                    borderRadius: selected ? 9 : inRange ? 0 : 9,
+                    background: selected ? TEAL : inRange ? '#e6f4f2' : 'transparent',
+                    color: selected ? 'white' : weekend ? MUTED : NAVY,
+                    fontSize: 14, fontWeight: selected ? 700 : weekend ? 400 : 600
+                  }}>
+                  {date.getUTCDate()}
+                </button>
+              )
+            })}
+          </div>
+        ))}
       </div>
 
       <div style={{
@@ -176,7 +204,9 @@ export default function DateRange({ start, end, onChange }) {
         display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12
       }}>
         <span style={{ fontSize: 12.5, color: MUTED }}>
-          {days > 0 ? 'Weekends not counted' : 'Tap a day to start'}
+          {days > 0
+            ? 'Weekends not counted'
+            : `${desktop ? 'Click' : 'Tap'} a day to start`}
         </span>
         {days > 0 && (
           <strong style={{ fontSize: 16, color: TEAL }}>
