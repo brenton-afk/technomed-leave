@@ -320,7 +320,18 @@ export function paleVersionOf(hex, band = [0.8, 0.93], minSaturation = 0.8) {
   const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => v / 255)
   const [h, sat, light] = toHsl(rgb)
   const [lo, hi] = band
-  return fromHsl(h, Math.max(sat, minSaturation), lo + (hi - lo) * light)
+  // A grey has no hue worth holding up, and forcing the floor onto one invents
+  // a colour out of nothing: Graphite is #616161, its hue reads as 0 because
+  // every channel is equal, and raising the saturation to 0.8 at hue 0 is
+  // exactly how to say "red". Dubey's Wednesday case came out pink, and
+  // Hannan's neutral grey came out blue.
+  //
+  // So the floor applies only where there is already a colour to lift. Below
+  // this the accent is a neutral on purpose — Graphite for Dubey, grey for a
+  // surgeon with no confirmed colour — and a neutral has to stay one.
+  const NEUTRAL = 0.2
+  const saturation = sat < NEUTRAL ? sat : Math.max(sat, minSaturation)
+  return fromHsl(h, saturation, lo + (hi - lo) * light)
 }
 
 function toHsl([r, g, b]) {

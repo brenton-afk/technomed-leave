@@ -92,3 +92,41 @@ describe('what the palette itself can support', () => {
     expect(close.map(c => c.pair)).toEqual(['Thani/Gupta'])
   })
 })
+
+describe('a neutral stays neutral', () => {
+  // "Why is Dubey's case on Wednesday now red?"
+  //
+  // Because the tint held saturation up to a floor, and Graphite is #616161 —
+  // every channel equal, so its hue reads as 0, and 0 at 80% saturation is
+  // red. Dubey came out pink and Hannan's neutral grey came out blue. The
+  // floor exists to stop pale colours washing out; applied to a grey it
+  // invents a colour that was never there, and on a clinical week grid a red
+  // card means something.
+  const channels = hex => {
+    const n = parseInt(String(hex).slice(1), 16)
+    // eslint-disable-next-line no-bitwise
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  }
+  const spread = hex => {
+    const c = channels(hex)
+    return Math.max(...c) - Math.min(...c)
+  }
+
+  it('leaves Graphite grey', () => {
+    // Dubey. Equal channels in, equal channels out.
+    expect(spread(wash('Dubey'))).toBeLessThan(10)
+  })
+
+  it('does not turn a surgeon with no confirmed colour into one', () => {
+    // Hannan falls back to neutral deliberately — the absence of a colour is
+    // information, and a blue card says the opposite.
+    expect(spread(wash('Hannan'))).toBeLessThan(24)
+  })
+
+  it('still lifts a real colour', () => {
+    // The floor has to keep doing its job, or this fix has traded one bug for
+    // the washed-out palette it replaced.
+    expect(spread(wash('Thani'))).toBeGreaterThan(40)
+    expect(spread(wash('Gupta'))).toBeGreaterThan(40)
+  })
+})
