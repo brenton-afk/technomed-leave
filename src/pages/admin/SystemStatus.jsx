@@ -149,7 +149,10 @@ export default function SystemStatus({ user }) {
                   display:'flex', justifyContent:'space-between', gap:12,
                   padding:'8px 0', borderTop:`1px solid ${BORDER}`, fontSize:12.5
                 }}>
-                  <span style={{ color:MUTED }}>{t.start.slice(0,10)} → {t.end.slice(0,10)}</span>
+                  <span style={{ color:MUTED }}>
+                    <strong style={{ color:NAVY }}>{t.who || 'Unknown employee'}</strong>
+                    {' · '}{t.start.slice(0,10)} → {t.end.slice(0,10)}
+                  </span>
                   <span style={{ display:'flex', alignItems:'center', gap:10 }}>
                     <span style={{ color:NAVY, fontWeight:600 }}>
                       {t.status} · {t.lines} line{t.lines === 1 ? '' : 's'} · {Math.round(t.hours * 100) / 100}h
@@ -165,6 +168,21 @@ export default function SystemStatus({ user }) {
                   </span>
                 </div>
               ))}
+              {sheets.drafts?.length > 0 && (
+                <div style={{ marginTop:12, paddingTop:10, borderTop:`1px solid ${BORDER}` }}>
+                  <div style={{ fontSize:12.5, color:MUTED, marginBottom:6 }}>
+                    Part-way through one in the app
+                  </div>
+                  {sheets.drafts.map(d => (
+                    <div key={d.name} style={{ fontSize:12.5, color:NAVY, padding:'3px 0' }}>
+                      <strong>{d.name}</strong>
+                      {d.periodStart ? ` · ${d.periodStart}` : ''}
+                      {d.savedAt ? ` · saved ${d.savedAt.slice(0, 16).replace('T', ' ')}` : ''}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {sheets.count === 0 && (
                 <div style={{ fontSize:12.5, color:MUTED }}>
                   Nothing. Whatever is wrong with Xero's page, this app has not

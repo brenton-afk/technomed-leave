@@ -4,6 +4,8 @@ import {
   listEmployees, listLeaveTypes
 } from '../_xeroClient.js'
 import { readXero } from '../_xeroResponse.js'
+import { STAFF } from '../../src/staffConfig.js'
+import { getTimesheetDraft } from '../_redis.js'
 
 // Read-only Xero lookups, routed by ?action=. These were three separate
 // functions (status, balances, debug); they were merged to stay under the
@@ -65,9 +67,19 @@ export default async function handler(req, res) {
       const { ok, data, error } = await readXero(timesheetsRes, 'Xero timesheets')
       if (!ok) return res.status(502).json({ error })
 
+      // Whose it is, by name. A Xero employee ID answers nobody's question —
+      // the point of this panel is working out who submitted what, and a UUID
+      // makes that a second lookup in a system that may not be loading.
+      const employees = await listEmployees(token, tenantId).catch(() => [])
+      const nameOf = id => {
+        const match = employees.find(e => (e.EmployeeID || e.employeeID) === id)
+        return match ? `${match.FirstName} ${match.LastName}`.trim() : null
+      }
+
       const sheets = (Array.isArray(data) ? data : data.Timesheets || []).map(t => ({
         id: t.TimesheetID,
         employeeID: t.EmployeeID,
+        who: nameOf(t.EmployeeID),
         start: String(t.StartDate || ''),
         end: String(t.EndDate || ''),
         status: t.Status,
@@ -87,7 +99,27 @@ export default async function handler(req, res) {
       }
       const duplicates = sheets.filter(t => seen.get(`${t.employeeID}|${t.start}`) > 1)
 
-      return res.status(200).json({ count: sheets.length, duplicates, timesheets: sheets })
+      // Who is part-way through one, from this app's own records.
+      //
+      // A submission that fails never reaches our store — the record is
+      // written after Xero accepts it — so a failed attempt leaves no trace
+      // there at all. The draft does, because it is saved as somebody types.
+      // That is what answers "who was trying to submit" when the submission
+      // is exactly the thing that broke, and it is why this is here: the app
+      // knew all along and had nowhere to say it.
+      const drafts = (await Promise.all(
+        STAFF.filter(p => p.hasTimesheets).map(async person => {
+          const draft = await getTimesheetDraft(person.email).catch(() => null)
+          if (!draft) return null
+          return {
+            name: person.name,
+            periodStart: draft.periodStart || null,
+            savedAt: draft.savedAt || null
+          }
+        })
+      )).filter(Boolean)
+
+      return res.status(200).json({ count: sheets.length, duplicates, timesheets: sheets, drafts })
     }
 
     // ── Removing a timesheet from Xero ──
