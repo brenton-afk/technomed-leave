@@ -45,25 +45,32 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
   return (
     <>
       <button onClick={() => setOpen(true)} disabled={busy}
+        // The word "Change" used to sit at the end of the row and carry this.
+        // It became a chevron to match the other cards, so the button has to
+        // say what it does somewhere a screen reader can reach.
+        aria-label={`Team leader: ${leader?.firstName || leader?.name || 'nobody set'}. Change.`}
         style={{
           display: 'flex', alignItems: 'center', gap: space.sm, width: '100%',
-          textAlign: 'left', cursor: 'pointer', marginBottom: space.sm,
-          background: 'rgba(255,255,255,0.10)',
-          border: '1px solid rgba(255,255,255,0.18)',
-          borderRadius: radius.pill, padding: `6px ${space.md}px`,
+          textAlign: 'left', cursor: 'pointer', marginBottom: space.md,
+          // Matched to the bookings inbox below it. This used to be white on
+          // navy because it sat in the header; on the page it has to be a
+          // card like the other things you can open from here.
+          background: leaderAway ? colour.warningSoft : 'transparent',
+          border: `1px solid ${leaderAway ? colour.warningLine : colour.line}`,
+          borderRadius: radius.card, padding: space.sm,
           opacity: busy ? 0.6 : 1
         }}>
         <span style={{
-          ...text('micro'), textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)'
+          ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint
         }}>
           {thisWeek ? 'Team leader' : 'Team leader, that week'}
         </span>
-        <span style={{ ...text('bodyStrong'), color: 'white', flex: 1, minWidth: 0 }}>
+        <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0 }}>
           {leader?.firstName || leader?.name || 'Nobody set'}
           {/* Said out loud, because "Brent is covering for Mat" and "it is
               Brent's turn" are different facts and the second is not true. */}
           {covering && (
-            <span style={{ ...text('caption'), color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>
+            <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}>
               {' '}covering for {leader.rostered.firstName}
             </span>
           )}
@@ -81,7 +88,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
             ...text('micro'), textTransform: 'uppercase', color: colour.accent
           }}>On now</span>
         )}
-        <span style={{ ...text('caption'), color: 'rgba(255,255,255,0.5)' }}>Change</span>
+        <span style={{ ...text('body'), color: colour.inkFaint }}>›</span>
       </button>
 
       {open && (

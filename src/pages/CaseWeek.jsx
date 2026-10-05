@@ -38,6 +38,15 @@ import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
 // the booking notes that neither of them used to show.
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+  'Saturday', 'Sunday']
+
+/** 5 → 5th, 22 → 22nd. The way the date is said out loud. */
+function ordinal(n) {
+  const teen = n % 100
+  if (teen >= 11 && teen <= 13) return `${n}th`
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`
+}
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -134,7 +143,12 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
   // The whole card carries the surgeon's colour, washed out, the way a
   // calendar entry does. A 5px strip reads on a phone and disappears in a
   // week column; a wash reads at any size. See washFor.
-  const wash = off ? 'transparent' : washFor(surgicalCase, 0.1)
+  //
+  // No second argument. It used to be the alpha, and when washFor stopped
+  // taking an alpha the leftover 0.1 became a truthy `dark` — so every card
+  // quietly rendered the dark-mode accents, which are lighter and sit closer
+  // together, undoing half the work done to separate Sage from Basil.
+  const wash = off ? 'transparent' : washFor(surgicalCase)
   const edge = off ? colour.line : withAlpha(bar, 0.35)
   const nameInk = off ? colour.inkFaint : accentTextForCase(surgicalCase)
   const ordering = typeof position === 'number' && Boolean(onMove)
@@ -466,7 +480,7 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
       marginBottom: 4, borderRadius: radius.control, overflow: 'hidden',
       // Same wash as the day card, so a surgeon looks the same in both.
       border: `1px solid ${off ? colour.line : withAlpha(accentForCase(surgicalCase), 0.35)}`,
-      background: off ? 'transparent' : washFor(surgicalCase, 0.1),
+      background: off ? 'transparent' : washFor(surgicalCase),
       opacity: off ? 0.55 : spare ? 0.72 : 1
     }}>
     <div style={{ display: 'flex', gap: 7, alignItems: 'stretch' }}>
@@ -1138,17 +1152,6 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         )}>
         {switcher}
 
-        {/* Who is on this week. It lives here because this is the screen the
-            duty leader works from, and "who is it this week" is asked while
-            looking at the week. */}
-        <TeamLeaderStrip
-          leader={leader}
-          away={plan?.away || []}
-          onChange={setTeamLeader}
-          week={window_.startDate}
-          today={today}
-          hour={new Date().getHours()} />
-
         {/* Moving between weeks is the most-used control here and was the
             smallest thing on the screen. Three items now, not four — the
             Day/Week pair moved up beside the title — so the range has room to
@@ -1182,56 +1185,39 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           <button onClick={() => goWeek(1)} aria-label="Next week" style={arrowStyle}>›</button>
         </div>
 
-        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
-          {/* The badges under each date are a count of cases, and a bare number
-              under a date does not say so. Labelling it once is cheaper than
-              leaving every reader to work it out — and it is the sort of thing
-              that only looks obvious to whoever built it. */}
-          <div style={{
-            ...text('micro'), textTransform: 'uppercase',
-            color: 'rgba(255,255,255,0.4)', padding: '0 2px 3px'
-          }}>
-            Cases each day
-          </div>
+        {/* Just the days. The count badges under each date went with the
+            "Cases each day" label that had to explain them — the week below
+            says how busy a day is by being long, and a number in a circle was
+            a second, smaller way of saying the same thing. */}
+        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '6px 8px 0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
             {days.map(day => {
-              const dp = (plan?.days || []).find(d => d.date === day)
-              const n = caseCount(dp)
               const on = day === activeDay
               const isToday = day === today
+              const at = parseDateStr(day)
+              const weekday = civilWeekday(at) - 1
               return (
                 <button key={day} onClick={() => pickDay(day)}
-                  aria-label={`${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}, `
-                    + `${n} case${n === 1 ? '' : 's'}`}
+                  aria-label={`${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}`}
                   aria-current={on ? 'date' : undefined}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    padding: '6px 2px 8px', border: 'none', cursor: 'pointer',
+                    padding: '7px 2px 9px', border: 'none', cursor: 'pointer',
                     borderRadius: '8px 8px 0 0',
                     background: on ? 'rgba(24,154,133,0.25)' : 'transparent',
                     borderBottom: on ? `3px solid ${colour.accent}` : '3px solid transparent'
                   }}>
+                  {/* The whole name where there is room for it. Seven columns
+                      of "Wednesday" do not fit across a phone. */}
                   <span style={{
-                    ...text('micro'),
-                    color: isToday ? colour.accent : 'rgba(255,255,255,0.5)'
-                  }}>{DAY_LABELS[civilWeekday(parseDateStr(day)) - 1]}</span>
+                    ...text('micro'), textTransform: 'none',
+                    whiteSpace: 'nowrap', overflow: 'hidden',
+                    color: isToday ? colour.accent : 'rgba(255,255,255,0.55)'
+                  }}>{desktop ? DAY_NAMES[weekday] : DAY_LABELS[weekday]}</span>
                   <span style={{
-                    ...text('bodyStrong'),
+                    ...text('bodyStrong'), marginTop: 1,
                     color: isToday ? colour.accent : 'white'
-                  }}>{dayNum(day)}</span>
-                  {/* A filled badge rather than a loose digit: a number in a
-                      circle reads as a count of things, a number floating under
-                      a date reads as anybody's guess. Kept at full size when
-                      empty so the row does not jump. */}
-                  <span style={{
-                    ...text('micro'),
-                    marginTop: 2,
-                    minWidth: 17, height: 17, lineHeight: '17px',
-                    borderRadius: radius.pill, textAlign: 'center',
-                    background: n ? (on ? colour.accent : 'rgba(255,255,255,0.20)') : 'transparent',
-                    color: n ? 'white' : 'transparent',
-                    fontWeight: 700
-                  }}>{n || '0'}</span>
+                  }}>{ordinal(dayNum(day))}</span>
                 </button>
               )
             })}
@@ -1287,6 +1273,18 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             )}
           </Banner>
         ))}
+
+        {/* Who is on this week. It was up in the navy header with the week
+            arrows, which made it look like part of the navigation rather than
+            a thing you can change. Down here it sits with the other entry
+            points — the inbox, adding a booking — which is what it is. */}
+        <TeamLeaderStrip
+          leader={leader}
+          away={plan?.away || []}
+          onChange={setTeamLeader}
+          week={window_.startDate}
+          today={today}
+          hour={new Date().getHours()} />
 
         {/* The bookings inbox. Always in the same place, whether or not anything
             is waiting — an entry point that only appears when there is something

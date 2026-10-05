@@ -218,12 +218,17 @@ describe('what the calendar says, and only that', () => {
     expect(screen.getAllByText('Cancelled')).toHaveLength(1)
   })
 
-  it('does not count a cancelled case in the day strip', async () => {
+  it('names each day and dates it', async () => {
+    // The count badges are gone, and the "Cases each day" label that had to
+    // explain them went with them: the week below says how busy a day is by
+    // being long, and a number in a circle was a smaller way of saying it
+    // twice. What is left is the day and the date, said the way it is said
+    // out loud.
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    // Tuesday has three bookings, one of them called off.
-    const tuesday = screen.getByText('22').closest('button')
-    expect(tuesday).toHaveTextContent('2')
+    expect(screen.getByText('22nd')).toBeInTheDocument()
+    expect(screen.getByText('22nd').closest('button')).toHaveTextContent('Tue')
+    expect(screen.queryByText(/Cases each day/i)).not.toBeInTheDocument()
   })
 })
 
@@ -453,22 +458,14 @@ describe('the week header fits a phone', () => {
 })
 
 describe('the number under each date', () => {
-  it('says what it is counting', async () => {
-    // "It wouldn't be obvious what that number means." A bare digit under a
-    // date is anybody's guess, so the strip is labelled once.
-    show()
-    await waitFor(() => expect(screen.getByText(/Cases each day/i)).toBeInTheDocument())
-  })
-
-  it('reads as a count to a screen reader too', async () => {
+  it('reads the whole date to a screen reader', async () => {
+    // "22nd" alone is not a date. The label says which day and which month,
+    // because that is what the column is actually offering to select.
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    // Monday 21 September carries one case in the fixtures.
-    expect(screen.getByRole('button', { name: /Monday 21 September, 1 case$/ }))
+    expect(screen.getByRole('button', { name: 'Monday 21 September' }))
       .toBeInTheDocument()
-    // Two, not three: Sturrock on the 22nd is cancelled, and the badge counts
-    // what is going ahead.
-    expect(screen.getByRole('button', { name: /Tuesday 22 September, 2 cases$/ }))
+    expect(screen.getByRole('button', { name: 'Tuesday 22 September' }))
       .toBeInTheDocument()
   })
 })
@@ -1014,7 +1011,7 @@ describe('who is team leader this week', () => {
   it('opens a picker on a tap', async () => {
     show()
     await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Change'))
+    fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
     expect(screen.getByText(/Monday 7am to Friday 5pm/)).toBeInTheDocument()
@@ -1023,7 +1020,7 @@ describe('who is team leader this week', () => {
   it('saves the person tapped, against that week', async () => {
     show()
     await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Change'))
+    fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
     fireEvent.click(screen.getByText(/^Aimee/))
 
@@ -1041,7 +1038,7 @@ describe('who is team leader this week', () => {
     // whoever held it last.
     show()
     await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Change'))
+    fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
     fireEvent.click(screen.getByText('Nobody this week'))
 
@@ -1148,8 +1145,33 @@ describe('the rota and covering for somebody', () => {
     })
     show()
     await waitFor(() => expect(screen.getByText(/covering for Mat/)).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Change'))
+    fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() =>
       expect(screen.getByText('Back to the roster — Mat')).toBeInTheDocument())
+  })
+})
+
+describe('the header, pared back', () => {
+  // "Move the team leader banner down to just below the dates and make it a
+  // section like the add a booking button. Ditch the case number tally and
+  // the cases each day reference."
+  it('puts the team leader on the page, not in the navy header', async () => {
+    const { container } = show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    const strip = screen.getByRole('button', { name: /Team leader:/ })
+    // The header is the navy block; the strip now sits in the body below it,
+    // with the inbox and the rest of the things you can open from here.
+    const header = container.querySelector('.tm-bleed')
+    expect(header).toBeTruthy()
+    expect(header.contains(strip)).toBe(false)
+  })
+
+  it('leaves no count badges behind in the strip', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    const monday = screen.getByRole('button', { name: 'Monday 21 September' })
+    // Just the day and the date. Monday carries one case in the fixtures, and
+    // the badge that used to say so has gone.
+    expect(monday.textContent).toBe('Mon21st')
   })
 })

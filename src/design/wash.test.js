@@ -107,6 +107,20 @@ describe('the cards actually use it', () => {
     expect(bodyOf('CaseCard')).toMatch(/const wash = off \? 'transparent'/)
   })
 
+  it('does not pass a leftover alpha where the dark flag now is', () => {
+    // washFor used to take an alpha as its second argument. When it stopped,
+    // the call sites kept passing 0.1 — which is truthy, so every card
+    // rendered the dark-mode accents: lighter, closer together, and quietly
+    // undoing the separation work. Nothing failed, because a card with a
+    // slightly wrong colour still looks like a card.
+    const calls = [...caseWeek.matchAll(/washFor\(([^)]*)\)/g)].map(m => m[1])
+    expect(calls.length).toBeGreaterThan(1)
+    for (const args of calls) {
+      expect(args, 'washFor takes a case, and optionally a dark flag')
+        .not.toMatch(/,\s*[\d.]+/)
+    }
+  })
+
   it('borders each card in a stronger pull of the same colour', () => {
     // Against a tinted fill a grey hairline reads as dirt. The edge has to
     // come from the same hue or the card loses its outline entirely.
