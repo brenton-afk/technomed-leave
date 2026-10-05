@@ -116,3 +116,30 @@ describe('what actually guards the admin portal', () => {
     expect(source).not.toMatch(/await requireSession\(/)
   })
 })
+
+describe('the admin prompt never costs a sign-in', () => {
+  // "It's still asking for passcode." It was, and this is why.
+  //
+  // The lock screen's "Use my PIN instead" called handleLogout(), so reaching
+  // for the gentler option destroyed the thirty-day session. The app then
+  // dropped to the PIN screen, which auto-fires the passkey — the iOS
+  // passcode sheet. Turning the prompt off stopped new instances; it could
+  // not give back a session already thrown away.
+  //
+  // Guarded at the source: the step-up is off, so there is no way to drive
+  // this through the UI, and a behavioural test would pass against the bug.
+  it('offers the PIN without signing anybody out', () => {
+    const app = readFileSync(join(__dirname, '..', 'App.jsx'), 'utf8')
+    const onUsePin = /onUsePin=\{([^}]*(?:\{[^}]*\})?[^}]*)\}/.exec(app)
+    expect(onUsePin, 'the lock screen still takes an onUsePin').toBeTruthy()
+    expect(onUsePin[1]).not.toMatch(/handleLogout/)
+  })
+
+  it('only clears the session where somebody asked to sign out', () => {
+    const app = readFileSync(join(__dirname, '..', 'App.jsx'), 'utf8')
+    // The Me hub's sign-out button, the expiry check, and nothing else.
+    const calls = [...app.matchAll(/handleLogout\b/g)]
+    expect(calls.length).toBeLessThanOrEqual(4)
+    expect(app).toMatch(/onLogout=\{handleLogout\}/)
+  })
+})

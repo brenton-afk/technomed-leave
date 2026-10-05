@@ -224,7 +224,20 @@ export default function App() {
         user={user}
         reason="The admin portal holds everybody's pay and PINs."
         onUnlock={() => { setAdminUnlockedAt(Date.now()); setUnlockingAdmin(false) }}
-        onUsePin={() => { setUnlockingAdmin(false); handleLogout() }}
+        // Dismiss, not sign out.
+        //
+        // This used to call handleLogout(), and that is the whole reason the
+        // admin prompt was reported as "really annoying" and as "it's still
+        // asking for a passcode" after the prompt itself was turned off. The
+        // button offering an alternative to Face ID destroyed the session
+        // instead: tap it, and the thirty-day sign-in was gone, the app
+        // dropped to the PIN screen, and the PIN screen auto-fires the passkey
+        // — which is the iOS passcode sheet. Every reach for the gentler
+        // option cost a full sign-in.
+        //
+        // Unreachable today with ADMIN_STEP_UP off, and fixed anyway: a trap
+        // left behind a flag is a trap waiting for whoever flips it back.
+        onUsePin={() => setUnlockingAdmin(false)}
         onCancel={() => { setUnlockingAdmin(false); navigate({ tab: 'cases' }) }} />
     )
   }
