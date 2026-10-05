@@ -530,6 +530,21 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
           }}>{surgicalCase.operation}</span>
         )}
 
+        {/* Who is on it. The phone card has carried this all along and the
+            column did not, so the one view that shows the whole week at once
+            was the one that could not answer "who has got Thursday". It goes
+            last and in the accent colour, which is where the eye lands after
+            the patient and the operation.
+
+            Not clamped and not truncated: a rep's name is one short word, and
+            an ellipsis through "Aimee" would save nothing. */}
+        {surgicalCase.rep && !off && (
+          <span style={{
+            ...text('micro'), display: 'block', textTransform: 'none',
+            fontWeight: 700, letterSpacing: 0, color: colour.accentDeep
+          }}>{surgicalCase.rep}</span>
+        )}
+
         {(off || spare) && (
           <span style={{
             ...text('micro'), display: 'block', color: colour.inkFaint

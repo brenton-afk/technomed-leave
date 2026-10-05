@@ -21,7 +21,7 @@ const EVENTS = [
   ev('a', 'Mardon DIPLOMAT - Fowler',
     'Surg: Fowler\nPt: Mardon\nHosp: RHH\n'
     + 'Procedure: Re do transphenoidal Rathkes/pituitary abscess with drain', '21'),
-  ev('b', 'Vellacott REFORM - Atallah', 'Surg: Atallah\nPt: Vellacott\nHosp: RHH', '23'),
+  ev('b', 'Vellacott REFORM - Atallah (Aimee)', 'Surg: Atallah\nPt: Vellacott\nHosp: RHH', '23'),
   // A second case at the same hospital on the same day. Without one there is
   // no running order to put in order, and the arrows correctly stay away.
   ev('c', 'Ashbury REFORM - Garg', 'Surg: Garg\nPt: Ashbury\nHosp: RHH', '21')
@@ -230,5 +230,28 @@ describe('ordering a list from the week, with no day view to fall back on', () =
     // Wednesday has one case at RHH. A running order of one is not an order.
     const wednesday = document.querySelector('[data-week-column="2026-09-23"]')
     expect(wednesday.textContent).not.toMatch(/1\. /)
+  })
+})
+
+describe('who is on the case', () => {
+  beforeEach(() => widthOf(1680))
+
+  // "I want to be able to see who attended the case in the desktop view like
+  // we can on the phone view."
+  //
+  // The phone card has carried the rep all along and the week column did not,
+  // so the one view that shows a whole week at once was the one that could
+  // not answer "who has got Thursday".
+  it('names the rep on a week card', async () => {
+    await toWeek()
+    expect(screen.getByText('Aimee')).toBeInTheDocument()
+  })
+
+  it('leaves a case with nobody assigned unmarked, rather than blank-labelled', async () => {
+    // Hollis has no rep in the fixtures. An empty "Rep:" line would read as
+    // "nobody is going", which is a different fact from "not allocated yet".
+    const { container } = await toWeek()
+    const monday = container.querySelector('[data-week-column="2026-09-21"]')
+    expect(monday.textContent).not.toMatch(/Rep/)
   })
 })
