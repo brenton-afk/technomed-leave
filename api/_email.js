@@ -36,12 +36,36 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
 }
 
-function adminRecipients() {
-  return [
-    process.env.EMAIL_TO_1 || 'Erin@technomed.com.au',
-    process.env.EMAIL_TO_2 || 'Brenton@technomed.com.au',
-    process.env.EMAIL_TO_3 || 'Bookings@technomed.com.au'
-  ]
+/**
+ * Who sees a leave application.
+ *
+ * Derived from the roster rather than read from EMAIL_TO_1..3, because those
+ * are environment variables that *override* the defaults written here. The
+ * code said Erin and Brenton all along; production said whatever was typed
+ * into Vercel months ago, and the two had quietly diverged — which is how an
+ * application can be submitted, recorded, acknowledged, and never reach the
+ * person who approves it.
+ *
+ * isAdmin on the roster is already exactly Brenton and Erin, and it is the
+ * same flag that gates the admin portal where leave is approved. One fact,
+ * one place: adding an approver means adding them to the roster, and they get
+ * the mail and the screen together rather than one without the other.
+ *
+ * The environment can still add — a forwarding address, a shared inbox — but
+ * it can no longer remove. Nobody responsible for approving leave should be
+ * droppable by an env var nobody can read back.
+ */
+export function adminRecipients() {
+  const fromRoster = STAFF.filter(s => s.isAdmin).map(s => s.email)
+  const extra = [process.env.EMAIL_TO_1, process.env.EMAIL_TO_2, process.env.EMAIL_TO_3]
+    .filter(Boolean)
+  const seen = new Set()
+  return [...fromRoster, ...extra].filter(address => {
+    const key = String(address).trim().toLowerCase()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 // Applications submitted before `email` was persisted fall back to the roster.

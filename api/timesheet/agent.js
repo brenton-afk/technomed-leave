@@ -10,7 +10,9 @@ import {
 } from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
-import { getXeroToken, findEmployee, toilBalanceInXero } from '../_xeroClient.js'
+import {
+  getXeroToken, findEmployee, toilBalanceInXero, leaveBalances
+} from '../_xeroClient.js'
 import { toilBalanceFor, compareWithXero } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import {
@@ -43,6 +45,7 @@ export default async function handler(req, res) {
     if (action === 'decide') return await handleDecide(req, res)
     if (action === 'payaudit') return await handlePayAudit(req, res)
     if (action === 'toil') return await handleToil(req, res, session)
+    if (action === 'balances') return await handleBalances(req, res, session)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     console.error(`timesheet/${action} failed:`, err.message)
@@ -367,6 +370,56 @@ async function handleCallIns(req, res, session) {
 // It does not write the answer back. A number worked out here and posted into
 // payroll with nobody looking would be a poor way to find out it was wrong.
 // What it does is end the arithmetic, and say whether Xero has kept pace.
+/**
+ * Annual, sick and TOIL balances, read from Xero.
+ *
+ * Asked for so Erin can see that somebody actually has the leave they are
+ * applying for, which until now meant opening Xero in another tab beside the
+ * application. The numbers come from payroll rather than being recomputed
+ * here: Xero is what pays people, and a second opinion on a leave balance is
+ * worse than none — it invites somebody to approve against the wrong one.
+ *
+ * `all=1` for an admin returns the team; everybody else gets their own, which
+ * is also worth having. Somebody who can see they have 38 hours of annual
+ * leave before they apply is somebody who does not apply for 50.
+ */
+async function handleBalances(req, res, session) {
+  const staff = requireTimesheetAccess(session)
+  const everyone = req.query.all === '1' && staff.isAdmin
+  const who = everyone ? STAFF.filter(s => s.hasTimesheets) : [staff]
+
+  let token
+  let tenantId
+  try {
+    ;({ token, tenantId } = await getXeroToken())
+  } catch {
+    // Not connected, or the refresh failed. Said plainly rather than as seven
+    // people with no leave — an empty balance beside an application reads as
+    // "they have none", which is the opposite of "we could not check".
+    return res.status(200).json({ connected: false, people: [] })
+  }
+
+  const people = await Promise.all(who.map(async person => {
+    try {
+      const employee = await findEmployee(token, tenantId, person.name)
+      if (!employee) {
+        return { name: person.name, email: person.email, matched: false, balances: null }
+      }
+      return {
+        name: person.name,
+        email: person.email,
+        matched: true,
+        balances: await leaveBalances(token, tenantId, employee.EmployeeID)
+      }
+    } catch {
+      // One person's lookup failing must not take the other eight with it.
+      return { name: person.name, email: person.email, matched: false, balances: null }
+    }
+  }))
+
+  return res.status(200).json({ connected: true, people })
+}
+
 async function handleToil(req, res, session) {
   const staff = requireTimesheetAccess(session)
   // An admin can ask about the whole team; everybody else gets their own.

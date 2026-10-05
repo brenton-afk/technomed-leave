@@ -168,12 +168,67 @@ export async function assignedEarningsRateIds(token, tenantId, employeeId) {
  * them means an adjustment is outstanding.
  */
 export async function toilBalanceInXero(token, tenantId, employeeId) {
+  const balances = await leaveBalances(token, tenantId, employeeId)
+  // Classified the same way the portal's three balances are, so TOIL cannot
+  // mean one thing on the timesheet screen and another on the leave screen.
+  return balances?.toil?.hours ?? null
+}
+
+/**
+ * Every leave balance Xero holds for somebody, named and sorted.
+ *
+ * Xero keeps these on the employee record as a free list — whatever leave
+ * types payroll has set up — so they are classified by name rather than by a
+ * fixed set of IDs. Annual, personal/sick and TOIL are the three that matter
+ * here; anything else payroll has configured comes back under `other` rather
+ * than being dropped, because a balance nobody expected is still a balance and
+ * silently hiding one is how a screen comes to disagree with payroll.
+ *
+ * Hours, not days. Xero stores hours, a standard day here is 7.6, and dividing
+ * in the API would bake that assumption into the wire — the portal can say
+ * "about three days" if it wants to, from a number that is still the truth.
+ */
+export function classifyLeave(name) {
+  const text = String(name || '').toLowerCase()
+  if (/toil|lieu/.test(text)) return 'toil'
+  if (/annual|holiday/.test(text)) return 'annual'
+  // Xero's standard type is "Personal/Carer's Leave"; people call it sick
+  // leave. Both spellings have to land in the same bucket or the portal shows
+  // an empty sick balance beside a full one with a different name.
+  if (/personal|carer|sick/.test(text)) return 'sick'
+  return 'other'
+}
+
+export async function leaveBalances(token, tenantId, employeeId) {
   const employee = await getEmployee(token, tenantId, employeeId)
-  const line = (employee?.LeaveBalances || [])
-    .find(b => /toil|lieu/i.test(b.LeaveName || b.leaveName || ''))
-  if (!line) return null
-  const hours = Number(line.BalanceHours ?? line.balanceHours)
-  return Number.isFinite(hours) ? hours : null
+  // Null, not an empty list: "Xero could not be read" and "Xero says this
+  // person has no leave set up" must not look the same on a screen somebody
+  // is about to approve leave from.
+  if (!employee) return null
+
+  const lines = employee.LeaveBalances || employee.leaveBalances || []
+  const balances = lines.map(line => {
+    const name = line.LeaveName || line.leaveName || ''
+    const hours = Number(line.NumberOfUnits ?? line.BalanceHours
+      ?? line.numberOfUnits ?? line.balanceHours)
+    return {
+      name,
+      kind: classifyLeave(name),
+      hours: Number.isFinite(hours) ? hours : null,
+      // Xero reports the unit alongside, and it is not always hours — a type
+      // set up in days would otherwise read as a wildly large hours figure.
+      units: line.TypeOfUnits || line.typeOfUnits || 'Hours'
+    }
+  })
+
+  const of = kind => balances.find(b => b.kind === kind) || null
+  return {
+    annual: of('annual'),
+    sick: of('sick'),
+    toil: of('toil'),
+    other: balances.filter(b => b.kind === 'other'),
+    all: balances
+  }
 }
 
 export async function listLeaveTypes(token, tenantId) {

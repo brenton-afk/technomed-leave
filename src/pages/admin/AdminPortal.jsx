@@ -16,6 +16,80 @@ function formatDate(d) {
   return `${parseInt(day)} ${months[parseInt(m)-1]} ${y}`
 }
 
+const HOURS_IN_A_DAY = 7.6
+
+/** 38 → "38h · 5 days". The hours are the truth; the days are the question. */
+function readBalance(entry) {
+  if (!entry || entry.hours == null) return null
+  const hours = Math.round(entry.hours * 10) / 10
+  // Only where Xero is counting in hours. A type configured in days would
+  // otherwise be divided by 7.6 and reported as a seventh of itself.
+  if (!/hour/i.test(entry.units || 'Hours')) return `${hours} ${entry.units}`
+  const days = Math.round((hours / HOURS_IN_A_DAY) * 10) / 10
+  return `${hours}h · ${days} day${days === 1 ? '' : 's'}`
+}
+
+/**
+ * Annual, sick and TOIL, as Xero holds them.
+ *
+ * Read rather than recomputed. Xero is what pays people, and a second opinion
+ * on a leave balance is worse than none — it invites approving against the
+ * wrong one.
+ */
+function LeaveBalances({ who, balances }) {
+  if (!balances) {
+    return <div style={{ fontSize:11, color:'#6b7a8d', marginBottom:10 }}>Checking leave balances…</div>
+  }
+  if (!balances.connected) {
+    return (
+      <div style={{ fontSize:11, color:'#6b7a8d', marginBottom:10 }}>
+        Leave balances unavailable — Xero could not be reached.
+      </div>
+    )
+  }
+
+  const person = (balances.people || []).find(p =>
+    (p.email || '').toLowerCase() === (who.email || '').toLowerCase()
+    || p.name === who.name)
+
+  if (!person?.matched || !person.balances) {
+    // Said plainly. A blank row here would read as "no leave left", and that
+    // is a different thing from "we could not find them in payroll".
+    return (
+      <div style={{ fontSize:11, color:'#6b7a8d', marginBottom:10 }}>
+        No matching Xero employee — balances could not be checked.
+      </div>
+    )
+  }
+
+  const shown = [
+    ['Annual', person.balances.annual],
+    ['Sick', person.balances.sick],
+    ['TOIL', person.balances.toil]
+  ]
+
+  return (
+    <div style={{
+      display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8, marginBottom:10,
+      background:'#f8f9fc', borderRadius:8, padding:'10px 12px'
+    }}>
+      {shown.map(([label, entry]) => {
+        const text = readBalance(entry)
+        return (
+          <div key={label}>
+            <div style={{ fontSize:11, color:'#6b7a8d', marginBottom:2 }}>{label}</div>
+            <div style={{ fontSize:13, fontWeight:600, color: text ? '#042746' : '#6b7a8d' }}>
+              {/* An em dash, not a nought: Xero holding no balance of this
+                  type and Xero holding zero hours are different facts. */}
+              {text || '—'}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function AdminPortal({ user }) {
   const [applications, setApplications] = useState({ pending: [], approved: [], declined: [] })
   const [loading, setLoading] = useState(true)
@@ -30,7 +104,27 @@ export default function AdminPortal({ user }) {
   // there is no shared password in the client bundle.
   const authHeaders = { Authorization: `Bearer ${user?.token || ''}` }
 
-  useEffect(() => { fetchApplications() }, [])
+  useEffect(() => { fetchApplications(); fetchBalances() }, [])
+
+  // What Xero says each person has left. Fetched once for the team rather than
+  // per card: the same people appear across pending, approved and declined,
+  // and nine lookups is enough without multiplying them by the list.
+  const [balances, setBalances] = useState(null)
+
+  async function fetchBalances() {
+    try {
+      const res = await fetch('/api/timesheet/agent?action=balances&all=1',
+        { headers: authHeaders })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setBalances(data)
+    } catch {
+      // Left null, which the card reads as "could not check" rather than as
+      // zero. A blank balance beside an application says "they have none",
+      // which is the opposite of what a failed lookup means.
+      setBalances({ connected: false, people: [] })
+    }
+  }
 
   async function fetchApplications() {
     setLoading(true)
@@ -145,6 +239,10 @@ export default function AdminPortal({ user }) {
                   </div>
                 ))}
               </div>
+              {/* What Xero says they have left, beside the application rather
+                  than in another tab. Approving leave somebody does not have
+                  is the mistake this is here to stop. */}
+              <LeaveBalances who={app} balances={balances} />
               {app.reason && <div style={{ background:'#f8f9fc', borderRadius:8, padding:'10px 12px', fontSize:13, color:'#042746' }}><span style={{ color:'#6b7a8d', fontSize:11 }}>Reason: </span>{app.reason}</div>}
             </div>
             {app.status === 'pending' && (
