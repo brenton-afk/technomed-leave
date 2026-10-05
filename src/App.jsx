@@ -25,6 +25,7 @@ import {
   IconStock, IconPayslip, IconLock, IconBack
 } from './design/icons.jsx'
 import { useNewBuild } from './appVersion.js'
+import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
 import { useUnread } from './chat/unread.js'
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -334,6 +335,23 @@ export default function App() {
       {/* A build shipped while this tab was open. It never reloads on its own —
           somebody halfway through a booking should not have the page taken out
           from under them — so it offers and they choose. See appVersion.js. */}
+      {/* A deployment URL keeps working and never updates. It is
+          indistinguishable from the real app until somebody notices a feature
+          is missing, which is how one person could see a rep's name on a case
+          and another could not. Said once, plainly, with the way out. */}
+      {isFrozenCopy() && (
+        <a href={canonicalUrl()}
+          style={{
+            position: 'fixed', zIndex: 140, left: 0, right: 0,
+            top: 'env(safe-area-inset-top, 0px)',
+            display: 'block', textAlign: 'center', textDecoration: 'none',
+            padding: '10px 16px', background: colour.warning, color: 'white',
+            fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700
+          }}>
+          This is an old copy of the app — tap to open the current one
+        </a>
+      )}
+
       {newBuild && (
         <button onClick={() => window.location.reload()}
           style={{
