@@ -72,6 +72,30 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 // left on a bench is not an open payroll screen an hour later.
 const ADMIN_UNLOCK_MS = 15 * 60 * 1000
 
+// ─── The step-up into the admin portal ───────────────────────────────────────
+// Off, asked for on 5 October 2026: "get rid of the log in for the admin
+// portal for now, it's really annoying."
+//
+// Worth being exact about what this does and does not change, because the
+// name makes it sound larger than it is.
+//
+// It does NOT open the admin portal to the team. Who may read or change
+// anything in there is decided by requireAdmin() in api/_auth.js, which
+// re-reads isAdmin from the roster on every request and does not care what
+// the browser believes. Somebody who is not an admin gets a 403 whether this
+// is on or off, and the data never reaches their device.
+//
+// What it removes is the *second* prompt for the two people who already are
+// admins. The remaining control for them is the device lock — the phone's
+// passcode or Face ID, the laptop's password — which is the same control
+// standing in front of the rest of the app since the sign-in on open was
+// dropped. The exposure it leaves is an unlocked, signed-in device belonging
+// to Brent or Erin, in somebody else's hands.
+//
+// One flag, and everything behind it — the LockScreen, the 15-minute window,
+// the unlock state — is left in place, so turning it back on is this line.
+const ADMIN_STEP_UP = false
+
 // localStorage, not sessionStorage. sessionStorage is emptied when the app is
 // closed, and iOS closes an installed web app whenever it wants the memory —
 // so the one-hour expiry was never what people were hitting. Every open was a
@@ -166,6 +190,9 @@ export default function App() {
 
   /** Opening the admin portal asks for Face ID, unless it did so recently. */
   const openAdmin = useCallback(() => {
+    // Turned off for now — see ADMIN_STEP_UP. The server still refuses a
+    // non-admin; this was the second ask for the two people who are.
+    if (!ADMIN_STEP_UP) return true
     if (Date.now() - adminUnlockedAt < ADMIN_UNLOCK_MS) return true
     setUnlockingAdmin(true)
     return false

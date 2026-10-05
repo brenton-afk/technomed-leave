@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 const supports = vi.fn(() => true)
@@ -58,6 +60,14 @@ describe('opening the app', () => {
 })
 
 describe('opening the admin portal', () => {
+  // "Get rid of the log in for the admin portal for now, it's really
+  // annoying." — 5 October 2026.
+  //
+  // What that removed is the second prompt for the two people who are already
+  // admins. It did not open the portal to anybody else: requireAdmin() in
+  // api/_auth.js re-reads isAdmin from the roster on every request and does
+  // not care what the browser believes. The tests that used to live here
+  // described the prompt; these describe what is true without it.
   const goAdmin = async () => {
     signedIn()
     render(<App />)
@@ -65,44 +75,44 @@ describe('opening the admin portal', () => {
     fireEvent.click(screen.getByText('Admin portal'))
   }
 
-  it('asks before showing it', async () => {
+  it('goes straight in', async () => {
     authenticate.mockImplementation(() => new Promise(() => {}))
     await goAdmin()
-    expect(await screen.findByText(/Welcome back, Brent/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByText(/Welcome back, Brent/)).not.toBeInTheDocument())
   })
 
-  it('says why it is asking', async () => {
-    authenticate.mockRejectedValue(new Error('cancelled'))
+  it('does not ask for Face ID on the way', async () => {
+    // The prompt was a WebAuthn call. Not reaching for it at all is the
+    // difference between "turned off" and "turned off but still asking".
     await goAdmin()
-    expect(await screen.findByText(/everybody's pay and PINs/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Admin portal')).not.toBeInTheDocument())
+    expect(authenticate).not.toHaveBeenCalled()
   })
 
-  it('lets you in once it takes', async () => {
-    authenticate.mockResolvedValue({ id: 'cred' })
-    global.fetch = vi.fn(async (url, opts) => {
-      const body = JSON.parse(opts?.body || '{}')
-      if (body.action === 'passkey-login-options') return { ok: true, json: async () => ({ options: {} }) }
-      if (body.action === 'passkey-login') return { ok: true, json: async () => ({ valid: true }) }
-      return { ok: true, json: async () => ({ events: [] }) }
-    })
-    await goAdmin()
-    await waitFor(() => expect(screen.queryByText(/Welcome back, Brent/)).not.toBeInTheDocument())
+  it('keeps the whole step-up behind one switch', async () => {
+    // Everything it needs — the LockScreen, the 15-minute window, the unlock
+    // state — is left in place deliberately, so turning it back on is one
+    // line rather than a rebuild of a security control.
+    const app = readFileSync(join(__dirname, '..', 'App.jsx'), 'utf8')
+    expect(app).toMatch(/const ADMIN_STEP_UP = (true|false)/)
+    expect(app).toMatch(/if \(!ADMIN_STEP_UP\) return true/)
+    expect(app).toMatch(/ADMIN_UNLOCK_MS/)
+    expect(app).toMatch(/LockScreen/)
   })
+})
 
-  it('has a way out that is not signing out', async () => {
-    // Somebody who tapped Admin by mistake should not have to
-    // re-authenticate to get back to the cases.
-    authenticate.mockRejectedValue(new Error('cancelled'))
-    await goAdmin()
-    const notNow = await screen.findByRole('button', { name: 'Not now' })
-    fireEvent.click(notNow)
-    await waitFor(() => expect(screen.queryByText(/Welcome back, Brent/)).not.toBeInTheDocument())
-    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
-  })
+describe('what actually guards the admin portal', () => {
+  // With the prompt gone this is the only control left, so it is worth a test
+  // that fails loudly rather than an assumption. Every admin route has to go
+  // through requireAdmin, which checks the roster server-side — the browser
+  // deciding it is allowed in counts for nothing.
+  const admin = ['action.js', 'applications.js']
 
-  it('always offers the PIN', async () => {
-    authenticate.mockRejectedValue(new Error('no'))
-    await goAdmin()
-    expect(await screen.findByRole('button', { name: 'Use my PIN instead' })).toBeInTheDocument()
+  it.each(admin)('api/admin/%s requires an admin session', file => {
+    const source = readFileSync(join(__dirname, '..', '..', 'api', 'admin', file), 'utf8')
+    expect(source).toMatch(/requireAdmin\(req, res\)/)
+    // Not requireSession: that is "signed in", which everybody is.
+    expect(source).not.toMatch(/await requireSession\(/)
   })
 })
