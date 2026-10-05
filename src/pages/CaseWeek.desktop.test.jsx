@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import CaseWeek from './CaseWeek.jsx'
 
 // "Make the case view for desktop similar to Google Calendar. It can stack the
@@ -247,11 +249,55 @@ describe('who is on the case', () => {
     expect(screen.getByText('Aimee')).toBeInTheDocument()
   })
 
+  it('labels it, so it is not read straight past', async () => {
+    // Reported as not being there at all when it was an unlabelled first name
+    // among surnames and operations. "Rep:" is the word somebody scans for.
+    const { container } = await toWeek()
+    const wednesday = container.querySelector('[data-week-column="2026-09-23"]')
+    expect(wednesday.textContent).toMatch(/Rep:\s*Aimee/)
+  })
+
   it('leaves a case with nobody assigned unmarked, rather than blank-labelled', async () => {
     // Hollis has no rep in the fixtures. An empty "Rep:" line would read as
     // "nobody is going", which is a different fact from "not allocated yet".
     const { container } = await toWeek()
     const monday = container.querySelector('[data-week-column="2026-09-21"]')
-    expect(monday.textContent).not.toMatch(/Rep/)
+    expect(monday.textContent).not.toMatch(/Rep:/)
+  })
+})
+
+describe('the header earns its space', () => {
+  beforeEach(() => widthOf(1680))
+
+  // "Reduce the size of the blue banner at the top to make more space for the
+  // calendar entries at the bottom. Change the proportions to prioritise the
+  // information in the bookings themselves."
+  it('runs the header compact on the week', () => {
+    // Checked in the source, not the DOM. The padding is a calc() around
+    // env(safe-area-inset-top); jsdom cannot parse that and drops the whole
+    // declaration, so the rendered element carries no padding at all and an
+    // assertion against it would pass whatever the value was.
+    const page = readFileSync(join(__dirname, 'CaseWeek.jsx'), 'utf8')
+    expect(page).toMatch(/<Header title="Cases" compact/)
+
+    const shell = readFileSync(join(__dirname, '..', 'design', 'Shell.jsx'), 'utf8')
+    // Compact is tighter than standard on both ends, or it is not compact.
+    expect(shell).toMatch(/compact\s*\?[\s\S]*space\.md\}px\) \$\{space\.lg\}px \$\{space\.sm\}px/)
+    expect(shell).toMatch(/text\(compact \? 'title' : 'display'\)/)
+    expect(shell).toMatch(/marginTop: compact \? space\.sm : space\.lg/)
+  })
+
+  it('drops the standing subtitle, which said the same thing every day', async () => {
+    await toWeek()
+    expect(screen.queryByText('Every booking, as the calendar has it'))
+      .not.toBeInTheDocument()
+  })
+
+  it('still says which week you are on', async () => {
+    // Trimming the header must not take the navigation with it. The week
+    // range and the arrows are the reason anybody looks up there.
+    await toWeek()
+    expect(screen.getByLabelText('Previous week')).toBeInTheDocument()
+    expect(screen.getByLabelText('Next week')).toBeInTheDocument()
   })
 })

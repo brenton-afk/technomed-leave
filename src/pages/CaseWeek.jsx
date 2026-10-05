@@ -541,8 +541,14 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
         {surgicalCase.rep && !off && (
           <span style={{
             ...text('micro'), display: 'block', textTransform: 'none',
-            fontWeight: 700, letterSpacing: 0, color: colour.accentDeep
-          }}>{surgicalCase.rep}</span>
+            letterSpacing: 0, color: colour.accentDeep
+          }}>
+            {/* Labelled, like the phone card. A bare first name in a column of
+                surnames and operations is easy to read straight past — it was
+                reported as not being there at all — and "Rep:" is the word
+                somebody is scanning for. */}
+            Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
+          </span>
         )}
 
         {(off || spare) && (
@@ -1159,8 +1165,12 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
       {/* No "This week" eyebrow any more: it said the same thing as the week
           range two rows below it, and the top of the screen had four things
           competing before the week itself appeared. */}
-      <Header title="Cases"
-        subtitle={plan?.summaryLine || 'Every booking, as the calendar has it'}
+      <Header title="Cases" compact
+        // The standing line goes on a desktop. "Every booking, as the calendar
+        // has it" is true on the first open and furniture on every one after,
+        // and it was costing a row of the screen the week could have had. A
+        // real summary — how many cases, how many days — still earns its line.
+        subtitle={plan?.summaryLine || (desktop ? undefined : 'Every booking, as the calendar has it')}
         right={!desktop && (
           <SpanToggle span={span}
             onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />
@@ -1204,7 +1214,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             "Cases each day" label that had to explain them — the week below
             says how busy a day is by being long, and a number in a circle was
             a second, smaller way of saying the same thing. */}
-        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '6px 8px 0' }}>
+        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
             {days.map(day => {
               const on = day === activeDay
@@ -1217,7 +1227,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                   aria-current={on ? 'date' : undefined}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    padding: '7px 2px 9px', border: 'none', cursor: 'pointer',
+                    padding: '5px 2px 7px', border: 'none', cursor: 'pointer',
                     borderRadius: '8px 8px 0 0',
                     background: on ? 'rgba(24,154,133,0.25)' : 'transparent',
                     borderBottom: on ? `3px solid ${colour.accent}` : '3px solid transparent'

@@ -32,7 +32,15 @@ export function Overlay({ children }) {
   return createPortal(children, document.body)
 }
 
-export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
+/**
+ * @param {boolean} [compact]  Tighter, for a screen whose content is the point.
+ *
+ * The week is the case for it: the navy block carried an eyebrow, a display
+ * title, a subtitle, a week switcher, the arrows and the day strip, and on a
+ * laptop that was most of the screen before the first booking appeared. The
+ * header is scaffolding; the bookings are the work.
+ */
+export function Header({ eyebrow, title, subtitle, onBack, right, children, compact }) {
   return (
     // `tm-bleed` on the navy, `tm-measure` on what is written on it. On a wide
     // screen the bar reaches both edges of the window while the title lines up
@@ -46,7 +54,9 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
       // the screen. The fallback is 0, not a guess at a notch: where env() is
       // unsupported there is no notch to avoid, and a guess would put a band of
       // empty navy across every desktop browser.
-      padding: `calc(env(safe-area-inset-top, 0px) + ${space.xl}px) ${space.lg}px ${space.lg}px`
+      padding: compact
+        ? `calc(env(safe-area-inset-top, 0px) + ${space.md}px) ${space.lg}px ${space.sm}px`
+        : `calc(env(safe-area-inset-top, 0px) + ${space.xl}px) ${space.lg}px ${space.lg}px`
     }}>
       <div className="tm-measure" style={{ display: 'flex', alignItems: 'flex-start', gap: space.md }}>
         {onBack && (
@@ -66,14 +76,18 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children }) {
               {eyebrow}
             </div>
           )}
-          <h1 style={{ ...text('display'), color: 'white', margin: 0 }}>{title}</h1>
+          <h1 style={{ ...text(compact ? 'title' : 'display'), color: 'white', margin: 0 }}>{title}</h1>
           {subtitle && (
             <div style={{ ...text('caption'), color: 'rgba(255,255,255,0.55)', marginTop: 5 }}>{subtitle}</div>
           )}
         </div>
         {right}
       </div>
-      {children && <div className="tm-measure" style={{ marginTop: space.lg }}>{children}</div>}
+      {children && (
+        <div className="tm-measure" style={{ marginTop: compact ? space.sm : space.lg }}>
+          {children}
+        </div>
+      )}
     </div>
   )
 }
