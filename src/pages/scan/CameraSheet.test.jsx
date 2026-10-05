@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
 import CameraSheet, { Outline, CropReview } from './CameraSheet.jsx'
 import { resetCameraForTests, torchOn, acquireCamera, setTorch }
   from '../../scanner/cameraStream.js'
@@ -127,16 +127,36 @@ describe('opening the camera', () => {
 
 describe('the controls', () => {
   it('has auto-capture on by default, and lets it be turned off', async () => {
+    // A switch now, not a checkbox in a caption. It was asked for again as
+    // though it did not exist, which is the only review a control needs.
     show()
-    const toggle = screen.getByRole('checkbox', { name: /Auto-capture/ })
-    expect(toggle).toBeChecked()
+    const toggle = screen.getByRole('switch', { name: /Auto-capture/ })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
     toggle.click()
-    await waitFor(() => expect(toggle).not.toBeChecked())
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
+  })
+
+  it('remembers auto-capture being turned off', async () => {
+    // From a known state: the preference is now persisted, so the test above
+    // leaves it off and this one would otherwise be toggling it back on.
+    localStorage.clear()
+    // Somebody who turns it off has a reason — a glossy form, a bad bench, a
+    // page that will not lie flat — and the reason is still true for the next
+    // form in the pile.
+    show()
+    screen.getByRole('switch', { name: /Auto-capture/ }).click()
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('tm_clinical_prefs') || '{}').autoCapture).toBe(false))
+
+    cleanup()
+    show()
+    expect(screen.getByRole('switch', { name: /Auto-capture/ }))
+      .toHaveAttribute('aria-checked', 'false')
   })
 
   it('keeps the shutter when auto-capture is off', async () => {
     show()
-    screen.getByRole('checkbox', { name: /Auto-capture/ }).click()
+    screen.getByRole('switch', { name: /Auto-capture/ }).click()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Capture page' })).toBeInTheDocument())
   })
 
@@ -376,24 +396,98 @@ describe('what the review screen offers', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 
+  it('asks outright whether there is another page', async () => {
+    // Asked for directly, and the two mistakes are not equal: reading a
+    // one-page form as finished costs nothing, while sending page one of
+    // three to a distributor and never noticing costs a tray of implants
+    // nobody is billed for.
+    review()
+    expect(screen.getByText('Is there a second page?')).toBeInTheDocument()
+  })
+
+  it('counts up as the pages go on', async () => {
+    review({ pageCount: 1 })
+    expect(screen.getByText('Is there a page 3?')).toBeInTheDocument()
+  })
+
   it('reads the page without a second confirmation', async () => {
     // It used to take three more taps: keep the page, close the camera, then
-    // find "Read usage document" behind it.
+    // find "Read usage document" behind it. Answering "no" still reads.
     const onConfirm = vi.fn()
     review({ onConfirm })
-    fireEvent.click(screen.getByRole('button', { name: 'Read this page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'No — read it' }))
     expect(onConfirm).toHaveBeenCalled()
   })
 
-  it('still allows a second page', async () => {
+  it('goes back for another page when the answer is yes', async () => {
     const onAddAnother = vi.fn()
     review({ onAddAnother })
-    fireEvent.click(screen.getByRole('button', { name: 'Add a page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes — scan it' }))
     expect(onAddAnother).toHaveBeenCalled()
   })
 
   it('counts the pages already taken in what it offers to read', async () => {
     review({ pageCount: 1 })
-    expect(screen.getByRole('button', { name: 'Read 2 pages' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'No — read 2' })).toBeInTheDocument()
+  })
+
+  it('offers each answer exactly once', async () => {
+    // "Add a page" used to sit in the row below as well, so there were two
+    // ways to say yes and they looked like different things.
+    review({ pageCount: 1 })
+    expect(screen.queryByRole('button', { name: 'Add a page' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Yes/ })).toHaveLength(1)
+  })
+})
+
+describe('the viewfinder, as a scanner rather than a camera', () => {
+  // "On google drive it makes the frame a shadow section and has a checked
+  // pattern that flashes through the page to show you that the scanner is
+  // working. It is more nuanced and less basic than the scanner you have."
+  //
+  // Two things were missing. The surroundings were as bright as the page, so
+  // the page sat in the bench rather than lifting off it; and a still outline
+  // over a still page gives no sign the thing is alive.
+  const view = {
+    corners: [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.9 }, { x: 0.1, y: 0.9 }],
+    opacity: 1
+  }
+  const draw = (props = {}) => render(<Outline view={view} countdown={0} {...props} />)
+
+  it('dims everything that is not the page', async () => {
+    const { container } = draw()
+    const scrim = container.querySelector('rect[mask]')
+    expect(scrim).toBeTruthy()
+    expect(scrim.getAttribute('mask')).toBe('url(#page-hole)')
+    // Well short of opaque: the surroundings are how somebody sees they are
+    // about to cut off a corner.
+    expect(Number(scrim.getAttribute('fill-opacity'))).toBeGreaterThan(0.2)
+    expect(Number(scrim.getAttribute('fill-opacity'))).toBeLessThan(0.6)
+  })
+
+  it('cuts the page out of the dimming, rather than drawing over it', async () => {
+    const { container } = draw()
+    const mask = container.querySelector('mask#page-hole')
+    // White sheet, black page: the page is the hole.
+    expect(mask.querySelector('rect').getAttribute('fill')).toBe('#fff')
+    expect(mask.querySelector('polygon').getAttribute('fill')).toBe('#000')
+  })
+
+  it('sweeps a band of light across the page', async () => {
+    const { container } = draw()
+    const sweep = container.querySelector('.tm-scan-sweep')
+    expect(sweep).toBeTruthy()
+    // Clipped to the paper, or it would wash across the whole viewfinder.
+    expect(sweep.closest('g').getAttribute('clip-path')).toBe('url(#page-only)')
+  })
+
+  it('keeps the outline fine', async () => {
+    // Asked for: "make the outline border a little thinner". A heavy line sits
+    // on top of the picture and reads as a drawing; a fine one reads as the
+    // edge of the paper.
+    const { container } = draw()
+    const line = container.querySelectorAll('polygon[stroke="#fff"]')
+    expect(line.length).toBeGreaterThan(0)
+    expect(Number(line[0].getAttribute('stroke-width'))).toBeLessThanOrEqual(0.5)
   })
 })

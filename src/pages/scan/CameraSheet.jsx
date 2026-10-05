@@ -4,6 +4,7 @@ import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument } from '../../scanner/documentDetect.js'
 import { DocumentTracker } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
+import { readPrefs, writePrefs } from '../../clinicalPlan/provider.js'
 import {
   acquireCamera, cameraOpen, setTorch, hasTorch, torchOn as torchIsOn, turnTorchOff,
   zoomRange, currentZoom, setZoom
@@ -44,11 +45,22 @@ function describeCameraError(err) {
   return `Could not open the camera. (${detail})`
 }
 const DETECT_WIDTH = 240
-// Every other frame. Detection at 240x180 measures under a millisecond
-// (`npm run bench:scanner`), so a third of the frames was buying very little and
-// costing a third of the outline's latency — every skipped frame is one more
-// frame the drawn outline is behind the page.
-const FRAME_INTERVAL = 2
+// Every frame.
+//
+// Detection at 240x180 measures under a millisecond (`npm run bench:scanner`),
+// so skipping frames was never buying back meaningful time — and every skipped
+// frame is one more frame the drawn outline lags the page by. At 2 the outline
+// was a sixtieth of a second behind at best and visibly swimming when the phone
+// moved; at 1 it tracks.
+const FRAME_INTERVAL = 1
+
+// How hard the drawn outline chases the detected one, per frame.
+//
+// The tracker has already thrown out the jitter, so this is only smoothing the
+// gap between detections. Now that there is a detection every frame there is
+// less gap to smooth, and the easing can be firmer without the outline getting
+// twitchy — 0.35 at half the frame rate felt like the outline was dragging.
+const CHASE = 0.5
 const MAX_IMAGE_DIM = 1568
 
 /** The outline, drawn as SVG over the video. */
@@ -83,6 +95,8 @@ export function Outline({ view, countdown }) {
   const fillRef = useRef(null)
   const lineRef = useRef(null)
   const cornerRef = useRef(null)
+  const maskRef = useRef(null)    // the hole the page shows through
+  const clipRef = useRef(null)    // the sweep, kept inside the page
   const shown = useRef(null)      // where the outline is drawn right now
   const target = useRef(null)     // where the last detection says it should be
 
@@ -110,8 +124,8 @@ export function Outline({ view, countdown }) {
         shown.current = to.corners.map(c => ({ ...c }))
       } else {
         for (let i = 0; i < to.corners.length; i++) {
-          shown.current[i].x += (to.corners[i].x - shown.current[i].x) * 0.35
-          shown.current[i].y += (to.corners[i].y - shown.current[i].y) * 0.35
+          shown.current[i].x += (to.corners[i].x - shown.current[i].x) * CHASE
+          shown.current[i].y += (to.corners[i].y - shown.current[i].y) * CHASE
         }
       }
 
@@ -122,6 +136,11 @@ export function Outline({ view, countdown }) {
       svg.style.opacity = String(to.opacity)
       fillRef.current?.setAttribute('points', joined)
       lineRef.current?.setAttribute('points', joined)
+      // Same quad, three more jobs: the hole in the scrim, and the boundary
+      // the sweep is clipped to. Set here rather than through React so they
+      // move on the same frame as the outline instead of a render behind it.
+      maskRef.current?.setAttribute('points', joined)
+      clipRef.current?.setAttribute('points', joined)
       cornerRef.current?.setAttribute('d', scaled
         .map((c, i) => bracket(c, scaled[(i + 3) % 4], scaled[(i + 1) % 4]))
         .join(' '))
@@ -134,9 +153,13 @@ export function Outline({ view, countdown }) {
 
   // Only the lock state goes through React, and only when it changes.
   useEffect(() => {
-    fillRef.current?.style.setProperty('fill-opacity', firing ? '0.18' : '0.06')
-    lineRef.current?.style.setProperty('stroke-width', firing ? '1.2' : '0.7')
-    cornerRef.current?.style.setProperty('stroke-width', firing ? '2.2' : '1.6')
+    // Thinner, asked for directly. A heavy line sits on top of the picture and
+    // reads as a drawing; a fine one reads as the edge of the paper, which is
+    // the thing it is trying to be. It still thickens on lock, because that is
+    // the only moment the outline has anything to say.
+    fillRef.current?.style.setProperty('fill-opacity', firing ? '0.16' : '0.04')
+    lineRef.current?.style.setProperty('stroke-width', firing ? '0.85' : '0.45')
+    cornerRef.current?.style.setProperty('stroke-width', firing ? '1.7' : '1.1')
   }, [firing])
 
   return (
@@ -153,22 +176,60 @@ export function Outline({ view, countdown }) {
         <filter id="outline-glow" x="-25%" y="-25%" width="150%" height="150%">
           <feDropShadow dx="0" dy="0" stdDeviation="0.7" floodColor="#000" floodOpacity="0.5" />
         </filter>
+
+        {/* White everywhere, black over the page: the page is the hole. */}
+        <mask id="page-hole">
+          <rect x="0" y="0" width="100" height="100" fill="#fff" />
+          <polygon ref={maskRef} fill="#000" />
+        </mask>
+
+        <clipPath id="page-only">
+          <polygon ref={clipRef} />
+        </clipPath>
+
+        {/* The sweep. A soft band rather than a hard edge — a hard one reads
+            as a glitch, a soft one reads as a scan passing over. */}
+        <linearGradient id="page-sweep" x1="0" y1="0" x2="1" y2="0.25">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="45%" stopColor="#fff" stopOpacity="0.1" />
+          <stop offset="55%" stopColor="#fff" stopOpacity="0.1" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
       </defs>
+
+      {/* Everything that is not the page, dimmed.
+          
+          This is the thing that makes a scanner feel like a scanner rather
+          than a camera with a line drawn on it: the page lifts off the bench
+          instead of sitting in it, and the edges of the detection become
+          obvious without the outline having to shout. Kept well short of
+          opaque — the surroundings are how somebody sees they are about to
+          cut off a corner. */}
+      <rect x="0" y="0" width="100" height="100" fill="#000" fillOpacity="0.42"
+        mask="url(#page-hole)" style={{ transition: 'fill-opacity 200ms ease-out' }} />
+
+      {/* And a sweep across the page while it is being read, so a scanner that
+          is working looks like one. Purely decorative: it says "this is live",
+          which a still outline on a still page cannot. */}
+      <g clipPath="url(#page-only)">
+        <rect className="tm-scan-sweep" x="-100" y="0" width="100" height="100"
+          fill="url(#page-sweep)" />
+      </g>
 
       {/* White, not teal. A coloured outline reads as a decoration laid over the
           picture; white reads as the edge of the thing itself, which is what
           every scanner worth copying does. The fill is a barely-there wash that
           lifts on lock, so the moment of recognition is visible without the
           outline changing colour and shouting about it. */}
-      <polygon ref={fillRef} fill="#fff" fillOpacity={0.06}
+      <polygon ref={fillRef} fill="#fff" fillOpacity={0.04}
         style={{ transition: 'fill-opacity 160ms ease-out' }} />
       <polygon ref={lineRef} fill="none" stroke="#fff"
-        strokeWidth={0.7} strokeLinejoin="round" strokeLinecap="round"
+        strokeWidth={0.45} strokeLinejoin="round" strokeLinecap="round"
         filter="url(#outline-glow)"
         style={{ transition: 'stroke-width 160ms ease-out' }} />
       {/* Corner brackets rather than dots. They say which way the page is
           oriented, and they hold their shape while the quad moves. */}
-      <path ref={cornerRef} fill="none" stroke="#fff" strokeWidth={1.6}
+      <path ref={cornerRef} fill="none" stroke="#fff" strokeWidth={1.1}
         strokeLinecap="round" strokeLinejoin="round"
         filter="url(#outline-glow)"
         style={{ transition: 'stroke-width 160ms ease-out' }} />
@@ -300,21 +361,44 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
             Redo crop
           </button>
         ) : (
-          <button onClick={() => onConfirm(preview)}
-            style={{ width: '100%', padding: '14px 0', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-            {pageCount > 0 ? `Read ${pageCount + 1} pages` : 'Read this page'}
-          </button>
+          <>
+            {/* Asked outright, rather than left to be inferred from which
+                button somebody picks.
+                
+                A usage form runs to two or three pages often enough that
+                guessing is wrong regularly, and the two mistakes are not
+                equal: reading a one-page form as though it were finished
+                costs nothing, while sending page one of three to a
+                distributor and never noticing costs a tray of implants
+                nobody is billed for. So the question gets asked every time,
+                in the words somebody would use.
+                
+                The answers are the same two actions that were already here.
+                What changed is that the screen now says what they mean. */}
+            <div style={{
+              fontSize: 14, fontWeight: 700, color: 'white', textAlign: 'center',
+              marginBottom: 2
+            }}>
+              {pageCount > 0
+                ? `Is there a page ${pageCount + 2}?`
+                : 'Is there a second page?'}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => onAddAnother(preview)}
+                style={{ flex: 1, padding: '14px 0', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                Yes — scan it
+              </button>
+              <button onClick={() => onConfirm(preview)}
+                style={{ flex: 1, padding: '14px 0', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                {pageCount > 0 ? `No — read ${pageCount + 1}` : 'No — read it'}
+              </button>
+            </div>
+          </>
         )}
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onRetake}
             style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontSize: 13.5, cursor: 'pointer' }}>
             Retake
-          </button>
-          {/* Still here, because a two-page form is normal. It is just no longer
-              the thing standing between one page and reading it. */}
-          <button onClick={() => onAddAnother(preview)}
-            style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontSize: 13.5, cursor: 'pointer' }}>
-            Add a page
           </button>
           {/* Out of the scanner altogether. Auto-capture fires on its own, and
               landing in a review with no way back but Retake is a trap. */}
@@ -347,7 +431,14 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [view, setView] = useState(null)
-  const [autoCapture, setAutoCapture] = useState(true)
+  // Remembered between scans. Somebody who turns auto-capture off has a
+  // reason — a glossy form, a bad bench, a page that will not sit flat — and
+  // that reason is still true on the next form in the pile.
+  const [autoCapture, setAutoCapture] = useState(() => readPrefs().autoCapture !== false)
+  const toggleAutoCapture = useCallback(on => {
+    setAutoCapture(on)
+    writePrefs({ ...readPrefs(), autoCapture: on })
+  }, [])
   // Read from the stream rather than started at false. The stream outlives this
   // component, so a torch left on and a button initialised to "off" is how the
   // light became impossible to put out: the first tap sent torch:true again.
@@ -689,12 +780,33 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         <div style={{ padding: '12px 16px calc(20px + env(safe-area-inset-bottom, 0px))', background: 'rgba(0,0,0,0.55)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)' }}>{hint}</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', cursor: 'pointer' }}>
-              Auto-capture
-              <input type="checkbox" checked={autoCapture}
-                onChange={e => setAutoCapture(e.target.checked)}
-                style={{ fontSize: 16, width: 34, height: 20, accentColor: TEAL, cursor: 'pointer' }} />
-            </label>
+            {/* A switch you can find and hit, not a checkbox in a caption.
+                It was a 34px tick beside grey text and was asked for again as
+                though it did not exist, which is the only review a control
+                needs. */}
+            <button type="button" role="switch" aria-checked={autoCapture}
+              aria-label="Auto-capture"
+              onClick={() => toggleAutoCapture(!autoCapture)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer',
+                minHeight: 36, padding: '0 12px 0 10px', borderRadius: 18,
+                background: autoCapture ? 'rgba(24,154,133,0.3)' : 'rgba(255,255,255,0.08)',
+                border: `1px solid ${autoCapture ? TEAL : 'rgba(255,255,255,0.25)'}`,
+                color: 'white', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700
+              }}>
+              <span aria-hidden="true" style={{
+                width: 32, height: 18, borderRadius: 9, flexShrink: 0, position: 'relative',
+                background: autoCapture ? TEAL : 'rgba(255,255,255,0.25)',
+                transition: 'background 160ms ease-out'
+              }}>
+                <span style={{
+                  position: 'absolute', top: 2, left: autoCapture ? 16 : 2,
+                  width: 14, height: 14, borderRadius: 7, background: 'white',
+                  transition: 'left 160ms ease-out'
+                }} />
+              </span>
+              Auto
+            </button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

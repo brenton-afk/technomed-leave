@@ -317,3 +317,30 @@ html, body {
   max-width: 100%;
   overflow-x: hidden;
 }
+
+/* ─── The scanner's sweep ────────────────────────────────────────────────────
+   A band of light crossing the detected page, over and over, while the camera
+   is looking at it. It carries no information — it says the thing is alive,
+   which a still outline over a still page cannot, and it is what separates a
+   scanner that feels like a tool from one that feels like a screenshot.
+
+   Clipped to the page in the SVG, so it stops exactly at the paper's edge.
+
+   Paused rather than removed for anybody who has asked their device to stop
+   animating things: the whole point is motion, so there is nothing to
+   usefully degrade to. */
+@keyframes tm-scan-sweep {
+  from { transform: translateX(0); }
+  to   { transform: translateX(200px); }
+}
+
+.tm-scan-sweep {
+  animation: tm-scan-sweep 2.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-scan-sweep {
+    animation: none;
+    opacity: 0;
+  }
+}

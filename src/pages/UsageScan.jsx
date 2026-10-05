@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { reorder } from './scan/pageList.js'
 import CameraSheet from './scan/CameraSheet.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { partitionItems } from '../usageReview.js'
@@ -320,6 +321,26 @@ export default function UsageScan({ user }) {
     setPages(pagesRef.current)
   }
 
+  /**
+   * Moves a page one place earlier or later.
+   *
+   * Page order is not presentation. The pages go to Claude in this order and
+   * get merged into one PDF in this order, and a usage form reads as a
+   * sequence — the patient label and the date are on page one, the overflow
+   * stickers on page two. Scanning them out of order and having no way to say
+   * so meant re-scanning the lot.
+   *
+   * Arrows rather than drag. This is used standing up, one-handed, often in
+   * gloves; a drag target that has to be grabbed and held is the wrong shape
+   * for that, and two taps is not slower than one careful drag.
+   */
+  function movePage(id, by) {
+    const next = reorder(pages, id, by)
+    if (next === pages) return
+    pagesRef.current = next
+    setPages(next)
+  }
+
   // The stream is held open across pages on purpose — see cameraStream.js — so
   // something has to close it when the scanner is actually finished with.
   useEffect(() => () => releaseCamera(), [])
@@ -582,7 +603,22 @@ export default function UsageScan({ user }) {
                         </div>}
                     <button onClick={() => removePage(p.id)} aria-label={`Remove page ${i + 1}`}
                       style={{ position: 'absolute', top: 4, right: 4, width: 24, height: 24, borderRadius: 12, border: 'none', background: 'rgba(4,39,70,0.75)', color: 'white', fontSize: 14, cursor: 'pointer', lineHeight: 1 }}>×</button>
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(4,39,70,0.72)', color: 'white', fontSize: 10, padding: '3px 6px' }}>Page {i + 1}</div>
+                    {/* Put a page back in its right place rather than scanning
+                        the form again. Only offered where there is somewhere
+                        for it to go — a lone page has no order to be in. */}
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', alignItems: 'stretch', background: 'rgba(4,39,70,0.72)' }}>
+                      {pages.length > 1 && (
+                        <button onClick={() => movePage(p.id, -1)} disabled={i === 0}
+                          aria-label={`Move page ${i + 1} earlier`}
+                          style={{ width: 26, border: 'none', background: 'transparent', color: i === 0 ? 'rgba(255,255,255,0.3)' : 'white', fontSize: 13, cursor: i === 0 ? 'default' : 'pointer', padding: '3px 0' }}>‹</button>
+                      )}
+                      <span style={{ flex: 1, color: 'white', fontSize: 10, padding: '3px 2px', textAlign: 'center' }}>Page {i + 1}</span>
+                      {pages.length > 1 && (
+                        <button onClick={() => movePage(p.id, 1)} disabled={i === pages.length - 1}
+                          aria-label={`Move page ${i + 1} later`}
+                          style={{ width: 26, border: 'none', background: 'transparent', color: i === pages.length - 1 ? 'rgba(255,255,255,0.3)' : 'white', fontSize: 13, cursor: i === pages.length - 1 ? 'default' : 'pointer', padding: '3px 0' }}>›</button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
