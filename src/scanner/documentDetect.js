@@ -104,6 +104,105 @@ function squareness(corners) {
  * Sampled on a grid, bilinear across the corners rather than a true perspective
  * map — which does not matter for sampling, since every point still lands inside.
  */
+/**
+ * How much of the candidate's outline actually sits on an edge in the picture.
+ *
+ * The failure this exists for: a quadrilateral that is convex, the right size,
+ * the right squareness, and runs diagonally across the middle of the page.
+ * Every geometric test passes, because the shape is a perfectly good shape —
+ * it is just not the shape of anything in the photograph. Reported with a page
+ * on a wooden bench, where the paper could not have been more obvious.
+ *
+ * Contours are supposed to make that impossible, and mostly do. What gets
+ * through is the hull of a contour that wandered: a border broken by a shadow
+ * joins the print inside the page, the hull closes over both, and the quad it
+ * approximates to cuts the corner.
+ *
+ * So each side is checked against the pixels. Sample along it, and a few
+ * pixels either side of it: a real page border is a step — paper one side,
+ * bench the other — and the step keeps the same sign the whole way along. A
+ * line across the page interior crosses print, which is a step that changes
+ * sign constantly, and white space, which is no step at all.
+ *
+ * Returns 0..1, the fraction of sampled points that look like a border.
+ * Cheap: 4 sides, 14 samples, 2 reads each.
+ */
+export function edgeSupport(grey, corners, spread = 64) {
+  const data = grey.data
+  const w = grey.cols, h = grey.rows
+  const PER_SIDE = 14
+  // Far enough out to clear the blur, close enough to stay on the bench rather
+  // than reaching the next object along.
+  const REACH = Math.max(2, Math.round(Math.min(w, h) * 0.012))
+
+  // What counts as a step, scaled to how much tonal range the frame has.
+  //
+  // A fixed 12 was right for a page on wood and wrong for a white form on a
+  // white bench, where the border is a genuine but shallow step and a fixed
+  // bar rejected the page outright — the detector went from a wrong answer to
+  // no answer, which is not an improvement when somebody is holding a phone
+  // over a form waiting for an outline.
+  //
+  // Floored, because in a very flat frame the remaining variation is sensor
+  // noise and a threshold below it would call anything a border.
+  const STEP = Math.max(7, Math.min(16, spread * 0.18))
+
+  // Whether a side lies along the edge of the picture.
+  //
+  // There are no pixels beyond it to compare against, so it scores zero
+  // however real it is. Counting that sinks every page photographed with an
+  // edge out of frame — which is common, deliberate on a big form, and was a
+  // 27px regression on the bench the moment this check was added. A side like
+  // that is not evidence either way, so it is left out of the count rather
+  // than counted as a failure.
+  const margin = REACH + 1
+  const onFrameEdge = (a, b) =>
+    (a.x <= margin && b.x <= margin) || (a.x >= w - margin && b.x >= w - margin)
+    || (a.y <= margin && b.y <= margin) || (a.y >= h - margin && b.y >= h - margin)
+
+  const at = (x, y) => {
+    const px = Math.min(w - 1, Math.max(0, Math.round(x)))
+    const py = Math.min(h - 1, Math.max(0, Math.round(y)))
+    return data[py * w + px]
+  }
+
+  let supported = 0, counted = 0
+
+  for (let side = 0; side < 4; side++) {
+    const a = corners[side]
+    const b = corners[(side + 1) % 4]
+    const dx = b.x - a.x, dy = b.y - a.y
+    const len = Math.hypot(dx, dy)
+    if (len < 1) continue
+    if (onFrameEdge(a, b)) continue
+    // The outward normal. Corners are ordered clockwise, so rotating the
+    // direction of travel by -90° points away from the middle.
+    const nx = dy / len, ny = -dx / len
+
+    let sign = 0
+    for (let i = 0; i < PER_SIDE; i++) {
+      // Skirt the corners: the rounding of a real sheet and the overshoot of
+      // approxPolyDP both live there, and neither says anything about the side.
+      const t = 0.12 + (0.76 * i) / (PER_SIDE - 1)
+      const x = a.x + dx * t, y = a.y + dy * t
+      const outside = at(x + nx * REACH, y + ny * REACH)
+      const inside = at(x - nx * REACH, y - ny * REACH)
+      const step = inside - outside
+      counted++
+      if (Math.abs(step) < STEP) continue
+      // Consistent in sign along the side, or it is print rather than a border.
+      const s = Math.sign(step)
+      if (sign === 0) sign = s
+      else if (s !== sign) continue
+      supported++
+    }
+  }
+
+  // No measurable side — a page framed right to all four edges — is not a
+  // reason to reject it. Nothing was measured, so nothing is alleged.
+  return counted ? supported / counted : 1
+}
+
 function interiorTones(grey, corners) {
   const data = grey.data
   const w = grey.cols, h = grey.rows
@@ -356,8 +455,22 @@ function cornersOf(cv, contour, minHullArea) {
  * @returns {{corners, areaFraction, squareness, contrast}|null}
  *          corners normalised 0..1, ordered TL TR BR BL
  */
+/**
+ * How much of a candidate's outline has to sit on a real edge.
+ *
+ * Just over half. A page on a bench scores high; a page whose bottom edge is
+ * in shadow still clears it on the other three sides; a line across the middle
+ * of a form does not come close. Set by what separates the two in the scenes,
+ * not by taste — raising it further starts rejecting real pages photographed
+ * on white.
+ */
+const MIN_EDGE_SUPPORT = 0.55
+
 export function detectDocument(cv, rgba, width, height, opts = {}) {
-  const { minAreaFraction = 0.2, minSquareness = 0.45, blur = 5 } = opts
+  const {
+    minAreaFraction = 0.2, minSquareness = 0.45, blur = 5,
+    minEdgeSupport = MIN_EDGE_SUPPORT
+  } = opts
   if (!cv || !rgba || !width || !height) return null
 
   const frameArea = width * height
@@ -383,7 +496,8 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
     const mean = track(new cv.Mat())
     const deviation = track(new cv.Mat())
     cv.meanStdDev(grey, mean, deviation)
-    const contrast = deviation.doubleAt(0, 0) / 64 // ~1.0 is a well-lit page
+    const spread = deviation.doubleAt(0, 0)
+    const contrast = spread / 64 // ~1.0 is a well-lit page
 
     // An adaptive rung, tried first. Otsu picks the threshold that best separates
     // the frame's own two populations of tone, so on a white form on a white bench
@@ -429,10 +543,16 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
             const shape = squareness(corners)
             if (shape < minSquareness) continue
 
+            // The pixels have the final say. A quad can satisfy every
+            // geometric test and still be a line drawn across a photograph.
+            const support = edgeSupport(grey, corners, spread)
+            if (support < minEdgeSupport) continue
+
             candidates.push({
               corners,
               areaFraction,
               squareness: shape,
+              edgeSupport: support,
               ...interiorTones(grey, corners)
             })
           } finally {
@@ -480,6 +600,50 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       squareness: chosen.squareness,
       contrast
     }
+  } finally {
+    for (const mat of open) {
+      try { mat.delete() } catch { /* already released */ }
+    }
+  }
+}
+
+/**
+ * Whether a set of corners actually sits on edges in this picture.
+ *
+ * The same check the detector applies to its own candidates, offered
+ * separately so the moment of capture can ask it about corners that came from
+ * somewhere else — the tracker, a frame a tenth of a second old, a detection
+ * on a different image.
+ *
+ * The case it exists for: auto-capture fires, the still is re-detected, that
+ * finds nothing, and the tracked corners stand by default. If those were
+ * wrong, the review opens with a quad that has no relationship to the page —
+ * reported as the frame "shifting up" on capture. Better to know.
+ *
+ * @param {Array<{x:number,y:number}>} corners  normalised 0..1
+ */
+export function cornersAreSupported(cv, rgba, width, height, corners, opts = {}) {
+  const { minEdgeSupport = MIN_EDGE_SUPPORT } = opts
+  if (!cv || !rgba || !width || !height || corners?.length !== 4) return false
+
+  const open = []
+  try {
+    const source = cv.matFromImageData({ data: rgba, width, height })
+    open.push(source)
+    const grey = new cv.Mat()
+    open.push(grey)
+    cv.cvtColor(source, grey, cv.COLOR_RGBA2GRAY)
+
+    const mean = new cv.Mat(); open.push(mean)
+    const deviation = new cv.Mat(); open.push(deviation)
+    cv.meanStdDev(grey, mean, deviation)
+
+    const pixels = corners.map(c => ({ x: c.x * width, y: c.y * height }))
+    return edgeSupport(grey, pixels, deviation.doubleAt(0, 0)) >= minEdgeSupport
+  } catch {
+    // Unable to check is not the same as failed. Saying yes here leaves the
+    // behaviour exactly as it was before this existed.
+    return true
   } finally {
     for (const mat of open) {
       try { mat.delete() } catch { /* already released */ }

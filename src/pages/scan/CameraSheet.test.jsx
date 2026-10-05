@@ -126,36 +126,37 @@ describe('opening the camera', () => {
 })
 
 describe('the controls', () => {
-  it('has auto-capture on by default, and lets it be turned off', async () => {
-    // A switch now, not a checkbox in a caption. It was asked for again as
-    // though it did not exist, which is the only review a control needs.
+  it('has auto-capture off until it is asked for', async () => {
+    // It is the one mode that can go wrong while nobody is watching: it fires
+    // on its own judgement, and a poor judgement has already photographed and
+    // cropped the page before anybody sees the outline.
+    localStorage.clear()
     show()
     const toggle = screen.getByRole('switch', { name: /Auto-capture/ })
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
     toggle.click()
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'))
   })
 
-  it('remembers auto-capture being turned off', async () => {
-    // From a known state: the preference is now persisted, so the test above
-    // leaves it off and this one would otherwise be toggling it back on.
+  it('remembers auto-capture being turned on', async () => {
     localStorage.clear()
-    // Somebody who turns it off has a reason — a glossy form, a bad bench, a
+    // Somebody who turns it on has a reason — a glossy form, a bad bench, a
     // page that will not lie flat — and the reason is still true for the next
     // form in the pile.
     show()
     screen.getByRole('switch', { name: /Auto-capture/ }).click()
     await waitFor(() =>
-      expect(JSON.parse(localStorage.getItem('tm_clinical_prefs') || '{}').autoCapture).toBe(false))
+      expect(JSON.parse(localStorage.getItem('tm_clinical_prefs') || '{}').autoCapture).toBe(true))
 
     cleanup()
     show()
     expect(screen.getByRole('switch', { name: /Auto-capture/ }))
-      .toHaveAttribute('aria-checked', 'false')
+      .toHaveAttribute('aria-checked', 'true')
   })
 
-  it('keeps the shutter when auto-capture is off', async () => {
+  it('keeps the shutter whichever way the switch is set', async () => {
     show()
+    expect(screen.getByRole('button', { name: 'Capture page' })).toBeInTheDocument()
     screen.getByRole('switch', { name: /Auto-capture/ }).click()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Capture page' })).toBeInTheDocument())
   })

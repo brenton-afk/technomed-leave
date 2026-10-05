@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
-import { detectDocument } from '../../scanner/documentDetect.js'
+import { detectDocument, cornersAreSupported } from '../../scanner/documentDetect.js'
 import { DocumentTracker } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
 import { readPrefs, writePrefs } from '../../clinicalPlan/provider.js'
@@ -431,10 +431,22 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [view, setView] = useState(null)
-  // Remembered between scans. Somebody who turns auto-capture off has a
-  // reason — a glossy form, a bad bench, a page that will not sit flat — and
-  // that reason is still true on the next form in the pile.
-  const [autoCapture, setAutoCapture] = useState(() => readPrefs().autoCapture !== false)
+  // Off until it is asked for.
+  //
+  // Auto-capture is the one mode that can go wrong while nobody is watching:
+  // it fires on its own judgement, and when that judgement is poor the page is
+  // already photographed and cropped before anybody sees the outline. Reported
+  // exactly that way — "it is on by default and when it auto captures it
+  // shifts the frame up".
+  //
+  // Detection rejects a quad that does not sit on real edges now, so the
+  // failure is rarer. Rarer is not the same as gone, and the cost of being
+  // wrong is asymmetric: a shutter tap costs a second, and a silently wrong
+  // crop costs a rescan at best and an unnoticed half-form at worst.
+  //
+  // Remembered once chosen, in both directions. Somebody who turns it on
+  // wants it on for the whole pile of forms, not for one.
+  const [autoCapture, setAutoCapture] = useState(() => readPrefs().autoCapture === true)
   const toggleAutoCapture = useCallback(on => {
     setAutoCapture(on)
     writePrefs({ ...readPrefs(), autoCapture: on })
@@ -544,7 +556,21 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         ctx.drawImage(source, 0, 0, small.width, small.height)
         const { data } = ctx.getImageData(0, 0, small.width, small.height)
         const onTheStill = detectDocument(cv, data, small.width, small.height)
-        if (onTheStill?.corners) corners = onTheStill.corners
+        if (onTheStill?.corners) {
+          corners = onTheStill.corners
+        } else if (corners && !cornersAreSupported(cv, data, small.width, small.height, corners)) {
+          // Nothing found on the still, and the corners carried over from the
+          // viewfinder do not sit on anything in it either. That combination
+          // is what opened the review with a quad floating above the page —
+          // reported as the frame shifting up on capture.
+          //
+          // The whole frame instead, slightly inset. It is honestly wrong
+          // rather than confidently wrong: it says "I could not find the
+          // page, here is everything, drag it" — and dragging four corners
+          // from a sensible rectangle is far quicker than dragging them back
+          // from somewhere arbitrary.
+          corners = null
+        }
       }
     } catch {
       // Keep the tracked corners.
