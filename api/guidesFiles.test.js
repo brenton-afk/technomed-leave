@@ -69,6 +69,23 @@ describe('the guides endpoint serves pages, not downloads', () => {
     expect(source).not.toMatch(/Content-Disposition/i)
   })
 
+  it('does not cache the list, so a new guide shows up at once', () => {
+    // Five minutes of caching here is why a guide could be deployed and not
+    // appear — the app kept showing the list it fetched before the deploy,
+    // and the only person who noticed was the one who knew it should be
+    // there. The list is a couple of kilobytes; there was nothing to save.
+    const source = readFileSync(join(__dirname, 'guides.js'), 'utf8')
+    const list = source.slice(source.indexOf('if (!slug) {'), source.indexOf('const guide = GUIDES.find'))
+    expect(list).toMatch(/Cache-Control['"]?,\s*'no-store'/)
+    expect(list).not.toMatch(/max-age/)
+  })
+
+  it('still caches the guide itself, which is a megabyte and never changes', () => {
+    const source = readFileSync(join(__dirname, 'guides.js'), 'utf8')
+    const body = source.slice(source.indexOf('const guide = GUIDES.find'))
+    expect(body).toMatch(/Cache-Control['"]?,\s*'private, max-age=3600'/)
+  })
+
   it('is bundled with the function that reads it', () => {
     // These files are read off disk at request time. Without includeFiles
     // they are not in the deployment at all and every guide 404s in

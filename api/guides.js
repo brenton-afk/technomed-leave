@@ -99,7 +99,19 @@ export default async function handler(req, res) {
   // No slug: the list, so the app can draw its own index rather than shipping
   // the hub page and navigating between folders inside an iframe.
   if (!slug) {
-    res.setHeader('Cache-Control', 'private, max-age=300')
+    // Not cached.
+    //
+    // It was five minutes, which is nothing on a page somebody opens twice a
+    // week and everything on the afternoon a guide is added: the guide is
+    // deployed, the card does not appear, and the app looks broken to the one
+    // person who knows it should be there. That happened with the proximal
+    // tibia guide and would have happened with every guide after it.
+    //
+    // There is nothing to buy back. It is a list of eleven names — under two
+    // kilobytes — fetched once when the screen opens. The megabyte is the
+    // guide itself, which is still cached for the hour below, and that one
+    // cannot go stale because a slug's content never changes.
+    res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({
       guides: GUIDES.map(({ file, ...rest }) => rest),
       coming: COMING
