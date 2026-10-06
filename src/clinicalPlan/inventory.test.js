@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY, dayShortfall } from './inventory.js'
+import {
+  inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY, dayShortfall, suggestSupply
+} from './inventory.js'
 import { systemsInKit, resolveE4Product, resolveKit } from './systems.js'
 
 // The inventory is dictated knowledge — it lives in people's heads and nowhere
@@ -373,6 +375,68 @@ describe('the three Calvary hospitals', () => {
   it('handles the apostrophe and the full stop', () => {
     for (const written of ["Calvary St Luke's", 'Calvary St. Lukes', 'ST LUKES', "St Luke's Launceston"]) {
       expect(loanNeed('Diplomat', written).reason, written).toMatch(/Launceston/)
+    }
+  })
+})
+
+describe('working out the supply from what is where', () => {
+  // "Those labels must be on every booking in every entry in the app." and
+  // "you need to scan and know what kits are where at each hospital (you
+  // already know) and then assign."
+  //
+  // It did already know — that is what the inventory is for — and only ever
+  // used it to warn. A booking saying "Kit: KT Lonestar" with no supply showed
+  // no supply at all.
+  it('calls a kit on the shelf consignment', () => {
+    expect(suggestSupply('KT Lonestar', 'RHH')).toBe('Consignment')
+    expect(suggestSupply('Dakota', 'Calvary')).toBe('Consignment')
+    expect(suggestSupply('Diplomat', 'CLV')).toBe('Consignment')
+  })
+
+  it('calls a Calvary Mariner case a distributor loan', () => {
+    // Not "there is one at RHH, go and get it". Mariner is consigned at RHH
+    // and a Calvary case still gets a distributor set — which is exactly what
+    // Loane and O'Brien both have.
+    expect(suggestSupply('Mariner', 'CLV')).toBe('Distributor Loan')
+  })
+
+  it('only sends somebody to RHH for a kit that actually travels', () => {
+    // Athlet's instrument kit is recorded as moving between sites. Reform is
+    // recorded as RHH-only with a loan requested for Calvary, in those words.
+    expect(suggestSupply('Athlet', 'CLV')).toBe('RHH Loan')
+    expect(suggestSupply('Reform', 'CLV')).toBe('Distributor Loan')
+  })
+
+  it('sends a mainland-only system to the mainland', () => {
+    expect(suggestSupply('Nuvasive', 'RHH')).toBe('Distributor Loan')
+  })
+
+  it('says nothing about kit that is not ours to supply', () => {
+    // KT cover their own Calvary cases unless they ask us.
+    expect(suggestSupply('Lonestar', 'CLV')).toBeNull()
+    expect(suggestSupply('Cascadia', 'RHH')).toBeNull()
+  })
+
+  it('says nothing about a system it has never heard of', () => {
+    // Better than a confident wrong answer on a card somebody packs from.
+    expect(suggestSupply('Something Nobody Stocks', 'RHH')).toBeNull()
+    expect(suggestSupply('', 'RHH')).toBeNull()
+    expect(suggestSupply('Dakota', '')).toBeNull()
+  })
+
+  it('finds a system under the name the booking writes', () => {
+    // The inventory says "Global BMD PLIF" and "Reform Cervical"; the
+    // bookings say "E4 Global PLIF" and "Reform". Without the aliases the
+    // lookup missed, so the app held the answer and could not find it.
+    for (const [written, held] of [
+      ['Reform', 'Reform Cervical'],
+      ['REFORM POCT', 'Reform Cervical'],
+      ['E4 Global PLIF', 'Global BMD PLIF'],
+      ['Global PLIF', 'Global BMD PLIF'],
+      ['Firebird', 'Orthofix Firebird'],
+      ['KT Lonestar', 'Lonestar']
+    ]) {
+      expect(inventoryFor(written)?.system, written).toBe(held)
     }
   })
 })

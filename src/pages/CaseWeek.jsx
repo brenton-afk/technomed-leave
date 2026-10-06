@@ -21,6 +21,7 @@ import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
 import { weekOf, withinWeek } from '../clinicalPlan/teamLeader.js'
 import { describeListPlace } from '../clinicalPlan/listPlace.js'
 import { isOrthopaedic } from '../clinicalPlan/colours.js'
+import { suggestSupply } from '../clinicalPlan/inventory.js'
 import { preferencesFor } from '../clinicalPlan/preferences.js'
 import { GuideView } from './TheatreGuides.jsx'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
@@ -132,18 +133,39 @@ const KIND_TONE = {
 }
 
 /**
- * The per-system supplies, but only when saying them separately earns its keep.
+ * Every system on a case, each with where its kit is coming from.
  *
- * Null for the ordinary case — one system, one answer — where the existing
- * line is shorter and reads better. Something only when the booking names more
- * than one system and they do not all have the same answer, which is the one
- * situation the single line gets wrong.
+ * "Pt Bannister for KT Medical doesn't say whether it was consignment or loan.
+ * Those labels must be on every booking in every entry in the app."
+ *
+ * They were missing wherever nobody had typed them, which is most bookings —
+ * the field is free text and "Kit: KT Lonestar" is a perfectly natural thing
+ * to write. An absent label reads exactly like a decision nobody has made, so
+ * the two cases that needed chasing looked identical to the dozen that did
+ * not.
+ *
+ * So where it is not recorded the app works it out, from the inventory it
+ * already holds: Lonestar and Dakota are consigned at RHH, Mariner at Calvary
+ * is a distributor set, Athlet at Calvary is a tray we move ourselves.
+ *
+ * A worked-out answer is marked with a question mark and drawn quietly. It is
+ * a reading of stock that was dictated once and goes stale — a set gets
+ * consigned, a floating kit is reassigned — and a guess dressed as an answer
+ * is how a wrong one survives to the morning of the case.
+ *
+ * Nothing at all for a case we are not attending: there is no kit to bring,
+ * and a supply prompt on one is noise standing next to the cases that need it.
  */
-function splitSupplies(surgicalCase) {
-  const entries = (surgicalCase?.supplies || []).filter(e => e?.system)
-  if (entries.length < 2) return null
-  const answers = new Set(entries.map(e => e.supply || ''))
-  return answers.size > 1 ? entries : null
+function suppliesFor(surgicalCase) {
+  if (!surgicalCase || surgicalCase.cancelled || surgicalCase.notRequired) return null
+  const entries = (surgicalCase.supplies || []).filter(e => e?.system)
+  if (!entries.length) return null
+
+  return entries.map(entry => {
+    if (entry.supply) return { ...entry, inferred: false }
+    const guess = suggestSupply(entry.system, surgicalCase.hospital)
+    return { ...entry, supply: guess, inferred: Boolean(guess) }
+  })
 }
 
 /**
@@ -299,36 +321,33 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           </span>
         )}
 
-        {/* Each system with its own supply, where they differ.
+        {/* Each system, and where its kit is coming from.
             
-            One supply for the whole line read "Mariner / E4 Global BMD PLIF ·
-            Distributor Loan", which says both are on loan when only the
-            Mariner is — and the E4 cages being consignment is exactly the
-            thing somebody checks before leaving the office. */}
-        {splitSupplies(surgicalCase) ? (
+            On every booking, including the ones nobody has labelled — those
+            carry a worked-out answer with a question mark after it. One line
+            per system, because a case is often two systems with different
+            answers and one line for both said the wrong thing about one. */}
+        {suppliesFor(surgicalCase) && (
           <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
-            {splitSupplies(surgicalCase).map((entry, i) => (
+            {suppliesFor(surgicalCase).map((entry, i) => (
               <React.Fragment key={entry.system}>
                 {i > 0 && ' · '}
                 {entry.system}
-                {entry.supply && (
-                  <span style={{ fontWeight: 600, color: colour.ink }}> ({entry.supply})</span>
+                {entry.supply ? (
+                  <span style={{
+                    fontWeight: entry.inferred ? 400 : 700,
+                    color: entry.inferred ? colour.inkFaint : colour.ink
+                  }}>
+                    {' '}({entry.supply}{entry.inferred ? '?' : ''})
+                  </span>
+                ) : (
+                  <span style={{ color: colour.warning, fontWeight: 700 }}> (supply?)</span>
                 )}
               </React.Fragment>
             ))}
           </span>
-        ) : (surgicalCase.system || surgicalCase.supply) && (
-          <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
-            {surgicalCase.system}
-            {surgicalCase.system && surgicalCase.supply ? ' · ' : ''}
-            {surgicalCase.supply && (
-              <span style={{ fontWeight: 600, color: colour.ink }}>{surgicalCase.supply}</span>
-            )}
-          </span>
         )}
 
-        {/* Only when the kit names something the system does not — a loan tray
-            alongside the implant system. */}
         {surgicalCase.kit && (
           <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
             Kit: {surgicalCase.kit}

@@ -80,6 +80,7 @@ export const INVENTORY = [
   },
   {
     system: 'Mariner Outrigger', distributor: 'device',
+    aka: ['Outrigger'],
     consigned: {},
     floating: 1,
     note: 'Connector set. TechnoMed floating kit, mostly lives at Calvary.'
@@ -88,6 +89,7 @@ export const INVENTORY = [
   // ── E4 Surgical ──
   {
     system: 'Global BMD PLIF', distributor: 'e4',
+    aka: ['Global PLIF', 'E4 Global PLIF', 'Global BMD', 'E4 BMD', 'BMD PLIF'],
     // The instrument kit is at RHH on long-term loan — confirmed 6 October
     // 2026. It was recorded as a floating kit that "mostly lives at RHH",
     // which reads as a tray that might be anywhere and has to be chased. It
@@ -99,6 +101,7 @@ export const INVENTORY = [
   },
   {
     system: 'Global BMD ALIF', distributor: 'e4',
+    aka: ['Global ALIF', 'BMD ALIF'],
     consigned: { CLV: 1 },
     note: 'Calvary only, with sterile implants.'
   },
@@ -112,6 +115,7 @@ export const INVENTORY = [
   },
   {
     system: 'Reform Cervical', distributor: 'e4',
+    aka: ['Reform', 'Reform POCT', 'POCT'],
     consigned: { RHH: 1 },
     note: 'POCT. Lateral mass screws — the two names are the same product. '
       + 'RHH only, so a Calvary case has to have a loan kit requested.'
@@ -131,6 +135,7 @@ export const INVENTORY = [
   },
   {
     system: 'Orthofix Firebird', distributor: 'kt',
+    aka: ['Firebird', 'Firebird NXG'],
     consigned: { RHH: 1, CLV: 1 },
     ours: false,
     weCover: { RHH: true, CLV: false },
@@ -181,12 +186,22 @@ export function inventoryFor(system) {
   const name = String(system || '').trim().toLowerCase()
   if (!name) return null
   if (byName.has(name)) return byName.get(name)
-  // Longest match first, so "Global BMD PLIF" is not answered by a shorter entry.
-  const hit = INVENTORY
-    .slice()
-    .sort((a, b) => b.system.length - a.system.length)
-    .find(item => new RegExp(`\\b${item.system.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(name))
-  return hit || null
+
+  // Every name an item answers to, longest first — so "Global BMD PLIF" is
+  // not answered by a shorter entry, and an alias cannot beat a full name.
+  //
+  // The aliases matter more than they look. The inventory calls it "Global
+  // BMD PLIF" and "Reform Cervical"; the bookings say "E4 Global PLIF" and
+  // "Reform". Without them the lookup simply missed, so the app held the
+  // answer and could not find it — no loan warning, and no supply suggested
+  // on a booking that had none recorded.
+  const named = INVENTORY
+    .flatMap(item => [item.system, ...(item.aka || [])].map(label => ({ item, label })))
+    .sort((a, b) => b.label.length - a.label.length)
+
+  const hit = named.find(({ label }) =>
+    new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(name))
+  return hit?.item || null
 }
 
 /**
@@ -398,4 +413,67 @@ export function isRush(surgeryIso, now = new Date(), tz = TZ) {
   const by = kitArrivalBy(surgeryIso, tz)
   if (!by) return false
   return new Date(by.iso).getTime() <= now.getTime()
+}
+
+/**
+ * Which hospital a booking's text names. Exported so one reading serves all.
+ */
+export function siteCode(hospital) {
+  const text = String(hospital || '').toUpperCase()
+  // The named campuses before the generic "CALVARY", which all three contain.
+  if (/ST\.?\s*LUKE/.test(text)) return 'STL'
+  if (/ST\.?\s*JOHN/.test(text)) return 'STJ'
+  if (/\bCLV\b|CALVARY|LENAH/.test(text)) return 'CLV'
+  if (/\bRHH\b|ROYAL\s*HOBART/.test(text)) return 'RHH'
+  return null
+}
+
+/**
+ * Where a system's kit would come from for a case at this hospital.
+ *
+ * "You need to scan and know what kits are where at each hospital (you already
+ * know) and then assign."
+ *
+ * It does already know — that is what INVENTORY above is for — and until now
+ * it only used it to warn. A booking that simply said "Kit: KT Lonestar" with
+ * no supply showed no supply, and an absent label reads exactly like a
+ * decision nobody has made. Bannister and Bayly both sat like that, and both
+ * are answerable from the shelf: Lonestar and Dakota are consigned at RHH.
+ *
+ * Returned as a suggestion, never as a fact. The card marks it as worked out
+ * rather than recorded, because the inventory is dictated knowledge that goes
+ * stale — a set gets consigned, a floating kit is reassigned — and a guess
+ * wearing the same clothes as an answer is how a wrong one survives.
+ *
+ * @returns {'Consignment'|'RHH Loan'|'Distributor Loan'|null}
+ */
+export function suggestSupply(system, hospital) {
+  const item = inventoryFor(system)
+  const site = siteCode(hospital)
+  if (!item || !site || item.competitor) return null
+  // Theirs to supply, not ours to label.
+  if (item.ours === false && item.weCover && !item.weCover[site]) return null
+
+  // On the shelf at this hospital. Nothing to arrange.
+  if ((item.consigned?.[site] || 0) > 0) {
+    // Unless it is there on long-term loan, which is a different answer to
+    // the question the buttons ask even though it means the same work: none.
+    return item.longTermLoan?.[site] ? 'Distributor Loan' : 'Consignment'
+  }
+
+  // Ours to move, and only where the kit actually travels.
+  //
+  // Not merely "there is one at RHH". Mariner is consigned at RHH and a
+  // Calvary case still gets a distributor set — which is what Loane and
+  // O'Brien both have — and the Reform note says the same in words: "RHH
+  // only, so a Calvary case has to have a loan kit requested". The kits that
+  // move are the ones recorded as moving: Athlet's instrument kit, and the
+  // floating sets.
+  //
+  // Only between the two Hobart hospitals. Nothing is driven to Launceston.
+  const hobart = site === 'RHH' || site === 'CLV'
+  if (hobart && (item.movesBetweenSites || item.floating)) return 'RHH Loan'
+
+  // Nothing of ours within reach: somebody has to request one.
+  return 'Distributor Loan'
 }

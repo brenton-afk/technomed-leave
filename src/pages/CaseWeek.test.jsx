@@ -89,7 +89,10 @@ describe('a case, in full', () => {
     // Resolved on the way in: the booking says "E4 Cages" and the procedure is
     // a PLIF, so the card names the cage the team actually has to bring.
     expect(screen.getByText(/Diplomat and Global BMD PLIF/)).toBeInTheDocument()
-    expect(screen.getByText('Consignment')).toBeInTheDocument()
+    // Bracketed and attached to its system now, because a booking can name
+    // two systems supplied differently and one trailing word said the wrong
+    // thing about one of them.
+    expect(screen.getByText('(Consignment)')).toBeInTheDocument()
     // The rep the old calendar view dropped on the floor.
     expect(screen.getByText('Mat')).toBeInTheDocument()
   })
@@ -139,7 +142,7 @@ describe('however the booking is written', () => {
     expect(screen.getByText('Ibbett')).toBeInTheDocument()
     expect(screen.getByText('L4/5 TLIF')).toBeInTheDocument()
     expect(screen.getByText(/MARINER/i)).toBeInTheDocument()
-    expect(screen.getByText('Loan')).toBeInTheDocument()
+    expect(screen.getByText('(Loan)')).toBeInTheDocument()
   })
 
   it('shows no label text and no raw line', async () => {
@@ -1206,7 +1209,80 @@ describe('a booking with two systems supplied differently', () => {
     show()
     await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
     const card = screen.getByText('Hollis').closest('div')
-    expect(card.textContent).toMatch(/Diplomat · Consignment|DIPLOMAT · Consignment/i)
-    expect(card.textContent).not.toMatch(/\(Consignment\)/)
+    // One system, one answer — still one line, and the answer is bracketed
+    // and attached to the system it belongs to like everywhere else.
+    expect(card.textContent).toMatch(/Diplomat \(Consignment\)/i)
+  })
+})
+
+describe('a supply on every booking', () => {
+  // "Pt Bannister for KT Medical doesn't say whether it was consignment or
+  // loan. Those labels must be on every booking in every entry in the app."
+  // "You need to scan and know what kits are where at each hospital (you
+  // already know) and then assign."
+  //
+  // The label was missing wherever nobody had typed it, which is most
+  // bookings — "Kit: KT Lonestar" is a natural thing to write. An absent
+  // label reads like a decision nobody has made, so the cases that needed
+  // chasing looked identical to the ones that did not.
+  const booking = (kit, hospital = 'RHH', patient = 'Bannister') => ({
+    id: patient, summary: `${patient} ${kit} - JPW`,
+    description: `Surgeon: JPW\nPatient: ${patient}\nHospital: ${hospital}\nKit: ${kit}`,
+    start: { dateTime: '2026-09-21T09:00:00+10:00' },
+    end: { dateTime: '2026-09-21T10:00:00+10:00' },
+    location: hospital
+  })
+
+  const cardFor = async patient => {
+    show()
+    await waitFor(() => expect(screen.getByText(patient)).toBeInTheDocument())
+    return screen.getByText(patient).closest('div').textContent
+  }
+
+  it('works out a supply nobody recorded', async () => {
+    // Lonestar is consigned at RHH, so it is on the shelf.
+    events = [booking('KT Lonestar')]
+    expect(await cardFor('Bannister')).toMatch(/\(Consignment\?\)/)
+  })
+
+  it('marks a worked-out answer as one', async () => {
+    // The inventory is dictated knowledge and goes stale. A guess dressed as
+    // an answer is how a wrong one survives to the morning of the case.
+    events = [booking('KT Lonestar')]
+    const card = await cardFor('Bannister')
+    expect(card).toContain('?')
+    expect(card).not.toMatch(/\(Consignment\)/)
+  })
+
+  it('leaves a recorded answer unmarked', async () => {
+    events = [booking('KT Lonestar (Consignment)')]
+    const card = await cardFor('Bannister')
+    expect(card).toMatch(/\(Consignment\)/)
+    expect(card).not.toMatch(/Consignment\?/)
+  })
+
+  it('knows a Calvary Mariner case needs a distributor set', async () => {
+    // Which is what Loane and O'Brien both actually have.
+    events = [booking('Mariner', 'CLV', 'Loane')]
+    expect(await cardFor('Loane')).toMatch(/\(Distributor Loan\?\)/)
+  })
+
+  it('knows the Athlet kit is one we move ourselves', async () => {
+    events = [booking('Athlet', 'CLV', 'Quintrell')]
+    expect(await cardFor('Quintrell')).toMatch(/\(RHH Loan\?\)/)
+  })
+
+  it('asks outright where it cannot work it out', async () => {
+    // Better than silence: a system the inventory has never heard of is
+    // exactly the one somebody needs to think about.
+    events = [booking('Something Nobody Stocks')]
+    expect(await cardFor('Bannister')).toMatch(/\(supply\?\)/)
+  })
+
+  it('says nothing for a case we are not attending', async () => {
+    // No kit to bring, and a supply prompt here is noise standing next to
+    // the cases that need one.
+    events = [booking('Blab F2F not required', 'RHH', 'Gray')]
+    expect(await cardFor('Gray')).not.toMatch(/supply\?|Consignment|Loan/)
   })
 })
