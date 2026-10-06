@@ -175,3 +175,63 @@ describe('grouped by who we order from', () => {
     expect(screen.queryByText('DIPLOMAT')).not.toBeInTheDocument()
   })
 })
+
+describe('the proximal tibia guide', () => {
+  const LISTED = {
+    guides: [
+      { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', revision: 'SE_825567 AF · 2025/07' },
+      {
+        slug: 'prox-tib-3.5', name: 'Proximal Tibia Plates 3.5', maker: 'DePuy Synthes',
+        group: 'Orthopaedics', revision: 'SE_858604 AA (lateral) · J5954-A (medial)',
+        keywords: 'Lateral VA-LCP and medial LCP plates in one app. '
+          + 'Plate selector · Technique · Screw/drill/torque · Trays · RHH small frag'
+      },
+      { slug: 'diplomat', distributor: 'signus', name: 'DIPLOMAT', maker: 'SIGNUS', group: 'Spine' }
+    ],
+    coming: []
+  }
+
+  const showListed = () => {
+    global.fetch = vi.fn(async url => (String(url).includes('guide=')
+      ? { ok: true, status: 200, text: async () => '<html><body>Proximal tibia</body></html>' }
+      : { ok: true, status: 200, json: async () => LISTED }))
+    return render(<TheatreGuides user={{ token: 'tok' }} onBack={() => {}} />)
+  }
+
+  it('sits under Orthopaedics, beside the clavicle guide', async () => {
+    const { container } = showListed()
+    await waitFor(() => expect(screen.getByText('Proximal Tibia Plates 3.5')).toBeInTheDocument())
+    const page = container.textContent
+    expect(page.indexOf('Orthopaedics')).toBeLessThan(page.indexOf('Proximal Tibia Plates 3.5'))
+    expect(page).toContain('VA LCP Clavicle Plate 2.7')
+  })
+
+  it('reads like every other card — the maker and the source revision', async () => {
+    showListed()
+    await waitFor(() => expect(screen.getByText('Proximal Tibia Plates 3.5')).toBeInTheDocument())
+    expect(screen.getByText('DePuy Synthes · SE_858604 AA (lateral) · J5954-A (medial)'))
+      .toBeInTheDocument()
+  })
+
+  it('is found by what is inside it, not only by its name', async () => {
+    // The chips asked for have no slot on a card here — an existing card is a
+    // name and a revision. They earn their keep in the search instead.
+    showListed()
+    await waitFor(() => expect(screen.getByText('Proximal Tibia Plates 3.5')).toBeInTheDocument())
+    for (const term of ['torque', 'small frag', 'plate selector', 'medial LCP']) {
+      fireEvent.change(screen.getByLabelText('Search the guides'), { target: { value: term } })
+      expect(screen.queryByText('Proximal Tibia Plates 3.5'), term).toBeInTheDocument()
+      expect(screen.queryByText('DIPLOMAT'), term).not.toBeInTheDocument()
+    }
+  })
+
+  it('opens the guide itself', async () => {
+    showListed()
+    await waitFor(() => expect(screen.getByText('Proximal Tibia Plates 3.5')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Proximal Tibia Plates 3.5'))
+    await waitFor(() =>
+      expect(screen.getByTitle('Proximal Tibia Plates 3.5')).toBeInTheDocument())
+    const asked = global.fetch.mock.calls.find(([u]) => String(u).includes('guide='))
+    expect(String(asked[0])).toContain('guide=prox-tib-3.5')
+  })
+})

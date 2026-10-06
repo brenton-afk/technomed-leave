@@ -54,6 +54,20 @@ export const GUIDES = [
   { slug: 'global-plif', distributor: 'e4', name: 'Global PLIF GW', maker: 'Global Biomedica', group: 'Spine', file: 'global-plif/index.html', revision: 'Rev. 2020-05-12 v1.1' },
   { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation', file: 'brainlab/index.html' },
   { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', file: 'clavicle-2.7/index.html', revision: 'SE_825567 AF · 2025/07' },
+  // Two plates in one guide — the lateral VA-LCP and the medial LCP — which
+  // is why it carries two source revisions. `keywords` is not shown on the
+  // card; it is there so the search finds the guide by what is inside it
+  // rather than only by its name. See the search in TheatreGuides.jsx.
+  {
+    slug: 'prox-tib-3.5',
+    name: 'Proximal Tibia Plates 3.5',
+    maker: 'DePuy Synthes',
+    group: 'Orthopaedics',
+    file: 'prox-tib-3.5/index.html',
+    revision: 'SE_858604 AA (lateral) · J5954-A (medial)',
+    keywords: 'Lateral VA-LCP and medial LCP plates in one app. '
+      + 'Plate selector · Technique · Screw/drill/torque · Trays · RHH small frag'
+  },
   {
     slug: 'surgeon-preferences',
     name: 'Surgeon Preferences',

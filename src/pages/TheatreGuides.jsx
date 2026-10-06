@@ -210,7 +210,11 @@ export default function TheatreGuides({ user, onBack }) {
 
   const needle = query.trim().toLowerCase()
   const matches = g => !needle
-    || `${g.name} ${g.maker} ${g.group} ${DISTRIBUTOR_NAMES[g.distributor] || ''}`
+    // keywords is what a guide is about rather than what it is called — the
+    // plate selector, the torque figures, which tray it comes out of. Not
+    // shown on the card, because an existing card is a name and a revision
+    // and nothing else, but somebody searching "torque" should find it.
+    || `${g.name} ${g.maker} ${g.group} ${DISTRIBUTOR_NAMES[g.distributor] || ''} ${g.keywords || ''}`
       .toLowerCase().includes(needle)
 
   const guides = (data?.guides || []).filter(matches)
