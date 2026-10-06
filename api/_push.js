@@ -1,6 +1,9 @@
 import webpush from 'web-push'
 import { pushSubscriptions, removePushSubscription } from './_redis.js'
 
+/** Set when web-push rejects the keys themselves. */
+let setupError = null
+
 // ─── Sending a notification ──────────────────────────────────────────────────
 // The thing that makes the internal channels worth having. A message that waits
 // in an app until somebody thinks to look is not a message, which is why nine
@@ -19,18 +22,68 @@ import { pushSubscriptions, removePushSubscription } from './_redis.js'
 // safe to write down. This adds one more limit on top: the preview is short, so
 // a long message shows its beginning and is finished in the app.
 
-const CONFIGURED = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
+// ─── Whether push is switched on, and saying so out loud ─────────────────────
+// Without both keys this module does nothing. Not broken — off: every send
+// returns {sent: 0, configured: false}, no error is raised, and nothing in the
+// app looks different. That is how a finished feature can sit dark for weeks
+// and nobody notice, which is exactly what happened here.
+//
+// So the state is named, logged once on startup, and reported to the admin
+// portal. It still does not throw: a deploy without keys has to keep working,
+// because push is a convenience and the case list is not.
 
-if (CONFIGURED) {
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:brenton@technomed.com.au',
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  )
+/** Why push is off, or null when it is on. */
+function configurationFault() {
+  if (!process.env.VAPID_PUBLIC_KEY && !process.env.VAPID_PRIVATE_KEY) {
+    return 'no VAPID keys are set'
+  }
+  if (!process.env.VAPID_PUBLIC_KEY) return 'VAPID_PUBLIC_KEY is missing'
+  if (!process.env.VAPID_PRIVATE_KEY) return 'VAPID_PRIVATE_KEY is missing'
+
+  const subject = process.env.VAPID_SUBJECT || DEFAULT_SUBJECT
+  // Checked here rather than left to web-push, which throws. setVapidDetails
+  // runs at module load, so a bare email address in VAPID_SUBJECT would not
+  // disable push — it would take the whole endpoint down with a 500 on every
+  // request, including the ones that have nothing to do with notifications.
+  if (!/^(mailto:|https:\/\/)/.test(subject)) {
+    return 'VAPID_SUBJECT must be a mailto: or https: URL'
+  }
+  return null
 }
 
-export const pushConfigured = () => CONFIGURED
-export const publicKey = () => process.env.VAPID_PUBLIC_KEY || null
+const DEFAULT_SUBJECT = 'mailto:brenton@technomed.com.au'
+const FAULT = configurationFault()
+const CONFIGURED = FAULT === null
+
+if (CONFIGURED) {
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || DEFAULT_SUBJECT,
+      process.env.VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    )
+  } catch (err) {
+    // Malformed keys, which only web-push can judge. Push goes off rather
+    // than the module failing to import — see above.
+    setupError = err?.message || 'setVapidDetails refused the keys'
+  }
+}
+
+if (!CONFIGURED || setupError) {
+  // Once, at cold start, where a deploy log will show it. No key material is
+  // logged — only which name is missing or malformed.
+  console.warn(
+    `[push] notifications are OFF — ${setupError || FAULT}. `
+    + 'Set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT (see .env.example). '
+    + 'Nothing else is affected; every send will no-op.')
+}
+
+export const pushConfigured = () => CONFIGURED && !setupError
+
+/** What is wrong, for the admin portal. Null when push is working. */
+export const pushFault = () => setupError || FAULT
+
+export const publicKey = () => (pushConfigured() ? process.env.VAPID_PUBLIC_KEY : null)
 
 /** As much of a message as belongs on a lock screen. */
 export function preview(text, limit = 140) {
@@ -62,7 +115,7 @@ export function preview(text, limit = 140) {
  * somebody finds out a booking changed.
  */
 export async function notify(emails, payload) {
-  if (!CONFIGURED) return { sent: 0, configured: false }
+  if (!pushConfigured()) return { sent: 0, configured: false }
 
   const body = JSON.stringify(payload)
   let sent = 0

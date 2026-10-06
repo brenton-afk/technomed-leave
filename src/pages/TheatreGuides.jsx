@@ -49,8 +49,49 @@ const DISTRIBUTOR_NAMES = {
 // a tidying job; a guide nobody can find is a guide that does not exist.
 const GROUP_ORDER = ['Spine', 'Navigation', 'Orthopaedics', 'Restricted']
 
-/** One guide, open full-screen over the list. */
-function GuideView({ guide, user, onClose }) {
+/**
+ * One guide, open full-screen over the list.
+ *
+ * `focus` is the id of a section to open at — how a booking jumps straight to
+ * its surgeon's card instead of landing somebody at the top of a document
+ * with seven of them.
+ *
+ * Exported so a case card can open one directly. The alternative was
+ * navigating to the guides tab and leaving somebody to find it, which is the
+ * browsing this exists to remove.
+ */
+/**
+ * The guide's own HTML, told to open at a section.
+ *
+ * Done by appending a script rather than by reaching into the frame: the
+ * iframe is sandboxed to scripts only and has no same-origin access back, so
+ * the instruction has to travel inside the document.
+ *
+ * The id is matched against a strict pattern before it is interpolated. It
+ * comes from the app's own table rather than from anything a user typed, and
+ * that is exactly the assumption that stops being true the first time
+ * somebody wires this to a search box.
+ */
+export function scrollTo(html, id) {
+  if (!html || !id || !/^[a-z][a-z0-9-]{0,40}$/.test(id)) return html
+  return `${html}
+<script>
+  (function () {
+    var target = document.getElementById(${JSON.stringify(id)})
+    if (!target) return
+    // The guides expand their own sections on load; going after that rather
+    // than racing it.
+    requestAnimationFrame(function () {
+      if (target.open === false) target.open = true
+      var card = target.closest ? (target.closest('details') || target) : target
+      if (card && card.open === false) card.open = true
+      target.scrollIntoView({ block: 'start' })
+    })
+  })()
+</script>`
+}
+
+export function GuideView({ guide, user, onClose, focus }) {
   const [html, setHtml] = useState(null)
   const [error, setError] = useState('')
 
@@ -109,7 +150,7 @@ function GuideView({ guide, user, onClose }) {
           // access back into the portal that framed them.
           <iframe
             title={guide.name}
-            srcDoc={html}
+            srcDoc={scrollTo(html, focus)}
             sandbox="allow-scripts"
             style={{ flex: 1, width: '100%', border: 'none', background: 'white' }} />
         )}

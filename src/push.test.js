@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { pushPossible, installed, turnOnPush, pushIsOn } from './push.js'
+import { pushPossible, installed, turnOnPush, pushIsOn, platform, installHint } from './push.js'
 
 // Notifications are the whole reason the channels are worth having: a message
 // that waits in an app until somebody thinks to look is not a message, which is
@@ -205,5 +205,55 @@ describe('rotating the VAPID keys', () => {
     const { subscribe } = setUp({ subscribedWith: null })
     expect(await turnOnPush('tok')).toBe('on')
     expect(subscribe).toHaveBeenCalled()
+  })
+})
+
+describe('telling somebody how to install, on the phone they are holding', () => {
+  // The guidance said "the share button, then Add to Home Screen". That is
+  // right on an iPhone and describes a control Android does not have — so an
+  // Android user following it went hunting for something that was not there.
+  it('names the iPhone route on an iPhone', () => {
+    expect(platform('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')).toBe('ios')
+    expect(installHint('ios')).toMatch(/share button/)
+    expect(installHint('ios')).toMatch(/Add to Home Screen/)
+  })
+
+  it('names the Android route on Android', () => {
+    expect(platform('Mozilla/5.0 (Linux; Android 14; Pixel 8)')).toBe('android')
+    expect(installHint('android')).toMatch(/Install app/)
+    expect(installHint('android')).not.toMatch(/share button/)
+  })
+
+  it('warns that Add to Home screen is not the same thing on Android', () => {
+    // The distinction that matters: it can produce a shortcut that opens in a
+    // browser tab rather than the installed app.
+    expect(installHint('android')).toMatch(/shortcut/)
+  })
+
+  it('recognises an iPad, which reports itself as a Mac', () => {
+    const was = Object.getOwnPropertyDescriptor(navigator, 'maxTouchPoints')
+    Object.defineProperty(navigator, 'maxTouchPoints', { value: 5, configurable: true })
+    expect(platform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('ios')
+    if (was) Object.defineProperty(navigator, 'maxTouchPoints', was)
+  })
+
+  it('does not mistake a desktop Mac for an iPad', () => {
+    const was = Object.getOwnPropertyDescriptor(navigator, 'maxTouchPoints')
+    Object.defineProperty(navigator, 'maxTouchPoints', { value: 0, configurable: true })
+    expect(platform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('other')
+    if (was) Object.defineProperty(navigator, 'maxTouchPoints', was)
+  })
+
+  it('names both routes when it cannot tell', () => {
+    // A wrong instruction is worse than a general one.
+    const hint = installHint('other')
+    expect(hint).toMatch(/Install app/)
+    expect(hint).toMatch(/Add to Home Screen/)
+  })
+
+  it('never leaves somebody without a next step', () => {
+    for (const which of ['ios', 'android', 'other', undefined]) {
+      expect(installHint(which).length, String(which)).toBeGreaterThan(30)
+    }
   })
 })

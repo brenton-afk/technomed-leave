@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Page, Header, Body, SectionLabel, Banner, Button, Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { identifierWarning } from '../chat/identifiers.js'
-import { usePush } from '../push.js'
+import { usePush, installHint, installed } from '../push.js'
 import { upload } from '@vercel/blob/client'
 import { shrink, PHOTO_WARNING } from '../chat/photo.js'
 
@@ -295,8 +295,7 @@ function Notifications({ user }) {
     // be both discouraging and untrue — it is one step away.
     'not-installed': {
       tone: 'info',
-      text: 'To get messages on your phone, add this to your Home Screen first — '
-        + 'the share button, then “Add to Home Screen”. Then open it from there.',
+      text: `To get messages on your phone, install this app first. ${installHint()}`,
       action: null
     },
     blocked: {
@@ -307,8 +306,15 @@ function Notifications({ user }) {
     },
     unsupported: {
       tone: 'info',
-      text: 'This device cannot show notifications. Messages will still be here '
-        + 'when you open the app.',
+      // Two different situations wore the same sentence. A browser that has no
+      // push at all is a dead end and should say so; the same browser running
+      // a shortcut rather than the installed app is one step from working, and
+      // telling that person "this device cannot show notifications" is both
+      // discouraging and untrue.
+      text: installed()
+        ? 'This device cannot show notifications. Messages will still be here '
+          + 'when you open the app.'
+        : `This browser cannot show notifications here. ${installHint()}`,
       action: null
     },
     off: {
