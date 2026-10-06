@@ -18,7 +18,11 @@ export const SURGEON_KEYS = [
   // Maxillofacial. Mostly RHH, occasionally Calvary, and almost always us
   // providing AIRO support — they like a post-operative CT once a facial
   // fracture is reduced and fixated.
-  'Garg', 'Varidel', 'Silifent', 'Ong', 'Carter'
+  'Garg', 'Varidel', 'Silifent', 'Ong', 'Carter',
+  // Orthopaedics. A different service with different kit and different
+  // theatres — see ORTHOPAEDIC_SURGEONS in colours.js, which is what makes the
+  // card say so.
+  'Harvie'
 ]
 
 /**
@@ -969,12 +973,48 @@ export function cleanOperation(text, o = {}) {
   // what the operation is.
   const PROCEDURE_WORDS = new Set(['plif', 'alif', 'tlif', 'dlif', 'acdf', 'psf', 'lif'])
 
+  // Anatomy, and which side of the body.
+  //
+  // The same trap one service along. A spine system is a brand — Diplomat,
+  // Mariner — so stripping its words out of the operation is safe. An
+  // orthopaedic set is named after the bone it goes on: "Synthes VA Proximal
+  // Tibia Set, Sterile Lateral VA Plates and Medial LCP Plates". Dropping
+  // those words left "Left proximal tibia, lateral and medial plates" reading
+  // as "Left" — the side, and nothing else.
+  //
+  // These words can appear in a product name and can never be only a product
+  // name. Losing which bone, or which side, is not a tidier operation; it is
+  // a different one, and on a card somebody packs a tray from.
+  const ANATOMY = new Set([
+    'left', 'right', 'bilateral', 'proximal', 'distal', 'medial', 'lateral',
+    'anterior', 'posterior', 'superior', 'inferior',
+    'tibia', 'tibial', 'femur', 'femoral', 'fibula', 'humerus', 'radius',
+    'ulna', 'clavicle', 'patella', 'calcaneus', 'scapula', 'pelvis',
+    'ankle', 'wrist', 'elbow', 'shoulder', 'hip', 'knee', 'foot', 'hand'
+  ])
+
+  // What is being put in, and the words joining it together.
+  //
+  // "Lateral and medial plates" came back as "lateral medial": the kit names
+  // plates, so "plates" went, and it names "and", so the conjunction went with
+  // it. Neither is ever a product's identity on its own, and without them the
+  // line stops being English.
+  const FIXATION = new Set([
+    'plate', 'plates', 'plating', 'screw', 'screws', 'nail', 'nails',
+    'wire', 'wires', 'pin', 'pins', 'fixation', 'orif'
+  ])
+  const JOINERS = new Set(['and', 'with', 'plus', 'the', 'for', 'to', 'of', 'a'])
+
+  const keep = word =>
+    PROCEDURE_WORDS.has(word) || ANATOMY.has(word)
+    || FIXATION.has(word) || JOINERS.has(word)
+
   const drop = new Set([
     ...systemWords(context),
     ...String(system || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean),
     // Loan sets belong on the kit line. Left in, they appeared on both.
     ...findLoanSets(context).join(' ').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-  ].filter(word => !PROCEDURE_WORDS.has(word)))
+  ].filter(word => !keep(word)))
 
   const kept = trimJoiners(
     stripSupply(text).split(/\s+/).filter(word => {

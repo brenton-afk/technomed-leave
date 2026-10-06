@@ -69,7 +69,29 @@ export const SURGEON_COLOUR_NAMES = {
   Varidel: 'Lavender',
   Silifent: 'Lavender',
   Ong: 'Lavender',
-  Carter: 'Lavender'
+  Carter: 'Lavender',
+
+  // ── Orthopaedics ──
+  //
+  // Peacock, which was the last colour in the Google palette nobody had. The
+  // spine guide uses eight and Max Fax the ninth; this is the tenth, and it is
+  // a blue nothing else here is, which is the point — an orthopaedic case
+  // should not be mistakable for a spine one at a glance.
+  Harvie: 'Peacock'
+}
+
+/**
+ * Surgeons whose cases are orthopaedic rather than spine.
+ *
+ * A different service with different kit, different theatres and a different
+ * set of people, and the week is read by somebody who carries spine trays. The
+ * colour says it at a distance; this is what lets the card say it in a word.
+ */
+export const ORTHOPAEDIC_SURGEONS = new Set(['Harvie'])
+
+/** Whether this case belongs to the orthopaedic service. */
+export function isOrthopaedic(surgeon) {
+  return ORTHOPAEDIC_SURGEONS.has(String(surgeon || '').trim())
 }
 
 /**
@@ -81,7 +103,8 @@ export const SURGEON_COLOUR_NAMES = {
  */
 export const SURGEON_SERVICES = [
   { service: 'Spine', surgeons: ['Atallah', 'Dubey', 'Fowler', 'Gupta', 'Hannan', 'Ibbett', 'JPW', 'Thani'] },
-  { service: 'Max Fax', surgeons: ['Carter', 'Garg', 'Ong', 'Silifent', 'Varidel'] }
+  { service: 'Max Fax', surgeons: ['Carter', 'Garg', 'Ong', 'Silifent', 'Varidel'] },
+  { service: 'Orthopaedics', surgeons: ['Harvie'] }
 ]
 
 export const OTHER_COLOUR_NAMES = {

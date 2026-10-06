@@ -81,8 +81,11 @@ describe('a case, in full', () => {
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.getByText('Fowler')).toBeInTheDocument()
-    // "and" is dropped by cleanOperation — the operation reads "L5/S1 PSF PLIF".
-    expect(screen.getByText('L5/S1 PSF PLIF')).toBeInTheDocument()
+    // "and" survives now. It used to be dropped because the kit — "Diplomat
+    // and E4 Cages" — contains the word, and every word of the kit was struck
+    // out of the operation. A conjunction is never a product's identity, and
+    // without it the line stops being English.
+    expect(screen.getByText('L5/S1 PSF and PLIF')).toBeInTheDocument()
     // Resolved on the way in: the booking says "E4 Cages" and the procedure is
     // a PLIF, so the card names the cage the team actually has to bring.
     expect(screen.getByText(/Diplomat and Global BMD PLIF/)).toBeInTheDocument()

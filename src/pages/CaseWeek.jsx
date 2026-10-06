@@ -20,6 +20,7 @@ import ListPlace from './cases/ListPlace.jsx'
 import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
 import { weekOf, withinWeek } from '../clinicalPlan/teamLeader.js'
 import { describeListPlace } from '../clinicalPlan/listPlace.js'
+import { isOrthopaedic } from '../clinicalPlan/colours.js'
 import { preferencesFor } from '../clinicalPlan/preferences.js'
 import { GuideView } from './TheatreGuides.jsx'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
@@ -191,7 +192,8 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           <span style={{ color: nameInk }}>{surgicalCase.surgeon}</span>
         </span>
 
-        {(off || spare || surgicalCase.navigation || surgicalCase.selfFunding) && (
+        {(off || spare || surgicalCase.navigation || surgicalCase.selfFunding
+          || isOrthopaedic(surgicalCase.surgeon)) && (
           <span style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
             {off && (
               <span style={{
@@ -229,6 +231,19 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
                 scanner was not drawn as an Ibbett case at all — two facts
                 fighting over one colour, and the surgeon losing. Both are
                 readable at once now. */}
+            {/* A different service, said in a word as well as in a colour.
+                The week is read by somebody carrying spine trays, and an
+                orthopaedic case is different kit, a different theatre and a
+                different set of people. */}
+            {isOrthopaedic(surgicalCase.surgeon) && !off && (
+              <span style={{
+                ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.4px',
+                borderRadius: radius.pill, padding: '1px 7px', fontWeight: 700,
+                background: withAlpha(accentForCase(surgicalCase), 0.22),
+                color: accentTextForCase(surgicalCase)
+              }}>Orthopaedic</span>
+            )}
+
             {surgicalCase.navigation && !off && (
               <span style={{
                 padding: '1px 7px', borderRadius: radius.pill,

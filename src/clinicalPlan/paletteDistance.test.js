@@ -86,10 +86,22 @@ describe('what the palette itself can support', () => {
       .filter(x => x.d < 25)
       .sort((x, y) => x.d - y.d)
 
-    // Sage against Basil, at 20. If this list ever grows, a surgeon has been
-    // given a calendar colour that collides with somebody else's, and no
-    // amount of rendering will fix it.
-    expect(close.map(c => c.pair)).toEqual(['Thani/Gupta'])
+    // Two pairs, both recorded rather than hidden:
+    //
+    //   Thani/Gupta at 20 — Sage against Basil, two greens.
+    //   Carter/Harvie at 22 — Lavender against Peacock, two blues.
+    //
+    // The second arrived with orthopaedics. Google has eleven colours; eight
+    // are spine, one is Max Fax, one is navigation and one is alerts, so the
+    // palette was full before this service existed and Peacock was the least
+    // bad of what was left — Tomato is 16 from Tangerine and means "alert"
+    // everywhere else in the app.
+    //
+    // Carter is Max Fax and Harvie is orthopaedics, so the two never appear on
+    // the same list; a confusion costs a second look rather than a wrong tray.
+    // Fixing it properly means moving somebody to a different colour in Google
+    // Calendar, which is a change to a shared convention and Brent's to make.
+    expect(close.map(c => c.pair)).toEqual(['Thani/Gupta', 'Carter/Harvie'])
   })
 })
 
