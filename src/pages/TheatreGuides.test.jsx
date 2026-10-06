@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import TheatreGuides from './TheatreGuides.jsx'
+import TheatreGuides, { framed } from './TheatreGuides.jsx'
 
 // Field references read on a phone in theatre. The one thing that must hold
 // however the rest changes: Surgeon Preferences names individual surgeons and
@@ -233,5 +233,63 @@ describe('the proximal tibia guide', () => {
       expect(screen.getByTitle('Proximal Tibia Plates 3.5')).toBeInTheDocument())
     const asked = global.fetch.mock.calls.find(([u]) => String(u).includes('guide='))
     expect(String(asked[0])).toContain('guide=prox-tib-3.5')
+  })
+})
+
+
+describe('a guide in a frame is not a guide on a screen', () => {
+  // "The black banner should be fixed at the top, it shouldn't allow the
+  // contents to scroll underneath it."
+  //
+  // The newer guides pin their header with top: env(safe-area-inset-top),
+  // which is right when the page is the whole screen — the header clears the
+  // notch. In the frame it is wrong twice: the frame sits below the app's own
+  // navy header so there is no notch to clear, and the inset still resolves to
+  // the phone's, so the guide's header is pushed down and the page scrolls
+  // through the gap above it.
+  it('pins a header that was written to clear a notch', () => {
+    expect(framed('.hdr{position:sticky;top:env(safe-area-inset-top,0px);z-index:40}'))
+      .toBe('.hdr{position:sticky;top:0px;z-index:40}')
+  })
+
+  it('keeps the gap the guide meant to leave below its own header', () => {
+    // calc(105px + env(...)) is "my header is 105 tall, plus the notch". The
+    // 105 is the guide's own measurement and has to survive.
+    expect(framed('.tabs{top:calc(105px + env(safe-area-inset-top,0px))}'))
+      .toBe('.tabs{top:105px}')
+    expect(framed('.tabs{top:calc( 88px  +  env( safe-area-inset-top , 0px ) )}'))
+      .toBe('.tabs{top:88px}')
+  })
+
+  it('leaves the bottom inset alone', () => {
+    // A guide may use it for something sensible, and removing it would be a
+    // second guess on top of the first.
+    const css = '.foot{padding-bottom:env(safe-area-inset-bottom,0px)}'
+    expect(framed(css)).toBe(css)
+  })
+
+  it('does not touch a guide that never used the inset', () => {
+    // Eleven of the thirteen already say top:0.
+    const css = '.hdr{position:sticky;top:0;z-index:40}.tabs{top:110px}'
+    expect(framed(css)).toBe(css)
+  })
+
+  it('survives nothing', () => {
+    expect(framed('')).toBe('')
+    expect(framed(undefined)).toBe(undefined)
+  })
+
+  it('is applied to what the frame is actually given', async () => {
+    global.fetch = vi.fn(async url => (String(url).includes('guide=')
+      ? { ok: true, status: 200,
+        text: async () => '<style>.hdr{position:sticky;top:env(safe-area-inset-top,0px)}</style>' }
+      : { ok: true, status: 200, json: async () => LIST }))
+    render(<TheatreGuides user={{ token: 'tok' }} onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByText('DIPLOMAT')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('DIPLOMAT'))
+    await waitFor(() => expect(screen.getByTitle('DIPLOMAT')).toBeInTheDocument())
+    const doc = screen.getByTitle('DIPLOMAT').getAttribute('srcdoc')
+    expect(doc).toContain('top:0px')
+    expect(doc).not.toContain('safe-area-inset-top')
   })
 })

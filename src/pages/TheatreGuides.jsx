@@ -72,6 +72,41 @@ const GROUP_ORDER = ['Spine', 'Navigation', 'Orthopaedics', 'Restricted']
  * that is exactly the assumption that stops being true the first time
  * somebody wires this to a search box.
  */
+/**
+ * A guide's HTML, adjusted for being in a frame rather than on a screen.
+ *
+ * The newer guides pin their header with
+ *
+ *   .hdr { position: sticky; top: env(safe-area-inset-top, 0px) }
+ *
+ * which is right when the page is the whole screen: the header clears the
+ * notch. In here it is wrong twice over. The frame sits below the app's own
+ * navy header, so there is no notch to clear — and the inset still resolves to
+ * the phone's, so the guide's header is pushed down by about fifty pixels and
+ * the page scrolls through the gap above it. Reported as the black banner
+ * letting content scroll out from underneath.
+ *
+ * Only the *top* inset, and only where it is added to a sticky offset. A guide
+ * may well use the bottom inset for something sensible, and a blanket removal
+ * would be a second guess on top of the first.
+ *
+ * Done here rather than in the guide files. It is a fact about the frame, not
+ * about the document — so it holds for the two guides written this way, for
+ * every guide written this way later, and it survives the file being replaced
+ * when the manufacturer revises it.
+ */
+export function framed(html) {
+  if (!html) return html
+  return html
+    // calc(105px + env(...)) → 105px, keeping the offset the guide intended
+    // between its own header and its tabs.
+    .replace(
+      /calc\(\s*([\d.]+px)\s*\+\s*env\(\s*safe-area-inset-top[^)]*\)\s*\)/g,
+      '$1')
+    // and a bare env(safe-area-inset-top) is simply nothing in here.
+    .replace(/env\(\s*safe-area-inset-top[^)]*\)/g, '0px')
+}
+
 export function scrollTo(html, id) {
   if (!html || !id || !/^[a-z][a-z0-9-]{0,40}$/.test(id)) return html
   return `${html}
@@ -150,7 +185,7 @@ export function GuideView({ guide, user, onClose, focus }) {
           // access back into the portal that framed them.
           <iframe
             title={guide.name}
-            srcDoc={scrollTo(html, focus)}
+            srcDoc={framed(scrollTo(html, focus))}
             sandbox="allow-scripts"
             style={{ flex: 1, width: '100%', border: 'none', background: 'white' }} />
         )}
