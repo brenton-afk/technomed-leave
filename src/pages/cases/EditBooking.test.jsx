@@ -729,3 +729,72 @@ describe('what the patient already has in', () => {
       expect(screen.getByText(/Could not check what is already in/)).toBeInTheDocument())
   })
 })
+
+describe('saying where each kit is coming from', () => {
+  // "I need a Loan/Consignment button from within the booking editor so we can
+  // tap that instead of having to write what kit we are using for each case."
+  const openWith = async kit => {
+    // Its own booking, because the shared fixture is read straight out of the
+    // mock and cannot be varied per test.
+    const booking = { ...BOOKING, fields: { ...BOOKING.fields, kit } }
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('action=booking')) {
+        return { status: 200, json: async () => booking }
+      }
+      saved = JSON.parse(init.body)
+      return { status: 200, json: async () => ({ ok: true, event: booking }) }
+    })
+    show()
+    await ready()
+  }
+
+  it('offers the three answers for each system', async () => {
+    await openWith('Ascot / Athlet')
+    for (const system of ['Ascot', 'Athlet']) {
+      for (const option of ['Consignment', 'RHH Loan', 'Distributor Loan']) {
+        expect(screen.getByLabelText(`${system}: ${option}`)).toBeInTheDocument()
+      }
+    }
+  })
+
+  it('sets one system without touching the other', async () => {
+    // Brent's case: Ascot lives at Calvary, Athlet does not, so one case has
+    // two different answers. A single choice for the booking could not say
+    // that, which is why it was being typed out by hand.
+    await openWith('Ascot / Athlet')
+    fireEvent.click(screen.getByLabelText('Ascot: Consignment'))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Ascot: Consignment')).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.getByLabelText('Athlet: Consignment')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('writes the answer into the kit field, not beside it', async () => {
+    // Tapping a button and typing the same thing have to produce one field,
+    // or the two disagree the first time somebody uses both.
+    await openWith('Ascot / Athlet')
+    fireEvent.click(screen.getByLabelText('Athlet: RHH Loan'))
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('Ascot / Athlet (RHH Loan)')).toBeInTheDocument())
+  })
+
+  it('clears an answer tapped twice', async () => {
+    await openWith('Ascot (Consignment)')
+    fireEvent.click(screen.getByLabelText('Ascot: Consignment'))
+    await waitFor(() => expect(screen.getByDisplayValue('Ascot')).toBeInTheDocument())
+  })
+
+  it('shows what is already recorded', async () => {
+    await openWith('Ascot (Consignment) / Athlet (RHH Loan)')
+    expect(screen.getByLabelText('Ascot: Consignment')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Athlet: RHH Loan')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Athlet: Consignment')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('draws nothing for a booking that names no system', async () => {
+    const booking = { ...BOOKING, fields: { ...BOOKING.fields, kit: '', system: '' } }
+    global.fetch = vi.fn(async () => ({ status: 200, json: async () => booking }))
+    show()
+    await ready()
+    expect(screen.queryByText('Where the kit is coming from')).not.toBeInTheDocument()
+  })
+})

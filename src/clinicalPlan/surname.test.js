@@ -132,6 +132,18 @@ describe('a description already written with the name cut in half', () => {
     expect(got.system).toBe('ATHLET and ASCOT')
   })
 
+  it('takes it off the kit line too, which is where it actually was', () => {
+    // Reported with a screenshot: the card read "Pietra ATHLET AND ASCOT
+    // PLATE · Loan". The stranded half sits at the front of whichever
+    // labelled field the app wrote it into — the procedure on one booking,
+    // the kit on another — so it comes off all of them.
+    const got = readBooking('La Pietra ATHLET AND ASCOT PLATE - Gupta',
+      'Pt: La\nProcedure: C6 corpectomy fixation\nKit: Pietra ATHLET AND ASCOT PLATE\nSurg: Gupta')
+    expect(got.patient).toBe('La Pietra')
+    expect(got.system).toBe('ATHLET AND ASCOT PLATE')
+    expect(got.operation).toBe('C6 corpectomy fixation')
+  })
+
   it('leaves a correctly written description alone', () => {
     const got = readBooking(title, 'Pt: La Pietra\nSurg: Ibbett')
     expect(got.patient).toBe('La Pietra')

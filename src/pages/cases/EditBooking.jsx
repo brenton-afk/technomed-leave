@@ -11,6 +11,9 @@ import { needsPriorImplants } from '../../clinicalPlan/priorImplants.js'
 import { fetchDayCases } from '../../clinicalPlan/provider.js'
 import { dayShortfall } from '../../clinicalPlan/inventory.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
+import {
+  SUPPLY_OPTIONS, parseKitSupplies, setSupply, systemsToSupply
+} from '../../clinicalPlan/kitSupply.js'
 import { ATTENDING_REPS } from '../../staffConfig.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
@@ -220,6 +223,71 @@ function ColourPicker({ value, surgeon, chosen, onChange, onClear }) {
 export function withReps(summary, reps) {
   const base = extractRep(String(summary || '')).rest
   return reps.length ? `${base} (${reps.join('/')})` : base
+}
+
+/**
+ * Where each system's kit is coming from, as buttons.
+ *
+ * "I need a Loan/Consignment button from within the booking editor so we can
+ * tap that instead of having to write what kit we are using for each case."
+ *
+ * A row per system, because one case is often two systems with different
+ * answers — Consignment Ascot and RHH Loan Athlet for an Ascot/Athlet case at
+ * Calvary, because Ascot lives at Calvary and Athlet does not. A single choice
+ * for the whole booking could not say that, which is why it was being typed
+ * out by hand.
+ *
+ * It writes into the Kit field rather than alongside it. The field is still
+ * there and still editable: somebody who wants to write "(2 levels, from
+ * Melbourne)" can, and the buttons read back whatever is in it.
+ */
+function KitSupply({ kit, system, onChange }) {
+  const systems = systemsToSupply({ kit, system })
+  if (!systems.length) return null
+  const chosen = new Map(parseKitSupplies(kit).map(e => [e.system.toLowerCase(), e.supply]))
+
+  return (
+    <div style={{ marginBottom: space.md }}>
+      <span style={{
+        ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
+        display: 'block', marginBottom: 6
+      }}>Where the kit is coming from</span>
+
+      {systems.map(name => (
+        <div key={name} style={{ marginBottom: space.sm }}>
+          <span style={{
+            ...text('caption'), color: colour.ink, fontWeight: 700,
+            display: 'block', marginBottom: 4
+          }}>{name}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {SUPPLY_OPTIONS.map(option => {
+              const on = chosen.get(name.toLowerCase()) === option
+              return (
+                <button key={option} type="button"
+                  aria-pressed={on}
+                  aria-label={`${name}: ${option}`}
+                  onClick={() => onChange(setSupply(kit || system, name, option))}
+                  style={{
+                    flex: 1, minHeight: 40, cursor: 'pointer', padding: '0 4px',
+                    borderRadius: radius.control,
+                    border: `1px solid ${on ? colour.accent : colour.line}`,
+                    background: on ? colour.accentSoft : colour.surface,
+                    ...text('caption'), fontWeight: on ? 700 : 400,
+                    color: on ? colour.accentDeep : colour.inkMuted
+                  }}>
+                  {option}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+
+      <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block' }}>
+        Tap the same one again to clear it.
+      </span>
+    </div>
+  )
 }
 
 export default function EditBooking({ eventId, user, onClose, onSaved }) {
@@ -588,9 +656,21 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
             {loaded && status !== 'loading' && (
               <>
                 {FIELDS.map((f, i) => (
-                  <Field key={f.key} label={f.label} hint={f.hint} autoFocus={i === 0}
-                    value={fields[f.key] || ''}
-                    onChange={v => setFields(c => ({ ...c, [f.key]: v }))} />
+                  <React.Fragment key={f.key}>
+                    <Field label={f.label} hint={f.hint} autoFocus={i === 0}
+                      value={fields[f.key] || ''}
+                      onChange={v => setFields(c => ({ ...c, [f.key]: v }))} />
+                    {/* Under the kit field, because it writes into it. Tapping
+                        a button and typing the same thing have to produce one
+                        field, or the two disagree the first time somebody
+                        uses both. */}
+                    {f.key === 'kit' && (
+                      <KitSupply
+                        kit={fields.kit || ''}
+                        system={fields.system || ''}
+                        onChange={next => setFields(c => ({ ...c, kit: next }))} />
+                    )}
+                  </React.Fragment>
                 ))}
 
                 <label style={{ display: 'block', marginBottom: space.md }}>

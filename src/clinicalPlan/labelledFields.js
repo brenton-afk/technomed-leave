@@ -284,13 +284,25 @@ export function parseKitField(kit) {
 
 // What counts as naming how a kit is supplied. "cons" is in here because the
 // team writes it: "Diplomat (consignment) /Cascadia (cons)".
-const KNOWN_SUPPLY = /\b(?:consign(?:ment|ed)?|cons|loan(?:ed)?)\b/i
+const KNOWN_SUPPLY = /\b(?:consign(?:ment|ed)?|cons|loan(?:ed)?|rhh\s*loan|distributor\s*loan)\b/i
 
-/** "on consignment", "LOAN KIT" and "Loaned" all mean one of two things. */
+/**
+ * "on consignment", "LOAN KIT" and "Loaned" all mean one of a few things.
+ *
+ * Three answers now rather than two, because "loan" was hiding a distinction
+ * that decides who has to do something: a set coming over from RHH is a
+ * transfer the team makes themselves, and a set coming from the distributor is
+ * a request somebody has to send and chase. Both used to read as "Loan".
+ *
+ * Checked most specific first — "RHH loan" contains "loan", so the general
+ * case has to come last or it swallows both.
+ */
 function normaliseSupply(raw) {
   const text = String(raw || '').trim()
   if (!text) return undefined
   if (/consign|^\s*cons\s*$/i.test(text)) return 'Consignment'
+  if (/\brhh\b[\s-]*loan|loan[\s-]*(?:from[\s-]*)?\brhh\b/i.test(text)) return 'RHH Loan'
+  if (/distributor[\s-]*loan|loan[\s-]*(?:from[\s-]*)?distributor/i.test(text)) return 'Distributor Loan'
   if (/\bloan/i.test(text)) return 'Loan'
   // Something else in the brackets — "(PM list)", "(2 levels)". Kept as written,
   // since the team put it there on purpose.

@@ -1079,7 +1079,6 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
       [field, stripCancellation(stripSelfFunding(stripIdentifiers(value)))]))
   // Resolved before anything reads it, so a booking accepted onto the calendar
   // with "Implanet" on it still shows the system somebody can actually bring.
-  const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
   const fromTitle = parseCaseTitle(title, { colourSurgeon })
 
   // ── Repairing a description written before surnames could have spaces ──
@@ -1109,6 +1108,29 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     ? titlePatient.slice(labelledPatient.length).trim()
     : ''
 
+  if (severed && strandedName) {
+    // The stranded half of the name is at the front of whichever labelled
+    // field the app happened to write it into when it mis-read the title.
+    // That was the procedure on one booking and the kit on another — "Kit:
+    // Pietra ATHLET AND ASCOT PLATE" — so it comes off all of them rather
+    // than off the one that was noticed first.
+    //
+    // Only the exact word, and only at the front: a field that merely
+    // mentions it further along is saying something else.
+    const lead = new RegExp(`^\\s*${strandedName}\\b[\\s,/-]*`, 'i')
+    for (const field of ['procedure', 'kit', 'system', 'notes']) {
+      const value = labelled[field]
+      if (!value) continue
+      const trimmed = String(value).replace(lead, '').trim()
+      if (trimmed) labelled[field] = trimmed
+    }
+  }
+
+
+  // After the repair, deliberately: this reads labelled.kit, and a kit with
+  // half a surname on the front of it is what started all this.
+  const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
+
   const patient = (severed ? titlePatient : labelledPatient) || fromTitle?.patient
   const surgeon = normaliseSurgeon(labelled.surgeon) || fromTitle?.surgeon
   // Both names are needed. Without them this is a meeting, a list marker or a
@@ -1116,15 +1138,6 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   if (!patient || !surgeon) return null
 
   // Free-text reading still runs, as the fallback for whatever was not labelled.
-  if (severed && labelled.procedure) {
-    // "Pietra ATHLET and ASCOT" → "ATHLET and ASCOT". Only the exact word, and
-    // only at the front, so a procedure that merely mentions it is untouched.
-    const trimmed = String(labelled.procedure)
-      .replace(new RegExp(`^\\s*${strandedName}\\b[\\s,/-]*`, 'i'), '')
-      .trim()
-    labelled.procedure = trimmed || labelled.procedure
-  }
-
   const inferred = describeCase(fromTitle?.procedure, description)
 
   // Two conventions are live in the calendar, and "Kit:" means something
