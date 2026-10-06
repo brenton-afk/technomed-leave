@@ -1,3 +1,4 @@
+import { STAFF } from '../src/staffConfig.js'
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 
@@ -495,6 +496,23 @@ export async function savePushSubscription(email, subscription) {
  * says an endpoint is gone. A subscription that has expired will never work
  * again, and keeping it means retrying it forever.
  */
+/**
+ * How many devices are registered for notifications, across everybody.
+ *
+ * The number that separates "push is configured" from "push reaches anybody".
+ * A deploy can have perfect keys and zero devices — which is the state after a
+ * key rotation, and the state before anybody has turned notifications on — and
+ * those look identical from the server unless somebody counts.
+ */
+export async function registeredDeviceCount() {
+  let total = 0
+  for (const person of STAFF) {
+    const subs = await pushSubscriptions(person.email).catch(() => [])
+    total += subs.length
+  }
+  return total
+}
+
 export async function removePushSubscription(email, endpoint) {
   if (!endpoint) return
   await redis('hdel', pushKey(email), endpoint)

@@ -5,7 +5,8 @@ import {
 } from '../_xeroClient.js'
 import { readXero } from '../_xeroResponse.js'
 import { STAFF } from '../../src/staffConfig.js'
-import { getTimesheetDraft } from '../_redis.js'
+import { getTimesheetDraft, registeredDeviceCount } from '../_redis.js'
+import { pushConfigured, pushFault } from '../_push.js'
 
 // Read-only Xero lookups, routed by ?action=. These were three separate
 // functions (status, balances, debug); they were merged to stay under the
@@ -176,7 +177,14 @@ export default async function handler(req, res) {
         TWILIO_AUTH_TOKEN: 'Timesheet SMS reminders',
         TWILIO_FROM_NUMBER: 'Timesheet SMS reminders',
         EMAIL_FROM: 'Email sender (falls back to resend.dev)',
-        CRON_SECRET: 'Cron authentication'
+        CRON_SECRET: 'Cron authentication',
+        // Push was absent from this list, which is the other half of why it
+        // went unnoticed: the screen that answers "what is this deploy
+        // missing" did not consider notifications a thing that could be
+        // missing.
+        VAPID_PUBLIC_KEY: 'Push notifications',
+        VAPID_PRIVATE_KEY: 'Push notifications',
+        VAPID_SUBJECT: 'Push notifications (mailto: or https: URL)'
       }
 
       const configured = {}
@@ -187,13 +195,25 @@ export default async function handler(req, res) {
         if (!present) missing.push({ key, purpose })
       }
 
+      // Push gets its own line rather than three variable names, because
+      // "VAPID_SUBJECT is set" and "notifications work" are different facts —
+      // a subject that is not a URL is set and still switches push off. And
+      // because a count of registered devices is the only thing that
+      // distinguishes "configured" from "actually reaching anybody".
+      const devices = await registeredDeviceCount().catch(() => null)
+
       return res.status(200).json({
         deployment: {
           env: process.env.VERCEL_ENV || 'unknown',
           commit: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || 'unknown'
         },
         configured,
-        missing
+        missing,
+        push: {
+          on: pushConfigured(),
+          fault: pushFault(),
+          devices
+        }
       })
     }
 

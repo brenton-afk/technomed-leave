@@ -226,6 +226,37 @@ export default function SystemStatus({ user }) {
         </div>
       )}
 
+      {env?.push && (
+        /* Push, on its own line.
+           
+           "VAPID_SUBJECT is set" and "notifications work" are different
+           facts — a subject that is not a URL is set and still switches push
+           off — and the device count is the only thing that separates a
+           correctly configured deploy from one that reaches nobody. Both
+           states looked identical from here until now, which is most of why a
+           finished feature sat dark for weeks. */
+        <div style={{
+          background: env.push.on ? '#e6f4f2' : '#fff8e6',
+          border: `1px solid ${env.push.on ? 'rgba(42,181,160,0.3)' : 'rgba(245,158,11,0.3)'}`,
+          borderRadius: 10, padding: '12px 14px', marginBottom: 12
+        }}>
+          <div style={{
+            fontSize: 12.5, fontWeight: 700, marginBottom: 4,
+            color: env.push.on ? TEAL : '#8a5a00'
+          }}>
+            {env.push.on ? '✓ Push notifications are on' : '✕ Push notifications are off'}
+          </div>
+          <div style={{ fontSize: 12, color: env.push.on ? MUTED : '#8a5a00', lineHeight: 1.6 }}>
+            {env.push.on
+              ? (env.push.devices === 0
+                ? 'Configured, but no device has registered yet — nobody has turned notifications on, '
+                  + 'or the keys changed and every phone needs to re-register.'
+                : `${env.push.devices} device${env.push.devices === 1 ? '' : 's'} registered.`)
+              : <>{env.push.fault}. Set the VAPID variables and redeploy — see .env.example.</>}
+          </div>
+        </div>
+      )}
+
       {env && (
         <>
           {env.missing.length === 0 ? (

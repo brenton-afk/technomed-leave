@@ -40,6 +40,53 @@ export function installed() {
     || window.navigator.standalone === true
 }
 
+/**
+ * Which set of instructions applies.
+ *
+ * Only ever used to choose words. The capability checks above decide what can
+ * actually happen; this decides whether to say "the share button" or "the
+ * three dots", and getting that wrong sends somebody hunting for a control
+ * their phone does not have.
+ *
+ * User-agent sniffing, which is normally the wrong tool — but the question
+ * here is genuinely "which phone is this person holding", and no feature
+ * detection answers that. Nothing breaks if it guesses wrong: the fallback
+ * copy names both routes.
+ */
+export function platform(ua = globalThis.navigator?.userAgent || '') {
+  const agent = String(ua)
+  // iPadOS reports as a Mac, and is told apart by having a touch screen.
+  const iPadOS = /Macintosh/.test(agent) && (globalThis.navigator?.maxTouchPoints || 0) > 1
+  if (/iPhone|iPad|iPod/.test(agent) || iPadOS) return 'ios'
+  if (/Android/.test(agent)) return 'android'
+  return 'other'
+}
+
+/**
+ * How to install, in the words of the phone in somebody's hand.
+ *
+ * The existing copy said "the share button, then Add to Home Screen", which is
+ * right on an iPhone and describes a control that does not exist on Android —
+ * where it is the three-dot menu, and where the item to choose is "Install
+ * app" rather than "Add to Home screen". The two are not the same: the second
+ * can produce a shortcut that opens in a browser tab, and a tab is not where
+ * this app should live even where push happens to work in one.
+ */
+export function installHint(which = platform()) {
+  if (which === 'ios') {
+    return 'Tap the share button, then “Add to Home Screen”. Open it from there.'
+  }
+  if (which === 'android') {
+    return 'Open the browser menu (⋮) and choose “Install app”. '
+      + 'If you only see “Add to Home screen”, that makes a shortcut rather than '
+      + 'the app — install it properly and notifications will be reliable.'
+  }
+  // Desktop, or something that did not identify itself. Name both rather than
+  // guess, since a wrong instruction is worse than a general one.
+  return 'Install this app from your browser’s menu — “Install app” on Android '
+    + 'or desktop Chrome, or the share button then “Add to Home Screen” on iPhone.'
+}
+
 /** The browser's own base64url, which is not the base64 atob expects. */
 function urlBase64ToUint8Array(base64) {
   const padded = (base64 + '='.repeat((4 - base64.length % 4) % 4))
