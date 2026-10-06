@@ -81,6 +81,11 @@ export default async function handler(req, res) {
   // A booking spoken into the phone. Fills the form; does not make the booking.
   if (req.query.action === 'dictate') return handleDictate(req, res)
   // The running order of a theatre list, taken on the evening ring-round.
+  // Nothing in the app calls this any more — the arrows that drove it are
+  // gone, because the number they moved counted only our cases and disagreed
+  // with the hospital's list whenever anybody else had one on. Left in place
+  // rather than deleted: it moves real calendar entries, and removing a
+  // working endpoint is a separate decision from removing the buttons.
   if (req.query.action === 'reorder') return handleReorder(req, res)
   if (req.query.action === 'listplace') return handleListPlace(req, res)
   if (req.query.action === 'leader') return handleTeamLeader(req, res)

@@ -136,7 +136,7 @@ const KIND_TONE = {
  * Everything the booking says, in one place: who, what, with which system, how
  * it is supplied, what extra kit, and whatever the team wrote in the notes.
  */
-function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, onPreferences, hasPreferences }) {
+function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPreferences }) {
   const off = Boolean(surgicalCase.cancelled)
   // Told about, not attending. Drawn back like a cancelled case rather than
   // struck through — it is still going ahead, just without us.
@@ -153,7 +153,6 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, on
   const wash = off ? 'transparent' : washFor(surgicalCase)
   const edge = off ? colour.line : withAlpha(bar, 0.35)
   const nameInk = off ? colour.inkFaint : accentTextForCase(surgicalCase)
-  const ordering = typeof position === 'number' && Boolean(onMove)
   const place = describeListPlace(surgicalCase.listPlace)
 
   return (
@@ -166,16 +165,6 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, on
       }}>
       <span aria-hidden="true" style={{ width: 5, background: bar, flexShrink: 0 }} />
 
-      {/* Where it sits in the list the hospital read out. Shown beside the case
-          rather than as a time, because it is a position and not a time — the
-          third case starts when the second one finishes. */}
-      {ordering && (
-        <span style={{
-          flexShrink: 0, width: 26, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', ...text('bodyStrong'),
-          color: off ? colour.inkFainter : colour.inkFaint
-        }}>{position + 1}</span>
-      )}
 
       {/* The case, and the one control that is not the case. They are siblings
           rather than nested: a button inside a button is invalid, and a browser
@@ -370,38 +359,11 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, on
         )}
       </span>
 
-      {ordering && (
-        <span style={{
-          flexShrink: 0, display: 'flex', flexDirection: 'column',
-          borderLeft: `1px solid ${colour.lineSoft}`
-        }}>
-          <MoveButton dir={-1} onMove={onMove} busy={busy} label={`Move ${surgicalCase.patient} up the list`} />
-          <MoveButton dir={1} onMove={onMove} busy={busy} label={`Move ${surgicalCase.patient} down the list`} />
-        </span>
-      )}
     </div>
   )
 }
 
 /** One arrow. Disabled at the ends, so the list cannot be pushed off itself. */
-function MoveButton({ dir, onMove, busy, label, width = 40 }) {
-  const can = onMove(dir, true)
-  return (
-    <button type="button" aria-label={label} disabled={!can || busy}
-      onClick={() => onMove(dir)}
-      style={{
-        // Wide enough to hit with a thumb in a car park, which is where the
-        // list order usually gets typed in.
-        width, flex: 1, minHeight: width >= 40 ? 30 : 19, border: 'none', background: 'none',
-        borderTop: dir === 1 ? `1px solid ${colour.lineSoft}` : 'none',
-        color: can && !busy ? colour.accentDeep : colour.inkFainter,
-        cursor: can && !busy ? 'pointer' : 'default',
-        ...text('body'), lineHeight: 1
-      }}>
-      {dir === -1 ? '▲' : '▼'}
-    </button>
-  )
-}
 
 /** Leave, hours, a meeting, a reminder — quieter than a case, and labelled. */
 function ItemRow({ item }) {
@@ -489,7 +451,7 @@ function Heading({ children }) {
  * view to send anybody to any more. They are the controls the week is actually
  * worked with, so they have to live on the view that is on the screen.
  */
-function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, onPreferences, hasPreferences }) {
+function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferences }) {
   const off = Boolean(surgicalCase.cancelled)
   const spare = Boolean(surgicalCase.notRequired) && !off
   const place = describeListPlace(surgicalCase.listPlace)
@@ -525,10 +487,6 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, on
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           ...(off ? { textDecoration: 'line-through' } : {})
         }}>
-          {/* The number the hospital will call, where the order is known. */}
-          {typeof position === 'number' && !off && (
-            <span style={{ color: colour.inkFaint, fontWeight: 400 }}>{position + 1}. </span>
-          )}
           {surgicalCase.patient}
           <span style={{ color: colour.inkFaint, fontWeight: 400 }}> · </span>
           <span style={{ color: off ? colour.inkFaint : accentTextForCase(surgicalCase) }}>
@@ -583,17 +541,6 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, on
 
       {/* Narrow on purpose. The phone card's 40px thumb target would be a
           fifth of a week column, and this one is driven with a mouse. */}
-      {onMove && (
-        <span style={{
-          display: 'flex', flexDirection: 'column', flexShrink: 0,
-          borderLeft: `1px solid ${withAlpha(accentForCase(surgicalCase), 0.25)}`
-        }}>
-          <MoveButton dir={-1} onMove={onMove} busy={busy} width={24}
-            label={`Move ${surgicalCase.patient} earlier on the list`} />
-          <MoveButton dir={1} onMove={onMove} busy={busy} width={24}
-            label={`Move ${surgicalCase.patient} later on the list`} />
-        </span>
-      )}
     </div>
 
       {/* Offered whether or not anything is recorded — including where this is
@@ -650,7 +597,7 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, on
  * the single noisiest thing on the screen; and the reorder arrows themselves,
  * which belong in the day view where there is room to use them.
  */
-function WeekGrid({ plan, today, onOpen, onReorder, onSetPlace, onPreferences, hasPreferences }) {
+function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences }) {
   return (
     <div style={{
       display: 'grid',
@@ -662,7 +609,7 @@ function WeekGrid({ plan, today, onOpen, onReorder, onSetPlace, onPreferences, h
     }}>
       {(plan.days || []).map(day => (
         <WeekColumn key={day.date} day={day} today={today} onOpen={onOpen}
-          onReorder={onReorder} onSetPlace={onSetPlace} onPreferences={onPreferences}
+          onSetPlace={onSetPlace} onPreferences={onPreferences}
           hasPreferences={hasPreferences} />
       ))}
     </div>
@@ -675,8 +622,7 @@ function WeekGrid({ plan, today, onOpen, onReorder, onSetPlace, onPreferences, h
  * Its own component because each column keeps its own running order while the
  * calendar catches up, and a hook cannot be called inside a map.
  */
-function WeekColumn({ day, today, onOpen, onReorder, onSetPlace, onPreferences, hasPreferences }) {
-  const { inOrder, running, moveWithin, busy } = useRunningOrder(day, onReorder)
+function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences }) {
   const isToday = day.date === today
         const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
         const groups = day.casesByHospital || []
@@ -731,9 +677,6 @@ function WeekColumn({ day, today, onOpen, onReorder, onSetPlace, onPreferences, 
               {groups.map(group => {
                 // The order the list will run in, and whether it is worth
                 // numbering: one case at a hospital has no running order.
-                const list = running(group.cases)
-                const numbered = list.length > 1
-                const at = c => list.findIndex(r => r.id === c.id)
                 return (
                 <div key={group.hospital} style={{ marginBottom: 6 }}>
                   <div style={{
@@ -742,12 +685,8 @@ function WeekColumn({ day, today, onOpen, onReorder, onSetPlace, onPreferences, 
                     {group.hospital === 'CALVARY LENAH VALLEY' ? 'CALVARY' : group.hospital}
                     {' · '}{group.cases.length}
                   </div>
-                  {inOrder(group.cases).map(c => (
+                  {group.cases.map(c => (
                     <WeekCase key={c.id} surgicalCase={c} onOpen={onOpen}
-                      position={numbered && !c.cancelled ? at(c) : undefined}
-                      onMove={onReorder && numbered && !c.cancelled
-                        ? moveWithin(group, at(c)) : undefined}
-                      busy={busy}
                       onSetPlace={onSetPlace}
                       onPreferences={onPreferences}
                       hasPreferences={hasPreferences} />
@@ -775,67 +714,9 @@ function WeekColumn({ day, today, onOpen, onReorder, onSetPlace, onPreferences, 
  * calendar's order — moving a case here moves the calendar entry — so there is
  * one running order and everybody is reading it.
  */
-/**
- * A day's running order, and the arrows that change it.
- *
- * Lifted out of DayPanel so the week columns can reorder too. The desktop has
- * no day view any more — the week is the view there — and a running order you
- * can only change on a phone is a running order that goes stale by Tuesday.
- */
-function useRunningOrder(day, onReorder) {
+
+function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences }) {
   const groups = day.casesByHospital || []
-  // The order shown before the calendar has caught up. A round trip to Google
-  // and back takes a couple of seconds on a hospital connection, and an arrow
-  // that does nothing for two seconds gets pressed again.
-  const [override, setOverride] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const present = groups.flatMap(g => g.cases.map(c => c.id)).slice().sort().join(',')
-  useEffect(() => { setOverride(null); setBusy(false) }, [day.date, present])
-
-  /** A group's cases, in the order last asked for. */
-  const inOrder = cases => {
-    if (!override) return cases
-    const rank = new Map(override.map((id, i) => [id, i]))
-    return cases.slice().sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
-  }
-
-  // A called-off case is not in the running order. It keeps its place on the
-  // screen, because the team needs to know it was booked and who was driving to
-  // it, but the calendar closes up around it — so it takes no number here
-  // either, or the card would say third while the calendar said second.
-  const running = cases => inOrder(cases).filter(c => !c.cancelled)
-
-  /**
-   * Swaps a case with its neighbour in the same hospital.
-   *
-   * Within the hospital, because a running order belongs to a list and a list
-   * belongs to a theatre — RHH's order says nothing about Calvary's. The whole
-   * day still goes to the server, since the calendar lays the day out end to end.
-   */
-  const moveWithin = (group, index) => (dir, probe) => {
-    const list = running(group.cases)
-    const to = index + dir
-    if (to < 0 || to >= list.length) return false
-    if (probe) return true
-
-    const next = list.slice()
-    next[index] = list[to]
-    next[to] = list[index]
-    const wanted = groups
-      .flatMap(g => (g.hospital === group.hospital ? next : running(g.cases)))
-      .map(c => c.id)
-
-    setOverride(wanted)
-    setBusy(true)
-    Promise.resolve(onReorder(day.date, wanted)).finally(() => setBusy(false))
-    return true
-  }
-
-  return { groups, inOrder, running, moveWithin, busy }
-}
-
-function DayPanel({ day, onOpen, onReorder, onSetPlace, leader, onPreferences, hasPreferences }) {
-  const { groups, inOrder, running, moveWithin, busy } = useRunningOrder(day, onReorder)
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
   // what, and it was sitting under the cases where you had to scroll past a
@@ -900,35 +781,16 @@ function DayPanel({ day, onOpen, onReorder, onSetPlace, leader, onPreferences, h
       )}
 
       {groups.map(group => {
-        const cases = inOrder(group.cases)
-        const list = running(group.cases)
-        // One case is not an order, and two hospitals with one case each is not
-        // an order either. The arrows appear where there is something to order.
-        const ordering = Boolean(onReorder) && list.length > 1
+        const cases = group.cases
         return (
           <div key={group.hospital}>
             <Heading>{group.hospital} · {cases.length} case{cases.length === 1 ? '' : 's'}</Heading>
-            {ordering && (
-              <div style={{
-                ...text('caption'), color: colour.inkFaint,
-                margin: `-${space.xs}px 0 ${space.sm}px`
-              }}>
-                In list order. Move a case with the arrows and the calendar follows.
-              </div>
-            )}
-            {cases.map(c => {
-              const at = list.indexOf(c)
-              const numbered = ordering && at >= 0
-              return (
-                <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
-                  position={numbered ? at : undefined}
-                  onMove={numbered ? moveWithin(group, at) : undefined}
-                  onSetPlace={onSetPlace}
-                  onPreferences={onPreferences}
-                  hasPreferences={hasPreferences}
-                  busy={busy} />
-              )
-            })}
+            {cases.map(c => (
+              <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
+                onSetPlace={onSetPlace}
+                onPreferences={onPreferences}
+                hasPreferences={hasPreferences} />
+            ))}
           </div>
         )
       })}
@@ -1074,22 +936,6 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
     }
     if (found.guide) setReading({ guide: found.guide, focus: null })
   }, [guides])
-
-  const reorder = useCallback(async (date, order) => {
-    try {
-      const res = await fetch(`/api/calendar/today?action=reorder&date=${date}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ order })
-      })
-      if (!res.ok) throw new Error('That did not save')
-      // Quietly, because the panel is already showing the new order — this only
-      // reconciles it with what Google ended up with.
-      await load(window_, { quiet: true })
-    } catch {
-      setNotice('The order did not save. Check the connection and try again.')
-    }
-  }, [token, load, window_])
 
   /**
    * Records where one case sits on the hospital's list.
@@ -1427,7 +1273,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             </div>
             <AddBookingRow day={activeDay} onAdd={setAdding} />
             {dayPlan
-              ? <DayPanel day={dayPlan} onOpen={setEditing} onReorder={reorder}
+              ? <DayPanel day={dayPlan} onOpen={setEditing}
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
                   hasPreferences={hasPreferences} />
@@ -1445,7 +1291,6 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             plan={plan}
             today={today}
             onOpen={setEditing}
-            onReorder={reorder}
             onSetPlace={setPlacing}
             onPreferences={openPreferences}
             hasPreferences={hasPreferences} />
@@ -1475,7 +1320,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 tomorrow — and the week is where anybody looks ahead. Having to
                 find the day first, in a view that had no arrows, meant the one
                 thing this was built for was the awkward one. */}
-            <DayPanel day={day} onOpen={setEditing} onReorder={reorder}
+            <DayPanel day={day} onOpen={setEditing}
               onSetPlace={setPlacing} leader={leader}
               onPreferences={openPreferences}
               hasPreferences={hasPreferences} />

@@ -481,129 +481,62 @@ describe('the number under each date', () => {
   })
 })
 
-describe('the running order', () => {
-  // The hospital rings about four o'clock the afternoon before and reads out
-  // the order the list will run in. Whether our case is first up or third
-  // decides whether somebody is on site at half seven or has a free morning —
-  // it was posted to the WhatsApp group and read off a phone. Here it is the
-  // order the cases sit in, and the calendar follows.
-
-  const second = ev('c9', 'Pearse DIPLOMAT - Fowler',
-    'Surg: Fowler\nPt: Pearse\nHosp: RHH\nSurgery: L4/5 PLIF\nKit: Diplomat (Consignment)',
-    { at: '10:00' })
-
-  const posted = () => global.fetch.mock.calls.find(
-    ([url]) => String(url).includes('action=reorder'))
-
-  beforeEach(() => {
-    events = [...BOOKINGS, second]
-    global.fetch = vi.fn(async url => (
-      String(url).includes('action=reorder')
-        ? { ok: true, json: async () => ({ ok: true, moved: 2 }) }
-        : { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
-    ))
-  })
-
-  it('numbers the cases and offers to move them', async () => {
-    show()
-    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
-    expect(screen.getByText(/Move a case with the arrows/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Move Mardon up the list')).toBeDisabled()
-    expect(screen.getByLabelText('Move Pearse down the list')).toBeDisabled()
-  })
-
-  it('sends the new order to the calendar', async () => {
-    show()
-    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
-
-    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
-
-    await waitFor(() => expect(posted()).toBeTruthy())
-    const [url, options] = posted()
-    expect(url).toContain('date=2026-09-21')
-    expect(JSON.parse(options.body).order).toEqual(['c9', 'c1'])
-    expect(screen.queryByText(/did not save/i)).not.toBeInTheDocument()
-  })
-
-  it('says so when the order does not save', async () => {
-    // Silently keeping a new order on screen that never reached the calendar is
-    // the worst of both: the team leader believes it is posted and nobody else
-    // can see it.
-    global.fetch = vi.fn(async url => (
-      String(url).includes('action=reorder')
-        ? { ok: false, json: async () => ({ error: 'nope' }) }
-        : { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
-    ))
-    show()
-    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
-    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
-    await waitFor(() => expect(screen.getByText(/did not save/i)).toBeInTheDocument())
-  })
-
-  it('shows the new order straight away, before Google has caught up', async () => {
-    // A round trip on a hospital connection takes a couple of seconds, and an
-    // arrow that does nothing for two seconds gets pressed again.
-    const { container } = show()
-    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
-
-    const order = () => [...container.querySelectorAll('button')]
-      .map(b => b.textContent)
-      .filter(t => t.includes('Mardon') || t.includes('Pearse'))
-      .map(t => (t.includes('Mardon') ? 'Mardon' : 'Pearse'))
-
-    expect(order()).toEqual(['Mardon', 'Pearse'])
-    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
-    await waitFor(() => expect(order()).toEqual(['Pearse', 'Mardon']))
-  })
-
-  it('leaves a called-off case out of the order', async () => {
-    // It keeps its place on screen — the team needs to know it was booked and
-    // who may already be driving to it — but the calendar closes up around a
-    // cancelled case, so numbering it would have the card say third while the
-    // calendar said second.
-    const off = ev('c8', 'CANCELLED Mackey DIPLOMAT - Fowler',
-      'Surg: Fowler\nPt: Mackey\nHosp: RHH\nKit: Diplomat (Consignment)', { at: '09:30' })
-    events = [...BOOKINGS, off, second]
-    show()
-    await waitFor(() => expect(screen.getByText('Pearse')).toBeInTheDocument())
-
-    expect(screen.getByText('Mackey')).toBeInTheDocument()
-    expect(screen.queryByLabelText(/Mackey.*the list/)).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByLabelText('Move Pearse up the list'))
-    await waitFor(() => expect(posted()).toBeTruthy())
-    expect(JSON.parse(posted()[1].body).order).toEqual(['c9', 'c1'])
-  })
-
-  it("orders tomorrow's list from the week, which is where you look ahead", async () => {
-    // This is the case it exists for. The hospital rings about four o'clock
-    // about tomorrow, never about today, and the app opens on today — so the
-    // one thing this was built for must not be the awkward one.
-    const alsoTomorrow = ev('c7', 'Vowles DIPLOMAT - Atallah',
-      'Surg: Atallah\nPt: Vowles\nHosp: RHH\nSurgery: L4/5 PSF\nKit: Diplomat (Consignment)',
-      { day: '22', at: '11:00' })
-    events = [...BOOKINGS, alsoTomorrow]
+describe('no numbers, and no arrows', () => {
+  // "The list order numbers are a bit clunky. Tomorrow we have patient Holmes
+  // as case number 1 according to the numbers, but there is a competitor case
+  // in the morning that is actually the first case. So I hit change list order
+  // and put the case second on the AM list following the competitor ALIF, but
+  // the number on the left is at odds with this and is confusing. I think we
+  // ditch the ability to move the cases and give them a number, because the
+  // number becomes obsolete if there are other cases on."
+  //
+  // The number only ever counted *our* cases. The hospital's list contains
+  // everybody's, so the two disagree the moment another company has a case on
+  // — which is most days. Two numbers for one thing, one of them wrong, and
+  // the wrong one bigger and further left.
+  //
+  // What replaces it is the thing that was already right: the list place,
+  // recorded against the hospital's actual running order and able to say
+  // "second on the AM list, after a competitor ALIF".
+  it('gives a case no position number', async () => {
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
-
-    await waitFor(() => expect(screen.getByText('Vowles')).toBeInTheDocument())
-    fireEvent.click(screen.getByLabelText('Move Vowles up the list'))
-
-    await waitFor(() => expect(posted()).toBeTruthy())
-    // Tomorrow's date, not today's. The whole day goes, RHH reordered and
-    // Calvary behind it untouched — the calendar lays a day out end to end,
-    // even though the running order itself belongs to one hospital's list.
-    expect(posted()[0]).toContain('date=2026-09-22')
-    expect(JSON.parse(posted()[1].body).order).toEqual(['c7', 'c2', 'c3'])
+    // Nothing on a card is a bare ordinal any more.
+    expect(screen.queryByText('1')).not.toBeInTheDocument()
+    expect(screen.queryByText('2')).not.toBeInTheDocument()
   })
 
-  it('does not offer to reorder a hospital with one case', async () => {
-    events = BOOKINGS
+  it('offers no arrows to move a case with', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.queryByLabelText(/up the list/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/down the list/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/earlier on the list/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/later on the list/)).not.toBeInTheDocument()
+  })
+
+  it('does not explain an ordering that no longer exists', async () => {
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.queryByText(/Move a case with the arrows/)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText(/up the list/)).not.toBeInTheDocument()
+  })
+
+  it('never writes an order to the calendar', async () => {
+    // The endpoint is still there and nothing in the app calls it. A reorder
+    // sent by accident would move real calendar entries.
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(global.fetch.mock.calls.some(([url]) => String(url).includes('action=reorder')))
+      .toBe(false)
+  })
+
+  it('keeps the list place, which is the thing that was right', async () => {
+    // It can say what a number never could: second on the AM list, behind
+    // somebody else's case.
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.getAllByLabelText(/Set where .* is on the list/).length)
+      .toBeGreaterThan(0)
   })
 })
 

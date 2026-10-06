@@ -161,15 +161,15 @@ describe('a week column is readable, not a stretched phone card', () => {
     expect(screen.queryByText(/— team leader/)).not.toBeInTheDocument()
   })
 
-  it('carries the running order controls, since nothing else does now', async () => {
-    // These used to be left out on purpose — the day view had room for them.
-    // Removing the day view without bringing them across would have quietly
-    // taken list ordering off the desktop altogether, which is the opposite
-    // of what was asked for.
+  it('carries the list order, and no arrows', async () => {
+    // The arrows were brought across when the day view went, because they
+    // were the only way to order a list. They are gone now for a better
+    // reason: the number they moved counted only our cases, so it disagreed
+    // with the hospital's list the moment anybody else had one on.
     await toWeek()
-    expect(screen.getAllByLabelText(/earlier on the list/).length).toBeGreaterThan(0)
-    expect(screen.getAllByLabelText(/later on the list/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/List order|Change list order/).length).toBeGreaterThan(0)
+    expect(screen.queryByLabelText(/earlier on the list/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/later on the list/)).not.toBeInTheDocument()
   })
 
   it('clamps a long operation rather than stacking it a word a line', async () => {
@@ -195,43 +195,24 @@ describe('a week column is readable, not a stretched phone card', () => {
   })
 })
 
-describe('ordering a list from the week, with no day view to fall back on', () => {
+describe('the list place, which says what a number could not', () => {
   beforeEach(() => widthOf(1680))
 
-  // The day view was where the running order got changed. Taking it off the
-  // desktop without moving these across would have removed list ordering from
-  // every laptop in the company, silently — the arrows would simply not be
-  // anywhere, and nothing would have failed.
-  it('sends the new order to the calendar when an arrow is pressed', async () => {
-    await toWeek()
-    const calls = () => global.fetch.mock.calls
-      .filter(([url]) => String(url).includes('reorder'))
-    expect(calls()).toHaveLength(0)
-
-    fireEvent.click(screen.getAllByLabelText(/later on the list/)[0])
-
-    await waitFor(() => expect(calls().length).toBeGreaterThan(0))
-    // The day is in the query, the order in the body. Both cases go, because
-    // the calendar lays a day out end to end.
-    expect(String(calls()[0][0])).toContain('date=2026-09-21')
-    const body = JSON.parse(calls()[0][1].body)
-    expect(body.order).toEqual(['c', 'a'])
-  })
-
-  it('opens the list-order sheet from a column', async () => {
+  // A number counts our cases. The hospital's list counts everybody's, so the
+  // two disagree whenever another company has a case on — which is most days.
+  // "Second on the AM list, after a competitor ALIF" is the fact that was
+  // wanted, and it was already being recorded.
+  it('opens the list place from a column', async () => {
     await toWeek()
     fireEvent.click(screen.getAllByText(/List order/)[0])
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: /list/i })).toBeInTheDocument())
   })
 
-  it('numbers a hospital with more than one case, and leaves a single alone', async () => {
+  it('numbers nothing', async () => {
     await toWeek()
     const monday = document.querySelector('[data-week-column="2026-09-21"]')
-    expect(monday.textContent).toMatch(/1\. /)
-    // Wednesday has one case at RHH. A running order of one is not an order.
-    const wednesday = document.querySelector('[data-week-column="2026-09-23"]')
-    expect(wednesday.textContent).not.toMatch(/1\. /)
+    expect(monday.textContent).not.toMatch(/\b1\.\s/)
   })
 })
 
