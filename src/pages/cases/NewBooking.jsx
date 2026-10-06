@@ -4,6 +4,7 @@ import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
 import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall } from '../../clinicalPlan/inventory.js'
+import { drawsOnLocalStock } from '../../clinicalPlan/kitSupply.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayName } from '../../clinicalPlan/week.js'
 
@@ -205,9 +206,12 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], onC
     // reason to skip the one warning worth reading.
     const spokenSite = siteOf(f.hospital || hospital)
     const wouldClash = spokenSite && [...systems, ...spokenSystems].some(chosen => {
+      // Only the cases competing for what is on the shelf — a case with a
+      // loan set booked brings its own kit. See drawsOnLocalStock.
       const alsoBooked = alreadyBooked.filter(c =>
         siteOf(c.hospital) === spokenSite
-        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(chosen.name)).length
+        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(chosen.name)
+        && drawsOnLocalStock(c.kit || c.system, chosen.name)).length
       return Boolean(dayShortfall(chosen.name, spokenSite, alsoBooked + 1))
     })
 
@@ -258,7 +262,8 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], onC
     return systems.map(chosen => {
       const alsoBooked = alreadyBooked.filter(c =>
         siteOf(c.hospital) === site
-        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(chosen.name)).length
+        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(chosen.name)
+        && drawsOnLocalStock(c.kit || c.system, chosen.name)).length
       return dayShortfall(chosen.name, site, alsoBooked + 1)
     }).filter(Boolean)
   }, [systems, hospital, alreadyBooked])

@@ -1,4 +1,5 @@
 import { STAFF } from '../staffConfig.js'
+import { parseKitSupplies } from './kitSupply.js'
 import { findSystems, findLoanSets, systemWords, findNavigation, resolveKit } from './systems.js'
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 import { isPreOpNoise } from './preOpNoise.js'
@@ -1204,6 +1205,16 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
       ? kitField.system : (inferred.system || kitField.system))
     : (inferred.system || kitField.system)
   const supply = kitField.type || inferred.supply
+  // The supply for each system named, read from the raw field before
+  // parseKitField strips the brackets out of it.
+  //
+  // `supply` above is one answer for the whole booking, which is right until a
+  // case names two systems with different answers — and then it is whichever
+  // was read first, shown against both. "Mariner (DT LOAN) E4 Global PLIF
+  // (Consignment)" came out as "Mariner / E4 Global PLIF · Distributor Loan",
+  // saying the cages were on loan when they are on the shelf.
+  const supplies = parseKitSupplies(
+    resolveKit(labelled.kit, labelled.procedure || '') || title)
   const operation = cleanOperation(labelled.procedure, { system, context: everything })
     || inferred.operation
   const kit = isLabelled ? undefined : inferred.kit
@@ -1218,6 +1229,7 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
     operation,
     system,
     supply,
+    supplies,
     // A labelled booking has said everything on the system line already.
     kit,
     hospital: hospitalCode(labelled.hospital),

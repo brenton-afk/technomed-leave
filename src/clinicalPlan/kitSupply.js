@@ -160,3 +160,39 @@ export function systemsToSupply({ kit, system } = {}) {
       return true
     })
 }
+
+/**
+ * Whether a case draws on the kit the hospital keeps on its shelf.
+ *
+ * "The app is still suggesting we borrow an RHH Mariner kit, even though we
+ * have distributor loan kits booked for both cases on Friday."
+ *
+ * The shortfall check counted every case on the day that named a system and
+ * compared the total against what is consigned at that hospital. Two Mariner
+ * cases at Calvary, nothing consigned at Calvary, so: borrow one from RHH.
+ * True of the stock, and wrong about the day — both cases had their own
+ * distributor sets already requested and confirmed. The advice was to go and
+ * fetch a tray that nobody needed.
+ *
+ * A case on loan brings its own kit. It does not touch the shelf, so it is not
+ * competing for what is on it.
+ *
+ * A supply nobody has recorded yet counts as drawing on the shelf. That is the
+ * safe direction: an unanswered case is one somebody still has to think about,
+ * and a warning that stays up until it is answered is the point of the
+ * warning. Silence would be the app quietly assuming a kit had been arranged.
+ */
+export function drawsOnLocalStock(kit, system) {
+  const want = String(system || '').trim().toLowerCase()
+  if (!want) return true
+
+  const entry = parseKitSupplies(kit).find(e => {
+    const named = e.system.toLowerCase()
+    return named === want || named.includes(want) || want.includes(named)
+  })
+  if (!entry?.supply) return true
+
+  // Every kind of loan arrives for the case: a distributor sends one, or we
+  // bring one over ourselves. Either way it is not the hospital's.
+  return !/loan/i.test(entry.supply)
+}

@@ -12,7 +12,7 @@ import { fetchDayCases } from '../../clinicalPlan/provider.js'
 import { dayShortfall } from '../../clinicalPlan/inventory.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
 import {
-  SUPPLY_OPTIONS, parseKitSupplies, setSupply, systemsToSupply
+  SUPPLY_OPTIONS, parseKitSupplies, setSupply, systemsToSupply, drawsOnLocalStock
 } from '../../clinicalPlan/kitSupply.js'
 import { ATTENDING_REPS } from '../../staffConfig.js'
 
@@ -430,12 +430,18 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
     const mine = systemsInKit(fields.kit || '')
     const others = dayCases.filter(c => c.id !== eventId)
     return mine.map(system => {
+      // Only the cases actually competing for what is on the hospital's
+      // shelf. A case with a loan set booked brings its own kit, so counting
+      // it here produced "borrow one from RHH" for a day where every case
+      // already had a tray coming — advice to fetch something nobody needed.
       const alsoBooked = others.filter(c =>
         siteOf(c.hospital) === site
-        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(system)).length
-      return dayShortfall(system, site, alsoBooked + 1)
+        && systemsInKit(`${c.system || ''} ${c.kit || ''}`).includes(system)
+        && drawsOnLocalStock(c.kit || c.system, system)).length
+      const meToo = drawsOnLocalStock(fields.kit || fields.system, system) ? 1 : 0
+      return dayShortfall(system, site, alsoBooked + meToo)
     }).filter(Boolean)
-  }, [fields.hospital, fields.kit, dayCases, eventId])
+  }, [fields.hospital, fields.kit, fields.system, dayCases, eventId])
 
   const repsChanged = Boolean(loaded && reps.join('/') !== (loaded.reps || []).join('/'))
 

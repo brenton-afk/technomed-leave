@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseKitSupplies, formatKitSupplies, matchSupply, setSupply,
-  systemsToSupply, SUPPLY_OPTIONS
+  systemsToSupply, SUPPLY_OPTIONS, drawsOnLocalStock
 } from './kitSupply.js'
 
 // Three answers, and the difference between them is who has to do something:
@@ -211,5 +211,53 @@ describe('the bookings as the team actually writes them', () => {
       { system: 'Diplomat', supply: null },
       { system: 'Cascadia', supply: 'Consignment' }
     ])
+  })
+})
+
+
+describe('whether a case competes for the hospital\'s own kit', () => {
+  // "The app is still suggesting we borrow an RHH Mariner kit, even though we
+  // have distributor loan kits booked for both cases on Friday."
+  //
+  // The shortfall counted every case naming a system against what is consigned
+  // at that hospital. Two Mariner cases at Calvary, none consigned there, so:
+  // borrow one from RHH. True of the stock and wrong about the day — both
+  // cases had their own sets requested and confirmed, so the advice was to
+  // fetch a tray nobody needed.
+  const loane = 'Mariner (DT LOAN) E4 Global PLIF (Consignment)'
+
+  it('a loan case brings its own kit', () => {
+    expect(drawsOnLocalStock(loane, 'Mariner')).toBe(false)
+  })
+
+  it('a consignment case on the same booking still uses the shelf', () => {
+    expect(drawsOnLocalStock(loane, 'E4 Global PLIF')).toBe(true)
+  })
+
+  it('counts every kind of loan as bringing its own', () => {
+    // A distributor sends one, or we carry one over. Either way it is not the
+    // hospital's kit being used.
+    for (const supply of ['DT Loan', 'RHH Loan', 'Distributor Loan', 'Loan']) {
+      expect(drawsOnLocalStock(`Mariner (${supply})`, 'Mariner'), supply).toBe(false)
+    }
+  })
+
+  it('counts a case nobody has answered yet', () => {
+    // The safe direction. An unanswered case is one somebody still has to
+    // think about, and the warning staying up is the point of the warning —
+    // silence would be the app assuming a kit had been arranged.
+    expect(drawsOnLocalStock('Mariner', 'Mariner')).toBe(true)
+    expect(drawsOnLocalStock('', 'Mariner')).toBe(true)
+  })
+
+  it('matches a system named more loosely than the booking writes it', () => {
+    // The inventory calls it "Global BMD PLIF"; the booking says "E4 Global
+    // PLIF". Neither is going to change to suit the other.
+    expect(drawsOnLocalStock(loane, 'Global PLIF')).toBe(true)
+    expect(drawsOnLocalStock('Mariner MIS (DT Loan)', 'Mariner')).toBe(false)
+  })
+
+  it('says nothing useful about a system that is not there', () => {
+    expect(drawsOnLocalStock(loane, 'Diplomat')).toBe(true)
   })
 })

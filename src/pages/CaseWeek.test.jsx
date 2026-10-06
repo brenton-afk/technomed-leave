@@ -1155,3 +1155,58 @@ describe('opening the preference card from a booking', () => {
       expect(screen.queryByTitle('Surgeon Preferences')).not.toBeInTheDocument())
   })
 })
+
+describe('a booking with two systems supplied differently', () => {
+  // "The preview in the app screen of the booking says Mariner/E4 Global BMD
+  // PLIF Distributor loan, which makes it look like both systems are loan
+  // when they are not."
+  //
+  // The card carried one supply for the whole line, so a booking with two
+  // systems showed whichever answer was read first against both of them. The
+  // E4 cages being consignment is exactly what somebody checks before leaving
+  // the office.
+  beforeEach(() => {
+    events = [{
+      id: 'loane', summary: 'Loane MARINER MIS (DT LOAN) + E4 BMD - Gupta',
+      description: 'Surg - Gupta\nPt - Loane\nHosp: CLV\n'
+        + 'Procedure: L3-S1 MIS Pedicle Screw Fixation\n'
+        + 'Kit: Mariner (DT LOAN) E4 Global PLIF (Consignment)',
+      start: { dateTime: '2026-09-21T09:00:00+10:00' },
+      end: { dateTime: '2026-09-21T10:00:00+10:00' },
+      location: 'CLV'
+    }]
+  })
+
+  it('gives each system its own answer', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Loane')).toBeInTheDocument())
+    const card = screen.getByText('Loane').closest('div')
+    expect(card.textContent).toMatch(/Mariner \(Distributor Loan\)/)
+    expect(card.textContent).toMatch(/E4 Global PLIF \(Consignment\)/)
+  })
+
+  it('does not read as though both are on loan', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Loane')).toBeInTheDocument())
+    const card = screen.getByText('Loane').closest('div')
+    // The old line: the two systems run together, then one supply after them.
+    expect(card.textContent).not.toMatch(/E4 Global PLIF · Distributor Loan/)
+  })
+
+  it('leaves an ordinary one-system booking alone', async () => {
+    // Shorter and reads better. The split only earns its keep where the
+    // single line is actually wrong.
+    events = [{
+      id: 'one', summary: 'Hollis DIPLOMAT - Ibbett',
+      description: 'Surg: Ibbett\nPt: Hollis\nHosp: RHH\nKit: Diplomat (Consignment)',
+      start: { dateTime: '2026-09-21T09:00:00+10:00' },
+      end: { dateTime: '2026-09-21T10:00:00+10:00' },
+      location: 'RHH'
+    }]
+    show()
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
+    const card = screen.getByText('Hollis').closest('div')
+    expect(card.textContent).toMatch(/Diplomat · Consignment|DIPLOMAT · Consignment/i)
+    expect(card.textContent).not.toMatch(/\(Consignment\)/)
+  })
+})

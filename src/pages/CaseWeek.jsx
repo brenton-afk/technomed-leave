@@ -132,6 +132,21 @@ const KIND_TONE = {
 }
 
 /**
+ * The per-system supplies, but only when saying them separately earns its keep.
+ *
+ * Null for the ordinary case — one system, one answer — where the existing
+ * line is shorter and reads better. Something only when the booking names more
+ * than one system and they do not all have the same answer, which is the one
+ * situation the single line gets wrong.
+ */
+function splitSupplies(surgicalCase) {
+  const entries = (surgicalCase?.supplies || []).filter(e => e?.system)
+  if (entries.length < 2) return null
+  const answers = new Set(entries.map(e => e.supply || ''))
+  return answers.size > 1 ? entries : null
+}
+
+/**
  * A case, in full.
  *
  * Everything the booking says, in one place: who, what, with which system, how
@@ -284,7 +299,25 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           </span>
         )}
 
-        {(surgicalCase.system || surgicalCase.supply) && (
+        {/* Each system with its own supply, where they differ.
+            
+            One supply for the whole line read "Mariner / E4 Global BMD PLIF ·
+            Distributor Loan", which says both are on loan when only the
+            Mariner is — and the E4 cages being consignment is exactly the
+            thing somebody checks before leaving the office. */}
+        {splitSupplies(surgicalCase) ? (
+          <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
+            {splitSupplies(surgicalCase).map((entry, i) => (
+              <React.Fragment key={entry.system}>
+                {i > 0 && ' · '}
+                {entry.system}
+                {entry.supply && (
+                  <span style={{ fontWeight: 600, color: colour.ink }}> ({entry.supply})</span>
+                )}
+              </React.Fragment>
+            ))}
+          </span>
+        ) : (surgicalCase.system || surgicalCase.supply) && (
           <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
             {surgicalCase.system}
             {surgicalCase.system && surgicalCase.supply ? ' · ' : ''}

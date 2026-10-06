@@ -454,6 +454,13 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         operation: read.operation,
         system: read.system,
         supply: read.supply,
+        // The supply for each system named, where there is more than one.
+        //
+        // `supply` is a single answer for the whole booking, and on a case
+        // with two systems it is whichever one was read first — so a card
+        // reading "Mariner / E4 Global BMD PLIF · Distributor Loan" said both
+        // were on loan when only the Mariner was. Reported exactly that way.
+        supplies: read.supplies,
         kit: read.kit,
         // Who attended, or who is covering. Written into the title by
         // markAttendance when a usage form is scanned.
