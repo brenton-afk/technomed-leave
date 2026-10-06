@@ -39,12 +39,57 @@ describe('where the sets are', () => {
   })
 
   it('says "check where it is" for a kit that travels', () => {
-    // Athlet's instrument kit lives at RHH and moves; the floating Shoreline and
-    // Dakota kits are the same shape. Neither is a distributor request, but both
-    // need somebody to confirm the kit is free.
+    // Athlet's instrument kit lives at RHH and moves; the floating Shoreline
+    // and Dakota kits are the same shape. Neither is a distributor request,
+    // but both need somebody to confirm the kit is free.
     expect(loanNeed('Athlet', 'CLV').need).toBe('move')
-    expect(loanNeed('Global BMD PLIF', 'RHH').need).toBe('move')
     expect(loanNeed('Mariner Outrigger', 'CLV').need).toBe('move')
+  })
+
+  it('records where each floating kit sits', () => {
+    // The Shoreline and Dakota loan kits are at the TechnoMed office —
+    // confirmed 6 October 2026. Both systems are also consigned at both
+    // Hobart hospitals, so loanNeed never has to reach for the floating kit
+    // and the location does not show on an ordinary booking. It shows when
+    // the day needs more kits than the site holds, and it is the difference
+    // between "somewhere, check" and "it is on the shelf, take it in".
+    for (const system of ['Shoreline', 'Dakota']) {
+      expect(inventoryFor(system).floatingAt, system).toBe('office')
+      expect(inventoryFor(system).note, system).toMatch(/TechnoMed office/)
+    }
+  })
+
+  it('names the office when the floating kit is the one covering a case', () => {
+    // Reachable where the system is not consigned at that site. Mariner
+    // Outrigger has no floatingAt, so it keeps the older, vaguer wording —
+    // which is correct, because nobody has said where that one lives.
+    expect(loanNeed('Mariner Outrigger', 'CLV').reason)
+      .toMatch(/floating TechnoMed kit/)
+  })
+
+  it('has the Global BMD PLIF kit at RHH, not floating', () => {
+    // Corrected 6 October 2026: it is at RHH on long-term loan. It was
+    // recorded as a floating kit that "mostly lives at RHH", which reads as a
+    // tray that might be anywhere and has to be chased before every case.
+    const atRhh = loanNeed('Global BMD PLIF', 'RHH')
+    expect(atRhh.need).toBe('none')
+    // And said as a loan, not as consignment: the booking editor now asks
+    // which, and calling it consignment would have somebody tick the wrong
+    // box all year.
+    expect(atRhh.reason).toMatch(/long-term loan/)
+  })
+
+  it('sends every Nuvasive and Globus case to the mainland', () => {
+    // Nothing is held in Tasmania, so it is a lead time rather than a phone
+    // call — the one answer that cannot be fixed on the morning.
+    for (const system of ['Nuvasive', 'Globus']) {
+      const need = loanNeed(system, 'RHH')
+      expect(need.need, system).toBe('order')
+      expect(need.reason, system).toMatch(/mainland/)
+    }
+    // And the same wherever the case is, because the answer does not depend
+    // on which hospital it is.
+    expect(loanNeed('Globus', 'Calvary').reason).toMatch(/mainland/)
   })
 })
 
@@ -121,7 +166,10 @@ describe('the inventory itself', () => {
   it('names a hospital count or says why not', () => {
     for (const item of INVENTORY) {
       const known = item.consigned && Object.keys(item.consigned).length > 0
-      expect(known || item.floating || item.loanSets || item.competitor, item.system).toBeTruthy()
+      expect(
+        known || item.floating || item.loanSets || item.competitor || item.mainlandOnly,
+        item.system
+      ).toBeTruthy()
     }
   })
 })

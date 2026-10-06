@@ -22,6 +22,16 @@ export const HOSPITALS = { RHH: 'RHH', CLV: 'CLV' }
 /** Where the floating kit can reasonably get to. Both are in Hobart. */
 const HOBART = new Set(['RHH', 'CLV'])
 
+/**
+ * Where a floating kit actually sits when it is not in a theatre.
+ *
+ * 'office' means the TechnoMed office, which is a real and useful answer:
+ * somebody has to put it in a car. The alternative — leaving it unsaid — makes
+ * every floating kit read as "somewhere, check" when two of them have a known
+ * shelf.
+ */
+const FLOATING_HOME = { office: 'the TechnoMed office' }
+
 export const INVENTORY = [
   // ── Signus ──
   {
@@ -63,7 +73,10 @@ export const INVENTORY = [
   {
     system: 'Shoreline', distributor: 'device',
     consigned: { CLV: 2, RHH: 1 },
-    floating: 1
+    floating: 1,
+    floatingAt: 'office',
+    note: 'A loan kit sits at the TechnoMed office. It covers a case without a '
+      + 'distributor request, and somebody has to take it in.'
   },
   {
     system: 'Mariner Outrigger', distributor: 'device',
@@ -75,10 +88,14 @@ export const INVENTORY = [
   // ── E4 Surgical ──
   {
     system: 'Global BMD PLIF', distributor: 'e4',
-    consigned: { CLV: 2 },
-    floating: 1,
-    note: 'Floating kit mostly lives at RHH. Sterile implants at both sites, '
-      + 'though most of them are at Calvary.'
+    // The instrument kit is at RHH on long-term loan — confirmed 6 October
+    // 2026. It was recorded as a floating kit that "mostly lives at RHH",
+    // which reads as a tray that might be anywhere and has to be chased. It
+    // does not move: it is at RHH, and a case there needs nothing organised.
+    consigned: { CLV: 2, RHH: 1 },
+    longTermLoan: { RHH: true },
+    note: 'Instrument kit at RHH on long-term loan. Sterile implants at both '
+      + 'sites, though most of them are at Calvary.'
   },
   {
     system: 'Global BMD ALIF', distributor: 'e4',
@@ -88,7 +105,10 @@ export const INVENTORY = [
   {
     system: 'Dakota', distributor: 'e4',
     consigned: { CLV: 1, RHH: 1 },
-    floating: 1
+    floating: 1,
+    floatingAt: 'office',
+    note: 'A loan kit sits at the TechnoMed office. It covers a case without a '
+      + 'distributor request, and somebody has to take it in.'
   },
   {
     system: 'Reform Cervical', distributor: 'e4',
@@ -122,6 +142,25 @@ export const INVENTORY = [
     consigned: { RHH: 1, CLV: 1 },
     ours: false,
     weCover: { RHH: true, CLV: false }
+  },
+
+  // ── Nuvasive / Globus ──
+  // Nothing is held in Tasmania. Every case needs a set flown down, which is a
+  // lead time rather than a phone call — and the one answer that cannot be
+  // fixed on the morning. Listed as a distributor rather than a product
+  // because the booking rarely names which system, and the answer is the same
+  // either way.
+  {
+    system: 'Nuvasive', distributor: 'globus',
+    consigned: {},
+    mainlandOnly: true,
+    note: 'No local sets. Every case needs a loan kit from the mainland.'
+  },
+  {
+    system: 'Globus', distributor: 'globus',
+    consigned: {},
+    mainlandOnly: true,
+    note: 'No local sets. Every case needs a loan kit from the mainland.'
   },
 
   // ── Not ours at all ──
@@ -182,6 +221,16 @@ export function loanNeed(system, hospital) {
     }
     return { need: 'unknown', reason: 'System not in the inventory — check before assuming.' }
   }
+  // Nothing local at all. Said before the site is even looked at, because the
+  // answer does not depend on which hospital it is and because a lead time is
+  // the one thing that cannot be fixed on the morning.
+  if (item.mainlandOnly) {
+    return {
+      need: 'order',
+      reason: `No ${item.system} sets in Tasmania — a loan kit has to come from the mainland.`,
+      item
+    }
+  }
   if (item.competitor) {
     return { need: 'none', reason: `${item.system} is ${item.competitor}'s — not ours to supply.`, item }
   }
@@ -197,7 +246,18 @@ export function loanNeed(system, hospital) {
 
   const consigned = item.consigned?.[site] || 0
   if (consigned > 0) {
-    return { need: 'none', reason: `${consigned} consigned at ${site}.`, item }
+    // Consignment and a long-term loan both mean the kit is on the shelf and
+    // nobody has to do anything — but they are not the same thing to say, and
+    // the booking editor now asks which. Calling a long-term loan consignment
+    // there would have somebody tick the wrong box all year.
+    const onLoan = item.longTermLoan?.[site]
+    return {
+      need: 'none',
+      reason: onLoan
+        ? `At ${site} on long-term loan.`
+        : `${consigned} consigned at ${site}.`,
+      item
+    }
   }
   // The floating kit and the kit that moves between sites both live in Hobart
   // and both get shifted the morning of a case. Neither answer is true of
@@ -208,7 +268,14 @@ export function loanNeed(system, hospital) {
       return { need: 'move', reason: `The ${item.system} kit moves between sites — check where it is.`, item }
     }
     if (item.floating) {
-      return { need: 'move', reason: 'Covered by the floating TechnoMed kit — check it is free.', item }
+      const home = FLOATING_HOME[item.floatingAt]
+      return {
+        need: 'move',
+        reason: home
+          ? `Covered by the loan kit at ${home} — check it is free and take it in.`
+          : 'Covered by the floating TechnoMed kit — check it is free.',
+        item
+      }
     }
   }
   if (site === 'STL') {
