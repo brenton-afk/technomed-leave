@@ -26,26 +26,58 @@ export const SUPPLY_OPTIONS = ['Consignment', 'RHH Loan', 'Distributor Loan']
 
 const SPLIT = /\s*[/,]\s*|\s+\+\s+/
 
-/** Reads "Ascot (Consignment) / Athlet (RHH Loan)" into its parts. */
+/**
+ * Reads "Mariner (DT Loan) E4 Global PLIF (Consignment)" into its parts.
+ *
+ * Driven by the brackets rather than by a separator, because the separator is
+ * often not there. The team writes these by hand and a real one reads
+ *
+ *   Mariner (DT LOAN) E4 Global PLIF (Consignment)
+ *
+ * with nothing at all between the two systems. Splitting on "/" or "+" made
+ * that one entry — so the booking offered a single row of buttons and could
+ * not say that the Mariner is a distributor loan while the E4 cages are
+ * consignment, which is the whole point of having the buttons per system.
+ *
+ * A bracketed supply closes a system. Whatever follows starts the next one.
+ */
 export function parseKitSupplies(kit) {
   const text = String(kit || '').trim()
   if (!text) return []
 
-  return text.split(SPLIT).map(part => {
-    const piece = part.trim()
-    if (!piece) return null
-    const bracket = /^(.*?)\s*[([{]([^)\]}]*)[)\]}]\s*$/.exec(piece)
-    if (!bracket) return { system: piece, supply: null }
-    const supply = matchSupply(bracket[2])
-    return {
-      system: bracket[1].trim() || piece,
-      // Something else in the brackets — "(2 levels)", "(PM list)" — is not a
-      // supply and is left attached to the system, because the team put it
-      // there on purpose and dropping it loses what they meant.
-      supply,
-      ...(supply ? {} : { system: piece })
+  const out = []
+  // <anything that is not a bracket> ( <anything that is not a bracket> )
+  const GROUP = /([^()[\]{}]+)[([{]([^)\]}]*)[)\]}]/g
+  let last = 0
+  for (const match of text.matchAll(GROUP)) {
+    const name = match[1]
+    const inside = match[2]
+    const supply = matchSupply(inside)
+    if (supply) {
+      pushSystem(out, name)
+      if (out.length) out[out.length - 1].supply = supply
+    } else {
+      // "(2 levels)", "(PM list)" — not a supply, so it belongs to the system
+      // it is written against. The team put it there on purpose.
+      pushSystem(out, `${name.trim()} (${inside})`)
     }
-  }).filter(Boolean)
+    last = match.index + match[0].length
+  }
+
+  // Anything after the final bracket, or the whole string when there were no
+  // brackets at all: systems with no supply recorded yet.
+  for (const name of text.slice(last).split(SPLIT)) pushSystem(out, name)
+  return out
+}
+
+/** Adds a system, trimming the separators it may be wearing. */
+function pushSystem(list, raw) {
+  const name = String(raw || '').replace(/^[\s,/+&-]+|[\s,/+&-]+$/g, '').trim()
+  if (!name) return
+  // A separator in the middle means two systems sharing one supply bracket —
+  // "Diplomat / Cascadia (Consignment)". Each gets its own row.
+  const parts = name.split(SPLIT).map(p => p.trim()).filter(Boolean)
+  for (const part of parts) list.push({ system: part, supply: null })
 }
 
 /** Writes the parts back out in the app's own convention. */
@@ -67,7 +99,13 @@ export function matchSupply(text) {
   if (!said) return null
   if (/consign|^\s*cons\s*$/i.test(said)) return 'Consignment'
   if (/\brhh\b[\s-]*loan|loan[\s-]*(?:from[\s-]*)?\brhh\b/i.test(said)) return 'RHH Loan'
-  if (/distributor[\s-]*loan|loan[\s-]*(?:from[\s-]*)?distributor|\bdist\b/i.test(said)) {
+  // Named distributors count as distributor loans. The team writes "DT LOAN"
+  // for Device Technologies and "SIGNUS LOAN" for Signus, and both mean the
+  // same job: a request to send, and a delivery to chase. Reading them as a
+  // bare "Loan" lost that.
+  if (/distributor[\s-]*loan|loan[\s-]*(?:from[\s-]*)?distributor|\bdist\b/i.test(said)
+    || /\b(?:dt|kt|e4|device|signus|seaspine|orthofix|globus|nuvasive)\b[\s-]*loan/i.test(said)
+    || /loan[\s-]*(?:from[\s-]*)?\b(?:dt|kt|e4|device|signus|seaspine|orthofix|globus|nuvasive)\b/i.test(said)) {
     return 'Distributor Loan'
   }
   // A bare "Loan" from before there were three. Left as it is rather than

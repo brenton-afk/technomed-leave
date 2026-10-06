@@ -140,3 +140,76 @@ describe('systemsToSupply', () => {
     expect(systemsToSupply({})).toEqual([])
   })
 })
+
+
+describe('the bookings as the team actually writes them', () => {
+  // "Pt Loane on Friday is Distributor Loan for the Mariner kit and
+  // consignment for the E4 Global BMD PLIF cages. The app gets confused and
+  // can't assign loan to one and consignment to the other."
+  //
+  // Two faults, both visible in the live booking:
+  //
+  //   Kit: Mariner (DT LOAN) E4 Global PLIF (Consignment)
+  //
+  // There is no separator between the two systems — the team writes these by
+  // hand and the bracket is the separator — so splitting on "/" or "+" made it
+  // one entry with one row of buttons. And "DT LOAN" is Device Technologies,
+  // which the matcher read as a bare "Loan", losing the distinction between a
+  // tray we fetch and a tray somebody has to request and chase.
+  it('reads Pt Loane correctly', () => {
+    expect(parseKitSupplies('Mariner (DT LOAN) E4 Global PLIF (Consignment)')).toEqual([
+      { system: 'Mariner', supply: 'Distributor Loan' },
+      { system: 'E4 Global PLIF', supply: 'Consignment' }
+    ])
+  })
+
+  it('offers a row of buttons for each of them', () => {
+    expect(systemsToSupply({ kit: 'Mariner (DT LOAN) E4 Global PLIF (Consignment)' }))
+      .toEqual(['Mariner', 'E4 Global PLIF'])
+  })
+
+  it('reads the same booking written with a separator', () => {
+    // Pt O'Brien, same day, same two systems, written with a plus.
+    expect(parseKitSupplies('Mariner (DT Loan)  + E4 BMD (Consignment)')).toEqual([
+      { system: 'Mariner', supply: 'Distributor Loan' },
+      { system: 'E4 BMD', supply: 'Consignment' }
+    ])
+  })
+
+  it('knows the distributors by the names the team uses', () => {
+    // Every one of these is a request to send and a delivery to chase.
+    for (const said of ['DT LOAN', 'SIGNUS LOAN', 'KT loan', 'loan from Device',
+      'Orthofix Loan', 'E4 loan']) {
+      expect(matchSupply(said), said).toBe('Distributor Loan')
+    }
+  })
+
+  it('still tells an RHH loan from a distributor one', () => {
+    // The two that look alike and mean different jobs.
+    expect(matchSupply('RHH Loan')).toBe('RHH Loan')
+    expect(matchSupply('DT Loan')).toBe('Distributor Loan')
+  })
+
+  it('sets one of two systems that share no separator', () => {
+    // The thing that could not be done before: change the Mariner without
+    // touching the cages.
+    expect(setSupply('Mariner (DT LOAN) E4 Global PLIF (Consignment)', 'Mariner', 'RHH Loan'))
+      .toBe('Mariner (RHH Loan) / E4 Global PLIF (Consignment)')
+  })
+
+  it('keeps a bracket that is not a supply with its system', () => {
+    expect(parseKitSupplies('Mariner (DT LOAN) E4 Global PLIF (2 levels)')).toEqual([
+      { system: 'Mariner', supply: 'Distributor Loan' },
+      { system: 'E4 Global PLIF (2 levels)', supply: null }
+    ])
+  })
+
+  it('splits two systems sharing one bracket', () => {
+    // "Diplomat / Cascadia (Consignment)" is two systems, and only the last
+    // carries the supply it was written against.
+    expect(parseKitSupplies('Diplomat / Cascadia (Consignment)')).toEqual([
+      { system: 'Diplomat', supply: null },
+      { system: 'Cascadia', supply: 'Consignment' }
+    ])
+  })
+})
