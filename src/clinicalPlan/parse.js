@@ -102,14 +102,24 @@ export function sanitisePatient(raw) {
     .filter(Boolean)
   if (!kept.length) return ''
 
-  // "Van der Berg", not "Van Der Berg": a particle after the first word keeps
-  // the lower case it is written with. The first word is always capitalised,
-  // so "la pietra" typed in a hurry still comes out right.
+  // Case, three ways, because the name arrives written three ways.
+  //
+  //   · ALL CAPS is how hospitals and theatre lists write everything, and how
+  //     it comes out of an email. Normalised, or the card shouts.
+  //   · McDonald and O'Brien are mixed case on purpose and must survive, so
+  //     only an entirely upper-case word is touched.
+  //   · a particle after the first word stays lower — "Van der Berg", which
+  //     is how the name is written.
+  const particle = word =>
+    SURNAME_PARTICLES.has(word.toLowerCase().replace(/[^a-z.']/g, ''))
+
   return kept
-    .map((word, i) => (i > 0
-      && SURNAME_PARTICLES.has(word.toLowerCase().replace(/[^a-z.']/g, ''))
-      ? word.toLowerCase()
-      : word.charAt(0).toUpperCase() + word.slice(1)))
+    .map((word, i) => {
+      const body = word === word.toUpperCase() ? word.toLowerCase() : word.slice(1)
+      const rest = word === word.toUpperCase() ? body.slice(1) : body
+      if (i > 0 && particle(word)) return word.toLowerCase()
+      return word.charAt(0).toUpperCase() + rest
+    })
     .join(' ')
 }
 
@@ -293,6 +303,12 @@ const SURNAME_PARTICLES = new Set([
   'mac', 'mc', 'st', 'st.', 'saint', 'san', 'santa',
   'al', 'el', 'bin', 'ibn', 'abu'
 ])
+
+/** Whether a word is a surname particle and nothing else. */
+export function isBareParticle(word) {
+  return SURNAME_PARTICLES.has(
+    String(word || '').trim().toLowerCase().replace(/[^a-z.']/g, ''))
+}
 
 /**
  * How many leading words belong to the surname.
@@ -1066,13 +1082,49 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
   const fromTitle = parseCaseTitle(title, { colourSurgeon })
 
-  const patient = sanitisePatient(labelled.patient) || fromTitle?.patient
+  // ── Repairing a description written before surnames could have spaces ──
+  //
+  // A labelled field beats the title, and rightly: "Pt:" is what the team
+  // typed. But La Pietra's booking was *written* by this app back when the
+  // surname was taken to be one word, so the description it saved says
+  // "Pt: La" and "Procedure: Pietra ATHLET and ASCOT". Fixing the parser did
+  // nothing for it — the damage is in the stored text, and the stored text
+  // wins.
+  //
+  // Reported as: "the title has changed correctly but when you edit in edit
+  // booking it still just says La in the patient name, then in the
+  // description it has pietra ATHLET and ASCOT. It's all over the place."
+  //
+  // Narrow on purpose. It only fires where the labelled patient is a bare
+  // particle — never a surname on its own — and the title's reading of the
+  // same booking starts with that particle and carries on. Both conditions
+  // together describe one thing: a name this app cut in half.
+  const labelledPatient = sanitisePatient(labelled.patient)
+  const titlePatient = fromTitle?.patient
+  const severed = Boolean(labelledPatient && titlePatient
+    && isBareParticle(labelledPatient)
+    && titlePatient.toLowerCase().startsWith(`${labelledPatient.toLowerCase()} `))
+  // The rest of the name, which is sitting at the front of the procedure.
+  const strandedName = severed
+    ? titlePatient.slice(labelledPatient.length).trim()
+    : ''
+
+  const patient = (severed ? titlePatient : labelledPatient) || fromTitle?.patient
   const surgeon = normaliseSurgeon(labelled.surgeon) || fromTitle?.surgeon
   // Both names are needed. Without them this is a meeting, a list marker or a
   // staffing entry, and calling it a case would put a half-blank card on the day.
   if (!patient || !surgeon) return null
 
   // Free-text reading still runs, as the fallback for whatever was not labelled.
+  if (severed && labelled.procedure) {
+    // "Pietra ATHLET and ASCOT" → "ATHLET and ASCOT". Only the exact word, and
+    // only at the front, so a procedure that merely mentions it is untouched.
+    const trimmed = String(labelled.procedure)
+      .replace(new RegExp(`^\\s*${strandedName}\\b[\\s,/-]*`, 'i'), '')
+      .trim()
+    labelled.procedure = trimmed || labelled.procedure
+  }
+
   const inferred = describeCase(fromTitle?.procedure, description)
 
   // Two conventions are live in the calendar, and "Kit:" means something

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { stripIdentifiers, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
+import { stripIdentifiers, normaliseSurgeon, sanitisePatient } from '../src/clinicalPlan/parse.js'
 import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { withoutPreOpNoise } from '../src/clinicalPlan/preOpNoise.js'
 import { sniffMediaType } from './_gmail.js'
@@ -86,7 +86,11 @@ function cleanCase(raw) {
   const kit = resolveKit(stripIdentifiers(String(raw?.kit || '')), String(raw?.procedure || ''))
 
   return {
-    patient: surname ? surname.charAt(0).toUpperCase() + surname.slice(1).toLowerCase() : '',
+    // Through the same cleaner the calendar uses, rather than a private
+    // version of it. This one lower-cased everything after the first letter,
+    // so "La Pietra" came out of an email as "La pietra" — a third spelling,
+    // beside the title's and the description's, for one person.
+    patient: sanitisePatient(surname),
     surgeon: normaliseSurgeon(raw?.surgeon) || stripIdentifiers(String(raw?.surgeon || '')).trim(),
     date: /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.date || '')) ? raw.date : null,
     procedure: stripIdentifiers(String(raw?.procedure || '')),

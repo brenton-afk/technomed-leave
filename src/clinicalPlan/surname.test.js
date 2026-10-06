@@ -66,9 +66,20 @@ describe('sanitisePatient', () => {
   })
 
   it('still drops a cancellation marker rather than reading it as a name', () => {
-    // Unchanged from before: the marker is taken as the one word, shouting
-    // included, and the case is matched as cancelled elsewhere.
-    expect(sanitisePatient('CANCELLED Hays')).toBe('CANCELLED')
+    expect(sanitisePatient('CANCELLED Hays')).toBe('Cancelled')
+  })
+
+  it('calms a name written in capitals, as hospitals write them', () => {
+    // Theatre lists and hospital emails shout. The card should not.
+    expect(sanitisePatient('MARSH')).toBe('Marsh')
+    expect(sanitisePatient('LA PIETRA')).toBe('La Pietra')
+  })
+
+  it('leaves a name that is mixed case on purpose alone', () => {
+    // McDonald and O'Brien are written that way deliberately, and a blanket
+    // lower-casing of everything after the first letter destroys both.
+    expect(sanitisePatient('McDonald')).toBe('McDonald')
+    expect(sanitisePatient("O'Brien")).toBe("O'Brien")
   })
 
   it('is unchanged for every ordinary surname', () => {
@@ -96,5 +107,51 @@ describe('the booking as a whole', () => {
     const got = readBooking('Van der Berg ACDF - Thani', '')
     expect(got.patient).toBe('Van der Berg')
     expect(got.operation).toBe('ACDF')
+  })
+})
+
+describe('a description already written with the name cut in half', () => {
+  // "The title has changed correctly but when you edit in edit booking it
+  // still just says La in the patient name, then in the description it has
+  // pietra ATHLET and ASCOT. It's all over the place."
+  //
+  // Fixing the parser did nothing for this booking, because the damage is in
+  // the stored text and the stored text wins: a labelled "Pt:" beats the
+  // title, and the app itself had written "Pt: La" with "Procedure: Pietra
+  // ATHLET and ASCOT" back when a surname was one word.
+  const title = 'La Pietra ATHLET and ASCOT - Ibbett'
+  const severed = 'Pt: La\nProcedure: Pietra ATHLET and ASCOT\nSurg: Ibbett'
+
+  it('puts the name back together', () => {
+    expect(readBooking(title, severed).patient).toBe('La Pietra')
+  })
+
+  it('takes the stranded half off the front of the procedure', () => {
+    const got = readBooking(title, severed)
+    expect(got.operation || '').not.toMatch(/Pietra/)
+    expect(got.system).toBe('ATHLET and ASCOT')
+  })
+
+  it('leaves a correctly written description alone', () => {
+    const got = readBooking(title, 'Pt: La Pietra\nSurg: Ibbett')
+    expect(got.patient).toBe('La Pietra')
+  })
+
+  it('does not touch an ordinary booking', () => {
+    // The repair only fires where the labelled patient is a bare particle and
+    // the title continues it. Both conditions together describe one thing: a
+    // name this app cut in half.
+    const got = readBooking('Hollis DIPLOMAT - Ibbett',
+      'Pt: Hollis\nProcedure: C5/6 ACDF\nSurg: Ibbett')
+    expect(got.patient).toBe('Hollis')
+    expect(got.operation).toBe('C5/6 ACDF')
+  })
+
+  it('does not fire when the title disagrees about the patient', () => {
+    // "Pt: La" with a title about somebody else is two different bookings in
+    // one entry, not a severed name, and guessing would merge them.
+    const got = readBooking('Hollis DIPLOMAT - Ibbett',
+      'Pt: La\nProcedure: Something\nSurg: Ibbett')
+    expect(got.patient).toBe('La')
   })
 })
