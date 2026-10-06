@@ -306,7 +306,16 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3100, display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>
+      {/* The flattened result. This is the part that gives way when the
+          screen is short: it is a confirmation, and the photograph below is
+          the thing being worked on. */}
+      {/* Longhands, not the `flex` shorthand: jsdom drops the shorthand
+          entirely, so a test cannot see it and the one declaration keeping
+          this screen honest would go unguarded. */}
+      <div style={{
+        flexGrow: 1, flexShrink: 1, flexBasis: 0,
+        minHeight: 0, position: 'relative', overflow: 'hidden'
+      }}>
         <img src={preview} alt="The page as it will be saved"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
       </div>
@@ -315,10 +324,33 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
         Drag a corner if the edges are wrong
       </div>
 
-      {/* The original, with the handles on it. */}
-      <div ref={frameRef} style={{ position: 'relative', margin: '0 16px', borderRadius: 10, overflow: 'hidden', touchAction: 'none' }}>
+      {/* The original, with the handles on it.
+          
+          The photograph and the outline over it have to be measured against
+          exactly the same box, and until now they were not. The div was a
+          flex item with the default flex-shrink, so on a screen with no room
+          left it was compressed — the photograph kept its own height and was
+          clipped, while the SVG, sized at height:100%, was squashed into the
+          shortened box. Normalised corners then mapped onto a shorter space
+          than the picture occupied, and the whole quad rode up the page and
+          flattened. Reported as the frame shifting violently upwards on
+          capture, and it got worse every time a button was added below.
+          
+          Now the box takes the photograph's own aspect ratio, the photograph
+          fills it absolutely, and it is not allowed to shrink. The two cannot
+          come apart: anything that resizes the box resizes both. */}
+      <div ref={frameRef} style={{
+        position: 'relative', margin: '0 16px', borderRadius: 10,
+        overflow: 'hidden', touchAction: 'none', flexShrink: 0,
+        aspectRatio: capture.originalWidth && capture.originalHeight
+          ? `${capture.originalWidth} / ${capture.originalHeight}`
+          : undefined
+      }}>
         <img src={capture.original} alt="The photograph the page was taken from"
-          style={{ width: '100%', display: 'block', opacity: 0.75 }} />
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            display: 'block', opacity: 0.75
+          }} />
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
           <defs>
@@ -592,7 +624,11 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
       preview: canvas.toDataURL('image/jpeg', 0.85),
       // Small copy for the corner editor, so dragging is not laid over a
       // full-resolution photograph.
-      original: shrunk.toDataURL('image/jpeg', 0.7)
+      original: shrunk.toDataURL('image/jpeg', 0.7),
+      // Its shape, so the editor can give the photograph and the handles over
+      // it one box that cannot come apart. See CropReview.
+      originalWidth: shrunk.width,
+      originalHeight: shrunk.height
     })
   }, [])
 

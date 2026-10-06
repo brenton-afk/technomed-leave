@@ -492,3 +492,69 @@ describe('the viewfinder, as a scanner rather than a camera', () => {
     expect(Number(line[0].getAttribute('stroke-width'))).toBeLessThanOrEqual(0.5)
   })
 })
+
+describe('the corner editor measures one box', () => {
+  // "When I hit the capture button it shifts violently upwards and moves the
+  // entire frame."
+  //
+  // Not detection — the outline was right in the viewfinder. The photograph
+  // and the SVG drawn over it were measured against different boxes: the
+  // container was a flex item with the default flex-shrink, so on a short
+  // screen it was compressed, the photograph kept its own height and was
+  // clipped, and the SVG at height:100% was squashed into the shortened box.
+  // Normalised corners then landed in a shorter space than the picture
+  // occupied, so the quad rode up and flattened — worse with every button
+  // added underneath it.
+  const capture = {
+    preview: 'data:image/jpeg;base64,x',
+    original: 'data:image/jpeg;base64,y',
+    originalWidth: 900,
+    originalHeight: 1200,
+    corners: [{ x: 0.1, y: 0.2 }, { x: 0.9, y: 0.2 }, { x: 0.9, y: 0.8 }, { x: 0.1, y: 0.8 }]
+  }
+  const noop = () => {}
+  const open = () => render(
+    <CropReview capture={capture} cv={null} pageCount={0}
+      onConfirm={noop} onRetake={noop} onAddAnother={noop} onCancel={noop} />)
+
+  const editor = () =>
+    screen.getByAltText('The photograph the page was taken from').parentElement
+
+  it('will not let the photograph be squashed', () => {
+    open()
+    // The one declaration that stops a short screen compressing the box out
+    // from under the outline.
+    expect(editor().style.flexShrink).toBe('0')
+  })
+
+  it('shapes the box to the photograph it is showing', () => {
+    open()
+    expect(editor().style.aspectRatio).toBe('900 / 1200')
+  })
+
+  it('fills that box with the photograph, rather than letting it set its own height', () => {
+    open()
+    const photo = screen.getByAltText('The photograph the page was taken from')
+    expect(photo.style.position).toBe('absolute')
+    expect(photo.style.width).toBe('100%')
+    expect(photo.style.height).toBe('100%')
+  })
+
+  it('draws the handles over the same box', () => {
+    // Same parent, both filling it. Anything that resizes it resizes both.
+    open()
+    const svg = editor().querySelector('svg')
+    expect(svg).toBeTruthy()
+    expect(svg.style.width).toBe('100%')
+    expect(svg.style.height).toBe('100%')
+  })
+
+  it('still gives way on the preview above, which is only a confirmation', () => {
+    const { container } = open()
+    const preview = screen.getByAltText('The page as it will be saved').parentElement
+    // Read off the longhands: jsdom does not expand the `flex` shorthand.
+    expect(preview.style.flexGrow).toBe('1')
+    expect(preview.style.flexShrink).toBe('1')
+    expect(container).toBeTruthy()
+  })
+})
