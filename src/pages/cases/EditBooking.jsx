@@ -236,7 +236,6 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
   const [colourChosen, setColourChosen] = useState(false)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
-  const [titleFix, setTitleFix] = useState(null)
   // Two taps, deliberately. A booking removed by accident is a case nobody
   // knows about, and the calendar keeps no undo the team can reach.
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -315,7 +314,6 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
       setColorId(data.colorId || null)
       setColourChosen(false)
       setReps(data.reps || [])
-      setTitleFix(null)
       setStatus('ready')
     } catch (err) {
       setError(err.message)
@@ -416,15 +414,27 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
       }
       if (data.error) throw new Error(data.error)
 
-      // Offered once the save has landed, so the description is already correct
-      // whatever is decided about the title.
+      // The title follows the fields, without being asked.
+      //
+      // It used to stop and offer, every time, on the reasoning that the title
+      // is what everybody reads on the calendar and rewriting it silently is a
+      // surprise. That was wrong about where the surprise is: somebody who has
+      // just corrected the surname in the edit screen has already said what
+      // they want the booking to say, and being asked again — on every edit,
+      // forever — is a second step for a decision that was made in the first.
+      //
+      // Reported as: "it asks me to update the title when I update the
+      // booking. I don't want it to ask me every time, I just want the title
+      // automatically updated if I edit it in the edit booking screen."
+      //
+      // Saved in two passes rather than one, because the description has to
+      // land first: a title rewritten from fields that failed to save would be
+      // the one genuinely bad outcome here.
       if (!withTitle) {
         const stale = staleTitle(data.event?.summary || loaded.summary, loaded.fields, fields)
         if (stale) {
           setLoaded({ ...loaded, ...data.event, fields: { ...fields }, notes })
-          setTitleFix(stale)
-          setStatus('ready')
-          onSaved?.()
+          await save({ withTitle: stale.proposed })
           return
         }
       }
@@ -555,35 +565,6 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                     </button>
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Proposed after a save, never applied without being asked. */}
-            {titleFix && (
-              <div style={{
-                background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
-                borderRadius: radius.control, padding: space.sm, marginBottom: space.md
-              }}>
-                <div style={{ ...text('caption'), color: colour.warning, fontWeight: 700 }}>
-                  Saved. The title still says “{titleFix.was}”.
-                </div>
-                <div style={{ ...text('caption'), color: colour.inkMuted, margin: `${space.xs}px 0` }}>
-                  {titleFix.proposed}
-                </div>
-                <div style={{ display: 'flex', gap: space.sm }}>
-                  <button onClick={() => save({ withTitle: titleFix.proposed })}
-                    style={{
-                      ...text('caption'), fontWeight: 700, cursor: 'pointer', color: 'white',
-                      background: colour.accent, border: 'none',
-                      borderRadius: radius.control, padding: `6px ${space.md}px`
-                    }}>Update title</button>
-                  <button onClick={() => { setTitleFix(null); onClose?.() }}
-                    style={{
-                      ...text('caption'), cursor: 'pointer', color: colour.inkMuted,
-                      background: 'none', border: `1px solid ${colour.line}`,
-                      borderRadius: radius.control, padding: `6px ${space.md}px`
-                    }}>Leave it</button>
-                </div>
               </div>
             )}
 

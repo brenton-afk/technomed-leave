@@ -1,3 +1,13 @@
+/* iOS enlarges text of its own accord when a page is rotated, or when it
+   decides a column is narrow — which changes the layout under somebody for
+   reasons they did not ask for and cannot undo, and is one of the ways the app
+   comes back a different size from the one it was left at. The app sets its
+   own sizes on a closed scale; nothing should be adjusting them afterwards. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 :root {
   --tm-navy: #042746;
   --tm-navy-dark: #021d33;

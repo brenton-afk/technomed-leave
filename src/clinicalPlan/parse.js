@@ -87,10 +87,30 @@ export function sanitisePatient(raw) {
   if (!cleaned) return ''
   // "Surname, First" → the part before the comma is the surname.
   const beforeComma = cleaned.split(',')[0].trim()
-  const token = beforeComma.split(/\s+/)[0] || ''
-  const letters = token.replace(/[^A-Za-z'’\-]/g, '')
-  if (!letters) return ''
-  return letters.charAt(0).toUpperCase() + letters.slice(1)
+  const words = beforeComma.split(/\s+/).filter(Boolean)
+  if (!words.length) return ''
+
+  // Usually one word. More where the name begins with a particle — see
+  // surnameLength. This used to take words[0] unconditionally, so La Pietra
+  // was filed as "La": in the title, in the Pt: field, in the Dropbox folder
+  // name, and on the sheet that went to the distributor. It also meant the
+  // booking could not be corrected by hand, because typing the space back in
+  // was undone by this function on the way through.
+  const take = surnameLength(words)
+  const kept = words.slice(0, take)
+    .map(word => word.replace(/[^A-Za-z'’\-]/g, ''))
+    .filter(Boolean)
+  if (!kept.length) return ''
+
+  // "Van der Berg", not "Van Der Berg": a particle after the first word keeps
+  // the lower case it is written with. The first word is always capitalised,
+  // so "la pietra" typed in a hurry still comes out right.
+  return kept
+    .map((word, i) => (i > 0
+      && SURNAME_PARTICLES.has(word.toLowerCase().replace(/[^a-z.']/g, ''))
+      ? word.toLowerCase()
+      : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(' ')
 }
 
 export function normaliseSurgeon(raw) {
@@ -248,6 +268,76 @@ const NOT_A_SURNAME = new Set([
   'spine', 'ortho', 'cmf', 'admin', 'setup', 'set', 'pack', 'stock', 'loan'
 ])
 
+// ─── Surnames that are more than one word ────────────────────────────────────
+// "Patient surname is La Pietra. The app can't handle the space in the surname
+// and just keeps booking it as surname 'la'."
+//
+// The title is read as "surname, then everything else", and the surname was
+// taken to be the first word. For most people that is right. For La Pietra it
+// took "La" and handed "Pietra" to the operation, so the booking was filed
+// under a surname that does not exist, the folder was named after it, and the
+// usage sheet carried it to a distributor.
+//
+// Guessing is not an option — "Hollis DIPLOMAT" has a perfectly ordinary
+// second word that is not part of the name. What makes La Pietra different is
+// the first word, not the second: a small, closed set of particles that are
+// never a surname on their own and are nearly always followed by the rest of
+// one.
+//
+// Conservative on purpose. A particle that is not in this list reads as a
+// one-word surname, which is the behaviour as it was; a word wrongly added to
+// the list would start eating system names off the front of every title.
+const SURNAME_PARTICLES = new Set([
+  'la', 'le', 'de', 'del', 'della', 'di', 'da', 'das', 'dos', 'du',
+  'van', 'von', 'der', 'den', 'ter', 'ten',
+  'mac', 'mc', 'st', 'st.', 'saint', 'san', 'santa',
+  'al', 'el', 'bin', 'ibn', 'abu'
+])
+
+/**
+ * How many leading words belong to the surname.
+ *
+ * Usually one. More where the name starts with a particle — and more than two
+ * where it starts with several, as "Van der Berg" does.
+ *
+ * Never all of them: a particle at the end of the words with nothing after it
+ * is not a surname, it is a word that happens to be in the list, and taking
+ * the lot would leave the operation empty.
+ */
+export function surnameLength(words) {
+  const particle = word =>
+    SURNAME_PARTICLES.has(String(word).toLowerCase().replace(/[^a-z.']/g, ''))
+
+  let n = 0
+  while (n < words.length - 1 && particle(words[n])) n++
+  if (n === 0) return 1
+
+  // What follows the particles has to be a name. "Van ACDF - Thani" is a
+  // patient called Van having an ACDF, not a patient called Van ACDF — and
+  // joining there would eat the operation off the front of the title and
+  // leave the case with none. A particle that leads nowhere is just a short
+  // surname, which is what it was before any of this.
+  const next = String(words[n] || '')
+  // And it has to be a name rather than another particle. "De la" is the
+  // front of a surname with the surname still missing, not a surname.
+  if (!looksLikeSurname(next) || particle(next)
+    || findSystems(next).length || isOperationWord(next)) {
+    return 1
+  }
+  return n + 1
+}
+
+/** Words that describe the operation rather than the person having it. */
+const OPERATION_WORDS = new Set([
+  'acdf', 'plif', 'tlif', 'alif', 'xlif', 'llif', 'olif', 'adr',
+  'decompression', 'discectomy', 'laminectomy', 'fusion', 'revision',
+  'removal', 'washout', 'biopsy', 'cranio', 'craniotomy', 'cervical',
+  'lumbar', 'thoracic', 'anterior', 'posterior', 'redo', 'bilateral'
+])
+
+const isOperationWord = word =>
+  OPERATION_WORDS.has(String(word).toLowerCase().replace(/[^a-z]/g, ''))
+
 function looksLikeSurname(token) {
   const letters = String(token || '').replace(/[^A-Za-z'’-]/g, '')
   if (letters.length < 2) return false
@@ -340,12 +430,13 @@ export function parseCaseTitle(title, hint = {}) {
   // reads like a surname, so "Theatre 3 list" does not become a patient.
   if (surgeonSource === 'colour' && !looksLikeSurname(words[0])) return null
 
-  const patient = sanitisePatient(words[0])
+  const take = surnameLength(words)
+  const patient = sanitisePatient(words.slice(0, take).join(' '))
   if (!patient) return null
 
   return {
     patient,
-    procedure: stripIdentifiers(words.slice(1).join(' ')),
+    procedure: stripIdentifiers(words.slice(take).join(' ')),
     surgeon,
     surgeonSource
   }

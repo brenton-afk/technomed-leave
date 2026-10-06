@@ -197,32 +197,46 @@ describe('a title left behind by an edit', () => {
       .toBe('Calvary list - Ibbett')
   })
 
-  it('is offered, never applied on its own', async () => {
-    // The description saves either way. The title is a second, explicit step —
-    // rewriting it automatically would silently reformat titles people wrote by
-    // hand, and anything unusual in one would be lost.
+  it('follows the fields without asking', async () => {
+    // "It asks me to update the title when I update the booking. I don't want
+    // it to ask me every time, I just want the title automatically updated if
+    // I edit it in the edit booking screen."
+    //
+    // It used to stop and offer, every time. That was wrong about where the
+    // surprise is: somebody who has just corrected the booking has already
+    // said what they want it to say, and being asked again is a second step
+    // for a decision made in the first.
     show()
     await ready()
     fireEvent.change(screen.getByDisplayValue('Dr Ibbett'), { target: { value: 'Fowler' } })
     fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
 
-    expect(await screen.findByText(/The title still says/)).toBeInTheDocument()
-    expect(saved.summary).toBeUndefined()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Update title' }))
     await waitFor(() => expect(saved.summary).toBe('Marsh DIPLOMAT  - Fowler'))
+    expect(screen.queryByText(/The title still says/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Update title' })).not.toBeInTheDocument()
   })
 
-  it('can be left alone', async () => {
+  it('saves the description first, and the title after it', async () => {
+    // Two passes, not one. A title rewritten from fields that failed to save
+    // would be the one genuinely bad outcome here.
+    show()
+    await ready()
+    fireEvent.change(screen.getByDisplayValue('Dr Ibbett'), { target: { value: 'Fowler' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+
+    await waitFor(() => expect(saved.summary).toBeTruthy())
+    const writes = global.fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
+    expect(writes.length).toBeGreaterThanOrEqual(2)
+    expect(JSON.parse(writes[0][1].body).summary).toBeUndefined()
+  })
+
+  it('closes once the title has followed', async () => {
     const onClose = vi.fn()
     show({ onClose })
     await ready()
     fireEvent.change(screen.getByDisplayValue('Dr Ibbett'), { target: { value: 'Fowler' } })
     fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
-    await screen.findByText(/The title still says/)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Leave it' }))
-    expect(onClose).toHaveBeenCalled()
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 })
 

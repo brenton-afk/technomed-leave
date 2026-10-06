@@ -300,7 +300,23 @@ function Candidate({ candidate, user, onDone }) {
         <div style={{ ...text('caption'), color: colour.danger, marginTop: space.xs }}>{error}</div>
       )}
 
-      <div style={{ display: 'flex', gap: space.sm, marginTop: space.md }}>
+      {/* Three answers, because there are three. The app checks the calendar
+          before offering a case, and still misses some — a surname spelt
+          differently, a day moved after the email was sent — so somebody has
+          to be able to say "we have this" without saying "this is not
+          happening". Dismissing a real case is the wrong thing for the next
+          person to find when they go looking for why a tray was not packed. */}
+      <button onClick={() => send('dismiss', { reason: 'onCalendar' })} disabled={busy}
+        style={{
+          width: '100%', padding: space.sm, marginTop: space.md, ...text('bodyStrong'),
+          cursor: busy ? 'default' : 'pointer', background: 'transparent',
+          color: colour.inkMuted, border: `1px solid ${colour.line}`,
+          borderRadius: radius.control
+        }}>
+        {status === 'dismiss' ? 'Marking…' : 'Already in the calendar'}
+      </button>
+
+      <div style={{ display: 'flex', gap: space.sm, marginTop: space.sm }}>
         <button onClick={() => send('dismiss', {})} disabled={busy} style={{
           flex: 1, padding: space.sm, cursor: busy ? 'default' : 'pointer', ...text('bodyStrong'),
           background: 'transparent', color: colour.inkMuted,

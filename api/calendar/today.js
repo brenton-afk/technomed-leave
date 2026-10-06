@@ -29,7 +29,7 @@ import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
 import { readDictatedBooking } from '../_readDictatedBooking.js'
 import {
-  sourceOf, isSameBooking, mergeBookings, isDistributorEmail
+  sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar
 } from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
@@ -975,8 +975,17 @@ async function handleIngest(req, res) {
         // Kept rather than dropped, marked as already booked, so a run can say
         // what it saw and nothing disappears without trace.
         if (candidate.date) {
-          const twinOnCalendar = (await calendarFor(candidate.date))
-            .find(c => !c.cancelled && isSameBooking(c, candidate))
+          // alreadyInCalendar, not isSameBooking.
+          //
+          // isSameBooking requires the surgeon to match exactly, which is
+          // right for comparing two emails and wrong for comparing an email
+          // to the calendar: the entry there has been through the team's own
+          // hands, and an email that names no surgeon at all failed the test
+          // outright. So this check existed and kept missing, and the case
+          // was offered a second time — reported as the app wanting to book
+          // cases twice.
+          const twinOnCalendar = alreadyInCalendar(
+            candidate, (await calendarFor(candidate.date)).filter(c => !c.cancelled))
           if (twinOnCalendar) {
             already += 1
             await saveBookingCandidate({
@@ -1074,6 +1083,20 @@ async function handleAccept(req, res) {
 }
 
 /** Dismiss: not a case, already on the calendar, or cancelled before it started. */
+/**
+ * Taking a candidate off the queue.
+ *
+ * Two different answers, kept apart because they mean opposite things about
+ * the case. "Not a booking" says this email was never a case — a reply, a
+ * circular, a misread. "Already booked" says the case is perfectly real and
+ * we have it; the app simply read the confirmation after somebody had entered
+ * it by hand.
+ *
+ * Recording them the same way would have lost the distinction that matters:
+ * dismissing a real case reads as "this is not happening", which is the wrong
+ * thing for the next person to find when they go looking for why a tray was
+ * not packed.
+ */
 async function handleDismiss(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
@@ -1082,8 +1105,9 @@ async function handleDismiss(req, res) {
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const id = String(body.id || '').trim()
+    const alreadyBooked = body.reason === 'onCalendar'
     const dismissed = await updateBookingCandidate(id, {
-      status: 'dismissed',
+      status: alreadyBooked ? 'onCalendar' : 'dismissed',
       dismissedBy: firstNameFor(session.email),
       dismissedAt: new Date().toISOString(),
       reason: String(body.reason || '').trim() || null

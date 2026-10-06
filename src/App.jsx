@@ -27,6 +27,7 @@ import {
 } from './design/icons.jsx'
 import { useNewBuild } from './appVersion.js'
 import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
+import { watchZoom } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -134,6 +135,12 @@ export default function App() {
   const unread = useUnread(user?.token)
   const [nav, setNav] = useState({ tab: 'cases', sub: null })
   const [submitted, setSubmitted] = useState(null)
+
+  // An accidental pinch is remembered by an installed app across a relaunch,
+  // so the morning starts slightly zoomed in with the right-hand controls off
+  // the edge. Pinch stays available — this only straightens the page up on
+  // the way back into it. See lockZoom.js.
+  useEffect(() => watchZoom(), [])
 
   useEffect(() => {
     const restored = loadStoredSession()

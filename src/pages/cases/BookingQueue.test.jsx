@@ -386,3 +386,44 @@ describe('what the card says we hold', () => {
     expect(accept.body.fields.kit).toBe('Diplomat + Global BMD PLIF')
   })
 })
+
+describe('saying a case is already booked', () => {
+  // "We need an option to select as 'already in the calendar or already
+  // booked'. This will tell the app that it has read an email unnecessarily
+  // when a booking is already in the app."
+  //
+  // Dismissing a real case reads as "this is not happening", which is the
+  // wrong thing for the next person to find when they go looking for why a
+  // tray was not packed.
+  const ready = async () => {
+    show()
+    await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
+  }
+
+  it('offers it as its own answer, not as a dismissal', async () => {
+    await ready()
+    expect(screen.getAllByRole('button', { name: 'Already in the calendar' }).length)
+      .toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Not a booking' }).length)
+      .toBeGreaterThan(0)
+  })
+
+  it('records it differently from a dismissal', async () => {
+    await ready()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Already in the calendar' })[0])
+    await waitFor(() => {
+      const call = calls.find(c => c.url.includes('action=dismiss'))
+      expect(call).toBeTruthy()
+      expect(call.body.reason).toBe('onCalendar')
+    })
+  })
+
+  it('still dismisses outright when it was never a booking', async () => {
+    await ready()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Not a booking' })[0])
+    await waitFor(() => {
+      const call = calls.find(c => c.url.includes('action=dismiss'))
+      expect(call.body.reason).toBeUndefined()
+    })
+  })
+})

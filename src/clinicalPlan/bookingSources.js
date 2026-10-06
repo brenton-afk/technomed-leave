@@ -173,6 +173,46 @@ export function isSameBooking(a, b) {
 }
 
 /**
+ * Whether a candidate is already a booking in the calendar.
+ *
+ * "It keeps wanting to add bookings from the email that it reads without back
+ * checking if it's already in the app. We need to improve this so we don't
+ * unnecessarily book cases twice."
+ *
+ * The queue was deduplicated against itself — two emails about one case merged
+ * — but never against the calendar. So a case booked by hand on Monday was
+ * offered again on Tuesday when the hospital's confirmation arrived, and the
+ * only way to say "we have this" was to dismiss it, which reads as "this is
+ * not happening".
+ *
+ * Matched on the day and the surname rather than on everything. The calendar
+ * entry has been through the team's own hands — the operation shortened, the
+ * system corrected, a rep's name added — so requiring the rest to agree would
+ * find nothing on exactly the bookings that have had the most attention.
+ *
+ * The surgeon is compared only when both sides name one. An email that does
+ * not say who is operating should not count as a different case from the
+ * calendar entry that does.
+ */
+export function alreadyInCalendar(candidate, events = []) {
+  if (!candidate?.date || !candidate?.patient) return null
+  const same = (x, y) => String(x || '').trim().toLowerCase() === String(y || '').trim().toLowerCase()
+  const surname = String(candidate.patient).trim().toLowerCase()
+
+  return events.find(event => {
+    if (!same(event?.date, candidate.date)) return false
+    const theirs = String(event?.patient || '').trim().toLowerCase()
+    if (!theirs || theirs !== surname) return false
+    // Both named somebody and they disagree: two cases, same surname, same
+    // day. Rare, and the one time offering it again is right.
+    if (candidate.surgeon && event.surgeon && !same(candidate.surgeon, event.surgeon)) {
+      return false
+    }
+    return true
+  }) || null
+}
+
+/**
  * One booking from two copies of it, preferring whichever actually said
  * something.
  *
