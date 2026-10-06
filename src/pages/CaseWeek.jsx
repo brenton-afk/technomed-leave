@@ -20,6 +20,8 @@ import ListPlace from './cases/ListPlace.jsx'
 import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
 import { weekOf, withinWeek } from '../clinicalPlan/teamLeader.js'
 import { describeListPlace } from '../clinicalPlan/listPlace.js'
+import { preferencesFor } from '../clinicalPlan/preferences.js'
+import { GuideView } from './TheatreGuides.jsx'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
@@ -134,7 +136,7 @@ const KIND_TONE = {
  * Everything the booking says, in one place: who, what, with which system, how
  * it is supplied, what extra kit, and whatever the team wrote in the notes.
  */
-function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) {
+function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, onPreferences, hasPreferences }) {
   const off = Boolean(surgicalCase.cancelled)
   // Told about, not attending. Drawn back like a cancelled case rather than
   // struck through — it is still going ahead, just without us.
@@ -345,6 +347,27 @@ function CaseCard({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
             {place ? 'Change list order' : '＋ Set list order'}
           </button>
         )}
+
+        {/* Beside the list order, because they are the two things somebody
+            wants off a booking at half past seven: where we are on the list,
+            and how this surgeon likes the room. The booking already names the
+            surgeon and the system, so the card opens rather than being
+            searched for. Drawn only where there is something to open. */}
+        {onPreferences && !off && hasPreferences?.(surgicalCase) && (
+          <button
+            type="button"
+            aria-label={`Preferences for ${surgicalCase.surgeon || 'this case'}`}
+            onClick={() => onPreferences(surgicalCase)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              marginTop: space.sm, marginLeft: space.sm, cursor: 'pointer',
+              minHeight: 32, padding: `0 ${space.md}px`, borderRadius: radius.pill,
+              border: `1px solid ${colour.line}`, background: colour.surface,
+              ...text('caption'), fontWeight: 700, color: colour.ink
+            }}>
+            ★ Preferences
+          </button>
+        )}
       </span>
 
       {ordering && (
@@ -466,7 +489,7 @@ function Heading({ children }) {
  * view to send anybody to any more. They are the controls the week is actually
  * worked with, so they have to live on the view that is on the screen.
  */
-function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) {
+function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace, onPreferences, hasPreferences }) {
   const off = Boolean(surgicalCase.cancelled)
   const spare = Boolean(surgicalCase.notRequired) && !off
   const place = describeListPlace(surgicalCase.listPlace)
@@ -576,6 +599,21 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
       {/* Offered whether or not anything is recorded — including where this is
           our only case at that hospital, which is exactly where the arrows can
           say nothing and the list order still matters. */}
+      {onPreferences && !off && hasPreferences?.(surgicalCase) && (
+        <button type="button"
+          aria-label={`Preferences for ${surgicalCase.surgeon || 'this case'}`}
+          onClick={() => onPreferences(surgicalCase)}
+          style={{
+            display: 'block', width: '100%', cursor: 'pointer', textAlign: 'left',
+            padding: '3px 7px 4px', border: 'none',
+            borderTop: `1px solid ${withAlpha(accentForCase(surgicalCase), 0.25)}`,
+            background: 'none', ...text('micro'), textTransform: 'none',
+            color: colour.inkFaint
+          }}>
+          ★ Preferences
+        </button>
+      )}
+
       {onSetPlace && !off && (
         <button type="button"
           aria-label={`Set where ${surgicalCase.patient} is on the list`}
@@ -612,7 +650,7 @@ function WeekCase({ surgicalCase, onOpen, position, onMove, busy, onSetPlace }) 
  * the single noisiest thing on the screen; and the reorder arrows themselves,
  * which belong in the day view where there is room to use them.
  */
-function WeekGrid({ plan, today, onOpen, onReorder, onSetPlace }) {
+function WeekGrid({ plan, today, onOpen, onReorder, onSetPlace, onPreferences, hasPreferences }) {
   return (
     <div style={{
       display: 'grid',
@@ -624,7 +662,8 @@ function WeekGrid({ plan, today, onOpen, onReorder, onSetPlace }) {
     }}>
       {(plan.days || []).map(day => (
         <WeekColumn key={day.date} day={day} today={today} onOpen={onOpen}
-          onReorder={onReorder} onSetPlace={onSetPlace} />
+          onReorder={onReorder} onSetPlace={onSetPlace} onPreferences={onPreferences}
+          hasPreferences={hasPreferences} />
       ))}
     </div>
   )
@@ -636,7 +675,7 @@ function WeekGrid({ plan, today, onOpen, onReorder, onSetPlace }) {
  * Its own component because each column keeps its own running order while the
  * calendar catches up, and a hook cannot be called inside a map.
  */
-function WeekColumn({ day, today, onOpen, onReorder, onSetPlace }) {
+function WeekColumn({ day, today, onOpen, onReorder, onSetPlace, onPreferences, hasPreferences }) {
   const { inOrder, running, moveWithin, busy } = useRunningOrder(day, onReorder)
   const isToday = day.date === today
         const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
@@ -709,7 +748,9 @@ function WeekColumn({ day, today, onOpen, onReorder, onSetPlace }) {
                       onMove={onReorder && numbered && !c.cancelled
                         ? moveWithin(group, at(c)) : undefined}
                       busy={busy}
-                      onSetPlace={onSetPlace} />
+                      onSetPlace={onSetPlace}
+                      onPreferences={onPreferences}
+                      hasPreferences={hasPreferences} />
                   ))}
                 </div>
                 )
@@ -793,7 +834,7 @@ function useRunningOrder(day, onReorder) {
   return { groups, inOrder, running, moveWithin, busy }
 }
 
-function DayPanel({ day, onOpen, onReorder, onSetPlace, leader }) {
+function DayPanel({ day, onOpen, onReorder, onSetPlace, leader, onPreferences, hasPreferences }) {
   const { groups, inOrder, running, moveWithin, busy } = useRunningOrder(day, onReorder)
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
@@ -883,6 +924,8 @@ function DayPanel({ day, onOpen, onReorder, onSetPlace, leader }) {
                   position={numbered ? at : undefined}
                   onMove={numbered ? moveWithin(group, at) : undefined}
                   onSetPlace={onSetPlace}
+                  onPreferences={onPreferences}
+                  hasPreferences={hasPreferences}
                   busy={busy} />
               )
             })}
@@ -952,6 +995,11 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [notice, setNotice] = useState('')
   // The case whose place on the hospital's list is being recorded.
   const [placing, setPlacing] = useState(null)
+  // The guides, so a booking can be matched to one. Fetched once: it is a
+  // short static list and the match happens on every card.
+  const [guides, setGuides] = useState([])
+  // What the preferences button opened, if anything.
+  const [reading, setReading] = useState(null)
   // Who is team leader for the week on screen. Held here rather than inside
   // the strip, because the days below need it too — it belongs in the list
   // alongside "Brent on call", which is the same kind of fact.
@@ -995,6 +1043,38 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
    * cases into it, the calendar entries follow into one-hour blocks in the same
    * sequence, and everyone with the app open can see whether we are first up.
    */
+  useEffect(() => {
+    let live = true
+    fetch('/api/guides', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.json())
+      .then(data => { if (live) setGuides(data.guides || []) })
+      // A booking without a matching guide still offers the surgeon's card,
+      // and a failure here is not worth saying anything about.
+      .catch(() => {})
+    return () => { live = false }
+  }, [token])
+
+  /**
+   * Opens the preference card for a booking.
+   *
+   * One tap where there is one answer. Where the booking names both a surgeon
+   * with a card and a system with a guide, the surgeon's card wins and the
+   * guide is offered from inside it — the question at the bench is nearly
+   * always "how does this one like it set up".
+   */
+  const hasPreferences = useCallback(
+    surgicalCase => preferencesFor(surgicalCase, guides).any, [guides])
+
+  const openPreferences = useCallback(surgicalCase => {
+    const found = preferencesFor(surgicalCase, guides)
+    if (!found.any) return
+    if (found.surgeon) {
+      const card = guides.find(g => g.slug === 'surgeon-preferences')
+      if (card) { setReading({ guide: card, focus: found.surgeon.anchor }); return }
+    }
+    if (found.guide) setReading({ guide: found.guide, focus: null })
+  }, [guides])
+
   const reorder = useCallback(async (date, order) => {
     try {
       const res = await fetch(`/api/calendar/today?action=reorder&date=${date}`, {
@@ -1348,7 +1428,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             <AddBookingRow day={activeDay} onAdd={setAdding} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing} onReorder={reorder}
-                  onSetPlace={setPlacing} leader={leader} />
+                  onSetPlace={setPlacing} leader={leader}
+                  onPreferences={openPreferences}
+                  hasPreferences={hasPreferences} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}
@@ -1364,7 +1446,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             today={today}
             onOpen={setEditing}
             onReorder={reorder}
-            onSetPlace={setPlacing} />
+            onSetPlace={setPlacing}
+            onPreferences={openPreferences}
+            hasPreferences={hasPreferences} />
         )}
 
         {plan && span === 'week' && !desktop && (plan.days || []).map(day => (
@@ -1392,7 +1476,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 find the day first, in a view that had no arrows, meant the one
                 thing this was built for was the awkward one. */}
             <DayPanel day={day} onOpen={setEditing} onReorder={reorder}
-              onSetPlace={setPlacing} leader={leader} />
+              onSetPlace={setPlacing} leader={leader}
+              onPreferences={openPreferences}
+              hasPreferences={hasPreferences} />
           </div>
         ))}
 
@@ -1427,6 +1513,14 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           </>
         )}
       </div>
+
+      {reading && (
+        <GuideView
+          guide={reading.guide}
+          user={user}
+          focus={reading.focus}
+          onClose={() => setReading(null)} />
+      )}
 
       {placing && (
         <ListPlace

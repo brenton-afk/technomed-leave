@@ -53,8 +53,19 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-09-21T02:00:00.000Z')) // Monday, midday Hobart
   localStorage.clear()
   events = BOOKINGS
-  global.fetch = vi.fn(async () => ({
-    json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' })
+  global.fetch = vi.fn(async url => ({
+    // The guide list, so a booking can be matched to a preference card.
+    json: async () => (String(url).includes('/api/guides')
+      ? {
+        guides: [
+          { slug: 'surgeon-preferences', name: 'Surgeon Preferences', group: 'Restricted', restricted: true },
+          { slug: 'dakota', name: 'Dakota ACDF', group: 'Spine' }
+        ],
+        coming: []
+      }
+      : { events, syncedAt: '2026-09-21T02:00:00.000Z' }),
+    text: async () => '<html><body><h2 id="p-fowler">Fowler</h2></body></html>',
+    ok: true
   }))
 })
 
@@ -1173,5 +1184,38 @@ describe('the header, pared back', () => {
     // Just the day and the date. Monday carries one case in the fixtures, and
     // the badge that used to say so has gone.
     expect(monday.textContent).toBe('Mon21st')
+  })
+})
+
+describe('opening the preference card from a booking', () => {
+  // "A button on the booking for each case next to where it says List order
+  // that takes you to a surgeon preferences page... rather than having to
+  // browse through and find the appropriate card."
+  it('offers preferences beside the list order', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.getAllByLabelText(/^Preferences for /).length).toBeGreaterThan(0)
+  })
+
+  it('opens the surgeon preferences guide at that surgeon', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    // Mardon's case is Fowler's in the fixtures, and Fowler has a card.
+    fireEvent.click(screen.getByLabelText('Preferences for Fowler'))
+    await waitFor(() =>
+      expect(screen.getByTitle('Surgeon Preferences')).toBeInTheDocument())
+    // The instruction to open at the right card travels inside the document,
+    // because the frame is sandboxed and cannot be reached into.
+    expect(screen.getByTitle('Surgeon Preferences').getAttribute('srcdoc'))
+      .toContain('p-fowler')
+  })
+
+  it('comes back to the week', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Preferences for Fowler'))
+    fireEvent.click(await screen.findByText('‹ All guides'))
+    await waitFor(() =>
+      expect(screen.queryByTitle('Surgeon Preferences')).not.toBeInTheDocument())
   })
 })

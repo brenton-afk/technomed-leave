@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { reorder } from './scan/pageList.js'
+import { usageMessage, smsLink } from '../usageText.js'
 import CameraSheet from './scan/CameraSheet.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { partitionItems } from '../usageReview.js'
@@ -244,6 +245,8 @@ export default function UsageScan({ user }) {
   // making that three taps was the wrong default.
   const [step, setStep] = useState(desktop ? 'history' : 'capture')
   const [pages, setPages] = useState([])
+  // Whether the registrar text has been put on the clipboard.
+  const [copied, setCopied] = useState(false)
   // Mirrors `pages` so a capture can check the payload size and answer straight
   // away, without reading state that has not been committed yet.
   const pagesRef = useRef([])
@@ -848,6 +851,51 @@ export default function UsageScan({ user }) {
               </>
             )}
           </div>
+
+          {/* The text for the registrar.
+              
+              A draft, never a send. The app does not know which registrar was
+              in the room and their number is not on the booking, so this
+              writes the message and hands it to the phone's own messaging app
+              — where somebody picks the person and reads it before it goes.
+              
+              Copy as well as the link, because a rep standing in a corridor
+              may want it in WhatsApp rather than a text, and the clipboard
+              reaches both. */}
+          {caseRecord && (
+            <div style={{ background: 'white', borderRadius: 12, padding: 15, marginBottom: 12, border: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                Send to the registrar
+              </div>
+              <pre style={{
+                margin: '0 0 10px', padding: 10, background: '#f8f9fc', borderRadius: 8,
+                fontSize: 12, color: NAVY, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+                fontFamily: 'inherit', maxHeight: 180, overflowY: 'auto'
+              }}>{usageMessage(caseRecord, caseRecord.items || [])}</pre>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <a href={smsLink(usageMessage(caseRecord, caseRecord.items || []))}
+                  style={{
+                    flex: 1, textAlign: 'center', padding: '12px 0', borderRadius: 10,
+                    background: TEAL, color: 'white', fontSize: 14, fontWeight: 700,
+                    textDecoration: 'none'
+                  }}>
+                  Text it
+                </a>
+                <button onClick={() => {
+                  navigator.clipboard?.writeText(
+                    usageMessage(caseRecord, caseRecord.items || []))
+                    .then(() => setCopied(true), () => setCopied(false))
+                }}
+                  style={{
+                    flex: 1, padding: '12px 0', borderRadius: 10, cursor: 'pointer',
+                    border: `1px solid ${BORDER}`, background: 'transparent',
+                    fontSize: 14, fontWeight: 600, color: NAVY
+                  }}>
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Whether the booking was marked. Said either way: silently not
               recording attendance looks identical to recording it. */}

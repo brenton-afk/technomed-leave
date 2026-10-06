@@ -99,6 +99,12 @@ export function MeHub({ user, onNavigate, onLogout }) {
           onClick={() => onNavigate({ tab: 'me', sub: 'usagefiles' })} />
 
         <SectionLabel>Account</SectionLabel>
+        {/* In settings, where somebody looks for a setting. It used to be a
+            banner inside Messages that appeared when the state warranted one,
+            so finding it meant opening the chat and hoping. */}
+        <NavCard icon={IconLock} label="Notifications"
+          detail="Messages on your phone, on or off"
+          onClick={() => onNavigate({ tab: 'me', sub: 'notifications' })} />
         <NavCard icon={IconLock} label="Sign-in & Face ID"
           detail="Manage this device"
           onClick={() => onNavigate({ tab: 'me', sub: 'security' })} />
