@@ -49,6 +49,17 @@ export function preview(text, limit = 140) {
  * A subscription the push service reports as gone (404/410) is deleted. Those
  * never come back, and keeping one means retrying it for as long as the app
  * exists.
+ *
+ * So is one it rejects with 403. That is what a push service returns when the
+ * VAPID key the subscription was made with is not the key the message is
+ * signed with — which happens exactly once, the day somebody rotates the keys,
+ * and then applies to every subscription at once.
+ *
+ * Leaving those in place was the trap: they would fail forever, nothing would
+ * clean them up, and the app would go on believing every phone was subscribed
+ * while no notification reached any of them. Silence that looks like nothing
+ * is wrong is the worst failure this code can have — notifications are how
+ * somebody finds out a booking changed.
  */
 export async function notify(emails, payload) {
   if (!CONFIGURED) return { sent: 0, configured: false }
@@ -63,7 +74,8 @@ export async function notify(emails, payload) {
         await webpush.sendNotification(subscription, body)
         sent += 1
       } catch (err) {
-        if (err?.statusCode === 404 || err?.statusCode === 410) {
+        if (err?.statusCode === 404 || err?.statusCode === 410
+          || err?.statusCode === 403) {
           await removePushSubscription(email, subscription.endpoint).catch(() => {})
         }
         // Anything else — a push service having a bad morning, a network blip —

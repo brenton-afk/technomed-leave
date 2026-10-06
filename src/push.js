@@ -63,6 +63,28 @@ const auth = token => (token ? { Authorization: `Bearer ${token}` } : {})
  *
  * @returns {Promise<'on'|'denied'|'unsupported'|'not-installed'>}
  */
+/**
+ * Whether a subscription was made with this VAPID key.
+ *
+ * The browser keeps the key it subscribed with on the subscription's options,
+ * as raw bytes. Compared rather than trusted: a subscription is only valid
+ * against the key that created it, and the app cannot tell from anywhere else
+ * that the server has moved on.
+ *
+ * Unknown counts as "yes, reuse it". Some browsers do not expose the options
+ * at all, and unsubscribing everybody on those because the question cannot be
+ * answered would be a worse bug than the one this prevents.
+ */
+function madeWith(subscription, key) {
+  const used = subscription?.options?.applicationServerKey
+  if (!used) return true
+  const want = urlBase64ToUint8Array(key)
+  const have = new Uint8Array(used)
+  if (have.length !== want.length) return false
+  for (let i = 0; i < want.length; i++) if (have[i] !== want[i]) return false
+  return true
+}
+
 export async function turnOnPush(token) {
   if (!pushPossible()) return installed() ? 'unsupported' : 'not-installed'
 
@@ -76,10 +98,20 @@ export async function turnOnPush(token) {
   const { key } = await res.json()
   if (!key) throw new Error('Notifications are not configured on the server')
 
-  // An existing subscription is reused. Subscribing twice with a different key
-  // throws, and a phone that has been through this before still has one.
+  // An existing subscription is reused — but only if it was made with the key
+  // the server is signing with now. Subscribing twice with a different key
+  // throws, so the old one has to go first.
+  //
+  // Without this check, rotating the VAPID keys broke notifications
+  // permanently and invisibly: every send failed, and turning notifications
+  // off and on again handed back the same stale subscription, so there was no
+  // way out from inside the app.
   const existing = await registration.pushManager.getSubscription()
-  const subscription = existing || await registration.pushManager.subscribe({
+  if (existing && !madeWith(existing, key)) {
+    await existing.unsubscribe().catch(() => {})
+  }
+  const reusable = existing && madeWith(existing, key) ? existing : null
+  const subscription = reusable || await registration.pushManager.subscribe({
     // Required by every browser that implements push: a silent push is not
     // allowed, and asking for one is refused outright.
     userVisibleOnly: true,

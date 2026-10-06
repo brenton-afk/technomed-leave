@@ -145,3 +145,65 @@ describe('whether this device is signed up', () => {
     await expect(pushIsOn()).resolves.toBe(true)
   })
 })
+
+describe('rotating the VAPID keys', () => {
+  // Prompted by `npx web-push generate-vapid-keys` being run against a project
+  // that already had keys. Rotating them is a one-line change in Vercel and it
+  // used to break notifications permanently and invisibly.
+  //
+  // Every existing subscription is bound to the key that created it. After a
+  // rotation the push service rejects each one with 403; the server kept them,
+  // because it only cleaned up 404 and 410; and the client handed back the same
+  // stale subscription whenever anybody turned notifications off and on again.
+  // There was no way out from inside the app.
+  const KEY_A = 'BKfJUOBrtAsoQBf15-Ix7NvZHWgkq7QygdS7nE9Z-fK6x6f6Cf2No7zGG6gyIGj7fdF2t_-LFrN7NYizgmwc8dg'
+  const KEY_B = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U'
+
+  const bytesOf = k => {
+    const padded = (k + '='.repeat((4 - (k.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/')
+    const raw = atob(padded)
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+  }
+
+  const setUp = ({ subscribedWith }) => {
+    const unsubscribe = vi.fn(async () => true)
+    const subscribe = vi.fn(async () => ({ toJSON: () => ({ endpoint: 'new' }) }))
+    const existing = subscribedWith
+      ? { options: { applicationServerKey: bytesOf(subscribedWith).buffer },
+        toJSON: () => ({ endpoint: 'old' }), unsubscribe }
+      : null
+
+    global.Notification = { requestPermission: async () => 'granted', permission: 'granted' }
+    navigator.serviceWorker = {
+      register: async () => ({ pushManager: { getSubscription: async () => existing, subscribe } }),
+      ready: Promise.resolve(),
+      getRegistration: async () => ({ pushManager: { getSubscription: async () => existing, subscribe } })
+    }
+    global.fetch = vi.fn(async url => String(url).includes('action=key')
+      ? { ok: true, json: async () => ({ key: KEY_A }) }
+      : { ok: true, json: async () => ({ ok: true }) })
+    return { unsubscribe, subscribe }
+  }
+
+  it('reuses a subscription made with the key in force', async () => {
+    const { unsubscribe, subscribe } = setUp({ subscribedWith: KEY_A })
+    expect(await turnOnPush('tok')).toBe('on')
+    expect(unsubscribe).not.toHaveBeenCalled()
+    expect(subscribe).not.toHaveBeenCalled()
+  })
+
+  it('replaces one made with a key that has been rotated away', async () => {
+    // The whole point: without this, turning notifications off and on again
+    // hands back the same dead subscription and nothing ever recovers.
+    const { unsubscribe, subscribe } = setUp({ subscribedWith: KEY_B })
+    expect(await turnOnPush('tok')).toBe('on')
+    expect(unsubscribe).toHaveBeenCalled()
+    expect(subscribe).toHaveBeenCalled()
+  })
+
+  it('subscribes from nothing, as it always did', async () => {
+    const { subscribe } = setUp({ subscribedWith: null })
+    expect(await turnOnPush('tok')).toBe('on')
+    expect(subscribe).toHaveBeenCalled()
+  })
+})
