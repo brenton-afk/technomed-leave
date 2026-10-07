@@ -92,9 +92,24 @@ describe('the cards actually use it', () => {
     expect(body).not.toMatch(/background: colour\.surface/)
   })
 
-  it('washes the week column card too', () => {
-    // The view the change was asked for. A strip at 3px wide is invisible.
-    expect(bodyOf('WeekCase')).toMatch(/background: off \? 'transparent' : washFor\(/)
+  it('fills the week column card solid, like a calendar entry', () => {
+    // The pale wash moves every hue towards the same near-white, which is
+    // what made Sage and Basil indistinguishable: 20 apart at full strength,
+    // about 6 once paled. Thani and Gupta share a list most weeks.
+    //
+    // The phone card keeps the wash — it carries far more text per card, and
+    // a column of solid blocks there reads as a stack of buttons.
+    const body = bodyOf('WeekCase')
+    expect(body).toMatch(/const fill = off \? colour\.surface : accentForCase\(surgicalCase\)/)
+    expect(body).toMatch(/background: fill/)
+    expect(bodyOf('CaseCard')).toMatch(/washFor\(surgicalCase\)/)
+  })
+
+  it('writes on the week card in whichever ink can be read', () => {
+    // Banana needs dark text and Grape needs white. One constant for both
+    // leaves one of them unreadable — so it is measured per colour, which is
+    // what Google does and why its two greens never look alike.
+    expect(bodyOf('WeekCase')).toMatch(/inkOn\(fill\)/)
   })
 
   it('washes the also-on rows in their own calendar colour', () => {
@@ -114,17 +129,22 @@ describe('the cards actually use it', () => {
     // undoing the separation work. Nothing failed, because a card with a
     // slightly wrong colour still looks like a card.
     const calls = [...caseWeek.matchAll(/washFor\(([^)]*)\)/g)].map(m => m[1])
-    expect(calls.length).toBeGreaterThan(1)
+    expect(calls.length).toBeGreaterThan(0)
     for (const args of calls) {
       expect(args, 'washFor takes a case, and optionally a dark flag')
         .not.toMatch(/,\s*[\d.]+/)
     }
   })
 
-  it('borders each card in a stronger pull of the same colour', () => {
+  it('borders the phone card in a stronger pull of the same colour', () => {
     // Against a tinted fill a grey hairline reads as dirt. The edge has to
     // come from the same hue or the card loses its outline entirely.
     expect(bodyOf('CaseCard')).toMatch(/withAlpha\(bar, 0\.35\)/)
-    expect(bodyOf('WeekCase')).toMatch(/withAlpha\(accentForCase\(surgicalCase\), 0\.35\)/)
+  })
+
+  it('needs no border on a solid week card', () => {
+    // The fill is the edge. A line around a strong colour is a second edge
+    // half a pixel from the first.
+    expect(bodyOf('WeekCase')).toMatch(/off \? colour\.line : 'transparent'/)
   })
 })

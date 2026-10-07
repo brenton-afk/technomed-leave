@@ -10,7 +10,7 @@ import {
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
 } from '../clinicalPlan/week.js'
 import {
-  accentForCase, accentTextForCase, NAVIGATION_ACCENT, washFor, withAlpha
+  accentForCase, accentTextForCase, NAVIGATION_ACCENT, washFor, withAlpha, inkOn
 } from '../clinicalPlan/theme.js'
 import { useIsDesktop } from '../design/viewport.js'
 import EditBooking from './cases/EditBooking.jsx'
@@ -539,6 +539,23 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
   const spare = Boolean(surgicalCase.notRequired) && !off
   const place = describeListPlace(surgicalCase.listPlace)
 
+  // Solid, like a Google Calendar entry, with the writing on top.
+  //
+  // The week used to pale every colour to about 90% lightness, which is what
+  // made Sage and Basil indistinguishable: paling moves every hue towards the
+  // same near-white, so two greens 20 apart at full strength ended up about 6
+  // apart on the card. Thani and Gupta have a case on the same list most
+  // weeks, and telling them apart at a glance is most of what the colour is
+  // for.
+  //
+  // The phone card keeps the pale wash. It carries far more text per card —
+  // operation, kit, supply, notes — and a column of solid blocks there reads
+  // as a stack of buttons rather than a list of cases.
+  const fill = off ? colour.surface : accentForCase(surgicalCase)
+  const ink = off
+    ? { ink: colour.inkFaint, muted: colour.inkFaint, faint: colour.inkFainter, line: colour.line }
+    : inkOn(fill)
+
   return (
     // A div, not a button. The arrows and the chip are buttons in their own
     // right, and a button inside a button is invalid HTML that browsers
@@ -546,9 +563,8 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
     // and does nothing at all.
     <div style={{
       marginBottom: 4, borderRadius: radius.control, overflow: 'hidden',
-      // Same wash as the day card, so a surgeon looks the same in both.
-      border: `1px solid ${off ? colour.line : withAlpha(accentForCase(surgicalCase), 0.35)}`,
-      background: off ? 'transparent' : washFor(surgicalCase),
+      border: `1px solid ${off ? colour.line : 'transparent'}`,
+      background: fill,
       opacity: off ? 0.55 : spare ? 0.72 : 1
     }}>
     <div style={{ display: 'flex', gap: 7, alignItems: 'stretch' }}>
@@ -563,16 +579,16 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
       <button type="button" onClick={() => onOpen?.(surgicalCase)}
         style={{
           minWidth: 0, flex: 1, textAlign: 'left', cursor: 'pointer',
-          border: 'none', background: 'none', padding: '6px 0'
+          border: 'none', background: 'none', padding: '6px 8px'
         }}>
         <span style={{
-          ...text('caption'), fontWeight: 700, display: 'block', color: colour.ink,
+          ...text('caption'), fontWeight: 700, display: 'block', color: ink.ink,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           ...(off ? { textDecoration: 'line-through' } : {})
         }}>
           {surgicalCase.patient}
-          <span style={{ color: colour.inkFaint, fontWeight: 400 }}> · </span>
-          <span style={{ color: off ? colour.inkFaint : accentTextForCase(surgicalCase) }}>
+          <span style={{ color: ink.faint, fontWeight: 400 }}> · </span>
+          <span style={{ color: ink.ink }}>
             {surgicalCase.surgeon}
           </span>
         </span>
@@ -580,7 +596,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
         {place?.headline && (
           <span style={{
             ...text('micro'), display: 'block', textTransform: 'none',
-            color: place.headline.includes('1st') ? colour.warning : colour.accentDeep
+            fontWeight: 700, color: ink.ink
           }}>{place.headline}</span>
         )}
 
@@ -590,7 +606,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           <span style={{
             ...text('micro'), display: '-webkit-box', WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical', overflow: 'hidden', textTransform: 'none',
-            fontWeight: 400, letterSpacing: 0, color: colour.inkMuted, lineHeight: 1.35
+            fontWeight: 400, letterSpacing: 0, color: ink.muted, lineHeight: 1.35
           }}>{surgicalCase.operation}</span>
         )}
 
@@ -606,16 +622,16 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
         {!off && suppliesFor(surgicalCase)?.map(entry => (
           <span key={entry.system} style={{
             ...text('micro'), display: 'block', textTransform: 'none',
-            letterSpacing: 0, lineHeight: 1.35, color: colour.ink,
+            letterSpacing: 0, lineHeight: 1.35, color: ink.ink,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
           }}>
             <strong style={{ fontWeight: 700 }}>{entry.system}</strong>
             {entry.supply ? (
-              <span style={{ color: entry.inferred ? colour.inkFainter : colour.inkMuted }}>
+              <span style={{ color: entry.inferred ? ink.faint : ink.muted }}>
                 {' '}{shortSupply(entry.supply)}{entry.inferred ? '?' : ''}
               </span>
             ) : (
-              <span style={{ color: colour.warning, fontWeight: 700 }}> supply?</span>
+              <span style={{ color: ink.ink, fontWeight: 700 }}> supply?</span>
             )}
           </span>
         ))}
@@ -643,7 +659,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
 
         {(off || spare) && (
           <span style={{
-            ...text('micro'), display: 'block', color: colour.inkFaint
+            ...text('micro'), display: 'block', color: ink.faint
           }}>{off ? 'Cancelled' : 'Not needed'}</span>
         )}
       </button>
@@ -662,9 +678,9 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           style={{
             display: 'block', width: '100%', cursor: 'pointer', textAlign: 'left',
             padding: '3px 7px 4px', border: 'none',
-            borderTop: `1px solid ${withAlpha(accentForCase(surgicalCase), 0.25)}`,
+            borderTop: `1px solid ${ink.line}`,
             background: 'none', ...text('micro'), textTransform: 'none',
-            color: colour.inkFaint
+            color: ink.faint
           }}>
           ★ Preferences
         </button>
@@ -677,9 +693,9 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           style={{
             display: 'block', width: '100%', cursor: 'pointer', textAlign: 'left',
             padding: '3px 7px 4px', border: 'none',
-            borderTop: `1px solid ${withAlpha(accentForCase(surgicalCase), 0.25)}`,
+            borderTop: `1px solid ${ink.line}`,
             background: 'none', ...text('micro'), textTransform: 'none',
-            color: place ? colour.accentDeep : colour.inkFaint,
+            color: place ? ink.ink : ink.faint,
             fontWeight: place ? 700 : 400
           }}>
           {place ? 'Change list order' : '＋ List order'}

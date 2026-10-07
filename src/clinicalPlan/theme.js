@@ -377,3 +377,69 @@ export function withAlpha(hex, alpha) {
   // eslint-disable-next-line no-bitwise
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
 }
+
+// ─── Writing on top of a calendar colour ─────────────────────────────────────
+// "In Google Calendar the colours are solid and the writing is over the top,
+// so the differential between Basil and Sage is more pronounced. With the more
+// translucent colours on the app, Basil and Sage are almost identical."
+//
+// Exactly right, and measurable. Sage and Basil are 20 apart at full strength
+// and about 6 once paled, because paling moves every colour towards the same
+// near-white. Google keeps them solid and puts the text on top, which is why
+// the two greens never look alike there.
+//
+// Doing the same means the text colour can no longer be a constant. Banana
+// needs dark text and Grape needs white, and picking one for both leaves one
+// of them unreadable. Google picks per colour and so does this.
+
+/** Near-black for writing on a light calendar colour. */
+const ON_LIGHT = '#0d1b2a'
+
+/** Relative luminance, for choosing between the two. */
+function luminance(hex) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim())
+  if (!match) return 1
+  const n = parseInt(match[1], 16)
+  // eslint-disable-next-line no-bitwise
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map(v => v / 255)
+    .map(c => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/**
+ * The text colour to use on a solid calendar colour: whichever reads better.
+ *
+ * Measured rather than guessed from a lightness threshold. Tangerine and
+ * Lavender both sit near the middle, where a threshold picks one of them
+ * wrongly, and the wrong one is a card nobody can read.
+ */
+export function readableOn(background) {
+  return contrast('#ffffff', background) >= contrast(ON_LIGHT, background)
+    ? '#ffffff'
+    : ON_LIGHT
+}
+
+/**
+ * The three weights of text for a card filled with `background`.
+ *
+ * Built by fading the readable colour rather than by picking three colours,
+ * so the relationship holds whichever of the two it turned out to be.
+ */
+export function inkOn(background) {
+  const ink = readableOn(background)
+  const rgb = ink === '#ffffff' ? '255, 255, 255' : '13, 27, 42'
+  return {
+    ink,
+    muted: `rgba(${rgb}, 0.82)`,
+    faint: `rgba(${rgb}, 0.62)`,
+    // A line between rows of a filled card, in the card's own ink rather than
+    // a grey that would read as dirt on a strong colour.
+    line: `rgba(${rgb}, 0.22)`
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { accentForCase, washFor } from './theme.js'
+import { accentForCase, washFor, readableOn, inkOn } from './theme.js'
 import { hasConfirmedAccent } from './theme.js'
 import { SURGEON_COLOUR_NAMES } from './colours.js'
 
@@ -41,6 +41,20 @@ const distance = (a, b) => {
 // Carter all render Lavender, deliberately, and Hannan has no confirmed accent
 // and falls back to neutral — measuring those as pairs would measure the
 // fallback rather than the palette and report a pile of zero distances.
+const luminance = hex => {
+  const n = parseInt(String(hex).replace('#', ''), 16)
+  // eslint-disable-next-line no-bitwise
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map(v => v / 255)
+    .map(c => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+const contrastRatio = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
 const SURGEONS = Object.keys(SURGEON_COLOUR_NAMES).filter(hasConfirmedAccent)
 const accent = name => accentForCase({ surgeon: name })
 const wash = name => washFor({ surgeon: name })
@@ -140,5 +154,49 @@ describe('a neutral stays neutral', () => {
     // the washed-out palette it replaced.
     expect(spread(wash('Thani'))).toBeGreaterThan(40)
     expect(spread(wash('Gupta'))).toBeGreaterThan(40)
+  })
+})
+
+describe('solid, the way Google draws them', () => {
+  // "In Google Calendar the colours are solid and the writing is over the top,
+  // so the differential between Basil and Sage is more pronounced. With the
+  // more translucent colours on the app, Basil and Sage are almost identical
+  // which is confusing for Thani and Gupta bookings."
+  //
+  // Measurably right, and the reason is paling itself: it moves every hue
+  // towards the same near-white, so the gap between two colours shrinks with
+  // it. Nothing about the rendering could rescue them while they were paled.
+  it('separates Sage and Basil far better solid than paled', () => {
+    const solid = distance(accent('Thani'), accent('Gupta'))
+    const paled = distance(wash('Thani'), wash('Gupta'))
+    expect(solid).toBeGreaterThan(paled * 2.5)
+    expect(solid).toBeGreaterThan(18)
+  })
+
+  it('gives every accent a readable ink', () => {
+    // Banana wants dark and Grape wants white. A single constant leaves one
+    // of them unreadable, which is why it is chosen per colour.
+    for (const surgeon of SURGEONS) {
+      const fill = accent(surgeon)
+      const ink = readableOn(fill)
+      expect(contrastRatio(ink, fill), `${surgeon} on ${fill}`).toBeGreaterThan(4.5)
+    }
+  })
+
+  it('tells Thani and Gupta apart by their ink as well as their colour', () => {
+    // Two axes rather than one: a Sage card is dark-on-green and a Basil card
+    // is white-on-green, which reads at a distance even for somebody who does
+    // not know which green is whose.
+    expect(readableOn(accent('Thani'))).not.toBe(readableOn(accent('Gupta')))
+  })
+
+  it('fades the secondary text from whichever ink was chosen', () => {
+    // So the relationship holds either way round, rather than three colours
+    // picked to suit one of the two cases.
+    for (const surgeon of ['Thani', 'Gupta']) {
+      const shades = inkOn(accent(surgeon))
+      expect(shades.ink).toBe(readableOn(accent(surgeon)))
+      expect(shades.muted).toContain(shades.ink === '#ffffff' ? '255, 255, 255' : '13, 27, 42')
+    }
   })
 })
