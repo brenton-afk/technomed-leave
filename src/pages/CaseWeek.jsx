@@ -504,6 +504,22 @@ function Heading({ children }) {
 }
 
 /**
+ * A supply, short enough for a 200px column.
+ *
+ * "Distributor Loan" is three times the width of a week column's worth of
+ * patience. The full words stay on the phone card, where there is room for
+ * them; here the distinction that has to survive is which of the three it is,
+ * and "Dist" against "RHH" carries that in a quarter of the space.
+ */
+function shortSupply(supply) {
+  if (!supply) return null
+  if (/^consign/i.test(supply)) return 'cons'
+  if (/^rhh/i.test(supply)) return 'RHH loan'
+  if (/^distributor/i.test(supply)) return 'dist loan'
+  return supply.toLowerCase()
+}
+
+/**
  * One case in a week column.
  *
  * Not the full card. A week column is about 200px wide and the phone's card
@@ -577,6 +593,32 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
             fontWeight: 400, letterSpacing: 0, color: colour.inkMuted, lineHeight: 1.35
           }}>{surgicalCase.operation}</span>
         )}
+
+        {/* What is going in, and where it is coming from.
+            
+            The column had the patient, the surgeon and the operation and not
+            the system — so the one view that shows a whole week at once could
+            not answer "what am I packing for Thursday", which is most of why
+            somebody opens a week the day before.
+            
+            Above the rep on purpose: the kit decides what goes in the car,
+            and who is taking it is the next question after that. */}
+        {!off && suppliesFor(surgicalCase)?.map(entry => (
+          <span key={entry.system} style={{
+            ...text('micro'), display: 'block', textTransform: 'none',
+            letterSpacing: 0, lineHeight: 1.35, color: colour.ink,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+          }}>
+            <strong style={{ fontWeight: 700 }}>{entry.system}</strong>
+            {entry.supply ? (
+              <span style={{ color: entry.inferred ? colour.inkFainter : colour.inkMuted }}>
+                {' '}{shortSupply(entry.supply)}{entry.inferred ? '?' : ''}
+              </span>
+            ) : (
+              <span style={{ color: colour.warning, fontWeight: 700 }}> supply?</span>
+            )}
+          </span>
+        ))}
 
         {/* Who is on it. The phone card has carried this all along and the
             column did not, so the one view that shows the whole week at once

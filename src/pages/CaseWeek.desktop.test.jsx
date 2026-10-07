@@ -23,7 +23,8 @@ const EVENTS = [
   ev('a', 'Mardon DIPLOMAT - Fowler',
     'Surg: Fowler\nPt: Mardon\nHosp: RHH\n'
     + 'Procedure: Re do transphenoidal Rathkes/pituitary abscess with drain', '21'),
-  ev('b', 'Vellacott REFORM - Atallah (Aimee)', 'Surg: Atallah\nPt: Vellacott\nHosp: RHH', '23'),
+  ev('b', 'Vellacott REFORM - Atallah (Aimee)',
+    'Surg: Atallah\nPt: Vellacott\nHosp: RHH\nKit: Reform (Consignment)', '23'),
   // A second case at the same hospital on the same day. Without one there is
   // no running order to put in order, and the arrows correctly stay away.
   ev('c', 'Ashbury REFORM - Garg', 'Surg: Garg\nPt: Ashbury\nHosp: RHH', '21')
@@ -280,5 +281,47 @@ describe('the header earns its space', () => {
     await toWeek()
     expect(screen.getByLabelText('Previous week')).toBeInTheDocument()
     expect(screen.getByLabelText('Next week')).toBeInTheDocument()
+  })
+})
+
+
+describe('what is going in, on the week', () => {
+  beforeEach(() => widthOf(1680))
+
+  // "On the desktop version you can't see the name of the implant system
+  // being used in the cases tab. So you have no idea what system is being
+  // used, unless you go into the booking."
+  //
+  // The column carried the patient, the surgeon and the operation and not the
+  // kit — so the one view that shows a whole week at once could not answer
+  // "what am I packing for Thursday", which is most of why somebody opens a
+  // week the day before.
+  it('names the system on each card', async () => {
+    await toWeek()
+    expect(screen.getAllByText('Reform').length).toBeGreaterThan(0)
+  })
+
+  it('says where the kit is coming from', async () => {
+    await toWeek()
+    const wednesday = document.querySelector('[data-week-column="2026-09-23"]')
+    expect(wednesday.textContent).toMatch(/Reform/)
+    expect(wednesday.textContent).toMatch(/cons/)
+  })
+
+  it('shortens the supply to fit a column', async () => {
+    // "Distributor Loan" is three times a week column's worth of patience.
+    // The full words stay on the phone card, where there is room.
+    await toWeek()
+    const wednesday = document.querySelector('[data-week-column="2026-09-23"]')
+    expect(wednesday.textContent).not.toMatch(/Consignment/)
+  })
+
+  it('puts the kit above the rep', async () => {
+    // The kit decides what goes in the car; who is taking it is the next
+    // question after that.
+    await toWeek()
+    const wednesday = document.querySelector('[data-week-column="2026-09-23"]')
+    expect(wednesday.textContent.indexOf('Reform'))
+      .toBeLessThan(wednesday.textContent.indexOf('Aimee'))
   })
 })
