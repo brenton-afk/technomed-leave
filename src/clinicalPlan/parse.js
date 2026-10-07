@@ -991,7 +991,14 @@ export function cleanOperation(text, o = {}) {
     'anterior', 'posterior', 'superior', 'inferior',
     'tibia', 'tibial', 'femur', 'femoral', 'fibula', 'humerus', 'radius',
     'ulna', 'clavicle', 'patella', 'calcaneus', 'scapula', 'pelvis',
-    'ankle', 'wrist', 'elbow', 'shoulder', 'hip', 'knee', 'foot', 'hand'
+    'ankle', 'wrist', 'elbow', 'shoulder', 'hip', 'knee', 'foot', 'hand',
+    // Which part of the spine. Found by the corpus test the moment it was
+    // written: the inventory calls a system "Reform Cervical", so Singh's
+    // booking — "Posterior cervical C3-5 decompression +/- lateral mass
+    // screws" — was being shown as a posterior decompression with no region
+    // named at all.
+    'cervical', 'thoracic', 'lumbar', 'sacral', 'lumbosacral',
+    'thoracolumbar', 'cervicothoracic', 'spine', 'spinal'
   ])
 
   // What is being put in, and the words joining it together.
@@ -1004,11 +1011,30 @@ export function cleanOperation(text, o = {}) {
     'plate', 'plates', 'plating', 'screw', 'screws', 'nail', 'nails',
     'wire', 'wires', 'pin', 'pins', 'fixation', 'orif'
   ])
+
+  // What is being done. These can appear in a product's name and can never be
+  // only a product's name.
+  //
+  // The one that caused this: there is a loan set called "TM Screw Removal",
+  // so "L1-L3 Pedicle Screw Removal" matched it, and every word of a matched
+  // kit is struck out of the operation. "Screw" survived because it is
+  // fixation; "Removal" did not, and the card read "L1-L3 Pedicle Screw" — a
+  // different operation, and the opposite one.
+  //
+  // That is the worst shape this bug can take. A missing word looks like a
+  // shorter description rather than a wrong one, so nothing about the card
+  // invites a second look.
+  const DOING = new Set([
+    'removal', 'removals', 'remove', 'explant', 'revision', 'revise',
+    'insertion', 'insert', 'exchange', 'exploration', 'washout', 'debridement',
+    'reduction', 'release', 'repair', 'reconstruction', 'biopsy', 'graft',
+    'augmentation', 'replacement', 'resection', 'closure'
+  ])
   const JOINERS = new Set(['and', 'with', 'plus', 'the', 'for', 'to', 'of', 'a'])
 
   const keep = word =>
     PROCEDURE_WORDS.has(word) || ANATOMY.has(word)
-    || FIXATION.has(word) || JOINERS.has(word)
+    || FIXATION.has(word) || JOINERS.has(word) || DOING.has(word)
 
   const drop = new Set([
     ...systemWords(context),
