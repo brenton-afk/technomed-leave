@@ -250,7 +250,7 @@ function Candidate({ candidate, user, onDone }) {
             background: colour.canvas, border: `1px solid ${colour.line}`,
             borderRadius: radius.control, padding: space.sm,
             whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            maxHeight: 220, overflowY: 'auto',
+            maxHeight: 220, overflowY: 'auto', overflowX: 'hidden',
             userSelect: 'text', WebkitUserSelect: 'text'
           }}>
             {candidate.from && <div style={{ color: colour.inkFainter }}>From {candidate.from}</div>}
@@ -412,7 +412,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
             }}>Close</button>
           </div>
 
-          <div style={{ padding: space.md, overflowY: 'auto', flex: 1 }}>
+          <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
             {error && (
               <div style={{
                 background: colour.dangerSoft, border: `1px solid ${colour.dangerLine}`,

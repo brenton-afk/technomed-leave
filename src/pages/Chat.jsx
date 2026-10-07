@@ -412,7 +412,7 @@ export function ChannelView({ channel, title, subtitle, user, onBack }) {
     <Page style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Header eyebrow="Team" title={title} subtitle={subtitle} onBack={onBack} />
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: space.md, minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: space.md, minHeight: 0 }}>
         {error && <Banner tone="danger">{error}</Banner>}
         {messages === null && (
           <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>

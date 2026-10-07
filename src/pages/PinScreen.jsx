@@ -401,7 +401,7 @@ export default function PinScreen({ onLogin }) {
     ]
 
     return (
-      <div style={{ ...w, overflowY: 'auto' }}>
+      <div style={{ ...w, overflowY: 'auto', overflowX: 'hidden' }}>
         <div style={{ padding: '48px 24px 24px', textAlign: 'center' }}>
           <img src="/logo.png" alt="TechnoMed" style={{ height: '46px', width: 'auto', marginBottom: '6px' }} />
           <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>Staff Portal</div>

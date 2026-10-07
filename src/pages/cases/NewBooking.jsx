@@ -359,7 +359,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], onC
             }}>Close</button>
           </div>
 
-          <div style={{ padding: space.md, overflowY: 'auto', flex: 1 }}>
+          <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
             {dictating && (
               <DictateBooking
                 user={user}

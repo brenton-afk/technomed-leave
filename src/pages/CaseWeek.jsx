@@ -1326,7 +1326,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           page and the header behind it reach both edges — see index.css. */}
       <div className="tm-measure"
         style={{
-          flex: 1, overflowY: 'auto',
+          flex: 1, overflowY: 'auto', overflowX: 'hidden',
           // Wider gutters on a big screen so the week is not glued to the
           // glass, and the phone's 16px where 16px is most of the width.
           padding: desktop ? `${space.md}px ${space.xl}px 100px` : `${space.md}px ${space.md}px 100px`

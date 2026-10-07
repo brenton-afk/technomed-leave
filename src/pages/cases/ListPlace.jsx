@@ -122,7 +122,7 @@ export default function ListPlace({ surgicalCase, onSave, onClose }) {
             }}>Close</button>
           </div>
 
-          <div style={{ padding: space.md, overflowY: 'auto', flex: 1 }}>
+          <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
             {error && <Banner tone="danger">{error}</Banner>}
 
             <Field

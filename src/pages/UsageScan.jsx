@@ -870,7 +870,7 @@ export default function UsageScan({ user }) {
               <pre style={{
                 margin: '0 0 10px', padding: 10, background: '#f8f9fc', borderRadius: 8,
                 fontSize: 12, color: NAVY, lineHeight: 1.5, whiteSpace: 'pre-wrap',
-                fontFamily: 'inherit', maxHeight: 180, overflowY: 'auto'
+                fontFamily: 'inherit', maxHeight: 180, overflowY: 'auto', overflowX: 'hidden'
               }}>{usageMessage(caseRecord, caseRecord.items || [])}</pre>
               <div style={{ display: 'flex', gap: 8 }}>
                 <a href={smsLink(usageMessage(caseRecord, caseRecord.items || []))}

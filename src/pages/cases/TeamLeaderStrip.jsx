@@ -117,7 +117,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                 </div>
               </div>
 
-              <div style={{ padding: space.md, overflowY: 'auto', flex: 1 }}>
+              <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
                 {leaderAway && (
                   <div style={{
                     background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,

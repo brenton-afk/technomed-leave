@@ -591,7 +591,15 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
             )}
           </div>
 
-          <div style={{ padding: space.md, overflowY: 'auto', flex: 1 }}>
+          {/* overflowX is not redundant beside overflowY.
+              
+              CSS computes a `visible` axis to `auto` when the other axis is
+              scrollable, so setting only overflowY quietly turns on sideways
+              scrolling too — and the sheet pans off the screen under a thumb
+              that was trying to scroll up. Reported on this sheet; it was true
+              of all eleven scroll regions in the app, and is now spelled out
+              in every one of them. See the guard in sheets.test.jsx. */}
+          <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
             {status === 'loading' && (
               <div style={{ ...text('body'), color: colour.inkFaint, textAlign: 'center', padding: space.lg }}>
                 Loading the booking…
