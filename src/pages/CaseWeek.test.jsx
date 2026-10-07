@@ -169,9 +169,13 @@ describe('a navigation case', () => {
     events = [mitchell()]
     const { container } = show()
     await waitFor(() => expect(screen.getByText('Mitchell')).toBeInTheDocument())
-    const bar = [...container.querySelectorAll('span[aria-hidden="true"]')]
-      .find(el => el.style.width === '5px')
-    expect(bar.style.background).toBe('rgb(246, 192, 38)')   // Banana, not blueberry
+    // The whole card carries the colour now, so that is where it is checked.
+    // The fact being protected has not changed: an AIRO case belonging to one
+    // of our surgeons stays their colour rather than turning blueberry, which
+    // would say the case is somebody else's.
+    const card = [...container.querySelectorAll('div')]
+      .find(el => el.style.background === 'rgb(246, 192, 38)')   // Banana
+    expect(card, 'the card should be drawn in Banana').toBeTruthy()
   })
 
   it('still says it needs the platform', async () => {

@@ -5,9 +5,10 @@ import { withAlpha, washFor } from '../clinicalPlan/theme.js'
 import { SURGEON_ACCENTS } from '../clinicalPlan/theme.js'
 
 // ─── The surgeon's colour, over the whole card ───────────────────────────────
-// A booking used to carry a 5px strip of its surgeon's colour down one edge.
-// In a 200px week column that is 2% of the card and reads as nothing, so the
-// card itself takes the colour now, washed right out.
+// A booking carried a 5px strip of its surgeon's colour, then a pale wash, and
+// now the solid colour with the writing on top — the way a Google Calendar
+// entry is drawn, and the only version in which Sage and Basil are far enough
+// apart to tell a Thani case from a Gupta one.
 //
 // Guarded structurally as well as behaviourally, because jsdom has no layout:
 // a test can assert a background is set and still not notice the card went
@@ -16,10 +17,18 @@ import { SURGEON_ACCENTS } from '../clinicalPlan/theme.js'
 
 const caseWeek = readFileSync(join(__dirname, '..', 'pages', 'CaseWeek.jsx'), 'utf8')
 
+/**
+ * One component's source, from its declaration to the next one.
+ *
+ * Measured rather than guessed at a fixed length: CaseCard is several
+ * thousand characters and a slice that stopped short of its end would quietly
+ * stop checking most of it, which is the sort of test that passes forever.
+ */
 const bodyOf = name => {
   const from = caseWeek.indexOf(`function ${name}(`)
   expect(from, `${name} should exist`).toBeGreaterThan(-1)
-  return caseWeek.slice(from, from + 2600)
+  const next = caseWeek.indexOf('\nfunction ', from + 1)
+  return caseWeek.slice(from, next > from ? next : undefined)
 }
 
 describe('withAlpha', () => {
@@ -85,66 +94,90 @@ describe('withAlpha', () => {
   })
 })
 
+describe('the phone card and the week card are one thing at two sizes', () => {
+  // "You need a rule built in that the changes you make in one version MUST
+  // correspond to both versions. I don't want to have to redo every change
+  // for both versions."
+  //
+  // This is that rule, and it has been earned three times: the rep went onto
+  // the week and not the phone, the system went onto the week and not the
+  // phone, and the solid fill went onto the week and left the phone with the
+  // bug the week had just lost — Thani and Gupta still indistinguishable.
+  //
+  // The two views differ in how much fits on a card. They do not differ in
+  // what anything means, and every one of those misses was a meaning that
+  // only reached one of them. Where a treatment is about meaning, both carry
+  // it, and this fails when only one does.
+  const phone = bodyOf('CaseCard')
+  const week = bodyOf('WeekCase')
+
+  const both = (what, pattern) => {
+    it(what, () => {
+      expect(phone, `CaseCard — ${what}`).toMatch(pattern)
+      expect(week, `WeekCase — ${what}`).toMatch(pattern)
+    })
+  }
+
+  both('fills the card with the surgeon own colour, solid',
+    /const fill = off \? colour\.surface : accentForCase\(surgicalCase\)/)
+
+  both('writes in whichever ink can be read on that colour', /inkOn\(fill\)/)
+
+  both('draws a cancelled case in grey rather than in colour',
+    /off\s*\n?\s*\?\s*\{ ink: colour\.inkFaint/)
+
+  both('needs no border once the card is the colour',
+    /off \? colour\.line : 'transparent'/)
+
+  both('names every system with where its kit is coming from',
+    /suppliesFor\(surgicalCase\)/)
+
+  // Word boundaries on all of these. Without them a renamed field still
+  // matches its own prefix — surgicalCase.repHidden satisfies /\.rep/ — and
+  // the rule passes while the card has quietly stopped showing anything.
+
+  both('says who is on the case', /surgicalCase\.rep\b/)
+
+  both('lifts the rep onto a panel so the name is readable on any colour',
+    /background: ink\.line, color: ink\.ink, fontWeight: 700/)
+
+  both('offers the list order', /onSetPlace\b/)
+
+  both('offers the preference card', /onPreferences\b/)
+
+  it('leaves neither card reading its text colour from the page palette', () => {
+    // A token meant for a white page — inkMuted on a solid green — is the
+    // shape every one of these regressions took: right on one card and
+    // invisible on the other.
+    for (const [name, body] of [['CaseCard', phone], ['WeekCase', week]]) {
+      const strays = [...body.matchAll(
+        /color: colour\.(ink|inkMuted|inkFaint|inkFainter|accentDeep|warning|danger)\b/g)]
+        .map(m => `colour.${m[1]}`)
+      expect(strays, `${name} should take its text colour from inkOn`).toEqual([])
+    }
+  })
+})
+
 describe('the cards actually use it', () => {
-  it('washes the day card instead of standing it on a white surface', () => {
-    const body = bodyOf('CaseCard')
-    expect(body).toMatch(/background: wash\b/)
-    expect(body).not.toMatch(/background: colour\.surface/)
-  })
-
-  it('fills the week column card solid, like a calendar entry', () => {
-    // The pale wash moves every hue towards the same near-white, which is
-    // what made Sage and Basil indistinguishable: 20 apart at full strength,
-    // about 6 once paled. Thani and Gupta share a list most weeks.
-    //
-    // The phone card keeps the wash — it carries far more text per card, and
-    // a column of solid blocks there reads as a stack of buttons.
-    const body = bodyOf('WeekCase')
-    expect(body).toMatch(/const fill = off \? colour\.surface : accentForCase\(surgicalCase\)/)
-    expect(body).toMatch(/background: fill/)
-    expect(bodyOf('CaseCard')).toMatch(/washFor\(surgicalCase\)/)
-  })
-
-  it('writes on the week card in whichever ink can be read', () => {
-    // Banana needs dark text and Grape needs white. One constant for both
-    // leaves one of them unreadable — so it is measured per colour, which is
-    // what Google does and why its two greens never look alike.
-    expect(bodyOf('WeekCase')).toMatch(/inkOn\(fill\)/)
-  })
-
-  it('washes the also-on rows in their own calendar colour', () => {
-    expect(bodyOf('ItemRow')).toMatch(/background: hex \? withAlpha\(hex,/)
-  })
-
-  it('leaves a cancelled case uncoloured', () => {
-    // Struck through and grey already. Washing it in the surgeon's colour
-    // would make a cancelled case look as live as the one under it.
-    expect(bodyOf('CaseCard')).toMatch(/const wash = off \? 'transparent'/)
-  })
-
-  it('does not pass a leftover alpha where the dark flag now is', () => {
-    // washFor used to take an alpha as its second argument. When it stopped,
-    // the call sites kept passing 0.1 — which is truthy, so every card
-    // rendered the dark-mode accents: lighter, closer together, and quietly
-    // undoing the separation work. Nothing failed, because a card with a
-    // slightly wrong colour still looks like a card.
-    const calls = [...caseWeek.matchAll(/washFor\(([^)]*)\)/g)].map(m => m[1])
-    expect(calls.length).toBeGreaterThan(0)
-    for (const args of calls) {
-      expect(args, 'washFor takes a case, and optionally a dark flag')
-        .not.toMatch(/,\s*[\d.]+/)
+  it('fills both cards with the accent rather than a pale version of it', () => {
+    // Paling moves every hue towards the same near-white, so two colours 20
+    // apart at full strength end up about 6 apart on the card. That is the
+    // whole reason Sage and Basil looked alike.
+    for (const name of ['CaseCard', 'WeekCase']) {
+      expect(bodyOf(name), name).toMatch(/background: fill/)
+      expect(bodyOf(name), name).not.toMatch(/background: wash\b/)
     }
   })
 
-  it('borders the phone card in a stronger pull of the same colour', () => {
-    // Against a tinted fill a grey hairline reads as dirt. The edge has to
-    // come from the same hue or the card loses its outline entirely.
-    expect(bodyOf('CaseCard')).toMatch(/withAlpha\(bar, 0\.35\)/)
+  it('washes the also-on rows in their own calendar colour', () => {
+    // Those are not cases and keep the lighter treatment: a day with six of
+    // them should not read as six more bookings.
+    expect(bodyOf('ItemRow')).toMatch(/background: hex \? withAlpha\(hex,/)
   })
 
-  it('needs no border on a solid week card', () => {
-    // The fill is the edge. A line around a strong colour is a second edge
-    // half a pixel from the first.
-    expect(bodyOf('WeekCase')).toMatch(/off \? colour\.line : 'transparent'/)
+  it('leaves a cancelled case uncoloured on both', () => {
+    for (const name of ['CaseCard', 'WeekCase']) {
+      expect(bodyOf(name), name).toMatch(/off \? colour\.surface/)
+    }
   })
 })

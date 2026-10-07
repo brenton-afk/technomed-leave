@@ -179,29 +179,31 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
   // Told about, not attending. Drawn back like a cancelled case rather than
   // struck through — it is still going ahead, just without us.
   const spare = Boolean(surgicalCase.notRequired) && !off
-  const bar = off ? colour.inkFainter : accentForCase(surgicalCase)
-  // The whole card carries the surgeon's colour, washed out, the way a
-  // calendar entry does. A 5px strip reads on a phone and disappears in a
-  // week column; a wash reads at any size. See washFor.
+  // Solid, with the writing on top — the same treatment as the week column.
   //
-  // No second argument. It used to be the alpha, and when washFor stopped
-  // taking an alpha the leftover 0.1 became a truthy `dark` — so every card
-  // quietly rendered the dark-mode accents, which are lighter and sit closer
-  // together, undoing half the work done to separate Sage from Basil.
-  const wash = off ? 'transparent' : washFor(surgicalCase)
-  const edge = off ? colour.line : withAlpha(bar, 0.35)
-  const nameInk = off ? colour.inkFaint : accentTextForCase(surgicalCase)
+  // This card kept the pale wash when the week went solid, on the reasoning
+  // that it carries more text. That was a judgement nobody asked for and it
+  // left the phone with the bug the week had just lost: Sage and Basil are 20
+  // apart at full strength and about 6 once paled, so Thani and Gupta still
+  // looked alike here.
+  //
+  // The two views are one thing seen at two sizes. They differ in how much
+  // fits, not in what a colour means — see the parity test in wash.test.js,
+  // which fails if one is changed without the other.
+  const fill = off ? colour.surface : accentForCase(surgicalCase)
+  const ink = off
+    ? { ink: colour.inkFaint, muted: colour.inkFaint, faint: colour.inkFainter, line: colour.line }
+    : inkOn(fill)
   const place = describeListPlace(surgicalCase.listPlace)
 
   return (
     <div
       style={{
         display: 'flex', width: '100%', gap: 0, padding: 0, alignItems: 'stretch',
-        background: wash, border: `1px solid ${edge}`,
+        background: fill, border: `1px solid ${off ? colour.line : 'transparent'}`,
         borderRadius: radius.card, marginBottom: space.sm, overflow: 'hidden',
         opacity: busy ? 0.55 : spare ? 0.72 : 1, transition: 'opacity 120ms'
       }}>
-      <span aria-hidden="true" style={{ width: 5, background: bar, flexShrink: 0 }} />
 
 
       {/* The case, and the one control that is not the case. They are siblings
@@ -221,12 +223,12 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           cursor: onOpen ? 'pointer' : 'default'
         }}>
         <span style={{
-          ...text('bodyStrong'), display: 'block', color: off ? colour.inkFaint : colour.ink,
+          ...text('bodyStrong'), display: 'block', color: ink.ink,
           ...(off ? { textDecoration: 'line-through' } : {})
         }}>
           {surgicalCase.patient}
-          <span style={{ color: colour.inkFainter, fontWeight: 400 }}> / </span>
-          <span style={{ color: nameInk }}>{surgicalCase.surgeon}</span>
+          <span style={{ color: ink.faint, fontWeight: 400 }}> / </span>
+          <span style={{ color: ink.ink }}>{surgicalCase.surgeon}</span>
         </span>
 
         {(off || spare || surgicalCase.navigation || surgicalCase.selfFunding
@@ -235,7 +237,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
             {off && (
               <span style={{
                 padding: '1px 7px', borderRadius: radius.pill,
-                border: `1px solid ${colour.inkFainter}`, color: colour.inkFaint,
+                border: `1px solid ${ink.line}`, color: ink.faint,
                 ...text('micro'), textTransform: 'uppercase'
               }}>Cancelled</span>
             )}
@@ -248,7 +250,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
             {spare && (
               <span style={{
                 padding: '1px 7px', borderRadius: radius.pill,
-                background: colour.inkMuted, color: 'white',
+                background: ink.line, color: ink.ink,
                 ...text('micro'), textTransform: 'uppercase'
               }}>{NOT_REQUIRED_LABEL}</span>
             )}
@@ -258,8 +260,8 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
             {surgicalCase.selfFunding && !off && (
               <span style={{
                 padding: '1px 7px', borderRadius: radius.pill,
-                background: colour.warningSoft, color: colour.ink,
-                border: `1px solid ${colour.warningLine}`,
+                background: ink.line, color: ink.ink,
+                border: `1px solid ${ink.line}`,
                 ...text('micro'), textTransform: 'uppercase'
               }}>Self funding</span>
             )}
@@ -276,8 +278,8 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
               <span style={{
                 ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.4px',
                 borderRadius: radius.pill, padding: '1px 7px', fontWeight: 700,
-                background: withAlpha(accentForCase(surgicalCase), 0.22),
-                color: accentTextForCase(surgicalCase)
+                background: ink.line,
+                color: ink.ink
               }}>Orthopaedic</span>
             )}
 
@@ -288,8 +290,8 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
                 // solid navigation badge is how the card says "we are there
                 // with the AIRO", which is the opposite of what this case is.
                 background: spare ? 'transparent' : NAVIGATION_ACCENT,
-                color: spare ? colour.inkFaint : 'white',
-                border: spare ? `1px solid ${colour.line}` : 'none',
+                color: ink.ink,
+                border: `1px solid ${ink.line}`,
                 ...text('micro'), textTransform: 'uppercase'
               }}>{surgicalCase.navigation}</span>
             )}
@@ -303,10 +305,10 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           <span style={{ display: 'block', marginTop: 3 }}>
             <span style={{
               ...text('bodyStrong'),
-              color: place.headline.includes('1st') ? colour.warning : colour.accentDeep
+              fontWeight: 700, color: ink.ink
             }}>{place.headline}</span>
             {place.ahead && (
-              <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
+              <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
                 {place.ahead}
               </span>
             )}
@@ -316,7 +318,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
         {/* The operation leads: "C5/6 ACDF" says more about a case than the
             implant system does. */}
         {surgicalCase.operation && (
-          <span style={{ ...text('bodyStrong'), display: 'block', color: colour.ink }}>
+          <span style={{ ...text('bodyStrong'), display: 'block', color: ink.ink }}>
             {surgicalCase.operation}
           </span>
         )}
@@ -328,7 +330,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
             per system, because a case is often two systems with different
             answers and one line for both said the wrong thing about one. */}
         {suppliesFor(surgicalCase) && (
-          <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
+          <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
             {suppliesFor(surgicalCase).map((entry, i) => (
               <React.Fragment key={entry.system}>
                 {i > 0 && ' · '}
@@ -336,12 +338,12 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
                 {entry.supply ? (
                   <span style={{
                     fontWeight: entry.inferred ? 400 : 700,
-                    color: entry.inferred ? colour.inkFaint : colour.ink
+                    color: entry.inferred ? ink.faint : ink.ink
                   }}>
                     {' '}({entry.supply}{entry.inferred ? '?' : ''})
                   </span>
                 ) : (
-                  <span style={{ color: colour.warning, fontWeight: 700 }}> (supply?)</span>
+                  <span style={{ color: ink.ink, fontWeight: 700 }}> (supply?)</span>
                 )}
               </React.Fragment>
             ))}
@@ -349,19 +351,36 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
         )}
 
         {surgicalCase.kit && (
-          <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
+          <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
             Kit: {surgicalCase.kit}
           </span>
         )}
 
+        {/* On a panel of its own rather than in the card's own ink.
+        
+        It was the same colour as everything else at 82% strength, which
+        on a mid-green is barely there — reported as hardly showing up on
+        the green surgeon bookings. A panel of the ink at low opacity
+        lifts the name off whatever colour is behind it, and works the
+        same on Banana as on Grape because it is made from the ink that
+        was already chosen to be readable on that fill.
+        
+        It also separates the rep from the kit above it at a glance,
+        which is the other thing the line is for. */}
         {surgicalCase.rep && (
-          <span style={{ ...text('caption'), display: 'block', color: colour.accentDeep }}>
+                    <span style={{
+            ...text('caption'), display: 'inline-flex', alignItems: 'center',
+            marginTop: 3, padding: '1px 8px', borderRadius: radius.pill,
+            background: ink.line, color: ink.ink, fontWeight: 700
+          }}>
+            {/* The name in its own element, so it can be read — and found —
+                as a name rather than as part of a sentence. */}
             Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
           </span>
         )}
 
         {surgicalCase.unread && (
-          <span style={{ ...text('caption'), display: 'block', color: colour.inkMuted }}>
+          <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
             {surgicalCase.unread}
           </span>
         )}
@@ -373,7 +392,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
             ...text('caption'), display: 'block', marginTop: 2,
             fontStyle: note.kind === 'booking' ? 'normal' : 'italic',
             fontWeight: note.kind === 'clinicalAlert' ? 700 : 400,
-            color: note.kind === 'clinicalAlert' ? colour.danger : colour.inkFaint
+            color: ink.ink, fontWeight: note.kind === 'clinicalAlert' ? 700 : 400
           }}>
             {note.text}
           </span>
@@ -395,10 +414,10 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
               display: 'inline-flex', alignItems: 'center', gap: 5,
               marginTop: space.sm, cursor: 'pointer', minHeight: 32,
               padding: `0 ${space.md}px`, borderRadius: radius.pill,
-              border: `1px solid ${place ? colour.accent : colour.line}`,
-              background: place ? colour.accentSoft : colour.surface,
+              border: `1px solid ${ink.line}`,
+              background: ink.line,
               ...text('caption'), fontWeight: 700,
-              color: place ? colour.accentDeep : colour.ink
+              color: ink.ink
             }}>
             {place ? 'Change list order' : '＋ Set list order'}
           </button>
@@ -418,8 +437,8 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
               display: 'inline-flex', alignItems: 'center', gap: 5,
               marginTop: space.sm, marginLeft: space.sm, cursor: 'pointer',
               minHeight: 32, padding: `0 ${space.md}px`, borderRadius: radius.pill,
-              border: `1px solid ${colour.line}`, background: colour.surface,
-              ...text('caption'), fontWeight: 700, color: colour.ink
+              border: `1px solid ${ink.line}`, background: ink.line,
+              ...text('caption'), fontWeight: 700, color: ink.ink
             }}>
             ★ Preferences
           </button>
@@ -644,15 +663,17 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
 
             Not clamped and not truncated: a rep's name is one short word, and
             an ellipsis through "Aimee" would save nothing. */}
+        {/* The same panel as the phone card. On a 200px column against a
+            solid green it was the least readable thing on the card. */}
         {surgicalCase.rep && !off && (
           <span style={{
-            ...text('micro'), display: 'block', textTransform: 'none',
-            letterSpacing: 0, color: colour.accentDeep
+            ...text('micro'), display: 'inline-flex', alignItems: 'center',
+            textTransform: 'none', letterSpacing: 0, marginTop: 2,
+            padding: '1px 7px', borderRadius: radius.pill,
+            background: ink.line, color: ink.ink, fontWeight: 700
           }}>
-            {/* Labelled, like the phone card. A bare first name in a column of
-                surnames and operations is easy to read straight past — it was
-                reported as not being there at all — and "Rep:" is the word
-                somebody is scanning for. */}
+            {/* The name in its own element, so it can be read — and found —
+                as a name rather than as part of a sentence. */}
             Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
           </span>
         )}
