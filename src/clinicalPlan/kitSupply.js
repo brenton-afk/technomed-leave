@@ -9,9 +9,13 @@
 // Three answers, and the difference between them is who has to do something:
 //
 //   Consignment      it is already at the hospital. Nobody does anything.
-//   RHH Loan         we move it ourselves, from RHH. A job for our team, on a
-//                    particular morning, and the thing most likely to be
-//                    forgotten because it does not involve anybody outside.
+//   TM Loan          one of ours, off the shelf at the office. Somebody puts
+//                    it in a car — the Shoreline and the Dakota loan kits sit
+//                    there, and a case covered by one needs no request at all.
+//   RHH Loan         we move it ourselves, from RHH to the other hospital. A
+//                    job for our team on a particular morning, and the thing
+//                    most likely to be forgotten because it involves nobody
+//                    outside.
 //   Distributor Loan somebody has to request it and chase it. A lead time, and
 //                    a phone call if it has not arrived.
 //
@@ -22,7 +26,9 @@
 // which is the whole reason the field could not just be a single choice.
 
 /** The three, in the order they appear on the buttons. */
-export const SUPPLY_OPTIONS = ['Consignment', 'RHH Loan', 'Distributor Loan']
+export const SUPPLY_OPTIONS = [
+  'Consignment', 'TM Loan', 'RHH Loan', 'Distributor Loan'
+]
 
 const SPLIT = /\s*[/,]\s*|\s+\+\s+/
 
@@ -99,6 +105,11 @@ export function matchSupply(text) {
   if (!said) return null
   if (/consign|^\s*cons\s*$/i.test(said)) return 'Consignment'
   if (/\brhh\b[\s-]*loan|loan[\s-]*(?:from[\s-]*)?\brhh\b/i.test(said)) return 'RHH Loan'
+  // Ours, from the office. Checked before the distributors below and before
+  // the bare "loan" at the bottom, both of which contain the same word.
+  if (/\b(?:tm|technomed)\b[\s-]*loan|loan[\s-]*(?:from[\s-]*)?\b(?:tm|technomed)\b/i.test(said)) {
+    return 'TM Loan'
+  }
   // Named distributors count as distributor loans. The team writes "DT LOAN"
   // for Device Technologies and "SIGNUS LOAN" for Signus, and both mean the
   // same job: a request to send, and a delivery to chase. Reading them as a

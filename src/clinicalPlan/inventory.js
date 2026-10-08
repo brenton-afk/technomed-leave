@@ -466,13 +466,17 @@ export function suggestSupply(system, hospital) {
   // Not merely "there is one at RHH". Mariner is consigned at RHH and a
   // Calvary case still gets a distributor set — which is what Loane and
   // O'Brien both have — and the Reform note says the same in words: "RHH
-  // only, so a Calvary case has to have a loan kit requested". The kits that
-  // move are the ones recorded as moving: Athlet's instrument kit, and the
-  // floating sets.
+  // only, so a Calvary case has to have a loan kit requested".
   //
   // Only between the two Hobart hospitals. Nothing is driven to Launceston.
   const hobart = site === 'RHH' || site === 'CLV'
-  if (hobart && (item.movesBetweenSites || item.floating)) return 'RHH Loan'
+  if (hobart) {
+    // One of ours off the shelf at the office — the Shoreline and the Dakota
+    // loan kits. Somebody puts it in a car and no request is made at all,
+    // which is a different job from fetching a tray out of RHH.
+    if (item.floatingAt === 'office') return 'TM Loan'
+    if (item.movesBetweenSites || item.floating) return 'RHH Loan'
+  }
 
   // Nothing of ours within reach: somebody has to request one.
   return 'Distributor Loan'

@@ -316,6 +316,25 @@ describe('what is going in, on the week', () => {
     expect(wednesday.textContent).not.toMatch(/Consignment/)
   })
 
+  it('has a short form for our own loan kit too', async () => {
+    // Four supplies now, three of them with "loan" in the name, and which
+    // one decides whether anybody has to do anything before Thursday: ring
+    // a distributor, fetch a tray out of RHH, or pick it up on the way.
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        events: [ev('tm', 'Quintrell SHORELINE - Ibbett',
+          'Surg: Ibbett\nPt: Quintrell\nHosp: CLV\nKit: Shoreline (TM Loan)', '23')],
+        syncedAt: '2026-09-21T02:00:00.000Z'
+      })
+    }))
+    show()
+    await waitFor(() => expect(screen.getByText('Quintrell')).toBeInTheDocument())
+    const wednesday = document.querySelector('[data-week-column="2026-09-23"]')
+    expect(wednesday.textContent).toMatch(/TM loan/)
+    expect(wednesday.textContent).not.toMatch(/TM Loan\b/)
+  })
+
   it('puts the kit above the rep', async () => {
     // The kit decides what goes in the car; who is taking it is the next
     // question after that.

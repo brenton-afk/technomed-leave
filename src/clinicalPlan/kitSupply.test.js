@@ -11,8 +11,20 @@ import {
 // decides whether a tray turns up.
 
 describe('the options', () => {
-  it('is the three that were asked for', () => {
-    expect(SUPPLY_OPTIONS).toEqual(['Consignment', 'RHH Loan', 'Distributor Loan'])
+  it('is the four, in the order the work gets easier to harder', () => {
+    // Consignment is nothing to do; a TM loan is a tray in a car; an RHH loan
+    // is a tray fetched out of another hospital; a distributor loan is a
+    // request and a chase.
+    expect(SUPPLY_OPTIONS)
+      .toEqual(['Consignment', 'TM Loan', 'RHH Loan', 'Distributor Loan'])
+  })
+
+  it('tells our own loan kit from the hospital one and the distributor one', () => {
+    // Three things with "loan" in the name and three different jobs.
+    expect(matchSupply('TM Loan')).toBe('TM Loan')
+    expect(matchSupply('TechnoMed loan')).toBe('TM Loan')
+    expect(matchSupply('RHH Loan')).toBe('RHH Loan')
+    expect(matchSupply('DT Loan')).toBe('Distributor Loan')
   })
 })
 

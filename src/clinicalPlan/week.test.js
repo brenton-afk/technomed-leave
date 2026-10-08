@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  resolveDefaultWeek, weekWindowFor, stepWeek, zoneAbbrev, zoneOffsetMs,
-  formatWeekRange, formatDayHeading, formatClock, formatTimeRange, mondayOf,
-  parseDateStr, addCivilDays, TZ
-} from './week.js'
+import { resolveDefaultWeek, weekWindowFor, stepWeek, zoneAbbrev, zoneOffsetMs, formatWeekRange, formatDayHeading, formatClock, formatTimeRange, mondayOf, parseDateStr, addCivilDays, TZ, todayStr } from './week.js'
 
 // Midday Hobart on a given August 2026 date. August is AEST (UTC+10), so
 // 02:00Z is 12:00 local — safely away from any midnight boundary.
@@ -16,9 +12,16 @@ describe('resolveDefaultWeek', () => {
     ['Tuesday', 25, '2026-08-24', '2026-08-30'],
     ['Wednesday', 26, '2026-08-24', '2026-08-30'],
     ['Thursday', 27, '2026-08-24', '2026-08-30'],
-    ['Friday', 28, '2026-08-31', '2026-09-06'],
-    ['Saturday', 29, '2026-08-31', '2026-09-06'],
-    ['Sunday', 30, '2026-08-31', '2026-09-06']
+    // Friday to Sunday used to roll forward to the following week, on the
+    // reasoning that Friday afternoon is when next week gets planned. It was
+    // reported as the portal "defaulting back to the last date you were
+    // looking at" — because a week that is not this one looks like a week
+    // somebody left it on, and from Friday to Sunday that is three days in
+    // seven. Nothing is remembered between visits, so there was never a last
+    // date to go back to; the roll-forward was the whole of it.
+    ['Friday', 28, '2026-08-24', '2026-08-30'],
+    ['Saturday', 29, '2026-08-24', '2026-08-30'],
+    ['Sunday', 30, '2026-08-24', '2026-08-30']
   ]
 
   it.each(cases)('on %s the default week is %s → %s', (_name, day, start, end) => {
@@ -36,16 +39,20 @@ describe('resolveDefaultWeek', () => {
     }
   })
 
-  it('flips forward on Friday and stays there until the next Monday', () => {
-    const thursday = resolveDefaultWeek(middayAug(27)).startDate
-    const friday = resolveDefaultWeek(middayAug(28)).startDate
-    const sunday = resolveDefaultWeek(middayAug(30)).startDate
-    const nextMonday = resolveDefaultWeek(new Date(Date.UTC(2026, 7, 31, 2, 0))).startDate
+  it('opens on the week containing today, every day of the week', () => {
+    // Next week is one tap away, and the arrow is the most used control on
+    // the screen. Today is not reachable by a tap nobody knew they had to
+    // make.
+    for (let day = 24; day <= 30; day++) {
+      const week = resolveDefaultWeek(middayAug(day))
+      expect(week.days, `${day} Aug`).toContain(todayStr(middayAug(day)))
+    }
+  })
 
-    expect(friday).not.toBe(thursday)
-    expect(sunday).toBe(friday)
-    // Monday's current week is the week Friday had been showing.
-    expect(nextMonday).toBe(friday)
+  it('moves on when the week does', () => {
+    expect(resolveDefaultWeek(middayAug(30)).startDate).toBe('2026-08-24')
+    expect(resolveDefaultWeek(new Date(Date.UTC(2026, 7, 31, 2, 0))).startDate)
+      .toBe('2026-08-31')
   })
 })
 
@@ -96,8 +103,8 @@ describe('Hobart daylight saving', () => {
     const w = resolveDefaultWeek(onTransition)
     expect(formatDayHeading(w.days[0]).startsWith('Monday')).toBe(true)
     expect(w.days).toHaveLength(7)
-    // Sunday → next week.
-    expect(w.startDate).toBe('2026-10-05')
+    // Sunday belongs to the week that is ending, not the one starting.
+    expect(w.startDate).toBe('2026-09-28')
   })
 })
 

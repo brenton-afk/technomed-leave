@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import EditBooking, { staleTitle, withReps } from './EditBooking.jsx'
@@ -751,7 +753,7 @@ describe('saying where each kit is coming from', () => {
   it('offers the three answers for each system', async () => {
     await openWith('Ascot / Athlet')
     for (const system of ['Ascot', 'Athlet']) {
-      for (const option of ['Consignment', 'RHH Loan', 'Distributor Loan']) {
+      for (const option of ['Consignment', 'TM Loan', 'RHH Loan', 'Distributor Loan']) {
         expect(screen.getByLabelText(`${system}: ${option}`)).toBeInTheDocument()
       }
     }
@@ -788,6 +790,23 @@ describe('saying where each kit is coming from', () => {
     expect(screen.getByLabelText('Ascot: Consignment')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('Athlet: RHH Loan')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('Athlet: Consignment')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lets a row of four wrap rather than squeezing the words', () => {
+    // Four options at 360px is 80px each, and "Distributor Loan" is not an
+    // 80px word — it wrapped to three lines and the row of buttons became a
+    // block of text. jsdom has no layout, so this reads the source: the row
+    // wraps and each button asks for 40%, which is two by two on a phone and
+    // four across where there is room.
+    const source = readFileSync(join(__dirname, 'EditBooking.jsx'), 'utf8')
+    // Bounded to KitSupply itself. An unbounded slice ran to the end of the
+    // file and found somebody else's wrapping row, so the guard passed with
+    // the wrap taken out — which is the one thing a guard must not do.
+    const from = source.indexOf('function KitSupply')
+    const row = source.slice(from, source.indexOf('export default function', from))
+    expect(row).toMatch(/flexWrap: 'wrap'/)
+    expect(row).toMatch(/flexBasis: '40%'/)
+    expect(row).not.toMatch(/flex: 1, minHeight: 40/)
   })
 
   it('draws nothing for a booking that names no system', async () => {

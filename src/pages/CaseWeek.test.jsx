@@ -794,43 +794,46 @@ describe('getting back to today from a week that is not this one', () => {
     }))
   }
 
-  it('opens on next week, which is the week being planned', async () => {
+  it('opens on this week, on a Friday as on any other day', async () => {
+    // "The portal keeps defaulting back to the last date you were looking at,
+    // instead of defaulting back to today's date."
+    //
+    // It never remembered a date. It rolled forward to next week from Friday
+    // — three days in seven where the app opened somewhere that was not
+    // today, which is indistinguishable from a week somebody left it on.
     onFriday()
     show()
-    // Monday the 5th is the first day shown, not today.
-    await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
-    expect(screen.getByText(/Back to today/i)).toBeInTheDocument()
-  })
-
-  it('goes to the week containing today, not back to the default', async () => {
-    onFriday()
-    show()
-    await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
-
-    fireEvent.click(screen.getByText(/Back to today/i))
-
-    // Friday's case, not next Monday's.
     await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
     expect(screen.queryByText('Kemp')).not.toBeInTheDocument()
   })
 
-  it('stops offering the way back once you are on today', async () => {
+  it('offers no way back, being already there', async () => {
     onFriday()
     show()
-    await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
-    fireEvent.click(screen.getByText(/Back to today/i))
-    await waitFor(() => expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
+    expect(screen.queryByText(/Back to today/i)).not.toBeInTheDocument()
   })
 
-  it('still works from a week reached with the arrows', async () => {
+  it('still has next week one tap away', async () => {
+    // Which is the thing the roll-forward was for, and it was never the only
+    // way to get there.
     onFriday()
     show()
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText(/next week/i))
     await waitFor(() => expect(screen.getByText('Kemp')).toBeInTheDocument())
+  })
+
+  it('comes back to today from wherever the arrows went', async () => {
+    onFriday()
+    show()
+    await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
     fireEvent.click(screen.getByLabelText(/next week/i))
     await waitFor(() => expect(screen.getByText(/Back to today/i)).toBeInTheDocument())
     fireEvent.click(screen.getByText(/Back to today/i))
     await waitFor(() => expect(screen.getByText('Hollis')).toBeInTheDocument())
   })
+
 })
 
 describe('a case we have been told about but are not needed at', () => {
@@ -1190,6 +1193,24 @@ describe('a booking with two systems supplied differently', () => {
     const card = screen.getByText('Loane').closest('div')
     expect(card.textContent).toMatch(/Mariner \(Distributor Loan\)/)
     expect(card.textContent).toMatch(/E4 Global PLIF \(Consignment\)/)
+  })
+
+  it('says when the kit is one of ours off the office shelf', async () => {
+    // "We need to add a TM Loan option to the where-the-kit-is-coming-from
+    // tab." A fourth answer and a fourth job: no request to anybody, no trip
+    // to RHH — somebody puts the Shoreline in a car on the way through.
+    events = [{
+      id: 'tm', summary: 'Quintrell SHORELINE - Ibbett',
+      description: 'Surg - Ibbett\nPt - Quintrell\nHosp: CLV\n'
+        + 'Procedure: L4-L5 ALIF\nKit: Shoreline (TM Loan)',
+      start: { dateTime: '2026-09-21T09:00:00+10:00' },
+      end: { dateTime: '2026-09-21T10:00:00+10:00' },
+      location: 'CLV'
+    }]
+    show()
+    await waitFor(() => expect(screen.getByText('Quintrell')).toBeInTheDocument())
+    const card = screen.getByText('Quintrell').closest('div')
+    expect(card.textContent).toMatch(/Shoreline \(TM Loan\)/)
   })
 
   it('does not read as though both are on loan', async () => {

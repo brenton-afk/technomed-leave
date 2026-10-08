@@ -400,6 +400,17 @@ describe('working out the supply from what is where', () => {
     expect(suggestSupply('Mariner', 'CLV')).toBe('Distributor Loan')
   })
 
+  it('calls the office loan kits ours', () => {
+    // The Shoreline and the Dakota loan kits sit at the TechnoMed office.
+    // Somebody puts one in a car and no request is made at all, which is a
+    // different job from fetching a tray out of RHH. Only visible where the
+    // system is not already consigned at that hospital — both of these are,
+    // so Mariner Outrigger is the one that shows it.
+    expect(suggestSupply('Mariner Outrigger', 'CLV')).toBe('RHH Loan')
+    expect(inventoryFor('Shoreline').floatingAt).toBe('office')
+    expect(inventoryFor('Dakota').floatingAt).toBe('office')
+  })
+
   it('only sends somebody to RHH for a kit that actually travels', () => {
     // Athlet's instrument kit is recorded as moving between sites. Reform is
     // recorded as RHH-only with a loan requested for Calvary, in those words.

@@ -106,11 +106,21 @@ function windowFromMonday(monday, tz = TZ) {
 //   Friday–Sunday   → next week, so the view flips forward every Friday in step
 //                     with the 5:30pm Friday email
 export function resolveDefaultWeek(now = new Date(), tz = TZ) {
-  const civil = zonedCivil(now, tz)
-  const weekday = civil.isoWeekday
-  const thisMonday = mondayOf(civil)
-  const monday = weekday <= 4 ? thisMonday : addCivilDays(thisMonday, 7)
-  return windowFromMonday(monday, tz)
+  // The week today is in. Always.
+  //
+  // This used to roll forward from Friday, on the reasoning that Friday
+  // afternoon is when next week gets planned. Reasonable, and wrong about
+  // what opening the app means: it was reported as the portal "defaulting
+  // back to the last date you were looking at", because a week that is not
+  // this one looks like a week somebody left it on — and from Friday to
+  // Sunday that is three days in seven.
+  //
+  // Nothing is remembered between visits either, so there was never a last
+  // date to go back to. The roll-forward was the whole of it.
+  //
+  // Next week is one tap away, and the arrow is the most used control on the
+  // screen. Today is not reachable by a tap you did not know you had to make.
+  return windowFromMonday(mondayOf(zonedCivil(now, tz)), tz)
 }
 
 // The window for the week containing an arbitrary date — used by manual

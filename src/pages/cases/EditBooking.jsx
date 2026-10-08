@@ -259,7 +259,11 @@ function KitSupply({ kit, system, onChange }) {
             ...text('caption'), color: colour.ink, fontWeight: 700,
             display: 'block', marginBottom: 4
           }}>{name}</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          {/* Two by two on a phone, four across where there is room. A row
+              of four at 360px gives each button 80px, and "Distributor
+              Loan" is not an 80px word — it wrapped to three lines and the
+              row of buttons became a block of text. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {SUPPLY_OPTIONS.map(option => {
               const on = chosen.get(name.toLowerCase()) === option
               return (
@@ -268,7 +272,8 @@ function KitSupply({ kit, system, onChange }) {
                   aria-label={`${name}: ${option}`}
                   onClick={() => onChange(setSupply(kit || system, name, option))}
                   style={{
-                    flex: 1, minHeight: 40, cursor: 'pointer', padding: '0 4px',
+                    flexGrow: 1, flexShrink: 1, flexBasis: '40%',
+                    minHeight: 40, cursor: 'pointer', padding: '0 4px',
                     borderRadius: radius.control,
                     border: `1px solid ${on ? colour.accent : colour.line}`,
                     background: on ? colour.accentSoft : colour.surface,

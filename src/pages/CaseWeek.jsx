@@ -527,12 +527,14 @@ function Heading({ children }) {
  *
  * "Distributor Loan" is three times the width of a week column's worth of
  * patience. The full words stay on the phone card, where there is room for
- * them; here the distinction that has to survive is which of the three it is,
- * and "Dist" against "RHH" carries that in a quarter of the space.
+ * them; here the distinction that has to survive is which of the four it is,
+ * and "TM" against "RHH" against "dist" carries that in a quarter of the
+ * space — three different people doing three different jobs.
  */
 function shortSupply(supply) {
   if (!supply) return null
   if (/^consign/i.test(supply)) return 'cons'
+  if (/^tm\b/i.test(supply)) return 'TM loan'
   if (/^rhh/i.test(supply)) return 'RHH loan'
   if (/^distributor/i.test(supply)) return 'dist loan'
   return supply.toLowerCase()
@@ -995,8 +997,11 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   // the first thing it shows is wrong, and quietly so.
   const [window_, setWindow] = useState(() => resolveDefaultWeek())
   const [selectedDay, setSelectedDay] = useState(() => todayStr())
-  const [plan, setPlan] = useState(() => readCachedPlan(
-    (prefs.weekStart ? weekWindowFor(prefs.weekStart) : resolveDefaultWeek()).startDate)?.plan || null)
+  // The cache for the week being shown, which is always the week containing
+  // today. It used to consult prefs.weekStart — a preference nothing has ever
+  // written — so the branch was dead and the fallback did all the work.
+  const [plan, setPlan] = useState(
+    () => readCachedPlan(resolveDefaultWeek().startDate)?.plan || null)
   const [status, setStatus] = useState('loading')
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
