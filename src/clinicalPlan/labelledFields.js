@@ -324,3 +324,95 @@ export function hospitalCode(value) {
   // An unrecognised hospital still groups, under whatever it was called.
   return trimmed ? trimmed.toUpperCase().slice(0, 12) : undefined
 }
+
+// ─── Keeping the written date in step with the day ───────────────────────────
+// "When a booking is moved in the portal and the calendar entry follows it, we
+// need to ensure that the date in the description gets altered in the calendar
+// entry, so that the information is accurate."
+//
+// Davie was moved to Tuesday 13 October and the entry moved with it — the title
+// bar of the event says Tuesday, October 13 — while the notes underneath still
+// read "Date: 08/10/2026". The app itself was never fooled: it reads the date
+// label only so as to consume it, and takes the event's own start as the truth.
+// People are not reading the event's start. They are reading the block of text,
+// and they forward it, print it and ring a hospital about it.
+//
+// So the written date follows the event. Not because anything in here needs it
+// — because it is in front of somebody.
+
+const WEEKDAYS = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+]
+
+/** The weekday of a plain yyyy-mm-dd, with no timezone anywhere near it. */
+function weekdayOf(y, m, d) {
+  return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]
+}
+
+/**
+ * The new date, written the way the old one was.
+ *
+ * Whoever typed "8/10/26" and whoever typed "Thursday 08-10-2026" both meant
+ * it to stay looking like that. Rewriting one into the house style would show
+ * up in the calendar's own revision history as an edit nobody made, which is
+ * the same reason setLabelledValue keeps the leading whitespace.
+ */
+function datedLike(existing, y, m, d) {
+  const was = String(existing || '').trim()
+  const separator = /[/.-]/.exec(was)?.[0] || '/'
+  // Four digits unless the old one plainly used two. A bare "8/10" with no
+  // year gets the full one: this is the line somebody reads to find out which
+  // day, so the year is worth the characters.
+  const shortYear = /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2}\b(?!\d)/.test(was)
+  const year = shortYear ? String(y).slice(-2) : String(y)
+  const date = [
+    String(d).padStart(2, '0'), String(m).padStart(2, '0'), year
+  ].join(separator)
+
+  // A weekday, where there was one. It is the part people actually act on —
+  // nobody checks a date against a calendar in a corridor — so leaving a stale
+  // "Thursday" in front of a corrected number would be worse than not touching
+  // the line at all.
+  const named = /^([A-Za-z]{3,9})\b/.exec(was)
+  const full = named && WEEKDAYS.find(day =>
+    day.toLowerCase() === named[1].toLowerCase())
+  const abbreviated = named && !full && WEEKDAYS.find(day =>
+    day.slice(0, 3).toLowerCase() === named[1].slice(0, 3).toLowerCase())
+
+  const weekday = weekdayOf(y, m, d)
+  if (full) return `${weekday} ${date}`
+  if (abbreviated) return `${weekday.slice(0, 3)} ${date}`
+  return date
+}
+
+/**
+ * Puts the description's date label back in step with the day the booking is on.
+ *
+ * Only where the label is already there. A booking whose team never wrote a
+ * date does not acquire one here: every description in the calendar would gain
+ * a line on its next save, which is a lot of noise to add in order to fix the
+ * ones that are wrong.
+ *
+ * Only where it disagrees, so an ordinary edit to the kit does not register as
+ * an edit to the date.
+ *
+ * @param {string} description the booking's notes
+ * @param {string} isoDate     yyyy-mm-dd, the day the event now starts
+ */
+export function withDateFollowing(description, isoDate) {
+  const text = String(description || '').replace(/\r\n?/g, '\n')
+  const on = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || '').trim())
+  if (!on) return text
+
+  const span = labelledFieldSpans(text).date
+  if (!span) return text
+
+  // Only a value that is actually a date. "Date: TBC" is somebody saying the
+  // day is not settled, and a provisional slot in the calendar is not the
+  // confirmation they are waiting for — overwriting it would make the line
+  // read as agreed when it is not, which is worse than leaving it stale.
+  if (!/\d{1,2}\s*[/.-]\s*\d{1,2}/.test(span.value)) return text
+
+  const written = datedLike(span.value, Number(on[1]), Number(on[2]), Number(on[3]))
+  return span.value.trim() === written ? text : setLabelledValue(text, 'date', written)
+}

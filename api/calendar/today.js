@@ -11,7 +11,7 @@ import {
 } from '../_googleCalendar.js'
 import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
-  parseLabelledDescription, descriptionNotes
+  parseLabelledDescription, descriptionNotes, withDateFollowing
 } from '../../src/clinicalPlan/labelledFields.js'
 import {
   readBooking, normaliseSurgeon, extractRep, stripIdentifiers,
@@ -439,8 +439,22 @@ async function handleSave(req, res) {
       if (guide && String(current.colorId || '') !== guide) patch.colorId = guide
     }
 
-    patch.description = withAttribution(patch.description, firstNameFor(session.email))
+    // The written date follows the booking. "When a booking is moved in the
+    // portal and the calendar entry follows it, we need to ensure that the
+    // date in the description gets altered, so that the information is
+    // accurate" — the entry moved to Tuesday 13 October and the notes under
+    // it still said 08/10/2026.
+    //
+    // Checked on every save, not only on a move. The ones that are already
+    // out of step were put that way by moves that happened before this
+    // existed, and they do not fix themselves by being moved again. Any edit
+    // to the booking now straightens it out, and a description that already
+    // agrees is left untouched.
     const wasOn = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
+    const onDay = (patch.start?.dateTime || '').slice(0, 10) || wasOn
+    patch.description = withDateFollowing(patch.description, onDay)
+
+    patch.description = withAttribution(patch.description, firstNameFor(session.email))
     const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })
 
     // Both days, when a booking moves: the one it left has a hole and the one it

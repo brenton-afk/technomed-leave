@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  labelledFieldSpans, setLabelledValue, replaceSurname, parseLabelledDescription
+  labelledFieldSpans, setLabelledValue, replaceSurname, parseLabelledDescription,
+  withDateFollowing
 } from './labelledFields.js'
 
 // Editing a booking writes to a calendar several people rely on, so the writer
@@ -102,5 +103,78 @@ describe('where the fields are', () => {
     for (const [field, value] of Object.entries(read)) {
       expect(spans[field].value.trim(), field).toBe(value)
     }
+  })
+})
+
+// ─── The written date, after the booking has been moved ──────────────────────
+// "When a booking is moved in the portal and the calendar entry follows it, we
+// need to ensure that the date in the description gets altered in the calendar
+// entry. So that the information is accurate. Note the booking was moved to
+// 13/10/26, but the description still says 8/10/26."
+//
+// Davie's entry sat under the heading "Tuesday, October 13" with "Date:
+// 08/10/2026" in the notes four lines below it. Nothing in the app was misled —
+// it reads the date label only so as to consume it, and takes the event's own
+// start as the truth — but the notes are the part a person reads, forwards and
+// rings a hospital about.
+describe('keeping the written date in step', () => {
+  const DAVIE = 'Surgeon: Gupta\nPatient: Davie\nDate: 08/10/2026\n'
+    + 'Hospital: RHH\nProcedure: C5 and C6 corpectomy cage and screws\n'
+    + 'Kit: Athlet Ascot'
+
+  it('moves the date with the booking', () => {
+    expect(withDateFollowing(DAVIE, '2026-10-13'))
+      .toMatch(/^Date: 13\/10\/2026$/m)
+  })
+
+  it('leaves every other line exactly as it was', () => {
+    // The whole design of this writer: a booking that has been wrong about
+    // several things cannot afford a rewriter that touches more than it must.
+    const moved = withDateFollowing(DAVIE, '2026-10-13')
+    expect(moved.split('\n').filter(l => !/^Date:/.test(l)))
+      .toEqual(DAVIE.split('\n').filter(l => !/^Date:/.test(l)))
+  })
+
+  it('writes it the way whoever typed it writes dates', () => {
+    // Rewriting "8/10/26" into the house style would show up in the calendar's
+    // own revision history as an edit nobody made.
+    expect(withDateFollowing('Date: 8/10/26', '2026-10-13')).toBe('Date: 13/10/26')
+    expect(withDateFollowing('Date - 23/09/2026', '2026-10-13'))
+      .toBe('Date - 13/10/2026')
+  })
+
+  it('moves the weekday with the date, where there is one', () => {
+    // The part people act on. Nobody checks a number against a calendar in a
+    // corridor, so a stale "Thursday" in front of a corrected date would be
+    // worse than not having touched the line.
+    expect(withDateFollowing('Date: Thursday 08/10/2026', '2026-10-13'))
+      .toBe('Date: Tuesday 13/10/2026')
+    expect(withDateFollowing('Date: Thu 08-10-2026', '2026-10-13'))
+      .toBe('Date: Tue 13-10-2026')
+  })
+
+  it('does not give a booking a date line it never had', () => {
+    // Otherwise every description in the calendar gains one on its next save,
+    // which is a lot of noise in order to fix the few that are wrong.
+    const none = 'Surgeon: Gupta\nPatient: Davie\nKit: Athlet'
+    expect(withDateFollowing(none, '2026-10-13')).toBe(none)
+  })
+
+  it('leaves a date nobody has settled yet alone', () => {
+    // A provisional slot in the calendar is not the confirmation they are
+    // waiting for. Writing a firm date over "TBC" would read as agreed.
+    expect(withDateFollowing('Date: TBC', '2026-10-13')).toBe('Date: TBC')
+    expect(withDateFollowing('Date: to be confirmed', '2026-10-13'))
+      .toBe('Date: to be confirmed')
+  })
+
+  it('does nothing at all where it already agrees', () => {
+    const right = 'Date: 13/10/2026\nKit: Athlet'
+    expect(withDateFollowing(right, '2026-10-13')).toBe(right)
+  })
+
+  it('does nothing when it is not told a day', () => {
+    expect(withDateFollowing(DAVIE, '')).toBe(DAVIE)
+    expect(withDateFollowing(DAVIE, 'next Tuesday')).toBe(DAVIE)
   })
 })
