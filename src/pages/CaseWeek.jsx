@@ -10,7 +10,8 @@ import {
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
 } from '../clinicalPlan/week.js'
 import {
-  accentForCase, accentTextForCase, NAVIGATION_ACCENT, washFor, withAlpha, inkOn
+  accentForCase, accentTextForCase, NAVIGATION_ACCENT, washFor, withAlpha,
+  inkOn, readableOn
 } from '../clinicalPlan/theme.js'
 import { isNavigationOnly } from '../clinicalPlan/systems.js'
 import { implantQuestion } from '../clinicalPlan/deduceKit.js'
@@ -159,6 +160,48 @@ const KIND_TONE = {
  * and a supply prompt on one is noise standing next to the cases that need it.
  */
 /**
+ * The navigation badge, readable on whatever colour the card happens to be.
+ *
+ * "Since we changed the background colours of the bookings to being more solid,
+ * the purple AIRO badge is not really clear and the black AIRO text gets lost."
+ *
+ * Both halves were measurable. The text was the card's own ink — near-black on
+ * most cards — sitting on #4a1c96, which is a contrast ratio of 1.57 where 4.5
+ * is the minimum anybody can read. And the pill itself is a dark purple, which
+ * on Fowler's purple card separated by 2.06 and on Garg's blue by 2.14: a dark
+ * blob on a dark card.
+ *
+ * Neither is fixable with another fixed colour. A white pill solves the dark
+ * cards and fails on Ibbett's banana at 1.71 — there is no one colour that
+ * reads on all nine surgeon accents, which is the whole reason the card's ink
+ * is chosen per card rather than set once.
+ *
+ * So: the purple stays, because that is what navigation is in this app and in
+ * the calendar it came from. The text becomes white, which reads on that purple
+ * at 11.07. And the pill is ringed in the card's own ink — the one colour
+ * already guaranteed to contrast with this fill, because inkOn picked it for
+ * exactly that. The badge therefore separates from every card there is, and
+ * from any accent added later.
+ */
+function NavigationBadge({ surgicalCase, ink, spare }) {
+  if (!surgicalCase?.navigation) return null
+  // Outlined rather than filled when we are not attending. A solid navigation
+  // badge is how the card says "we are there with the AIRO", which is the
+  // opposite of what this case is.
+  const filled = !spare
+  return (
+    <span style={{
+      ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.4px',
+      padding: '1px 7px', borderRadius: radius.pill, fontWeight: 700,
+      background: filled ? NAVIGATION_ACCENT : 'transparent',
+      color: filled ? readableOn(NAVIGATION_ACCENT) : ink.ink,
+      border: `1px solid ${ink.ink}`,
+      whiteSpace: 'nowrap'
+    }}>{surgicalCase.navigation}</span>
+  )
+}
+
+/**
  * What goes where the surname goes.
  *
  * "There was a booking for Monday that was entered without a patient name as
@@ -305,17 +348,8 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
               }}>Orthopaedic</span>
             )}
 
-            {surgicalCase.navigation && !off && (
-              <span style={{
-                padding: '1px 7px', borderRadius: radius.pill,
-                // Outlined rather than filled when we are not attending. A
-                // solid navigation badge is how the card says "we are there
-                // with the AIRO", which is the opposite of what this case is.
-                background: spare ? 'transparent' : NAVIGATION_ACCENT,
-                color: ink.ink,
-                border: `1px solid ${ink.line}`,
-                ...text('micro'), textTransform: 'uppercase'
-              }}>{surgicalCase.navigation}</span>
+            {!off && (
+              <NavigationBadge surgicalCase={surgicalCase} ink={ink} spare={spare} />
             )}
           </span>
         )}
@@ -653,6 +687,16 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
             ...text('micro'), display: 'block', textTransform: 'none',
             fontWeight: 700, color: ink.ink
           }}>{place.headline}</span>
+        )}
+
+        {/* The column never carried this at all, so the one view that shows a
+            whole week could not say which days need a scanner booked — and a
+            badge changed on the phone would not have shown up here to be
+            judged. Same component, so the two cannot drift apart. */}
+        {!off && surgicalCase.navigation && (
+          <span style={{ display: 'block', marginTop: 2 }}>
+            <NavigationBadge surgicalCase={surgicalCase} ink={ink} spare={spare} />
+          </span>
         )}
 
         {/* Two lines at most. A week is read by scanning down a column, and a
