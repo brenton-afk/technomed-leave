@@ -448,6 +448,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // Carried through to the card. It was being read and then left behind.
         selfFunding: read.selfFunding,
         patient: read.patient,
+        // Booked, not yet named. The kit still has to be there.
+        awaitingName: read.awaitingName,
         surgeon: read.surgeon,
         // The title's raw middle section is not kept: it ran the operation and
         // the system together, which is exactly the ambiguity being removed.

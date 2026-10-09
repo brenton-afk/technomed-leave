@@ -26,6 +26,8 @@
 // which is the whole reason the field could not just be a single choice.
 
 /** The three, in the order they appear on the buttons. */
+import { isNavigationOnly } from './systems.js'
+
 export const SUPPLY_OPTIONS = [
   'Consignment', 'TM Loan', 'RHH Loan', 'Distributor Loan'
 ]
@@ -156,6 +158,12 @@ export function setSupply(kit, system, supply) {
  * wrote, and from the system otherwise. Deduplicated case-insensitively: a
  * booking naming ASCOT in the title and Ascot in the kit is one system and
  * should get one row of buttons.
+ *
+ * Navigation is left out. "Spinal Brainlab" and "AIRO" turn up on a kit line
+ * often — they were on Oakley's booking from Hana — and there is no answer to
+ * give about them: the hospital owns the scanner, nobody requests one and
+ * nobody drives one over. The kit text keeps them, because the AIRO badge is
+ * read out of it; only the question goes away.
  */
 export function systemsToSupply({ kit, system } = {}) {
   const fromKit = parseKitSupplies(kit).map(e => e.system)
@@ -164,6 +172,11 @@ export function systemsToSupply({ kit, system } = {}) {
   const seen = new Set()
   return [...fromKit, ...fromSystem]
     .map(s => String(s || '').trim())
+    // Both sources, not just the kit field. A labelled booking puts the whole
+    // kit line in `system` — Oakley's read "Mariner / Spinal Brainlab / AIRO"
+    // there and nowhere else — so filtering one branch left the other asking
+    // which distributor the scanner was coming from.
+    .filter(s => !isNavigationOnly(s))
     .filter(s => {
       const key = s.toLowerCase()
       if (!s || seen.has(key)) return false

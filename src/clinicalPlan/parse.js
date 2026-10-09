@@ -1,6 +1,8 @@
 import { STAFF } from '../staffConfig.js'
 import { parseKitSupplies } from './kitSupply.js'
-import { findSystems, findLoanSets, systemWords, findNavigation, resolveKit } from './systems.js'
+import {
+  findSystems, findLoanSets, systemWords, findNavigation, resolveKit, isNavigationOnly
+} from './systems.js'
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 import { isPreOpNoise } from './preOpNoise.js'
 import { parseListPlace } from './listPlace.js'
@@ -126,6 +128,70 @@ export function sanitisePatient(raw) {
       return word.charAt(0).toUpperCase() + rest
     })
     .join(' ')
+}
+
+// ─── Words that sit where a surname should and are not one ───────────────────
+// "There was a booking for Monday that was entered without a patient name as it
+// wasn't yet confirmed. The portal missed it, probably because it didn't have a
+// patient name."
+//
+// It is worse than missing it. With no Pt: label the reader falls back to the
+// first word of the title, and the first word of a title is very often not a
+// person: "MARINER - Gupta" was read as a patient called Mariner, "Spine list -
+// Gupta" as one called Spine, and "TBA MARINER - Gupta" as one called Tba. A
+// fabricated surname is the worse of the two failures, because a card with a
+// name on it looks answered — nobody goes looking for the booking that is
+// missing, and nobody questions the one that is there.
+//
+// So the slot is checked against the things that genuinely turn up in it. What
+// is refused becomes a booking with no name yet rather than a booking with a
+// wrong one.
+
+/** Placeholders somebody types when the name is not known yet. */
+const PLACEHOLDER_NAMES = new Set([
+  'tba', 'tbc', 'tbd', 'unknown', 'unconfirmed', 'pending', 'name', 'names',
+  'patient', 'pt', 'nil', 'na', 'none', 'noname', 'xxx', 'xx', 'test', 'blank',
+  'confirmed', 'provisional', 'possible', 'potential', 'new', 'extra', 'add'
+])
+
+/** Places and list words. A theatre list is not a person. */
+const ADMIN_NAMES = new Set([
+  'rhh', 'clv', 'calvary', 'royal', 'hobart', 'lenah', 'valley', 'hospital',
+  'spine', 'spinal', 'ortho', 'orthopaedic', 'orthopedic', 'neuro', 'list',
+  'lists', 'theatre', 'theatres', 'case', 'cases', 'session', 'am', 'pm',
+  'morning', 'afternoon', 'ward', 'clinic', 'round', 'rounds', 'meeting',
+  'leave', 'oncall', 'call', 'holiday', 'admin', 'office', 'cancelled'
+])
+
+/**
+ * Whether a candidate surname is plainly not somebody's name.
+ *
+ * Deliberately a list of what it is *not*, never a test of what a surname looks
+ * like. Tasmanian surnames include La Pietra, O'Brien and Van der Berg, and
+ * every rule anybody writes for "looks like a name" throws one of those away —
+ * which this app has already done once, and filed a patient as "La".
+ */
+export function namesNobody(value) {
+  const text = String(value || '').trim()
+  if (!text) return true
+
+  const word = text.toLowerCase().replace(/[^a-z0-9'’\- ]/g, '').trim()
+  if (!word) return true
+  if (PLACEHOLDER_NAMES.has(word) || ADMIN_NAMES.has(word)) return true
+  // Every word of it is admin — "Spine List", "Theatre 3".
+  const words = word.split(/[\s-]+/).filter(Boolean)
+  if (words.length && words.every(w => ADMIN_NAMES.has(w) || /^\d+$/.test(w))) return true
+
+  // The kit, in the patient's slot. "MARINER - Gupta" is a booking that names
+  // its system and not its patient, which is exactly the case being caught.
+  if (findSystems(text).length || findLoanSets(text).length) return true
+  if (isNavigationOnly(text)) return true
+
+  // The surgeon, written first. "Gupta - Mariner PLIF" puts the surgeon where
+  // the patient usually is, and nobody is their own patient.
+  if (normaliseSurgeon(text)) return true
+
+  return false
 }
 
 export function normaliseSurgeon(raw) {
@@ -1198,11 +1264,32 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   // half a surname on the front of it is what started all this.
   const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
 
-  const patient = (severed ? titlePatient : labelledPatient) || fromTitle?.patient
+  const named = (severed ? titlePatient : labelledPatient) || fromTitle?.patient
   const surgeon = normaliseSurgeon(labelled.surgeon) || fromTitle?.surgeon
-  // Both names are needed. Without them this is a meeting, a list marker or a
-  // staffing entry, and calling it a case would put a half-blank card on the day.
-  if (!patient || !surgeon) return null
+
+  // A name, unless the slot is holding something that is not one. See
+  // namesNobody: "MARINER - Gupta" has no patient in it, and reading one out
+  // of it produces a card that looks answered.
+  const patient = named && !namesNobody(named) ? named : null
+
+  // A booking with no name yet is still a booking.
+  //
+  // "There was a booking for Monday that was entered without a patient name as
+  // it wasn't yet confirmed. The portal missed it." A hospital books the slot
+  // before the name is settled, and the kit still has to be there on Monday —
+  // which is the part that takes a week to arrange and the part that was going
+  // unseen.
+  //
+  // Only where the entry is plainly a case. The surgeon alone is not enough:
+  // a surgeon's leave, a clinic and a meeting all name one, and every one of
+  // those would become a blank card on the day. There has to be something
+  // being done or something being used as well.
+  const awaitingName = !patient && Boolean(surgeon)
+    && Boolean(kitField?.system || labelled.kit || labelled.procedure)
+
+  // A meeting, a list marker or a staffing entry. Calling it a case would put
+  // a half-blank card on the day.
+  if ((!patient && !awaitingName) || !surgeon) return null
 
   // Free-text reading still runs, as the fallback for whatever was not labelled.
   const inferred = describeCase(fromTitle?.procedure, description)
@@ -1247,6 +1334,10 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
 
   return {
     patient,
+    // The hospital has booked the slot and not settled the name. Rendered as
+    // "Name to come" rather than left blank, so it reads as a booking waiting
+    // on one thing instead of a card that failed to load.
+    awaitingName: awaitingName || undefined,
     surgeon,
     surgeonSource: normaliseSurgeon(labelled.surgeon) ? 'label'
       : (fromTitle?.surgeonSource || undefined),

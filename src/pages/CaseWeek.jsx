@@ -12,6 +12,8 @@ import {
 import {
   accentForCase, accentTextForCase, NAVIGATION_ACCENT, washFor, withAlpha, inkOn
 } from '../clinicalPlan/theme.js'
+import { isNavigationOnly } from '../clinicalPlan/systems.js'
+import { implantQuestion } from '../clinicalPlan/deduceKit.js'
 import { useIsDesktop } from '../design/viewport.js'
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
@@ -156,9 +158,29 @@ const KIND_TONE = {
  * Nothing at all for a case we are not attending: there is no kit to bring,
  * and a supply prompt on one is noise standing next to the cases that need it.
  */
+/**
+ * What goes where the surname goes.
+ *
+ * "There was a booking for Monday that was entered without a patient name as
+ * it wasn't yet confirmed. The portal missed it."
+ *
+ * It now reaches the week with no name on it, and a card with a blank at the
+ * front reads as one that failed to load. This says what is actually true:
+ * the slot is booked and the name has not come through yet. The kit, the
+ * surgeon and the hospital are all there, which is the part that has to be
+ * organised before Monday.
+ */
+function patientLabel(surgicalCase) {
+  return surgicalCase?.patient || (surgicalCase?.awaitingName ? 'Name to come' : '')
+}
+
 function suppliesFor(surgicalCase) {
   if (!surgicalCase || surgicalCase.cancelled || surgicalCase.notRequired) return null
-  const entries = (surgicalCase.supplies || []).filter(e => e?.system)
+  // Navigation is not something anybody supplies. The badge says AIRO; a line
+  // underneath reading "AIRO (Distributor Loan?)" says a tray is being chased
+  // that nobody has ever ordered.
+  const entries = (surgicalCase.supplies || [])
+    .filter(e => e?.system && !isNavigationOnly(e.system))
   if (!entries.length) return null
 
   return entries.map(entry => {
@@ -226,7 +248,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           ...text('bodyStrong'), display: 'block', color: ink.ink,
           ...(off ? { textDecoration: 'line-through' } : {})
         }}>
-          {surgicalCase.patient}
+          {patientLabel(surgicalCase)}
           <span style={{ color: ink.faint, fontWeight: 400 }}> / </span>
           <span style={{ color: ink.ink }}>{surgicalCase.surgeon}</span>
         </span>
@@ -350,6 +372,18 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           </span>
         )}
 
+        {/* The operation says implants are going in and the booking names no
+            kit. Asked, never filled in: a wrong answer written in as fact is
+            a tray from Melbourne that nobody can use, found in the theatre. */}
+        {implantQuestion(surgicalCase) && (
+          <span style={{
+            ...text('caption'), display: 'block',
+            color: ink.ink, fontWeight: 700
+          }}>
+            {implantQuestion(surgicalCase).asked}
+          </span>
+        )}
+
         {surgicalCase.kit && (
           <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
             Kit: {surgicalCase.kit}
@@ -405,7 +439,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
         {onSetPlace && !off && (
           <button
             type="button"
-            aria-label={`Set where ${surgicalCase.patient} is on the list`}
+            aria-label={`Set where ${patientLabel(surgicalCase)} is on the list`}
             onClick={() => onSetPlace(surgicalCase)}
             style={{
               // A bordered chip rather than a text link. The first version was
@@ -607,7 +641,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           ...(off ? { textDecoration: 'line-through' } : {})
         }}>
-          {surgicalCase.patient}
+          {patientLabel(surgicalCase)}
           <span style={{ color: ink.faint, fontWeight: 400 }}> · </span>
           <span style={{ color: ink.ink }}>
             {surgicalCase.surgeon}
@@ -656,6 +690,18 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
             )}
           </span>
         ))}
+
+        {/* The same question as the phone card. Implants are going in and the
+            booking has not said what. */}
+        {!off && implantQuestion(surgicalCase) && (
+          <span style={{
+            ...text('micro'), display: 'block', textTransform: 'none',
+            letterSpacing: 0, lineHeight: 1.35, color: ink.ink, fontWeight: 700,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+          }}>
+            {implantQuestion(surgicalCase).asked}
+          </span>
+        )}
 
         {/* Who is on it. The phone card has carried this all along and the
             column did not, so the one view that shows the whole week at once
@@ -711,7 +757,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
 
       {onSetPlace && !off && (
         <button type="button"
-          aria-label={`Set where ${surgicalCase.patient} is on the list`}
+          aria-label={`Set where ${patientLabel(surgicalCase)} is on the list`}
           onClick={() => onSetPlace(surgicalCase)}
           style={{
             display: 'block', width: '100%', cursor: 'pointer', textAlign: 'left',

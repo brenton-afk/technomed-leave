@@ -218,6 +218,57 @@ export const NAVIGATION = [
   }
 ]
 
+// ─── Navigation is not a kit we supply ───────────────────────────────────────
+// "The spinal Brainlab AIRO is only relevant to us in the sense that we need
+// the little AIRO badge applied to the booking, but instrument kits are not
+// required, so that kind of information when included in the booking can be
+// omitted from the instrument requirements — it will not require consignment
+// or loan kits so shouldn't be included moving forward."
+//
+// Oakley's booking from Hana at Calvary carried "Spinal Brainlab" and "AIRO" on
+// the kit line, and the portal offered a row of consignment/loan buttons
+// against each of them. Nothing can be answered there: the hospital owns the
+// scanner, nobody requests one from a distributor and nobody drives one over
+// from RHH. The badge is the entire job, and the badge already works.
+//
+// Deliberately narrow. An entry has to be navigation and nothing else before
+// it is dropped — "Mariner + AIRO" is a kit line with a real system on it, and
+// AIRO_SIGNALS matches Mariner on purpose, so testing for navigation alone
+// would throw the system away with it.
+
+/** Words that name a navigation platform rather than something implanted. */
+const NAVIGATION_WORDS =
+  /\b(?:airo|brain\s*lab|curve|vario\s*guide|navigation|nav|stealth|o-?arm)\b/gi
+
+/** Words that describe navigation without naming anything of ours. */
+const NAVIGATION_FILLER =
+  /\b(?:spinal|spine|cranial|cervical|lumbar|system|platform|scanner|support|required|req|and|with|the|for|only|case)\b/gi
+
+/**
+ * Whether a kit-line entry is a navigation platform and nothing more.
+ *
+ * True for "AIRO", "Spinal Brainlab", "Brainlab AIRO", "Curve navigation".
+ * False for "Mariner", "Mariner + AIRO", "Reform Cervical" — anything that
+ * also names a system, because that is a kit somebody has to produce.
+ */
+export function isNavigationOnly(name) {
+  const text = String(name || '').trim()
+  if (!text) return false
+
+  NAVIGATION_WORDS.lastIndex = 0
+  if (!NAVIGATION_WORDS.test(text)) return false
+  // Something implanted is named here too, so the entry stands.
+  if (findSystems(text).length) return false
+
+  const rest = text
+    .replace(NAVIGATION_WORDS, ' ')
+    .replace(NAVIGATION_FILLER, ' ')
+  // Anything left with a letter or a digit in it is a word this does not
+  // recognise, and an unrecognised word on a kit line is not something to
+  // quietly drop.
+  return !/[a-z0-9]/i.test(rest)
+}
+
 /** The navigation platforms named in a piece of text. */
 export function findNavigation(text) {
   const haystack = String(text || '')

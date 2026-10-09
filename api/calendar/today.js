@@ -789,7 +789,10 @@ async function tidyDay(date, preferred = null) {
       // A cancelled case keeps its place in the calendar but not in the
       // running order — the day should close up around it, the same as if it
       // had been deleted.
-      return read?.patient && !isCancelled(e.summary || '', e.description || '')
+      // A booking the hospital has not named yet still holds a slot, and the
+      // day has to close up around it like any other.
+      return (read?.patient || read?.awaitingName)
+        && !isCancelled(e.summary || '', e.description || '')
         ? {
           id: e.id,
           etag: e.etag,
