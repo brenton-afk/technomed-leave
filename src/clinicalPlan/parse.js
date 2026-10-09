@@ -170,7 +170,20 @@ const ADMIN_NAMES = new Set([
  * like. Tasmanian surnames include La Pietra, O'Brien and Van der Berg, and
  * every rule anybody writes for "looks like a name" throws one of those away —
  * which this app has already done once, and filed a patient as "La".
+ *
+ * ONLY for a name taken from a title. A typed "Patient:" label is a person
+ * saying who this is, and is checked with isPlaceholderName instead — a
+ * patient really is called Gupta on Thani's list on 12 October, which is a
+ * coincidence with a surgeon's name and not a parsing failure. Second-guessing
+ * a typed field would overrule the one source here that is not inferred.
  */
+export function isPlaceholderName(value) {
+  const text = String(value || '').trim()
+  if (!text) return true
+  const word = text.toLowerCase().replace(/[^a-z0-9'’\- ]/g, '').trim()
+  return !word || PLACEHOLDER_NAMES.has(word)
+}
+
 export function namesNobody(value) {
   const text = String(value || '').trim()
   if (!text) return true
@@ -1264,13 +1277,24 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   // half a surname on the front of it is what started all this.
   const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
 
-  const named = (severed ? titlePatient : labelledPatient) || fromTitle?.patient
+  const typed = severed ? titlePatient : labelledPatient
   const surgeon = normaliseSurgeon(labelled.surgeon) || fromTitle?.surgeon
 
-  // A name, unless the slot is holding something that is not one. See
-  // namesNobody: "MARINER - Gupta" has no patient in it, and reading one out
-  // of it produces a card that looks answered.
-  const patient = named && !namesNobody(named) ? named : null
+  // Where the name came from decides how hard it is questioned.
+  //
+  // A typed "Patient:" label is somebody saying who this is, and the only
+  // thing refused there is a placeholder — "Patient: TBA" is the booking this
+  // all started with. A patient on Thani's list really is called Gupta, which
+  // is a coincidence with a surgeon's name, and overruling a typed field on
+  // that basis would be the app deciding it knows better than the person who
+  // entered it.
+  //
+  // A name read out of a title is inferred, and gets the full check. That is
+  // where the fabrications came from: "MARINER - Gupta" has no patient in it
+  // at all, and reading one out produces a card that looks answered.
+  const patient = typed
+    ? (isPlaceholderName(typed) ? null : typed)
+    : (fromTitle?.patient && !namesNobody(fromTitle.patient) ? fromTitle.patient : null)
 
   // A booking with no name yet is still a booking.
   //

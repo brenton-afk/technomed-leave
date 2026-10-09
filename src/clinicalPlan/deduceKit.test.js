@@ -9,6 +9,7 @@ import { implantQuestion } from './deduceKit.js'
 import { isNavigationOnly } from './systems.js'
 import { systemsToSupply } from './kitSupply.js'
 import { readBooking, namesNobody } from './parse.js'
+import { findNavigation } from './systems.js'
 
 // ─── Reading more out of a booking than it says ──────────────────────────────
 // "I want a rule set that if the operation description includes acronyms like
@@ -235,10 +236,66 @@ describe('a booking with no patient name', () => {
     }
   })
 
+  it('trusts a name somebody typed, even when a surgeon shares it', () => {
+    // "The patient name is Gupta (not to be confused with surgeon Gupta — that
+    // is a coincidence)." Monday 12 October at Calvary, on Thani's list.
+    //
+    // A typed Patient: label is a person saying who this is. The fabrications
+    // all came from names read out of a title, and that is the only place the
+    // full check belongs — overruling a typed field would be the app deciding
+    // it knows better than whoever entered the booking.
+    const read = readBooking('Gupta DIPLOMAT SCREWS - Thani',
+      'Surgeon: Thani\nPatient: Gupta\nDate: 12/10/2026\nHospital: CLV\n'
+      + 'Procedure: L1 - L3 Pedicle screw removal\nKit: Diplomat (Consignment)')
+    expect(read.patient).toBe('Gupta')
+    expect(read.surgeon).toBe('Thani')
+    expect(read.awaitingName).toBeUndefined()
+  })
+
+  it('still refuses a placeholder somebody typed', () => {
+    // The booking this all started with. A label is trusted about who, not
+    // about whether there is a who yet.
+    const read = readBooking('MARINER - Thani',
+      'Surg: Thani\nPt: TBA\nHosp: RHH\nProcedure: L4/5 PLIF\nKit: Mariner')
+    expect(read.patient).toBeNull()
+    expect(read.awaitingName).toBe(true)
+  })
+
   it('does not turn a meeting or a leave day into a blank card', () => {
     // The surgeon alone is not enough. Every one of these names one.
     expect(readBooking('Spine MDT - Gupta', 'Surg: Gupta')).toBeNull()
     expect(readBooking('Gupta leave', 'Surg: Gupta')).toBeNull()
+  })
+})
+
+// ─── Taking screws out does not need navigation ──────────────────────────────
+// "AIRO is not required for a removal of pedicle screws. Please note this down
+// as a rule."
+describe('navigation on a removal', () => {
+  it('does not badge a pedicle screw removal', () => {
+    // Monday's case was badged twice over — "pedicle" is an AIRO signal and so
+    // is "diplomat", and the booking says both. Hence a rule above the
+    // signals rather than one among them.
+    expect(findNavigation('L1 - L3 Pedicle screw removal')).toEqual([])
+    expect(findNavigation('L1-L3 Pedicle screw removal Diplomat (Consignment)'))
+      .toEqual([])
+  })
+
+  it('still badges one where something is going back in', () => {
+    // A revision takes metal out and puts metal back, and the putting back is
+    // navigated like any other construct.
+    expect(findNavigation('Revision L1-L3 pedicle screws')).toEqual(['AIRO'])
+    expect(findNavigation('Removal of pedicle screws and refixation L2-L4'))
+      .toEqual(['AIRO'])
+    expect(findNavigation('L1-L3 pedicle screw removal and L4/5 PLIF'))
+      .toEqual(['AIRO'])
+  })
+
+  it('leaves every other AIRO case exactly as it was', () => {
+    for (const operation of ['L1-L3 Pedicle Screw Fixation', 'L4/5 PLIF',
+      'T10-L2 Pedicle Fixation for T12 Fracture', 'Max fax AIRO spin']) {
+      expect(findNavigation(operation), operation).toEqual(['AIRO'])
+    }
   })
 })
 

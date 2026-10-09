@@ -192,10 +192,42 @@ const AIRO_SIGNALS = [
   /(?:posterior|transforaminal)\s+(?:lumbar\s+)?interbody/
 ]
 
+// ─── Taking screws out does not need navigation ──────────────────────────────
+// "AIRO is not required for a removal of pedicle screws. Please note this down
+// as a rule."
+//
+// Navigation is for putting something in a place that cannot be seen. Screws
+// already in a patient are visible on the image intensifier and the surgeon is
+// following a track that exists — there is nothing to navigate to. Monday's
+// case at Calvary is exactly this: L1-L3 pedicle screw removal, carrying an
+// AIRO badge it did not need.
+//
+// It was badged twice over, which is why the rule has to sit above the signals
+// rather than among them: "pedicle" is an AIRO signal and so is "diplomat",
+// and that booking says both.
+
+/** The operation is a removal. */
+const IS_REMOVAL = /\b(?:removal|remove|removing|removed|explant(?:ation)?|r\s*\/\s*o)\b/i
+
+/**
+ * Something is also going in.
+ *
+ * A revision takes metal out and puts metal back, and the putting back is
+ * navigated like any other construct. So is a removal with a refixation on the
+ * end of it, and so is the common shape of taking one level out while fusing
+ * the next. Any of these and the removal no longer speaks for the whole case.
+ */
+const ALSO_GOING_IN =
+  /\b(?:insert(?:ion)?|re-?insert\w*|revision|revise|refixation|re-?fix\w*|fixation|fusion|instrumentation|extension|extend\w*|augmentation|replace\w*)\b|(?:^|[^a-z])(?:[pta]lif|acdf|accf|psf)/i
+
 export const NAVIGATION = [
   {
     name: 'AIRO',
-    test: new RegExp(AIRO_SIGNALS.map(r => r.source).join('|'), 'i')
+    test: new RegExp(AIRO_SIGNALS.map(r => r.source).join('|'), 'i'),
+    // A missed badge is the worse error everywhere else in this file, and this
+    // is the one place that is not true: a scanner and a radiographer booked
+    // for an operation that cannot use them costs a theatre an hour.
+    notWhen: text => IS_REMOVAL.test(text) && !ALSO_GOING_IN.test(text)
   },
   {
     name: 'Curve',
