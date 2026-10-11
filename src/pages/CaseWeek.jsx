@@ -759,19 +759,6 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           </span>
         </span>
 
-        {place?.headline && (
-          <span style={{
-            ...text('micro'), display: 'block', textTransform: 'none',
-            fontWeight: 700, color: ink.ink
-          }}>{place.headline}</span>
-        )}
-
-        {/* The column never carried this at all, so the one view that shows a
-            whole week could not say which days need a scanner booked — and a
-            badge changed on the phone would not have shown up here to be
-            judged. Same component, so the two cannot drift apart. */}
-
-
         {/* Two lines at most. A week is read by scanning down a column, and a
             case that takes nine lines stops the column being scannable. */}
         {surgicalCase.operation && (
@@ -810,8 +797,6 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           </span>
         ))}
 
-        {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} compact />}
-
         {/* The same question as the phone card. Implants are going in and the
             booking has not said what. */}
         {!off && implantQuestion(surgicalCase) && (
@@ -823,6 +808,22 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
             {implantQuestion(surgicalCase).asked}
           </span>
         )}
+
+        {/* Where we are on the hospital's list. Below the kit, as on the phone:
+            "patient/surgeon, then the operation description, then the system
+            and loan/consignment, then the information about where it is on the
+            list". It used to sit second here and fourth there, which is the
+            kind of drift the parity rule exists to stop and did not, because
+            that rule asked whether both cards carried a thing and never
+            whether they carried it in the same order. */}
+        {place?.headline && (
+          <span style={{
+            ...text('micro'), display: 'block', textTransform: 'none',
+            fontWeight: 700, color: ink.ink
+          }}>{place.headline}</span>
+        )}
+
+        {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} compact />}
 
         {/* Who is on it. The phone card has carried this all along and the
             column did not, so the one view that shows the whole week at once

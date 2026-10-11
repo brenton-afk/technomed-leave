@@ -352,6 +352,24 @@ describe('what is going in, on the week', () => {
     expect(wednesday.textContent).not.toMatch(/TM Loan\b/)
   })
 
+  it('reads in the order the phone card reads in', async () => {
+    // "These changes look great on the phone version but you haven't updated
+    // on desktop. We've got to keep it consistent across both versions."
+    //
+    // Checked on the rendered text, not the source — the order of blocks in a
+    // file and the order in a column are not the same thing. The source-level
+    // guard lives in src/design/cardParity.test.js.
+    await toWeek()
+    const column = document.querySelector('[data-week-column="2026-09-23"]')
+    const text = column.textContent
+    const at = what => text.indexOf(what)
+
+    // Vellacott, Atallah, Reform, consignment, Aimee — patient, operation,
+    // kit, then who attended.
+    expect(at('Vellacott')).toBeLessThan(at('Reform'))
+    expect(at('Reform')).toBeLessThan(at('Aimee'))
+  })
+
   it('puts the kit above the rep', async () => {
     // The kit decides what goes in the car; who is taking it is the next
     // question after that.
