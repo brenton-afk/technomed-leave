@@ -541,6 +541,20 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         tasks.push({ ...task, id: event.id, date: dayDate })
         continue
       }
+
+      // "There is another calendar entry down the bottom for team leader, but
+      // that's a double up as well. That doesn't need to be there."
+      //
+      // "Ben - Spine Team Leader" is a real all-day entry on the calendar and
+      // it was falling through to the day's other items, so the page said who
+      // the leader was twice: once in the strip at the top that can change it,
+      // and once as a line nobody can act on.
+      //
+      // Dropped from the day rather than from the calendar. The entry is how
+      // the roster is kept and it stays exactly where it is; it is simply not
+      // news on a page that already carries the answer. A handover is still a
+      // handover and still shows — that is an event, not a standing fact.
+      if (/team\s*leader/i.test(event.title) && !/handover/i.test(event.title)) continue
       // An untitled event used to be skipped outright, which meant it vanished
       // from the app while still sitting on the calendar.
       const title = stripIdentifiers(event.title) || '(untitled booking)'

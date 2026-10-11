@@ -224,12 +224,113 @@ export function namesNobody(value) {
 
   // The surgeon, written first. "Gupta - Mariner PLIF" puts the surgeon where
   // the patient usually is, and nobody is their own patient.
-  if (normaliseSurgeon(text)) return true
+  //
+  // Exactly, not nearly. A patient really can be called Harvey, which is one
+  // edit from the surgeon Harvie — in a surgeon's field that is a misspelling
+  // worth bridging, and in the patient's slot it is somebody's name.
+  if (normaliseSurgeon(text, { near: false })) return true
 
   return false
 }
 
-export function normaliseSurgeon(raw) {
+// ─── A name spelled the other way ────────────────────────────────────────────
+// "Book it whether it is spelt Eionoder or Einoder. You need to be able to
+// bridge that gap and work it out."
+//
+// Surnames arrive from four places that do not agree with each other: a
+// hospital list, an email from a surgeon's rooms, somebody typing on a phone,
+// and this app's own spelling. An unrecognised surgeon is not a small failure
+// — no surgeon means the entry is not read as a case at all, so the booking
+// disappears rather than looking wrong.
+//
+// ── Why this is narrow ──
+//
+// Matching the wrong surgeon is worse than matching none. It puts a case under
+// another person's name, in their colour, against their preference card. So
+// this only runs after exact matching has failed, and then only when all four
+// of these hold:
+//
+//   · the word is five letters or more — Ong and Garg are one edit from a
+//     great many English words, and the short names are where a near miss
+//     stops being a near miss
+//   · the first letter is the same — typos and transpositions almost never
+//     change it, and requiring it removes most of the false matches at once
+//   · it is within one edit, or two for a long name where there is more room
+//     to get it wrong
+//   · exactly one surgeon is that close. Two and it refuses: an ambiguous
+//     guess is the one that puts a case under the wrong person.
+
+/** Levenshtein, given up on as soon as it exceeds what we would accept. */
+function editDistance(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i]
+    let best = i
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      )
+      best = Math.min(best, current[j])
+    }
+    if (best > max) return max + 1
+    previous = current
+  }
+  return previous[b.length]
+}
+
+/**
+ * How far wrong a pair this length is allowed to be.
+ *
+ * Measured on the shorter of the two, so a four-letter surgeon is protected
+ * however long the word being tested is. Garg and Ong are one edit from a
+ * great many English words, and "Gargg" being read as Garg is fine while
+ * "Garth" being read as Garg is not — the two are indistinguishable by
+ * distance alone, so neither is allowed.
+ */
+function allowance(a, b) {
+  const shorter = Math.min(a.length, b.length)
+  if (shorter < 5) return 0
+  return shorter >= 8 ? 2 : 1
+}
+
+/**
+ * The surgeon a word most nearly names, or null.
+ *
+ * Null rather than a best guess whenever two are equally close. See above:
+ * the cost of the two answers is not the same.
+ */
+function nearestSurgeon(word) {
+  if (word.length < 5) return null
+
+  let best = null
+  let bestAt = Infinity
+  let tied = false
+  for (const key of SURGEON_KEYS) {
+    const against = key.toLowerCase()
+    if (against[0] !== word[0]) continue
+    const max = allowance(word, against)
+    if (!max) continue
+    const at = editDistance(word, against, max)
+    if (at > max) continue
+    if (at < bestAt) { best = key; bestAt = at; tied = false } else if (at === bestAt) tied = true
+  }
+  return tied ? null : best
+}
+
+/**
+ * The surgeon a string names, as this app spells them.
+ *
+ * @param {string} raw
+ * @param {{near?: boolean}} [opts] `near: false` turns off the tolerance above
+ *   and demands an exact name. Used where the question is not "who is this
+ *   surgeon" but "is this word a surgeon at all" — a patient really can be
+ *   called Harvey, which is one edit from Harvie, and in the patient's slot
+ *   that is a name and not a misspelling.
+ */
+export function normaliseSurgeon(raw, { near = true } = {}) {
   const cleaned = stripIdentifiers(raw).replace(/^(dr|mr|mrs|ms|prof|professor|a\/prof)\b\.?/i, '').trim()
   if (!cleaned) return null
   const direct = SURGEON_LOOKUP.get(cleaned.toLowerCase()) || SURGEON_LOOKUP.get(flattenName(cleaned))
@@ -242,6 +343,15 @@ export function normaliseSurgeon(raw) {
   // Tolerate "Fowler (RHH)" or a surname buried in a longer string.
   for (const key of SURGEON_KEYS) {
     if (new RegExp(`\\b${key}\\b`, 'i').test(cleaned)) return key
+  }
+  if (!near) return null
+
+  // Nothing matched as written. Each word in turn, longest first, so a full
+  // name is judged on its surname rather than on "paul".
+  const words = flat.split(/[\s-]+/).filter(Boolean).sort((a, b) => b.length - a.length)
+  for (const word of words) {
+    const found = nearestSurgeon(word)
+    if (found) return found
   }
   return null
 }

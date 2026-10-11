@@ -15,6 +15,14 @@ import { weekOf, withinWeek } from '../../clinicalPlan/teamLeader.js'
 // It sits on the week, because that is the screen the duty leader lives on and
 // the question "who is it this week" is asked while looking at the week.
 
+/** 2026-10-19 → 19 Oct. The week, said the way somebody would say it. */
+function shortDate(day) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''))
+  return m ? `${Number(m[3])} ${months[Number(m[2]) - 1]}` : ''
+}
+
 export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour }) {
   const monday = weekOf(week) || weekOf(today)
   const [open, setOpen] = useState(false)
@@ -42,6 +50,27 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
   const thisWeek = monday === weekOf(today)
   const onDuty = thisWeek && withinWeek(today, hour)
 
+  // "It shouldn't say 'Team leader, that week'. That doesn't make sense."
+  //
+  // It was trying to say "the leader of the week you are looking at, which is
+  // not the week you are in" — a distinction worth drawing and not worth that
+  // sentence. The week says which week instead, which is the thing a reader
+  // actually wanted to know.
+  const label = thisWeek ? 'Team leader' : `Team leader · w/c ${shortDate(monday)}`
+
+  // "Team leader is listed at the top and gets missed, make it with a green
+  // outline or similar to make it clear."
+  //
+  // It was a grey hairline the same as everything else on the page, which is
+  // what made it furniture. Green where somebody is set, amber where they are
+  // set and away — the warning still wins, because a leader on leave is the
+  // state worth noticing above all the others.
+  const tone = leaderAway
+    ? { line: colour.warningLine, fill: colour.warningSoft }
+    : leader
+      ? { line: colour.accent, fill: colour.accentSoft }
+      : { line: colour.line, fill: 'transparent' }
+
   return (
     <>
       <button onClick={() => setOpen(true)} disabled={busy}
@@ -55,15 +84,17 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
           // Matched to the bookings inbox below it. This used to be white on
           // navy because it sat in the header; on the page it has to be a
           // card like the other things you can open from here.
-          background: leaderAway ? colour.warningSoft : 'transparent',
-          border: `1px solid ${leaderAway ? colour.warningLine : colour.line}`,
+          background: tone.fill,
+          // Two pixels, not one. A hairline in the accent colour reads as the
+          // same grey card from arm's length, which is where this is read.
+          border: `2px solid ${tone.line}`,
           borderRadius: radius.card, padding: space.sm,
           opacity: busy ? 0.6 : 1
         }}>
         <span style={{
           ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint
         }}>
-          {thisWeek ? 'Team leader' : 'Team leader, that week'}
+          {label}
         </span>
         <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0 }}>
           {leader?.firstName || leader?.name || 'Nobody set'}
