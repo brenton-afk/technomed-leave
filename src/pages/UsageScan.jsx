@@ -379,6 +379,22 @@ export default function UsageScan({ user }) {
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+
+      // "I scanned a page the other day and it scanned well then it froze with
+      // no buttons to proceed/cancel."
+      //
+      // This is how. The review screen draws only when there is a case to
+      // review — `step === 'review' && caseRecord` — and this moved to that
+      // step on any answer that merely lacked an error. A reply with no case
+      // in it left the app on a screen that renders nothing: no heading, no
+      // buttons, no way back, with the scan still in hand.
+      //
+      // A reply without a case is a failed read, whatever the status code said.
+      if (!data.case) {
+        throw new Error('The scan came back empty. Try the photograph again — '
+          + 'more light, and the whole sheet in frame.')
+      }
+
       setCaseRecord(data.case)
       if (data.truncated) setNotice('The document was long and extraction may be incomplete — check every row carefully.')
       setStep('review')
@@ -973,5 +989,43 @@ export default function UsageScan({ user }) {
     )
   }
 
-  return null
+  // ── Nothing above matched ──
+  //
+  // There was a bare `return null` here, which is what turned a missing case
+  // into a frozen screen: every guarded branch declined to draw and the
+  // component rendered nothing at all. The specific cause is fixed above, but
+  // a screen that *can* render nothing is one unforeseen state away from doing
+  // it again — and this one is held in a theatre corridor with a signed form
+  // in the other hand.
+  //
+  // So the last word is always a way out. It keeps the pages: starting again
+  // should not mean photographing the sheet a second time.
+  return (
+    <div style={{ padding: 20, maxWidth: 520, margin: '0 auto' }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 8 }}>
+        Something went wrong reading that
+      </div>
+      <div style={{ fontSize: 14, color: MUTED, lineHeight: 1.5, marginBottom: 18 }}>
+        {error || 'The scan did not come back. Your photographs are still here.'}
+      </div>
+      <button onClick={() => { setError(''); setStep(pages.length ? 'capture' : 'history') }}
+        style={{
+          width: '100%', padding: 14, background: TEAL, color: 'white',
+          border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700,
+          cursor: 'pointer', marginBottom: 10
+        }}>
+        {pages.length
+          ? `Back to the ${pages.length === 1 ? 'photograph' : 'photographs'}`
+          : 'Back'}
+      </button>
+      <button onClick={startNew}
+        style={{
+          width: '100%', padding: 12, background: 'transparent',
+          border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 13,
+          color: MUTED, cursor: 'pointer'
+        }}>
+        Start again
+      </button>
+    </div>
+  )
 }

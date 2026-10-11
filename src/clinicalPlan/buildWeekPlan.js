@@ -302,6 +302,26 @@ function groupByHospital(cases) {
 // Templated from what the events actually say. Deliberately mechanical: it
 // states what is on rather than trying to imitate a person's editorial voice.
 
+/**
+ * The days something falls on, short enough to sit in brackets.
+ *
+ * A run becomes a range — Mon–Thu, which is what a Boy's Week is — and
+ * anything else is listed. One day is just that day, which is the case that
+ * started this: a Friday arrangement read as a standing one because nothing
+ * said Friday.
+ */
+function whichDays(dates) {
+  const names = [...new Set(dates)].sort().map(d => weekdayName(d).slice(0, 3))
+  if (names.length === 1) return names[0]
+  // Consecutive in the week they were taken from, so a gap stays a list.
+  const sorted = [...new Set(dates)].sort()
+  const consecutive = sorted.every((d, i) =>
+    i === 0 || Date.parse(`${d}T00:00:00Z`) - Date.parse(`${sorted[i - 1]}T00:00:00Z`) === 86400000)
+  return consecutive && names.length > 2
+    ? `${names[0]}–${names[names.length - 1]}`
+    : names.join(', ')
+}
+
 function listPhrase(items) {
   if (items.length === 0) return ''
   if (items.length === 1) return items[0]
@@ -378,8 +398,32 @@ function buildKeyFlags(allCases, days, surgeons) {
   const handover = byKind('handover')
   if (handover.length) flags.push({ label: 'Team leader handover', text: listPhrase(handover) + '.' })
 
-  const staffing = [...new Set(days.flatMap(d =>
-    d.flags.filter(f => f.kind === 'recurringStaffing' || f.kind === 'staffing').map(f => f.text)))]
+  // ── Staffing, with the day it is on ──
+  //
+  // "Ben's early finish this week is only Friday at 2.30pm. It's listed in the
+  // portal as a note at the bottom of each day under staffing. It's JUST
+  // Friday on his non-Boy weeks."
+  //
+  // The day flags were right all along — the entry is on the Friday and shows
+  // on the Friday. This line was the problem: it collected the text off
+  // whichever days carried it and threw the days away, so a Friday
+  // arrangement appeared under the week as "Ben - EARLY FINISH 2.30pm" with
+  // nothing to say when. Read next to a day, that is a statement about that
+  // day; read under a week, it is a statement about the week. Both wrong.
+  //
+  // It says which days now. The Boy's Week entry really does run Monday to
+  // Thursday and will say so, which is the same fact told properly rather than
+  // two different-looking rules.
+  const staffingDays = new Map()
+  for (const day of days) {
+    for (const flag of day.flags) {
+      if (flag.kind !== 'recurringStaffing' && flag.kind !== 'staffing') continue
+      if (!staffingDays.has(flag.text)) staffingDays.set(flag.text, [])
+      staffingDays.get(flag.text).push(day.date)
+    }
+  }
+  const staffing = [...staffingDays.entries()]
+    .map(([text, on]) => `${text} (${whichDays(on)})`)
   if (staffing.length) flags.push({ label: 'Staffing', text: listPhrase(staffing) + '.' })
 
   const travel = byKind('travel')

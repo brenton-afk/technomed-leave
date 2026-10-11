@@ -772,3 +772,59 @@ describe('an afternoon list reads below one nobody has rung about', () => {
     ])).toEqual(['CALVARY LENAH VALLEY', 'RHH'])
   })
 })
+
+
+// ─── Staffing says which day ─────────────────────────────────────────────────
+// "Ben's early finish this week is only Friday at 2.30pm. It's listed in the
+// portal as a note at the bottom of each day under staffing. It's JUST Friday
+// on his non-Boy weeks."
+describe('the week’s staffing line', () => {
+  const WEEK = {
+    startDate: '2026-10-12',
+    endDate: '2026-10-18',
+    days: ['2026-10-12', '2026-10-13', '2026-10-14',
+      '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18']
+  }
+  const allDay = (id, summary, from, to) =>
+    ({ id, summary, start: { date: from }, end: { date: to } })
+  const staffingLine = events => (buildWeekPlan(events, WEEK,
+    { generatedAt: '2026-10-11T00:00:00.000Z' }).keyFlags || [])
+    .find(f => f.label === 'Staffing')?.text
+
+  it('names the day a one-day arrangement falls on', () => {
+    // The day flags were right all along — the entry is on the Friday and
+    // shows on the Friday. This line collected the text and threw the day
+    // away, so a Friday arrangement read as a standing one.
+    expect(staffingLine([
+      allDay('ef', 'Ben - EARLY FINISH 2.30pm', '2026-10-16', '2026-10-17')
+    ])).toBe('Ben - EARLY FINISH 2.30pm (Fri).')
+  })
+
+  it('leaves it off the days it is not on', () => {
+    const plan = buildWeekPlan(
+      [allDay('ef', 'Ben - EARLY FINISH 2.30pm', '2026-10-16', '2026-10-17')],
+      WEEK, { generatedAt: '2026-10-11T00:00:00.000Z' })
+    const carrying = plan.days
+      .filter(d => d.flags.some(f => /EARLY FINISH/.test(f.text)))
+      .map(d => d.date)
+    expect(carrying).toEqual(['2026-10-16'])
+  })
+
+  it('gives a run of days as a range, which is what a Boy’s Week is', () => {
+    expect(staffingLine([
+      allDay('bw', "Ben - LATE START / EARLY FINISH (Boy's Week)",
+        '2026-10-12', '2026-10-16')
+    ])).toBe("Ben - LATE START / EARLY FINISH (Boy's Week) (Mon–Thu).")
+  })
+
+  it('dates each one where there are several', () => {
+    expect(staffingLine([
+      allDay('ef', 'Ben - EARLY FINISH 2.30pm', '2026-10-16', '2026-10-17'),
+      allDay('al', 'Aimee - Late Start (0945)', '2026-10-12', '2026-10-13')
+    ])).toBe('Aimee - Late Start (0945) (Mon) and Ben - EARLY FINISH 2.30pm (Fri).')
+  })
+
+  it('says nothing at all in a week with no arrangements', () => {
+    expect(staffingLine([])).toBeUndefined()
+  })
+})
