@@ -102,3 +102,64 @@ describe('which half of the kit line is bold', () => {
     expect(line).toMatch(/fontWeight: 400/)
   })
 })
+
+// ─── Less on the tile, everything still reachable ────────────────────────────
+// "It might be better to have slightly less information on view when you look
+// at it in the portal view (a bit like the Google Calendar view) but still be
+// able to go into each booking and get the extra info... The goal is to be able
+// to see the blocks of bookings on the phone view more easily, so the coloured
+// boxes are smaller tiles."
+//
+// The test that matters is not that things are gone — it is that nothing was
+// lost. Each omission has a named home.
+describe('the slimmed phone tile', () => {
+  const WITH_EVERYTHING = {
+    ...BOOKING,
+    description: 'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+      + 'Procedure: L4/5 PLIF decompression\nKit: Mariner (Distributor Loan)\n'
+      + 'List: 2nd · morning\n\nRebooked from Friday, Toby rang at 1318hrs\n'
+      + 'Entered by Brent'
+  }
+
+  const tile = async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ events: [WITH_EVERYTHING], syncedAt: '2026-10-12T02:00:00.000Z' })
+    }))
+    render(<CaseWeek user={USER} />)
+    await waitFor(() => expect(screen.getByText('Whiteley')).toBeInTheDocument())
+    return screen.getByText('Whiteley').closest('div')
+  }
+
+  it('still carries what changes the next thing somebody does', async () => {
+    const text = (await tile()).textContent
+    expect(text).toContain('Whiteley')          // who
+    expect(text).toContain('Thani')             // whose
+    expect(text).toMatch(/PLIF/)                // what
+    expect(text).toContain('Mariner')           // what is going in
+    expect(text).toMatch(/Distributor Loan/)    // and where from
+    expect(text).toMatch(/on the list/)         // where we are on the day
+  })
+
+  it('no longer carries the prose', async () => {
+    // The longest thing on the card and the least often why you are looking.
+    const text = (await tile()).textContent
+    expect(text).not.toMatch(/Toby rang/)
+  })
+
+  it('no longer carries the platform', async () => {
+    // A PLIF is an AIRO case, so this said the same thing on most of a week.
+    const text = (await tile()).textContent
+    expect(text).not.toMatch(/AIRO/)
+  })
+
+  it('no longer carries the preference card', async () => {
+    await tile()
+    expect(screen.queryByLabelText(/^Preferences for /)).not.toBeInTheDocument()
+  })
+
+  it('keeps the list order, which is a thing you change rather than read', async () => {
+    await tile()
+    expect(screen.getAllByLabelText(/is on the list$/).length).toBeGreaterThan(0)
+  })
+})

@@ -79,14 +79,18 @@ describe('how it is shown', () => {
     expect(note.slice(0, note.indexOf('\n}'))).not.toMatch(/borderRadius|background/)
   })
 
-  it('is on both cards, the same way', () => {
-    // "You need a rule built in that the changes you make in one version MUST
-    // correspond to both versions."
-    const phone = source.slice(
-      source.indexOf('function CaseCard'), source.indexOf('function WeekCase'))
+  it('is on the desktop column, and inside the booking on a phone', () => {
+    // It came off the tile: it reads AIRO on every pedicle screw case, which
+    // is most of a spine list, so it said the same thing on most of the week.
+    // "Still be able to go into each booking and get the extra info" is only
+    // true if it is in there, so it is.
     const week = source.slice(source.indexOf('function WeekCase'))
-    expect(phone).toMatch(/<NavigationNote\b/)
     expect(week).toMatch(/<NavigationNote\b/)
+
+    const sheet = readFileSync(
+      join(__dirname, '..', 'pages', 'cases', 'EditBooking.jsx'), 'utf8')
+    expect(sheet).toMatch(/findNavigation\(/)
+    expect(sheet).toMatch(/\{navigation && \(/)
   })
 
   it('is worked out every time rather than stored', () => {

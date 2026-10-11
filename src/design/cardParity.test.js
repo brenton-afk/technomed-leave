@@ -56,7 +56,6 @@ const MARKERS = [
   ['the kit and where it comes from', /suppliesFor\(surgicalCase\)/],
   ['the implant question', /implantQuestion\(surgicalCase\) &&/],
   ['where it is on the list', /place\??\.?\.?headline/],
-  ['the navigation platform', /<NavigationNote\b/],
   ['who attended', /\{surgicalCase\.rep &&|surgicalCase\.rep && !off/]
 ]
 
@@ -76,7 +75,7 @@ describe('both cards carry the same facts', () => {
 })
 
 describe('and in the same order', () => {
-  it('runs patient, operation, kit, question, list place, platform, rep', () => {
+  it('runs patient, operation, kit, question, list place, rep', () => {
     // The order Brent asked for: "patient/surgeon, then the operation
     // description, then the system and loan/consignment, then the information
     // about where it is on the list, then entered by Brent and the rep who
@@ -87,15 +86,62 @@ describe('and in the same order', () => {
       'the kit and where it comes from',
       'the implant question',
       'where it is on the list',
-      'the navigation platform',
       'who attended'
     ])
   })
 
   it('reads the same on the desktop as on the phone', () => {
-    // The assertion that would have caught it. Both cards had every one of
-    // these; the column put the list place second and the phone put it fifth.
-    expect(sequenceIn(week)).toEqual(sequenceIn(phone))
+    // The rule, restated for two views that are now allowed to differ in how
+    // much they show: everything the phone shows, the desktop shows, in the
+    // same order. A fact may be left off the smaller screen on purpose; it
+    // may not turn up in a different place.
+    const onPhone = sequenceIn(phone)
+    expect(sequenceIn(week).filter(name => onPhone.includes(name))).toEqual(onPhone)
+  })
+})
+
+describe('what the phone leaves out, on purpose', () => {
+  // "It might be better to have slightly less information on view when you
+  // look at it in the portal view (a bit like the Google Calendar view) but
+  // still be able to go into each booking and get the extra info... The
+  // desktop view can stay consistent because you have a bigger screen."
+  //
+  // Named here rather than left to drift. Everything on this list is a
+  // deliberate omission from the tile and has to be reachable from inside the
+  // booking; anything that disappears from the phone without being added here
+  // fails the test above.
+  const LEFT_OFF = [
+    ['the navigation platform', /<NavigationNote\b/],
+    ['the preference card', /onPreferences\b/]
+  ]
+
+  for (const [name, pattern] of LEFT_OFF) {
+    it(`leaves ${name} to the booking and the desktop`, () => {
+      expect(phone, `CaseCard still shows ${name}`).not.toMatch(pattern)
+      expect(week, `WeekCase should keep ${name}`).toMatch(pattern)
+    })
+  }
+
+  it('leaves the free notes to the booking on both views', () => {
+    // These were never on the column — 200px could not hold "Re do
+    // transphenoidal Rathkes/pituitary abscess with drain" — and they are off
+    // the tile now too. The booking is where they are read.
+    expect(phone).not.toMatch(/surgicalCase\.notes/)
+    expect(week).not.toMatch(/surgicalCase\.notes/)
+  })
+
+  it('keeps the things that change what somebody does next', () => {
+    // Chosen deliberately: cancelled or not-needed, because it decides
+    // whether anybody goes; the implant question, because nobody chases a kit
+    // they cannot see is missing; and who attended.
+    expect(phone).toMatch(/surgicalCase\.cancelled/)
+    expect(phone).toMatch(/surgicalCase\.notRequired/)
+    expect(phone).toMatch(/implantQuestion\(surgicalCase\)/)
+    expect(phone).toMatch(/surgicalCase\.rep\b/)
+  })
+
+  it('keeps the list order on the tile, which is a thing you change', () => {
+    expect(phone).toMatch(/onSetPlace\b/)
   })
 })
 
@@ -105,11 +151,9 @@ describe('what the column is allowed to do differently', () => {
     expect(phone).not.toMatch(/shortSupply/)
   })
 
-  it('leaves the free notes to the phone, which has room for them', () => {
-    // A fortnight of "Re do transphenoidal Rathkes/pituitary abscess with
-    // drain" came out as a vertical stack of single words when the column
-    // tried to carry everything.
-    expect(phone).toMatch(/surgicalCase\.notes/)
-    expect(week).not.toMatch(/surgicalCase\.notes/)
+  it('shortens nothing on the phone, which has the width for the words', () => {
+    // The column abbreviates the supply because 200px is 200px; the tile does
+    // not, having the full width of the glass.
+    expect(phone).not.toMatch(/shortSupply/)
   })
 })

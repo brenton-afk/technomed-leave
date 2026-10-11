@@ -143,7 +143,18 @@ describe('the phone card and the week card are one thing at two sizes', () => {
 
   both('offers the list order', /onSetPlace\b/)
 
-  both('offers the preference card', /onPreferences\b/)
+  // The preference card left the phone tile and moved inside the booking:
+// "it might be better to have slightly less information on view... the
+// preferences button could be inside the booking itself." It is a thing you
+// open to read, not a thing you read on a tile meant to be glanced at. The
+// desktop column keeps it — a laptop has the room, which is the whole reason
+// the two views are allowed to differ here at all.
+it('offers the preference card from the desktop column', () => {
+  expect(week).toMatch(/onPreferences\b/)
+})
+it('leaves it to the booking on the phone', () => {
+  expect(phone).not.toMatch(/onPreferences\b/)
+})
 
   it('leaves neither card reading its text colour from the page palette', () => {
     // A token meant for a white page — inkMuted on a solid green — is the

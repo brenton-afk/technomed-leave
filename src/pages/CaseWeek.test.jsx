@@ -97,12 +97,15 @@ describe('a case, in full', () => {
     expect(screen.getByText('Mat')).toBeInTheDocument()
   })
 
-  it('shows the notes the team wrote, which neither old view did', async () => {
-    // This is the whole reason a case moved, and it lived only in Google.
+  it('leaves the notes the team wrote to the booking', async () => {
+    // They were on the tile, and they are the longest thing on it and the
+    // least often why you are looking: "slightly less information on view...
+    // but still be able to go into each booking and get the extra info". The
+    // tile is a block to glance at; the prose is one tap in.
     show()
     fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Week' })))
-    expect(await screen.findByText(/rebooked to Tuesday 22\/9/)).toBeInTheDocument()
-    expect(screen.getByText(/Notification received from Toby/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.queryByText(/rebooked to Tuesday 22\/9/)).not.toBeInTheDocument()
   })
 
   it('does not repeat a note that only says what a field already says', async () => {
@@ -178,12 +181,16 @@ describe('a navigation case', () => {
     expect(card, 'the card should be drawn in Banana').toBeTruthy()
   })
 
-  it('still says it needs the platform', async () => {
-    // The signal is not lost, it has its own marker — so both facts are
-    // readable at once instead of one replacing the other.
+  it('keeps the surgeon’s own colour, with the platform a tap away', async () => {
+    // The point of that fix stands: navigation never overrides the surgeon,
+    // because a booking can be both and one colour channel cannot carry two
+    // facts. Where the platform is *said* has moved — off the tile, onto the
+    // desktop column and into the booking — because it reads AIRO on every
+    // pedicle screw case and so said the same thing on most of a week.
     events = [mitchell()]
     show()
-    expect(await screen.findByText('AIRO')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Mitchell')).toBeInTheDocument())
+    expect(screen.queryByText('AIRO')).not.toBeInTheDocument()
   })
 })
 
@@ -876,12 +883,12 @@ describe('a case we have been told about but are not needed at', () => {
   // that we are not needed. A second signal of the same fact is what a badge
   // on most of the week amounts to.
 
-  it('still says what platform the room needs, since the theatre is busy', async () => {
-    // Named on a case we are not attending, because it is why the theatre is
-    // busy and why the surgeon is unavailable.
+  it('still says we are not needed, which is what changes the day', async () => {
+    // The platform itself moved off the tile. Whether anybody goes did not —
+    // it is one of the three things kept, because it decides the morning.
     show()
     await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
-    expect(screen.getByText('Brainlab')).toBeInTheDocument()
+    expect(screen.getAllByText(/not needed/i).length).toBeGreaterThan(0)
   })
 
   it('does not dress it up as a case we are attending', async () => {
@@ -892,13 +899,11 @@ describe('a case we have been told about but are not needed at', () => {
     expect(screen.getAllByText(/not needed/i).length).toBeGreaterThan(0)
   })
 
-  it('names the platform on an ordinary case without any of that', async () => {
+  it('says nothing of the sort on an ordinary case', async () => {
     events = [...BOOKINGS, ev('c51', 'Nunan AIRO - Ibbett',
       'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nProcedure: L4/5 PSF with AIRO')]
     show()
     await waitFor(() => expect(screen.getByText('Nunan')).toBeInTheDocument())
-    // The title says AIRO too, so this counts rather than insisting on one.
-    expect(screen.getAllByText('AIRO').length).toBeGreaterThan(0)
     expect(screen.queryByText(/We are not needed/i)).not.toBeInTheDocument()
   })
 })
@@ -1151,36 +1156,26 @@ describe('the header, pared back', () => {
   })
 })
 
-describe('opening the preference card from a booking', () => {
-  // "A button on the booking for each case next to where it says List order
-  // that takes you to a surgeon preferences page... rather than having to
-  // browse through and find the appropriate card."
-  it('offers preferences beside the list order', async () => {
+describe('the preference card on a phone', () => {
+  // It used to sit on the tile beside the list order, asked for in those
+  // words: "a button on the booking for each case next to where it says List
+  // order that takes you to a surgeon preferences page".
+  //
+  // It has moved inside the booking: "it might be better to have slightly
+  // less information on view when you look at it in the portal view... the
+  // preferences button could be inside the booking itself." Both are right —
+  // the second is about a tile you glance at, and reading a preference card
+  // is not glancing. The desktop column keeps it, having the room.
+  it('is not on the tile any more', async () => {
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    expect(screen.getAllByLabelText(/^Preferences for /).length).toBeGreaterThan(0)
+    expect(screen.queryByLabelText(/^Preferences for /)).not.toBeInTheDocument()
   })
 
-  it('opens the surgeon preferences guide at that surgeon', async () => {
+  it('leaves the list order where it was, which is a thing you change', async () => {
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    // Mardon's case is Fowler's in the fixtures, and Fowler has a card.
-    fireEvent.click(screen.getByLabelText('Preferences for Fowler'))
-    await waitFor(() =>
-      expect(screen.getByTitle('Surgeon Preferences')).toBeInTheDocument())
-    // The instruction to open at the right card travels inside the document,
-    // because the frame is sandboxed and cannot be reached into.
-    expect(screen.getByTitle('Surgeon Preferences').getAttribute('srcdoc'))
-      .toContain('p-fowler')
-  })
-
-  it('comes back to the week', async () => {
-    show()
-    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    fireEvent.click(screen.getByLabelText('Preferences for Fowler'))
-    fireEvent.click(await screen.findByText('‹ All guides'))
-    await waitFor(() =>
-      expect(screen.queryByTitle('Surgeon Preferences')).not.toBeInTheDocument())
+    expect(screen.getAllByLabelText(/is on the list$/).length).toBeGreaterThan(0)
   })
 })
 

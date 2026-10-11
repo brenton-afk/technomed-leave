@@ -817,3 +817,47 @@ describe('saying where each kit is coming from', () => {
     expect(screen.queryByText('Where the kit is coming from')).not.toBeInTheDocument()
   })
 })
+
+// ─── The preference card, now that it lives in here ──────────────────────────
+// "The preferences button could be inside the booking itself."
+//
+// It was on the tile beside the list order. The list order stayed there — it
+// is a thing you change about the day — and this came inside, because a
+// preference card is a thing you open and read, and reading does not belong on
+// a tile meant to be glanced at.
+describe('opening the surgeon’s preferences', () => {
+  it('offers it, named for the surgeon on the booking', async () => {
+    show({ onPreferences: () => {}, hasPreferences: () => true })
+    await ready()
+    expect(screen.getByLabelText('Preferences for Ibbett')).toBeInTheDocument()
+  })
+
+  it('hands back the booking as it stands, not as it was loaded', async () => {
+    // A surgeon corrected in this sheet should open the corrected surgeon's
+    // card, not the one that was on the calendar when it opened.
+    const opened = []
+    show({ onPreferences: c => opened.push(c), hasPreferences: () => true })
+    await ready()
+    fireEvent.click(screen.getByLabelText('Preferences for Ibbett'))
+    expect(opened).toHaveLength(1)
+    expect(opened[0]).toMatchObject({
+      surgeon: 'Ibbett',
+      operation: 'L5/S1 PLIF',
+      kit: 'Diplomat (Consignment) /Cascadia/AIRO'
+    })
+  })
+
+  it('says nothing where there is no card to open', async () => {
+    // Null rather than a guess: opening the guide at somebody else's card is
+    // worse than not offering it.
+    show({ onPreferences: () => {}, hasPreferences: () => false })
+    await ready()
+    expect(screen.queryByLabelText(/^Preferences for /)).not.toBeInTheDocument()
+  })
+
+  it('is absent entirely where the page has not offered one', async () => {
+    show()
+    await ready()
+    expect(screen.queryByLabelText(/^Preferences for /)).not.toBeInTheDocument()
+  })
+})

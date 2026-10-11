@@ -275,7 +275,7 @@ function suppliesFor(surgicalCase) {
  * Everything the booking says, in one place: who, what, with which system, how
  * it is supplied, what extra kit, and whatever the team wrote in the notes.
  */
-function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPreferences }) {
+function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
   const off = Boolean(surgicalCase.cancelled)
   // Told about, not attending. Drawn back like a cancelled case rather than
   // struck through — it is still going ahead, just without us.
@@ -302,7 +302,10 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
       style={{
         display: 'flex', width: '100%', gap: 0, padding: 0, alignItems: 'stretch',
         background: fill, border: `1px solid ${off ? colour.line : 'transparent'}`,
-        borderRadius: radius.card, marginBottom: space.sm, overflow: 'hidden',
+        // Closer together, so more of a day fits on the glass. "The goal is to
+        // be able to see the blocks of bookings on the phone view more
+        // easily, so the coloured boxes are smaller tiles."
+        borderRadius: radius.card, marginBottom: 6, overflow: 'hidden',
         opacity: busy ? 0.55 : spare ? 0.72 : 1, transition: 'opacity 120ms'
       }}>
 
@@ -315,7 +318,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           and a real browser hit-tests first. */}
       <span style={{
         flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'flex-start', padding: `${space.sm}px ${space.md}px`
+        alignItems: 'flex-start', padding: `${space.xs}px ${space.md}px ${space.sm}px`
       }}>
       <button type="button" onClick={() => onOpen?.(surgicalCase)}
         style={{
@@ -391,7 +394,14 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
         {/* The operation leads: "C5/6 ACDF" says more about a case than the
             implant system does. */}
         {surgicalCase.operation && (
-          <span style={{ ...text('bodyStrong'), display: 'block', color: ink.ink }}>
+          <span style={{
+            ...text('bodyStrong'), color: ink.ink,
+            // One line. It is the thing that tells two of a surgeon's cases
+            // apart at a glance, and the glance is all this tile is for —
+            // the whole of it is a tap away inside the booking.
+            display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+            overflow: 'hidden', wordBreak: 'break-word'
+          }}>
             {surgicalCase.operation}
           </span>
         )}
@@ -483,18 +493,28 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
 
         {/* What the team wrote that no field has a name for. This is the part
             neither old screen showed, and it is often the reason a case moved. */}
-        {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} />}
-
-        {(surgicalCase.notes || []).map((note, i) => (
-          <span key={i} style={{
-            ...text('caption'), display: 'block', marginTop: 2,
-            fontStyle: note.kind === 'booking' ? 'normal' : 'italic',
-            fontWeight: note.kind === 'clinicalAlert' ? 700 : 400,
-            color: ink.ink, fontWeight: note.kind === 'clinicalAlert' ? 700 : 400
-          }}>
-            {note.text}
-          </span>
-        ))}
+        {/* ── What the tile deliberately leaves out ──
+            
+            "It might be better to have slightly less information on view when
+            you look at it in the portal view (a bit like the Google Calendar
+            view) but still be able to go into each booking and get the extra
+            info... the goal is to be able to see the blocks of bookings on
+            the phone view more easily."
+            
+            Gone from here and kept inside the booking: the navigation
+            platform, which reads AIRO on every pedicle screw case and so said
+            the same thing on most of a week; the free notes, which are the
+            longest thing on a card and the least often why you are looking;
+            and the preference card, which is a thing you open rather than a
+            thing you read.
+            
+            What stays is what changes the next thing somebody does: who the
+            case is and whose it is, one line of the operation, what is going
+            in and where it comes from, where we are on the list, whether it
+            is off, whether a kit has been named at all, and who went. The
+            desktop column keeps everything — "the desktop view can stay
+            consistent because you have a bigger screen". cardParity.test.js
+            holds both halves of that. */}
 
         {/* Last, which is where it belongs: "entered by Brent and the rep who
             attended at the bottom once that's added". Who was in the theatre is
@@ -542,26 +562,6 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           </button>
         )}
 
-        {/* Beside the list order, because they are the two things somebody
-            wants off a booking at half past seven: where we are on the list,
-            and how this surgeon likes the room. The booking already names the
-            surgeon and the system, so the card opens rather than being
-            searched for. Drawn only where there is something to open. */}
-        {onPreferences && !off && hasPreferences?.(surgicalCase) && (
-          <button
-            type="button"
-            aria-label={`Preferences for ${surgicalCase.surgeon || 'this case'}`}
-            onClick={() => onPreferences(surgicalCase)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              marginTop: space.sm, marginLeft: space.sm, cursor: 'pointer',
-              minHeight: 32, padding: `0 ${space.md}px`, borderRadius: radius.pill,
-              border: `1px solid ${ink.line}`, background: ink.line,
-              ...text('caption'), fontWeight: 700, color: ink.ink
-            }}>
-            ★ Preferences
-          </button>
-        )}
       </span>
 
     </div>
@@ -1112,9 +1112,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
             <Heading>{group.hospital} · {cases.length} case{cases.length === 1 ? '' : 's'}</Heading>
             {cases.map(c => (
               <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
-                onSetPlace={onSetPlace}
-                onPreferences={onPreferences}
-                hasPreferences={hasPreferences} />
+                onSetPlace={onSetPlace} />
             ))}
           </div>
         )
@@ -1784,6 +1782,11 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         <EditBooking
           eventId={editing.id}
           user={user}
+          // "The preferences button could be inside the booking itself." It
+          // opens the guide reader on this page, so the sheet is handed the
+          // same two functions the card used to carry.
+          onPreferences={surgicalCase => { setEditing(null); openPreferences(surgicalCase) }}
+          hasPreferences={hasPreferences}
           onClose={() => setEditing(null)}
           // Straight back to the calendar for the truth, rather than patching
           // what is on screen from the response: the plan derives a case from

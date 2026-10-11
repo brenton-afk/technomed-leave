@@ -6,11 +6,11 @@ import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
 } from '../../clinicalPlan/colours.js'
 import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
-import { extractRep, isCancelled } from '../../clinicalPlan/parse.js'
+import { extractRep, isCancelled, normaliseSurgeon} from '../../clinicalPlan/parse.js'
 import { needsPriorImplants } from '../../clinicalPlan/priorImplants.js'
 import { fetchDayCases } from '../../clinicalPlan/provider.js'
 import { dayShortfall } from '../../clinicalPlan/inventory.js'
-import { systemsInKit } from '../../clinicalPlan/systems.js'
+import { systemsInKit, findNavigation} from '../../clinicalPlan/systems.js'
 import {
   SUPPLY_OPTIONS, parseKitSupplies, setSupply, systemsToSupply, drawsOnLocalStock
 } from '../../clinicalPlan/kitSupply.js'
@@ -295,7 +295,9 @@ function KitSupply({ kit, system, onChange }) {
   )
 }
 
-export default function EditBooking({ eventId, user, onClose, onSaved }) {
+export default function EditBooking({
+  eventId, user, onClose, onSaved, onPreferences, hasPreferences
+}) {
   // The booking's own thread. Opened from here because this is where somebody
   // already is when they think of the question.
   const [thread, setThread] = useState(false)
@@ -550,6 +552,25 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
     }
   }
 
+  // The booking in the shape the preference lookup expects. Built from the
+  // fields as they stand rather than from what was loaded, so a surgeon
+  // corrected in this sheet opens the corrected surgeon's card.
+  // The platform this case needs, read off the operation and the kit. Same
+  // rules as the week and the calendar colour; see systems.js.
+  const navigation = findNavigation(
+    [fields.procedure, fields.kit, fields.system].filter(Boolean).join(' ')).join(' + ')
+
+  const asCase = {
+    // Normalised, because the field holds whatever the calendar says — "Dr
+    // Ibbett", "PETERS-WILLKE" — and the preference lookup is keyed on the
+    // name this app files them under. Without this the button offers itself
+    // and then opens nothing, which is worse than not offering it.
+    surgeon: normaliseSurgeon(fields.surgeon) || fields.surgeon || '',
+    system: fields.system || '',
+    operation: fields.procedure || '',
+    kit: fields.kit || ''
+  }
+
   return (
     <>
     {thread && (
@@ -691,6 +712,66 @@ export default function EditBooking({ eventId, user, onClose, onSaved }) {
                     )}
                   </React.Fragment>
                 ))}
+
+                {/* ── What the room has to have set up ──
+                    
+                    AIRO is off the phone tile now — it reads the same on
+                    every pedicle screw case, which is most of a spine list —
+                    and "still be able to go into each booking and get the
+                    extra info" is only true if it is actually in here. It is
+                    derived from the operation and the kit every time, as it
+                    is everywhere else, so correcting a procedure corrects
+                    this without anybody editing a second field. */}
+                {navigation && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    marginBottom: space.md, padding: `${space.sm}px ${space.md}px`,
+                    borderRadius: radius.control,
+                    background: colour.surface, border: `1px solid ${colour.line}`
+                  }}>
+                    <span style={{
+                      ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint
+                    }}>Navigation</span>
+                    <span style={{ ...text('bodyStrong'), color: colour.ink }}>
+                      {navigation}
+                    </span>
+                  </div>
+                )}
+
+                {/* ── How this surgeon likes the room ──
+                    
+                    "The preferences button could be inside the booking
+                    itself."
+                    
+                    It was on the card, beside the list order, on the grounds
+                    that those are the two things somebody wants at half past
+                    seven. The list order is still there — it is a thing you
+                    change about the day. A preference card is a thing you
+                    read, and reading belongs where the rest of the booking is
+                    rather than on a tile meant to be glanced at.
+                    
+                    Under the kit, because that is what it is about: the
+                    booking names the surgeon and the system, so this opens
+                    the right card rather than a list to search. */}
+                {onPreferences && hasPreferences?.(asCase) && (
+                  <button type="button"
+                    aria-label={`Preferences for ${asCase.surgeon || 'this case'}`}
+                    onClick={() => onPreferences(asCase)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', minHeight: 48, marginBottom: space.md,
+                      padding: `0 ${space.md}px`, cursor: 'pointer',
+                      borderRadius: radius.control,
+                      border: `1px solid ${colour.line}`, background: colour.surface,
+                      ...text('bodyStrong'), color: colour.ink
+                    }}>
+                    <span aria-hidden="true">★</span>
+                    Preferences{asCase.surgeon ? ` — ${asCase.surgeon}` : ''}
+                    <span aria-hidden="true" style={{
+                      marginLeft: 'auto', color: colour.inkFaint
+                    }}>›</span>
+                  </button>
+                )}
 
                 <label style={{ display: 'block', marginBottom: space.md }}>
                   <span style={{
