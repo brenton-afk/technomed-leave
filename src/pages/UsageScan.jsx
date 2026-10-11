@@ -665,8 +665,15 @@ export default function UsageScan({ user }) {
         <div style={{ padding: 16 }}>
           {error && <Banner tone="danger">{error}</Banner>}
           {!desktop && (
-            <button onClick={startNew} style={{ width: '100%', padding: 15, background: TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 16 }}>
-              📷 New Usage Scan
+            <button onClick={startNew}
+              style={{
+                width: '100%', minHeight: 54, marginBottom: 16,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+                background: TEAL, color: 'white', border: 'none', borderRadius: 14,
+                fontSize: 15.5, fontWeight: 700, letterSpacing: '-0.2px',
+                cursor: 'pointer', boxShadow: '0 6px 18px rgba(24,154,133,0.28)'
+              }}>
+              <CameraIcon size={20} />New usage scan
             </button>
           )}
           {/* Said once, plainly, rather than offering a button that cannot
