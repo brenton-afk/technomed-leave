@@ -322,6 +322,56 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
   const [dragging, setDragging] = useState(null)
   const frameRef = useRef(null)
 
+  // ── The box is measured, not calculated ──
+  //
+  // "Still dropping down when it's selected. You really need to fix this
+  // problem."
+  //
+  // Four attempts at saying "fit in the space that is left" in CSS, and each
+  // was subtly wrong in a way that only showed on a real handset: a box that
+  // could not shrink ran off the bottom; one sized from its height collapsed to
+  // nothing; a cap in vh was forty points too generous once the Close button's
+  // padding and the two rows of buttons were counted. Every one of those was me
+  // guessing at numbers I could not see.
+  //
+  // So the space is asked for rather than predicted. The area between the hint
+  // and the buttons reports its own size, the photograph is fitted inside it at
+  // its true aspect ratio, and the box is set to exactly that in pixels. It
+  // cannot be cut off, because the area it is fitted into is by definition what
+  // is left — whatever the handset, the safe areas, or the number of buttons.
+  const areaRef = useRef(null)
+  const [box, setBox] = useState(null)
+
+  useEffect(() => {
+    const area = areaRef.current
+    if (!area) return
+
+    const fit = () => {
+      const { width, height } = area.getBoundingClientRect()
+      // jsdom has no layout and reports zeroes. Leaving the box null there
+      // falls back to the CSS below, so the handles are still rendered and
+      // still testable.
+      if (!width || !height) return
+      const ratio = capture.originalWidth && capture.originalHeight
+        ? capture.originalWidth / capture.originalHeight
+        : 3 / 4
+      const w = Math.min(width, height * ratio)
+      setBox({ width: Math.round(w), height: Math.round(w / ratio) })
+    }
+
+    fit()
+    let observer = null
+    if (typeof ResizeObserver === 'function') {
+      observer = new ResizeObserver(fit)
+      observer.observe(area)
+    }
+    window.addEventListener('orientationchange', fit)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('orientationchange', fit)
+    }
+  }, [capture.originalWidth, capture.originalHeight])
+
   const reflatten = useCallback(() => {
     const { canvas } = flattenCapture(cv, capture.source, corners, { maxDimension: MAX_IMAGE_DIM })
     setPreview(canvas.toDataURL('image/jpeg', 0.85))
@@ -377,8 +427,12 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
       {/* Longhands, not the `flex` shorthand: jsdom drops the shorthand
           entirely, so a test cannot see it and the one declaration keeping
           this screen honest would go unguarded. */}
+      {/* It has never once been visible on a phone — there is no spare height
+          on this screen — and while it grew it was taking half of what was
+          left from the photograph that people actually work on. It keeps its
+          place for a tall screen and claims nothing. */}
       <div style={{
-        flexGrow: 1, flexShrink: 1, flexBasis: 0,
+        flexGrow: 0, flexShrink: 1, flexBasis: 0,
         minHeight: 0, position: 'relative', overflow: 'hidden'
       }}>
         <img src={preview} alt="The page as it will be saved"
@@ -427,20 +481,30 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
           The height cap leaves room for the hint above and the buttons below,
           measured in vh so it is always a definite length. The sheet still
           scrolls, as a second line of defence. */}
-      <div style={{
-        flexShrink: 0, display: 'flex', justifyContent: 'center', padding: '0 16px'
+      <div ref={areaRef} style={{
+        // Everything left between the hint and the buttons, and nothing more.
+        flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '0 16px'
       }}>
       <div ref={frameRef} style={{
         position: 'relative', lineHeight: 0, touchAction: 'none',
         // Visible, not hidden: a handle on a corner is half outside the box by
         // design, and clipping it took away the part you aim at.
-        overflow: 'visible'
+        overflow: 'visible',
+        // Measured where there is a measurement; the CSS is the fallback for
+        // the first frame and for jsdom, which has no layout.
+        ...(box
+          ? { width: box.width, height: box.height }
+          : { maxWidth: '100%', maxHeight: '100%' })
       }}>
         <img src={capture.original} alt="The photograph the page was taken from"
           style={{
             display: 'block', opacity: 0.75, borderRadius: 10,
-            maxWidth: '100%', maxHeight: 'calc(100vh - 300px)',
-            width: 'auto', height: 'auto'
+            // Fills the measured box exactly, so the outline and the handles
+            // over it cannot be measured against anything else.
+            width: '100%', height: '100%',
+            maxWidth: '100%', maxHeight: '100%'
           }} />
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>

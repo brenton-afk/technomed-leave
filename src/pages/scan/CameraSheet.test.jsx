@@ -541,14 +541,35 @@ describe('the corner editor measures one box', () => {
     expect(editor().style.aspectRatio).toBe('')
   })
 
-  it('is capped so that it fits on the screen', () => {
-    // Room for the hint above and the buttons below. In vh because a
-    // percentage would need a definite parent and would reintroduce exactly
-    // the circularity that collapsed the box.
-    open()
-    const photo = screen.getByAltText('The photograph the page was taken from')
-    expect(photo.style.maxWidth).toBe('100%')
-    expect(photo.style.maxHeight).toMatch(/vh/)
+  it('fits the space that is left, measured rather than predicted', () => {
+    // Four attempts at saying "fit in what is left" in CSS, each subtly wrong
+    // in a way that only showed on a handset: a box that could not shrink ran
+    // off the bottom, one sized from its height collapsed, and a cap in vh was
+    // forty points too generous once the Close button's padding and two rows
+    // of buttons were counted. All of them were guesses at numbers that can be
+    // asked for instead.
+    const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
+    const crop = source.slice(
+      source.indexOf('export function CropReview'),
+      source.indexOf('export default function CameraSheet'))
+
+    // The area reports its own size, and the photograph is fitted into it.
+    expect(crop).toMatch(/areaRef\.current/)
+    expect(crop).toMatch(/getBoundingClientRect\(\)/)
+    expect(crop).toMatch(/new ResizeObserver\(fit\)/)
+    expect(crop).toMatch(/Math\.min\(width, height \* ratio\)/)
+    // And nothing is guessed in viewport units any more.
+    expect(crop).not.toMatch(/vh\)/)
+  })
+
+  it('re-fits when the screen turns', () => {
+    const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
+    expect(source).toMatch(/addEventListener\('orientationchange', fit\)/)
+  })
+
+  it('survives a browser with no ResizeObserver', () => {
+    const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
+    expect(source).toMatch(/typeof ResizeObserver === 'function'/)
   })
 
   it('does not clip the handles that sit on its corners', () => {
@@ -613,11 +634,14 @@ describe('the corner editor measures one box', () => {
     expect(svg.style.height).toBe('100%')
   })
 
-  it('still gives way on the preview above, which is only a confirmation', () => {
+  it('does not let the preview compete for the photograph’s space', () => {
+    // It has never once been visible on a phone — there is no spare height on
+    // this screen — and while it grew it was taking half of what was left from
+    // the thing people actually work on.
     const { container } = open()
     const preview = screen.getByAltText('The page as it will be saved').parentElement
     // Read off the longhands: jsdom does not expand the `flex` shorthand.
-    expect(preview.style.flexGrow).toBe('1')
+    expect(preview.style.flexGrow).toBe('0')
     expect(preview.style.flexShrink).toBe('1')
     expect(container).toBeTruthy()
   })
@@ -766,5 +790,94 @@ describe('re-detecting at the shutter', () => {
     // anything in it either. Honestly wrong beats confidently wrong.
     expect(body).toMatch(/cornersAreSupported/)
     expect(body).toMatch(/corners = null/)
+  })
+})
+
+// ─── The box actually fits, on a screen with real numbers ────────────────────
+// jsdom has no layout, which is why four CSS attempts at this all passed their
+// tests and all failed on the handset. So the layout is supplied: the area is
+// told what size it is, and what the box comes out as is arithmetic that can be
+// checked.
+describe('fitting the photograph into what is left', () => {
+  const capture = {
+    preview: 'data:image/jpeg;base64,x',
+    original: 'data:image/jpeg;base64,y',
+    originalWidth: 900,
+    originalHeight: 1200,
+    corners: [{ x: 0.1, y: 0.2 }, { x: 0.9, y: 0.2 }, { x: 0.9, y: 0.8 }, { x: 0.1, y: 0.8 }]
+  }
+  const noop = () => {}
+
+  /** Renders with an area of exactly this size, and reports the box chosen. */
+  const fitInto = (areaWidth, areaHeight, shape = {}) => {
+    const realRect = Element.prototype.getBoundingClientRect
+    class FakeObserver {
+      observe() {} disconnect() {}
+    }
+    const realObserver = global.ResizeObserver
+    global.ResizeObserver = FakeObserver
+    Element.prototype.getBoundingClientRect = function rect() {
+      // Only the measured area answers; everything else keeps the zeroes
+      // jsdom gives, which is what the component already copes with.
+      if (this.style?.flexBasis === '0px' && this.style?.alignItems === 'center') {
+        return { width: areaWidth, height: areaHeight, top: 0, left: 0, right: 0, bottom: 0 }
+      }
+      return { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 }
+    }
+    try {
+      render(
+        <CropReview capture={{ ...capture, ...shape }} cv={null} pageCount={0}
+          onConfirm={noop} onRetake={noop} onAddAnother={noop} onCancel={noop} />)
+      const frame = screen.getByAltText('The photograph the page was taken from').parentElement
+      return {
+        width: Number.parseFloat(frame.style.width),
+        height: Number.parseFloat(frame.style.height)
+      }
+    } finally {
+      Element.prototype.getBoundingClientRect = realRect
+      global.ResizeObserver = realObserver
+      cleanup()
+    }
+  }
+
+  it('never exceeds the space it was given', () => {
+    // The whole complaint, as arithmetic. A portrait form in a short gap is
+    // the case that was running off the bottom.
+    const box = fitInto(358, 420)
+    expect(box.width).toBeLessThanOrEqual(358)
+    expect(box.height).toBeLessThanOrEqual(420)
+  })
+
+  it('keeps the photograph’s own shape', () => {
+    const box = fitInto(358, 420)
+    expect(box.width / box.height).toBeCloseTo(900 / 1200, 2)
+  })
+
+  it('uses the height when height is the tighter of the two', () => {
+    // A tall photograph in a short gap: the height binds, and the width
+    // follows it rather than filling the screen.
+    const box = fitInto(358, 300)
+    expect(box.height).toBeCloseTo(300, 0)
+    expect(box.width).toBeLessThan(358)
+  })
+
+  it('uses the width when width is the tighter', () => {
+    const box = fitInto(300, 900)
+    expect(box.width).toBeCloseTo(300, 0)
+    expect(box.height).toBeLessThan(900)
+  })
+
+  it('fits a landscape photograph too', () => {
+    const box = fitInto(358, 420, { originalWidth: 1600, originalHeight: 900 })
+    expect(box.width).toBeLessThanOrEqual(358)
+    expect(box.height).toBeLessThanOrEqual(420)
+    expect(box.width / box.height).toBeCloseTo(1600 / 900, 2)
+  })
+
+  it('falls back to a sensible shape when the photograph has no dimensions', () => {
+    const box = fitInto(358, 600, { originalWidth: 0, originalHeight: 0 })
+    expect(box.width).toBeLessThanOrEqual(358)
+    expect(box.height).toBeLessThanOrEqual(600)
+    expect(box.width / box.height).toBeCloseTo(3 / 4, 2)
   })
 })
