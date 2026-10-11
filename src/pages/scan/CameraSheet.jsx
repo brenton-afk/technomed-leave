@@ -63,6 +63,43 @@ const FRAME_INTERVAL = 1
 const CHASE = 0.5
 const MAX_IMAGE_DIM = 1568
 
+/**
+ * The way out, and it is never conditional on anything.
+ *
+ * "Need the ability to get out of the scanner when it freezes or fails, needs a
+ * back or exit button or similar. There can't be situations when you get stuck
+ * in a part of the app, you always need to be able to return to the main page."
+ *
+ * The scanner had one way out and it was the wrong shape: "Past scans" at the
+ * foot of the control bar, which is itself inside `{!error && …}` — so a camera
+ * that would not open took the only exit with it. The crop screen's Cancel sat
+ * below a photograph tall enough to push it off the bottom. Both were escapes
+ * that depended on the rest of the screen working, which is precisely when an
+ * escape is wanted.
+ *
+ * So this renders first, sits above everything, and is drawn whatever state the
+ * screen is in. It is deliberately the dumbest thing on the page: no state of
+ * its own, no condition, one call.
+ */
+function WayOut({ onCancel }) {
+  return (
+    <button type="button" onClick={onCancel} aria-label="Close the scanner"
+      style={{
+        position: 'absolute',
+        top: 'calc(14px + env(safe-area-inset-top, 0px))', left: 14,
+        zIndex: 10,
+        minWidth: 44, minHeight: 44, borderRadius: 22,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 6, padding: '0 14px',
+        background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.35)',
+        color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer'
+      }}>
+      <span aria-hidden="true" style={{ fontSize: 17, lineHeight: 1 }}>✕</span>
+      Close
+    </button>
+  )
+}
+
 /** The outline, drawn as SVG over the video. */
 /** The bracket at one corner, turned towards the two edges that meet there. */
 function bracket(c, prev, next, len = 5) {
@@ -310,7 +347,7 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
     <div style={{
       position: 'fixed', inset: 0, background: '#000', zIndex: 3100,
       display: 'flex', flexDirection: 'column',
-      paddingTop: 'env(safe-area-inset-top, 0px)',
+      paddingTop: 'calc(14px + 44px + env(safe-area-inset-top, 0px))',
       // The safety net, and the lesson from the same week's scanner freeze: a
       // screen somebody is holding over a bench with a signed form in the
       // other hand must never be able to put a control out of reach. If some
@@ -320,6 +357,11 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
       // drags the corner rather than the page.
       overflowY: 'auto', overflowX: 'hidden'
     }}>
+      {/* Fixed to the sheet, not to the scroll: the one control that must be
+          reachable whatever else has gone wrong. */}
+      <div style={{ position: 'fixed', top: 0, left: 0, zIndex: 10 }}>
+        <WayOut onCancel={onCancel} />
+      </div>
       {/* The flattened result. This is the part that gives way when the
           screen is short: it is a confirmation, and the photograph below is
           the thing being worked on. */}
@@ -523,6 +565,8 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
   // The video's own dimensions, so the preview can be shown whole rather than
   // cropped to whatever shape the screen happens to be.
   const [frame, setFrame] = useState(null)
+  // The same thing the loop can read without re-subscribing every render.
+  const frameRef = useRef(null)
   const [cameraState, setCameraState] = useState(cameraOpen() ? 'ready' : 'opening')
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -570,7 +614,23 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
    */
   const attachVideo = useCallback(node => {
     videoRef.current = node
-    if (node && streamRef.current && node.srcObject !== streamRef.current) {
+    if (!node) return
+
+    // Both events, because the picture's shape is not settled by the first.
+    const measure = () => {
+      if (!node.videoWidth || !node.videoHeight) return
+      const next = { width: node.videoWidth, height: node.videoHeight }
+      if (frameRef.current
+        && frameRef.current.width === next.width
+        && frameRef.current.height === next.height) return
+      frameRef.current = next
+      setFrame(next)
+    }
+    node.addEventListener('loadedmetadata', measure)
+    node.addEventListener('resize', measure)
+    measure()
+
+    if (streamRef.current && node.srcObject !== streamRef.current) {
       node.srcObject = streamRef.current
       node.play().catch(() => {})
     }
@@ -727,6 +787,31 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
       const video = videoRef.current
       if (!video?.videoWidth) return
 
+      // ── The box must always be the shape of the picture ──
+      //
+      // "The frame is still all over the place."
+      //
+      // The outline is drawn over the box, and the video sits inside it with
+      // object-fit: contain — so the two coincide only while the box carries
+      // the camera's own aspect ratio. That was read once, from
+      // loadedmetadata, and never again. A track whose resolution changes
+      // afterwards — applyConstraints for the torch or the zoom does it, and
+      // iOS renegotiates on its own — leaves the box the wrong shape, the
+      // video letterboxed inside it, and the outline stretched across the
+      // whole box instead of across the picture. Corners then sit off the
+      // paper, and one can land outside the visible video entirely, which is
+      // what the screenshot shows.
+      //
+      // This loop already reads the true dimensions every frame to size the
+      // detection canvas, so it is the cheapest place to notice, and it
+      // catches a change from any cause rather than from the ones I thought of.
+      if (!frameRef.current
+        || frameRef.current.width !== video.videoWidth
+        || frameRef.current.height !== video.videoHeight) {
+        frameRef.current = { width: video.videoWidth, height: video.videoHeight }
+        setFrame(frameRef.current)
+      }
+
       if (!detectCanvasRef.current) detectCanvasRef.current = document.createElement('canvas')
       const canvas = detectCanvasRef.current
       const height = Math.max(1, Math.round(DETECT_WIDTH * video.videoHeight / video.videoWidth))
@@ -811,6 +896,8 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         onRetake={() => { setPending(null); busyRef.current = false; trackerRef.current?.reset() }} />
     )}
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column', visibility: pending ? 'hidden' : 'visible' }}>
+      {/* First, and outside every condition on this screen. */}
+      <WayOut onCancel={onCancel} />
       <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {/* Sized to the camera's own aspect, so the whole field of view is on
             screen. Filling the screen instead means cropping the picture, and a
@@ -824,12 +911,17 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
           width: frame ? undefined : '100%',
           background: '#000'
         }}>
+          {/* `resize` as well as `loadedmetadata`: the first fires once, and
+              the dimensions can change afterwards. Both are handled in
+              attachVideo, natively — React has no onResize for media. */}
           <video ref={attachVideo} autoPlay muted playsInline
-            onLoadedMetadata={e => setFrame({ width: e.target.videoWidth, height: e.target.videoHeight })}
             style={{ width: '100%', height: '100%', display: error ? 'none' : 'block', objectFit: 'contain' }} />
 
           {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.75 }} />}
-          <Outline view={view} countdown={view?.countdown || 0} />
+          {/* Not against a guessed box. Until the camera has reported its
+              dimensions the container is a 3/4 placeholder, and an outline
+              drawn over that sits somewhere the picture is not. */}
+          {frame && <Outline view={view} countdown={view?.countdown || 0} />}
         </div>
 
         {cameraState === 'opening' && !error && (

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
 import CameraSheet, { Outline, CropReview } from './CameraSheet.jsx'
 import { resetCameraForTests, torchOn, acquireCamera, setTorch }
@@ -602,5 +604,102 @@ describe('the corner editor measures one box', () => {
     expect(preview.style.flexGrow).toBe('1')
     expect(preview.style.flexShrink).toBe('1')
     expect(container).toBeTruthy()
+  })
+})
+
+// ─── The outline is drawn over the picture, not beside it ────────────────────
+// "The frame is still all over the place."
+//
+// The outline is an SVG over the box, and the video sits inside that box with
+// object-fit: contain — so the two coincide only while the box carries the
+// camera's own aspect ratio. That was read once, from loadedmetadata, and never
+// again. A track whose resolution changes afterwards — applyConstraints for the
+// torch or the zoom does it, and iOS renegotiates on its own — leaves the box
+// the wrong shape, the video letterboxed inside it, and the outline stretched
+// across the whole box instead of across the picture.
+describe('the box the outline is measured against', () => {
+  const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
+
+  it('is shaped by the camera’s own dimensions', () => {
+    expect(source).toMatch(/aspectRatio: frame \? `\$\{frame\.width\} \/ \$\{frame\.height\}`/)
+  })
+
+  it('listens for the picture changing shape, not only for it arriving', () => {
+    // loadedmetadata fires once. `resize` is the event that fires when
+    // videoWidth or videoHeight change afterwards, and React has no onResize
+    // for media elements — so both are attached natively.
+    const attach = source.slice(source.indexOf('const attachVideo'))
+    const body = attach.slice(0, attach.indexOf('\n  }, [])'))
+    expect(body).toMatch(/addEventListener\('loadedmetadata', measure\)/)
+    expect(body).toMatch(/addEventListener\('resize', measure\)/)
+  })
+
+  it('also checks it on every detection, whatever changed it', () => {
+    // The loop already reads the true dimensions to size its canvas, so it is
+    // the cheapest place to notice — and it catches a change from any cause
+    // rather than only the ones anybody thought of.
+    const loop = source.slice(source.indexOf('if (!video?.videoWidth) return'))
+    const body = loop.slice(0, loop.indexOf('detectCanvasRef.current'))
+    expect(body).toMatch(/frameRef\.current\.width !== video\.videoWidth/)
+    expect(body).toMatch(/frameRef\.current\.height !== video\.videoHeight/)
+    expect(body).toMatch(/setFrame\(frameRef\.current\)/)
+  })
+
+  it('draws no outline at all until the shape is known', () => {
+    // Until the camera reports, the container is a 3/4 placeholder — and an
+    // outline over a placeholder sits somewhere the picture is not.
+    expect(source).toMatch(/\{frame && <Outline /)
+  })
+})
+
+// ─── There is always a way out ───────────────────────────────────────────────
+// "Need the ability to get out of the scanner when it freezes or fails, needs a
+// back or exit button or similar. There can't be situations when you get stuck
+// in a part of the app, you always need to be able to return to the main page."
+//
+// The scanner had one exit and it was the wrong shape: "Past scans" at the foot
+// of the control bar, which is itself inside `{!error && …}` — so a camera that
+// would not open took the only way out with it. The crop screen's Cancel sat
+// below a photograph tall enough to push it off the bottom of a sheet that did
+// not scroll. Both were escapes that depended on the rest of the screen
+// working, which is exactly when an escape is wanted.
+describe('getting out', () => {
+  const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
+
+  it('offers a close on the camera, outside every condition', () => {
+    const view = source.slice(source.indexOf('visibility: pending ?'))
+    const before = view.slice(0, view.indexOf('<div style={{ position: \'relative\', flex: 1'))
+    // Rendered flat, not behind a `&&` on error or camera state.
+    expect(before).toMatch(/<WayOut onCancel=\{onCancel\} \/>/)
+    expect(before).not.toMatch(/&&/)
+  })
+
+  it('offers one on the crop screen too', () => {
+    const crop = source.slice(
+      source.indexOf('export function CropReview'), source.indexOf('export default function CameraSheet'))
+    expect(crop).toMatch(/<WayOut onCancel=\{onCancel\} \/>/)
+  })
+
+  it('is fixed on the crop screen, so scrolling cannot lose it', () => {
+    const crop = source.slice(
+      source.indexOf('export function CropReview'), source.indexOf('export default function CameraSheet'))
+    const block = crop.slice(crop.indexOf('zIndex: 10'))
+    expect(crop.slice(0, crop.indexOf('<WayOut'))).toMatch(/position: 'fixed', top: 0, left: 0/)
+    expect(block).toBeTruthy()
+  })
+
+  it('has nothing to go wrong in it', () => {
+    // No state, no condition, one call. The dumbest thing on the page on
+    // purpose: it is what is left when everything else has failed.
+    const out = source.slice(source.indexOf('function WayOut'))
+    const body = out.slice(0, out.indexOf('\n}'))
+    expect(body).not.toMatch(/useState|useEffect|useRef/)
+    expect(body).toMatch(/onClick=\{onCancel\}/)
+    expect(body).toMatch(/aria-label="Close the scanner"/)
+  })
+
+  it('is big enough to hit with a thumb', () => {
+    const out = source.slice(source.indexOf('function WayOut'))
+    expect(out.slice(0, out.indexOf('\n}'))).toMatch(/minWidth: 44, minHeight: 44/)
   })
 })
