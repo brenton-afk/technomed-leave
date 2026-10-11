@@ -196,3 +196,98 @@ export function withListPlace(description, place) {
   if (!line) return body
   return body ? `${body}\nList: ${line}` : `List: ${line}`
 }
+
+// ─── Reading what is ahead of us ─────────────────────────────────────────────
+// "It should be able to deduce from the information in the bookings what the
+// cases are in front of it. For example within patient Whiteley the information
+// says 'After two cranis and a discectomy' — that means you can put 1.
+// Craniotomy, 2. Craniotomy, 3. Discectomy in the list order page and then our
+// cases, rather than '3 cases that aren't ours'. I will ensure the team put
+// good amounts of information into the portal when they are getting list
+// orders."
+//
+// The team already writes this down. It was being kept as one line of prose and
+// shown as one line of prose, which is accurate and not much use — a theatre
+// list is a sequence, and "two cranis and a discectomy" is three places in it.
+//
+// Read, never invented. A phrase this does not recognise stays as the prose it
+// was rather than becoming a case with a made-up name, and a count with no
+// procedure attached becomes an unnamed case rather than nothing.
+
+/** Numbers as the team writes them. */
+const COUNTS = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  seven: 7, eight: 8, nine: 9, ten: 10
+}
+
+/**
+ * What the theatre actually calls them, and what we should write.
+ *
+ * The short forms are the point — nobody types "craniotomy" into a phone at
+ * half past four while a hospital reads out a list. Longest first, so "micro
+ * discectomy" is not read as "discectomy" with "micro" left over.
+ */
+const PROCEDURES = [
+  [/\bmicro\s*disc(?:ectom(?:y|ies))?\b/i, 'Microdiscectomy'],
+  [/\bcrani(?:o|os|s|otom(?:y|ies)|ectom(?:y|ies))?\b/i, 'Craniotomy'],
+  [/\bdisc(?:ectom(?:y|ies)|s)?\b/i, 'Discectomy'],
+  [/\blami(?:nectom(?:y|ies)|s)?\b/i, 'Laminectomy'],
+  [/\bdecompress(?:ion|ions)?\b/i, 'Decompression'],
+  [/\bacdf?s?\b/i, 'ACDF'],
+  [/\b[pta]lifs?\b/i, 'Interbody fusion'],
+  [/\bfusions?\b/i, 'Fusion'],
+  [/\bshunts?\b/i, 'Shunt'],
+  [/\bbiops(?:y|ies)\b/i, 'Biopsy'],
+  [/\bwashouts?\b/i, 'Washout'],
+  [/\btum(?:our|or)s?\b/i, 'Tumour'],
+  [/\bspines?\b/i, 'Spine case'],
+  [/\bhips?\b/i, 'Hip'],
+  [/\bknees?\b/i, 'Knee'],
+  [/\bscopes?\b|\barthroscop(?:y|ies)\b/i, 'Arthroscopy'],
+  [/\bcases?\b|\blists?\b/i, 'Case']
+]
+
+/** The leading word "after"/"behind" and friends, which say nothing about what. */
+const LEAD_IN = /^\s*(?:we\s+are\s+)?(?:after|behind|following|comes?\s+after|on\s+after)\s+/i
+
+/**
+ * The cases ahead of ours, named, in the order they run.
+ *
+ * "After two cranis and a discectomy" → Craniotomy, Craniotomy, Discectomy.
+ *
+ * Empty where nothing is recognised, which is the signal to say how many
+ * rather than what — a theatre list with a name invented onto it is worse than
+ * one that admits it does not know.
+ *
+ * @param {string} text the free words from a list-order line
+ * @returns {string[]} one entry per case, in order
+ */
+export function casesAhead(text) {
+  const said = String(text || '').trim().replace(LEAD_IN, '')
+  if (!said) return []
+
+  const out = []
+  // "two cranis and a discectomy" → ["two cranis", "a discectomy"]. Also
+  // handles "2 cranis, 1 disc" and "a crani then a lami".
+  for (const chunk of said.split(/\s*(?:,|;|\band\b|\bthen\b|\+|&)\s*/i)) {
+    const part = chunk.trim()
+    if (!part) continue
+
+    const digits = /^(\d{1,2})\b/.exec(part)
+    const word = /^([a-z]+)\b/i.exec(part)
+    const count = digits
+      ? Number(digits[1])
+      : (word && COUNTS[word[1].toLowerCase()]) || 1
+    if (count < 1 || count > 10) continue
+
+    const found = PROCEDURES.find(([pattern]) => pattern.test(part))
+    // A count with no procedure on it is still a case somebody has to wait
+    // for; it just has no name yet.
+    const named = found ? found[1] : (digits || (word && COUNTS[word[1].toLowerCase()])
+      ? 'Case'
+      : null)
+    if (!named) continue
+    for (let i = 0; i < count; i++) out.push(named)
+  }
+  return out
+}

@@ -1,6 +1,6 @@
 import React from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { bySession } from '../../clinicalPlan/listPlace.js'
+import { bySession, casesAhead } from '../../clinicalPlan/listPlace.js'
 import { accentForCase } from '../../clinicalPlan/theme.js'
 import { weekdayName } from '../../clinicalPlan/week.js'
 
@@ -50,21 +50,54 @@ function startsAt(cases) {
 }
 
 /**
- * The rows of one list, with the places that are not ours left as gaps.
+ * The rows of one list: ours, and what the team was told is in front of us.
  *
- * A case nobody has rung about has no position. Those keep their order and are
- * shown without a number rather than given one — an invented position is the
- * whole thing this view exists not to do.
+ * "It should be able to deduce from the information in the bookings what the
+ * cases are in front of it. For example within patient Whiteley the
+ * information says 'After two cranis and a discectomy' — that means you can
+ * put 1. Craniotomy, 2. Craniotomy, 3. Discectomy, and then our cases, rather
+ * than '3 cases that aren't ours'."
+ *
+ * The team already writes it down when they ring for the running order. It was
+ * being kept as prose and shown as prose, which is accurate and not much use:
+ * a theatre list is a sequence, and "two cranis and a discectomy" is three
+ * places in it.
+ *
+ * Where the words name exactly as many cases as the gap, they fill it. Where
+ * they do not — unrecognised prose, or a count that disagrees with the
+ * position the hospital gave — it falls back to saying how many. A list with a
+ * name invented onto it is worse than one that admits what it does not know.
+ *
+ * It also works the other way round. A case with no position whose notes say
+ * what is ahead of it has a position: three cases in front makes us fourth.
+ * That is not a guess — it is what the hospital said, read properly.
+ *
+ * A case nobody has rung about at all keeps its order and gets no number.
  */
 function rowsFor(cases) {
   const ordered = bySession(cases)
   const rows = []
   let last = 0
+
   for (const surgicalCase of ordered) {
+    const named = casesAhead(surgicalCase.listPlace?.ahead)
+    // The hospital's number where there is one; otherwise what the words imply,
+    // and only for the first of ours — after that the count is relative to a
+    // place already established.
     const at = surgicalCase.listPlace?.position
-    if (at && at > last + 1) {
-      rows.push({ gap: true, count: at - last - 1, key: `gap-${at}` })
+      || (named.length && last === 0 ? named.length + 1 : null)
+
+    const gap = at ? at - last - 1 : 0
+    if (gap > 0) {
+      if (named.length === gap) {
+        named.forEach((what, i) => rows.push({
+          ahead: true, at: last + 1 + i, what, key: `ahead-${at}-${i}`
+        }))
+      } else {
+        rows.push({ gap: true, count: gap, key: `gap-${at}` })
+      }
     }
+
     if (at) last = at
     rows.push({ surgicalCase, at, key: surgicalCase.id })
   }
@@ -98,7 +131,18 @@ function TheatreList({ surgeon, cases }) {
         </span>
       </div>
 
-      {rowsFor(cases).map(row => row.gap ? (
+      {rowsFor(cases).map(row => row.ahead ? (
+        // A case in front of ours, named from what the team was told. Numbered
+        // like the rest — it holds a real place on the hospital's list — and
+        // set in the faint italic so it reads as somebody else's at a glance.
+        <div key={row.key} style={{
+          display: 'flex', gap: space.sm, padding: '3px 0',
+          ...text('caption'), color: colour.inkFainter, fontStyle: 'italic'
+        }}>
+          <span style={{ width: 18, flexShrink: 0, textAlign: 'right' }}>{row.at}</span>
+          <span>{row.what}</span>
+        </div>
+      ) : row.gap ? (
         <div key={row.key} style={{
           display: 'flex', gap: space.sm, padding: '3px 0',
           ...text('caption'), color: colour.inkFainter, fontStyle: 'italic'

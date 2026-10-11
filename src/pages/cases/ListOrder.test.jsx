@@ -121,6 +121,74 @@ describe('the places that are not ours', () => {
   })
 })
 
+describe('naming what is in front of us', () => {
+  // "It should be able to deduce from the information in the bookings what the
+  // cases are in front of it. For example within patient Whiteley the
+  // information says 'After two cranis and a discectomy' — that means you can
+  // put 1. Craniotomy, 2. Craniotomy, 3. Discectomy and then our cases, rather
+  // than '3 cases that aren't ours'."
+  it('reads the team’s own words into places on the list', () => {
+    show([
+      ev('a', 'Whiteley CYLOX - Thani',
+        'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+        + 'Procedure: C5/6 ACDF\n'
+        + 'List: 4th · morning · After two cranis and a discectomy', 11, 'Calvary')
+    ])
+    expect(screen.getAllByText('Craniotomy')).toHaveLength(2)
+    expect(screen.getByText('Discectomy')).toBeInTheDocument()
+    expect(screen.queryByText(/not ours/)).not.toBeInTheDocument()
+  })
+
+  it('numbers them, because they hold real places', () => {
+    show([
+      ev('a', 'Whiteley CYLOX - Thani',
+        'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+        + 'Procedure: C5/6 ACDF\n'
+        + 'List: 4th · morning · After two cranis and a discectomy', 11, 'Calvary')
+    ])
+    for (const n of ['1', '2', '3', '4']) {
+      expect(screen.getByText(n), n).toBeInTheDocument()
+    }
+  })
+
+  it('works out our place from what is ahead, where nobody gave us a number', () => {
+    // Three cases in front makes us fourth. Not a guess — it is what the
+    // hospital said, read properly.
+    show([
+      ev('a', 'Whiteley CYLOX - Thani',
+        'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+        + 'Procedure: C5/6 ACDF\n'
+        + 'List: morning · After two cranis and a discectomy', 11, 'Calvary')
+    ])
+    expect(screen.getByText('4')).toBeInTheDocument()
+  })
+
+  it('falls back to counting where the words are not recognised', () => {
+    // A list with a name invented onto it is worse than one that admits what
+    // it does not know.
+    show([
+      ev('a', 'Whiteley CYLOX - Thani',
+        'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+        + 'Procedure: C5/6 ACDF\n'
+        + 'List: 3rd · morning · waiting on the surgeon', 10, 'Calvary')
+    ])
+    expect(screen.getByText(/2 cases not ours/)).toBeInTheDocument()
+  })
+
+  it('falls back where the words disagree with the number given', () => {
+    // Told we are 2nd, and told two cases are ahead. One of those is wrong and
+    // this does not get to choose which.
+    show([
+      ev('a', 'Whiteley CYLOX - Thani',
+        'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+        + 'Procedure: C5/6 ACDF\n'
+        + 'List: 2nd · morning · After two cranis', 9, 'Calvary')
+    ])
+    expect(screen.getByText(/one case not ours/)).toBeInTheDocument()
+    expect(screen.queryByText('Craniotomy')).not.toBeInTheDocument()
+  })
+})
+
 describe('two hospitals are not one queue', () => {
   const BOTH = [
     ev('a', 'Whiteley CYLOX - Thani',

@@ -388,23 +388,6 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
           </span>
         )}
 
-        {/* Before the operation, because it is the part that decides what time
-            somebody sets an alarm for. A case can be routine and still have the
-            team on the road at half six because it is first up. */}
-        {place && !off && (
-          <span style={{ display: 'block', marginTop: 3 }}>
-            <span style={{
-              ...text('bodyStrong'),
-              fontWeight: 700, color: ink.ink
-            }}>{place.headline}</span>
-            {place.ahead && (
-              <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
-                {place.ahead}
-              </span>
-            )}
-          </span>
-        )}
-
         {/* The operation leads: "C5/6 ACDF" says more about a case than the
             implant system does. */}
         {surgicalCase.operation && (
@@ -424,11 +407,15 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
             {suppliesFor(surgicalCase).map((entry, i) => (
               <React.Fragment key={entry.system}>
                 {i > 0 && ' · '}
-                {entry.system}
+                {/* "The name of the system should be what is in bold, rather
+                    than the Loan/Consignment word." The system is what somebody
+                    is looking for when they scan a card — where it comes from
+                    is the next question, not the first. */}
+                <span style={{ fontWeight: 700, color: ink.ink }}>{entry.system}</span>
                 {entry.supply ? (
                   <span style={{
-                    fontWeight: entry.inferred ? 400 : 700,
-                    color: entry.inferred ? ink.faint : ink.ink
+                    fontWeight: 400,
+                    color: entry.inferred ? ink.faint : ink.muted
                   }}>
                     {' '}({entry.supply}{entry.inferred ? '?' : ''})
                   </span>
@@ -469,15 +456,22 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
         
         It also separates the rep from the kit above it at a glance,
         which is the other thing the line is for. */}
-        {surgicalCase.rep && (
-                    <span style={{
-            ...text('caption'), display: 'inline-flex', alignItems: 'center',
-            marginTop: 3, padding: '1px 8px', borderRadius: radius.pill,
-            background: ink.line, color: ink.ink, fontWeight: 700
-          }}>
-            {/* The name in its own element, so it can be read — and found —
-                as a name rather than as part of a sentence. */}
-            Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
+        {/* Where we are on the hospital's list. After the kit, because the kit
+            is what has to be found and this is what decides when: "the order
+            of the information should be patient/surgeon, then the operation
+            description, then the system and loan/consignment, then the
+            information about where it is on the list". */}
+        {place && !off && (
+          <span style={{ display: 'block', marginTop: 3 }}>
+            <span style={{
+              ...text('bodyStrong'),
+              fontWeight: 700, color: ink.ink
+            }}>{place.headline}</span>
+            {place.ahead && (
+              <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
+                {place.ahead}
+              </span>
+            )}
           </span>
         )}
 
@@ -501,6 +495,27 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
             {note.text}
           </span>
         ))}
+
+        {/* Last, which is where it belongs: "entered by Brent and the rep who
+            attended at the bottom once that's added". Who was in the theatre is
+            read after the day has been understood, not before it.
+
+            On a panel of the card's own ink, because at 82% of the ink colour
+            it was barely there on a mid-green — reported as hardly showing up
+            on the green surgeon bookings. The panel lifts the name off whatever
+            is behind it and works the same on Banana as on Grape, being made
+            from the ink already chosen to be readable on that fill. */}
+        {surgicalCase.rep && (
+          <span style={{
+            ...text('caption'), display: 'inline-flex', alignItems: 'center',
+            marginTop: 4, padding: '1px 8px', borderRadius: radius.pill,
+            background: ink.line, color: ink.ink, fontWeight: 700
+          }}>
+            {/* The name in its own element, so it can be read — and found —
+                as a name rather than as part of a sentence. */}
+            Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
+          </span>
+        )}
       </button>
 
         {/* Always offered, whether or not anything is recorded — including on a
@@ -784,7 +799,9 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           }}>
             <strong style={{ fontWeight: 700 }}>{entry.system}</strong>
             {entry.supply ? (
-              <span style={{ color: entry.inferred ? ink.faint : ink.muted }}>
+              <span style={{
+                fontWeight: 400, color: entry.inferred ? ink.faint : ink.muted
+              }}>
                 {' '}{shortSupply(entry.supply)}{entry.inferred ? '?' : ''}
               </span>
             ) : (
