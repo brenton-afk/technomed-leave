@@ -881,3 +881,72 @@ describe('fitting the photograph into what is left', () => {
     expect(box.width / box.height).toBeCloseTo(3 / 4, 2)
   })
 })
+
+// ─── Adjusting the crop must not remove the way forward ──────────────────────
+// "The scan is correct, I want to progress. How do I progress, because I don't
+// want redo crop, or retake or cancel or close??? Weird, there's no way to
+// progress."
+//
+// There was not one. Touching a corner set a `dirty` flag, and that flag
+// *replaced* the two buttons that go forward with a single "Redo crop" — so
+// adjusting the crop, which is the entire purpose of the screen, removed the
+// way off it. Retake, Cancel and Close all throw the page away; none of them
+// is progress.
+describe('after dragging a corner', () => {
+  const capture = {
+    preview: 'data:image/jpeg;base64,x',
+    original: 'data:image/jpeg;base64,y',
+    originalWidth: 900,
+    originalHeight: 1200,
+    corners: [{ x: 0.1, y: 0.2 }, { x: 0.9, y: 0.2 }, { x: 0.9, y: 0.8 }, { x: 0.1, y: 0.8 }]
+  }
+
+  const drag = handlers => {
+    render(
+      <CropReview capture={capture} cv={null} pageCount={0}
+        onConfirm={handlers.onConfirm || (() => {})}
+        onRetake={() => {}}
+        onAddAnother={handlers.onAddAnother || (() => {})}
+        onCancel={() => {}} />)
+    // Grab a corner, move it, let go — the whole point of the screen.
+    fireEvent.pointerDown(screen.getByLabelText('Corner 1'))
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 60 })
+    fireEvent.pointerUp(window)
+  }
+
+  it('still offers the way forward', () => {
+    drag({})
+    expect(screen.getByText('No — read it')).toBeInTheDocument()
+    expect(screen.getByText('Yes — scan it')).toBeInTheDocument()
+  })
+
+  it('no longer asks anybody to redo anything first', () => {
+    drag({})
+    expect(screen.queryByText('Redo crop')).not.toBeInTheDocument()
+  })
+
+  it('goes forward when told to', () => {
+    const onConfirm = vi.fn()
+    drag({ onConfirm })
+    fireEvent.click(screen.getByText('No — read it'))
+    expect(onConfirm).toHaveBeenCalled()
+  })
+
+  it('sends something rather than nothing when the warp fails', () => {
+    // cv is null here, so flattening cannot run. A tap that silently does
+    // nothing is the failure this screen keeps being reported for, so the
+    // page flattened at capture is sent instead of the adjustment.
+    const onConfirm = vi.fn()
+    drag({ onConfirm })
+    fireEvent.click(screen.getByText('No — read it'))
+    expect(onConfirm).toHaveBeenCalledWith(expect.stringContaining('data:image'))
+  })
+
+  it('offers the way forward before anything is touched, too', () => {
+    render(
+      <CropReview capture={capture} cv={null} pageCount={0}
+        onConfirm={() => {}} onRetake={() => {}}
+        onAddAnother={() => {}} onCancel={() => {}} />)
+    expect(screen.getByText('No — read it')).toBeInTheDocument()
+  })
+})

@@ -318,7 +318,6 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
   const [corners, setCorners] = useState(
     capture.corners || [{ x: 0.06, y: 0.06 }, { x: 0.94, y: 0.06 }, { x: 0.94, y: 0.94 }, { x: 0.06, y: 0.94 }])
   const [preview, setPreview] = useState(capture.preview)
-  const [dirty, setDirty] = useState(false)
   const [dragging, setDragging] = useState(null)
   const frameRef = useRef(null)
 
@@ -372,11 +371,35 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
     }
   }, [capture.originalWidth, capture.originalHeight])
 
-  const reflatten = useCallback(() => {
-    const { canvas } = flattenCapture(cv, capture.source, corners, { maxDimension: MAX_IMAGE_DIM })
-    setPreview(canvas.toDataURL('image/jpeg', 0.85))
-    setDirty(false)
-  }, [cv, capture.source, corners])
+  /**
+   * The page as it will be saved, from the corners as they are right now.
+   *
+   * "The scan is correct, I want to progress. How do I progress, because I
+   * don't want redo crop, or retake or cancel or close??? Weird, there's no
+   * way to progress."
+   *
+   * There was not one. Touching a corner set `dirty`, and `dirty` *replaced*
+   * the two buttons that go forward with a single "Redo crop" — so adjusting
+   * the crop, which is the entire purpose of the screen, removed the way off
+   * it. The reason was real: the flattened image goes stale the moment a
+   * corner moves, and sending a stale one would file the wrong crop.
+   *
+   * Flattening at the moment of going forward fixes that without hiding
+   * anything. It costs one warp, on a tap that was already going to do work,
+   * and it cannot be stale by construction.
+   */
+  const asItWillBeSaved = useCallback(() => {
+    try {
+      const { canvas } = flattenCapture(cv, capture.source, corners, { maxDimension: MAX_IMAGE_DIM })
+      return canvas.toDataURL('image/jpeg', 0.85)
+    } catch {
+      // Never nothing. A tap that goes forward must go forward — if the warp
+      // fails, the page already flattened at capture is sent instead of the
+      // adjustment, which is a worse crop and not a dead end. Silently doing
+      // nothing is the failure this whole screen keeps being reported for.
+      return preview
+    }
+  }, [cv, capture.source, corners, preview])
 
   const move = useCallback((event) => {
     if (dragging == null || !frameRef.current) return
@@ -388,19 +411,23 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
       y: Math.min(1, Math.max(0, (touch.clientY - box.top) / box.height))
     }
     setCorners(next)
-    setDirty(true)
   }, [dragging, corners])
 
   useEffect(() => {
     if (dragging == null) return
-    const stop = () => setDragging(null)
+    const stop = () => {
+      setDragging(null)
+      // So the preview above matches, on a screen tall enough to show it.
+      // Correctness does not rest on this: going forward flattens again.
+      try { setPreview(asItWillBeSaved()) } catch { /* keep the old one */ }
+    }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', stop)
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', stop)
     }
-  }, [dragging, move])
+  }, [dragging, move, asItWillBeSaved])
 
   return (
     <div style={{
@@ -554,13 +581,9 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
         padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))',
         display: 'flex', flexDirection: 'column', gap: 10
       }}>
-        {dirty ? (
-          <button onClick={reflatten}
-            style={{ width: '100%', padding: '14px 0', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-            Redo crop
-          </button>
-        ) : (
-          <>
+        {/* Always. There is no state of this screen in which the way forward
+            is hidden — see asItWillBeSaved for what used to take it away. */}
+        <>
             {/* Asked outright, rather than left to be inferred from which
                 button somebody picks.
                 
@@ -583,17 +606,16 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
                 : 'Is there a second page?'}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => onAddAnother(preview)}
+              <button onClick={() => onAddAnother(asItWillBeSaved())}
                 style={{ flex: 1, padding: '14px 0', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
                 Yes — scan it
               </button>
-              <button onClick={() => onConfirm(preview)}
+              <button onClick={() => onConfirm(asItWillBeSaved())}
                 style={{ flex: 1, padding: '14px 0', background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
                 {pageCount > 0 ? `No — read ${pageCount + 1}` : 'No — read it'}
               </button>
             </div>
-          </>
-        )}
+        </>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onRetake}
             style={{ flex: 1, padding: '12px 0', background: 'transparent', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, fontSize: 13.5, cursor: 'pointer' }}>
