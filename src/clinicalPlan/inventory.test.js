@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY, dayShortfall, suggestSupply
 } from './inventory.js'
-import { systemsInKit, resolveE4Product, resolveKit } from './systems.js'
+import { systemsInKit, resolveE4Product, resolveKit, findSystems } from './systems.js'
 
 // The inventory is dictated knowledge — it lives in people's heads and nowhere
 // else — so these tests are really a written record of what was said, in a form
@@ -448,6 +448,45 @@ describe('working out the supply from what is where', () => {
       ['KT Lonestar', 'Lonestar']
     ]) {
       expect(inventoryFor(written)?.system, written).toBe(held)
+    }
+  })
+})
+
+
+// ─── The two lists have to know the same kits ────────────────────────────────
+// "Nova's CYLOX bookings for tomorrow say something about ACDF — nothing
+// allocated for Thani... the kit IS named in the kit description."
+//
+// CYLOX has been in this inventory since it was written and was never in
+// SYSTEMS, so findSystems could not see a word that was on the booking. The
+// same gap existed for Forza XP, Cascadia, Nuvasive and Globus — four more
+// bookings that would have been told they named no kit while naming one.
+//
+// This is the third time the two lists have disagreed. Reform was "Reform"
+// here and "Reform Cervical" there; the E4 cages were "E4 Global PLIF" and
+// "Global BMD PLIF". Both are written up in systems.js as faults worth not
+// repeating, and both were repeated. So it is a test now rather than a comment.
+describe('every kit the inventory knows', () => {
+  it('can be found by the reader that looks for kit in a booking', () => {
+    const unfindable = INVENTORY
+      .map(item => item.system)
+      .filter(system => !findSystems(system).length)
+    expect(unfindable, 'in the inventory but invisible to findSystems').toEqual([])
+  })
+
+  it('is found under a name the inventory can then look up', () => {
+    // Not merely matched by something. "Reform" matching a detector called
+    // "Reform" while the inventory calls it "Reform Cervical" is exactly the
+    // shape of the original bug: both sides worked, and neither could look the
+    // other up. So the round trip is what is tested — detector name back into
+    // the inventory — rather than the strings being identical.
+    //
+    // Case is not part of it. The inventory shouts MOBIS and the detector says
+    // Mobis; inventoryFor is case-insensitive, so that costs nothing.
+    for (const item of INVENTORY) {
+      const found = findSystems(item.system).map(f => f.name)
+      const roundTrips = found.some(name => inventoryFor(name)?.system === item.system)
+      expect(roundTrips, `${item.system} → ${found.join(', ') || 'nothing'}`).toBe(true)
     }
   })
 })

@@ -31,7 +31,12 @@
  * @typedef {object} Preference
  * @property {string}  surgeon  as the app spells it — see SURGEON_KEYS
  * @property {string}  acronym  as procedureImplants.js spells it
- * @property {string}  system   as the inventory spells it
+ * @property {string}  system   first choice, as the inventory spells it
+ * @property {string}  [backup] what they will take when the first is not to be
+ *                              had. Recorded separately rather than as a note,
+ *                              because it is the answer to a question somebody
+ *                              asks under pressure — "there isn't one, now
+ *                              what" — and prose is no use at that moment.
  * @property {string}  [hospital] where the answer differs by site
  * @property {string}  [note]   anything a person would want to read
  * @property {string}  since    yyyy-mm-dd, when this was last confirmed
@@ -39,16 +44,21 @@
 
 /** @type {Preference[]} */
 export const SURGEON_PREFERENCES = [
-  // Awaiting Brent. The shape, for when the list arrives:
-  //
-  //   { surgeon: 'Ibbett', acronym: 'ACDF', system: 'Dakota', since: '2026-10-09' },
-  //   { surgeon: 'Gupta',  acronym: 'PLIF', system: 'Mariner',
-  //     note: 'with Global BMD PLIF cages', since: '2026-10-09' },
-  //
-  // A row per combination that is genuinely settled. Anything that varies case
-  // by case is better left out than written down as though it were a rule —
-  // see preferenceFor: no row means the app asks, which is the right outcome
-  // for a question that really does need asking.
+  // "The app needs to know that his preferences for ACDF are CYLOX number one
+  // and Shoreline as a back up."  — Brent, 11 October 2026
+  {
+    surgeon: 'Thani',
+    acronym: 'ACDF',
+    system: 'CYLOX',
+    backup: 'Shoreline',
+    since: '2026-10-11'
+  },
+
+  // More as Brent dictates them. A row per combination that is genuinely
+  // settled; anything that varies case by case is better left out than written
+  // down as though it were a rule — see preferenceFor: no row means the app
+  // asks, which is the right outcome for a question that really does need
+  // asking.
 ]
 
 /**

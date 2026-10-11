@@ -86,6 +86,57 @@ describe('crossing it with what the surgeon uses', () => {
       .toBeNull()
   })
 
+  it('does not say "no kit named" about a booking that names one', () => {
+    // "Nova's CYLOX bookings for tomorrow say something about ACDF — nothing
+    // allocated for Thani. The app should not say ACDF-no kit named since the
+    // kit IS named in the kit description."
+    //
+    // Thani's two real cases on 12 October, verbatim apart from the names.
+    const whiteley = readBooking('Whiteley CYLOX - Thani',
+      'Surg - Dr Thani\nPt - Whiteley\nDate - 12/10/2026\n'
+      + 'Procedure - C5/6, C6/7 ACDF, fixation, decompression\n'
+      + 'Kit - CYLOX (Distributor Loan)\nHospital - Calvary Lenah Valley')
+    const bopf = readBooking('Bopf CYLOX (second kit) - Thani',
+      'Surgeon: Thani\nPatient: Bopf\nDate: 12.10.26\n'
+      + 'Procedure: C5/6 ACDF  fixation and  decompression\n'
+      + 'Kit: CYLOX (Distributor Loan)\nHospital: Calvary Lenah Valley')
+
+    expect(implantQuestion(whiteley)).toBeNull()
+    expect(implantQuestion(bopf)).toBeNull()
+  })
+
+  it('stays quiet about a kit this app has never heard of', () => {
+    // The general form, and the point of the fix. Not knowing a word is a gap
+    // here; it is no grounds for telling somebody they left a field blank.
+    const unknown = { operation: 'C5/6 ACDF', surgeon: 'Thani', kit: '某 Widget 9000' }
+    expect(implantQuestion(unknown)).toBeNull()
+  })
+
+  it('still asks when the only thing named is navigation', () => {
+    // A scanner is not a kit anybody supplies, so a booking carrying nothing
+    // but AIRO has still named no implants.
+    const navOnly = { operation: 'C5/6 ACDF', surgeon: 'Ibbett', kit: 'Spinal Brainlab AIRO' }
+    expect(implantQuestion(navOnly)?.acronyms).toEqual(['ACDF'])
+  })
+
+  it('knows what Thani uses for an ACDF, and what he will take instead', () => {
+    // "His preferences for ACDF are CYLOX number one and Shoreline as a back
+    // up." The backup is on the card rather than a tap away: the moment it is
+    // wanted is the moment somebody has been told the first is not to be had.
+    const q = implantQuestion({ operation: 'C5/6 ACDF', surgeon: 'Thani', hospital: 'CLV' })
+    expect(q.suggestion).toBe('CYLOX')
+    expect(q.backup).toBe('Shoreline')
+    expect(q.asked).toBe('ACDF — CYLOX? (or Shoreline)')
+  })
+
+  it('does not claim to know his other operations', () => {
+    // A preference recorded for one acronym says nothing about another, and
+    // the wording has to stop short of implying it does.
+    const q = implantQuestion({ operation: 'L4/5 PLIF', surgeon: 'Thani' })
+    expect(q.suggestion).toBeNull()
+    expect(q.asked).not.toMatch(/CYLOX/)
+  })
+
   it('stays quiet on a case nobody is packing for', () => {
     const off = { operation: 'C5/6 ACDF', surgeon: 'Ibbett', cancelled: true }
     expect(implantQuestion(off)).toBeNull()

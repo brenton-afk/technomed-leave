@@ -23,6 +23,10 @@
  * it should read the way the team says it out loud.
  */
 export const SYSTEMS = [
+  // The Outrigger is its own tray and its own answer — it travels between the
+  // Hobart sites where the Mariner is consigned at RHH — so it has to be read
+  // before the bare word swallows it. Same rule as Dakota-2 below.
+  { name: 'Mariner Outrigger', test: /\bmariners?\s*outrigger\b/i },
   { name: 'Mariner', test: /\bmariners?\b/i },
   { name: 'Shoreline', test: /\bshorelines?\b/i },
   // Dakota-2 is a distinct set, and the hyphen is part of the name.
@@ -60,9 +64,35 @@ export const SYSTEMS = [
   { name: 'Stryker PSI', test: /\bstryker\s*psi\b/i },
   { name: 'Stryker', test: /\bstryker\b/i },
   { name: 'Orthofix Connectors', test: /\borthofix\s*connectors?\b/i },
+  // Firebird is Orthofix's pedicle screw system and the inventory lists it
+  // separately, so a booking naming it has to resolve to it and not to the
+  // distributor. Before the bare "Orthofix", as the Connectors are.
+  { name: 'Orthofix Firebird', test: /\b(?:orthofix\s*)?firebird\b/i },
   { name: 'Orthofix', test: /\borthofix\b/i },
   { name: 'Boost', test: /\bboost\b/i },
-  { name: 'Signus', test: /\bsignus\b/i }
+  { name: 'Signus', test: /\bsignus\b/i },
+
+  // ── The five the inventory knew and this list did not ──
+  //
+  // "Nova's CYLOX bookings for tomorrow say something about ACDF — nothing
+  // allocated for Thani... the kit IS named in the kit description."
+  //
+  // CYLOX has been in the inventory since it was written and was never in
+  // here, so findSystems could not see a word that was on the booking. The
+  // consequence had been quiet until something started asking the question out
+  // loud; the same gap existed for four more. This is the third time the two
+  // lists have disagreed — see Reform Cervical and Global BMD PLIF above — so
+  // inventory.test.js now fails if a system exists in one and not the other.
+  //
+  // Named exactly as the inventory names them, which is what the earlier two
+  // got wrong.
+  { name: 'CYLOX', test: /\bcylox\b/i },
+  { name: 'Forza XP', test: /\bforza(?:\s*xp)?\b/i },
+  { name: 'Cascadia', test: /\bcascadia\b/i },
+  // The distributors, who are also written on a kit line as though they were
+  // the system — "Nuvasive loan" is a real booking shape.
+  { name: 'Nuvasive', test: /\bnuvasive\b/i },
+  { name: 'Globus', test: /\bglobus\b(?!\s*(?:bmd\s*)?(?:plif|alif))/i }
 ]
 
 /**

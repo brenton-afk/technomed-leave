@@ -27,7 +27,7 @@
 // one of those — La Pietra, the dropped "removal", the Mariner nobody needed
 // — was the app being confident instead of being useful.
 
-import { findSystems } from './systems.js'
+import { systemsToSupply } from './kitSupply.js'
 import { findImplantProcedures } from './procedureImplants.js'
 import { preferenceFor, hasRecordedPreferences } from './surgeonPreferences.js'
 
@@ -44,6 +44,7 @@ import { preferenceFor, hasRecordedPreferences } from './surgeonPreferences.js'
  *   acronyms: string[],     what was recognised — ['PLIF']
  *   needs: string,          'lumbar interbody cage and pedicle screws'
  *   suggestion: string|null the system, where a preference is recorded
+ *   backup: string|null     what they take when the first is not to be had
  *   surgeon: string|null    whose preference it is
  *   note: string|null       anything written alongside that preference
  *   asked: string           the question, in words, for the card
@@ -55,10 +56,24 @@ export function implantQuestion(surgicalCase) {
   // a case anybody is packing for.
   if (surgicalCase.cancelled || surgicalCase.notRequired) return null
 
-  // What the booking already says. Both fields, because the two conventions in
-  // the calendar put the system in different places.
-  const named = [surgicalCase.system, surgicalCase.kit].filter(Boolean).join(' ')
-  if (findSystems(named).length) return null
+  // What the booking already says.
+  //
+  // "Nova's CYLOX bookings for tomorrow say something about ACDF — nothing
+  // allocated for Thani. The app should not say ACDF-no kit named since the
+  // kit IS named in the kit description. The app needs to be able to check the
+  // information within a booking and work it out."
+  //
+  // This asked findSystems, which only recognises kit the app has been told
+  // about — and CYLOX was in the inventory but not in that list, so Thani's
+  // two cases said "no kit named" with CYLOX written on both of them.
+  //
+  // The test is now whether the team named anything, not whether this app
+  // happens to recognise the word. Failing to know a kit is a gap here, and a
+  // gap here is no grounds for telling somebody they left a field blank when
+  // they did not. systemsToSupply is the same reading the supply buttons use,
+  // so the two screens cannot disagree about whether a booking names a kit —
+  // and it already drops navigation, which is not a kit anybody supplies.
+  if (systemsToSupply(surgicalCase).length) return null
 
   const operation = [surgicalCase.operation, surgicalCase.kit]
     .filter(Boolean).join(' ')
@@ -80,6 +95,7 @@ export function implantQuestion(surgicalCase) {
     acronyms,
     needs,
     suggestion: preference?.system || null,
+    backup: preference?.backup || null,
     surgeon: preference ? surgicalCase.surgeon : null,
     note: preference?.note || null,
     asked: questionFor(acronyms, needs, preference, surgicalCase.surgeon)
@@ -102,7 +118,14 @@ export function implantQuestion(surgicalCase) {
  */
 function questionFor(acronyms, needs, preference, surgeon) {
   const what = acronyms.join(' + ')
-  if (preference) return `${what} — ${preference.system}?`
+  if (preference) {
+    // The backup is on the card rather than a tap away, because the moment it
+    // is wanted is the moment somebody has just been told the first choice is
+    // not to be had — and that is a phone call, in a corridor, at speed.
+    return preference.backup
+      ? `${what} — ${preference.system}? (or ${preference.backup})`
+      : `${what} — ${preference.system}?`
+  }
   if (surgeon && !hasRecordedPreferences(surgeon)) {
     return `${what} — no kit named (nothing recorded for ${surgeon})`
   }
