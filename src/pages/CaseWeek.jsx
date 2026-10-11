@@ -10,8 +10,7 @@ import {
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
 } from '../clinicalPlan/week.js'
 import {
-  accentForCase, accentTextForCase, NAVIGATION_ACCENT, washFor, withAlpha,
-  inkOn, readableOn
+  accentForCase, accentTextForCase, washFor, withAlpha, inkOn
 } from '../clinicalPlan/theme.js'
 import { isNavigationOnly } from '../clinicalPlan/systems.js'
 import { implantQuestion } from '../clinicalPlan/deduceKit.js'
@@ -19,6 +18,7 @@ import { useIsDesktop } from '../design/viewport.js'
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
+import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import ListPlace from './cases/ListPlace.jsx'
 import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
@@ -99,14 +99,16 @@ const arrowStyle = {
  * with one lit says where you are and where you can go at the same time, and
  * costs no more room beside the title.
  */
-function SpanToggle({ span, onChange }) {
+const SPAN_LABELS = { day: 'Day', week: 'Week', lists: 'Lists' }
+
+function SpanToggle({ span, onChange, options = ['day', 'week', 'lists'] }) {
   return (
     <div role="tablist" aria-label="How much of the week to show"
       style={{
         display: 'flex', flexShrink: 0, padding: 3, gap: 2,
         background: 'rgba(0,0,0,0.22)', borderRadius: radius.pill
       }}>
-      {['day', 'week'].map(id => {
+      {options.map(id => {
         const on = span === id
         return (
           <button key={id} role="tab" aria-selected={on}
@@ -120,7 +122,7 @@ function SpanToggle({ span, onChange }) {
               color: on ? colour.navy : 'rgba(255,255,255,0.7)',
               ...text('bodyStrong'), cursor: 'pointer'
             }}>
-            {id === 'day' ? 'Day' : 'Week'}
+            {SPAN_LABELS[id]}
           </button>
         )
       })}
@@ -205,43 +207,32 @@ function TaskRow({ task, onDone, compact }) {
 }
 
 /**
- * The navigation badge, readable on whatever colour the card happens to be.
+ * The navigation platform, written rather than badged.
  *
- * "Since we changed the background colours of the bookings to being more solid,
- * the purple AIRO badge is not really clear and the black AIRO text gets lost."
+ * "Remove the AIRO badge from all AIRO bookings — just have AIRO listed in the
+ * notes for all pedicle screw cases, PLIF, TLIF, PSF, C1/2 fixations, Reform
+ * lateral mass cases, max fax post-op spins, etc (all the previous rules)."
  *
- * Both halves were measurable. The text was the card's own ink — near-black on
- * most cards — sitting on #4a1c96, which is a contrast ratio of 1.57 where 4.5
- * is the minimum anybody can read. And the pill itself is a dark purple, which
- * on Fowler's purple card separated by 2.06 and on Garg's blue by 2.14: a dark
- * blob on a dark card.
+ * The rules are unchanged and two were added — C1/2 and the max fax spins were
+ * never detected at all. What changed is how the answer is shown.
  *
- * Neither is fixable with another fixed colour. A white pill solves the dark
- * cards and fails on Ibbett's banana at 1.71 — there is no one colour that
- * reads on all nine surgeon accents, which is the whole reason the card's ink
- * is chosen per card rather than set once.
+ * A badge is for something exceptional, and a badge that appears on most of a
+ * week stops being read. AIRO is on every pedicle screw case we do, which is
+ * most of the spine list, so the pill was decorating the ordinary. As a line of
+ * notes it sits with the other things somebody needs to know about the case and
+ * takes no more room than it is worth.
  *
- * So: the purple stays, because that is what navigation is in this app and in
- * the calendar it came from. The text becomes white, which reads on that purple
- * at 11.07. And the pill is ringed in the card's own ink — the one colour
- * already guaranteed to contrast with this fill, because inkOn picked it for
- * exactly that. The badge therefore separates from every card there is, and
- * from any accent added later.
+ * Still derived, never stored: the app works it out from the operation every
+ * time, so a booking whose procedure is corrected gets the right answer without
+ * anybody editing a second field.
  */
-function NavigationBadge({ surgicalCase, ink, spare }) {
+function NavigationNote({ surgicalCase, ink, compact }) {
   if (!surgicalCase?.navigation) return null
-  // Outlined rather than filled when we are not attending. A solid navigation
-  // badge is how the card says "we are there with the AIRO", which is the
-  // opposite of what this case is.
-  const filled = !spare
   return (
     <span style={{
-      ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.4px',
-      padding: '1px 7px', borderRadius: radius.pill, fontWeight: 700,
-      background: filled ? NAVIGATION_ACCENT : 'transparent',
-      color: filled ? readableOn(NAVIGATION_ACCENT) : ink.ink,
-      border: `1px solid ${ink.ink}`,
-      whiteSpace: 'nowrap'
+      ...text(compact ? 'micro' : 'caption'), display: 'block',
+      textTransform: 'none', letterSpacing: 0, lineHeight: 1.35,
+      marginTop: 2, color: ink.muted, fontWeight: 600
     }}>{surgicalCase.navigation}</span>
   )
 }
@@ -393,9 +384,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
               }}>Orthopaedic</span>
             )}
 
-            {!off && (
-              <NavigationBadge surgicalCase={surgicalCase} ink={ink} spare={spare} />
-            )}
+
           </span>
         )}
 
@@ -500,6 +489,8 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace, onPreferences, hasPr
 
         {/* What the team wrote that no field has a name for. This is the part
             neither old screen showed, and it is often the reason a case moved. */}
+        {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} />}
+
         {(surgicalCase.notes || []).map((note, i) => (
           <span key={i} style={{
             ...text('caption'), display: 'block', marginTop: 2,
@@ -764,11 +755,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
             whole week could not say which days need a scanner booked — and a
             badge changed on the phone would not have shown up here to be
             judged. Same component, so the two cannot drift apart. */}
-        {!off && surgicalCase.navigation && (
-          <span style={{ display: 'block', marginTop: 2 }}>
-            <NavigationBadge surgicalCase={surgicalCase} ink={ink} spare={spare} />
-          </span>
-        )}
+
 
         {/* Two lines at most. A week is read by scanning down a column, and a
             case that takes nine lines stops the column being scannable. */}
@@ -805,6 +792,8 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
             )}
           </span>
         ))}
+
+        {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} compact />}
 
         {/* The same question as the phone card. Implants are going in and the
             booking has not said what. */}
@@ -1156,7 +1145,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   // opening one does not look like opening the other.
   const [addingTask, setAddingTask] = useState(null)
   const prefs = useMemo(() => readPrefs(), [])
-  const [chosenSpan, setSpan] = useState(prefs.caseSpan === 'week' ? 'week' : 'day')
+  const [chosenSpan, setSpan] = useState(
+    ['week', 'lists'].includes(prefs.caseSpan) ? prefs.caseSpan : 'day')
   // A desktop has one view: the week, laid out in columns. The day view was
   // built for a phone, where a week cannot fit across the glass — on a laptop
   // it is the same information in a narrower strip with six-sevenths of the
@@ -1164,7 +1154,12 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   //
   // Forced rather than defaulted, so a phone preference carried over in
   // localStorage cannot land somebody on a view the desktop no longer offers.
-  const span = desktop ? 'week' : chosenSpan
+  // A desktop has no day view — see above — but the lists are as much a
+  // desktop view as a phone one: two hospitals side by side is what a wide
+  // screen is for.
+  const span = desktop
+    ? (chosenSpan === 'lists' ? 'lists' : 'week')
+    : chosenSpan
   // Always this week, never where you were last time. The app is opened to find
   // out what is on now; restoring a week somebody scrolled to yesterday means
   // the first thing it shows is wrong, and quietly so.
@@ -1448,8 +1443,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         // and it was costing a row of the screen the week could have had. A
         // real summary — how many cases, how many days — still earns its line.
         subtitle={plan?.summaryLine || (desktop ? undefined : 'Every booking, as the calendar has it')}
-        right={!desktop && (
+        right={(
           <SpanToggle span={span}
+            options={desktop ? ['week', 'lists'] : ['day', 'week', 'lists']}
             onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />
         )}>
         {switcher}
@@ -1696,6 +1692,13 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
         {/* The week's own notes and key flags, which only the plan used to
             carry. `notes` is one sentence, not a list — assuming otherwise
             crashed the week view outright. */}
+        {/* The theatre lists, as the hospitals run them. Grouped by the thing
+            that genuinely runs in sequence — one surgeon's list, in one
+            theatre, in one session — because a flat 1,2,3 across two hospitals
+            is our ordering and not theirs, which is why the numbers came off
+            the cards in the first place. */}
+        {plan && span === 'lists' && <ListOrder plan={plan} today={today} />}
+
         {plan && span === 'week' && (plan.notes || (plan.keyFlags || []).length > 0) && (
           <>
             <Heading>Notes for the week</Heading>

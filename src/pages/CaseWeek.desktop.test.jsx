@@ -93,13 +93,30 @@ describe('the week on a desktop', () => {
 
   it('offers no day view at all', async () => {
     // Asked for directly: the day view "is not really useful" on a desktop.
-    // Both halves matter — the toggle is gone, and so is the view behind it,
+    // Both halves matter — the segment is gone, and so is the view behind it,
     // so a 'day' preference saved on a phone cannot strand a laptop on a
     // screen the desktop no longer draws.
     const { container } = await toWeek()
     expect(screen.queryByRole('tab', { name: 'Day' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'Week' })).not.toBeInTheDocument()
     expect(container.querySelectorAll('[data-week-column]').length).toBe(7)
+  })
+
+  it('does offer the lists, which are a desktop view if anything is', async () => {
+    // Two hospitals side by side is what a wide screen is for. The toggle is
+    // back on the desktop for this, with Day still absent from it.
+    await toWeek()
+    expect(screen.getByRole('tab', { name: 'Week' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Lists' })).toBeInTheDocument()
+  })
+
+  it('shows each surgeon’s list, in its own order', async () => {
+    const { container } = await toWeek()
+    fireEvent.click(screen.getByRole('tab', { name: 'Lists' }))
+    await waitFor(() =>
+      expect(container.querySelectorAll('[data-week-column]').length).toBe(0))
+    // Vellacott is Atallah's single case at RHH on the Wednesday.
+    expect(screen.getByText('Vellacott')).toBeInTheDocument()
+    expect(screen.getAllByText('Atallah').length).toBeGreaterThan(0)
   })
 
   it('ignores a day view carried over from a phone', async () => {

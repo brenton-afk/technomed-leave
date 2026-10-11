@@ -869,31 +869,36 @@ describe('a case we have been told about but are not needed at', () => {
     expect(screen.getByText(/L4\/5 decompression/)).toBeInTheDocument()
   })
 
-  // Several spans on a card contain the word — the wrapper, the badge and the
-  // system line. The badge is the pill.
-  const navBadge = (container, word) => [...container.querySelectorAll('span')]
-    .find(el => el.textContent === word && el.style.borderRadius === '999px')
+  // The badge used to carry this: filled on a case we are attending, outlined
+  // on one we are not. The badge is gone — "remove the AIRO badge, just have
+  // AIRO listed in the notes" — so the distinction it drew has to be made by
+  // the thing that was already making it, which is the card saying outright
+  // that we are not needed. A second signal of the same fact is what a badge
+  // on most of the week amounts to.
 
-  it('does not dress it up as a case we are attending', async () => {
-    // A filled navigation badge is how every other card says "we are there
-    // with the AIRO". On this one it is outlined.
-    const { container } = show()
+  it('still says what platform the room needs, since the theatre is busy', async () => {
+    // Named on a case we are not attending, because it is why the theatre is
+    // busy and why the surgeon is unavailable.
+    show()
     await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
-    const badge = navBadge(container, 'Brainlab')
-    expect(badge).toBeTruthy()
-    expect(badge.style.background).toBe('transparent')
-    expect(badge.style.border).not.toBe('')
+    expect(screen.getByText('Brainlab')).toBeInTheDocument()
   })
 
-  it('leaves an ordinary navigation case shouting as before', async () => {
+  it('does not dress it up as a case we are attending', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mathieson')).toBeInTheDocument())
+    // More than one place says it — the card and the day's count line — which
+    // is the point: the fact is already carried without a badge drawing it.
+    expect(screen.getAllByText(/not needed/i).length).toBeGreaterThan(0)
+  })
+
+  it('names the platform on an ordinary case without any of that', async () => {
     events = [...BOOKINGS, ev('c51', 'Nunan AIRO - Ibbett',
       'Surg: Ibbett\nPt: Nunan\nHosp: RHH\nProcedure: L4/5 PSF with AIRO')]
-    const { container } = show()
+    show()
     await waitFor(() => expect(screen.getByText('Nunan')).toBeInTheDocument())
-    const badge = navBadge(container, 'AIRO')
-    expect(badge).toBeTruthy()
-    expect(badge.style.background).not.toBe('transparent')
-    expect(badge.style.background).not.toBe('')
+    // The title says AIRO too, so this counts rather than insisting on one.
+    expect(screen.getAllByText('AIRO').length).toBeGreaterThan(0)
     expect(screen.queryByText(/We are not needed/i)).not.toBeInTheDocument()
   })
 })

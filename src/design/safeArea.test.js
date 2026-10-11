@@ -125,6 +125,8 @@ describe('no screen is left out', () => {
     'leave/DateRange.jsx',
     // A strip inside the Cases header, which carries the insets itself.
     'cases/TeamLeaderStrip.jsx',
+    // The theatre lists, drawn in the body of the Cases page under its Header.
+    'cases/ListOrder.jsx',
   ])
 
   it('accounts for every screen that does not use the shared header', () => {
