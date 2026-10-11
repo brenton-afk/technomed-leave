@@ -198,7 +198,7 @@ export function accentForCase(surgicalCase, dark = false) {
   // surgeon, so there is no colour to inherit, and blueberry is what the team
   // already reads as "this is a navigation job". Where the case *does* belong to
   // one of our surgeons — an RHH pedicle screw case with AIRO support — the
-  // surgeon's colour holds and the platform shows as a badge instead.
+  // surgeon's colour holds and the platform is named in the notes instead.
   if (surgicalCase?.navigation && !hasConfirmedAccent(surgicalCase?.surgeon)) {
     return NAVIGATION_ACCENT
   }
@@ -212,9 +212,14 @@ export function accentForCase(surgicalCase, dark = false) {
   // exists to show.
   //
   // The surgeon keeps the colour. Navigation is a different dimension — it
-  // changes what the day needs set up, not whose case it is — so it is shown as
-  // its own marker on the card, in NAVIGATION_ACCENT, where it can be read at
-  // the same time as the surgeon rather than instead of them.
+  // changes what the day needs set up, not whose case it is — so it is written
+  // in the notes, where it can be read at the same time as the surgeon rather
+  // than instead of them.
+  //
+  // It was a badge until 11 October, when it stopped being worth one: AIRO is
+  // on every pedicle screw case we do, and a badge that appears on most of a
+  // week is decoration. NAVIGATION_ACCENT still colours a case that has no
+  // surgeon of ours, which is the branch above.
   // accentFor already prefers the guide, so this is only deciding what to do
   // for a surgeon it has no colour for: the booking's own colour beats grey.
   if (hasConfirmedAccent(surgicalCase?.surgeon)) return accentFor(surgicalCase?.surgeon, dark)
