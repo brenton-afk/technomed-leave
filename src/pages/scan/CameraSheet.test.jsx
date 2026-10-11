@@ -522,23 +522,40 @@ describe('the corner editor measures one box', () => {
   const editor = () =>
     screen.getByAltText('The photograph the page was taken from').parentElement
 
-  it('will not let the photograph be squashed', () => {
+  it('is sized by the photograph, not by a shape computed for it', () => {
+    // Two attempts went wrong before this. A box with a computed aspect ratio
+    // and the photograph absolutely filling it stood taller than the screen on
+    // a portrait form, putting the bottom two handles under the buttons —
+    // "the bottom gets cut off, such that I can't adjust the bottom of the
+    // scan even if I wanted to". Shrinking that box by its height collapsed it
+    // to nothing, because a box whose only child is absolutely positioned has
+    // no size of its own to shrink from.
+    //
+    // The photograph is an ordinary element again and gives the box its size.
+    // It cannot collapse, an image having intrinsic dimensions, and it cannot
+    // be the wrong shape, because nothing computes a shape.
     open()
-    // The box keeps its full width and does not shrink, so it is always the
-    // shape of the photograph it is showing.
-    expect(editor().style.flexShrink).toBe('0')
-    expect(editor().style.aspectRatio).toBe('900 / 1200')
+    const photo = screen.getByAltText('The photograph the page was taken from')
+    expect(photo.style.position).not.toBe('absolute')
+    expect(photo.style.display).toBe('block')
+    expect(editor().style.aspectRatio).toBe('')
   })
 
-  it('does not try to size itself from its height', () => {
-    // That was tried, to keep the buttons on the screen, and it collapsed the
-    // box: with `width: auto` there is no intrinsic width to compute from —
-    // the photograph inside is positioned absolutely and contributes none —
-    // so the box became nothing wide and took the corner handles with it.
-    // Reported at once: "now I can't adjust the corners".
+  it('is capped so that it fits on the screen', () => {
+    // Room for the hint above and the buttons below. In vh because a
+    // percentage would need a definite parent and would reintroduce exactly
+    // the circularity that collapsed the box.
     open()
-    expect(editor().style.width).not.toBe('auto')
-    expect(editor().style.alignSelf).not.toBe('center')
+    const photo = screen.getByAltText('The photograph the page was taken from')
+    expect(photo.style.maxWidth).toBe('100%')
+    expect(photo.style.maxHeight).toMatch(/vh/)
+  })
+
+  it('does not clip the handles that sit on its corners', () => {
+    // A handle on a corner is half outside the box by design, and clipping it
+    // took away the part you aim at.
+    open()
+    expect(editor().style.overflow).toBe('visible')
   })
 
   it('keeps its corner handles, which are the point of the screen', () => {
@@ -575,17 +592,16 @@ describe('the corner editor measures one box', () => {
     expect(buttons.style.background).toBe('rgb(0, 0, 0)')
   })
 
-  it('shapes the box to the photograph it is showing', () => {
-    open()
-    expect(editor().style.aspectRatio).toBe('900 / 1200')
-  })
-
-  it('fills that box with the photograph, rather than letting it set its own height', () => {
+  it('lays the outline over the photograph itself', () => {
+    // The thing all three earlier bugs came down to: the outline, the handles
+    // and the picture have to be measured against one box. They are the same
+    // element's children now, and that element is the picture's own box.
     open()
     const photo = screen.getByAltText('The photograph the page was taken from')
-    expect(photo.style.position).toBe('absolute')
-    expect(photo.style.width).toBe('100%')
-    expect(photo.style.height).toBe('100%')
+    const svg = editor().querySelector('svg')
+    expect(photo.parentElement).toBe(editor())
+    expect(svg.parentElement).toBe(editor())
+    expect(screen.getByLabelText('Corner 1').parentElement).toBe(editor())
   })
 
   it('draws the handles over the same box', () => {
@@ -701,5 +717,54 @@ describe('getting out', () => {
   it('is big enough to hit with a thumb', () => {
     const out = source.slice(source.indexOf('function WayOut'))
     expect(out.slice(0, out.indexOf('\n}'))).toMatch(/minWidth: 44, minHeight: 44/)
+  })
+})
+
+// ─── The shutter must not move the page ──────────────────────────────────────
+// "The scan is still jumping last minute. Captures the frame well then when I
+// hit scan, the page jumps up and it cuts off the bottom part of the page."
+//
+// Capture re-detects on the still, which is right: the corners handed in came
+// from a detection up to a tenth of a second earlier, and a hand-held phone
+// drifts in between. What was wrong is that it took whatever came back, every
+// time, without comparing it to what was on the screen.
+//
+// The outline somebody watched settle is the product of a tracker — dozens of
+// detections, smoothed, each checked against the last. The still gets one
+// detection on one frame, which is exactly the noisy thing the tracker exists
+// to average out. Giving the single reading authority over the many inverted
+// the arrangement, and one bad frame moved the crop off the page after the
+// shutter had gone.
+describe('re-detecting at the shutter', () => {
+  const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
+  const capture = source.slice(source.indexOf('const capture = useCallback'))
+  const body = capture.slice(0, capture.indexOf('\n  }, [])'))
+
+  it('only accepts a reading that agrees with the one on screen', () => {
+    expect(body).toMatch(/maxCornerShift\(corners, onTheStill\?\.corners\) <= CAPTURE_AGREEMENT/)
+    expect(body).toMatch(/if \(onTheStill\?\.corners && agrees\)/)
+  })
+
+  it('takes it outright when there was nothing on screen to disagree with', () => {
+    // No tracked outline — the engine failed, or the page was only just
+    // found. Anything the still can offer beats nothing.
+    expect(body).toMatch(/const agrees = corners\s*\n\s*\?[\s\S]{0,120}: true/)
+  })
+
+  it('allows a real correction through', () => {
+    // A tenth of a second of hand drift is a fraction of the threshold. What
+    // is excluded is the still latching onto something else entirely, which
+    // moves a corner a long way.
+    const threshold = /const CAPTURE_AGREEMENT = ([\d.]+)/.exec(source)
+    expect(threshold).toBeTruthy()
+    expect(Number(threshold[1])).toBeGreaterThan(0.03)
+    expect(Number(threshold[1])).toBeLessThan(0.2)
+  })
+
+  it('still falls back to the whole frame when neither reading holds up', () => {
+    // Nothing found on the still, and the tracked corners do not sit on
+    // anything in it either. Honestly wrong beats confidently wrong.
+    expect(body).toMatch(/cornersAreSupported/)
+    expect(body).toMatch(/corners = null/)
   })
 })

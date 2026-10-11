@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument, cornersAreSupported } from '../../scanner/documentDetect.js'
-import { DocumentTracker } from '../../scanner/documentTracker.js'
+import { DocumentTracker, maxCornerShift } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
 import { readPrefs, writePrefs } from '../../clinicalPlan/provider.js'
 import {
@@ -61,6 +61,17 @@ const FRAME_INTERVAL = 1
 // less gap to smooth, and the easing can be firmer without the outline getting
 // twitchy — 0.35 at half the frame rate felt like the outline was dragging.
 const CHASE = 0.5
+/**
+ * How far the still's own reading may sit from the tracked one and still be
+ * taken as a correction rather than a contradiction.
+ *
+ * In frame widths. A tenth of a second of hand drift is a fraction of this;
+ * the thing being excluded is the still latching onto something else entirely,
+ * which moves a corner a long way. Loose enough that a real correction is
+ * never refused, tight enough that a different answer always is.
+ */
+const CAPTURE_AGREEMENT = 0.08
+
 const MAX_IMAGE_DIM = 1568
 
 /**
@@ -341,8 +352,6 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
     }
   }, [dragging, move])
 
-  const shaped = Boolean(capture.originalWidth && capture.originalHeight)
-
   return (
     <div style={{
       position: 'fixed', inset: 0, background: '#000', zIndex: 3100,
@@ -395,56 +404,43 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
           Now the box takes the photograph's own aspect ratio, the photograph
           fills it absolutely, and it is not allowed to shrink. The two cannot
           come apart: anything that resizes the box resizes both. */}
+      {/* ── The photograph sizes the box, and the box always fits ──
+          
+          "Image 29 is of the frame capturing neatly around the page. Image 30
+          is when I hit scan — the page jumps up and the bottom gets cut off,
+          such that I can't adjust the bottom of the scan even if I wanted to."
+          
+          The box was the full width at the photograph's own aspect ratio,
+          which on a portrait form is taller than the screen: the bottom of the
+          page and the two bottom handles sat under the button block. Shrinking
+          it by height was tried first and collapsed it to nothing, because a
+          box whose only child is absolutely positioned has no size of its own
+          to shrink from.
+          
+          So the photograph is an ordinary element again, and it is what gives
+          the box its size. It cannot collapse — an image has intrinsic
+          dimensions — and it cannot be the wrong shape, because nothing is
+          computing a shape: max-width and max-height do the fitting and
+          preserve the ratio themselves. The outline and the handles overlay
+          the same element, so all three agree by construction at any size.
+          
+          The height cap leaves room for the hint above and the buttons below,
+          measured in vh so it is always a definite length. The sheet still
+          scrolls, as a second line of defence. */}
+      <div style={{
+        flexShrink: 0, display: 'flex', justifyContent: 'center', padding: '0 16px'
+      }}>
       <div ref={frameRef} style={{
-        position: 'relative', borderRadius: 10,
-        overflow: 'hidden', touchAction: 'none',
-
-        // ── It may shrink, and it must keep its shape ──
-        //
-        // "Scanned the page, worked quite well, then I can't do anything. No
-        // button to hit scan next page, or anything, just frozen and have to
-        // exit the app."
-        //
-        // It was flexShrink: 0. A usage form is photographed in portrait, so
-        // the box took the photograph's own aspect ratio and stood ~1300px
-        // tall on a phone — taller than what was left of the screen once the
-        // hint and the buttons were allowed for. The buttons went under the
-        // bottom edge, a fixed overlay does not scroll, and there was no way
-        // to reach them or to go back. Nothing had crashed; the only control
-        // left was to kill the app.
-        //
-        // The shrink lock was belt-and-braces and it is not needed any more.
-        // What the earlier fix was really protecting is that the photograph
-        // and the outline are measured against the *same* box, and that is now
-        // guaranteed by both of them filling it absolutely — resize the box and
-        // both resize with it, at any size.
-        //
-        // So the height gives way and the aspect ratio holds: the width is
-        // computed from the height rather than set, which keeps the photograph
-        // undistorted and the normalised corners true.
-        // Full width, at the photograph's own shape, and it does not shrink.
-        //
-        // Sizing it from the height was tried and was wrong: with `width:
-        // auto` the box has no intrinsic width to compute from — the
-        // photograph inside is positioned absolutely and contributes none — so
-        // it collapsed to nothing and took the corner handles with it.
-        // Reported immediately: "now I can't adjust the corners".
-        //
-        // So the box keeps the full width it has always had, and the problem
-        // it was shrunk to solve — the buttons under the bottom edge — is
-        // solved where it actually lives: the sheet scrolls, and the buttons
-        // are stuck to the bottom of it. Making the thing being worked on
-        // smaller to fit the controls was the wrong trade on a screen whose
-        // whole job is dragging four corners accurately.
-        flexShrink: 0, margin: '0 16px',
-        aspectRatio: shaped
-          ? `${capture.originalWidth} / ${capture.originalHeight}`
-          : undefined
+        position: 'relative', lineHeight: 0, touchAction: 'none',
+        // Visible, not hidden: a handle on a corner is half outside the box by
+        // design, and clipping it took away the part you aim at.
+        overflow: 'visible'
       }}>
         <img src={capture.original} alt="The photograph the page was taken from"
           style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            display: 'block', opacity: 0.75
+            display: 'block', opacity: 0.75, borderRadius: 10,
+            maxWidth: '100%', maxHeight: 'calc(100vh - 300px)',
+            width: 'auto', height: 'auto'
           }} />
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
@@ -475,6 +471,7 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
               padding: 0, cursor: 'grab', touchAction: 'none'
             }} />
         ))}
+      </div>
       </div>
 
       {/* Reading is one tap from here, not three. It used to take "Use this
@@ -712,7 +709,32 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         ctx.drawImage(source, 0, 0, small.width, small.height)
         const { data } = ctx.getImageData(0, 0, small.width, small.height)
         const onTheStill = detectDocument(cv, data, small.width, small.height)
-        if (onTheStill?.corners) {
+
+        // ── It may correct the outline. It may not replace it. ──
+        //
+        // "The scan is still jumping last minute. Captures the frame well then
+        // when I hit scan, the page jumps up and it cuts off the bottom part
+        // of the page."
+        //
+        // This took whatever the still detection returned, every time,
+        // without comparing it to what was on the screen. But the outline
+        // somebody watched settle is the product of a tracker: dozens of
+        // detections, smoothed, each checked against the last. The still gets
+        // one detection on one frame — exactly the noisy thing the tracker
+        // exists to average out. Handing the single reading authority over
+        // the many inverted the whole arrangement, and one bad frame moved
+        // the crop off the page after the shutter had gone.
+        //
+        // What re-detecting is for is the tenth of a second between the last
+        // detection and the shutter, during which a hand-held phone drifts a
+        // little. That is a small correction by definition. A large
+        // disagreement is not a correction — it is a different answer, and
+        // the one that was watched settle wins.
+        const agrees = corners
+          ? maxCornerShift(corners, onTheStill?.corners) <= CAPTURE_AGREEMENT
+          : true
+
+        if (onTheStill?.corners && agrees) {
           corners = onTheStill.corners
         } else if (corners && !cornersAreSupported(cv, data, small.width, small.height, corners)) {
           // Nothing found on the still, and the corners carried over from the
