@@ -4,6 +4,7 @@
 // the UI, the text copy and the .docx export without any of them diverging.
 
 import { classifyItem } from './itemKind.js'
+import { readTask } from './tasks.js'
 import './types.js'
 import {
   normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking, isCancelled
@@ -526,9 +527,20 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
     const nonSurgeonItems = []
     const otherRollup = []
     const needsAttention = []
+    const tasks = []
 
     for (const event of dayEvents) {
       if (caseIds.has(event.id)) continue
+
+      // A job somebody has to do, as opposed to an operation. Taken first: the
+      // prefix is unambiguous, and nothing after this should get the chance to
+      // read "TASK: Get Athlet back from RHH" as a meeting and roll it up with
+      // the things nobody acts on.
+      const task = readTask(event.title, event.description)
+      if (task) {
+        tasks.push({ ...task, id: event.id, date: dayDate })
+        continue
+      }
       // An untitled event used to be skipped outright, which meant it vanished
       // from the app while still sitting on the calendar.
       const title = stripIdentifiers(event.title) || '(untitled booking)'
@@ -595,6 +607,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       caseCountLine: caseCountLine(cases, nonSurgeonItems),
       flags,
       casesByHospital: groupByHospital(cases.map(stripInternals)),
+      // Kit to move, trays to get back, things to restock. Not operations, and
+      // the part of the week that actually goes wrong.
+      tasks,
       nonSurgeonItems,
       otherRollup,
       needsAttention

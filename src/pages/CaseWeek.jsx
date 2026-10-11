@@ -18,6 +18,7 @@ import { implantQuestion } from '../clinicalPlan/deduceKit.js'
 import { useIsDesktop } from '../design/viewport.js'
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
+import NewTask from './cases/NewTask.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import ListPlace from './cases/ListPlace.jsx'
 import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
@@ -159,6 +160,50 @@ const KIND_TONE = {
  * Nothing at all for a case we are not attending: there is no kit to bring,
  * and a supply prompt on one is noise standing next to the cases that need it.
  */
+/**
+ * A job on a day, with a tap to say it is done.
+ *
+ * "These reminders are important and need to be really easy to add to the day
+ * so everyone can see them."
+ *
+ * Tomato, because colours.js already calls that one "General alerts" and no
+ * surgeon owns it — a task in a surgeon's colour reads as that surgeon having
+ * a case. Loud on purpose: the whole problem is that these get forgotten.
+ *
+ * Done greys it out and strikes it through rather than removing it. A task that
+ * vanishes when it is finished leaves nobody able to answer "did anybody
+ * actually fetch that tray", which is the question it was written to prevent.
+ */
+function TaskRow({ task, onDone, compact }) {
+  const done = Boolean(task.done)
+  return (
+    <button type="button"
+      onClick={() => onDone?.(task, !done)}
+      aria-pressed={done}
+      aria-label={`${task.what}${done ? ' — done' : ' — mark as done'}`}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+        padding: compact ? '4px 7px' : `6px ${space.sm}px`, marginBottom: 4,
+        borderRadius: radius.control,
+        background: done ? colour.surface : 'rgba(213,0,0,0.10)',
+        border: `1px solid ${done ? colour.line : 'rgba(213,0,0,0.38)'}`,
+        ...text('micro'), textTransform: 'none', letterSpacing: 0, lineHeight: 1.35,
+        color: done ? colour.inkFaint : colour.ink,
+        fontWeight: done ? 400 : 600,
+        ...(done ? { textDecoration: 'line-through' } : {})
+      }}>
+      <span aria-hidden="true" style={{ marginRight: 6 }}>{done ? '✓' : '☐'}</span>
+      {task.what}
+      {task.who && !done && (
+        <span style={{ fontWeight: 400, color: colour.inkMuted }}> · {task.who}</span>
+      )}
+      {done && task.doneBy && (
+        <span style={{ fontWeight: 400 }}> · {task.doneBy}</span>
+      )}
+    </button>
+  )
+}
+
 /**
  * The navigation badge, readable on whatever colour the card happens to be.
  *
@@ -564,20 +609,46 @@ function ItemRow({ item }) {
  * under, so the sheet opens already set to that date — one fewer thing to choose
  * for the booking somebody is most likely making.
  */
-function AddBookingRow({ day, onAdd }) {
+function AddBookingRow({ day, onAdd, onAddTask }) {
+  const when = day ? ` to ${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}` : ''
+  const base = {
+    display: 'flex', alignItems: 'center', gap: space.sm,
+    padding: `${space.sm}px ${space.md}px`,
+    borderRadius: radius.card, cursor: 'pointer',
+    ...text('bodyStrong')
+  }
   return (
-    <button type="button" onClick={() => onAdd(day)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: space.sm, width: '100%',
-        padding: `${space.sm}px ${space.md}px`, marginBottom: space.sm,
-        borderRadius: radius.card, cursor: 'pointer',
-        background: colour.accentSoft,
-        border: '1px dashed rgba(24,154,133,0.45)',
-        color: colour.accentDeep, ...text('bodyStrong')
-      }}>
-      <span aria-hidden="true" style={{ ...text('heading'), lineHeight: 1 }}>+</span>
-      <span>Add a booking{day ? ` to ${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}` : ''}</span>
-    </button>
+    <div style={{ display: 'flex', gap: space.sm, marginBottom: space.sm }}>
+      <button type="button" onClick={() => onAdd(day)}
+        style={{
+          ...base, flexGrow: 1, flexShrink: 1, flexBasis: 0,
+          background: colour.accentSoft,
+          border: '1px dashed rgba(24,154,133,0.45)',
+          color: colour.accentDeep
+        }}>
+        <span aria-hidden="true" style={{ ...text('heading'), lineHeight: 1 }}>+</span>
+        <span>Add a booking{when}</span>
+      </button>
+
+      {/* "We need to add an extra button to the portal for add task... add it
+          somewhere useful, like under the add a booking button or similar."
+          Beside it rather than under it: the two are the same decision — what
+          is happening on this day — and a second full-width row pushes the
+          cases further down every screen for the sake of a button.
+
+          Narrower, because a booking is the commoner thing, and in the task
+          colour so it is obvious which one does which. */}
+      <button type="button" onClick={() => onAddTask(day)}
+        style={{
+          ...base, flexGrow: 0, flexShrink: 0, whiteSpace: 'nowrap',
+          background: 'rgba(213,0,0,0.08)',
+          border: '1px dashed rgba(213,0,0,0.38)',
+          color: colour.ink
+        }}>
+        <span aria-hidden="true" style={{ ...text('heading'), lineHeight: 1 }}>+</span>
+        <span>Task</span>
+      </button>
+    </div>
   )
 }
 
@@ -835,7 +906,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
  * the single noisiest thing on the screen; and the reorder arrows themselves,
  * which belong in the day view where there is room to use them.
  */
-function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences }) {
+function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone }) {
   return (
     <div style={{
       display: 'grid',
@@ -848,7 +919,7 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
       {(plan.days || []).map(day => (
         <WeekColumn key={day.date} day={day} today={today} onOpen={onOpen}
           onSetPlace={onSetPlace} onPreferences={onPreferences}
-          hasPreferences={hasPreferences} />
+          hasPreferences={hasPreferences} onTaskDone={onTaskDone} />
       ))}
     </div>
   )
@@ -860,7 +931,7 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
  * Its own component because each column keeps its own running order while the
  * calendar catches up, and a hook cannot be called inside a map.
  */
-function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences }) {
+function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone }) {
   const isToday = day.date === today
         const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
         const groups = day.casesByHospital || []
@@ -912,6 +983,13 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
                 }}>{item.title || item.text}</div>
               ))}
 
+              {/* Kit to move, trays to get back, things to restock. Above the
+                  cases, because a job that has to happen before the list
+                  starts is the thing somebody needs to see first. */}
+              {(day.tasks || []).map(task => (
+                <TaskRow key={task.id} task={task} onDone={onTaskDone} compact />
+              ))}
+
               {groups.map(group => {
                 // The order the list will run in, and whether it is worth
                 // numbering: one case at a hospital has no running order.
@@ -953,7 +1031,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
  * one running order and everybody is reading it.
  */
 
-function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences }) {
+function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone }) {
   const groups = day.casesByHospital || []
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
@@ -966,7 +1044,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   // the on-call rota, which is a different job and usually a different person.
   const leaderToday = leader?.firstName && withinWeek(day.date, 12) ? leader.firstName : null
   const empty = !groups.length && !others.length && !away.length
-    && !attention.length && !(day.flags || []).length
+    && !attention.length && !(day.flags || []).length && !(day.tasks || []).length
 
   return (
     <>
@@ -1002,6 +1080,14 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           ))}
         </div>
       )}
+
+      {/* Kit to move, trays to get back, things to restock. Above the cases,
+          because a job that has to happen before the list starts is the thing
+          somebody needs to see first. Same component as the week column, so
+          the two cannot drift apart. */}
+      {(day.tasks || []).map(task => (
+        <TaskRow key={task.id} task={task} onDone={onTaskDone} />
+      ))}
 
       {/* Kit on the move is drawn like an alert on purpose. It is a thing
           somebody has to physically do, on that day, and it used to sit at the
@@ -1072,6 +1158,9 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [editing, setEditing] = useState(null)
   // The day the sheet should open on, or null when it is closed.
   const [adding, setAdding] = useState(null)
+  // The day a task is being added to, or null. Separate from `adding` so that
+  // opening one does not look like opening the other.
+  const [addingTask, setAddingTask] = useState(null)
   const prefs = useMemo(() => readPrefs(), [])
   const [chosenSpan, setSpan] = useState(prefs.caseSpan === 'week' ? 'week' : 'day')
   // A desktop has one view: the week, laid out in columns. The day view was
@@ -1302,6 +1391,33 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [queueCount, setQueueCount] = useState(0)
   const [showQueue, setShowQueue] = useState(false)
 
+  /**
+   * Ticks a task off, or puts it back.
+   *
+   * One tap on the task itself, because a tick-box beside it would be a second
+   * target on a row that is already small on a phone, and there is nothing else
+   * tapping a task could reasonably mean.
+   *
+   * The week is read again afterwards rather than the row being changed in
+   * place: the task lives on the calendar, several people are looking at the
+   * same day, and the answer to "is this done" should come from there.
+   */
+  const markTaskDone = useCallback(async (task, done) => {
+    if (!task?.id) return
+    try {
+      const res = await fetch('/api/calendar/today?action=taskdone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user?.token}` },
+        body: JSON.stringify({ eventId: task.id, done })
+      })
+      if (!res.ok) return
+      await load(window_, { quiet: true })
+    } catch {
+      // A tick that did not save leaves the task where it was, which is the
+      // safe direction: somebody sees it still outstanding and taps again.
+    }
+  }, [user, load, window_])
+
   const countQueue = useCallback(async () => {
     try {
       const res = await fetch('/api/calendar/today?action=queue', {
@@ -1512,17 +1628,18 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 {dayPlan?.caseCountLine ? ` · ${dayPlan.caseCountLine}` : ''}
               </div>
             </div>
-            <AddBookingRow day={activeDay} onAdd={setAdding} />
+            <AddBookingRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing}
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
-                  hasPreferences={hasPreferences} />
+                  hasPreferences={hasPreferences}
+                  onTaskDone={markTaskDone} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}
 
-        {plan && span === 'week' && <AddBookingRow day={activeDay} onAdd={setAdding} />}
+        {plan && span === 'week' && <AddBookingRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask} />}
 
         {/* Seven columns on a desktop, the familiar list on a phone. A week
             read side by side shows which day is heavy without scrolling, which
@@ -1534,7 +1651,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             onOpen={setEditing}
             onSetPlace={setPlacing}
             onPreferences={openPreferences}
-            hasPreferences={hasPreferences} />
+            hasPreferences={hasPreferences}
+            onTaskDone={markTaskDone} />
         )}
 
         {plan && span === 'week' && !desktop && (plan.days || []).map(day => (
@@ -1564,7 +1682,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             <DayPanel day={day} onOpen={setEditing}
               onSetPlace={setPlacing} leader={leader}
               onPreferences={openPreferences}
-              hasPreferences={hasPreferences} />
+              hasPreferences={hasPreferences}
+              onTaskDone={markTaskDone} />
           </div>
         ))}
 
@@ -1626,6 +1745,14 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             .flatMap(g => g.cases)
             .filter(c => !c.cancelled)}
           onClose={() => setAdding(null)}
+          onCreated={() => load(window_, { quiet: true })} />
+      )}
+
+      {addingTask && (
+        <NewTask
+          user={user}
+          date={addingTask}
+          onClose={() => setAddingTask(null)}
           onCreated={() => load(window_, { quiet: true })} />
       )}
 

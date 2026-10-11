@@ -59,6 +59,16 @@ export default async function handler(req, res) {
 
   try {
     calendarResult = await addCalendarEvent(approved)
+    // Said out loud rather than silently. Falling back means the service
+    // account cannot write to the Staff Leave calendar, and the consequence is
+    // the duplicate entries this was changed to stop — the portal reads both
+    // calendars, so leave written to the bookings one shows up twice. No names
+    // in the line: it is a configuration fault, not a person's business.
+    if (calendarResult?.fellBack) {
+      console.warn('Calendar: leave fell back to the bookings calendar — '
+        + 'the service account cannot write to GOOGLE_LEAVE_CALENDAR_ID. '
+        + 'Share that calendar with it to stop duplicate entries.')
+    }
   } catch (err) {
     calendarError = err.message
     console.error('Calendar:', err.message)

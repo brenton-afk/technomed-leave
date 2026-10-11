@@ -141,22 +141,58 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
     transparency: 'transparent'
   }
 
-  const res = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(event)
+  // ── Which calendar approved leave goes on ──
+  //
+  // "There are currently two entries in the calendar for Brenton leave."
+  //
+  // There was a Staff Leave calendar — "Calendar for TechnoMed Team's Approved
+  // Annual/Personal Leave", which is exactly what this writes — and this wrote
+  // to the bookings calendar anyway. The portal reads both, so every approved
+  // request has been showing up twice: once from whoever keeps the leave
+  // calendar by hand, and once from here. Brent's was the one he noticed.
+  //
+  // The leave calendar first, where one is configured. The bookings calendar
+  // only as a fallback, because a staff member filing leave at nine on a
+  // Sunday night must not be told to come back when somebody has fixed a
+  // sharing setting — the request still has to land somewhere.
+  const leaveCalendar = (process.env.GOOGLE_LEAVE_CALENDAR_ID || '').trim()
+  const targets = leaveCalendar
+    ? [{ id: leaveCalendar, preferred: true }, { id: GOOGLE_CALENDAR_ID, preferred: false }]
+    : [{ id: GOOGLE_CALENDAR_ID, preferred: false }]
+
+  let lastError = null
+  for (const target of targets) {
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(target.id)}/events`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(event)
+      }
+    )
+
+    const result = await res.json()
+    if (!result.error) {
+      return {
+        eventId: result.id,
+        eventLink: result.htmlLink,
+        calendarId: target.id,
+        // Said out loud so the caller can say it too. A silent fallback would
+        // recreate the duplicate quietly, which is the bug this is fixing.
+        fellBack: !target.preferred && targets.length > 1
+      }
     }
-  )
+    lastError = result.error
+    // Only a permissions problem is worth trying the other calendar for. A
+    // malformed event will be just as malformed on the second attempt.
+    const denied = res.status === 403 || res.status === 404
+    if (!denied) break
+  }
 
-  const result = await res.json()
-  if (result.error) throw new Error(result.error.message || 'Google Calendar error')
-
-  return { eventId: result.id, eventLink: result.htmlLink }
+  throw new Error(lastError?.message || 'Google Calendar error')
 }
 
 // ─── Marking who attended a case ──────────────────────────────────────────────
@@ -314,6 +350,45 @@ export async function getCalendarEvent(eventId) {
  * top of one another. An hour each, laid out end to end, says the same nothing
  * about timing and shows the day. See src/clinicalPlan/dayLayout.js.
  */
+/**
+ * A task on a day: kit to move, a tray to get back, something to restock.
+ *
+ * All-day on purpose. A task is not at ten o'clock — it is a thing that has to
+ * happen before the day is out — and an all-day entry sits in the band at the
+ * top of the day in Google, above the cases, which is exactly where a reminder
+ * wants to be. It also keeps tidyDay away from it: that only moves entries with
+ * a start time, and a task being shuffled into a theatre slot would be absurd.
+ */
+export async function createTaskEvent({ summary, description, date, colorId }) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const calendarId = getCalendarId()
+
+  // Google treats an all-day end as exclusive, so a one-day task ends tomorrow.
+  const end = new Date(`${date}T00:00:00Z`)
+  end.setUTCDate(end.getUTCDate() + 1)
+
+  const body = {
+    summary,
+    description,
+    start: { date },
+    end: { date: end.toISOString().slice(0, 10) },
+    // It does not make anybody busy. Somebody has a job to do, not a meeting.
+    transparency: 'transparent'
+  }
+  if (colorId) body.colorId = String(colorId)
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+
+  if (!res.ok) throw new Error(`Could not add the task (${res.status}): ${await res.text()}`)
+  return res.json()
+}
+
 export async function createBookingEvent({ summary, description, date, colorId, location, hour = 8 }) {
   const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
   const calendarId = getCalendarId()

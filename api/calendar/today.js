@@ -7,7 +7,20 @@ import {
 } from '../_googleCalendar.js'
 import { requireSession } from '../_auth.js'
 import {
-  updateCalendarEvent, getCalendarEvent, createBookingEvent, deleteCalendarEvent, BOOKING_TZ
+  taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX
+} from '../../src/clinicalPlan/tasks.js'
+
+/**
+ * Tomato — the eleventh Google colour, and the only one no surgeon owns.
+ *
+ * colours.js already calls it "General alerts", so a task is not borrowing a
+ * meaning; it is the thing that meaning was for. A task in a surgeon's colour
+ * would read as that surgeon having a case.
+ */
+const TASK_COLOR_ID = '11'
+import {
+  updateCalendarEvent, getCalendarEvent, createBookingEvent, createTaskEvent,
+  deleteCalendarEvent, BOOKING_TZ
 } from '../_googleCalendar.js'
 import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
@@ -71,6 +84,10 @@ export default async function handler(req, res) {
   // One booking, read fresh when the edit sheet opens.
   if (req.query.action === 'booking') return handleBooking(req, res)
   if (req.query.action === 'create') return handleCreate(req, res)
+  // Kit to move, a tray to get back, something to restock. Not an operation,
+  // and the part of a week that actually goes wrong.
+  if (req.query.action === 'task') return handleTask(req, res)
+  if (req.query.action === 'taskdone') return handleTaskDone(req, res)
   if (req.query.action === 'delete') return handleDelete(req, res)
   // The booking review queue. Bookings read out of bookings@ wait here for a
   // person before they reach the calendar — see api/_redis.js for why.
@@ -662,6 +679,112 @@ function withAttribution(description, name, { created = false } = {}) {
       ? `Entered by ${enteredBy}`
       : `Entered by ${enteredBy} · amended by ${who}`
   })
+}
+
+/**
+ * Adds a task to a day.
+ *
+ * "These reminders are important and need to be really easy to add to the day
+ * so everyone can see them. It needs to be easier than adding a task in Google
+ * Calendar, which is a bit clunky and relies on a lot of text entry."
+ *
+ * So the body is a handful of chosen values rather than prose, and the wording
+ * is composed here from them. Nothing a phone keyboard has to produce.
+ */
+async function handleTask(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const date = String(body.date || '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'A date is needed' })
+    }
+    if (!kindFor(body.kind)) return res.status(400).json({ error: 'Pick what kind of task' })
+
+    // The one free-text field there is, held to the same rule as every other
+    // string that reaches this calendar.
+    const task = {
+      kind: body.kind,
+      thing: stripIdentifiers(String(body.thing || '')).trim().slice(0, 120),
+      from: stripIdentifiers(String(body.from || '')).trim().slice(0, 40),
+      to: stripIdentifiers(String(body.to || '')).trim().slice(0, 40),
+      who: stripIdentifiers(String(body.who || '')).trim().slice(0, 40),
+      note: stripIdentifiers(String(body.note || '')).trim().slice(0, 200),
+      addedBy: firstNameFor(session.email)
+    }
+    const summary = taskSummary(task)
+    if (!summary || summary === TASK_PREFIX) {
+      return res.status(400).json({ error: 'Say what the task is' })
+    }
+
+    const created = await createTaskEvent({
+      summary,
+      description: taskDescription(task),
+      date,
+      colorId: TASK_COLOR_ID
+    })
+
+    return res.status(200).json({
+      ok: true,
+      event: { id: created.id, summary: created.summary || '', date }
+    })
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message })
+  }
+}
+
+/**
+ * Ticks a task off, or puts it back.
+ *
+ * Appended to the notes rather than deleted, and the entry stays on the day
+ * greyed out. A task that vanishes when it is done leaves nobody able to answer
+ * "did anybody actually fetch that tray" — which is the question the task was
+ * written to prevent in the first place.
+ */
+async function handleTaskDone(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const eventId = String(body.eventId || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' })
+    const done = body.done !== false
+
+    const current = await getCalendarEvent(eventId)
+    if (!isTask(current.summary || '')) {
+      return res.status(400).json({ error: 'That is not a task' })
+    }
+
+    const without = String(current.description || '')
+      .replace(/^\s*Done by [^\n]*$/gmi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trimEnd()
+
+    const description = done
+      ? `${without}\n\n${doneLine(firstNameFor(session.email), todayInHobart())}`.trim()
+      : without
+
+    const saved = await updateCalendarEvent(eventId, {
+      description,
+      // Grey once it is done, so the calendar says so too and not only the app.
+      colorId: done ? '8' : TASK_COLOR_ID
+    }, { etag: body.etag })
+
+    return res.status(200).json({
+      ok: true, done,
+      event: { id: saved.id, summary: saved.summary || '', etag: saved.etag || null }
+    })
+  } catch (err) {
+    if (err.code === 'conflict') {
+      return res.status(409).json({ error: err.message, code: 'conflict' })
+    }
+    return res.status(err.status || 500).json({ error: err.message })
+  }
 }
 
 async function handleDelete(req, res) {
