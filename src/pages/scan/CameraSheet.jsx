@@ -304,8 +304,22 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
     }
   }, [dragging, move])
 
+  const shaped = Boolean(capture.originalWidth && capture.originalHeight)
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3100, display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+    <div style={{
+      position: 'fixed', inset: 0, background: '#000', zIndex: 3100,
+      display: 'flex', flexDirection: 'column',
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+      // The safety net, and the lesson from the same week's scanner freeze: a
+      // screen somebody is holding over a bench with a signed form in the
+      // other hand must never be able to put a control out of reach. If some
+      // combination of photograph and handset still overflows, it scrolls.
+      // Up only — sideways is the bug that had the edit sheet sliding under a
+      // thumb. The frame sets touch-action: none, so dragging a corner still
+      // drags the corner rather than the page.
+      overflowY: 'auto', overflowX: 'hidden'
+    }}>
       {/* The flattened result. This is the part that gives way when the
           screen is short: it is a confirmation, and the photograph below is
           the thing being worked on. */}
@@ -340,11 +354,45 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
           fills it absolutely, and it is not allowed to shrink. The two cannot
           come apart: anything that resizes the box resizes both. */}
       <div ref={frameRef} style={{
-        position: 'relative', margin: '0 16px', borderRadius: 10,
-        overflow: 'hidden', touchAction: 'none', flexShrink: 0,
-        aspectRatio: capture.originalWidth && capture.originalHeight
-          ? `${capture.originalWidth} / ${capture.originalHeight}`
-          : undefined
+        position: 'relative', borderRadius: 10,
+        overflow: 'hidden', touchAction: 'none',
+
+        // ── It may shrink, and it must keep its shape ──
+        //
+        // "Scanned the page, worked quite well, then I can't do anything. No
+        // button to hit scan next page, or anything, just frozen and have to
+        // exit the app."
+        //
+        // It was flexShrink: 0. A usage form is photographed in portrait, so
+        // the box took the photograph's own aspect ratio and stood ~1300px
+        // tall on a phone — taller than what was left of the screen once the
+        // hint and the buttons were allowed for. The buttons went under the
+        // bottom edge, a fixed overlay does not scroll, and there was no way
+        // to reach them or to go back. Nothing had crashed; the only control
+        // left was to kill the app.
+        //
+        // The shrink lock was belt-and-braces and it is not needed any more.
+        // What the earlier fix was really protecting is that the photograph
+        // and the outline are measured against the *same* box, and that is now
+        // guaranteed by both of them filling it absolutely — resize the box and
+        // both resize with it, at any size.
+        //
+        // So the height gives way and the aspect ratio holds: the width is
+        // computed from the height rather than set, which keeps the photograph
+        // undistorted and the normalised corners true.
+        // Width from height only where there is a ratio to compute it from.
+        // Without one, `width: auto` has nothing to work with — the
+        // photograph is positioned absolutely and contributes no intrinsic
+        // size — so the box would collapse to nothing. That is the same class
+        // of fault as the one being fixed, so it is handled rather than
+        // assumed away.
+        flexGrow: 0, flexShrink: 1, minHeight: 0,
+        ...(shaped
+          ? {
+            alignSelf: 'center', width: 'auto', maxWidth: 'calc(100% - 32px)',
+            aspectRatio: `${capture.originalWidth} / ${capture.originalHeight}`
+          }
+          : { alignSelf: 'stretch', margin: '0 16px' })
       }}>
         <img src={capture.original} alt="The photograph the page was taken from"
           style={{

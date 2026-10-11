@@ -522,9 +522,49 @@ describe('the corner editor measures one box', () => {
 
   it('will not let the photograph be squashed', () => {
     open()
-    // The one declaration that stops a short screen compressing the box out
-    // from under the outline.
-    expect(editor().style.flexShrink).toBe('0')
+    // This used to assert flexShrink: 0, which was the first fix for the
+    // outline riding up the page — and it was the wrong thing to hold on to.
+    // A box that cannot shrink stands as tall as a portrait photograph makes
+    // it, which on a phone put the buttons under the bottom edge of a fixed
+    // overlay that does not scroll: "just frozen and have to exit the app".
+    //
+    // What actually stops the squash is the aspect ratio. The height gives
+    // way, the width is computed from it, and the shape is kept — so the
+    // photograph is never distorted and the normalised corners stay true.
+    expect(editor().style.aspectRatio).toBe('900 / 1200')
+    expect(editor().style.width).toBe('auto')
+    expect(editor().style.flexGrow).toBe('0')
+  })
+
+  it('gives way rather than pushing the buttons off the screen', () => {
+    open()
+    expect(editor().style.flexShrink).toBe('1')
+    expect(editor().style.minHeight).toBe('0px')
+  })
+
+  it('does not collapse when the photograph has no dimensions on it', () => {
+    // width:auto needs a ratio to compute from, and the photograph is
+    // positioned absolutely so it contributes no intrinsic size. Without a
+    // ratio the box would be nothing wide — the same class of fault as the one
+    // being fixed, so it is handled rather than assumed away.
+    render(
+      <CropReview capture={{ ...capture, originalWidth: 0, originalHeight: 0 }}
+        cv={null} pageCount={0}
+        onConfirm={noop} onRetake={noop} onAddAnother={noop} onCancel={noop} />)
+    const box = screen.getByAltText('The photograph the page was taken from').parentElement
+    expect(box.style.alignSelf).toBe('stretch')
+    expect(box.style.width).not.toBe('auto')
+  })
+
+  it('can be scrolled to, whatever the photograph turns out to be', () => {
+    // The safety net. A screen held over a bench with a signed form in the
+    // other hand must never be able to put a control out of reach.
+    const { container } = open()
+    const sheet = container.firstChild
+    expect(sheet.style.overflowY).toBe('auto')
+    // Up only. Sideways is the bug that had the edit sheet sliding under a
+    // thumb.
+    expect(sheet.style.overflowX).toBe('hidden')
   })
 
   it('shapes the box to the photograph it is showing', () => {
