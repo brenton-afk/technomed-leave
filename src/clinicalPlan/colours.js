@@ -77,7 +77,16 @@ export const SURGEON_COLOUR_NAMES = {
   // spine guide uses eight and Max Fax the ninth; this is the tenth, and it is
   // a blue nothing else here is, which is the point — an orthopaedic case
   // should not be mistakable for a spine one at a glance.
-  Harvie: 'Peacock'
+  // All of orthopaedics shares it. "We can retain the blue colour that you
+  // used last week for the Harvie booking" — and the point of that colour was
+  // never Harvie, it was that an orthopaedic case should not be mistakable for
+  // a spine one at a glance.
+  Harvie: 'Peacock',
+  Sadiq: 'Peacock',
+  Mackie: 'Peacock',
+  Eionoder: 'Peacock',
+  Hutchinson: 'Peacock',
+  Pritchard: 'Peacock'
 }
 
 /**
@@ -87,7 +96,9 @@ export const SURGEON_COLOUR_NAMES = {
  * set of people, and the week is read by somebody who carries spine trays. The
  * colour says it at a distance; this is what lets the card say it in a word.
  */
-export const ORTHOPAEDIC_SURGEONS = new Set(['Harvie'])
+export const ORTHOPAEDIC_SURGEONS = new Set([
+  'Harvie', 'Sadiq', 'Mackie', 'Eionoder', 'Hutchinson', 'Pritchard'
+])
 
 /** Whether this case belongs to the orthopaedic service. */
 export function isOrthopaedic(surgeon) {
@@ -104,7 +115,10 @@ export function isOrthopaedic(surgeon) {
 export const SURGEON_SERVICES = [
   { service: 'Spine', surgeons: ['Atallah', 'Dubey', 'Fowler', 'Gupta', 'Hannan', 'Ibbett', 'JPW', 'Thani'] },
   { service: 'Max Fax', surgeons: ['Carter', 'Garg', 'Ong', 'Silifent', 'Varidel'] },
-  { service: 'Orthopaedics', surgeons: ['Harvie'] }
+  // Alphabetical, like the others. "Just keep them as a list in the portal so
+  // we know who they are if we book a case under ortho" — this is that list,
+  // and it is also what the new-booking picker offers.
+  { service: 'Orthopaedics', surgeons: ['Eionoder', 'Harvie', 'Hutchinson', 'Mackie', 'Pritchard', 'Sadiq'] }
 ]
 
 export const OTHER_COLOUR_NAMES = {

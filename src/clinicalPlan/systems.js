@@ -219,7 +219,30 @@ const AIRO_SIGNALS = [
   // The same three spelled out. A booking written in full words is still a
   // booking for screws, and the abbreviations are not guaranteed.
   /posterior\s+spinal\s+fusion/,
-  /(?:posterior|transforaminal)\s+(?:lumbar\s+)?interbody/
+  /(?:posterior|transforaminal)\s+(?:lumbar\s+)?interbody/,
+
+  // ── Two Brent named that were never here ──
+  //
+  // "C1/2 Fixations, Reform Lateral Mass cases, Max Fax Post Op Spins, etc
+  // (all the previous rules)."
+  //
+  // The lateral mass cases were covered. These two were not, so they have been
+  // going without a badge the whole time.
+  //
+  // The upper cervical spine. C1/2 is the one place in the spine where a screw
+  // goes past the vertebral artery with no margin, which is the case most in
+  // need of navigation and the one the app was silent about. Written every way
+  // the rooms write it, including the named techniques.
+  /\bc\s*1\s*[/-]\s*(?:c\s*)?2\b/i,
+  /\batlanto[\s-]?axial\b/,
+  /\bodontoid\b/,
+  /\b(?:magerl|harms|goel)\b/,
+
+  // Max fax. They book us for a post-operative CT once a facial fracture is
+  // reduced and fixated — that spin IS the AIRO, and it is most of what this
+  // service calls us for at all.
+  /post[\s-]?op(?:erative)?[\s-]*(?:spin|ct|scan|image|imaging)/,
+  /\bspin\b(?!\w)/
 ]
 
 // ─── Taking screws out does not need navigation ──────────────────────────────

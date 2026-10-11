@@ -1040,32 +1040,26 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   const away = everythingElse.filter(item => item.kind === 'leave')
   const others = everythingElse.filter(item => item.kind !== 'leave')
   const attention = day.needsAttention || []
-  // Only on the weekdays they actually hold it. Saturday and Sunday belong to
-  // the on-call rota, which is a different job and usually a different person.
-  const leaderToday = leader?.firstName && withinWeek(day.date, 12) ? leader.firstName : null
+  // Said once, at the top of the page, by the strip that can also change it.
+  //
+  // "The team leader notation is doubled up at the top of the page — there's a
+  // spot to amend the team leader and then the actual team leader is listed a
+  // second time. Just have the one option/tab that allows you to adjust, and
+  // also informs you."
+  //
+  // It used to be here as well, on the grounds that the strip answers it for
+  // the week and this answered it for the day. On the day that is on screen
+  // those are the same sentence twice, a few centimetres apart — and the one
+  // that can be acted on is the other one.
   const empty = !groups.length && !others.length && !away.length
     && !attention.length && !(day.flags || []).length && !(day.tasks || []).length
 
   return (
     <>
-      {(away.length > 0 || leaderToday) && (
+      {away.length > 0 && (
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: space.sm
         }}>
-          {/* Alongside "Brent on call" and who is away, because it is the same
-              kind of fact: who is covering what, on this day. The strip at the
-              top of the week answers it for the week; this answers it for the
-              day somebody is actually looking at. */}
-          {leaderToday && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              background: colour.accentSoft, border: `1px solid ${colour.accent}`,
-              borderRadius: radius.pill, padding: `4px ${space.md}px`,
-              ...text('bodyStrong'), color: colour.accentDeep
-            }}>
-              {leaderToday} — team leader
-            </span>
-          )}
           {away.map((item, i) => (
             <span key={i} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,

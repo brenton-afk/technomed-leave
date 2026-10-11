@@ -57,6 +57,7 @@ const contrastRatio = (a, b) => {
 
 const SURGEONS = Object.keys(SURGEON_COLOUR_NAMES).filter(hasConfirmedAccent)
 const accent = name => accentForCase({ surgeon: name })
+const colourOf = name => SURGEON_COLOUR_NAMES[name]
 const wash = name => washFor({ surgeon: name })
 
 /** One representative surgeon per distinct colour, named for the message. */
@@ -96,7 +97,7 @@ describe('what the palette itself can support', () => {
     // genuinely similar. Fixing one means moving a surgeon to another calendar
     // colour, which is a change to a shared convention and so Brent's to make.
     const close = pairs
-      .map(([a, b]) => ({ pair: `${a}/${b}`, d: Math.round(distance(accent(a), accent(b))) }))
+      .map(([a, b]) => ({ a, b, d: Math.round(distance(accent(a), accent(b))) }))
       .filter(x => x.d < 25)
       .sort((x, y) => x.d - y.d)
 
@@ -111,11 +112,20 @@ describe('what the palette itself can support', () => {
     // bad of what was left — Tomato is 16 from Tangerine and means "alert"
     // everywhere else in the app.
     //
-    // Carter is Max Fax and Harvie is orthopaedics, so the two never appear on
-    // the same list; a confusion costs a second look rather than a wrong tray.
-    // Fixing it properly means moving somebody to a different colour in Google
-    // Calendar, which is a change to a shared convention and Brent's to make.
-    expect(close.map(c => c.pair)).toEqual(['Thani/Gupta', 'Carter/Harvie'])
+    // Max Fax is Lavender and orthopaedics is Peacock, so the two never appear
+    // on the same list; a confusion costs a second look rather than a wrong
+    // tray. Fixing it properly means moving somebody to a different colour in
+    // Google Calendar, which is a change to a shared convention and Brent's to
+    // make.
+    //
+    // Named by colour, not by surgeon. DISTINCT keeps one surgeon per colour
+    // and which one that is depends on who happens to be last in the list —
+    // so adding the five orthopaedic surgeons turned "Carter/Harvie" into
+    // "Carter/Pritchard" while the palette itself had not moved an inch. The
+    // fact being recorded is about two colours; naming it after two people
+    // made it churn every time somebody new was hired.
+    expect(close.map(c => `${colourOf(c.a)}/${colourOf(c.b)}`))
+      .toEqual(['Sage/Basil', 'Lavender/Peacock'])
   })
 })
 

@@ -25,7 +25,17 @@ export const SURGEON_KEYS = [
   // Orthopaedics. A different service with different kit and different
   // theatres — see ORTHOPAEDIC_SURGEONS in colours.js, which is what makes the
   // card say so.
-  'Harvie'
+  //
+  // "Add the following Orthopaedic surgeons to the surgeon banks for when we
+  // want to add adhoc ortho bookings to the portal... just keep them as a list
+  // in the portal so we know who they are if we book a case under ortho."
+  //
+  // Listed so an ad-hoc orthopaedic booking has a name to pick rather than one
+  // to type, and so a booking that arrives under one of them is read as a case
+  // at all — an unrecognised surgeon means no surgeon, and no surgeon means the
+  // booking is not read as a case. They share Peacock with Harvie, which is
+  // what makes an orthopaedic case unmistakable at a glance on a week.
+  'Harvie', 'Sadiq', 'Mackie', 'Eionoder', 'Hutchinson', 'Pritchard'
 ]
 
 /**
@@ -41,7 +51,19 @@ export const SURGEON_KEYS = [
  */
 const SURGEON_ALIASES = {
   'peters willke': 'JPW',
-  'jens peters willke': 'JPW'
+  'jens peters willke': 'JPW',
+
+  // The orthopaedic list, written out in full the way a hospital list gives
+  // them and the way Brent sent them through. The app files everybody under a
+  // surname; these are the other strings that reach the same person.
+  'shalinder sadiq': 'Sadiq',
+  'scott mackie': 'Mackie',
+  'paul eionoder': 'Eionoder',
+  'steve hutchinson': 'Hutchinson',
+  'stephen hutchinson': 'Hutchinson',
+  'mike pritchard': 'Pritchard',
+  'michael pritchard': 'Pritchard',
+  'paul harvie': 'Harvie'
 }
 
 /**
