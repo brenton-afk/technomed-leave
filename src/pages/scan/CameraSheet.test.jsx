@@ -522,49 +522,55 @@ describe('the corner editor measures one box', () => {
 
   it('will not let the photograph be squashed', () => {
     open()
-    // This used to assert flexShrink: 0, which was the first fix for the
-    // outline riding up the page — and it was the wrong thing to hold on to.
-    // A box that cannot shrink stands as tall as a portrait photograph makes
-    // it, which on a phone put the buttons under the bottom edge of a fixed
-    // overlay that does not scroll: "just frozen and have to exit the app".
-    //
-    // What actually stops the squash is the aspect ratio. The height gives
-    // way, the width is computed from it, and the shape is kept — so the
-    // photograph is never distorted and the normalised corners stay true.
+    // The box keeps its full width and does not shrink, so it is always the
+    // shape of the photograph it is showing.
+    expect(editor().style.flexShrink).toBe('0')
     expect(editor().style.aspectRatio).toBe('900 / 1200')
-    expect(editor().style.width).toBe('auto')
-    expect(editor().style.flexGrow).toBe('0')
   })
 
-  it('gives way rather than pushing the buttons off the screen', () => {
+  it('does not try to size itself from its height', () => {
+    // That was tried, to keep the buttons on the screen, and it collapsed the
+    // box: with `width: auto` there is no intrinsic width to compute from —
+    // the photograph inside is positioned absolutely and contributes none —
+    // so the box became nothing wide and took the corner handles with it.
+    // Reported at once: "now I can't adjust the corners".
     open()
-    expect(editor().style.flexShrink).toBe('1')
-    expect(editor().style.minHeight).toBe('0px')
+    expect(editor().style.width).not.toBe('auto')
+    expect(editor().style.alignSelf).not.toBe('center')
   })
 
-  it('does not collapse when the photograph has no dimensions on it', () => {
-    // width:auto needs a ratio to compute from, and the photograph is
-    // positioned absolutely so it contributes no intrinsic size. Without a
-    // ratio the box would be nothing wide — the same class of fault as the one
-    // being fixed, so it is handled rather than assumed away.
-    render(
-      <CropReview capture={{ ...capture, originalWidth: 0, originalHeight: 0 }}
-        cv={null} pageCount={0}
-        onConfirm={noop} onRetake={noop} onAddAnother={noop} onCancel={noop} />)
-    const box = screen.getByAltText('The photograph the page was taken from').parentElement
-    expect(box.style.alignSelf).toBe('stretch')
-    expect(box.style.width).not.toBe('auto')
+  it('keeps its corner handles, which are the point of the screen', () => {
+    open()
+    for (let i = 1; i <= 4; i++) {
+      expect(screen.getByLabelText(`Corner ${i}`)).toBeInTheDocument()
+    }
+    // Inside the same box as the photograph and the outline, so all three
+    // move together.
+    expect(screen.getByLabelText('Corner 1').parentElement).toBe(editor())
   })
 
-  it('can be scrolled to, whatever the photograph turns out to be', () => {
-    // The safety net. A screen held over a bench with a signed form in the
-    // other hand must never be able to put a control out of reach.
+  it('can be scrolled, whatever the photograph turns out to be', () => {
+    // A screen held over a bench with a signed form in the other hand must
+    // never be able to put a control out of reach.
     const { container } = open()
     const sheet = container.firstChild
     expect(sheet.style.overflowY).toBe('auto')
     // Up only. Sideways is the bug that had the edit sheet sliding under a
     // thumb.
     expect(sheet.style.overflowX).toBe('hidden')
+  })
+
+  it('keeps the buttons on the screen while it is scrolled', () => {
+    // The actual fix for the freeze. Shrinking the photograph to make room
+    // was the wrong trade on a screen whose whole job is dragging four
+    // corners accurately — so the photograph keeps its size and the controls
+    // stop moving instead.
+    open()
+    const buttons = screen.getByText('Retake').closest('div').parentElement
+    expect(buttons.style.position).toBe('sticky')
+    expect(buttons.style.bottom).toBe('0px')
+    // Opaque, because the photograph scrolls underneath them.
+    expect(buttons.style.background).toBe('rgb(0, 0, 0)')
   })
 
   it('shapes the box to the photograph it is showing', () => {

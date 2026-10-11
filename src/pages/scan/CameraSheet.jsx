@@ -380,19 +380,24 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
         // So the height gives way and the aspect ratio holds: the width is
         // computed from the height rather than set, which keeps the photograph
         // undistorted and the normalised corners true.
-        // Width from height only where there is a ratio to compute it from.
-        // Without one, `width: auto` has nothing to work with — the
-        // photograph is positioned absolutely and contributes no intrinsic
-        // size — so the box would collapse to nothing. That is the same class
-        // of fault as the one being fixed, so it is handled rather than
-        // assumed away.
-        flexGrow: 0, flexShrink: 1, minHeight: 0,
-        ...(shaped
-          ? {
-            alignSelf: 'center', width: 'auto', maxWidth: 'calc(100% - 32px)',
-            aspectRatio: `${capture.originalWidth} / ${capture.originalHeight}`
-          }
-          : { alignSelf: 'stretch', margin: '0 16px' })
+        // Full width, at the photograph's own shape, and it does not shrink.
+        //
+        // Sizing it from the height was tried and was wrong: with `width:
+        // auto` the box has no intrinsic width to compute from — the
+        // photograph inside is positioned absolutely and contributes none — so
+        // it collapsed to nothing and took the corner handles with it.
+        // Reported immediately: "now I can't adjust the corners".
+        //
+        // So the box keeps the full width it has always had, and the problem
+        // it was shrunk to solve — the buttons under the bottom edge — is
+        // solved where it actually lives: the sheet scrolls, and the buttons
+        // are stuck to the bottom of it. Making the thing being worked on
+        // smaller to fit the controls was the wrong trade on a screen whose
+        // whole job is dragging four corners accurately.
+        flexShrink: 0, margin: '0 16px',
+        aspectRatio: shaped
+          ? `${capture.originalWidth} / ${capture.originalHeight}`
+          : undefined
       }}>
         <img src={capture.original} alt="The photograph the page was taken from"
           style={{
@@ -434,7 +439,18 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
           page", then "Done", then "Read usage document" on the screen behind —
           four taps after framing the page, for the ordinary case of scanning one
           form and reading it. */}
-      <div style={{ padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Stuck to the bottom of the sheet, so they are on the screen whatever
+          shape the photograph turned out to be. This is the fix for "no button
+          to hit scan next page, or anything, just frozen and have to exit the
+          app" — the controls were under the bottom edge of an overlay that did
+          not scroll. Now the sheet scrolls and these do not go with it.
+
+          Opaque, because the photograph scrolls underneath them. */}
+      <div style={{
+        position: 'sticky', bottom: 0, background: '#000',
+        padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))',
+        display: 'flex', flexDirection: 'column', gap: 10
+      }}>
         {dirty ? (
           <button onClick={reflatten}
             style={{ width: '100%', padding: '14px 0', background: 'white', color: '#042746', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
