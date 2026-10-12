@@ -6,6 +6,7 @@ import {
 } from '../_redis.js'
 import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
+import { flagRepeats } from '../_worklistMatch.js'
 
 // Everything for the meeting note taker lives in this one function, routed
 // by ?action=. Vercel's Hobby plan caps a deployment at 12 serverless
@@ -38,6 +39,13 @@ export default async function handler(req, res) {
   if (action === 'analyze') return handleAnalyze(req, res)
   if (action === 'finalize') return handleFinalize(req, res)
   if (action === 'worklist') return handleWorklist(req, res)
+  // "Could she dump a transcript from a meeting into that section and have the
+  // Claude agent build out a task and action list?" The extraction already
+  // takes raw text, so pasting needs nothing here. A file does: this turns one
+  // into text and hands it to the same analyse step.
+  if (action === 'read-file') return handleReadFile(req, res)
+  // And a task that came from nobody's meeting — the thing agreed in the car.
+  if (action === 'add-task') return handleAddTask(req, res)
 
   return res.status(400).json({ error: 'Unknown or missing action' })
 }
@@ -209,6 +217,22 @@ ${transcript}
       notes: it.notes || ''
     }))
 
+    // "The same action comes up at the weekly meeting three weeks running."
+    //
+    // Flagged against what is already open, never merged. Two tasks that read
+    // alike are sometimes two different jobs, and a person reading both in two
+    // seconds can tell where this cannot. See _worklistMatch.js.
+    //
+    // A failure here costs the flag, not the extraction: an action list that
+    // arrives without the "haven't we said this" note is still the thing
+    // somebody asked for.
+    let flagged = actionItems
+    try {
+      flagged = flagRepeats(actionItems, await getWorklist())
+    } catch (err) {
+      console.error('repeat check skipped:', err.message)
+    }
+
     const meetingId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     const meeting = {
       id: meetingId,
@@ -217,15 +241,152 @@ ${transcript}
       recordedByEmail: recordedByEmail || null,
       summary: parsed.summary || '',
       transcript,
-      actionItems,
+      actionItems: flagged,
       status: 'draft',
       createdAt: new Date().toISOString()
     }
     await saveMeeting(meetingId, meeting)
 
-    return res.status(200).json({ meetingId, summary: meeting.summary, actionItems })
+    return res.status(200).json({ meetingId, summary: meeting.summary, actionItems: flagged })
   } catch (err) {
     console.error('analyze error:', err.message)
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+// ─── Turning a dumped file into text ─────────────────────────
+// Three kinds, and each is read the way this repo already reads that kind.
+//
+//   · .txt  — it is already text
+//   · .pdf  — handed to Claude as a document, which is how
+//             _readBookingDocument.js reads the ones that arrive by email.
+//             No PDF parser is added for the same reason it was not added
+//             there: the model reads a scanned page and a text one alike
+//   · .docx — mammoth, which is the one thing here that needed a dependency.
+//             A .docx is a zip of XML and unpacking it by hand is a parallel
+//             implementation of something fiddly and well solved
+//
+// The text is not stored. It goes to the analyse step, which keeps it on the
+// meeting record as the transcript — the same place a recorded meeting's words
+// already live.
+
+const READABLE = {
+  'text/plain': 'txt',
+  'text/markdown': 'txt',
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx'
+}
+
+/** The kind, from the media type where there is one and the name otherwise. */
+function kindOf(mediaType, filename) {
+  const byType = READABLE[String(mediaType || '').toLowerCase()]
+  if (byType) return byType
+  const ext = /\.([a-z0-9]+)$/i.exec(String(filename || ''))?.[1]?.toLowerCase()
+  if (ext === 'txt' || ext === 'md') return 'txt'
+  if (ext === 'pdf') return 'pdf'
+  if (ext === 'docx') return 'docx'
+  return null
+}
+
+async function handleReadFile(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { filename, mediaType, data } = req.body || {}
+  if (!data) return res.status(400).json({ error: 'No file was sent' })
+
+  const kind = kindOf(mediaType, filename)
+  if (!kind) {
+    return res.status(400).json({
+      error: 'That file type cannot be read here. Save it as .txt, .docx or '
+        + '.pdf, or paste the text straight in.'
+    })
+  }
+
+  try {
+    if (kind === 'txt') {
+      return res.status(200).json({ text: Buffer.from(data, 'base64').toString('utf8') })
+    }
+
+    if (kind === 'docx') {
+      const { default: mammoth } = await import('mammoth')
+      const { value } = await mammoth.extractRawText({ buffer: Buffer.from(data, 'base64') })
+      return res.status(200).json({ text: value || '' })
+    }
+
+    // A PDF, read by Claude rather than parsed. Asked for the words only:
+    // anything it adds of its own becomes a task somebody is told to do.
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
+    const claude = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 8000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data }
+            },
+            {
+              type: 'text',
+              text: 'Return the text of this document, verbatim, as plain text. '
+                + 'No summary, no commentary, no markdown fences. If it is a '
+                + 'meeting transcript keep the speaker labels as they are.'
+            }
+          ]
+        }]
+      })
+    })
+    if (!claude.ok) {
+      throw new Error(`Could not read the PDF (${claude.status})`)
+    }
+    const body = await claude.json()
+    const text = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('')
+    return res.status(200).json({ text })
+  } catch (err) {
+    // No file content in the message: a meeting document is exactly the kind
+    // of thing that must not reach a log.
+    console.error('read-file error:', err.message)
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+// ─── A task nobody held a meeting about ──────────────────────
+// The thing agreed in the car, or the one Erin already knows about and does
+// not need a model's help to write down. Straight to the worklist, because
+// there is nothing to review: whoever typed it is the review.
+
+async function handleAddTask(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { task, assignee, priority, due_date: dueDate, notes, addedByEmail } = req.body || {}
+  if (!String(task || '').trim()) return res.status(400).json({ error: 'Say what the task is' })
+
+  const validNames = new Set(STAFF.map(s => s.name))
+  const item = {
+    id: `typed-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    task: String(task).trim().slice(0, 300),
+    assignee: validNames.has(assignee) ? assignee : 'Unassigned',
+    priority: ['urgent', 'normal', 'low'].includes(priority) ? priority : 'normal',
+    due_date: dueDate || '',
+    notes: String(notes || '').trim().slice(0, 500),
+    status: 'open',
+    // No meeting behind it. Said rather than left blank, so the board can show
+    // where a task came from without having to guess from a missing field.
+    source: 'typed',
+    addedByEmail: addedByEmail || null,
+    createdAt: new Date().toISOString()
+  }
+
+  try {
+    await saveWorklistItem(item)
+    return res.status(200).json({ ok: true, item })
+  } catch (err) {
     return res.status(500).json({ error: err.message })
   }
 }
