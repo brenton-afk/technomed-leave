@@ -7,6 +7,7 @@ import {
 import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
 import { flagRepeats } from '../_worklistMatch.js'
+import { readActionList } from '../_actionItems.js'
 
 // Everything for the meeting note taker lives in this one function, routed
 // by ?action=. Vercel's Hobby plan caps a deployment at 12 serverless
@@ -193,7 +194,12 @@ ${transcript}
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
+        // Was 2,000, which is where "unterminated string in JSON at position
+        // 6964" came from: a long action list is more than 2,000 tokens of
+        // JSON and the answer stopped in the middle of a word. A meeting can
+        // reasonably produce forty items with a line of context each, and the
+        // cost of room that goes unused is nothing.
+        max_tokens: 16000,
         messages: [{ role: 'user', content: prompt }]
       })
     })
@@ -205,8 +211,9 @@ ${transcript}
     const textBlock = (claudeData.content || []).find(b => b.type === 'text')
     if (!textBlock) throw new Error('No text in Claude response')
 
-    const cleaned = textBlock.text.replace(/```json|```/g, '').trim()
-    const parsed = JSON.parse(cleaned)
+    // Salvaged rather than parsed, so an answer that still runs out of room
+    // one day costs the last item instead of all of them. See _actionItems.js.
+    const parsed = readActionList(textBlock.text, { stopReason: claudeData.stop_reason })
 
     const validNames = new Set(STAFF.map(s => s.name))
     const actionItems = (parsed.actionItems || []).map(it => ({
@@ -247,7 +254,15 @@ ${transcript}
     }
     await saveMeeting(meetingId, meeting)
 
-    return res.status(200).json({ meetingId, summary: meeting.summary, actionItems: flagged })
+    return res.status(200).json({
+      meetingId,
+      summary: meeting.summary,
+      actionItems: flagged,
+      // Said out loud. A list that is quietly shorter than the meeting is
+      // worse than an error, because nobody goes looking for what is not
+      // there.
+      truncated: parsed.truncated || undefined
+    })
   } catch (err) {
     console.error('analyze error:', err.message)
     return res.status(500).json({ error: err.message })

@@ -40,6 +40,7 @@ export default function Projects({ user, onBack }) {
   const [summary, setSummary] = useState('')
   const [draftItems, setDraftItems] = useState([])
   const [sentResult, setSentResult] = useState(null)
+  const [truncated, setTruncated] = useState(false)
 
   // ── Dumping things in ──
   //
@@ -57,6 +58,22 @@ export default function Projects({ user, onBack }) {
   // A task that came from nobody's meeting — the thing agreed in the car.
   const [typed, setTyped] = useState({ task: '', assignee: 'Unassigned', priority: 'normal', due_date: '' })
   const [addingTask, setAddingTask] = useState(false)
+
+  // ── Mine, or everyone's ──
+  //
+  // "The portal becomes a single source of truth for projects and actions —
+  // this will enable Erin to keep track of items being completed and also give
+  // staff a centralised location for their to do lists."
+  //
+  // Those are two different screens of the same data. Erin needs the whole
+  // board, to see what is moving. Everybody else needs the four things that
+  // are theirs, and a board of forty items belonging to nine people is not a
+  // to-do list — it is a reason to keep using a notebook.
+  //
+  // Defaults to mine, because that is what somebody opening this on a phone
+  // between cases came for. Erin's first tap is "Everyone" and it stays where
+  // she puts it for the session.
+  const [showing, setShowing] = useState('mine')
 
   const [worklist, setWorklist] = useState([])
   const [loadingBoard, setLoadingBoard] = useState(true)
@@ -151,6 +168,7 @@ export default function Projects({ user, onBack }) {
       if (analyzeData.error) throw new Error(analyzeData.error)
 
       setMeetingId(analyzeData.meetingId)
+      setTruncated(Boolean(analyzeData.truncated))
       setSummary(analyzeData.summary)
       setDraftItems(analyzeData.actionItems.map((it, i) => ({ ...it, _localId: `item-${i}` })))
       setPhase('reviewing')
@@ -275,6 +293,7 @@ export default function Projects({ user, onBack }) {
       if (data.error) throw new Error(data.error)
 
       setMeetingId(data.meetingId)
+      setTruncated(Boolean(data.truncated))
       setSummary(data.summary)
       setDraftItems(data.actionItems.map((it, i) => ({ ...it, _localId: `item-${i}` })))
       setPasted('')
@@ -335,6 +354,12 @@ export default function Projects({ user, onBack }) {
     }
     setAddingTask(false)
   }
+
+  // Mine is "assigned to me", not "I added it". Somebody who pastes a
+  // transcript is not thereby responsible for everything in it.
+  const mine = worklist.filter(it => it.assignee === user?.name)
+  const mineCount = mine.filter(it => it.status !== 'done').length
+  const visible = showing === 'mine' ? mine : worklist
 
   return (
     <Page>
@@ -466,6 +491,22 @@ export default function Projects({ user, onBack }) {
         {phase === 'reviewing' && (
           <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(26,43,74,0.08)' }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: colour.navy, marginBottom: 6 }}>Review before sending</div>
+            {/* A list that is quietly shorter than the meeting is worse than
+                an error: nobody goes looking for the items that are not
+                there. This is what "unterminated string in JSON at position
+                6964" should have said. */}
+            {truncated && (
+              <div style={{
+                background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+                borderRadius: 8, padding: '10px 12px', marginBottom: 12,
+                fontSize: 12.5, color: colour.ink, lineHeight: 1.5
+              }}>
+                That was a long one and the agent ran out of room, so the end of
+                the list may be missing. What is here is complete — check the
+                last few against your notes, and paste the rest separately if
+                anything is short.
+              </div>
+            )}
             <div style={{ fontSize: 14, color: colour.inkFaint, lineHeight: 1.5, marginBottom: 14 }}>{summary}</div>
 
             {draftItems.length === 0 && (
@@ -598,12 +639,27 @@ export default function Projects({ user, onBack }) {
           )}
         </div>
 
+        {/* Two views of one list. See `showing`. */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          {[['mine', `Mine${mineCount ? ` · ${mineCount}` : ''}`], ['all', `Everyone · ${worklist.length}`]].map(([key, label]) => (
+            <button key={key} onClick={() => setShowing(key)}
+              style={{
+                flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 38,
+                borderRadius: 8, cursor: 'pointer',
+                border: showing === key ? 'none' : '1px solid rgba(26,43,74,0.15)',
+                background: showing === key ? colour.navy : 'white',
+                color: showing === key ? 'white' : colour.inkFaint,
+                fontSize: 14, fontWeight: 700
+              }}>{label}</button>
+          ))}
+        </div>
+
         {loadingBoard ? (
           <div style={{ textAlign: 'center', padding: 30, color: '#aab0bb', fontSize: 14 }}>Loading…</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {STATUS_COLUMNS.map(col => {
-              const items = worklist.filter(w => w.status === col.key)
+              const items = visible.filter(w => w.status === col.key)
               return (
                 <div key={col.key} style={{ background: 'white', borderRadius: 12, border: '1px solid rgba(26,43,74,0.08)', overflow: 'hidden' }}>
                   <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(26,43,74,0.06)', display: 'flex', alignItems: 'center', gap: 6 }}>

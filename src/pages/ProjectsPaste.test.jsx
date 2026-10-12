@@ -175,3 +175,66 @@ describe('the file path', () => {
     expect(fn.slice(0, fn.indexOf('\n  }'))).toMatch(/file\.name\.replace/)
   })
 })
+
+// ─── A to-do list has to be somebody's ───────────────────────────────────────
+// "The portal becomes a single source of truth for projects and actions — this
+// will enable Erin to keep track of items being completed and also give staff a
+// centralised location for their to do lists."
+//
+// Those are two screens of one set of data. Erin needs the whole board to see
+// what is moving; everybody else needs the four things that are theirs, and a
+// board of forty items belonging to nine people is not a to-do list — it is a
+// reason to keep using a notebook.
+describe('whose list it is', () => {
+  const board = [
+    { id: '1', task: 'Chase the Globus paperwork', assignee: 'Erin Smallbon', priority: 'normal', status: 'open' },
+    { id: '2', task: 'Get the Athlet tray back', assignee: 'Ben Cassidy', priority: 'normal', status: 'open' },
+    { id: '3', task: 'Book the in-service', assignee: 'Erin Smallbon', priority: 'normal', status: 'done' }
+  ]
+
+  const openBoard = async () => {
+    global.fetch = vi.fn(async url => {
+      if (String(url).includes('action=worklist')) {
+        return { ok: true, json: async () => ({ items: board }) }
+      }
+      return { ok: true, json: async () => ({}) }
+    })
+    render(<Projects user={USER} onBack={() => {}} />)
+    await waitFor(() =>
+      expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument())
+  }
+
+  it('opens on mine, which is what somebody between cases came for', async () => {
+    await openBoard()
+    expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument()
+    expect(screen.queryByText('Get the Athlet tray back')).not.toBeInTheDocument()
+  })
+
+  it('counts only what is still to do', async () => {
+    // Three items, two mine, one of those already done.
+    await openBoard()
+    expect(screen.getByText('Mine · 1')).toBeInTheDocument()
+    expect(screen.getByText('Everyone · 3')).toBeInTheDocument()
+  })
+
+  it('shows the whole board when asked, which is Erin’s view', async () => {
+    await openBoard()
+    fireEvent.click(screen.getByText('Everyone · 3'))
+    expect(screen.getByText('Get the Athlet tray back')).toBeInTheDocument()
+    expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument()
+  })
+
+  it('still shows what is finished, so progress is visible', async () => {
+    // Erin keeping track of items being completed is half the point; a done
+    // item that disappears answers nothing.
+    await openBoard()
+    expect(screen.getByText('Book the in-service')).toBeInTheDocument()
+  })
+
+  it('is mine by assignment, not by who typed it', async () => {
+    // Somebody who pastes a transcript is not thereby responsible for
+    // everything in it.
+    const source = readFileSync(join(__dirname, 'Projects.jsx'), 'utf8')
+    expect(source).toMatch(/it\.assignee === user\?\.name/)
+  })
+})
