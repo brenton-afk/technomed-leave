@@ -41,6 +41,23 @@ export default function Projects({ user, onBack }) {
   const [draftItems, setDraftItems] = useState([])
   const [sentResult, setSentResult] = useState(null)
 
+  // ── Dumping things in ──
+  //
+  // "Could she dump a transcript from a meeting into that section and have the
+  // Claude agent build out a task and action list and allocate to staff?"
+  //
+  // It could already, in the sense that mattered: the extraction takes raw
+  // text and matches names against the real staff list. What it had no way of
+  // was getting text in without holding the meeting again into a phone. So a
+  // meeting is now one of three ways in, not the only one.
+  const [pasted, setPasted] = useState('')
+  const [reading, setReading] = useState('')
+  const pasteFileRef = useRef(null)
+
+  // A task that came from nobody's meeting — the thing agreed in the car.
+  const [typed, setTyped] = useState({ task: '', assignee: 'Unassigned', priority: 'normal', due_date: '' })
+  const [addingTask, setAddingTask] = useState(false)
+
   const [worklist, setWorklist] = useState([])
   const [loadingBoard, setLoadingBoard] = useState(true)
 
@@ -229,6 +246,96 @@ export default function Projects({ user, onBack }) {
     }
   }
 
+  /**
+   * Text in, action list out.
+   *
+   * The same analyse step the recording uses, which is the point: a pasted
+   * transcript and a recorded one reach the review screen by the same road,
+   * so there is one place where an item is checked before it lands on
+   * somebody's day.
+   */
+  async function readFromText(text, titleFallback) {
+    const words = String(text || '').trim()
+    if (!words) { setError('Paste something first, or pick a file.'); return }
+
+    setError('')
+    setPhase('analyzing')
+    try {
+      const res = await fetch('/api/meetings/agent?action=analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({
+          transcript: words,
+          meetingTitle: meetingTitle.trim() || titleFallback || 'Pasted notes',
+          meetingDate,
+          recordedByEmail: user?.email || null
+        })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+
+      setMeetingId(data.meetingId)
+      setSummary(data.summary)
+      setDraftItems(data.actionItems.map((it, i) => ({ ...it, _localId: `item-${i}` })))
+      setPasted('')
+      setPhase('reviewing')
+    } catch (err) {
+      setError(err.message || 'Could not read that.')
+      setPhase('idle')
+    }
+  }
+
+  /** A dropped or chosen file, turned into text on the server. */
+  async function readFromFile(file) {
+    if (!file) return
+    setError('')
+    setReading(file.name)
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+        reader.onerror = () => reject(new Error('Could not open that file'))
+        reader.readAsDataURL(file)
+      })
+
+      const res = await fetch('/api/meetings/agent?action=read-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ filename: file.name, mediaType: file.type, data })
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      setReading('')
+      // Named after the file, because "Pasted notes" is no use in a month when
+      // somebody is looking for what was agreed.
+      await readFromText(body.text, file.name.replace(/\.[^.]+$/, ''))
+    } catch (err) {
+      setReading('')
+      setError(err.message || 'Could not read that file.')
+    }
+  }
+
+  /** One task, straight to the worklist. Whoever typed it is the review. */
+  async function addTypedTask() {
+    if (!typed.task.trim() || addingTask) return
+    setAddingTask(true)
+    setError('')
+    try {
+      const res = await fetch('/api/meetings/agent?action=add-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ ...typed, addedByEmail: user?.email || null })
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      setTyped({ task: '', assignee: 'Unassigned', priority: 'normal', due_date: '' })
+      await loadWorklist()
+    } catch (err) {
+      setError(err.message || 'Could not add that task.')
+    }
+    setAddingTask(false)
+  }
+
   return (
     <Page>
       <Header eyebrow="Team" title="Projects" subtitle="Meeting notes and the shared worklist" onBack={onBack} />
@@ -265,6 +372,69 @@ export default function Projects({ user, onBack }) {
                 <button onClick={startRecording} style={{ width: '100%', padding: 13, background: colour.danger, color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                   ● Start recording
                 </button>
+
+                {/* ── Or give it the words some other way ──
+                    
+                    "Could she dump a transcript from a meeting into that
+                    section and have the Claude agent build out a task and
+                    action list and allocate to staff within the portal?"
+                    
+                    The same road from here on: text goes to the same analyse
+                    step the recording uses, and lands on the same review
+                    screen, so there is one place an item is checked before it
+                    reaches somebody's day. */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  margin: '16px 0 12px', color: colour.inkFainter, fontSize: 12.5
+                }}>
+                  <span style={{ flex: 1, height: 1, background: 'rgba(26,43,74,0.1)' }} />
+                  or paste what was said
+                  <span style={{ flex: 1, height: 1, background: 'rgba(26,43,74,0.1)' }} />
+                </div>
+
+                <textarea
+                  value={pasted}
+                  onChange={e => setPasted(e.target.value)}
+                  rows={5}
+                  placeholder="Paste a transcript, your notes, or an email — anything that says what was agreed and who is doing it."
+                  style={{
+                    width: '100%', padding: '10px 12px', boxSizing: 'border-box',
+                    border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8,
+                    fontSize: 16, fontFamily: 'inherit', resize: 'vertical',
+                    marginBottom: 8
+                  }} />
+
+                <input ref={pasteFileRef} type="file"
+                  accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  style={{ fontSize: 16, display: 'none' }}
+                  onChange={e => { readFromFile(e.target.files?.[0]); e.target.value = '' }} />
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => readFromText(pasted)}
+                    disabled={!pasted.trim()}
+                    style={{
+                      flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 13,
+                      background: pasted.trim() ? colour.accent : '#c8d2dc',
+                      color: 'white', border: 'none', borderRadius: 8,
+                      fontSize: 14, fontWeight: 600,
+                      cursor: pasted.trim() ? 'pointer' : 'default'
+                    }}>
+                    Build the action list
+                  </button>
+                  <button onClick={() => pasteFileRef.current?.click()}
+                    disabled={Boolean(reading)}
+                    style={{
+                      flexShrink: 0, padding: '13px 16px', background: 'transparent',
+                      border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8,
+                      fontSize: 14, fontWeight: 600, color: colour.navy,
+                      cursor: reading ? 'default' : 'pointer'
+                    }}>
+                    {reading ? 'Reading…' : 'Or a file'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 12.5, color: colour.inkFainter, marginTop: 6 }}>
+                  .txt, .docx or .pdf
+                </div>
               </>
             )}
             {phase === 'recording' && (
@@ -305,6 +475,27 @@ export default function Projects({ user, onBack }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {draftItems.map(it => (
                 <div key={it._localId} style={{ background: '#f8f9fc', borderRadius: 8, padding: 12 }}>
+                  {/* "The same action comes up at the weekly meeting three
+                      weeks running." Flagged against what is still open, and
+                      never merged: two tasks that read alike are sometimes two
+                      different jobs, and the person reading both can tell
+                      where the app cannot. Dismiss it by deleting the draft —
+                      which is the ✕ already beside it. */}
+                  {it.possibleRepeatOf && (
+                    <div style={{
+                      background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+                      borderRadius: 6, padding: '7px 9px', marginBottom: 8,
+                      fontSize: 12.5, color: colour.ink, lineHeight: 1.45
+                    }}>
+                      Already on the list:{' '}
+                      <strong style={{ fontWeight: 700 }}>{it.possibleRepeatOf.task}</strong>
+                      {it.possibleRepeatOf.assignee && it.possibleRepeatOf.assignee !== 'Unassigned'
+                        ? ` · ${it.possibleRepeatOf.assignee}` : ''}
+                      {it.possibleRepeatOf.sourceMeetingDate
+                        ? ` · from ${formatDate(it.possibleRepeatOf.sourceMeetingDate)}` : ''}
+                      . Still open — delete this one if it is the same job.
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                     <input
                       value={it.task}
@@ -357,6 +548,54 @@ export default function Projects({ user, onBack }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: colour.navy }}>Worklist</div>
           <div style={{ fontSize: 12.5, color: colour.inkFaint }}>{worklist.length} item{worklist.length === 1 ? '' : 's'}</div>
+        </div>
+
+        {/* ── A task nobody held a meeting about ──
+            
+            The thing agreed in the car, or the one already known about that
+            does not need a model's help to write down. Straight onto the
+            board: whoever typed it is the review. */}
+        <div style={{
+          background: 'white', borderRadius: 12, padding: 12, marginBottom: 16,
+          border: '1px solid rgba(26,43,74,0.08)'
+        }}>
+          <input
+            value={typed.task}
+            onChange={e => setTyped(t => ({ ...t, task: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') addTypedTask() }}
+            placeholder="Add a task…"
+            style={{
+              width: '100%', padding: '10px 12px', boxSizing: 'border-box',
+              border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 16
+            }} />
+          {typed.task.trim() && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              <select value={typed.assignee}
+                onChange={e => setTyped(t => ({ ...t, assignee: e.target.value }))}
+                style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }}>
+                <option value="Unassigned">Unassigned</option>
+                {STAFF.map(p => <option key={p.email} value={p.name}>{p.name}</option>)}
+              </select>
+              <select value={typed.priority}
+                onChange={e => setTyped(t => ({ ...t, priority: e.target.value }))}
+                style={{ flexShrink: 0, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }}>
+                <option value="urgent">Urgent</option>
+                <option value="normal">Normal</option>
+                <option value="low">Low</option>
+              </select>
+              <input type="date" value={typed.due_date}
+                onChange={e => setTyped(t => ({ ...t, due_date: e.target.value }))}
+                style={{ flexShrink: 0, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }} />
+              <button onClick={addTypedTask} disabled={addingTask}
+                style={{
+                  flexShrink: 0, padding: '8px 16px', background: colour.accent,
+                  color: 'white', border: 'none', borderRadius: 6,
+                  fontSize: 14, fontWeight: 600, cursor: addingTask ? 'default' : 'pointer'
+                }}>
+                {addingTask ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+          )}
         </div>
 
         {loadingBoard ? (
