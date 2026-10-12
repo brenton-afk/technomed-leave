@@ -416,6 +416,64 @@ export async function createBookingEvent({ summary, description, date, colorId, 
   return res.json()
 }
 
+/**
+ * Events in a window, as Google returns them.
+ *
+ * The listing was written out by hand in two places before this — the week and
+ * the booking inbox — and the holiday sync needs a third. One helper rather
+ * than a third copy: the query string is fiddly (singleEvents, the zone, the
+ * page size) and three versions of it drift.
+ */
+export async function listCalendarEvents({ from, to, max = 250, query } = {}) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+  const calendarId = getCalendarId()
+  const url = new URL(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`)
+  if (from) url.searchParams.set('timeMin', `${from}T00:00:00Z`)
+  if (to) url.searchParams.set('timeMax', `${to}T23:59:59Z`)
+  if (query) url.searchParams.set('q', query)
+  url.searchParams.set('singleEvents', 'true')
+  url.searchParams.set('orderBy', 'startTime')
+  url.searchParams.set('maxResults', String(max))
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`Could not list the calendar (${res.status})`)
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+  return data.items || []
+}
+
+/**
+ * Creates an event under an id we chose, so a second run is not a second copy.
+ *
+ * Google allows the caller to supply the id, and answers 409 when it is
+ * already taken. That is the whole idempotency mechanism: the 409 is not an
+ * error to be handled so much as the answer to "does this exist yet", and it
+ * is reported as `existed` rather than thrown.
+ *
+ * Ids must be base32hex — lowercase a-v and digits — and at least five
+ * characters. An id outside that is a 400 from Google, so it is checked here
+ * where the message can say which id and why.
+ */
+export async function createCalendarEventWithId(id, body) {
+  if (!/^[a-v0-9]{5,1024}$/.test(String(id || ''))) {
+    throw new Error(`"${id}" is not a usable Google event id (base32hex, 5+ characters)`)
+  }
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const calendarId = getCalendarId()
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, id })
+    })
+
+  if (res.status === 409) return { existed: true }
+  if (!res.ok) throw new Error(`Could not create the event (${res.status}): ${await res.text()}`)
+  return { existed: false, event: await res.json() }
+}
+
 export const BOOKING_TZ = 'Australia/Hobart'
 
 

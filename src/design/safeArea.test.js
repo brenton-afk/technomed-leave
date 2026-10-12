@@ -116,6 +116,7 @@ describe('no screen is left out', () => {
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',
+    'admin/PublicHolidays.jsx',
     // Chooses between two screens and renders its switcher inside whichever
     // one's Header is showing. It draws no chrome of its own to inset.
     'Cases.jsx',

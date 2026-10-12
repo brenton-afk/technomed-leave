@@ -30,6 +30,10 @@
     "api/cron/timesheet-reminder.js": {
       "maxDuration": 60
     },
+    "api/cron/sync-public-holidays.js": {
+      "maxDuration": 60,
+      "includeFiles": "data/**"
+    },
     "api/guides.js": {
       "includeFiles": "theatre-guides/**",
       "maxDuration": 30,
@@ -44,6 +48,10 @@
     {
       "path": "/api/cron/timesheet-reminder",
       "schedule": "0 22 * * 6"
+    },
+    {
+      "path": "/api/cron/sync-public-holidays",
+      "schedule": "0 15 * * *"
     }
   ],
   "headers": [

@@ -12,7 +12,11 @@ export default defineConfig({
     globals: true,
     // api/ had no tests at all: it is checked by an esbuild pass that resolves
     // every import, which catches a missing export and nothing about behaviour.
-    include: ['src/**/*.test.{js,jsx}', 'api/**/*.test.js'],
+    // lib/ is shared code that both the app and the serverless functions
+    // import — publicHolidays.js is the first of it — so its tests have to be
+    // collected too. They were not, and a new test file in there ran nowhere
+    // and reported nothing.
+    include: ['src/**/*.test.{js,jsx}', 'api/**/*.test.js', 'lib/**/*.test.js'],
     // A fixed clock, so snapshots of anything date-derived stay stable.
     setupFiles: ['./src/test/setup.js']
   }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import TimesheetApprovals from './TimesheetApprovals.jsx'
 import StaffPins from './StaffPins.jsx'
 import SystemStatus from './SystemStatus.jsx'
+import PublicHolidays from './PublicHolidays.jsx'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -208,7 +209,10 @@ export default function AdminPortal({ user }) {
       <div style={{ padding:16 }}>
         {domain === 'timesheets' && <TimesheetApprovals user={user} />}
         {domain === 'pins' && <StaffPins user={user} />}
-        {domain === 'system' && <SystemStatus user={user} />}
+        {domain === 'system' && <>
+          <PublicHolidays user={user} />
+          <SystemStatus user={user} />
+        </>}
         {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
         {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{error}</div>}
