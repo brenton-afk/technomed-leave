@@ -124,3 +124,52 @@ describe('the October rebuild', () => {
     expect(xcore.keywords).toMatch(/corpectomy/i)
   })
 })
+
+// ─── A rebuilt guide has to actually arrive ──────────────────────────────────
+// "Are you sure they updated? The Diplomat card still looks the same."
+//
+// Diplomat was right — Aimee did not send one. But the question was the right
+// one to ask, because the content was cached for an hour on the reasoning that
+// "a slug's content never changes". That held for about a fortnight. Eight
+// guides were rebuilt under the same slugs in October, and anybody who had
+// opened one in the previous hour kept the old file with nothing on screen to
+// say so.
+describe('serving a guide that has been rebuilt', () => {
+  // ROOT here means the guides directory, not the repo.
+  const source = readFileSync(join(__dirname, 'guides.js'), 'utf8')
+
+  it('does not hold the old one for an hour', () => {
+    // The header that is set, not any mention of it. The first version of
+    // this matched the comment above it explaining what used to be wrong,
+    // which passes whatever the code does.
+    const headers = [...source.matchAll(/setHeader\('Cache-Control', '([^']+)'\)/g)]
+      .map(m => m[1])
+    expect(headers.length).toBeGreaterThan(0)
+    expect(headers.filter(h => /max-age=(?!0\b)\d+/.test(h))).toEqual([])
+  })
+
+  it('makes the browser check before using what it has', () => {
+    // It still holds the megabyte — these are one to two of them and nobody
+    // wants to pay that twice for flicking back. It just asks first, and the
+    // asking costs a 304 with no body.
+    expect(source).toMatch(/must-revalidate/)
+    expect(source).toMatch(/res\.setHeader\('ETag', etag\)/)
+  })
+
+  it('answers 304 when the file has not changed', () => {
+    expect(source).toMatch(/if-none-match/)
+    expect(source).toMatch(/status\(304\)/)
+  })
+
+  it('keys the tag on the file, so a rebuild changes it', () => {
+    // Not on the slug, which is the thing that stayed the same, and not on a
+    // date, which is the thing a redeploy resets.
+    expect(source).toMatch(/createHash\('sha1'\)\.update\(html\)/)
+  })
+
+  it('leaves the list itself unstored, which is a separate fix', () => {
+    // "I can't see it under orthopaedics" — the list was cached for five
+    // minutes and a new guide took that long to appear.
+    expect(source).toMatch(/Cache-Control', 'no-store'/)
+  })
+})

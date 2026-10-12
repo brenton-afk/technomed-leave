@@ -80,10 +80,19 @@ describe('the guides endpoint serves pages, not downloads', () => {
     expect(list).not.toMatch(/max-age/)
   })
 
-  it('still caches the guide itself, which is a megabyte and never changes', () => {
+  it('still lets the browser keep the guide, but makes it ask first', () => {
+    // This asserted `max-age=3600`, on the reasoning written beside it: a
+    // megabyte that "never changes". It changed. Aimee rebuilt eight guides
+    // under the same slugs in October and anybody who had opened one in the
+    // previous hour kept the old file, with nothing on screen to say so.
+    //
+    // An ETag keeps what the hour was buying — the browser still holds the
+    // megabyte — and drops what it cost, because the asking is a 304 with no
+    // body and a rebuilt guide arrives on the next open.
     const source = readFileSync(join(__dirname, 'guides.js'), 'utf8')
     const body = source.slice(source.indexOf('const guide = GUIDES.find'))
-    expect(body).toMatch(/Cache-Control['"]?,\s*'private, max-age=3600'/)
+    expect(body).toMatch(/Cache-Control['"]?,\s*'private, max-age=0, must-revalidate'/)
+    expect(body).toMatch(/ETag/)
   })
 
   it('is bundled with the function that reads it', () => {

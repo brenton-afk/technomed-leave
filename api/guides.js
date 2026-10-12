@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join, normalize } from 'node:path'
 import { requireSession } from './_auth.js'
@@ -127,8 +128,7 @@ export default async function handler(req, res) {
     //
     // There is nothing to buy back. It is a list of eleven names — under two
     // kilobytes — fetched once when the screen opens. The megabyte is the
-    // guide itself, which is still cached for the hour below, and that one
-    // cannot go stale because a slug's content never changes.
+    // guide itself, which is revalidated below rather than held for an hour.
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({
       guides: GUIDES.map(({ file, ...rest }) => rest),
@@ -146,11 +146,26 @@ export default async function handler(req, res) {
     if (!path.startsWith(ROOT)) return res.status(400).json({ error: 'Bad path' })
     const html = await readFile(path, 'utf8')
 
+    // ── Cached, but checked ──
+    //
+    // This was `max-age=3600` on the reasoning that "a slug's content never
+    // changes". That was true for about a fortnight. Aimee rebuilt eight of
+    // these in October — same slug, new file — and anybody who had opened one
+    // in the previous hour kept the old one, with nothing on screen to say so.
+    // Reported as "are you sure they updated?", which is the right question
+    // to ask of a guide that still says what it said yesterday.
+    //
+    // An ETag keeps what the hour was buying and drops what it cost. The
+    // browser still holds the megabyte; it just asks first, and the asking is
+    // a 304 with no body. A rebuilt guide arrives on the next open rather
+    // than within the hour.
+    const etag = `"${createHash('sha1').update(html).digest('base64url')}"`
+    res.setHeader('ETag', etag)
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate')
+
+    if (req.headers['if-none-match'] === etag) return res.status(304).end()
+
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    // Private, because it is behind a login. Cached for the session anyway:
-    // these are one to two megabytes and nobody wants to pay that twice for
-    // flicking back to a guide they had open a minute ago.
-    res.setHeader('Cache-Control', 'private, max-age=3600')
     return res.status(200).send(html)
   } catch {
     return res.status(404).json({ error: 'That guide could not be read' })
