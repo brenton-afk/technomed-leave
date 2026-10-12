@@ -1,5 +1,4 @@
-<div class="tmnav"><a href="../">&larr; All guides</a><span class="wm">Technomed</span></div><!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
 <title>ATHLET + ASCOT</title>
 <style>
 :root{
@@ -108,6 +107,21 @@ table.spec td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-
 
 .footer-credit{text-align:center;font-size:10.5px;color:#a89e9c;padding:10px 0 4px;}
 ::-webkit-scrollbar{width:0;height:0;}
+</style><style>
+.tmx-card{background:var(--card,#fff);border-radius:var(--radius,16px);box-shadow:var(--shadow,0 1px 2px rgba(20,22,28,.06),0 6px 18px rgba(20,22,28,.06));padding:14px;margin:0 0 12px;border-left:4px solid var(--tmx-c)}
+.tmx-card.gen{background:#FBFBFA;border-left-style:dashed}
+.tmx-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.tmx-av{width:34px;height:34px;border-radius:50%;background:var(--tmx-c);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 34px}
+.tmx-card.gen .tmx-av{background:#fff;color:var(--tmx-c);border:1.5px solid var(--tmx-c)}
+.tmx-h b{display:block;font-size:14px;font-weight:800;color:var(--ink,#16202E)}
+.tmx-h span{display:block;font-size:10.5px;color:#6C707A;font-weight:600}
+.tmx-list{margin:0;padding:0;list-style:none}
+.tmx-list li{display:flex;gap:9px;padding:7px 0;border-top:1px solid #ECEEF1;font-size:12px;color:#494D55;line-height:1.5}
+.tmx-list li:first-child{border-top:none}
+.tmx-list .k{flex:0 0 88px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:#9A9EA8;padding-top:2px}
+.tmx-list b{color:var(--ink,#16202E);font-weight:700}
+.tmx-wrap{padding:4px 0 6px}
+.tmx-head{font-size:11px;color:#6C707A;font-weight:600;margin:6px 2px 12px;line-height:1.5}
 </style>
 
 <div class="shell">
@@ -475,11 +489,7 @@ table.spec td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-
 
     <!-- ============ PREFS ============ -->
     <div class="panel" id="panel-prefs">
-      <div class="empty">
-        <div class="icon">📋</div>
-        <h3>No surgeon preference cards yet</h3>
-        <p>Neither the ATHLET® nor ASCOT® guides include theatre preference-card data. Send through your surgeons' specifics — implant number ranges they default to, plate/screw brand preferences, retractor choice, closure routine — and this tab will be built out the same way as the other Technomed reference apps.</p>
-      </div>
+      <div class="tmx-wrap" style="padding:14px 16px"><div class="tmx-head">Confirm against the day's list &mdash; preferences vary by case.</div><div class="tmx-card gen" style="--tmx-c:#c0203a"><div class="tmx-h"><div class="tmx-av">i</div><div><b>Team notes</b><span>ATHLET + ASCOT &middot; all surgeons</span></div></div><ul class="tmx-list"><li><span class="k">Screws</span><span class="v">Ideally <b>fixed screws</b>. They are very blunt &mdash; if one is struggling, <b>drill</b> to get it started.</span></li><li><span class="k">Connector</span><span class="v">Have the <b>connector screw</b> ready.</span></li><li><span class="k">ASCOT prep</span><span class="v">Awl / drill on the <b>DNO tray</b>.</span></li><li><span class="k">Removal</span><span class="v">DNO tray &rarr; connector plate&ndash;cage.</span></li></ul></div><div class="tmx-card" style="--tmx-c:#c0203a"><div class="tmx-h"><div class="tmx-av">T</div><div><b>Thani</b><span>ATHLET + ASCOT</span></div></div><ul class="tmx-list"><li><span class="k">Cage position</span><span class="v">Likes it <b>pulled towards posterior</b>.</span></li></ul></div><div class="tmx-card" style="--tmx-c:#c0203a"><div class="tmx-h"><div class="tmx-av">A</div><div><b>Atallah / Regs</b><span>ATHLET + ASCOT</span></div></div><ul class="tmx-list"><li><span class="k">Plate</span><span class="v">Likes a <b>bigger plate</b>.</span></li></ul></div></div>
     </div>
 
   </div>
@@ -691,4 +701,4 @@ renderTray("tray-ascot-cases", trayAscotCases);
 renderTray("tray-ascot-instr", trayAscotInstr);
 </script>
 
-</html>
+</body></html>

@@ -83,9 +83,13 @@ describe('the restricted guide', () => {
 // "reaches nowhere but the page itself" above is what caught it. It stopped at
 // the first guide in the list; all nine had it.
 describe('the October rebuild', () => {
+  // All ten. Athlet + Ascot came a day later, from Aimee's second email, and
+  // is the only one of them that arrived with no webfont link already — which
+  // is why it was installed exactly as sent. It is held to the same rule
+  // regardless, because the next export of it may not be.
   const INSTALLED = [
-    'dakota', 'firebird-forza', 'global-plif', 'lonestar', 'mariner',
-    'reform-poct', 'truprofile', 'xcore-vbr', 'surgeon-preferences'
+    'athlet-ascot', 'dakota', 'firebird-forza', 'global-plif', 'lonestar',
+    'mariner', 'reform-poct', 'truprofile', 'xcore-vbr', 'surgeon-preferences'
   ]
 
   it.each(INSTALLED)('%s has no webfont to wait for', slug => {
