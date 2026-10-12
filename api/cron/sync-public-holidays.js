@@ -47,6 +47,12 @@ const DEFAULT_COLOUR = '11'
 /** Entries this has made before, and the ones made by hand before it existed. */
 const LOOKS_LIKE_A_HOLIDAY = /public\s*holiday/i
 
+/** The prefix on every id this sync writes. See holidayEventId. */
+const OUR_IDS = 'tmph'
+
+/** How much of one colour makes it the house style rather than a tendency. */
+const CLEAR_MAJORITY = 0.7
+
 /**
  * The colour the calendar already uses for public holidays.
  *
@@ -74,13 +80,67 @@ async function colourAlreadyUsed(today) {
       counts.set(e.colorId, (counts.get(e.colorId) || 0) + 1)
     }
     if (!counts.size) return { colorId: DEFAULT_COLOUR, matched: false }
-    const [colorId] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+
+    // A convention, or a coin toss?
+    //
+    // The calendar's own public holidays are a mix — some Graphite, some
+    // Tangerine, several with no colour at all — so "the commonest" would pick
+    // between two near-equal piles and call the winner a house style. It is
+    // not one. Where there is no clear majority this keeps its own colour and
+    // says it did not match, which is the honest answer and is also the one
+    // that is easiest to correct once somebody decides.
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    const coloured = ranked.reduce((n, [, count]) => n + count, 0)
+    const [colorId, top] = ranked[0]
+    if (top / coloured < CLEAR_MAJORITY) return { colorId: DEFAULT_COLOUR, matched: false }
     return { colorId, matched: true }
   } catch {
     // A calendar that cannot be read is not a reason to skip the sync; it is a
     // reason not to know the colour.
     return { colorId: DEFAULT_COLOUR, matched: false }
   }
+}
+
+/**
+ * The days somebody has already put a public holiday on by hand.
+ *
+ * "Skip."
+ *
+ * The bookings calendar already carries some of these, entered by whoever
+ * thought of it first — "PUBLIC HOLIDAY - AUSTRALIA DAY" on 26 January 2026,
+ * a plain "PUBLIC HOLIDAY" on the Regatta and on Eight Hours Day. They are not
+ * ours and have no id of ours, so nothing about the upsert would recognise
+ * them: it would add its own beside each and leave two entries on the day.
+ *
+ * So the sync fills the gaps and leaves what is already there alone. Theirs
+ * wins. Nothing is deleted and nothing is overwritten, which is the only
+ * arrangement that is safe to run unattended against a calendar nine people
+ * write to.
+ *
+ * Only entries that are not ours count. A day this sync wrote last night is
+ * not somebody's hand-made note, and treating it as one would mean never
+ * correcting a holiday after the first time it was written.
+ */
+async function daysAlreadyWrittenByHand(from, to) {
+  const taken = new Map()
+  try {
+    const events = await listCalendarEvents({ from, to, query: 'Public Holiday', max: 250 })
+    for (const event of events) {
+      const summary = String(event.summary || '')
+      // "Public School Holidays" is not a public holiday, and the calendar has
+      // several. The pattern wants the two words together.
+      if (!LOOKS_LIKE_A_HOLIDAY.test(summary)) continue
+      if (String(event.id || '').startsWith(OUR_IDS)) continue
+      const day = (event.start?.date || event.start?.dateTime || '').slice(0, 10)
+      if (day) taken.set(day, summary)
+    }
+  } catch {
+    // A calendar that cannot be read is a reason to write nothing rather than
+    // to write everything twice: an empty answer here would duplicate every
+    // holiday somebody had already put in.
+    throw new Error('Could not read the calendar to see what is already on it')
+  }
+  return taken
 }
 
 /** Today in Hobart, whatever zone the server thinks it is in. */
@@ -147,11 +207,19 @@ export async function syncPublicHolidays({ dryRun = false } = {}) {
   }
 
   const colour = await colourAlreadyUsed(today)
+  const byHand = await daysAlreadyWrittenByHand(
+    `${years[0]}-01-01`, `${years[years.length - 1]}-12-31`)
+
   const created = []
   const updated = []
+  const skipped = []
   const failed = []
 
   for (const holiday of found) {
+    if (byHand.has(holiday.date)) {
+      skipped.push({ date: holiday.date, because: byHand.get(holiday.date) })
+      continue
+    }
     try {
       const result = await upsert(holiday, colour.colorId)
       ;(result.action === 'created' ? created : updated).push(result.date)
@@ -167,6 +235,10 @@ export async function syncPublicHolidays({ dryRun = false } = {}) {
     colour: { colorId: colour.colorId, matchedExisting: colour.matched },
     created,
     updated,
+    // Days that already had one somebody put there. Reported rather than
+    // silent: "it added nothing" and "there was nothing to add" are different
+    // answers, and only one of them means it is working.
+    skipped,
     failed,
     holidays: found
   }
