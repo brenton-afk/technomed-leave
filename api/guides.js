@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join, normalize } from 'node:path'
 import { requireSession } from './_auth.js'
@@ -52,6 +53,24 @@ export const GUIDES = [
   { slug: 'mariner', distributor: 'device', name: 'MARINER MIS', maker: 'SeaSpine', group: 'Spine', file: 'mariner/index.html', revision: 'RA-15122022-GT' },
   { slug: 'firebird-forza', distributor: 'kt', name: 'Firebird NXG + Forza XP', maker: 'Orthofix', group: 'Spine', file: 'firebird-forza/index.html', revision: 'NX-1706 · FX-1704' },
   { slug: 'global-plif', distributor: 'e4', name: 'Global PLIF GW', maker: 'Global Biomedica', group: 'Spine', file: 'global-plif/index.html', revision: 'Rev. 2020-05-12 v1.1' },
+  // New from Aimee, 12 October. Nuvasive, so it routes under the globus key —
+  // _distributors.js calls that one "Nuvasive/Globus".
+  //
+  // No revision: the document does not state one, and the rule here is that a
+  // blank is shown rather than a number invented, since this line is how
+  // anybody tells whether a guide still matches the manufacturer's current
+  // document. Its own title is "XCore Corpectomy Guide" while the team says
+  // "XCore", so corpectomy is in the keywords instead — that is what somebody
+  // will type when they are looking for it.
+  {
+    slug: 'xcore-vbr',
+    distributor: 'globus',
+    name: 'XCore VBR',
+    maker: 'NuVasive',
+    group: 'Spine',
+    file: 'xcore-vbr/index.html',
+    keywords: 'Corpectomy · vertebral body replacement · expandable'
+  },
   { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation', file: 'brainlab/index.html' },
   { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', file: 'clavicle-2.7/index.html', revision: 'SE_825567 AF · 2025/07' },
   // Two plates in one guide — the lateral VA-LCP and the medial LCP — which
@@ -109,8 +128,7 @@ export default async function handler(req, res) {
     //
     // There is nothing to buy back. It is a list of eleven names — under two
     // kilobytes — fetched once when the screen opens. The megabyte is the
-    // guide itself, which is still cached for the hour below, and that one
-    // cannot go stale because a slug's content never changes.
+    // guide itself, which is revalidated below rather than held for an hour.
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({
       guides: GUIDES.map(({ file, ...rest }) => rest),
@@ -128,11 +146,26 @@ export default async function handler(req, res) {
     if (!path.startsWith(ROOT)) return res.status(400).json({ error: 'Bad path' })
     const html = await readFile(path, 'utf8')
 
+    // ── Cached, but checked ──
+    //
+    // This was `max-age=3600` on the reasoning that "a slug's content never
+    // changes". That was true for about a fortnight. Aimee rebuilt eight of
+    // these in October — same slug, new file — and anybody who had opened one
+    // in the previous hour kept the old one, with nothing on screen to say so.
+    // Reported as "are you sure they updated?", which is the right question
+    // to ask of a guide that still says what it said yesterday.
+    //
+    // An ETag keeps what the hour was buying and drops what it cost. The
+    // browser still holds the megabyte; it just asks first, and the asking is
+    // a 304 with no body. A rebuilt guide arrives on the next open rather
+    // than within the hour.
+    const etag = `"${createHash('sha1').update(html).digest('base64url')}"`
+    res.setHeader('ETag', etag)
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate')
+
+    if (req.headers['if-none-match'] === etag) return res.status(304).end()
+
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    // Private, because it is behind a login. Cached for the session anyway:
-    // these are one to two megabytes and nobody wants to pay that twice for
-    // flicking back to a guide they had open a minute ago.
-    res.setHeader('Cache-Control', 'private, max-age=3600')
     return res.status(200).send(html)
   } catch {
     return res.status(404).json({ error: 'That guide could not be read' })
