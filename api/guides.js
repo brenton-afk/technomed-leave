@@ -52,6 +52,24 @@ export const GUIDES = [
   { slug: 'mariner', distributor: 'device', name: 'MARINER MIS', maker: 'SeaSpine', group: 'Spine', file: 'mariner/index.html', revision: 'RA-15122022-GT' },
   { slug: 'firebird-forza', distributor: 'kt', name: 'Firebird NXG + Forza XP', maker: 'Orthofix', group: 'Spine', file: 'firebird-forza/index.html', revision: 'NX-1706 · FX-1704' },
   { slug: 'global-plif', distributor: 'e4', name: 'Global PLIF GW', maker: 'Global Biomedica', group: 'Spine', file: 'global-plif/index.html', revision: 'Rev. 2020-05-12 v1.1' },
+  // New from Aimee, 12 October. Nuvasive, so it routes under the globus key —
+  // _distributors.js calls that one "Nuvasive/Globus".
+  //
+  // No revision: the document does not state one, and the rule here is that a
+  // blank is shown rather than a number invented, since this line is how
+  // anybody tells whether a guide still matches the manufacturer's current
+  // document. Its own title is "XCore Corpectomy Guide" while the team says
+  // "XCore", so corpectomy is in the keywords instead — that is what somebody
+  // will type when they are looking for it.
+  {
+    slug: 'xcore-vbr',
+    distributor: 'globus',
+    name: 'XCore VBR',
+    maker: 'NuVasive',
+    group: 'Spine',
+    file: 'xcore-vbr/index.html',
+    keywords: 'Corpectomy · vertebral body replacement · expandable'
+  },
   { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation', file: 'brainlab/index.html' },
   { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', file: 'clavicle-2.7/index.html', revision: 'SE_825567 AF · 2025/07' },
   // Two plates in one guide — the lateral VA-LCP and the medial LCP — which

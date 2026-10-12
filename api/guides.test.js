@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { GUIDES, COMING } from './guides.js'
+import { PREFERENCE_SECTIONS } from '../src/clinicalPlan/preferences.js'
+import { DISTRIBUTORS } from './_distributors.js'
 
 // The guides arrive as a folder drop — eleven of them, in parts, rebuilt when a
 // manufacturer revises a technique document. The list and the files on disk are
@@ -67,5 +69,58 @@ describe('the restricted guide', () => {
 
   it('is the only one that is', () => {
     expect(GUIDES.filter(g => g.restricted).map(g => g.slug)).toEqual(['surgeon-preferences'])
+  })
+})
+
+// ─── The guides Aimee rebuilt, October 2026 ──────────────────────────────────
+// Nine arrived by email and were installed as they were, except for one thing:
+// every one of them linked out to Google Fonts. A theatre guide is read on a
+// phone in a building with no signal, and a webfont that cannot load is a page
+// that reflows while somebody is reading it — so the link tags were removed and
+// the font stacks fall back to the system face, which is what they were going
+// to do in theatre anyway.
+//
+// "reaches nowhere but the page itself" above is what caught it. It stopped at
+// the first guide in the list; all nine had it.
+describe('the October rebuild', () => {
+  const INSTALLED = [
+    'dakota', 'firebird-forza', 'global-plif', 'lonestar', 'mariner',
+    'reform-poct', 'truprofile', 'xcore-vbr', 'surgeon-preferences'
+  ]
+
+  it.each(INSTALLED)('%s has no webfont to wait for', slug => {
+    const guide = GUIDES.find(g => g.slug === slug)
+    const html = readFileSync(join(ROOT, guide.file), 'utf8')
+    expect(html).not.toMatch(/fonts\.googleapis\.com/)
+    expect(html).not.toMatch(/fonts\.gstatic\.com/)
+  })
+
+  it('still carries a section for every surgeon the app jumps to', () => {
+    // The booking's Preferences button opens this guide at `p-<surgeon>`. A
+    // rebuilt file that renamed its sections would send somebody to the top of
+    // the page, or to the wrong card — and the file came back a fifth of its
+    // old size, so this is not a theoretical worry.
+    const guide = GUIDES.find(g => g.slug === 'surgeon-preferences')
+    const html = readFileSync(join(ROOT, guide.file), 'utf8')
+    for (const who of PREFERENCE_SECTIONS) {
+      expect(html, `anchor for ${who}`).toMatch(new RegExp(`id=["']p-${who}["']`, 'i'))
+    }
+  })
+
+  it('lists XCore under the distributor that actually supplies it', () => {
+    // NuVasive, which _distributors.js routes under the globus key — it calls
+    // that one "Nuvasive/Globus". A wrong distributor on a guide is a wrong
+    // phone call at seven in the morning.
+    const xcore = GUIDES.find(g => g.slug === 'xcore-vbr')
+    expect(xcore).toBeTruthy()
+    expect(xcore.maker).toBe('NuVasive')
+    expect(xcore.distributor).toBe('globus')
+    expect(DISTRIBUTORS[xcore.distributor]).toBeTruthy()
+  })
+
+  it('finds XCore by what it is for, not only by its name', () => {
+    // Its own title is "XCore Corpectomy Guide" while the team says "XCore".
+    const xcore = GUIDES.find(g => g.slug === 'xcore-vbr')
+    expect(xcore.keywords).toMatch(/corpectomy/i)
   })
 })
