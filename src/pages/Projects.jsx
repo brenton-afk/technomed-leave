@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Page, Header } from '../design/Shell.jsx'
 import { colour, text } from '../design/tokens.js'
 import { upload } from '@vercel/blob/client'
-import { STAFF } from '../staffConfig.js'
+import { STAFF, isSameStaff } from '../staffConfig.js'
 
 const PRIORITY_COLORS = { urgent: colour.danger, normal: '#1a7a6e', low: colour.inkFaint }
 const PRIORITY_LABELS = { urgent: 'Urgent', normal: 'Normal', low: 'Low' }
@@ -357,7 +357,12 @@ export default function Projects({ user, onBack }) {
 
   // Mine is "assigned to me", not "I added it". Somebody who pastes a
   // transcript is not thereby responsible for everything in it.
-  const mine = worklist.filter(it => it.assignee === user?.name)
+  // Matched tolerantly: an item assigned before Mat was renamed from "Matthew
+  // Usher" in October is still his, and a to-do list that quietly drops half
+  // somebody's work is worse than no to-do list.
+  const me = STAFF.find(p => p.email === user?.email)
+  const mine = worklist.filter(it =>
+    me ? isSameStaff(it.assignee, me) : it.assignee === user?.name)
   const mineCount = mine.filter(it => it.status !== 'done').length
   const visible = showing === 'mine' ? mine : worklist
 

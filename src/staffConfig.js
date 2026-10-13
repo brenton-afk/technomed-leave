@@ -13,7 +13,18 @@ export const STAFF = [
   { name: 'Emma Lovering', email: 'marketing@technomed.com.au', firstName: 'Emma', division: 'Operations', role: 'Co-Founder, Brand Lead', isAdmin: false, hasTimesheets: false, mobileNumber: '' },
   { name: 'Toni Hoppitt', email: 'toni@technomed.com.au', firstName: 'Toni', division: 'Operations', role: 'Operations Coordinator', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'Ben Cassidy', email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' },
-  { name: 'Matthew Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt'], division: 'CMF', role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' },
+  // "All references to Mat Usher in the portal should be Mat not Matt."
+  //
+  // `firstName` was already Mat and the rep names on a booking already tidy
+  // "(Matt)" into it. What did not was `name`, which is what the assignee
+  // dropdowns, the PIN screen, the admin list and every worklist item show —
+  // all of them read "Matthew Usher".
+  //
+  // `aka` keeps every spelling the portal has ever used or been given. It is
+  // never displayed; it is what lets an old worklist item assigned to
+  // "Matthew Usher" still be his, and what lets a transcript saying "Matt"
+  // find him. Removing them would fix the display and break the reading.
+  { name: 'Mat Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' },
   { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'April Foale', email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' }
@@ -33,7 +44,26 @@ export function mayOpenTimesheets(staff) {
   return Boolean(staff?.hasTimesheets || staff?.isAdmin)
 }
 
-export function getStaffByName(name) { return STAFF.find(s => s.name === name) }
+/**
+ * Whether a name written down somewhere refers to this person.
+ *
+ * Tolerant on purpose. Names in this app are stored as strings in places that
+ * were written months ago — a worklist item, a leave application, a calendar
+ * title — and renaming somebody in staffConfig would otherwise orphan every
+ * one of them. Mat was "Matthew Usher" until October 2026 and a task assigned
+ * to him before that is still his.
+ */
+export function isSameStaff(written, staff) {
+  const value = String(written || '').trim().toLowerCase()
+  if (!value || !staff) return false
+  return [staff.name, staff.firstName, ...(staff.aka || [])]
+    .filter(Boolean)
+    .some(form => String(form).toLowerCase() === value)
+}
+
+export function getStaffByName(name) {
+  return STAFF.find(s => s.name === name) || STAFF.find(s => isSameStaff(name, s))
+}
 export function getStaffByEmail(email) { return STAFF.find(s => s.email === email) }
 
 

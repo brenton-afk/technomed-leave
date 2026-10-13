@@ -1,5 +1,5 @@
 import { handleUpload } from '@vercel/blob/client'
-import { STAFF } from '../../src/staffConfig.js'
+import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
   saveMeeting, getMeeting, updateMeetingStatus,
   saveWorklistItem, getWorklist, updateWorklistItem, deleteWorklistItem
@@ -437,7 +437,7 @@ async function handleFinalize(req, res) {
 
   const emailResults = []
   for (const staff of STAFF) {
-    const myItems = stamped.filter(it => it.assignee === staff.name)
+    const myItems = stamped.filter(it => isSameStaff(it.assignee, staff))
     try {
       await sendMeetingSummaryEmail(staff, meeting, myItems)
       emailResults.push({ email: staff.email, sent: true })

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { IconAlert, IconChevron } from '../design/icons.jsx'
+import { STAFF, isSameStaff } from '../staffConfig.js'
 import { currentPeriod, isPeriodClosed } from '../../api/_fortnight.js'
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
@@ -48,8 +49,13 @@ export default function PromptBanner({ user, onNavigate }) {
       try {
         const res = await fetch('/api/meetings/agent?action=worklist', { headers: authHeaders })
         const data = await res.json()
+        // Matched tolerantly: an item assigned before Mat was renamed from
+        // "Matthew Usher" in October is still his, and a nudge that quietly
+        // stops counting half somebody's work is worse than no nudge.
+        const me = STAFF.find(p => p.email === user?.email)
         const mine = (data.items || []).filter(i =>
-          i.status !== 'done' && (!i.assignee || i.assignee === user?.name))
+          i.status !== 'done'
+          && (!i.assignee || (me ? isSameStaff(i.assignee, me) : i.assignee === user?.name)))
         if (mine.length) {
           found.push({
             id: 'actions', tone: 'info',
