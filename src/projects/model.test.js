@@ -3,7 +3,7 @@ import {
   DEFAULT_COLUMNS, GENERAL, columnKey, normaliseProject, newProject,
   projectIdOf, columnOf, statusFor, movedTo, tasksOf, progressOf,
   renamedColumn, addedColumn, removedColumn, withComment, commentCount,
-  archived, restored, blockedFromArchiving, orderedProjects, dueBy
+  archived, restored, blockedFromArchiving, orderedProjects, dueBy, dueOnDay
 } from './model.js'
 
 // ─── A project page rather than a list ───────────────────────────────────────
@@ -380,5 +380,38 @@ describe('what is due', () => {
   it('copes with no day and no tasks', () => {
     expect(dueBy('', TASKS)).toEqual([])
     expect(dueBy('2026-10-13')).toEqual([])
+  })
+})
+
+// ─── What belongs on one day of the week ─────────────────────────────────────
+// "Anything due today appears on the Cases day view alongside the bookings, so
+// the portal is one place you look each morning."
+describe('a day in the week view', () => {
+  const TASKS = [
+    task({ id: 'late', due_date: '2026-10-09' }),
+    task({ id: 'today', due_date: '2026-10-13' }),
+    task({ id: 'thursday', due_date: '2026-10-15' }),
+    task({ id: 'done', due_date: '2026-10-13', status: 'done' })
+  ]
+
+  it('meets you again on today with what is overdue', () => {
+    expect(dueOnDay('2026-10-13', TASKS, '2026-10-13').map(t => t.id))
+      .toEqual(['late', 'today'])
+  })
+
+  it('shows another day only what is due on it', () => {
+    // Otherwise today's backlog appears on all seven columns of the week and
+    // the one that matters becomes invisible.
+    expect(dueOnDay('2026-10-15', TASKS, '2026-10-13').map(t => t.id))
+      .toEqual(['thursday'])
+  })
+
+  it('leaves out what is finished', () => {
+    expect(dueOnDay('2026-10-13', TASKS, '2026-10-13').map(t => t.id))
+      .not.toContain('done')
+  })
+
+  it('copes with no day', () => {
+    expect(dueOnDay('', TASKS, '2026-10-13')).toEqual([])
   })
 })

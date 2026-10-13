@@ -1456,3 +1456,121 @@ describe('following the date, with nobody touching it', () => {
     expect(selected()).toMatch(/Thursday 24 September/i)
   })
 })
+
+// ─── What is due, on the morning view ────────────────────────────────────────
+// "Anything due today appears on the Cases day view alongside the bookings, so
+// the portal is one place you look each morning."
+//
+// The day view is where this team starts the day. A to-do list on a different
+// tab is a to-do list that gets looked at on Fridays.
+describe('project tasks that fall due', () => {
+  const WORKLIST = [
+    {
+      id: 'w1', task: 'Get the Athlet tray back from RHH', assignee: 'Ben Cassidy',
+      status: 'open', priority: 'normal', due_date: '2026-09-21'
+    },
+    {
+      id: 'w2', task: 'Chase the Globus paperwork', assignee: 'Toni Hoppitt',
+      status: 'open', priority: 'normal', due_date: '2026-09-18'
+    },
+    {
+      id: 'w3', task: 'Book the Calvary in-service', assignee: 'Aimee Vulinovich',
+      status: 'open', priority: 'normal', due_date: '2026-09-24'
+    },
+    {
+      id: 'w4', task: 'Already handled', assignee: 'Ben Cassidy',
+      status: 'done', priority: 'normal', due_date: '2026-09-21'
+    }
+  ]
+
+  const withWorklist = () => {
+    global.fetch = vi.fn(async url => {
+      const at = String(url)
+      if (at.includes('action=board')) {
+        return { ok: true, json: async () => ({ items: WORKLIST, projects: [] }) }
+      }
+      if (at.includes('/api/guides')) {
+        return { ok: true, json: async () => ({ guides: [], coming: [] }) }
+      }
+      return {
+        ok: true,
+        json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }),
+        text: async () => ''
+      }
+    })
+  }
+
+  it('puts what is due today on today', async () => {
+    withWorklist()
+    show()
+    await waitFor(() =>
+      expect(screen.getByText(/Get the Athlet tray back from RHH/)).toBeInTheDocument())
+  })
+
+  it('brings the overdue one along, because it is still due', async () => {
+    // A task due on Friday does not stop being due because it is Monday, and
+    // a list that quietly drops it is a list that helped you forget.
+    withWorklist()
+    show()
+    await waitFor(() =>
+      expect(screen.getByText(/Chase the Globus paperwork/)).toBeInTheDocument())
+    expect(screen.getByText(/Chase the Globus paperwork/).textContent)
+      .toMatch(/overdue/)
+  })
+
+  it('leaves a later one for its own day', async () => {
+    withWorklist()
+    show()
+    await waitFor(() =>
+      expect(screen.getByText(/Get the Athlet tray back/)).toBeInTheDocument())
+    expect(screen.queryByText(/Book the Calvary in-service/)).not.toBeInTheDocument()
+  })
+
+  it('leaves out what is already done', async () => {
+    withWorklist()
+    show()
+    await waitFor(() =>
+      expect(screen.getByText(/Get the Athlet tray back/)).toBeInTheDocument())
+    expect(screen.queryByText(/Already handled/)).not.toBeInTheDocument()
+  })
+
+  it('names who has it, so the day view says whose job it is', async () => {
+    withWorklist()
+    show()
+    await waitFor(() =>
+      expect(screen.getByText(/Get the Athlet tray back/).textContent)
+        .toMatch(/Ben Cassidy/))
+  })
+
+  it('ticks one off without leaving the week', async () => {
+    // The point of putting these here is clearing them without changing tab.
+    withWorklist()
+    show()
+    const row = await waitFor(() =>
+      screen.getByLabelText('Tick off Get the Athlet tray back from RHH'))
+    fireEvent.click(row)
+    await waitFor(() => {
+      const calls = global.fetch.mock.calls.filter(c => String(c[0]).includes('action=task'))
+      expect(calls.length).toBeGreaterThan(0)
+      expect(JSON.parse(calls[0][1].body)).toMatchObject({ id: 'w1', column: 'done' })
+    })
+  })
+
+  it('still draws the week when the worklist will not load', async () => {
+    // A missing to-do list is a smaller problem than a blank screen on the
+    // morning of a list.
+    global.fetch = vi.fn(async url => {
+      if (String(url).includes('action=board')) throw new Error('Upstash is down')
+      if (String(url).includes('/api/guides')) {
+        return { ok: true, json: async () => ({ guides: [], coming: [] }) }
+      }
+      return {
+        ok: true,
+        json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }),
+        text: async () => ''
+      }
+    })
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+  })
+})

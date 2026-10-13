@@ -392,3 +392,21 @@ export function dueBy(day, tasks = []) {
     .filter(t => t.due_date <= day)
     .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0))
 }
+
+/**
+ * What belongs on one day of the week view.
+ *
+ * Not simply dueBy. On today, overdue counts — a task due on Friday does not
+ * stop being due because it is Monday, and the morning view is exactly where
+ * somebody should meet it again. On any other day it must not: a Thursday
+ * three weeks out showing everything that is late today would put the same
+ * backlog on all seven columns of the week and make the one that matters
+ * invisible.
+ */
+export function dueOnDay(day, tasks = [], today = '') {
+  if (!day) return []
+  if (today && day === today) return dueBy(day, tasks)
+  return (tasks || [])
+    .filter(t => t && !t.archived && t.status !== 'done')
+    .filter(t => t.due_date === day)
+}

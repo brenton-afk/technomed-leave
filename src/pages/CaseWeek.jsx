@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Page, Header, Banner } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { useLiveRefresh, useToday, useReturn } from '../liveRefresh.js'
+import { dueOnDay } from '../projects/model.js'
 import {
   fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature
 } from '../clinicalPlan/provider.js'
@@ -202,6 +203,43 @@ function TaskRow({ task, onDone, compact }) {
       {done && task.doneBy && (
         <span style={{ fontWeight: 400 }}> · {task.doneBy}</span>
       )}
+    </button>
+  )
+}
+
+/**
+ * A project task that falls due on this day.
+ *
+ * "Anything due today appears on the Cases day view alongside the bookings, so
+ * the portal is one place you look each morning."
+ *
+ * Deliberately not the same row as a kit task. Those are jobs attached to the
+ * day itself — move a tray, restock — and they are drawn in red because they
+ * have to happen before the list starts. This is somebody's to-do item that
+ * happens to fall today, which is a quieter thing: it should be visible on the
+ * morning view and must not shout over a tray that has to be at Calvary by
+ * eight.
+ */
+function DueRow({ task, today, onDone, compact }) {
+  const late = task.due_date && today && task.due_date < today
+  return (
+    <button type="button"
+      onClick={() => onDone?.(task)}
+      aria-label={`Tick off ${task.task}`}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+        padding: compact ? '4px 7px' : `6px ${space.sm}px`, marginBottom: 4,
+        borderRadius: radius.control, background: colour.surface,
+        border: `1px solid ${late ? colour.dangerLine : colour.line}`,
+        ...text('micro'), textTransform: 'none', letterSpacing: 0, lineHeight: 1.35,
+        color: colour.ink, fontWeight: 600
+      }}>
+      <span aria-hidden="true" style={{ marginRight: 6 }}>☐</span>
+      {task.task}
+      <span style={{ fontWeight: 400, color: colour.inkMuted }}>
+        {task.assignee && task.assignee !== 'Unassigned' ? ` · ${task.assignee}` : ''}
+        {late ? ' · overdue' : ''}
+      </span>
     </button>
   )
 }
@@ -955,7 +993,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, onOpen, onSetPlace
  * the single noisiest thing on the screen; and the reorder arrows themselves,
  * which belong in the day view where there is room to use them.
  */
-function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone }) {
+function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, dueFor, onDueDone }) {
   return (
     <div style={{
       display: 'grid',
@@ -968,7 +1006,8 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
       {(plan.days || []).map(day => (
         <WeekColumn key={day.date} day={day} today={today} onOpen={onOpen}
           onSetPlace={onSetPlace} onPreferences={onPreferences}
-          hasPreferences={hasPreferences} onTaskDone={onTaskDone} />
+          hasPreferences={hasPreferences} onTaskDone={onTaskDone}
+          due={dueFor(day.date)} onDueDone={onDueDone} />
       ))}
     </div>
   )
@@ -980,7 +1019,7 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
  * Its own component because each column keeps its own running order while the
  * calendar catches up, and a hook cannot be called inside a map.
  */
-function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone }) {
+function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, due, onDueDone }) {
   const isToday = day.date === today
         const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
         const groups = day.casesByHospital || []
@@ -1039,6 +1078,13 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
                 <TaskRow key={task.id} task={task} onDone={onTaskDone} compact />
               ))}
 
+              {/* And what falls due off the project board. Same row as the day
+                  view uses, so the two cannot drift apart. */}
+              {(due || []).map(task => (
+                <DueRow key={task.id} task={task} today={today}
+                  onDone={onDueDone} compact />
+              ))}
+
               {groups.map(group => {
                 // The order the list will run in, and whether it is worth
                 // numbering: one case at a hospital has no running order.
@@ -1080,7 +1126,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
  * one running order and everybody is reading it.
  */
 
-function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone }) {
+function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone, due, today, onDueDone }) {
   const groups = day.casesByHospital || []
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
@@ -1130,6 +1176,12 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           the two cannot drift apart. */}
       {(day.tasks || []).map(task => (
         <TaskRow key={task.id} task={task} onDone={onTaskDone} />
+      ))}
+
+      {/* And whatever falls due today off the project board, so the morning
+          view is one place to look rather than two. */}
+      {(due || []).map(task => (
+        <DueRow key={task.id} task={task} today={today} onDone={onDueDone} />
       ))}
 
       {/* Kit on the move is drawn like an alert on purpose. It is a thing
@@ -1225,6 +1277,16 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [selectedDay, setSelectedDay] = useState(() => todayStr())
   // Today, kept current rather than worked out once at mount — see useToday.
   const today = useToday()
+
+  // ── What is due, off the project board ──
+  //
+  // "Anything due today appears on the Cases day view alongside the bookings,
+  // so the portal is one place you look each morning."
+  //
+  // Fetched separately from the plan and allowed to fail quietly: the week is
+  // the point of this screen, and a worklist that will not load must not take
+  // the theatre lists with it.
+  const [worklist, setWorklist] = useState([])
   // The cache for the week being shown, which is always the week containing
   // today. It used to consult prefs.weekStart — a preference nothing has ever
   // written — so the branch was dead and the fallback did all the work.
@@ -1272,6 +1334,22 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
       setStale(true)
     }
   }, [token])
+
+  const loadWorklist = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/meetings/agent?action=board', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      setWorklist(Array.isArray(data.items) ? data.items : [])
+    } catch {
+      // The week still draws. A missing to-do list is a smaller problem than
+      // a blank screen on the morning of a list.
+    }
+  }, [token])
+
+  useEffect(() => { loadWorklist() }, [loadWorklist])
 
   useEffect(() => { load(window_) }, [window_, load])
   useLiveRefresh(useCallback(() => load(window_, { quiet: true }), [window_, load]), [window_, load])
@@ -1390,6 +1468,40 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   // The selected day has to be inside the week on screen, or stepping back a
   // week would leave the day view showing a day that is not in it.
   const activeDay = days.includes(selectedDay) ? selectedDay : days[0]
+
+  /**
+   * The project tasks that belong on a given day of this week.
+   *
+   * On today that includes what is overdue — a task due on Friday does not
+   * stop being due because it is Monday, and the morning view is exactly where
+   * somebody should meet it again. On any other day it is only what falls on
+   * it, or today's backlog would appear in all seven columns at once and bury
+   * the one that matters.
+   */
+  const dueFor = useCallback(
+    day => dueOnDay(day, worklist, today), [worklist, today])
+
+  /**
+   * Ticked off from here rather than from the project board.
+   *
+   * Straight to done: the point of putting these on the morning view is that
+   * somebody can clear them without leaving the week, and a tap that opened
+   * another screen would defeat it. On screen first, server after, and the
+   * worklist is reloaded so a refusal corrects itself.
+   */
+  const markDueDone = useCallback(async task => {
+    setWorklist(items => items.map(it =>
+      (it.id === task.id ? { ...it, status: 'done', column: 'done' } : it)))
+    try {
+      await fetch('/api/meetings/agent?action=task', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: task.id, column: 'done' })
+      })
+    } catch {
+      await loadWorklist()
+    }
+  }, [token, loadWorklist])
   const dayPlan = (plan?.days || []).find(d => d.date === activeDay)
 
   function goWeek(by) {
@@ -1710,6 +1822,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             <AddBookingRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing}
+                  due={dueFor(activeDay)} today={today} onDueDone={markDueDone}
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
                   hasPreferences={hasPreferences}
@@ -1725,6 +1838,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             is most of what somebody opens the week for. */}
         {plan && span === 'week' && desktop && (
           <WeekGrid
+            dueFor={dueFor} onDueDone={markDueDone}
             plan={plan}
             today={today}
             onOpen={setEditing}
@@ -1759,6 +1873,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
                 find the day first, in a view that had no arrows, meant the one
                 thing this was built for was the awkward one. */}
             <DayPanel day={day} onOpen={setEditing}
+              due={dueFor(day.date)} today={today} onDueDone={markDueDone}
               onSetPlace={setPlacing} leader={leader}
               onPreferences={openPreferences}
               hasPreferences={hasPreferences}
