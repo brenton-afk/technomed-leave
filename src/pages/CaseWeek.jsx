@@ -3,6 +3,7 @@ import { Page, Header, Banner } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { useLiveRefresh, useToday, useReturn } from '../liveRefresh.js'
 import { dueOnDay } from '../projects/model.js'
+import { matchCase } from '../voice/command.js'
 import {
   fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature
 } from '../clinicalPlan/provider.js'
@@ -1242,7 +1243,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   )
 }
 
-export default function CaseWeek({ user, switcher, promptBanner }) {
+export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpokenDone }) {
   // A week in columns on a desktop, a list on a phone — different shapes of
   // screen, different right answer.
   const desktop = useIsDesktop()
@@ -1251,6 +1252,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   const [editing, setEditing] = useState(null)
   // The day the sheet should open on, or null when it is closed.
   const [adding, setAdding] = useState(null)
+  // Fields from a booking spoken at the mic, applied when the form opens.
+  const [spokenBooking, setSpokenBooking] = useState(null)
   // The day a task is being added to, or null. Separate from `adding` so that
   // opening one does not look like opening the other.
   const [addingTask, setAddingTask] = useState(null)
@@ -1489,6 +1492,61 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
    * another screen would defeat it. On screen first, server after, and the
    * worklist is reloaded so a refusal corrects itself.
    */
+  /**
+   * A command spoken at the mic that needed the week to make sense of it.
+   *
+   * Resolved here rather than on the server because the app is already holding
+   * the cases, and the server would have to fetch the whole week again to work
+   * out which booking "we're second tomorrow" is about.
+   *
+   * A booking opens the form filled in. A list order is applied to the one case
+   * it matches — and refuses where it matches none or two, because a running
+   * order put on the wrong case moves the wrong team to the wrong hospital at
+   * half past seven.
+   */
+  useEffect(() => {
+    if (!spoken || !plan) return
+    const command = spoken.command
+
+    if (command.intent === 'booking') {
+      setAdding(spoken.booking?.fields?.date || activeDay)
+      setSpokenBooking(spoken.booking?.fields || null)
+      onSpokenDone?.()
+      return
+    }
+
+    if (command.intent !== 'listOrder') { onSpokenDone?.(); return }
+
+    const { match, why } = matchCase(plan, command.listOrder)
+    if (!match) {
+      setNotice(why || 'Could not tell which case that was for.')
+      onSpokenDone?.()
+      return
+    }
+
+    const { position, session, from, ahead } = command.listOrder
+    ;(async () => {
+      try {
+        const res = await fetch('/api/calendar/today?action=listplace', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            eventId: match.id,
+            place: { position, session, from, ahead }
+          })
+        })
+        const body = await res.json()
+        if (body.error) throw new Error(body.error)
+        setNotice(`List order set for ${match.patient || match.surgeon}.`)
+        await load(window_, { quiet: true })
+      } catch (err) {
+        setNotice(err.message || 'That list order did not save.')
+      }
+      onSpokenDone?.()
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spoken, plan])
+
   const markDueDone = useCallback(async task => {
     setWorklist(items => items.map(it =>
       (it.id === task.id ? { ...it, status: 'done', column: 'done' } : it)))
@@ -1944,6 +2002,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
 
       {adding && (
         <NewBooking
+          spoken={spokenBooking}
           user={user}
           date={adding}
           // What is already booked that day, so the sheet can tell when a
@@ -1952,7 +2011,7 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
           alreadyBooked={((plan?.days || []).find(d => d.date === adding)?.casesByHospital || [])
             .flatMap(g => g.cases)
             .filter(c => !c.cancelled)}
-          onClose={() => setAdding(null)}
+          onClose={() => { setAdding(null); setSpokenBooking(null) }}
           onCreated={() => load(window_, { quiet: true })} />
       )}
 

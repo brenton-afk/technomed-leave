@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
@@ -154,7 +154,7 @@ function siteOf(text) {
   return null
 }
 
-export default function NewBooking({ user, date: openOn, alreadyBooked = [], onClose, onCreated }) {
+export default function NewBooking({ user, date: openOn, alreadyBooked = [], spoken, onClose, onCreated }) {
   // Opens on the day being looked at, which is the booking most likely being
   // made. Falls back to the next weekday when opened from nowhere in particular.
   const [date, setDate] = useState(() => openOn || defaultDate())
@@ -171,6 +171,18 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], onC
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
   const [dictating, setDictating] = useState(false)
+
+  // A booking spoken at the mic from anywhere in the app arrives already read,
+  // so the form opens filled in rather than making somebody say it twice. The
+  // same applyDictation the in-form recorder uses — one path, so the two
+  // cannot drift.
+  const applied = useRef(false)
+  useEffect(() => {
+    if (!spoken || applied.current) return
+    applied.current = true
+    applyDictation(spoken)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spoken])
 
   /**
    * What was dictated, written into the form.

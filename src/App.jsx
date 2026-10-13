@@ -29,6 +29,8 @@ import { useNewBuild } from './appVersion.js'
 import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
 import { watchZoom } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
+import VoiceSheet, { Mic } from './pages/voice/VoiceSheet.jsx'
+import { weekdayName } from './clinicalPlan/week.js'
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 // Five destinations, because a bottom bar stops being scannable past about five.
@@ -134,6 +136,20 @@ export default function App() {
   // early return, which is the only place both rules are satisfied.
   const unread = useUnread(user?.token)
   const [nav, setNav] = useState({ tab: 'cases', sub: null })
+
+  // ── The microphone ──
+  //
+  // "I want a voice option... like a speak function that says 'Hey TM Portal,
+  // I want to add a booking'."
+  //
+  // On every screen, because the point of speaking a command is not having to
+  // navigate to the right place first — a mic you have to find defeats itself.
+  // It routes rather than acts: a booking and a list order need the week, so
+  // they are handed to the Cases tab, which is already holding it. A reminder
+  // and a task list item are self-contained and go straight out from here.
+  const [micOpen, setMicOpen] = useState(false)
+  const [spoken, setSpoken] = useState(null)
+  const [said, setSaid] = useState('')
   const [submitted, setSubmitted] = useState(null)
 
   // An accidental pinch is remembered by an installed app across a relaunch,
@@ -254,6 +270,54 @@ export default function App() {
 
   const tabs = TABS.filter(t => !t.adminOnly || user.isAdmin)
 
+  /**
+   * A command somebody has read and tapped.
+   *
+   * Two of the four are self-contained and go straight out from here. The other
+   * two need the week — which booking is "we're second tomorrow" about — so
+   * they are handed to the Cases tab, which already has it loaded.
+   */
+  async function actOnSpoken(heard) {
+    const command = heard?.command
+    setMicOpen(false)
+    if (!command) return
+
+    const auth = {
+      'Content-Type': 'application/json',
+      ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {})
+    }
+
+    if (command.intent === 'booking' || command.intent === 'listOrder') {
+      setSpoken(heard)
+      navigate({ tab: 'cases' })
+      return
+    }
+
+    try {
+      if (command.intent === 'reminder') {
+        const res = await fetch('/api/calendar/today?action=task', {
+          method: 'POST', headers: auth, body: JSON.stringify(command.reminder)
+        })
+        const body = await res.json()
+        if (body.error) throw new Error(body.error)
+        setSaid('Task added to the day.')
+      }
+
+      if (command.intent === 'todo') {
+        const res = await fetch('/api/meetings/agent?action=add-task', {
+          method: 'POST',
+          headers: auth,
+          body: JSON.stringify({ ...command.todo, addedByEmail: user?.email || null })
+        })
+        const body = await res.json()
+        if (body.error) throw new Error(body.error)
+        setSaid('Added to the task list.')
+      }
+    } catch (err) {
+      setSaid(err.message || 'That did not go through.')
+    }
+  }
+
   function renderContent() {
     // Shown in place of whatever tab you were on, rather than above the whole
     // shell. It used to be an early return, which took the bottom navigation
@@ -279,7 +343,8 @@ export default function App() {
       return (
         <>
           <FaceIdSetup user={user} />
-          <Cases user={user} promptBanner={<PromptBanner user={user} onNavigate={navigate} />} />
+          <Cases user={user} promptBanner={<PromptBanner user={user} onNavigate={navigate} />}
+            spoken={spoken} onSpokenDone={() => setSpoken(null)} />
         </>
       )
     }
@@ -378,10 +443,49 @@ export default function App() {
         </button>
       )}
 
+      {/* What a spoken command did, said once and then gone. */}
+      {said && (
+        <button onClick={() => setSaid('')}
+          style={{
+            position: 'fixed', zIndex: 140, left: '50%', transform: 'translateX(-50%)',
+            top: 'calc(10px + env(safe-area-inset-top, 0px))',
+            padding: '8px 16px', minHeight: 40, borderRadius: 999,
+            border: 'none', background: colour.navy, color: 'white',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
+            fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer'
+          }}>
+          {said}
+        </button>
+      )}
+
       {/* The one scrolling region. The tab bar is a sibling below it rather than
           something this has to leave room for, so there is no clearance to keep
           in step with the bar's height. */}
       <div className="tm-scroll">{renderContent()}</div>
+
+      {/* ── The microphone ──
+          Above the bar rather than in it: the bar is full at five, and a sixth
+          destination would make all six harder to hit. Floating keeps it one
+          tap from everywhere, which is the whole point of speaking a command
+          rather than navigating to the screen that does it. */}
+      {user && (
+        <button onClick={() => setMicOpen(true)} aria-label="Speak a command"
+          style={{
+            position: 'fixed', zIndex: 120, right: 16,
+            bottom: `calc(${desktop ? 78 : 86}px + env(safe-area-inset-bottom, 0px))`,
+            width: 56, height: 56, borderRadius: 999, border: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: colour.navy, color: 'white', cursor: 'pointer',
+            boxShadow: '0 6px 20px rgba(4,39,70,0.32)'
+          }}>
+          <Mic size={24} />
+        </button>
+      )}
+
+      {micOpen && (
+        <VoiceSheet user={user} onClose={() => setMicOpen(false)}
+          onPlan={actOnSpoken} weekdayOf={weekdayName} />
+      )}
 
       {/* Not `position: fixed`. It is the last child of a column that is exactly
           the height of the viewport, so it is pinned by the layout itself — which

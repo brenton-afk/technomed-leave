@@ -59,7 +59,7 @@ function ModeSwitch({ mode, onChange }) {
   )
 }
 
-export default function Cases({ user, promptBanner }) {
+export default function Cases({ user, promptBanner, spoken, onSpokenDone }) {
   // Remembered, because which view someone reads the week in is a habit rather
   // than a decision. Stored with the plan's other preferences.
   const [mode, setMode] = useState(() => {
@@ -77,5 +77,6 @@ export default function Cases({ user, promptBanner }) {
   const switcher = <ModeSwitch mode={mode} onChange={change} />
 
   if (mode === 'lead') return <TeamLeader user={user} switcher={switcher} />
-  return <CaseWeek user={user} switcher={switcher} promptBanner={promptBanner} />
+  return <CaseWeek user={user} switcher={switcher} promptBanner={promptBanner}
+    spoken={spoken} onSpokenDone={onSpokenDone} />
 }

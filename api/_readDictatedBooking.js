@@ -41,7 +41,15 @@ const VOCABULARY = [
 ]
 
 /** Audio straight to AssemblyAI, no intermediate storage of our own. */
-async function transcribe(audioBase64, contentType) {
+/**
+ * Audio in, words out.
+ *
+ * `extra` is for callers with their own vocabulary — the voice router primes it
+ * with the words a command is made of. Passed rather than imported so this file
+ * keeps no opinion about what a command sounds like, and the booking path, which
+ * passes nothing, behaves exactly as it did.
+ */
+export async function transcribe(audioBase64, contentType, extra = []) {
   const apiKey = process.env.ASSEMBLYAI_API_KEY
   if (!apiKey) throw new Error('Dictation needs ASSEMBLYAI_API_KEY')
 
@@ -59,7 +67,10 @@ async function transcribe(audioBase64, contentType) {
     body: JSON.stringify({
       audio_url: audioUrl,
       // One person dictating, so no speaker labels — they only add noise here.
-      word_boost: VOCABULARY,
+      // AssemblyAI caps the boost list, and a list over the cap is rejected
+      // outright rather than trimmed — which would take dictation down for
+      // every surgeon name as well.
+      word_boost: [...new Set([...VOCABULARY, ...extra])].slice(0, 1000),
       boost_param: 'high',
       punctuate: true,
       format_text: true

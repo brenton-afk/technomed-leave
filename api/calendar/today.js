@@ -41,6 +41,7 @@ import { searchMailbox, readMessage, addressOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
 import { readDictatedBooking } from '../_readDictatedBooking.js'
+import { readVoiceCommand } from '../_voiceCommand.js'
 import {
   sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar
 } from '../../src/clinicalPlan/bookingSources.js'
@@ -97,6 +98,9 @@ export default async function handler(req, res) {
   if (req.query.action === 'dismiss') return handleDismiss(req, res)
   // A booking spoken into the phone. Fills the form; does not make the booking.
   if (req.query.action === 'dictate') return handleDictate(req, res)
+  // One button, four things. See _voiceCommand.js — it reads and routes, and
+  // writes nothing: the app does that only after somebody has tapped.
+  if (req.query.action === 'voice') return handleVoice(req, res)
   // The running order of a theatre list, taken on the evening ring-round.
   // Nothing in the app calls this any more — the arrows that drove it are
   // gone, because the number they moved counted only our cases and disagreed
@@ -1273,6 +1277,33 @@ async function handleDismiss(req, res) {
  * with the raw transcript so a misheard word is visible rather than buried in a
  * field that looks confidently correct.
  */
+/**
+ * A spoken command, read and routed.
+ *
+ * Returns what was heard and what it would do. Nothing is written here — every
+ * one of the four things this can turn into has its own action, already behind
+ * its own checks, and the app calls that one after a person has read the two
+ * lines on screen and tapped.
+ */
+async function handleVoice(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const result = await readVoiceCommand({
+      audio: body.audio,
+      contentType: body.contentType
+    })
+    return res.status(200).json({ ok: true, ...result })
+  } catch (err) {
+    // Written to be read by somebody holding a phone, so it goes through as it
+    // is rather than becoming "something went wrong".
+    return res.status(400).json({ error: err.message })
+  }
+}
+
 async function handleDictate(req, res) {
   const session = await requireSession(req, res)
   if (!session) return

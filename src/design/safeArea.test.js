@@ -117,6 +117,8 @@ describe('no screen is left out', () => {
     // the Header and the page ground — the board and the list are sections of
     // it, and the task sheet is handed a fixed, inset backdrop by its caller.
     'projects/ProjectList.jsx', 'projects/ProjectBoard.jsx', 'projects/TaskSheet.jsx',
+    // A sheet over everything, with its own fixed backdrop.
+    'voice/VoiceSheet.jsx',
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',
