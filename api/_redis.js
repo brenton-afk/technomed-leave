@@ -109,7 +109,10 @@ export async function updateMeetingStatus(id, status, actionItems) {
 // ─── WORKLIST (action items) ───────────────────────────────
 
 export async function saveWorklistItem(item) {
-  await redis('set', `worklist:${item.id}`, JSON.stringify(item))
+  // Body form, not path form: a task carries a thread of updates now, and a
+  // long one outgrows what fits in a request line.
+  await redisSetBody(`worklist:${item.id}`, JSON.stringify(item))
+  await redis('lrem', 'worklist:all', '0', item.id)
   await redis('lpush', 'worklist:all', item.id)
 }
 
@@ -128,13 +131,43 @@ export async function updateWorklistItem(id, updates) {
   const item = await getWorklistItem(id)
   if (!item) throw new Error('Worklist item not found')
   const updated = { ...item, ...updates, updatedAt: new Date().toISOString() }
-  await redis('set', `worklist:${id}`, JSON.stringify(updated))
+  await redisSetBody(`worklist:${id}`, JSON.stringify(updated))
   return updated
 }
 
 export async function deleteWorklistItem(id) {
   await redis('del', `worklist:${id}`)
   await redis('lrem', 'worklist:all', '0', id)
+}
+
+// ─── PROJECTS ───────────────────────────────────────────────
+// A project owns its tasks. Stored the same way the worklist is — one key per
+// row, one list of ids — because the whole board is read at once anyway and a
+// nine-person company is never going to have the number of projects where
+// that stops being the right answer.
+
+export async function saveProject(project) {
+  await redisSetBody(`project:${project.id}`, JSON.stringify(project))
+  // Removed first so a re-save cannot leave the id in the list twice, which
+  // would draw the project twice on the board.
+  await redis('lrem', 'project:all', '0', project.id)
+  await redis('lpush', 'project:all', project.id)
+}
+
+export async function getProject(id) {
+  const data = await redis('get', `project:${id}`)
+  return data ? JSON.parse(data) : null
+}
+
+export async function getProjects() {
+  const ids = await redis('lrange', 'project:all', '0', '-1') || []
+  const rows = await Promise.all(ids.map(id => getProject(id)))
+  return rows.filter(Boolean)
+}
+
+export async function deleteProject(id) {
+  await redis('del', `project:${id}`)
+  await redis('lrem', 'project:all', '0', id)
 }
 
 // ─── SURGEON USAGE ──────────────────────────────────────────

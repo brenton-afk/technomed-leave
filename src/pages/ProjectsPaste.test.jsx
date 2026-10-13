@@ -28,8 +28,8 @@ beforeEach(() => {
   calls = []
   global.fetch = vi.fn(async (url, init) => {
     calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null })
-    if (String(url).includes('action=worklist')) {
-      return { ok: true, json: async () => ({ items: [] }) }
+    if (String(url).includes('action=board')) {
+      return { ok: true, json: async () => ({ items: [], projects: [] }) }
     }
     if (String(url).includes('action=analyze')) {
       return {
@@ -55,8 +55,18 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
+/**
+ * The capture screen.
+ *
+ * Behind a tab now rather than the front door. "We want it similar to
+ * monday.com as a true project page" — a recorder is one way work gets in, not
+ * what the page is about, and it opened straight onto a Start recording button
+ * every single time anybody looked at their to-do list.
+ */
 const open = async () => {
   render(<Projects user={USER} onBack={() => {}} />)
+  await waitFor(() => expect(screen.getByRole('tab', { name: /Capture/ })).toBeInTheDocument())
+  fireEvent.click(screen.getByRole('tab', { name: /Capture/ }))
   await waitFor(() => expect(screen.getByText('New meeting')).toBeInTheDocument())
 }
 
@@ -123,20 +133,30 @@ describe('pasting what was said', () => {
 })
 
 describe('a task nobody held a meeting about', () => {
+  // It belongs to a project now, so it is typed on one. General is the board
+  // for everything that names no project — the thing agreed in the car.
+  const openGeneral = async () => {
+    render(<Projects user={USER} onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByText('General')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('General'))
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Add a task…')).toBeInTheDocument())
+  }
+
   it('offers a plain row to type one in', async () => {
-    await open()
+    await openGeneral()
     expect(screen.getByPlaceholderText('Add a task…')).toBeInTheDocument()
   })
 
   it('keeps the rest out of the way until there is something to add', async () => {
-    await open()
+    await openGeneral()
     expect(screen.queryByText('Add')).not.toBeInTheDocument()
   })
 
   it('sends it straight to the board, with no agent in between', async () => {
     // Whoever typed it is the review. There is nothing for a model to extract
     // from a sentence somebody has already written as a task.
-    await open()
+    await openGeneral()
     fireEvent.change(screen.getByPlaceholderText('Add a task…'),
       { target: { value: 'Get the Athlet tray back from RHH' } })
     fireEvent.click(await screen.findByText('Add'))
@@ -194,12 +214,14 @@ describe('whose list it is', () => {
 
   const openBoard = async () => {
     global.fetch = vi.fn(async url => {
-      if (String(url).includes('action=worklist')) {
-        return { ok: true, json: async () => ({ items: board }) }
+      if (String(url).includes('action=board')) {
+        return { ok: true, json: async () => ({ items: board, projects: [] }) }
       }
       return { ok: true, json: async () => ({}) }
     })
     render(<Projects user={USER} onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Mine/ })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: /Mine/ }))
     await waitFor(() =>
       expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument())
   }
@@ -213,7 +235,7 @@ describe('whose list it is', () => {
   it('counts only what is still to do', async () => {
     // Three items, two mine, one of those already done.
     await openBoard()
-    expect(screen.getByText('Mine · 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mine · 1' })).toBeInTheDocument()
     expect(screen.getByText('Everyone · 3')).toBeInTheDocument()
   })
 

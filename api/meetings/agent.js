@@ -2,12 +2,18 @@ import { handleUpload } from '@vercel/blob/client'
 import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
   saveMeeting, getMeeting, updateMeetingStatus,
-  saveWorklistItem, getWorklist, updateWorklistItem, deleteWorklistItem
+  saveWorklistItem, getWorklist, getWorklistItem, updateWorklistItem, deleteWorklistItem,
+  saveProject, getProject, getProjects
 } from '../_redis.js'
 import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
 import { flagRepeats } from '../_worklistMatch.js'
 import { readActionList } from '../_actionItems.js'
+import {
+  GENERAL, newProject, normaliseProject, movedTo, withComment,
+  archived, restored, blockedFromArchiving,
+  renamedColumn, addedColumn, removedColumn
+} from '../../src/projects/model.js'
 
 // Everything for the meeting note taker lives in this one function, routed
 // by ?action=. Vercel's Hobby plan caps a deployment at 12 serverless
@@ -47,6 +53,16 @@ export default async function handler(req, res) {
   if (action === 'read-file') return handleReadFile(req, res)
   // And a task that came from nobody's meeting — the thing agreed in the car.
   if (action === 'add-task') return handleAddTask(req, res)
+
+  // ── The project page ──
+  // "We want it similar to monday.com as a true project page." A project owns
+  // its tasks, names its own columns and knows how far through it is. Routed
+  // here rather than in a function of its own because this file already owns
+  // the worklist, and a project is what the worklist grew into.
+  if (action === 'board') return handleBoard(req, res, session)
+  if (action === 'project') return handleProject(req, res, session)
+  if (action === 'column') return handleColumn(req, res, session)
+  if (action === 'task') return handleTask(req, res, session)
 
   return res.status(400).json({ error: 'Unknown or missing action' })
 }
@@ -469,5 +485,202 @@ async function handleWorklist(req, res) {
     await deleteWorklistItem(id)
     return res.status(200).json({ success: true })
   }
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+
+// ─── The project page ────────────────────────────────────────
+// "Build the task/project section out to be more comprehensive. We want it
+// similar to monday.com as a true project page."
+//
+// Four actions rather than one REST resource each, following this file's own
+// pattern. The rules all live in _projects.js, which is pure and tested
+// without a database; what is here is reading, writing and refusing.
+
+const nowStamp = () => new Date().toISOString()
+
+/** Everything a board needs, in one request. */
+async function handleBoard(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  // Both at once on purpose: progress, counts and the "which column" question
+  // all need the tasks and the projects together, and two round trips from a
+  // phone on hospital wifi is the difference between instant and visibly slow.
+  const [items, stored] = await Promise.all([getWorklist(), getProjects()])
+  const projects = stored.map(normaliseProject).filter(Boolean)
+  return res.status(200).json({ items, projects, general: GENERAL })
+}
+
+/** A project created, edited, put away or brought back. */
+async function handleProject(req, res, session) {
+  const by = session?.name || session?.email || ''
+
+  if (req.method === 'POST') {
+    const { name, owner, due, colour, notes } = req.body || {}
+    if (!String(name || '').trim()) return res.status(400).json({ error: 'Give the project a name' })
+    const validNames = new Set(STAFF.map(s => s.name))
+    const project = newProject({
+      name: String(name).trim().slice(0, 120),
+      owner: validNames.has(owner) ? owner : 'Unassigned',
+      due: due || '',
+      colour,
+      notes: String(notes || '').trim().slice(0, 1000),
+      by,
+      at: nowStamp()
+    })
+    await saveProject(project)
+    return res.status(200).json({ project })
+  }
+
+  if (req.method === 'PATCH') {
+    const { id, name, owner, due, colour, notes, archive } = req.body || {}
+    if (!id) return res.status(400).json({ error: 'id is required' })
+    if (id === GENERAL.id) return res.status(400).json({ error: 'The General list cannot be changed' })
+
+    const stored = await getProject(id)
+    if (!stored) return res.status(404).json({ error: 'That project is not there' })
+    let project = normaliseProject(stored)
+
+    if (archive === true) {
+      // Checked here and not only in the app: the warning on screen is a
+      // courtesy, and this is the rule. Archiving takes a project's tasks off
+      // everybody's board at once, including somebody else's "Mine" list.
+      const why = blockedFromArchiving(project, await getWorklist())
+      if (why) return res.status(400).json({ error: why })
+      project = archived(project, { by, at: nowStamp() })
+    } else if (archive === false) {
+      project = restored(project)
+    }
+
+    if (name !== undefined) project.name = String(name).trim().slice(0, 120) || project.name
+    if (owner !== undefined) {
+      const validNames = new Set(STAFF.map(s => s.name))
+      project.owner = validNames.has(owner) ? owner : 'Unassigned'
+    }
+    if (due !== undefined) project.due = due || ''
+    if (colour !== undefined) project.colour = colour
+    if (notes !== undefined) project.notes = String(notes).trim().slice(0, 1000)
+    project.updatedAt = nowStamp()
+
+    await saveProject(normaliseProject(project))
+    return res.status(200).json({ project: normaliseProject(project) })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+/** A column added, renamed or removed — and whatever that did to the tasks. */
+async function handleColumn(req, res) {
+  const { id, key, label } = req.body || {}
+  if (!id) return res.status(400).json({ error: 'id is required' })
+  if (id === GENERAL.id) return res.status(400).json({ error: 'The General list keeps its columns' })
+
+  const stored = await getProject(id)
+  if (!stored) return res.status(404).json({ error: 'That project is not there' })
+  const project = normaliseProject(stored)
+
+  try {
+    if (req.method === 'POST') {
+      const next = addedColumn(project, label)
+      await saveProject(next)
+      return res.status(200).json({ project: next })
+    }
+
+    if (req.method === 'PATCH') {
+      const next = renamedColumn(project, key, label)
+      await saveProject(next)
+      return res.status(200).json({ project: next })
+    }
+
+    if (req.method === 'DELETE') {
+      // The one board edit that can lose work, so the tasks that were in the
+      // column are written back before the column goes. Order matters: a
+      // project saved without the column while tasks still point at it is a
+      // board that looks right and is not.
+      const { project: next, moved } = removedColumn(project, key, await getWorklist())
+      await Promise.all(moved.map(t => saveWorklistItem(t)))
+      await saveProject(next)
+      return res.status(200).json({ project: next, moved: moved.length })
+    }
+  } catch (err) {
+    return res.status(400).json({ error: err.message })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+/** A task moved, edited, commented on, archived or brought back. */
+async function handleTask(req, res, session) {
+  const by = session?.name || session?.email || ''
+
+  if (req.method === 'POST') {
+    // An update on the thread. Append-only: the value of "rang them 12 Oct" is
+    // that it was written on the 12th and has not been tidied since.
+    const { id, text } = req.body || {}
+    if (!id) return res.status(400).json({ error: 'id is required' })
+    const item = await getWorklistItem(id)
+    if (!item) return res.status(404).json({ error: 'That task is not there' })
+    try {
+      const updated = withComment(item, { text, by, at: nowStamp() })
+      await saveWorklistItem(updated)
+      return res.status(200).json({ item: updated })
+    } catch (err) {
+      return res.status(400).json({ error: err.message })
+    }
+  }
+
+  if (req.method === 'PATCH') {
+    const { id, column, projectId, assignee, priority, due_date: dueDate, task, archive } = req.body || {}
+    if (!id) return res.status(400).json({ error: 'id is required' })
+    const item = await getWorklistItem(id)
+    if (!item) return res.status(404).json({ error: 'That task is not there' })
+
+    let next = { ...item }
+    if (projectId !== undefined) {
+      // Moving a task between projects can strand it in a column the new
+      // board has never heard of, so it starts at the beginning of the new
+      // one. columnOf would cope, but a task silently in a column nobody can
+      // see it in is worse than one visibly back at the start.
+      next.projectId = projectId && projectId !== GENERAL.id ? String(projectId) : ''
+      next.column = ''
+    }
+
+    const projectNow = next.projectId ? normaliseProject(await getProject(next.projectId)) : GENERAL
+    if (column !== undefined) {
+      try {
+        next = movedTo(next, column, projectNow || GENERAL, nowStamp())
+      } catch (err) {
+        return res.status(400).json({ error: err.message })
+      }
+    }
+
+    if (assignee !== undefined) {
+      const validNames = new Set(STAFF.map(s => s.name))
+      next.assignee = validNames.has(assignee) ? assignee : 'Unassigned'
+    }
+    if (priority !== undefined) {
+      next.priority = ['urgent', 'normal', 'low'].includes(priority) ? priority : next.priority
+    }
+    if (dueDate !== undefined) next.due_date = dueDate || ''
+    if (task !== undefined && String(task).trim()) next.task = String(task).trim().slice(0, 300)
+    if (archive === true) next = archived(next, { by, at: nowStamp() })
+    if (archive === false) next = restored(next)
+
+    // Saved whole rather than merged. updateWorklistItem spreads the stored
+    // row under the changes, which would quietly put archivedBy and archivedAt
+    // back on a task that had just been taken out of the archive.
+    const updated = { ...next, updatedAt: nowStamp() }
+    await saveWorklistItem(updated)
+    return res.status(200).json({ item: updated })
+  }
+
+  if (req.method === 'DELETE') {
+    // Still here, and still really deletes. The app archives now — this is for
+    // the one somebody genuinely wants gone, and the app asks twice first.
+    const { id } = req.query
+    if (!id) return res.status(400).json({ error: 'id is required' })
+    await deleteWorklistItem(id)
+    return res.status(200).json({ success: true })
+  }
+
   return res.status(405).json({ error: 'Method not allowed' })
 }

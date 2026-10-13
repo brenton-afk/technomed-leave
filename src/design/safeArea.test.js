@@ -113,6 +113,10 @@ describe('no screen is left out', () => {
   // Drawn inside another screen's frame, so the frame's insets already apply.
   const INSIDE_ANOTHER = new Set([
     'PromptBanner.jsx', 'Success.jsx', 'FaceIdSetup.jsx', 'clinical/PlanBlocks.jsx',
+    // The project screens. All three are drawn inside Projects.jsx, which has
+    // the Header and the page ground — the board and the list are sections of
+    // it, and the task sheet is handed a fixed, inset backdrop by its caller.
+    'projects/ProjectList.jsx', 'projects/ProjectBoard.jsx', 'projects/TaskSheet.jsx',
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',

@@ -1,23 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Page, Header } from '../design/Shell.jsx'
-import { colour, text } from '../design/tokens.js'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Page, Header, Overlay } from '../design/Shell.jsx'
+import { colour, text, space, radius } from '../design/tokens.js'
 import { upload } from '@vercel/blob/client'
 import { STAFF, isSameStaff } from '../staffConfig.js'
-
-const PRIORITY_COLORS = { urgent: colour.danger, normal: '#1a7a6e', low: colour.inkFaint }
-const PRIORITY_LABELS = { urgent: 'Urgent', normal: 'Normal', low: 'Low' }
-const STATUS_COLUMNS = [
-  { key: 'open', label: 'Open', icon: '○' },
-  { key: 'in_progress', label: 'In progress', icon: '◐' },
-  { key: 'done', label: 'Done', icon: '●' }
-]
-
-function formatDate(d) {
-  if (!d) return '—'
-  const [y, m, day] = d.split('-')
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return `${parseInt(day)} ${months[parseInt(m) - 1]} ${y}`
-}
+import {
+  GENERAL, normaliseProject, projectIdOf, columnOf, tasksOf
+} from '../projects/model.js'
+import ProjectList from './projects/ProjectList.jsx'
+import ProjectBoard from './projects/ProjectBoard.jsx'
+import TaskSheet from './projects/TaskSheet.jsx'
+import {
+  PRIORITY_COLOURS as PRIORITY_COLORS, PRIORITY_LABELS,
+  formatDate, todayISO, tintOf, dueState, DUE_TONES
+} from './projects/shared.js'
 
 function formatElapsed(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0')
@@ -78,6 +73,23 @@ export default function Projects({ user, onBack }) {
   const [worklist, setWorklist] = useState([])
   const [loadingBoard, setLoadingBoard] = useState(true)
 
+  // ── The project layer ──
+  //
+  // "We want it similar to monday.com as a true project page."
+  //
+  // Three screens of one set of data, and one of them pushed on top: the
+  // projects and how far through each one is; my own list across all of them;
+  // and the ways work gets in. A project opened replaces all three, which is
+  // the only arrangement that fits a phone.
+  const [projects, setProjects] = useState([])
+  const [view, setView] = useState('projects')
+  const [openId, setOpenId] = useState(null)
+  const [openTaskId, setOpenTaskId] = useState(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [savingProject, setSavingProject] = useState(false)
+  const today = todayISO()
+  const wide = typeof window !== 'undefined' && window.innerWidth >= 1024
+
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
   const chunksRef = useRef([])
@@ -85,12 +97,20 @@ export default function Projects({ user, onBack }) {
 
   useEffect(() => { loadWorklist() }, [])
 
+  /**
+   * The whole board, in one request.
+   *
+   * Projects and tasks together: progress, counts and which-column all need
+   * both, and two round trips from a phone on hospital wifi is the difference
+   * between instant and visibly slow.
+   */
   async function loadWorklist() {
     setLoadingBoard(true)
     try {
-      const res = await fetch('/api/meetings/agent?action=worklist', { headers: auth })
+      const res = await fetch('/api/meetings/agent?action=board', { headers: auth })
       const data = await res.json()
       setWorklist(data.items || [])
+      setProjects((data.projects || []).map(normaliseProject).filter(Boolean))
     } catch (err) {
       console.error(err)
     }
@@ -236,31 +256,123 @@ export default function Projects({ user, onBack }) {
     setError('')
   }
 
-  function cycleStatus(item) {
-    const idx = STATUS_COLUMNS.findIndex(c => c.key === item.status)
-    const next = STATUS_COLUMNS[(idx + 1) % STATUS_COLUMNS.length].key
-    updateStatus(item.id, next)
-  }
-
-  async function updateStatus(id, status) {
-    setWorklist(items => items.map(it => it.id === id ? { ...it, status } : it))
+  /**
+   * One task changed, on screen first and on the server after.
+   *
+   * Optimistic because every one of these is a tap on a card — moving a column,
+   * ticking something off — and a board that waits for hospital wifi before it
+   * redraws feels broken rather than careful. The reload at the end is what
+   * makes it honest: if the server disagreed, the board corrects itself.
+   */
+  const patchTask = useCallback(async (task, fields) => {
+    setWorklist(items => items.map(it => (it.id === task.id ? { ...it, ...fields } : it)))
     try {
-      await fetch('/api/meetings/agent?action=worklist', {
+      const res = await fetch('/api/meetings/agent?action=task', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...auth },
-        body: JSON.stringify({ id, status })
+        body: JSON.stringify({ id: task.id, ...fields })
       })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      setWorklist(items => items.map(it => (it.id === task.id ? body.item : it)))
+    } catch (err) {
+      setError(err.message || 'That change did not save.')
+      await loadWorklist()
+    }
+  }, [auth])
+
+  const moveTask = useCallback((task, column) => {
+    const row = worklist.find(it => it.id === task.id) || task
+    patchTask(row, { column })
+  }, [worklist, patchTask])
+
+  /** An update on the thread. Not optimistic — it needs the server's stamp. */
+  const commentOnTask = useCallback(async (task, textSaid) => {
+    try {
+      const res = await fetch('/api/meetings/agent?action=task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ id: task.id, text: textSaid })
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      setWorklist(items => items.map(it => (it.id === task.id ? body.item : it)))
+    } catch (err) {
+      setError(err.message || 'That update did not save.')
+    }
+  }, [auth])
+
+  const archiveTask = useCallback((task, on) => patchTask(task, { archive: on }), [patchTask])
+
+  /** Really gone. The sheet asks twice before it calls this. */
+  async function deleteItem(id) {
+    setWorklist(items => items.filter(it => it.id !== id))
+    setOpenTaskId(null)
+    try {
+      await fetch(`/api/meetings/agent?action=task&id=${id}`, { method: 'DELETE', headers: auth })
     } catch (err) {
       console.error(err)
     }
   }
 
-  async function deleteItem(id) {
-    setWorklist(items => items.filter(it => it.id !== id))
+  async function createProject(fields) {
+    setSavingProject(true)
+    setError('')
     try {
-      await fetch(`/api/meetings/agent?action=worklist&id=${id}`, { method: 'DELETE', headers: auth })
+      const res = await fetch('/api/meetings/agent?action=project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify(fields)
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      setProjects(list => [...list, normaliseProject(body.project)])
+      setOpenId(body.project.id)
     } catch (err) {
-      console.error(err)
+      setError(err.message || 'Could not make that project.')
+    }
+    setSavingProject(false)
+  }
+
+  async function patchProject(id, fields) {
+    setError('')
+    try {
+      const res = await fetch('/api/meetings/agent?action=project', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ id, ...fields })
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      setProjects(list => list.map(p => (p.id === id ? normaliseProject(body.project) : p)))
+      return true
+    } catch (err) {
+      setError(err.message || 'That did not save.')
+      return false
+    }
+  }
+
+  /**
+   * A column added, renamed or removed.
+   *
+   * The removal reloads rather than patching in place: it moves every task that
+   * was in the column, and guessing which ones on the client is how a board
+   * ends up showing work that is no longer where it says it is.
+   */
+  async function changeColumn(method, body) {
+    setError('')
+    try {
+      const res = await fetch('/api/meetings/agent?action=column', {
+        method,
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ id: openId, ...body })
+      })
+      const out = await res.json()
+      if (out.error) throw new Error(out.error)
+      setProjects(list => list.map(p => (p.id === openId ? normaliseProject(out.project) : p)))
+      if (method === 'DELETE') await loadWorklist()
+    } catch (err) {
+      setError(err.message || 'That column change did not save.')
     }
   }
 
@@ -361,14 +473,61 @@ export default function Projects({ user, onBack }) {
   // Usher" in October is still his, and a to-do list that quietly drops half
   // somebody's work is worse than no to-do list.
   const me = STAFF.find(p => p.email === user?.email)
-  const mine = worklist.filter(it =>
-    me ? isSameStaff(it.assignee, me) : it.assignee === user?.name)
+  const mine = worklist
+    .filter(it => !it.archived)
+    .filter(it => me ? isSameStaff(it.assignee, me) : it.assignee === user?.name)
   const mineCount = mine.filter(it => it.status !== 'done').length
-  const visible = showing === 'mine' ? mine : worklist
+
+  // ── What the render needs ──
+
+  /** Every project a task can belong to, General included. */
+  const allProjects = [...projects, GENERAL]
+  const projectFor = task =>
+    allProjects.find(p => p.id === projectIdOf(task)) || GENERAL
+
+  /** The board on screen, or nothing when the list is. */
+  const board = openId ? allProjects.find(p => p.id === openId) || null : null
+  const openTask = openTaskId ? worklist.find(it => it.id === openTaskId) : null
+
+  // Mid-flow beats whatever tab was last tapped. Switching away from a meeting
+  // that is recording would stop it, which is not what tapping "Projects"
+  // means by any reading.
+  const capturing = phase !== 'idle'
+  const at = capturing ? 'capture' : view
+
+  const liveProjects = allProjects
+    .filter(p => !p.archived)
+    .filter(p => tasksOf(p.id, worklist).some(t => t.status !== 'done')).length
+
+  const columnLabel = (task, project) => {
+    const key = columnOf(task, project)
+    return project.columns.find(c => c.key === key)?.label || ''
+  }
+
+  /**
+   * My list, gathered under the project each item belongs to.
+   *
+   * Grouped rather than flat because "four things" is a to-do list and "four
+   * things from four different pieces of work" is a to-do list you can act on.
+   * Finished ones stay — Erin keeping track of what has been completed is half
+   * the point, and an item that vanishes when ticked answers nothing.
+   */
+  // Mine by default; Erin's first tap is Everyone and it stays where she puts
+  // it for the session. Both are the same screen — a to-do list grouped by the
+  // work it belongs to — because a board of forty items belonging to nine
+  // people is not a to-do list, it is a reason to keep using a notebook.
+  const everyone = worklist.filter(it => !it.archived)
+  const listed = showing === 'mine' ? mine : everyone
+
+  const byProject = allProjects
+    .map(p => [p, listed.filter(it => projectIdOf(it) === p.id)])
+    .filter(([, rows]) => rows.length)
 
   return (
     <Page>
-      <Header eyebrow="Team" title="Projects" subtitle="Meeting notes and the shared worklist" onBack={onBack} />
+      <Header eyebrow="Team" title="Projects"
+        subtitle={board ? board.name : 'Projects, tasks and what was agreed'}
+        onBack={board ? () => setOpenId(null) : onBack} />
 
       <div className="tm-measure" style={{ padding: 16 }}>
         {error && (
@@ -377,6 +536,7 @@ export default function Projects({ user, onBack }) {
           </div>
         )}
 
+        {at === 'capture' && (<>
         {/* Recording panel */}
         {(phase === 'idle' || phase === 'recording') && (
           <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(26,43,74,0.08)' }}>
@@ -589,110 +749,257 @@ export default function Projects({ user, onBack }) {
             </button>
           </div>
         )}
+        </>)}
 
-        {/* Worklist board */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: colour.navy }}>Worklist</div>
-          <div style={{ fontSize: 12.5, color: colour.inkFaint }}>{worklist.length} item{worklist.length === 1 ? '' : 's'}</div>
-        </div>
+        {/* ── Where you are ──
 
-        {/* ── A task nobody held a meeting about ──
-            
-            The thing agreed in the car, or the one already known about that
-            does not need a model's help to write down. Straight onto the
-            board: whoever typed it is the review. */}
-        <div style={{
-          background: 'white', borderRadius: 12, padding: 12, marginBottom: 16,
-          border: '1px solid rgba(26,43,74,0.08)'
-        }}>
-          <input
-            value={typed.task}
-            onChange={e => setTyped(t => ({ ...t, task: e.target.value }))}
-            onKeyDown={e => { if (e.key === 'Enter') addTypedTask() }}
-            placeholder="Add a task…"
-            style={{
-              width: '100%', padding: '10px 12px', boxSizing: 'border-box',
-              border: '1px solid rgba(26,43,74,0.15)', borderRadius: 8, fontSize: 16
-            }} />
-          {typed.task.trim() && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-              <select value={typed.assignee}
-                onChange={e => setTyped(t => ({ ...t, assignee: e.target.value }))}
-                style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }}>
-                <option value="Unassigned">Unassigned</option>
-                {STAFF.map(p => <option key={p.email} value={p.name}>{p.name}</option>)}
-              </select>
-              <select value={typed.priority}
-                onChange={e => setTyped(t => ({ ...t, priority: e.target.value }))}
-                style={{ flexShrink: 0, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }}>
-                <option value="urgent">Urgent</option>
-                <option value="normal">Normal</option>
-                <option value="low">Low</option>
-              </select>
-              <input type="date" value={typed.due_date}
-                onChange={e => setTyped(t => ({ ...t, due_date: e.target.value }))}
-                style={{ flexShrink: 0, padding: '8px 10px', border: '1px solid rgba(26,43,74,0.15)', borderRadius: 6, fontSize: 16 }} />
-              <button onClick={addTypedTask} disabled={addingTask}
+            Three screens of one set of data. Projects answers "what is going
+            on"; Mine is the four things that are actually yours, which is what
+            somebody between cases came for; Capture is how work gets in. A
+            project opened replaces all three — a phone has room for one. */}
+        {!board && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: space.md }} role="tablist">
+            {[
+              ['projects', `Projects · ${liveProjects}`],
+              ['mine', `Mine${mineCount ? ` · ${mineCount}` : ''}`],
+              ['capture', 'Capture']
+            ].map(([key, label]) => (
+              <button key={key} role="tab" aria-selected={at === key}
+                onClick={() => setView(key)}
                 style={{
-                  flexShrink: 0, padding: '8px 16px', background: colour.accent,
-                  color: 'white', border: 'none', borderRadius: 6,
-                  fontSize: 14, fontWeight: 600, cursor: addingTask ? 'default' : 'pointer'
-                }}>
-                {addingTask ? 'Adding…' : 'Add'}
-              </button>
+                  ...text('bodyStrong'),
+                  flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 38,
+                  borderRadius: radius.control, cursor: 'pointer',
+                  border: at === key ? 'none' : `1px solid ${colour.line}`,
+                  background: at === key ? colour.navy : colour.surface,
+                  color: at === key ? 'white' : colour.inkFaint
+                }}>{label}</button>
+            ))}
+          </div>
+        )}
+
+        {loadingBoard && !board && (
+          <div style={{ ...text('body'), textAlign: 'center', padding: space.xxl, color: colour.inkFainter }}>
+            Loading…
+          </div>
+        )}
+
+        {/* ── One project ── */}
+        {board && (
+          <div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.md
+            }}>
+              <span aria-hidden="true" style={{
+                width: 10, height: 10, borderRadius: radius.pill,
+                background: tintOf(board.colour).solid, flexShrink: 0
+              }} />
+              <span style={{ ...text('title'), color: colour.ink, flex: 1, minWidth: 0 }}>
+                {board.name}
+              </span>
+              {!board.fixed && (
+                <button type="button"
+                  onClick={async () => {
+                    const ok = await patchProject(board.id, { archive: !board.archived })
+                    if (ok && !board.archived) setOpenId(null)
+                  }}
+                  style={{
+                    ...text('caption'), background: 'none', border: `1px solid ${colour.line}`,
+                    borderRadius: radius.control, padding: '6px 10px',
+                    color: colour.inkFaint, cursor: 'pointer'
+                  }}>
+                  {board.archived ? 'Bring back' : 'Archive'}
+                </button>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Two views of one list. See `showing`. */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-          {[['mine', `Mine${mineCount ? ` · ${mineCount}` : ''}`], ['all', `Everyone · ${worklist.length}`]].map(([key, label]) => (
-            <button key={key} onClick={() => setShowing(key)}
-              style={{
-                flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 38,
-                borderRadius: 8, cursor: 'pointer',
-                border: showing === key ? 'none' : '1px solid rgba(26,43,74,0.15)',
-                background: showing === key ? colour.navy : 'white',
-                color: showing === key ? 'white' : colour.inkFaint,
-                fontSize: 14, fontWeight: 700
-              }}>{label}</button>
-          ))}
-        </div>
-
-        {loadingBoard ? (
-          <div style={{ textAlign: 'center', padding: 30, color: '#aab0bb', fontSize: 14 }}>Loading…</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {STATUS_COLUMNS.map(col => {
-              const items = visible.filter(w => w.status === col.key)
-              return (
-                <div key={col.key} style={{ background: 'white', borderRadius: 12, border: '1px solid rgba(26,43,74,0.08)', overflow: 'hidden' }}>
-                  <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(26,43,74,0.06)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 12.5 }}>{col.icon}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: colour.navy, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{col.label}</span>
-                    <span style={{ fontSize: 12.5, color: '#aab0bb', marginLeft: 'auto' }}>{items.length}</span>
-                  </div>
-                  <div style={{ padding: 10 }}>
-                    {items.length === 0 && <div style={{ fontSize: 12.5, color: '#aab0bb', textAlign: 'center', padding: '10px 0' }}>Nothing here</div>}
-                    {items.map(it => (
-                      <div key={it.id} onClick={() => cycleStatus(it)} style={{ background: '#f8f9fc', borderRadius: 8, padding: 10, marginBottom: 8, cursor: 'pointer', borderLeft: `3px solid ${PRIORITY_COLORS[it.priority] || colour.inkFaint}` }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: colour.navy }}>{it.task}</div>
-                          <button onClick={e => { e.stopPropagation(); deleteItem(it.id) }} style={{ background: 'none', border: 'none', color: '#aab0bb', fontSize: 14, cursor: 'pointer', padding: '0 0 0 8px' }}>✕</button>
-                        </div>
-                        <div style={{ fontSize: 12.5, color: colour.inkFaint, marginTop: 4 }}>
-                          {it.assignee}{it.due_date ? ` · Due ${formatDate(it.due_date)}` : ''}
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#aab0bb', marginTop: 4 }}>from {it.sourceMeetingTitle} · {formatDate(it.sourceMeetingDate)}</div>
-                      </div>
-                    ))}
-                  </div>
+            {/* A task straight onto this board. Whoever typed it is the
+                review — there is nothing for a model to extract from a
+                sentence somebody has already written as a task. */}
+            <div style={{
+              background: colour.surface, borderRadius: radius.card,
+              border: `1px solid ${colour.line}`, padding: space.md, marginBottom: space.md
+            }}>
+              <input
+                value={typed.task}
+                onChange={e => setTyped(t => ({ ...t, task: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') addTypedTask() }}
+                placeholder="Add a task…"
+                style={{
+                  ...text('field'), width: '100%', boxSizing: 'border-box',
+                  padding: `${space.sm}px ${space.md}px`,
+                  border: `1px solid ${colour.line}`, borderRadius: radius.control
+                }} />
+              {typed.task.trim() && (
+                <div style={{ display: 'flex', gap: 6, marginTop: space.sm, flexWrap: 'wrap' }}>
+                  <select value={typed.assignee}
+                    onChange={e => setTyped(t => ({ ...t, assignee: e.target.value }))}
+                    aria-label="Who has it"
+                    style={{
+                      ...text('field'), flexGrow: 1, flexShrink: 1, flexBasis: 0,
+                      padding: '8px 10px', border: `1px solid ${colour.line}`, borderRadius: 6
+                    }}>
+                    <option value="Unassigned">Unassigned</option>
+                    {STAFF.map(p => <option key={p.email} value={p.name}>{p.name}</option>)}
+                  </select>
+                  <input type="date" value={typed.due_date} aria-label="Due"
+                    onChange={e => setTyped(t => ({ ...t, due_date: e.target.value }))}
+                    style={{
+                      ...text('field'), flexShrink: 0, padding: '8px 10px',
+                      border: `1px solid ${colour.line}`, borderRadius: 6
+                    }} />
+                  <button onClick={addTypedTask} disabled={addingTask}
+                    style={{
+                      ...text('bodyStrong'), flexShrink: 0, padding: '8px 16px',
+                      background: colour.accent, color: 'white', border: 'none',
+                      borderRadius: 6, cursor: addingTask ? 'default' : 'pointer'
+                    }}>
+                    {addingTask ? 'Adding…' : 'Add'}
+                  </button>
                 </div>
-              )
-            })}
+              )}
+            </div>
+
+            <ProjectBoard
+              project={board} items={worklist} wide={wide} today={today}
+              onOpen={t => setOpenTaskId(t.id)}
+              onMove={moveTask}
+              onRenameColumn={(key, label) => changeColumn('PATCH', { key, label })}
+              onAddColumn={label => changeColumn('POST', { label })}
+              onRemoveColumn={key => changeColumn('DELETE', { key })} />
+          </div>
+        )}
+
+        {/* ── All of them ── */}
+        {!board && at === 'projects' && !loadingBoard && (
+          <ProjectList
+            projects={projects} items={worklist} today={today}
+            busy={savingProject}
+            showArchived={showArchived}
+            onToggleArchived={() => setShowArchived(v => !v)}
+            onCreate={createProject}
+            onOpen={p => setOpenId(p.id)} />
+        )}
+
+        {/* ── Mine, across everything ── */}
+        {!board && at === 'mine' && !loadingBoard && (
+          <div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: space.md }}>
+              {[['mine', `Mine${mineCount ? ` · ${mineCount}` : ''}`],
+                ['all', `Everyone · ${everyone.length}`]].map(([key, label]) => (
+                <button key={key} onClick={() => setShowing(key)}
+                  aria-pressed={showing === key}
+                  style={{
+                    ...text('caption'), fontWeight: 700,
+                    flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 34,
+                    borderRadius: radius.control, cursor: 'pointer',
+                    border: showing === key ? 'none' : `1px solid ${colour.line}`,
+                    background: showing === key ? colour.accentSoft : colour.surface,
+                    color: showing === key ? colour.accentDeep : colour.inkFaint
+                  }}>{label}</button>
+              ))}
+            </div>
+            {listed.length === 0 && (
+              <div style={{
+                ...text('body'), color: colour.inkFaint, textAlign: 'center',
+                padding: space.xxl
+              }}>
+                {showing === 'mine'
+                  ? 'Nothing on your list. Either you are on top of it, or nobody has told you yet.'
+                  : 'Nothing on anybody’s list yet.'}
+              </div>
+            )}
+            {byProject.map(([project, rows]) => (
+              <div key={project.id} style={{ marginBottom: space.lg }}>
+                <button type="button" onClick={() => setOpenId(project.id === GENERAL.id ? GENERAL.id : project.id)}
+                  style={{
+                    ...text('micro'), color: tintOf(project.colour).ink,
+                    background: 'none', border: 'none', padding: `0 0 ${space.sm}px`,
+                    cursor: 'pointer'
+                  }}>{project.name}</button>
+                {rows.map(it => {
+                  const due = dueState(it.due_date, today)
+                  const finished = it.status === 'done'
+                  return (
+                    <div key={it.id} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: space.md,
+                      background: colour.surface, borderRadius: radius.control,
+                      border: `1px solid ${colour.line}`,
+                      borderLeft: `3px solid ${PRIORITY_COLORS[it.priority] || colour.inkFainter}`,
+                      padding: `${space.sm}px ${space.md}px`, marginBottom: 6
+                    }}>
+                      {/* Ticking it off goes straight to the finishing column,
+                          whatever that column is called on its own board. */}
+                      <button type="button"
+                        aria-label={finished ? `Reopen ${it.task}` : `Tick off ${it.task}`}
+                        onClick={() => moveTask(it, finished
+                          ? project.columns[0].key
+                          : (project.columns.find(c => c.done) || project.columns[0]).key)}
+                        style={{
+                          flexShrink: 0, width: 22, height: 22, marginTop: 1,
+                          borderRadius: radius.pill, cursor: 'pointer',
+                          border: `2px solid ${finished ? colour.accent : colour.line}`,
+                          background: finished ? colour.accent : 'transparent',
+                          color: 'white', ...text('micro'), letterSpacing: 0, padding: 0
+                        }}>{finished ? '✓' : ''}</button>
+                      <button type="button" onClick={() => setOpenTaskId(it.id)}
+                        style={{
+                          flex: 1, minWidth: 0, textAlign: 'left', background: 'none',
+                          border: 'none', padding: 0, cursor: 'pointer'
+                        }}>
+                        <span style={{
+                          ...text('bodyStrong'), color: colour.ink, display: 'block',
+                          ...(finished ? { textDecoration: 'line-through', color: colour.inkFainter } : {})
+                        }}>{it.task}</span>
+                        <span style={{
+                          ...text('caption'), color: colour.inkFaint, display: 'block'
+                        }}>
+                          {columnLabel(it, project)}
+                          {due ? ' · ' : ''}
+                          {due && (
+                            <span style={{ color: DUE_TONES[due.tone].colour }}>{due.label}</span>
+                          )}
+                        </span>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
           </div>
         )}
       </div>
+
+      {/* One task, opened. Over the top rather than pushed, because you come
+          back to the same place on the same board every time. */}
+      {openTask && (
+        <Overlay>
+          {/* Overlay is only a portal — it puts this at the end of
+              document.body and positions nothing. Without a fixed backdrop the
+              sheet renders below #root, which is exactly the height of the
+              viewport, so it opens off-screen and the tap looks dead. jsdom has
+              no layout, so nothing here would have caught it but the guard in
+              sheets.test.jsx. */}
+          <div onClick={() => setOpenTaskId(null)} style={{
+            position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.45)',
+            zIndex: 3000, display: 'flex', alignItems: 'flex-end',
+            justifyContent: 'center', overflowY: 'auto', overflowX: 'hidden'
+          }}>
+          <div onClick={e => e.stopPropagation()} className="tm-sheet"
+            style={{ width: '100%', maxWidth: 520, padding: space.md }}>
+            <TaskSheet
+              task={openTask}
+              project={projectFor(openTask)}
+              projects={[...projects.filter(p => !p.archived), GENERAL]}
+              onChange={patchTask}
+              onComment={commentOnTask}
+              onArchive={archiveTask}
+              onDelete={t => deleteItem(t.id)}
+              onClose={() => setOpenTaskId(null)} />
+          </div>
+          </div>
+        </Overlay>
+      )}
     </Page>
   )
 }
