@@ -861,3 +861,49 @@ describe('opening the surgeon’s preferences', () => {
     expect(screen.queryByLabelText(/^Preferences for /)).not.toBeInTheDocument()
   })
 })
+
+// ─── A 200 that is not a booking ─────────────────────────────────────────────
+// "There can't be situations when you get stuck in a part of the app, you
+// always need to be able to return to the main page."
+//
+// The error path here covered a 4xx and a body carrying `error`. It did not
+// cover a perfectly successful response whose body is not a booking — the app
+// shell served while a deploy is mid-flight, an auth redirect followed
+// quietly. That got as far as the render and threw on `loaded.fields` being
+// undefined, which in a browser is a white screen: no header, no Close, and
+// nothing to do but kill the app.
+describe('a reply that is not a booking', () => {
+  const replyWith = body => {
+    global.fetch = vi.fn(async url => {
+      if (String(url).includes('action=booking')) {
+        return { status: 200, json: async () => body }
+      }
+      return { status: 200, json: async () => ({ ok: true }) }
+    })
+  }
+
+  it('says so instead of throwing', async () => {
+    replyWith({ ok: true })
+    show()
+    await waitFor(() =>
+      expect(screen.getByText(/could not be read/i)).toBeInTheDocument())
+  })
+
+  it('leaves a way out', async () => {
+    // The whole point. A sheet that fails has to still be a sheet you can
+    // close.
+    replyWith({ ok: true })
+    const closed = vi.fn()
+    show({ onClose: closed })
+    await waitFor(() =>
+      expect(screen.getByText(/could not be read/i)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+    expect(closed).toHaveBeenCalled()
+  })
+
+  it('still reads a real booking', async () => {
+    show()
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('Marsh')).toBeInTheDocument())
+  })
+})

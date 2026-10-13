@@ -50,11 +50,16 @@ const week = bodyOf('WeekCase')
  * Matched on the expression that renders each one rather than on wording, so
  * restyling a line does not break this and moving one does.
  */
+// Each pattern has to match where the fact is *drawn*, not where it is worked
+// out. The three parsed values are hoisted to the top of each card now — once
+// per card rather than twice — and a pattern that matched `useMemo(() =>
+// patientLabel(...))` would find all three of them up there, in declaration
+// order, and report an order this screen does not have.
 const MARKERS = [
-  ['the patient', /\{patientLabel\(surgicalCase\)\}/],
+  ['the patient', /\{label\}/],
   ['the operation', /\{surgicalCase\.operation &&/],
-  ['the kit and where it comes from', /suppliesFor\(surgicalCase\)/],
-  ['the implant question', /implantQuestion\(surgicalCase\) &&/],
+  ['the kit and where it comes from', /\{(?:!off && )?supplies[ ?]/],
+  ['the implant question', /\{(?:!off && )?question && \(/],
   ['where it is on the list', /place\??\.?\.?headline/],
   ['who attended', /\{surgicalCase\.rep &&|surgicalCase\.rep && !off/]
 ]
@@ -156,4 +161,44 @@ describe('what the column is allowed to do differently', () => {
     // not, having the full width of the glass.
     expect(phone).not.toMatch(/shortSupply/)
   })
+})
+
+// ─── Worked out once, not twice ──────────────────────────────────────────────
+// "It's really laggy at the moment."
+//
+// Each of these reads the booking with a pattern — the kit line is parsed, the
+// operation is scanned for ACDF and its cousins, the surgeon's preferences are
+// looked up — and each was written twice in the body of a card: once in the
+// guard that decides whether to draw the line, once in the line itself. Across
+// a week of cases that is several hundred parses on every render, for an
+// answer that cannot change unless the booking does.
+describe('the parsing each card does', () => {
+  const PARSERS = ['patientLabel', 'suppliesFor', 'implantQuestion']
+
+  const timesIn = (body, name) =>
+    body.split(`${name}(surgicalCase)`).length - 1
+
+  for (const [card, body] of [['CaseCard', phone], ['WeekCase', week]]) {
+    for (const name of PARSERS) {
+      it(`${card} runs ${name} once`, () => {
+        expect(timesIn(body, name), `${card} calls ${name}`).toBe(1)
+      })
+    }
+
+    it(`${card} holds onto the answers`, () => {
+      // Once per card is only once per *render* without this.
+      for (const name of PARSERS) {
+        expect(body, `${card} — ${name}`)
+          .toMatch(new RegExp(`useMemo\\(\\(\\) => ${name}\\(surgicalCase\\)`))
+      }
+    })
+
+    it(`${card} is not redrawn for a booking that has not changed`, () => {
+      // All of its callbacks are useCallback or setState, so this holds.
+      //
+      // Read from SOURCE rather than body: bodyOf slices from `function
+      // CaseCard`, and the wrapper sits immediately before that.
+      expect(SOURCE).toMatch(new RegExp(`React\\.memo\\(function ${card}\\(`))
+    })
+  }
 })

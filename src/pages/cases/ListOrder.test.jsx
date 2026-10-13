@@ -240,3 +240,62 @@ describe('what it does with the rest of a week', () => {
     expect(screen.getByText('Name to come')).toBeInTheDocument()
   })
 })
+
+// ─── The day you tapped ──────────────────────────────────────────────────────
+// "The list view isn't refreshing automatically when you select the day... the
+// list order view needs to correspond immediately and refresh immediately to
+// whatever day you click on. It's really laggy at the moment."
+//
+// It drew the whole week and was never told which day was selected, so tapping
+// Wednesday on the strip above it changed nothing anybody could see. Seven days
+// of theatre lists on every render is also most of where the lag was.
+describe('following the day strip', () => {
+  const evOn = (id, name, surgeon, isoDay, hour) => ({
+    id,
+    summary: `${name} CYLOX - ${surgeon}`,
+    description: `Surgeon: ${surgeon}\nPatient: ${name}\nHospital: CLV\n`
+      + 'Procedure: C5/6 ACDF\nKit: CYLOX (Distributor Loan)',
+    location: 'Calvary',
+    start: { dateTime: `${isoDay}T${String(hour).padStart(2, '0')}:00:00+11:00` },
+    end: { dateTime: `${isoDay}T${String(hour + 1).padStart(2, '0')}:00:00+11:00` }
+  })
+
+  const WEEK_OF_CASES = [
+    evOn('m', 'Whiteley', 'Thani', '2026-10-12', 9),
+    evOn('w', 'Vellacott', 'Atallah', '2026-10-14', 9),
+    evOn('f', 'Ashbury', 'Garg', '2026-10-16', 9)
+  ]
+
+  const onDay = day => render(
+    <ListOrder plan={planFor(WEEK_OF_CASES)} today="2026-10-12" day={day} />)
+
+  it('shows the day it was given, and only that day', () => {
+    onDay('2026-10-14')
+    expect(screen.getByText('Vellacott')).toBeInTheDocument()
+    expect(screen.queryByText('Whiteley')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ashbury')).not.toBeInTheDocument()
+  })
+
+  it('moves when the day moves', () => {
+    const { rerender } = onDay('2026-10-12')
+    expect(screen.getByText('Whiteley')).toBeInTheDocument()
+    rerender(<ListOrder plan={planFor(WEEK_OF_CASES)} today="2026-10-12" day="2026-10-16" />)
+    expect(screen.getByText('Ashbury')).toBeInTheDocument()
+    expect(screen.queryByText('Whiteley')).not.toBeInTheDocument()
+  })
+
+  it('says so when the day you picked has nothing on it', () => {
+    // Rather than an empty panel, which reads as a screen that failed to load.
+    onDay('2026-10-13')
+    expect(screen.getByText('Nothing booked on this day.')).toBeInTheDocument()
+  })
+
+  it('still draws the week when no day is named, which is the desktop', () => {
+    // A desktop has no day view at all — all seven are on the glass — so
+    // there is nothing there for one day to correspond to.
+    render(<ListOrder plan={planFor(WEEK_OF_CASES)} today="2026-10-12" />)
+    expect(screen.getByText('Whiteley')).toBeInTheDocument()
+    expect(screen.getByText('Vellacott')).toBeInTheDocument()
+    expect(screen.getByText('Ashbury')).toBeInTheDocument()
+  })
+})

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Page, Header, Banner } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
-import { useLiveRefresh } from '../liveRefresh.js'
+import { useLiveRefresh, useToday, useReturn } from '../liveRefresh.js'
 import {
   fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature
 } from '../clinicalPlan/provider.js'
@@ -275,7 +275,14 @@ function suppliesFor(surgicalCase) {
  * Everything the booking says, in one place: who, what, with which system, how
  * it is supplied, what extra kit, and whatever the team wrote in the notes.
  */
-function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
+// ── Memoised ──
+//
+// Same reason as the values inside it: a card whose booking has not changed
+// should not be drawn again. Every one of these redrew whenever anything on
+// the screen moved — a sheet opening, a notice appearing — and each redraw
+// re-parsed the kit line. The callbacks below are all useCallback or
+// setState, so this actually holds.
+const CaseCard = React.memo(function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
   const off = Boolean(surgicalCase.cancelled)
   // Told about, not attending. Drawn back like a cancelled case rather than
   // struck through — it is still going ahead, just without us.
@@ -296,6 +303,20 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
     ? { ink: colour.inkFaint, muted: colour.inkFaint, faint: colour.inkFainter, line: colour.line }
     : inkOn(fill)
   const place = describeListPlace(surgicalCase.listPlace)
+
+  // ── Worked out once per card ──
+  //
+  // "It's really laggy at the moment."
+  //
+  // Each of these reads the booking text with a pattern — the kit line is
+  // parsed, the operation is scanned for ACDF and its cousins, the surgeon's
+  // preferences are looked up — and each was called twice in the body of this
+  // card: once to decide whether to draw the line, once to draw it. Across a
+  // week of cases that is several hundred parses on every keystroke, scroll
+  // and poll, for an answer that cannot change unless the booking does.
+  const label = useMemo(() => patientLabel(surgicalCase), [surgicalCase])
+  const supplies = useMemo(() => suppliesFor(surgicalCase), [surgicalCase])
+  const question = useMemo(() => implantQuestion(surgicalCase), [surgicalCase])
 
   return (
     <div
@@ -330,7 +351,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
           ...text('bodyStrong'), display: 'block', color: ink.ink,
           ...(off ? { textDecoration: 'line-through' } : {})
         }}>
-          {patientLabel(surgicalCase)}
+          {label}
           <span style={{ color: ink.faint, fontWeight: 400 }}> / </span>
           <span style={{ color: ink.ink }}>{surgicalCase.surgeon}</span>
         </span>
@@ -412,9 +433,9 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
             carry a worked-out answer with a question mark after it. One line
             per system, because a case is often two systems with different
             answers and one line for both said the wrong thing about one. */}
-        {suppliesFor(surgicalCase) && (
+        {supplies && (
           <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
-            {suppliesFor(surgicalCase).map((entry, i) => (
+            {supplies.map((entry, i) => (
               <React.Fragment key={entry.system}>
                 {i > 0 && ' · '}
                 {/* "The name of the system should be what is in bold, rather
@@ -440,12 +461,12 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
         {/* The operation says implants are going in and the booking names no
             kit. Asked, never filled in: a wrong answer written in as fact is
             a tray from Melbourne that nobody can use, found in the theatre. */}
-        {implantQuestion(surgicalCase) && (
+        {question && (
           <span style={{
             ...text('caption'), display: 'block',
             color: ink.ink, fontWeight: 700
           }}>
-            {implantQuestion(surgicalCase).asked}
+            {question.asked}
           </span>
         )}
 
@@ -544,7 +565,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
         {onSetPlace && !off && (
           <button
             type="button"
-            aria-label={`Set where ${patientLabel(surgicalCase)} is on the list`}
+            aria-label={`Set where ${label} is on the list`}
             onClick={() => onSetPlace(surgicalCase)}
             style={{
               // A bordered chip rather than a text link. The first version was
@@ -566,7 +587,7 @@ function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
 
     </div>
   )
-}
+})
 
 /** One arrow. Disabled at the ends, so the list cannot be pushed off itself. */
 
@@ -700,7 +721,14 @@ function shortSupply(supply) {
  * view to send anybody to any more. They are the controls the week is actually
  * worked with, so they have to live on the view that is on the screen.
  */
-function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferences }) {
+// ── Memoised ──
+//
+// Same reason as the values inside it: a card whose booking has not changed
+// should not be drawn again. Every one of these redrew whenever anything on
+// the screen moved — a sheet opening, a notice appearing — and each redraw
+// re-parsed the kit line. The callbacks below are all useCallback or
+// setState, so this actually holds.
+const WeekCase = React.memo(function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferences }) {
   const off = Boolean(surgicalCase.cancelled)
   const spare = Boolean(surgicalCase.notRequired) && !off
   const place = describeListPlace(surgicalCase.listPlace)
@@ -721,6 +749,20 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
   const ink = off
     ? { ink: colour.inkFaint, muted: colour.inkFaint, faint: colour.inkFainter, line: colour.line }
     : inkOn(fill)
+
+  // ── Worked out once per card ──
+  //
+  // "It's really laggy at the moment."
+  //
+  // Each of these reads the booking text with a pattern — the kit line is
+  // parsed, the operation is scanned for ACDF and its cousins, the surgeon's
+  // preferences are looked up — and each was called twice in the body of this
+  // card: once to decide whether to draw the line, once to draw it. Across a
+  // week of cases that is several hundred parses on every keystroke, scroll
+  // and poll, for an answer that cannot change unless the booking does.
+  const label = useMemo(() => patientLabel(surgicalCase), [surgicalCase])
+  const supplies = useMemo(() => suppliesFor(surgicalCase), [surgicalCase])
+  const question = useMemo(() => implantQuestion(surgicalCase), [surgicalCase])
 
   return (
     // A div, not a button. The arrows and the chip are buttons in their own
@@ -752,7 +794,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           ...(off ? { textDecoration: 'line-through' } : {})
         }}>
-          {patientLabel(surgicalCase)}
+          {label}
           <span style={{ color: ink.faint, fontWeight: 400 }}> · </span>
           <span style={{ color: ink.ink }}>
             {surgicalCase.surgeon}
@@ -778,7 +820,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
             
             Above the rep on purpose: the kit decides what goes in the car,
             and who is taking it is the next question after that. */}
-        {!off && suppliesFor(surgicalCase)?.map(entry => (
+        {!off && supplies?.map(entry => (
           <span key={entry.system} style={{
             ...text('micro'), display: 'block', textTransform: 'none',
             letterSpacing: 0, lineHeight: 1.35, color: ink.ink,
@@ -799,13 +841,13 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
 
         {/* The same question as the phone card. Implants are going in and the
             booking has not said what. */}
-        {!off && implantQuestion(surgicalCase) && (
+        {!off && question && (
           <span style={{
             ...text('micro'), display: 'block', textTransform: 'none',
             letterSpacing: 0, lineHeight: 1.35, color: ink.ink, fontWeight: 700,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
           }}>
-            {implantQuestion(surgicalCase).asked}
+            {question.asked}
           </span>
         )}
 
@@ -879,7 +921,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
 
       {onSetPlace && !off && (
         <button type="button"
-          aria-label={`Set where ${patientLabel(surgicalCase)} is on the list`}
+          aria-label={`Set where ${label} is on the list`}
           onClick={() => onSetPlace(surgicalCase)}
           style={{
             display: 'block', width: '100%', cursor: 'pointer', textAlign: 'left',
@@ -894,7 +936,7 @@ function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferen
       )}
     </div>
   )
-}
+})
 
 /**
  * The week as seven columns, for a desktop.
@@ -1181,6 +1223,8 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   // the first thing it shows is wrong, and quietly so.
   const [window_, setWindow] = useState(() => resolveDefaultWeek())
   const [selectedDay, setSelectedDay] = useState(() => todayStr())
+  // Today, kept current rather than worked out once at mount — see useToday.
+  const today = useToday()
   // The cache for the week being shown, which is always the week containing
   // today. It used to consult prefs.weekStart — a preference nothing has ever
   // written — so the branch was dead and the fallback did all the work.
@@ -1343,7 +1387,6 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   }
 
   const days = window_.days
-  const today = todayStr()
   // The selected day has to be inside the week on screen, or stepping back a
   // week would leave the day view showing a day that is not in it.
   const activeDay = days.includes(selectedDay) ? selectedDay : days[0]
@@ -1358,6 +1401,11 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
   function pickDay(day) {
     setSelectedDay(day)
     if (desktop) return
+    // "The list order view needs to correspond immediately to whatever day you
+    // click on." It does now, by showing that day — so tapping a date while in
+    // Lists must not also jump to the Day view, which is where it used to go
+    // and why the list appeared not to respond.
+    if (span === 'lists') return
     setSpan('day')
     remember({ caseSpan: 'day' })
   }
@@ -1389,6 +1437,31 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
    * already here, hid the label, and did nothing when the button was pressed.
    */
   const atToday = span === 'day' ? activeDay === today : window_.days.includes(today)
+
+  /**
+   * Back to how the app opens.
+   *
+   * resolveDefaultWeek() and not goToday(), deliberately: this is the app
+   * being picked up again, and it should land where it lands when it is
+   * launched — including the roll-forward to next week from Friday, which is
+   * the week being planned. Two different answers to "where does the app
+   * start" would be two things to explain.
+   */
+  const backToDefault = useCallback(() => {
+    setWindow(resolveDefaultWeek())
+    setSelectedDay(todayStr())
+  }, [])
+
+  // Midnight. The date changed under an open screen, so follow it.
+  const lastDay = useRef(today)
+  useEffect(() => {
+    if (lastDay.current === today) return
+    lastDay.current = today
+    backToDefault()
+  }, [today, backToDefault])
+
+  // And the morning: picked up again after a real absence.
+  useReturn(backToDefault)
 
   // How many bookings are waiting to be confirmed. Only the count is fetched
   // here — the cards themselves are read when the queue is opened, so the week
@@ -1713,7 +1786,14 @@ export default function CaseWeek({ user, switcher, promptBanner }) {
             theatre, in one session — because a flat 1,2,3 across two hospitals
             is our ordering and not theirs, which is why the numbers came off
             the cards in the first place. */}
-        {plan && span === 'lists' && <ListOrder plan={plan} today={today} />}
+        {plan && span === 'lists' && (
+          // The day on a phone, the week on a desktop — which is the split the
+          // rest of this screen already makes, and for the same reason. A
+          // desktop has no day view at all ("not really useful on a desktop")
+          // because the glass holds all seven; a phone holds one, and tapping
+          // Wednesday there has to put Wednesday on the screen.
+          <ListOrder plan={plan} today={today} day={desktop ? null : activeDay} />
+        )}
 
         {plan && span === 'week' && (plan.notes || (plan.keyFlags || []).length > 0) && (
           <>

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import CaseWeek from './CaseWeek.jsx'
+import { LIVE_POLL_MS, AWAY_LONG_ENOUGH_MS } from '../liveRefresh.js'
 import { formatWeekRangeShort } from '../clinicalPlan/week.js'
 
 // One view replacing two. The Calendar navigated well and showed everything the
@@ -1322,5 +1323,136 @@ describe('a supply on every booking', () => {
     // the cases that need one.
     events = [booking('Blab F2F not required', 'RHH', 'Gray')]
     expect(await cardFor('Gray')).not.toMatch(/supply\?|Consignment|Loan/)
+  })
+})
+
+// ─── Tapping a day in the Lists view ─────────────────────────────────────────
+// "The list view isn't refreshing automatically when you select the day... the
+// list order view needs to correspond immediately and refresh immediately to
+// whatever day you click on."
+//
+// Two separate faults behind that. The list was never told which day was
+// selected, so it drew the whole week regardless; and the date strip, on a
+// phone, switched you to the Day view as a side effect — so the one thing you
+// could do to make the list respond was also the thing that took the list off
+// the screen.
+describe('the lists follow the day strip', () => {
+  const toLists = async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Lists' }))
+    return waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Lists' })).toHaveAttribute('aria-selected', 'true'))
+  }
+
+  it('stays in the lists when a day is tapped', async () => {
+    await toLists()
+    fireEvent.click(screen.getByLabelText(/Tuesday 22 September/i))
+    expect(screen.getByRole('tab', { name: 'Lists' }))
+      .toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('shows the day that was tapped', async () => {
+    // Monday is Mardon's; Tuesday is Vellacott's and Larkin's.
+    //
+    // The Lists assertion is load-bearing and not belt-and-braces. Without it
+    // this passed against the broken build: the tap dropped out of Lists into
+    // the Day view, which also shows Tuesday and not Monday — so the test
+    // agreed with the screen for entirely the wrong reason.
+    await toLists()
+    expect(screen.getByText('Mardon')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText(/Tuesday 22 September/i))
+    await waitFor(() => expect(screen.getByText('Vellacott')).toBeInTheDocument())
+    expect(screen.getByRole('tab', { name: 'Lists' }))
+      .toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText('Mardon')).not.toBeInTheDocument()
+  })
+
+  it('still takes you to the day view from the week, which it always did', async () => {
+    // The early return is for the lists only. Tapping a date in the week view
+    // opens that day, which is how the strip has always worked on a phone.
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
+    fireEvent.click(screen.getByLabelText(/Tuesday 22 September/i))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Day' }))
+      .toHaveAttribute('aria-selected', 'true'))
+  })
+})
+
+// ─── The screen that was left open ───────────────────────────────────────────
+// "The auto refresh to the current day is also not working. The app needs to
+// constantly refresh back to today's date."
+//
+// Today was worked out once, at mount, and never again. A screen left open on
+// the office desk overnight was still on Monday on Tuesday morning, with
+// Monday highlighted as today and nothing to say otherwise. The plan behind it
+// refreshed every minute the whole time, so the data was right and the date it
+// was filed under was wrong — which is worse than being plainly stale.
+describe('following the date, with nobody touching it', () => {
+  const selected = () =>
+    document.querySelector('[aria-current="date"]')?.getAttribute('aria-label')
+
+  it('moves to the new day when the date rolls over', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(selected()).toMatch(/Monday 21 September/i)
+
+    // Just past midnight, Hobart.
+    //
+    // What this guards is the wiring — the screen moving when the date does.
+    // It does not, on its own, prove the date is rechecked: the minute poll
+    // re-renders this component anyway, which is enough to notice here. The
+    // part that holds when a poll changes nothing is useToday, and that is
+    // guarded directly in liveRefresh.today.test.jsx.
+    await act(async () => {
+      vi.setSystemTime(new Date('2026-09-21T14:30:00.000Z'))
+      vi.advanceTimersByTime(LIVE_POLL_MS + 10)
+    })
+    await waitFor(() => expect(selected()).toMatch(/Tuesday 22 September/i))
+  })
+
+  it('leaves the day alone while it is still the same day', async () => {
+    // Somebody looking at Thursday should still be looking at Thursday a
+    // minute later. The clock only moves the screen when the date moves.
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText(/Thursday 24 September/i))
+    await act(async () => { vi.advanceTimersByTime(LIVE_POLL_MS * 3) })
+    expect(selected()).toMatch(/Thursday 24 September/i)
+  })
+
+  it('goes back to today when the app is picked up again', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText(/Thursday 24 September/i))
+    expect(selected()).toMatch(/Thursday 24 September/i)
+
+    await act(async () => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(AWAY_LONG_ENOUGH_MS + 1000)
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await waitFor(() => expect(selected()).toMatch(/Monday 21 September/i))
+  })
+
+  it('does not snap back for a flick away and straight back', async () => {
+    // A photo picker closing, a notification dismissed. Resetting the week
+    // out from under somebody adding a booking for next Thursday is worse
+    // than the staleness it would prevent.
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText(/Thursday 24 September/i))
+
+    await act(async () => {
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      vi.advanceTimersByTime(4000)
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(selected()).toMatch(/Thursday 24 September/i)
   })
 })

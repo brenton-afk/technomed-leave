@@ -380,6 +380,13 @@ export default function EditBooking({
         { headers: auth })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      // A 200 carrying something that is not a booking — the app shell served
+      // mid-deploy, an auth redirect followed quietly — used to get as far as
+      // the render and throw there, on loaded.fields being undefined. That is
+      // a white screen with no header and no way back out of it, which is the
+      // one thing this app is not allowed to do. Caught here instead, where
+      // there is already a message and a Close button.
+      if (!data.fields) throw new Error('That booking could not be read. Try again.')
       setLoaded(data)
       setFields({ ...data.fields })
       setNotes(data.notes || '')
@@ -453,7 +460,7 @@ export default function EditBooking({
   const repsChanged = Boolean(loaded && reps.join('/') !== (loaded.reps || []).join('/'))
 
   const changed = loaded && (
-    FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields[f.key] || ''))
+    FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields?.[f.key] || ''))
     || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged)
 
   async function save({ withTitle } = {}) {

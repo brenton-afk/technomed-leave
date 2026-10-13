@@ -230,14 +230,29 @@ function HospitalLists({ hospital, cases }) {
  * not one queue. Stacked on a phone, where there is no room for two columns
  * and the wrap does it without a breakpoint.
  */
-export default function ListOrder({ plan, today }) {
-  const days = (plan?.days || []).filter(day =>
-    (day.casesByHospital || []).some(g => (g.cases || []).length))
+export default function ListOrder({ plan, today, day }) {
+  // ── The day you tapped, and only that day ──
+  //
+  // "The list view isn't refreshing automatically when you select the day...
+  // the list order view needs to correspond immediately and refresh
+  // immediately to whatever day you click on. It's really laggy."
+  //
+  // It was drawing the whole week at once and ignoring the date strip
+  // entirely, so tapping Wednesday changed nothing that could be seen. Seven
+  // days of theatre lists is also seven times the work on every render, which
+  // is most of where the lag was.
+  //
+  // One day, with the strip above it to move between them. Falls back to the
+  // whole week when no day is named — which is the desktop, where all seven
+  // days are on the glass anyway and there is no day view to correspond to.
+  const all = (plan?.days || []).filter(dayPlan =>
+    (dayPlan.casesByHospital || []).some(g => (g.cases || []).length))
+  const days = day ? all.filter(dayPlan => dayPlan.date === day) : all
 
   if (!days.length) {
     return (
       <div style={{ ...text('caption'), color: colour.inkFaint, padding: space.md }}>
-        Nothing booked this week.
+        {day ? 'Nothing booked on this day.' : 'Nothing booked this week.'}
       </div>
     )
   }
