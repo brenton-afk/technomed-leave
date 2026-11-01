@@ -55,7 +55,7 @@ Start with Task 1.
 ## Progress (updated 1 Nov 2026, late)
 
 Done and live: Tasks 1–19.
-- Tasks 1–7 as before. Task 8: loan-set requests to E4 and Globus (Device listed, off until
+- Tasks 1–7 as before. Task 8: loan-set requests to E4, Globus and Device (Device: loan requests only, no booking notices; was off until
   ticked in Admin → Notices; Kaye removed from Device, Asher and dl_spine_marketing cc'd).
 - Task 9: Signus and KT Medical (RHH) notices. Task 10: planned reps (several per case),
   allocated by the team leader. Task 11: 6pm "usage not sent" reminder.

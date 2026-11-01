@@ -31,7 +31,18 @@ describe('Device Technologies contacts', () => {
     expect(applyCorrections(edited)).toBeNull()
   })
 
-  it('offer Device loan requests switched off until somebody ticks them', () => {
-    expect(DEFAULT_LOAN_REQUESTS.find(l => l.distributor === 'device')).toMatchObject({ enabled: false })
+  it('get loan requests, like E4 and Globus', () => {
+    // "DT also get loan requests, just not booking updates."
+    expect(DEFAULT_LOAN_REQUESTS.find(l => l.distributor === 'device')).toMatchObject({ enabled: true })
+  })
+
+  it('have loan requests switched on in a copy saved while they were off', () => {
+    const saved = { ...SAVED, loanRequests: [{ distributor: 'device', contactId: 'device', enabled: false }] }
+    expect(applyCorrections(saved).loanRequests[0].enabled).toBe(true)
+  })
+
+  it('still get no booking notices', async () => {
+    const { DEFAULT_RULES } = await import('./_bookingNotices.js')
+    expect(DEFAULT_RULES.some(r => r.contactId === 'device' || r.distributor === 'device')).toBe(false)
   })
 })

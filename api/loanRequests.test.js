@@ -56,8 +56,14 @@ describe('Globus, and everybody else', () => {
     expect(req.contactId).toBe('globus')
     expect(req.to).toContain('jlagoon@globusmedical.com')
   })
-  it('a Device loan writes nothing — not one of the two asked for', () => {
-    expect(loanRequestsFor({ kind: 'new', after: booking({ kit: 'Mariner (Distributor Loan)' }), eventId: 'x', settings })).toEqual([])
+  it('a Device loan writes a request to Device loans — "DT also get loan requests"', () => {
+    const [req] = loanRequestsFor({ kind: 'new', after: booking({ kit: 'Mariner (Distributor Loan)' }), eventId: 'x', settings })
+    expect(req.to).toEqual(['DL_VICLoans@device.com.au'])
+    expect(req.autoSend).toBe(false)
+  })
+  it('a Device loan writes nothing when Device are switched off', () => {
+    const off = { ...settings, loanRequests: settings.loanRequests.map(l => (l.distributor === 'device' ? { ...l, enabled: false } : l)) }
+    expect(loanRequestsFor({ kind: 'new', after: booking({ kit: 'Mariner (Distributor Loan)' }), eventId: 'x', settings: off })).toEqual([])
   })
   it('a request is always shown first', () => {
     const [req] = loanRequestsFor({ kind: 'new', after: booking(), eventId: 'x', settings })

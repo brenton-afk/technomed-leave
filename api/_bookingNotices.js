@@ -60,7 +60,9 @@ export const CONTACT_CORRECTIONS = [
     addCc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] },
   // The kit room's two hospital contacts, added to a copy saved before they
   // existed.
-  { id: 'kit-hospitals-2026-11-01', addContacts: ['calvary_loans', 'rhh_loans'] }
+  { id: 'kit-hospitals-2026-11-01', addContacts: ['calvary_loans', 'rhh_loans'] },
+  // Device loan requests on, in a copy saved while they were offered but off.
+  { id: 'device-loans-on-2026-11-02', enableLoans: 'device' }
 ]
 
 /** Applies any correction not yet applied. Returns null when nothing changed. */
@@ -70,7 +72,15 @@ export function applyCorrections(saved) {
   if (!due.length) return null
   const lower = v => String(v).trim().toLowerCase()
   let contacts = saved.contacts
+  let loanRequests = saved.loanRequests
   for (const fix of due) {
+    if (fix.enableLoans) {
+      if (Array.isArray(loanRequests)) {
+        loanRequests = loanRequests.map(l => (l.distributor === fix.enableLoans ? { ...l, enabled: true } : l))
+      }
+      applied.add(fix.id)
+      continue
+    }
     if (fix.addContacts) {
       for (const id of fix.addContacts) {
         const seed = DEFAULT_CONTACTS.find(c => c.id === id)
@@ -90,7 +100,7 @@ export function applyCorrections(saved) {
     })
     applied.add(fix.id)
   }
-  return { ...saved, contacts, applied: [...applied] }
+  return { ...saved, contacts, ...(loanRequests ? { loanRequests } : {}), applied: [...applied] }
 }
 
 
@@ -101,9 +111,10 @@ export const EVENTS = ['new', 'changed', 'moved', 'cancelled']
 export const DEFAULT_LOAN_REQUESTS = [
   { distributor: 'e4', contactId: 'e4', enabled: true },
   { distributor: 'globus', contactId: 'globus', enabled: true },
-  // Offered, switched off: ticking it in Admin → Notices is what starts
-  // requests going to Device, since it means emails to a supplier.
-  { distributor: 'device', contactId: 'device', enabled: false }
+  // "DT also get loan requests, just not booking updates." — Brent, 2 Nov
+  // 2026. On, like E4 and Globus: each request is still shown to a person
+  // before it goes. Booking notices stay off for Device (no rule names them).
+  { distributor: 'device', contactId: 'device', enabled: true }
 ]
 
 /** A saved loan list with any distributor added since it was saved. */
