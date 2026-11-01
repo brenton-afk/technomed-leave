@@ -222,6 +222,21 @@ the client shows them in `cases/NoticeSheet.jsx` and confirms by id
 on its own. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
+### Surgeon preference cards (Task 18)
+
+Editable data, not a page. `api/_preferences.js` keeps them in Redis
+(`prefs:current`, a full snapshot per version at `prefs:v:{n}`, `prefs:history`),
+seeded once from `src/preferences/seed.js` — generated from Aimee's 28 Oct card by
+`scripts/extract-preferences.py`, and `seed.test.js` asserts no phrase was lost.
+Served from `api/guides.js?prefs=` (no new function). The clinical team and
+admins edit; a save against an older version is refused (409); restoring is a new
+version. Bold is `**text**`, never HTML. `GuideView` renders
+`pages/PreferenceCards.jsx` for the `surgeon-preferences` slug, so the booking's
+Preferences button and Theatre Guides both open it. The static HTML file remains
+only as the seed's source. Aimee's system guides still carry their own copy of each
+surgeon's preferences ("Synced with the Surgeon Preferences app") — those are not
+editable here and will drift until she drops them.
+
 ### Talking to Claude
 
 Every call goes through `askClaude` / `streamClaude` in `api/_anthropic.js`. Nothing calls the SDK or `api.anthropic.com` directly — the point is that one failure is handled one way wherever it happens.

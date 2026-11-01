@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join, normalize } from 'node:path'
 import { requireSession } from './_auth.js'
+import {
+  getPreferences, editCard, preferenceHistory, restoreVersion, canEditPreferences
+} from './_preferences.js'
+import { firstNameFor } from '../src/staffConfig.js'
 
 // ─── Theatre guides ──────────────────────────────────────────────────────────
 // Eleven field references for the systems the team carries, plus Surgeon
@@ -113,6 +117,10 @@ export default async function handler(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
 
+  // The editable surgeon preference cards (Task 18), here rather than in a
+  // function of their own: the plan allows twelve and the app is at twelve.
+  if (req.query.prefs) return handlePreferences(req, res, session)
+
   const slug = String(req.query.guide || '').trim()
 
   // No slug: the list, so the app can draw its own index rather than shipping
@@ -169,5 +177,34 @@ export default async function handler(req, res) {
     return res.status(200).send(html)
   } catch {
     return res.status(404).json({ error: 'That guide could not be read' })
+  }
+}
+
+
+async function handlePreferences(req, res, session) {
+  res.setHeader('Cache-Control', 'no-store')
+  const by = firstNameFor(session.email) || session.name || session.email
+  const canEdit = canEditPreferences(session.email)
+  try {
+    if (req.method === 'GET') {
+      if (req.query.prefs === 'history') {
+        return res.status(200).json({ history: await preferenceHistory() })
+      }
+      return res.status(200).json({ ...(await getPreferences()), canEdit })
+    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    if (!canEdit) return res.status(403).json({ error: 'Only the clinical team can change preference cards' })
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const saved = body.restore !== undefined
+      ? await restoreVersion(body.restore, by)
+      : await editCard({
+        baseVersion: body.baseVersion, surgeonId: body.surgeonId,
+        index: body.index === null || body.index === undefined ? null : Number(body.index),
+        card: body.card === null ? null : body.card
+      }, by)
+    return res.status(200).json({ ...saved, canEdit })
+  } catch (err) {
+    if (err.code === 'stale') return res.status(409).json({ error: err.message, code: 'stale' })
+    return res.status(400).json({ error: err.message })
   }
 }

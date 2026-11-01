@@ -1,3 +1,4 @@
+import PreferenceCards from './PreferenceCards.jsx'
 import React, { useState, useEffect, useCallback } from 'react'
 import { Page, Header, Body, SectionLabel, Banner, Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
@@ -127,6 +128,14 @@ export function scrollTo(html, id) {
 }
 
 export function GuideView({ guide, user, onClose, focus }) {
+  // The surgeon preferences are editable data now (Task 18), not a page.
+  if (guide?.slug === 'surgeon-preferences') {
+    return <PreferenceCards user={user} focus={focus} onClose={onClose} />
+  }
+  return <StaticGuide guide={guide} user={user} onClose={onClose} focus={focus} />
+}
+
+function StaticGuide({ guide, user, onClose, focus }) {
   const [html, setHtml] = useState(null)
   const [error, setError] = useState('')
 

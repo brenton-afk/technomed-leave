@@ -84,7 +84,8 @@ describe('opening one', () => {
     show()
     await waitFor(() => expect(screen.getByText('Surgeon Preferences')).toBeInTheDocument())
     fireEvent.click(screen.getByText('Surgeon Preferences'))
-    await waitFor(() => expect(calls.some(c => c.url.includes('guide=surgeon-preferences'))).toBe(true))
+    // The preferences are editable data now (Task 18), fetched from ?prefs=1.
+    await waitFor(() => expect(calls.some(c => c.url.includes('prefs=1'))).toBe(true))
     for (const call of calls) {
       expect(call.headers.Authorization, call.url).toBe('Bearer tok')
     }
