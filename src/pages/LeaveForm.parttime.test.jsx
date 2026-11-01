@@ -66,3 +66,21 @@ describe('everyone else', () => {
     expect(screen.queryByText('Hours')).not.toBeInTheDocument()
   })
 })
+
+describe('TOIL for somebody on a standard week', () => {
+  it('is asked for in hours, so half a day is half a day', async () => {
+    const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { success: true } })
+    render(<LeaveForm user={{ name: 'Ben Cassidy', email: 'ben@technomed.com.au', token: 't' }} onSuccess={() => {}} />)
+    day(14); day(14) // Wed 14 Oct
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: /Time Off In Lieu/ }))
+    expect(screen.getByLabelText(/Hours on Wed 14 Oct/)).toHaveValue(7.6)
+    fireEvent.change(screen.getByLabelText(/Hours on Wed 14 Oct/), { target: { value: '3.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.change(screen.getByPlaceholderText(/Family holiday/), { target: { value: 'Afternoon off' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(screen.getByRole('button', { name: /Submit application/ }))
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    expect(post.mock.calls[0][1].hours).toEqual([{ date: '2026-10-14', hours: 3.5 }])
+  })
+})

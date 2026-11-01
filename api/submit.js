@@ -52,7 +52,9 @@ export default async function handler(req, res) {
   // Part-time staff send the hours each day is worth; see src/leaveHours.js.
   // Checked here, not trusted from the form, because these are what Xero pays.
   let hours = null
-  if (workPatternFor(email)) {
+  // Required for part-time staff; for TOIL, taken whenever it is sent, since
+  // TOIL is held in hours and a part day is the usual case.
+  if (workPatternFor(email) || (leaveType === 'TOIL' && Array.isArray(req.body?.hours))) {
     try {
       hours = cleanLeaveHours(req.body?.hours, { startDate, endDate })
     } catch (err) {

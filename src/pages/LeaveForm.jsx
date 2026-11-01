@@ -185,7 +185,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
   const staffMember = user?.staff || user
   // Part-time staff state their leave in hours. Everybody else keeps the plain
   // date range, which Xero already gets right for a standard week.
-  const pattern = workPatternFor(user?.email)
+  const ownPattern = workPatternFor(user?.email)
   const [hours, setHours] = useState([])
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -207,6 +207,12 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
       .catch(() => {})
   }, [user?.token])
 
+  // TOIL is held in hours, so it is always applied for in hours — a part day
+  // is the common case. A standard 7.6 Mon–Fri for anybody without a pattern
+  // of their own, every day of it editable.
+  const pattern = ownPattern
+    || (form.leaveType === 'TOIL' ? { kind: 'fixed', days: [STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, 0, 0] } : null)
+
   // Re-laid when the dates change, keeping anything already typed for a day
   // that is still in the range.
   useEffect(() => {
@@ -217,7 +223,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
         .map(d => (typed.has(d.date) ? { ...d, hours: typed.get(d.date) } : d))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.startDate, form.endDate])
+  }, [form.startDate, form.endDate, Boolean(pattern)])
 
   function setField(f, v) {
     setForm(p => {
@@ -243,7 +249,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
       if (!form.returnDate) return 'Pick the day you are back at work'
       if (form.endDate < form.startDate) return 'The last day cannot be before the first'
       if (form.returnDate <= form.endDate) return 'You come back after your last day of leave'
-      if (pattern) {
+      if (ownPattern) {
         if (hours.some(d => !(Number(d.hours) >= 0 && Number(d.hours) <= 12))) {
           return 'Each day must be between 0 and 12 hours'
         }
@@ -251,6 +257,12 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
       }
     }
     if (step === 1 && !form.leaveType) return 'Choose a type of leave'
+    if (step === 1 && pattern && !ownPattern) {
+      if (hours.some(d => !(Number(d.hours) >= 0 && Number(d.hours) <= 12))) {
+        return 'Each day must be between 0 and 12 hours'
+      }
+      if (!(totalHours(hours) > 0)) return 'Enter the TOIL hours for at least one day'
+    }
     if (step === 2 && !form.reason.trim()) return 'A short reason, so management know what it is for'
     return ''
   }
@@ -344,7 +356,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
                 setError('')
               }} />
 
-            {pattern && form.endDate && (
+            {ownPattern && form.endDate && (
               <HoursCard pattern={pattern} days={hours}
                 onChange={(date, value) => setHours(list => list.map(
                   d => (d.date === date ? { ...d, hours: value } : d)))} />
@@ -397,6 +409,15 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
                 </button>
               )
             })}
+
+            {/* TOIL in hours for somebody on a standard week: here, once
+                they have said it is TOIL. Part-time staff already set their
+                hours on the first step. */}
+            {form.leaveType === 'TOIL' && !ownPattern && form.endDate && (
+              <HoursCard pattern={pattern} days={hours}
+                onChange={(date, value) => setHours(list => list.map(
+                  d => (d.date === date ? { ...d, hours: value } : d)))} />
+            )}
 
             {/* Said here, where the choice is made, rather than discovered
                 afterwards by email. It does not block the application —

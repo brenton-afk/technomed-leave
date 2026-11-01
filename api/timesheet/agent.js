@@ -2,7 +2,8 @@ import { requireSession, requireAdmin } from '../_auth.js'
 import { STAFF, getStaffByEmail } from '../../src/staffConfig.js'
 import {
   saveTimesheetDraft, getTimesheetDraft, clearTimesheetDraft,
-  saveTimesheet, getTimesheet, getAllTimesheets, getAllApplications
+  saveTimesheet, getTimesheet, getAllTimesheets, getAllApplications,
+  getToilOpening, setToilOpening
 } from '../_redis.js'
 import {
   fetchEarningsRates, categoriesForStaff, CATEGORY_RULES, assignedRatesFor, unitMismatch,
@@ -13,7 +14,7 @@ import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero
 import {
   getXeroToken, findEmployee, toilBalanceInXero, leaveBalances
 } from '../_xeroClient.js'
-import { toilBalanceFor, compareWithXero } from '../../src/clinicalPlan/toil.js'
+import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import {
   onCallHoursFor, totalHours as onCallTotal
@@ -45,6 +46,8 @@ export default async function handler(req, res) {
     if (action === 'decide') return await handleDecide(req, res)
     if (action === 'payaudit') return await handlePayAudit(req, res)
     if (action === 'toil') return await handleToil(req, res, session)
+    if (action === 'toilopening') return await handleToilOpening(req, res)
+    if (action === 'leavedays') return await handleLeaveDays(req, res, session)
     if (action === 'balances') return await handleBalances(req, res, session)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
@@ -432,7 +435,9 @@ async function handleToil(req, res, session) {
   ])
 
   const people = await Promise.all(who.map(async person => {
-    const ours = toilBalanceFor({ timesheets, leave, email: person.email })
+    const opening = await getToilOpening(person.email).catch(() => null)
+    const ours = toilBalanceFor({ timesheets, leave, email: person.email, opening })
+    const ledger = toilLedgerFor({ timesheets, leave, email: person.email, opening })
     // Compared, never corrected. Xero's is the number that pays people.
     let inXero = null
     try {
@@ -448,11 +453,57 @@ async function handleToil(req, res, session) {
       email: person.email,
       ...ours,
       xero: inXero,
-      check: compareWithXero(ours, inXero)
+      check: compareWithXero(ours, inXero),
+      ledger,
+      openingNote: opening?.note || ''
     }
   }))
 
   return res.status(200).json({ ok: true, people: everyone ? people : undefined, me: people[0] })
+}
+
+/**
+ * Sets somebody's TOIL opening balance. Admin only.
+ *
+ * "Allow an opening balance per person (e.g. from Xero) with a note." The
+ * hours the app could not have seen — accrued before it kept the balance —
+ * and where the number came from, so the ledger's first line explains itself.
+ */
+async function handleToilOpening(req, res) {
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { email, hours, note, asAt } = req.body || {}
+  const person = STAFF.find(s => s.email === email && s.hasTimesheets)
+  if (!person) return res.status(400).json({ error: 'Not somebody on timesheets' })
+  const value = Number(hours)
+  if (!Number.isFinite(value) || Math.abs(value) > 500) {
+    return res.status(400).json({ error: 'Hours must be a number' })
+  }
+  const opening = {
+    hours: Math.round(value * 100) / 100,
+    note: String(note || '').trim().slice(0, 200),
+    asAt: /^\d{4}-\d{2}-\d{2}$/.test(String(asAt || '')) ? asAt : '',
+    by: admin.name || admin.email,
+    at: new Date().toISOString()
+  }
+  await setToilOpening(person.email, opening)
+  return res.status(200).json({ ok: true, opening })
+}
+
+/**
+ * Approved leave on the days of a pay period, for the person filing it.
+ *
+ * So the timesheet can show it, and the standard week can leave those hours
+ * out rather than claim them twice — once as leave, once as ordinary time.
+ */
+async function handleLeaveDays(req, res, session) {
+  const staff = requireTimesheetAccess(session)
+  const start = String(req.query.periodStart || '')
+  if (!isValidPeriodStart(start)) return res.status(400).json({ error: 'periodStart is not a period start' })
+  const { days } = periodFor(start)
+  const leave = await getAllApplications().catch(() => ({ approved: [] }))
+  return res.status(200).json({ days: leaveOnDays({ leave, email: staff.email, days }) })
 }
 
 // ─── list / decide: admin ──────────────────────────────────

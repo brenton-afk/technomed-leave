@@ -84,8 +84,10 @@ export function toilHoursTaken(application, { standardDay = 7.6 } = {}) {
  * @param {number} [input.standardDay]
  */
 export function toilBalanceFor({
-  timesheets = [], leave = {}, email, opening = 0, standardDay = 7.6
+  timesheets = [], leave = {}, email, opening: openingIn = 0, standardDay = 7.6
 } = {}) {
+  // A number, or the stored { hours, note, asAt } an admin set.
+  const opening = typeof openingIn === 'object' && openingIn ? Number(openingIn.hours) || 0 : Number(openingIn) || 0
   const mine = t => String(t?.email || '').toLowerCase() === String(email || '').toLowerCase()
   const theirs = a => String(a?.email || '').toLowerCase() === String(email || '').toLowerCase()
 
@@ -150,4 +152,67 @@ export function compareWithXero(ours, xeroHours) {
 /** Two decimal places. Hours come in as 7.6 and adding them up drifts. */
 function round(n) {
   return Math.round((Number(n) || 0) * 100) / 100
+}
+
+// ─── The ledger ──────────────────────────────────────────────────────────────
+// "A balance history (ledger) per staff member, so balances can be checked
+// against Xero." Every line that moves the balance, in date order, with the
+// running total — so a difference from Xero can be traced to the line it
+// starts at rather than argued about as a total.
+
+/**
+ * @returns {Array<{date, kind, hours, note, balance}>} oldest first
+ *   kind: 'opening' | 'accrued' | 'taken'
+ */
+export function toilLedgerFor({ timesheets = [], leave = {}, email, opening = null, standardDay = 7.6 } = {}) {
+  const same = x => String(x?.email || '').toLowerCase() === String(email || '').toLowerCase()
+  const lines = []
+  if (opening && Number(opening.hours)) {
+    lines.push({ date: opening.asAt || '', kind: 'opening', hours: round(opening.hours),
+      note: opening.note || 'Opening balance' })
+  }
+  for (const t of timesheets.filter(same).filter(t => t.status === 'approved')) {
+    const hours = toilHoursOn(t)
+    if (hours) lines.push({ date: t.periodEnd || t.periodStart || '', kind: 'accrued', hours: round(hours),
+      note: `Timesheet ${t.periodStart || ''}${t.periodEnd ? ` to ${t.periodEnd}` : ''}` })
+  }
+  for (const a of (leave.approved || []).filter(same).filter(isToil)) {
+    const hours = toilHoursTaken(a, { standardDay })
+    if (hours) lines.push({ date: a.startDate || '', kind: 'taken', hours: -round(hours),
+      note: `TOIL leave ${a.startDate}${a.endDate !== a.startDate ? ` to ${a.endDate}` : ''}` })
+  }
+  // The opening balance first whatever its date; then by date.
+  lines.sort((x, y) => (x.kind === 'opening' ? -1 : y.kind === 'opening' ? 1 : String(x.date).localeCompare(String(y.date))))
+  let running = 0
+  return lines.map(line => ({ ...line, balance: (running = round(running + line.hours)) }))
+}
+
+/**
+ * Approved leave on the days of a period, for the timesheet.
+ *
+ * "Approved TOIL leave appears on the timesheet for those days automatically."
+ * Every type, not only TOIL: a day of annual leave is just as much a day not
+ * to enter ordinary hours for. Exact hours where the application has them
+ * (part-time staff, part-day TOIL); a standard day per weekday otherwise.
+ */
+export function leaveOnDays({ leave = {}, email, days = [], standardDay = 7.6 } = {}) {
+  const same = x => String(x?.email || '').toLowerCase() === String(email || '').toLowerCase()
+  const inPeriod = new Set(days)
+  const out = {}
+  for (const a of (leave.approved || []).filter(same)) {
+    const type = String(a.leaveType || '')
+    const perDay = Array.isArray(a.hours) && a.hours.length
+      ? a.hours
+      : days.filter(d => d >= a.startDate && d <= a.endDate)
+        .filter(d => { const w = new Date(`${d}T00:00:00Z`).getUTCDay(); return w !== 0 && w !== 6 })
+        .map(d => ({ date: d, hours: standardDay }))
+    for (const { date, hours } of perDay) {
+      if (!inPeriod.has(date)) continue
+      const at = out[date] || { hours: 0, types: [] }
+      at.hours = round(at.hours + Number(hours || 0))
+      if (!at.types.includes(type)) at.types.push(type)
+      out[date] = at
+    }
+  }
+  return out
 }

@@ -3,6 +3,9 @@ import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { extraDoubleTime, COVERED_HOURS } from '../clinicalPlan/callIn.js'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
+import { workPatternFor } from '../staffConfig.js'
+
+const LEAVE_NAMES = { ANNUAL_LEAVE: 'annual leave', SICK: 'personal leave', TOIL: 'TOIL' }
 
 // Points at the shared tokens rather than redefining them, so this screen
 // cannot drift from the rest of the app. Amber and purple stay local: here they
@@ -361,6 +364,9 @@ export default function Timesheets({ user, onBack }) {
   // timesheets it has filed and the TOIL leave it has sent to Xero, because
   // Xero accrues nothing from a timesheet line.
   const [toil, setToil] = useState(null)
+  // Approved leave on the days of this period, from the leave store, so it
+  // shows on the timesheet and the standard week does not claim it again.
+  const [leaveDays, setLeaveDays] = useState({})
   // Every pay item, invented, so the whole screen can be looked at. Brent's own
   // Xero template has one rate on it, so without this the screen he checks is
   // not the screen anybody uses.
@@ -404,6 +410,8 @@ export default function Timesheets({ user, onBack }) {
         .catch(() => {})
       fetch('/api/timesheet/agent?action=toil', { headers: authHeaders })
         .then(r => r.json()).then(d => setToil(d.me || null)).catch(() => {})
+      fetch(`/api/timesheet/agent?action=leavedays&periodStart=${data.period.start}`, { headers: authHeaders })
+        .then(r => r.json()).then(d => setLeaveDays(d.days || {})).catch(() => {})
     } catch (err) {
       setError(err.message)
     }
@@ -466,13 +474,25 @@ export default function Timesheets({ user, onBack }) {
     setCell(categoryKey, day, round2(current + delta))
   }
 
+  // The person's own week where they have one — Toni's is Mon, Wed and Thu at
+  // 5.5 — and 7.6 Mon–Fri otherwise. Approved leave on a day comes off it:
+  // that time is paid as leave, and claiming it as ordinary hours as well is
+  // paying it twice. Erin's days change, so hers is left for her to enter.
+  const pattern = workPatternFor(user?.email)
+  const canFillWeek = pattern?.kind !== 'flexible'
+
   function fillStandardWeek(weekIndex) {
     const ordinary = categories.find(c => c.kind === 'ordinary')
-    if (!ordinary) return
-    const weekDays = days.slice(weekIndex * 7, weekIndex * 7 + 5) // Mon–Fri
+    if (!ordinary || !canFillWeek) return
+    const weekDays = days.slice(weekIndex * 7, weekIndex * 7 + 7)
     setEntries(prev => {
       const cell = { ...(prev[ordinary.key] || {}) }
-      for (const d of weekDays) cell[d] = STANDARD_DAY
+      weekDays.forEach((d, i) => {
+        const usual = pattern?.kind === 'fixed' ? Number(pattern.days[i] || 0) : (i < 5 ? STANDARD_DAY : 0)
+        const worked = round2(Math.max(0, usual - Number(leaveDays[d]?.hours || 0)))
+        if (worked > 0) cell[d] = worked
+        else if (usual > 0) delete cell[d]
+      })
       return { ...prev, [ordinary.key]: cell }
     })
   }
@@ -712,10 +732,10 @@ export default function Timesheets({ user, onBack }) {
         </div>
 
         <div style={{ display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap' }}>
-          <button onClick={() => fillStandardWeek(activeWeek)}
+          {canFillWeek && <button onClick={() => fillStandardWeek(activeWeek)}
             style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: NAVY, cursor: 'pointer' }}>
-            ⚡ Standard week
-          </button>
+            ⚡ {pattern ? 'My usual week' : 'Standard week'}
+          </button>}
           <button onClick={() => setShowOnCall(true)}
             style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: PURPLE, cursor: 'pointer' }}>
             🌙 On-call
@@ -735,6 +755,15 @@ export default function Timesheets({ user, onBack }) {
             </button>
           )}
         </div>
+
+        {/* Leave already approved for days in this week. Shown so nobody
+            enters ordinary hours for a day they were paid as leave. */}
+        {days.slice(activeWeek * 7, activeWeek * 7 + 7).filter(d => leaveDays[d]).map(d => (
+          <div key={`leave-${d}`} style={{ background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)', borderRadius: 10, padding: '9px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY }}>
+            <strong>{DAY_NAMES[days.indexOf(d) % 7]}</strong> — {leaveDays[d].hours}h approved{' '}
+            {leaveDays[d].types.map(t => LEAVE_NAMES[t] || t).join(' + ')}. Not entered as ordinary hours.
+          </div>
+        ))}
 
         {overtimeNudges.filter(n => Math.floor(n.dayIndex / 7) === activeWeek).map(n => (
           <div key={n.day} style={{ background: '#fff8e6', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>

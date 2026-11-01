@@ -630,3 +630,18 @@ export async function setTeamLeaderFor(monday, entry) {
   await redis('set', leaderKey(monday), JSON.stringify(entry))
   return entry
 }
+
+
+// ─── TOIL opening balances ──────────────────────────────────
+// Hours carried in from before the app kept the balance — set by an admin,
+// usually from Xero, with a note saying where the number came from.
+
+export async function getToilOpening(email) {
+  const raw = await redis('get', `toil:opening:${String(email).toLowerCase()}`)
+  if (!raw) return null
+  try { return JSON.parse(raw) } catch { return null }
+}
+
+export async function setToilOpening(email, opening) {
+  await redisSetBody(`toil:opening:${String(email).toLowerCase()}`, JSON.stringify(opening))
+}
