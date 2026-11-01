@@ -52,28 +52,21 @@ Start with Task 1.
 
 ---
 
-## Progress (updated 1 Nov 2026, evening)
+## Progress (updated 1 Nov 2026, late)
 
-Live:
-- Tasks 1–7: done. Task 7's offline queue built (booking edits only). Brent: no further
-  work on Calvary signal — not a portal problem.
-- Task 9: Signus (any hospital) and KT Medical (RHH only) notices, shown before sending.
-  Contacts and rules in Admin → Notices. Device Technologies on no rule (they asked not
-  to get booking notices).
-- Task 12: Brainlab AIRO/CURVE/Other + Attendance required / No F2F; No F2F button in Edit
-  booking; Calvary Loan added beside RHH Loan.
-- Task 13: lodged leave emails Erin only, with an Approve link (and push).
-- Task 14: Toni (Mon/Wed/Thu 5.5, 16.5h) and Erin (24h, flexible) apply in hours; Xero gets
-  explicit hours per pay period and nothing is sent if Xero already has overlapping leave.
-  Tested against a fake Xero only — check the first real approval in Xero.
-- Task 15: TOIL in hours for everyone, leave shown on timesheets, ledger and opening
-  balances in Admin → TOIL.
-- Task 16: search on the Cases page. Task 17/19 were already done.
-- Task 18 (part): Aimee's guides and surgeon preferences of 28 Oct installed.
-- Surnames read whole from every source.
+Done and live: Tasks 1–19.
+- Tasks 1–7 as before. Task 8: loan-set requests to E4 and Globus (Device listed, off until
+  ticked in Admin → Notices; Kaye removed from Device, Asher and dl_spine_marketing cc'd).
+- Task 9: Signus and KT Medical (RHH) notices. Task 10: planned reps (several per case),
+  allocated by the team leader. Task 11: 6pm "usage not sent" reminder.
+- Task 12: Brainlab, AIRO always with Curve, Curve alone; Toby's emails auto-set Brainlab
+  and No F2F. Task 13: lodged leave emails Erin.
+- Task 14: part-time leave in hours. Task 15: TOIL in hours; balances now read from Xero
+  in full (Toni both roles, Mat), Match Xero in Admin → TOIL, Toni can claim TOIL per role.
+- Task 16 search, 17 Today button, 18 preference cards edited in the portal, 19 Mat.
 
-Waiting on Brent: Task 10 go-ahead (planned rep — see chat), Task 11 after 10 (6pm daily),
-Task 18 in-portal editing approach, Task 8 loan-kit rules (contacts are in Admin → Notices).
+Not started: Task 20 (usage index) — needs Brent's go-ahead because it reads the historical
+usage forms, which contain patient details.
 On hold: 21, 22, 23.
 
 ## PRIORITY 1 — Broken now
