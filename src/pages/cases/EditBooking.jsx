@@ -19,6 +19,7 @@ import {
 import { ATTENDING_REPS } from '../../staffConfig.js'
 import { queueBookingSave, isNetworkFailure } from '../../offlineQueue.js'
 import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
+import { offerNotices } from '../../notices.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -396,6 +397,7 @@ export default function EditBooking({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'That did not go through')
+      offerNotices(data)
       setConfirmCancel(false)
       setReason('')
       onSaved?.()
@@ -567,6 +569,8 @@ export default function EditBooking({
         return
       }
       if (data.error) throw new Error(data.error)
+      // Suppliers this change concerns, for somebody to confirm. See NoticeSheet.
+      offerNotices(data)
 
       // The title follows the fields, without being asked.
       //
@@ -641,6 +645,7 @@ export default function EditBooking({
         return
       }
       if (data.error) throw new Error(data.error)
+      offerNotices(data)
       onSaved?.()
       onClose?.()
     } catch (err) {

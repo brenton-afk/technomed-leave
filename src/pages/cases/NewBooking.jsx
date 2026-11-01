@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
+import { offerNotices } from '../../notices.js'
 import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
@@ -339,6 +340,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      offerNotices(data)
       onCreated?.()
       onClose?.()
     } catch (err) {

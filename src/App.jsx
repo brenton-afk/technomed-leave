@@ -23,6 +23,7 @@ import {
 import { useNewBuild } from './appVersion.js'
 import { useOnline } from './online.js'
 import { useOfflineQueue, dismissChange } from './offlineQueue.js'
+import NoticeSheet from './pages/cases/NoticeSheet.jsx'
 import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
 import { watchZoom } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
@@ -511,6 +512,7 @@ export default function App() {
           Offline — showing what has loaded. Booking edits are kept on this phone and sent when you are back in range.
         </div>
       )}
+      {user && <NoticeSheet user={user} />}
       <div className="tm-scroll">
         <LazyScreen screenKey={`${nav.tab}/${nav.sub || ''}`}>{renderContent()}</LazyScreen>
       </div>

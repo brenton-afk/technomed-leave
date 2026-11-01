@@ -5,7 +5,12 @@ import {
   getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY, CALENDAR_SCOPE_WRITE,
   serviceAccountEmail
 } from '../_googleCalendar.js'
-import { requireSession } from '../_auth.js'
+import { requireSession, requireAdmin } from '../_auth.js'
+import {
+  getNoticeSettings, saveNoticeSettings, noticesFor, describeBooking,
+  holdNotice, takeNotice, previewOf
+} from '../_bookingNotices.js'
+import { sendBookingNotice } from '../_email.js'
 import {
   taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX
 } from '../../src/clinicalPlan/tasks.js'
@@ -56,7 +61,7 @@ import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
   readFiledCase, priorImplantsFor, describePrior
 } from '../../src/clinicalPlan/priorImplants.js'
-import { firstNameFor } from '../../src/staffConfig.js'
+import { firstNameFor, getStaffByEmail as STAFF_BY_EMAIL } from '../../src/staffConfig.js'
 import { sanitisePatient } from '../../src/clinicalPlan/parse.js'
 import { withAttribution, creatorTag } from '../../src/clinicalPlan/attribution.js'
 
@@ -148,6 +153,8 @@ export default async function handler(req, res) {
   // What this patient already has in, for a revision or a removal.
   if (req.query.action === 'prior') return handlePrior(req, res)
   if (req.query.action === 'search') return handleSearch(req, res)
+  if (req.query.action === 'notify') return handleNotify(req, res)
+  if (req.query.action === 'noticesettings') return handleNoticeSettings(req, res)
 
   // Everything below this line is the bookings calendar in full: surgeons,
   // patient surnames, hospitals, procedures, kit. It was served to anyone who
@@ -565,8 +572,14 @@ async function handleSave(req, res) {
       await tidyDay(day).catch(() => {})
     }
 
+    const notices = await prepareNotices({
+      kind: nowOn && wasOn && nowOn !== wasOn ? 'moved' : 'changed',
+      beforeEvent: current, afterEvent: saved, eventId, session
+    })
+
     return res.status(200).json({
       ok: true,
+      ...notices,
       event: {
         id: saved.id, summary: saved.summary || '', description: saved.description || '',
         etag: saved.etag || null,
@@ -738,9 +751,11 @@ async function handleCreate(req, res) {
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const created = await writeBooking(body, firstNameFor(session.email))
+    const notices = await prepareNotices({ kind: 'new', afterEvent: created, eventId: created.id, session })
     return res.status(200).json({
       ok: true,
-      event: { id: created.id, summary: created.summary || '', etag: created.etag || null }
+      event: { id: created.id, summary: created.summary || '', etag: created.etag || null },
+      ...notices
     })
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.message })
@@ -882,8 +897,9 @@ async function handleDelete(req, res) {
 
     // Read before it goes, so the day it was on can be closed up after.
     let wasOn = null
+    let doomed = null
     try {
-      const doomed = await getCalendarEvent(eventId)
+      doomed = await getCalendarEvent(eventId)
       wasOn = (doomed?.start?.dateTime || doomed?.start?.date || '').slice(0, 10) || null
     } catch {
       wasOn = null
@@ -892,7 +908,11 @@ async function handleDelete(req, res) {
     await deleteCalendarEvent(eventId, { etag: body.etag })
     // Otherwise the day keeps the hole where the case was.
     if (wasOn) await tidyDay(wasOn).catch(() => {})
-    return res.status(200).json({ ok: true })
+    // Deleted is cancelled, as far as a supplier is concerned.
+    const notices = doomed
+      ? await prepareNotices({ kind: 'cancelled', beforeEvent: doomed, eventId, session })
+      : {}
+    return res.status(200).json({ ok: true, ...notices })
   } catch (err) {
     if (err.code === 'conflict') {
       return res.status(409).json({ error: err.message, code: 'conflict' })
@@ -1319,7 +1339,8 @@ export async function moveBooking(eventId, day, { hospital, by, etag } = {}) {
   if (to !== day) throw new Error(`The calendar did not take the new date (it says ${to || 'nothing'})`)
 
   for (const d of [...new Set([from, to].filter(Boolean))]) await tidyDay(d).catch(() => {})
-  return { id: saved.id, from, to, summary: saved.summary || '', etag: saved.etag || null }
+  return { id: saved.id, from, to, summary: saved.summary || '', etag: saved.etag || null,
+    beforeEvent: current, afterEvent: saved }
 }
 
 /** Accept: the candidate, as edited on screen, goes to the calendar. */
@@ -1352,9 +1373,13 @@ async function handleAccept(req, res) {
         eventId: result.id,
         movedFrom: result.from
       })
+      const notices = await prepareNotices({
+        kind: 'moved', beforeEvent: result.beforeEvent, afterEvent: result.afterEvent, eventId: result.id, session
+      })
       return res.status(200).json({
         ok: true, moved: true, from: result.from, to: result.to, candidate: accepted,
-        event: { id: result.id, summary: result.summary, etag: result.etag }
+        event: { id: result.id, summary: result.summary, etag: result.etag },
+        ...notices
       })
     }
 
@@ -1382,10 +1407,12 @@ async function handleAccept(req, res) {
       eventId: created.id
     })
 
+    const notices = await prepareNotices({ kind: 'new', afterEvent: created, eventId: created.id, session })
     return res.status(200).json({
       ok: true,
       candidate: accepted,
-      event: { id: created.id, summary: created.summary || '', etag: created.etag || null }
+      event: { id: created.id, summary: created.summary || '', etag: created.etag || null },
+      ...notices
     })
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.message })
@@ -1717,10 +1744,17 @@ async function handleCancel(req, res) {
     // The day closes up around it, and reopens when it comes back.
     if (day) await tidyDay(day).catch(() => {})
 
+    // Called off is a cancellation to a supplier; put back on is the booking
+    // again, so it goes as new.
+    const notices = await prepareNotices({
+      kind: off ? 'cancelled' : 'new', beforeEvent: current, afterEvent: saved, eventId, session
+    })
+
     return res.status(200).json({
       ok: true,
       cancelled: off,
-      event: { id: saved.id, summary: saved.summary || '', etag: saved.etag || null }
+      event: { id: saved.id, summary: saved.summary || '', etag: saved.etag || null },
+      ...notices
     })
   } catch (err) {
     if (err.code === 'conflict') {
@@ -1861,5 +1895,80 @@ async function handleSearch(req, res) {
   } catch (err) {
     console.error('calendar/search failed:', err.message)
     return res.status(500).json({ error: 'Search is unavailable right now. Try again in a moment.' })
+  }
+}
+
+
+// ─── Supplier notices (Tasks 8 and 9) ─────────────────────────────────────────
+// Worked out after every booking change and handed back to the screen to
+// confirm, unless a rule has been set to send on its own. Never allowed to
+// cost the change itself: a notice that cannot be prepared is reported, and
+// the booking stands.
+
+function staffSender(session) {
+  const staff = STAFF_BY_EMAIL(session.email)
+  return { name: staff?.name || session.name || '', email: staff?.email || session.email }
+}
+
+async function prepareNotices({ kind, beforeEvent, afterEvent, eventId, session }) {
+  try {
+    const settings = await getNoticeSettings()
+    const notices = noticesFor({
+      kind, eventId, settings,
+      before: beforeEvent ? describeBooking(beforeEvent) : null,
+      after: afterEvent ? describeBooking(afterEvent) : null
+    })
+    const previews = []
+    const sent = []
+    const failed = []
+    for (const notice of notices) {
+      if (notice.autoSend) {
+        try {
+          await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: eventId })
+          sent.push(notice.name)
+        } catch (err) {
+          failed.push({ name: notice.name, error: err.message })
+        }
+      } else {
+        previews.push(previewOf(notice, await holdNotice(notice)))
+      }
+    }
+    return { notices: previews, noticesSent: sent, noticesFailed: failed }
+  } catch (err) {
+    console.error('notices: could not prepare', err.message)
+    return { notices: [], noticeError: 'Supplier notices could not be prepared for this change.' }
+  }
+}
+
+/** Sends notices a person has looked at and confirmed. */
+async function handleNotify(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  const results = []
+  for (const id of (body.ids || []).slice(0, 10)) {
+    const notice = await takeNotice(id)
+    if (!notice) { results.push({ id, ok: false, error: 'This notice has expired or was already sent' }); continue }
+    try {
+      await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: notice.eventId })
+      results.push({ id, ok: true, name: notice.name })
+    } catch (err) {
+      results.push({ id, ok: false, name: notice.name, error: err.message || 'Email not sent' })
+    }
+  }
+  return res.status(200).json({ ok: results.every(r => r.ok), results })
+}
+
+/** Admin → Notices: the contacts and the rules. */
+async function handleNoticeSettings(req, res) {
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
+  if (req.method === 'GET') return res.status(200).json(await getNoticeSettings())
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    return res.status(200).json(await saveNoticeSettings(body))
+  } catch (err) {
+    return res.status(400).json({ error: err.message })
   }
 }

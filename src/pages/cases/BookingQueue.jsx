@@ -6,6 +6,7 @@ import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
 import { resolveKit, systemsInKit } from '../../clinicalPlan/systems.js'
 import { loanNeed } from '../../clinicalPlan/inventory.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
+import { offerNotices } from '../../notices.js'
 
 // ─── Bookings waiting to be confirmed ────────────────────────────────────────
 // Everything read out of bookings@technomed.com.au stops here first.
@@ -175,6 +176,7 @@ function Candidate({ candidate, user, onDone }) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'That did not go through')
+      offerNotices(data)
       onDone(candidate.id)
     } catch (err) {
       setError(err.message)

@@ -29,7 +29,7 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -614,5 +614,18 @@ export async function sendServiceAlertEmail({ feature, fault, detail }) {
   </body></html>`,
     text: `${line}\n\n${action}\n\n${detail ? String(detail).slice(0, 300) + '\n\n' : ''}`
       + 'Staff are being asked to do it by hand instead. One alert per feature per day.'
+  })
+}
+
+/**
+ * A booking notice to a supplier (Tasks 8/9). Sent as the person who
+ * confirmed it, replies to them and to bookings@ — the inbox the suppliers
+ * already write back to. Logged like every other send.
+ */
+export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId }) {
+  return send({
+    kind: 'notification',
+    to, cc, subject, html, text, sender, caseId,
+    replyTo: [sender?.email, 'bookings@technomed.com.au'].filter(Boolean)
   })
 }

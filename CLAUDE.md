@@ -211,6 +211,17 @@ and drops a given name after a comma or in lower case after a capitalised
 surname. Titles typed by hand use `handTypedSurnameLength` plus title/Pt-line
 agreement. Never go back to "first word" (or, for usage forms, "last word").
 
+### Supplier booking notices (Tasks 8/9)
+
+`api/_bookingNotices.js` holds the rules and contacts (Redis `notices:settings`,
+seeded from `DEFAULT_CONTACTS`/`DEFAULT_RULES`, edited in Admin → Notices). Every
+booking route in `api/calendar/today.js` (create, save, move, cancel, delete,
+accept) calls `prepareNotices`, which returns previews held in Redis for a day;
+the client shows them in `cases/NoticeSheet.jsx` and confirms by id
+(`action=notify`) — the client never supplies the text. A rule may be set to send
+on its own. Device Technologies are on no rule: they asked not to get booking
+notices. Notices for an edit made offline and sent later are not offered.
+
 ### Talking to Claude
 
 Every call goes through `askClaude` / `streamClaude` in `api/_anthropic.js`. Nothing calls the SDK or `api.anthropic.com` directly — the point is that one failure is handled one way wherever it happens.
