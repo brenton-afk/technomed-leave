@@ -135,7 +135,19 @@ export default function App() {
   // The number on the Messages tab. Below the state it reads and above every
   // early return, which is the only place both rules are satisfied.
   const unread = useUnread(user?.token)
-  const [nav, setNav] = useState({ tab: 'cases', sub: null })
+  // "/?go=approvals" — the link in the leave email and notification — opens
+  // the admin portal, whose first screen is Leave. Read once and then taken
+  // off the address, so a reload does not keep landing there.
+  const [nav, setNav] = useState(() => {
+    try {
+      const go = new URLSearchParams(window.location.search).get('go')
+      if (go === 'approvals') {
+        window.history.replaceState(null, '', window.location.pathname)
+        return { tab: 'admin', sub: null }
+      }
+    } catch { /* no window in tests that do not need one */ }
+    return { tab: 'cases', sub: null }
+  })
 
   // ── The microphone ──
   //

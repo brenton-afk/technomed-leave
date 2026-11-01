@@ -257,3 +257,29 @@ describe('every kind of email goes through one sender', () => {
     expect(stored[0].kind).toBe('leave')
   })
 })
+
+describe('a leave application being lodged (Task 13)', () => {
+  const APP = {
+    name: 'Toni Hoppitt', email: 'toni@technomed.com.au', division: 'Operations',
+    startDate: '2026-11-04', endDate: '2026-11-05', returnDate: '2026-11-09',
+    leaveType: 'ANNUAL_LEAVE', reason: 'Family'
+  }
+
+  it('goes to Erin, the one approver, and nobody else', async () => {
+    await email.sendNotificationEmail(APP)
+    expect(posted[0].to).toEqual(['erin@technomed.com.au'])
+  })
+
+  it('carries a working link straight to the approvals screen', async () => {
+    await email.sendNotificationEmail(APP)
+    expect(posted[0].html).toContain('href="https://leave.technomed.com.au/?go=approvals"')
+    expect(posted[0].html).toMatch(/Approve or decline/)
+    expect(posted[0].text).toContain('https://leave.technomed.com.au/?go=approvals')
+  })
+
+  it('names the dates and the type in what she reads', async () => {
+    await email.sendNotificationEmail(APP)
+    expect(posted[0].subject).toBe('Leave to approve — Toni Hoppitt (Annual Leave)')
+    expect(posted[0].html).toMatch(/Wed(nesday)?,? 4 Nov/)
+  })
+})

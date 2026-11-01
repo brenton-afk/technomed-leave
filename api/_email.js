@@ -1,4 +1,4 @@
-import { STAFF } from '../src/staffConfig.js'
+import { STAFF, leaveApprovers } from '../src/staffConfig.js'
 import { recordEmail } from './_emailLog.js'
 
 const LEAVE_LABELS = {
@@ -110,7 +110,10 @@ function buildEmailHtml(application, variant, declineReason) {
   </td></tr>${bannerHtml}
   <tr><td style="padding:20px 32px;">
   <table width="100%" style="border:1px solid rgba(26,43,74,0.1);border-radius:10px;overflow:hidden;">${rowHtml}
-  </table></td></tr>
+  </table></td></tr>${variant === 'submitted' ? `
+  <tr><td style="padding:0 32px 24px;" align="center">
+  <a href="${APPROVE_URL}" style="display:inline-block;background:#189a85;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:12px 28px;border-radius:10px;">Approve or decline</a>
+  </td></tr>` : ''}
   <tr><td style="padding:0 32px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Leave Portal · technomed.com.au</td></tr>
   </table></td></tr></table>
   </body></html>`
@@ -261,15 +264,23 @@ function summaryText(application, prefix, extra = '') {
   return `${prefix}\nEmployee: ${application.name}\nLeave type: ${leaveLabel}\nDivision: ${application.division}\nFrom: ${application.startDate}\nTo: ${application.endDate}\nReturn: ${application.returnDate}\nReason: ${application.reason}${extra}`
 }
 
-// Sent to the approvers when a new application is submitted.
+/** Where the approver lands from the email: Admin → Leave. */
+export const APPROVE_URL = 'https://leave.technomed.com.au/?go=approvals'
+
+// Sent to the approver (Erin) when a new application is lodged. Only her:
+// "Erin is the only approver so email can go to her when a leave application
+// is placed." It used to go to every admin, which is two people each assuming
+// the other had it.
 export async function sendNotificationEmail(application) {
   const leaveLabel = LEAVE_LABELS[application.leaveType] || application.leaveType
+  const approvers = leaveApprovers()
   return send({
     kind: 'leave',
-    to: adminRecipients(),
-    subject: `Leave Application — ${application.name} (${leaveLabel})`,
+    to: approvers.length ? approvers : adminRecipients(),
+    subject: `Leave to approve — ${application.name} (${leaveLabel})`,
     html: buildEmailHtml(application, 'submitted'),
-    text: summaryText(application, `New leave application from ${application.name}`)
+    text: summaryText(application, `New leave application from ${application.name}`,
+      `\n\nApprove or decline: ${APPROVE_URL}`)
   })
 }
 

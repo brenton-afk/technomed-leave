@@ -9,7 +9,8 @@
 // has to match what everyone already writes there by hand.
 export const STAFF = [
   { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', firstName: 'Brent', division: 'Operations', role: 'Managing Director', isAdmin: true, isClinicalTeam: true, hasTimesheets: false, mobileNumber: '' },
-  { name: 'Erin Smallbon', email: 'erin@technomed.com.au', firstName: 'Erin', division: 'Operations', role: 'General Manager', isAdmin: true, hasTimesheets: true, mobileNumber: '' },
+  // The one leave approver (Brent, 1 Nov 2026): lodged leave is sent to her.
+  { name: 'Erin Smallbon', email: 'erin@technomed.com.au', firstName: 'Erin', division: 'Operations', role: 'General Manager', isAdmin: true, isLeaveApprover: true, hasTimesheets: true, mobileNumber: '' },
   { name: 'Emma Lovering', email: 'marketing@technomed.com.au', firstName: 'Emma', division: 'Operations', role: 'Co-Founder, Brand Lead', isAdmin: false, hasTimesheets: false, mobileNumber: '' },
   { name: 'Toni Hoppitt', email: 'toni@technomed.com.au', firstName: 'Toni', division: 'Operations', role: 'Operations Coordinator', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'Ben Cassidy', email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' },
@@ -88,3 +89,15 @@ export function firstNameFor(email) {
  * booking sheet offers rather than asking anybody to type a name.
  */
 export const ATTENDING_REPS = ['Ben', 'Aimee', 'Brent', 'Mat']
+
+
+/**
+ * Who approves leave, and so who is told the moment some is lodged.
+ *
+ * Narrower than isAdmin: both Brent and Erin can open the admin portal, but
+ * Erin alone approves leave, and an email to two people about one decision is
+ * an email each assumes the other has handled.
+ */
+export function leaveApprovers() {
+  return STAFF.filter(s => s.isLeaveApprover).map(s => s.email)
+}

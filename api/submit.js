@@ -2,6 +2,8 @@ import { saveApplication } from './_redis.js'
 import { sendNotificationEmail } from './_email.js'
 import { getStaffByEmail } from '../src/staffConfig.js'
 import { requireSession } from './_auth.js'
+import { notify } from './_push.js'
+import { leaveApprovers } from '../src/staffConfig.js'
 
 // ─── Filing a leave application ──────────────────────────────────────────────
 // This had no session check at all. Anyone who knew the URL could post one, and
@@ -73,6 +75,19 @@ export default async function handler(req, res) {
   } catch (err) {
     emailError = err.message
     console.error('Email error:', err.message)
+  }
+
+  // And to her phone, where she has turned notifications on. Best effort: the
+  // email is the record, this is the nudge.
+  try {
+    await notify(leaveApprovers(), {
+      title: 'Leave to approve',
+      body: `${name} — ${startDate === endDate ? startDate : `${startDate} to ${endDate}`}`,
+      tag: 'leave',
+      url: '/?go=approvals'
+    })
+  } catch (err) {
+    console.error('Leave push failed:', err.message)
   }
 
   return res.status(200).json({ success: true, id, emailError })
