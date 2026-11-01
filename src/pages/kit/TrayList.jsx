@@ -174,7 +174,12 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
       // Each tray's photo, matched by the number the reading gave it. Kept on
       // the phone until the list is saved.
       const byN = new Map(photos.map(p => [p.n, p.data]))
-      const trays = data.trays.map(t => ({ ...t, photoData: t.photo ? byN.get(t.photo) || null : null, photo: null }))
+      // A one-tray list whose reading named no photo still has one if the file
+      // does: the first picture in it is the tray (a check sheet puts the tray
+      // photo first and the item pictures after).
+      const named = data.trays.map(t => (t.photo && byN.has(t.photo) ? t.photo : null))
+      if (data.trays.length === 1 && !named[0] && photos.length) named[0] = photos[0].n
+      const trays = data.trays.map((t, i) => ({ ...t, photoData: named[i] ? byN.get(named[i]) : null, photo: null }))
       setReview({ ...data, trays, file: file.name, attempt: mine, keeping: true, note, photoCount: photos.length })
       setOpen('')
       keepOriginal(file, mine)

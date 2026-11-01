@@ -50,7 +50,7 @@ const MIN_PHOTO_SIDE = 220
 
 async function blobToPhoto(blob) {
   const bitmap = await createImageBitmap(blob)
-  if (Math.max(bitmap.width, bitmap.height) < MIN_PHOTO_SIDE) return null
+  if (!looksLikePhoto(bitmap.width, bitmap.height)) return null
   const scale = Math.min(1, 1400 / Math.max(bitmap.width, bitmap.height))
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(bitmap.width * scale)
@@ -96,19 +96,57 @@ async function docxPayload(file) {
   return { text, photos }
 }
 
-/** The pictures embedded on one PDF page, drawn out as photos. Best effort. */
-async function pdfPagePhotos(pdfjs, page) {
+/**
+ * Whether an embedded picture could be a tray photograph. Not a logo or an
+ * icon (too small), and not a letterhead banner (too wide) — Calvary's check
+ * sheets carry a 595×149 header on every page.
+ */
+export function looksLikePhoto(width, height) {
+  const long = Math.max(width, height)
+  const short = Math.min(width, height)
+  return long >= MIN_PHOTO_SIDE && short >= 120 && long / short <= 2.6
+}
+
+/**
+ * One embedded image's pixels, or null — never waits more than a moment.
+ *
+ * An image used on several pages (a letterhead, a tick-box) is named "g_…" and
+ * kept in the document's shared store, not the page's. Asking the page for it
+ * waited out the timeout on every page, which was most of a long read.
+ */
+function imageObject(page, name) {
+  const store = String(name).startsWith('g_') ? page.commonObjs : page.objs
+  try {
+    if (store.has(name)) return Promise.resolve(store.get(name))
+  } catch { /* fall through to waiting */ }
+  return new Promise(resolve => {
+    const t = setTimeout(() => resolve(null), 1000)
+    try { store.get(name, v => { clearTimeout(t); resolve(v) }) } catch { clearTimeout(t); resolve(null) }
+  })
+}
+
+/**
+ * The pictures embedded on one PDF page, drawn out as photos. Best effort.
+ *
+ * Each named image is looked at once. A Calvary check sheet paints the same
+ * tick-box icon about a hundred times a page, and waiting on each of those in
+ * turn is what made a five-page list take minutes and come back with no photo.
+ */
+async function pdfPagePhotos(pdfjs, page, deadline) {
   const out = []
   try {
     const ops = await page.getOperatorList()
+    const seen = new Set()
     for (let i = 0; i < ops.fnArray.length; i += 1) {
+      // Two a page: the tray photograph comes first, and a check sheet's
+      // twenty-odd item pictures after it are not needed and cost seconds.
+      if (Date.now() > deadline || out.length >= 2) break
       if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue
       const name = ops.argsArray[i][0]
-      const img = await new Promise(resolve => {
-        const t = setTimeout(() => resolve(null), 3000)
-        page.objs.get(name, v => { clearTimeout(t); resolve(v) })
-      })
-      if (!img || Math.max(img.width, img.height) < MIN_PHOTO_SIDE) continue
+      if (seen.has(name)) continue
+      seen.add(name)
+      const img = await imageObject(page, name)
+      if (!img || !looksLikePhoto(img.width, img.height)) continue
       const canvas = document.createElement('canvas')
       canvas.width = img.width; canvas.height = img.height
       const ctx = canvas.getContext('2d')
@@ -117,8 +155,9 @@ async function pdfPagePhotos(pdfjs, page) {
         const rgba = new Uint8ClampedArray(img.width * img.height * 4)
         const src = img.data
         const step = src.length / (img.width * img.height)
+        if (step !== 3 && step !== 4) continue
         for (let p = 0, q = 0; p < rgba.length; p += 4, q += step) {
-          rgba[p] = src[q]; rgba[p + 1] = src[q + (step > 1 ? 1 : 0)]; rgba[p + 2] = src[q + (step > 1 ? 2 : 0)]
+          rgba[p] = src[q]; rgba[p + 1] = src[q + 1]; rgba[p + 2] = src[q + 2]
           rgba[p + 3] = step === 4 ? src[q + 3] : 255
         }
         ctx.putImageData(new ImageData(rgba, img.width, img.height), 0, 0)
@@ -141,10 +180,12 @@ async function pdfPayload(file) {
   // few KB however many photographs sit around it.
   const pages = []
   const photos = []
+  // However the PDF is built, looking for photos gets 15 seconds in all.
+  const deadline = Date.now() + 15000
   for (let n = 1; n <= doc.numPages; n += 1) {
     const page = await doc.getPage(n)
     const markers = []
-    for (const data of await pdfPagePhotos(pdfjs, page)) {
+    for (const data of await pdfPagePhotos(pdfjs, page, deadline)) {
       photos.push({ n: photos.length + 1, data })
       markers.push(`[PHOTO ${photos.length}]`)
     }

@@ -43,3 +43,12 @@ describe('what the phone sends', () => {
     expect(await originalIfSmall(big)).toBeNull()
   })
 })
+
+describe('which pictures count as a tray photo', () => {
+  it('takes a photograph and leaves out letterheads and tick-boxes', async () => {
+    const { looksLikePhoto } = await import('./readTrayFile.js')
+    expect(looksLikePhoto(470, 352)).toBe(true)   // the CYLOX tray on Calvary's check sheet
+    expect(looksLikePhoto(595, 149)).toBe(false)  // Calvary's letterhead banner
+    expect(looksLikePhoto(100, 100)).toBe(false)  // the tick-box icon
+  })
+})
