@@ -10,9 +10,14 @@
 export const STAFF = [
   { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', firstName: 'Brent', division: 'Operations', role: 'Managing Director', isAdmin: true, isClinicalTeam: true, hasTimesheets: false, mobileNumber: '' },
   // The one leave approver (Brent, 1 Nov 2026): lodged leave is sent to her.
-  { name: 'Erin Smallbon', email: 'erin@technomed.com.au', firstName: 'Erin', division: 'Operations', role: 'General Manager', isAdmin: true, isLeaveApprover: true, hasTimesheets: true, mobileNumber: '' },
+  // Permanent part-time, 24 hours a week on days that change (Brent, 1 Nov 2026).
+  { name: 'Erin Smallbon', email: 'erin@technomed.com.au', firstName: 'Erin', division: 'Operations', role: 'General Manager', isAdmin: true, isLeaveApprover: true, hasTimesheets: true, mobileNumber: '',
+    workPattern: { kind: 'flexible', weeklyHours: 24 } },
   { name: 'Emma Lovering', email: 'marketing@technomed.com.au', firstName: 'Emma', division: 'Operations', role: 'Co-Founder, Brand Lead', isAdmin: false, hasTimesheets: false, mobileNumber: '' },
-  { name: 'Toni Hoppitt', email: 'toni@technomed.com.au', firstName: 'Toni', division: 'Operations', role: 'Operations Coordinator', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
+  // Permanent part-time, 16.5 hours a week (contract, Erin 8 May 2026): Monday,
+  // Wednesday and Thursday at 5.5 (her own email of 26 Oct 2026). See leaveHours.js.
+  { name: 'Toni Hoppitt', email: 'toni@technomed.com.au', firstName: 'Toni', division: 'Operations', role: 'Operations Coordinator', isAdmin: false, hasTimesheets: true, mobileNumber: '',
+    workPattern: { kind: 'fixed', days: [5.5, 0, 5.5, 5.5, 0, 0, 0] } },
   { name: 'Ben Cassidy', email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' },
   // "All references to Mat Usher in the portal should be Mat not Matt."
   //
@@ -100,4 +105,9 @@ export const ATTENDING_REPS = ['Ben', 'Aimee', 'Brent', 'Mat']
  */
 export function leaveApprovers() {
   return STAFF.filter(s => s.isLeaveApprover).map(s => s.email)
+}
+
+/** A staff member's work pattern, or null for a standard full-time week. */
+export function workPatternFor(email) {
+  return STAFF.find(s => s.email.toLowerCase() === String(email || '').toLowerCase())?.workPattern || null
 }

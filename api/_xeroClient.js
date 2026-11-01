@@ -1,5 +1,6 @@
 import { redis } from './_redis.js'
 import { readXero } from './_xeroResponse.js'
+import { hoursByPayPeriod } from '../src/leaveHours.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
@@ -269,18 +270,87 @@ function xeroDate(dateStr) {
   return `/Date(${ms}+0000)/`
 }
 
-export async function submitToXero({ name, startDate, endDate, leaveType, reason }) {
+/** A /Date(ms+0000)/ value back to YYYY-MM-DD. */
+export function fromXeroDate(value) {
+  const ms = Number(/\/Date\((-?\d+)/.exec(String(value || ''))?.[1])
+  if (Number.isFinite(ms)) return new Date(ms).toISOString().slice(0, 10)
+  const iso = /^(\d{4}-\d{2}-\d{2})/.exec(String(value || ''))?.[1]
+  return iso || null
+}
+
+/**
+ * Leave Xero already holds for this employee that overlaps these dates.
+ *
+ * "On 27 Oct 2026 the portal created a SICK request for Toni on top of her own
+ * three single-day Xero requests and it was paid twice in the draft pay run."
+ * The portal never looked. Now it does, and an overlap stops it.
+ */
+export async function overlappingXeroLeave(token, tenantId, employeeId, startDate, endDate) {
+  const where = encodeURIComponent(`EmployeeID==Guid("${employeeId}")`)
+  const data = await xeroGet(`/LeaveApplications?where=${where}`, token, tenantId)
+  return (data.LeaveApplications || [])
+    .filter(app => app.EmployeeID === undefined || app.EmployeeID === employeeId)
+    .map(app => ({
+      id: app.LeaveApplicationID,
+      title: app.Title || '',
+      start: fromXeroDate(app.StartDate),
+      end: fromXeroDate(app.EndDate),
+      hours: (app.LeavePeriods || []).reduce((s, p) => s + Number(p.NumberOfUnits || 0), 0)
+    }))
+    .filter(app => app.start && app.end && app.start <= endDate && app.end >= startDate)
+}
+
+/** Thrown when Xero already has leave over these dates. Not sent; nothing doubled. */
+export class XeroLeaveExists extends Error {
+  constructor(existing, name) {
+    const list = existing.map(e =>
+      `${e.title || 'Leave'} ${e.start}${e.end !== e.start ? ` to ${e.end}` : ''}${e.hours ? ` (${e.hours}h)` : ''}`).join('; ')
+    super(`Not sent to Xero — it already has leave for ${name} on these dates: ${list}. `
+      + 'Check it in Xero; nothing was added, so nothing is paid twice.')
+    this.code = 'duplicate'
+    this.existing = existing
+  }
+}
+
+export async function submitToXero({ name, startDate, endDate, leaveType, reason, hours }) {
   const { token, tenantId } = await getXeroToken()
   const employee = await findEmployee(token, tenantId, name)
   const leaveTypeId = await getLeaveTypeId(token, tenantId, leaveType)
 
+  // Exact hours per pay period where the portal knows them. The dates sent are
+  // the first and last day that carry hours, not the whole range asked for.
+  const periods = Array.isArray(hours) && hours.length ? hoursByPayPeriod(hours) : null
+  const from = periods ? hours[0].date : startDate
+  const to = periods ? hours[hours.length - 1].date : endDate
+
+  // Fails closed. If Xero cannot be asked what it already holds, nothing is
+  // sent: a request somebody has to add by hand is a nuisance, a second one
+  // on top of theirs is a double payment.
+  let existing
+  try {
+    existing = await overlappingXeroLeave(token, tenantId, employee.EmployeeID, from, to)
+  } catch (err) {
+    throw Object.assign(new Error('Not sent to Xero — could not check it for leave already lodged on these '
+      + `dates (${err.message}). Add it in Xero by hand after checking there is none.`), { code: 'unchecked' })
+  }
+  if (existing.length) throw new XeroLeaveExists(existing, `${employee.FirstName} ${employee.LastName}`)
+
   const leaveApp = {
     EmployeeID: employee.EmployeeID,
     LeaveTypeID: leaveTypeId,
-    StartDate: xeroDate(startDate),
-    EndDate: xeroDate(endDate),
+    StartDate: xeroDate(from),
+    EndDate: xeroDate(to),
     Title: `${name} - ${leaveType}`,
-    Description: reason || ''
+    Description: reason || '',
+    // Never left to Xero: it would spread the weekly hours evenly over
+    // Monday to Friday, days off included. See src/leaveHours.js.
+    ...(periods ? {
+      LeavePeriods: periods.map(p => ({
+        PayPeriodStartDate: xeroDate(p.start),
+        PayPeriodEndDate: xeroDate(p.end),
+        NumberOfUnits: p.hours
+      }))
+    } : {})
   }
 
   const submitRes = await fetch(`${XERO_API_BASE}/LeaveApplications`, {

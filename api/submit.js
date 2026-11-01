@@ -3,7 +3,8 @@ import { sendNotificationEmail } from './_email.js'
 import { getStaffByEmail } from '../src/staffConfig.js'
 import { requireSession } from './_auth.js'
 import { notify } from './_push.js'
-import { leaveApprovers } from '../src/staffConfig.js'
+import { leaveApprovers, workPatternFor } from '../src/staffConfig.js'
+import { cleanLeaveHours, totalHours } from '../src/leaveHours.js'
 
 // ─── Filing a leave application ──────────────────────────────────────────────
 // This had no session check at all. Anyone who knew the URL could post one, and
@@ -48,6 +49,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Return date must be after the last day of leave' })
   }
 
+  // Part-time staff send the hours each day is worth; see src/leaveHours.js.
+  // Checked here, not trusted from the form, because these are what Xero pays.
+  let hours = null
+  if (workPatternFor(email)) {
+    try {
+      hours = cleanLeaveHours(req.body?.hours, { startDate, endDate })
+    } catch (err) {
+      return res.status(400).json({ error: err.message })
+    }
+  }
+
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 
   const application = {
@@ -63,6 +75,7 @@ export default async function handler(req, res) {
     returnDate,
     leaveType,
     reason,
+    ...(hours ? { hours, totalHours: totalHours(hours) } : {}),
     status: 'pending',
     submittedAt: new Date().toISOString()
   }

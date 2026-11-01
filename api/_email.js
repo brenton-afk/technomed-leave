@@ -86,6 +86,9 @@ function buildEmailHtml(application, variant, declineReason) {
     ['First day', formatDate(startDate)],
     ['Last day', formatDate(endDate)],
     ['Return date', formatDate(returnDate)],
+    // Part-time staff: the hours, day by day, which is what Xero is sent.
+    ...(application.totalHours ? [['Hours', `${application.totalHours}h — `
+      + (application.hours || []).map(d => `${formatDate(d.date)} ${d.hours}h`).join(', ')]] : []),
     ['Reason', reason]
   ]
   if (variant === 'declined' && declineReason) rows.push(['Decline reason', declineReason])

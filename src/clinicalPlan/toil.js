@@ -68,6 +68,8 @@ export function workingDaysBetween(startDate, endDate) {
  */
 export function toilHoursTaken(application, { standardDay = 7.6 } = {}) {
   if (!isToil(application)) return 0
+  // Stated in hours by part-time staff (src/leaveHours.js) — those are exact.
+  if (Number(application.totalHours) > 0) return Number(application.totalHours)
   return workingDaysBetween(application.startDate, application.endDate) * standardDay
 }
 
