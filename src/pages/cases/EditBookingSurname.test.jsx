@@ -174,3 +174,15 @@ describe('the title follows the surname field', () => {
       { patient: 'Smith' }, { patient: 'Smithe' })).toBeNull()
   })
 })
+
+describe('the No F2F button', () => {
+  it('writes the line the team writes by hand, and takes it off again', async () => {
+    show()
+    await ready()
+    const button = screen.getByRole('button', { name: 'No F2F' })
+    fireEvent.click(button)
+    expect(screen.getByDisplayValue(/No F2F required/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
+    expect(screen.queryByDisplayValue(/No F2F required/)).not.toBeInTheDocument()
+  })
+})

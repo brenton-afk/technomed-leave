@@ -101,7 +101,7 @@ describe('the question a booking raises', () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
     fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Loan' })).toHaveAttribute('aria-pressed', 'true'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Distributor Loan' })).toHaveAttribute('aria-pressed', 'true'))
   })
 })
 
@@ -163,7 +163,7 @@ describe('what gets created', () => {
     expect(posted.fields.patient).toBe('Marsh')
     expect(posted.fields.surgeon).toBe('Ibbett')
     expect(posted.fields.hospital).toBe('CLV')
-    expect(posted.fields.kit).toBe('Mariner (Loan)')
+    expect(posted.fields.kit).toBe('Mariner (Distributor Loan)')
     expect(posted.date).toBe('2026-09-24')
   })
 
@@ -384,5 +384,48 @@ describe('a dictated booking that would leave a case without a kit', () => {
     // Filled in and waiting, not written to the calendar.
     expect(posted).toBeNull()
     expect(screen.getByDisplayValue('Marsh')).toBeInTheDocument()
+  })
+})
+
+describe('Brainlab', () => {
+  it('needs an answer about attendance before it can be added', async () => {
+    show()
+    fill()
+    fireEvent.click(screen.getByRole('button', { name: 'AIRO' }))
+    expect(screen.getByRole('button', { name: /Add to calendar/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
+    expect(screen.getByRole('button', { name: /Add to calendar/ })).not.toBeDisabled()
+  })
+
+  it('a No F2F booking says so in the kit, the notes and to the server', async () => {
+    show()
+    fill()
+    fireEvent.click(screen.getByRole('button', { name: 'AIRO' }))
+    fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
+    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
+    await waitFor(() => expect(posted).toBeTruthy())
+    expect(posted.fields.kit).toMatch(/BRAINLAB AIRO$/)
+    expect(posted.notes).toMatch(/No F2F required/)
+    expect(posted.attendance).toBe('No F2F')
+  })
+
+  it('an attended case does not', async () => {
+    show()
+    fill()
+    fireEvent.click(screen.getByRole('button', { name: 'CURVE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Attendance required' }))
+    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
+    await waitFor(() => expect(posted).toBeTruthy())
+    expect(posted.fields.kit).toMatch(/BRAINLAB CURVE$/)
+    expect(posted.notes || '').not.toMatch(/F2F/)
+    expect(posted.attendance).toBeUndefined()
+  })
+
+  it('offers the Calvary and RHH loans for a system', async () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    expect(await screen.findByRole('button', { name: 'Calvary Loan' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'RHH Loan' })).toBeInTheDocument()
   })
 })

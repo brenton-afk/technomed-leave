@@ -626,8 +626,12 @@ function replaceFreeNotes(description, notes) {
  * in every other calendar app the team opens, so a booking made in the portal
  * has to be indistinguishable from one typed by a person.
  */
-function bookingTitle({ patient, system, surgeon, rep }) {
-  const parts = [patient, system ? system.toUpperCase() : null].filter(Boolean).join(' ')
+function bookingTitle({ patient, system, surgeon, rep, noF2F }) {
+  // "BRAINLAB (No F2F)" — said in the title because the title is what the
+  // whole team reads in Google's month view, and whether anybody goes is the
+  // first thing to know about a navigation-only case.
+  const named = system ? `${system.toUpperCase()}${noF2F ? ' (No F2F)' : ''}` : (noF2F ? '(No F2F)' : null)
+  const parts = [patient, named].filter(Boolean).join(' ')
   const head = parts || patient || 'Booking'
   const tail = surgeon ? ` - ${surgeon}` : ''
   return `${head}${tail}${rep ? ` (${rep})` : ''}`.replace(/\s{2,}/g, ' ').trim()
@@ -641,7 +645,7 @@ function bookingTitle({ patient, system, surgeon, rep }) {
  * team typed — same title convention, same labelled notes, same colour rule.
  * Two writers would drift apart within a month.
  */
-async function writeBooking({ fields: given = {}, date, notes, rep, colorId }, enteredBy, { source } = {}) {
+async function writeBooking({ fields: given = {}, date, notes, rep, colorId, attendance }, enteredBy, { source } = {}) {
   let fields = given
   const patient = String(fields.patient || '').trim()
   const surgeon = String(fields.surgeon || '').trim()
@@ -688,7 +692,8 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId }, e
     patient,
     system: String(kitField).replace(/\s*[([{].*$/, '').trim(),
     surgeon,
-    rep: String(rep || '').trim() || null
+    rep: String(rep || '').trim() || null,
+    noF2F: attendance === 'No F2F'
   })
 
   // The colour follows the surgeon, exactly as it does on every save.

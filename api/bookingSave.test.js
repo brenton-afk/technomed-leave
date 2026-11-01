@@ -153,3 +153,15 @@ describe('a two-word surname typed into Google, opened in the portal', () => {
     expect(res.payload.fields.patient).toBe('Lloyd Jones')
   })
 })
+
+describe('a No F2F Brainlab booking (Task 12)', () => {
+  it('says (No F2F) in the title', async () => {
+    await call('create', {
+      method: 'POST',
+      body: { fields: { patient: 'Testa', surgeon: 'Ibbett', kit: 'BRAINLAB AIRO' }, date: '2026-11-04',
+        notes: 'No F2F required', attendance: 'No F2F' }
+    })
+    expect(created.summary).toMatch(/^Testa BRAINLAB AIRO \(No F2F\) - Ibbett/)
+    expect(created.description).toMatch(/No F2F required/)
+  })
+})

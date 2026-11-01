@@ -18,6 +18,7 @@ import {
 } from '../../clinicalPlan/kitSupply.js'
 import { ATTENDING_REPS } from '../../staffConfig.js'
 import { queueBookingSave, isNetworkFailure } from '../../offlineQueue.js'
+import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -962,6 +963,37 @@ export default function EditBooking({
                     Goes into the booking title, as the team already writes it
                   </span>
                 </div>
+
+                {/* "No F2F" as a button rather than a phrase to remember. It
+                    writes the line the team already writes by hand, which is
+                    what marks the card "We are not needed". */}
+                {(() => {
+                  const NO_F2F = /^\s*no f2f required\s*$/im
+                  const on = NO_F2F.test(notes) || attendanceNotRequired(`${notes}\n${loaded?.summary || ''}`)
+                  const handTyped = on && !NO_F2F.test(notes)
+                  return (
+                    <div style={{ marginBottom: space.md }}>
+                      <button type="button" aria-pressed={on} disabled={handTyped}
+                        onClick={() => setNotes(n => on
+                          ? n.replace(NO_F2F, '').replace(/\n{3,}/g, '\n\n').trim()
+                          : [n.trim(), 'No F2F required'].filter(Boolean).join('\n'))}
+                        style={{
+                          padding: `6px ${space.md}px`, borderRadius: radius.pill,
+                          cursor: handTyped ? 'default' : 'pointer', ...text('bodyStrong'),
+                          background: on ? colour.accent : colour.surface,
+                          color: on ? 'white' : colour.inkMuted,
+                          border: `1px solid ${on ? colour.accent : colour.line}`
+                        }}>
+                        No F2F
+                      </button>
+                      <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block', marginTop: 2 }}>
+                        {handTyped
+                          ? 'Already marked not needed in the booking text'
+                          : 'Nobody from TechnoMed needed in the room'}
+                      </span>
+                    </div>
+                  )
+                })()}
 
                 <ColourPicker
                   value={colorId}

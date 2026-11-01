@@ -28,8 +28,10 @@
 /** The three, in the order they appear on the buttons. */
 import { isNavigationOnly } from './systems.js'
 
+// Calvary Loan added 1 Nov 2026 at Brent's request: Calvary's consigned kit
+// lent to a case at RHH, the mirror of RHH Loan. The same job — we move it.
 export const SUPPLY_OPTIONS = [
-  'Consignment', 'TM Loan', 'RHH Loan', 'Distributor Loan'
+  'Consignment', 'TM Loan', 'RHH Loan', 'Calvary Loan', 'Distributor Loan'
 ]
 
 const SPLIT = /\s*[/,]\s*|\s+\+\s+/
@@ -107,6 +109,9 @@ export function matchSupply(text) {
   if (!said) return null
   if (/consign|^\s*cons\s*$/i.test(said)) return 'Consignment'
   if (/\brhh\b[\s-]*loan|loan[\s-]*(?:from[\s-]*)?\brhh\b/i.test(said)) return 'RHH Loan'
+  if (/\b(?:calvary|clv|lvh)\b[\s-]*loan|loan[\s-]*(?:from[\s-]*)?\b(?:calvary|clv|lvh)\b/i.test(said)) {
+    return 'Calvary Loan'
+  }
   // Ours, from the office. Checked before the distributors below and before
   // the bare "loan" at the bottom, both of which contain the same word.
   if (/\b(?:tm|technomed)\b[\s-]*loan|loan[\s-]*(?:from[\s-]*)?\b(?:tm|technomed)\b/i.test(said)) {

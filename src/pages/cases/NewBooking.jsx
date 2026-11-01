@@ -4,7 +4,7 @@ import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
 import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall } from '../../clinicalPlan/inventory.js'
-import { drawsOnLocalStock } from '../../clinicalPlan/kitSupply.js'
+import { drawsOnLocalStock, SUPPLY_OPTIONS } from '../../clinicalPlan/kitSupply.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayName } from '../../clinicalPlan/week.js'
 
@@ -29,7 +29,17 @@ import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayN
 // moments, and one list of thirteen names makes the common eight harder to find.
 const SYSTEMS = INVENTORY.filter(i => !i.competitor).map(i => i.system)
 const HOSPITALS = [{ id: 'RHH', label: 'RHH' }, { id: 'CLV', label: 'Calvary' }]
-const SUPPLY = ['Consignment', 'Loan']
+// The same five as the edit sheet, so a booking made here and one corrected
+// there say the same thing. "Loan" on its own was one button for three jobs.
+const SUPPLY = SUPPLY_OPTIONS
+
+// ─── Brainlab ───────────────────────────────────────────────────────────────
+// "Adding a non-face-to-face Brainlab booking from an email was difficult."
+// Which platform, then whether anybody from here is wanted in the room — a
+// required answer, because the second decides whether a rep goes and whether
+// the case is invoiced as clinical support.
+const BRAINLAB = ['AIRO', 'CURVE', 'Other']
+const ATTENDANCE = ['Attendance required', 'No F2F']
 
 /** The next weekday, since a booking is far more often ahead than today. */
 function defaultDate() {
@@ -168,6 +178,8 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const [patient, setPatient] = useState('')
   const [procedure, setProcedure] = useState('')
   const [notes, setNotes] = useState('')
+  const [brainlab, setBrainlab] = useState('')
+  const [attendance, setAttendance] = useState('')
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
   const [dictating, setDictating] = useState(false)
@@ -252,7 +264,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const supplyFor = (name, at = hospital) => {
     if (!at) return ''
     const need = loanNeed(name, at).need
-    return need === 'none' ? 'Consignment' : need === 'order' ? 'Loan' : ''
+    return need === 'none' ? 'Consignment' : need === 'order' ? 'Distributor Loan' : ''
   }
 
   function addSystem(name) {
@@ -281,7 +293,8 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   }, [systems, hospital, alreadyBooked])
 
   const colourId = guideColorIdFor(surgeon)
-  const ready = patient.trim() && surgeon && date
+  // A Brainlab case has to say whether we are wanted in the room.
+  const ready = patient.trim() && surgeon && date && (!brainlab || attendance)
 
   /**
    * @param {object} [over] values to send instead of what is on screen.
@@ -294,13 +307,15 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
     setStatus('saving'); setError('')
     try {
       const use = {
-        date, notes, patient, surgeon, procedure, hospital, systems, ...over
+        date, notes, patient, surgeon, procedure, hospital, systems, brainlab, attendance, ...over
       }
       // "Diplomat (Consignment) + Global BMD PLIF (Loan)" — each system with the
-      // supply that actually applies to it.
-      const kit = use.systems
-        .map(s => [s.name, s.supply ? `(${s.supply})` : ''].filter(Boolean).join(' '))
-        .join(' + ')
+      // supply that actually applies to it, and Brainlab last.
+      const noF2F = use.brainlab && use.attendance === 'No F2F'
+      const kit = [
+        ...use.systems.map(s => [s.name, s.supply ? `(${s.supply})` : ''].filter(Boolean).join(' ')),
+        use.brainlab ? `BRAINLAB${use.brainlab === 'Other' ? '' : ` ${use.brainlab}`}` : ''
+      ].filter(Boolean).join(' + ')
       const res = await fetch('/api/calendar/today?action=create', {
         method: 'POST',
         headers: {
@@ -309,7 +324,10 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
         },
         body: JSON.stringify({
           date: use.date,
-          notes: use.notes,
+          // Written as the team writes it, so the existing reader marks the
+          // case "We are not needed" — see attendance.js.
+          notes: [use.notes, noF2F ? 'No F2F required' : ''].filter(Boolean).join('\n'),
+          attendance: noF2F ? 'No F2F' : undefined,
           fields: {
             patient: String(use.patient || '').trim(),
             surgeon: use.surgeon,
@@ -415,24 +433,27 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: space.sm }}>
                   {systems.map(chosen => (
                     <div key={chosen.name} style={{
-                      display: 'flex', alignItems: 'center', gap: space.sm,
+                      display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap',
                       background: colour.surface, border: `1px solid ${colour.line}`,
                       borderRadius: radius.control, padding: `6px ${space.sm}px 6px ${space.md}px`
                     }}>
                       <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0 }}>
                         {chosen.name}
                       </span>
-                      {/* Supply per system: one may be consigned here while the
-                          other has to be ordered. */}
-                      <Choice options={SUPPLY} value={chosen.supply}
-                        onChange={value => setSystems(list => list.map(
-                          s => s.name === chosen.name ? { ...s, supply: value } : s))} />
                       <button type="button" aria-label={`Remove ${chosen.name}`}
                         onClick={() => setSystems(list => list.filter(s => s.name !== chosen.name))}
                         style={{
                           background: 'none', border: 'none', cursor: 'pointer',
                           ...text('body'), color: colour.inkFainter, padding: '0 4px'
                         }}>×</button>
+                      {/* Supply per system: one may be consigned here while the
+                          other has to be ordered. Its own line, because five
+                          buttons do not fit beside a system name on a phone. */}
+                      <div style={{ flexBasis: '100%' }}>
+                        <Choice options={SUPPLY} value={chosen.supply}
+                          onChange={value => setSystems(list => list.map(
+                            s => s.name === chosen.name ? { ...s, supply: value } : s))} />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -444,6 +465,20 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                 {SYSTEMS.filter(s => !systems.some(c => c.name === s))
                   .map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+            </div>
+
+            <div style={{ marginBottom: space.md }}>
+              <Label>Brainlab navigation</Label>
+              <Choice options={BRAINLAB} value={brainlab}
+                onChange={v => { setBrainlab(v); if (!v) setAttendance('') }} />
+              {brainlab && (
+                <div style={{ marginTop: space.sm }}>
+                  <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: 4 }}>
+                    Is anyone from TechnoMed needed in the room?
+                  </div>
+                  <Choice options={ATTENDANCE} value={attendance} onChange={setAttendance} />
+                </div>
+              )}
             </div>
 
             {/* One verdict per system, because they can differ: Diplomat may be
