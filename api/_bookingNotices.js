@@ -26,7 +26,7 @@ const KEY = 'notices:settings'
 // Confirmed by Brent (PORTAL_FIXES.md, 1 Nov 2026) and, for the rest, the
 // addresses the team already writes to, read from the bookings mailbox.
 export const DEFAULT_CONTACTS = [
-  { id: 'signus', name: 'Signus', to: ['jhanson@signus.com.au'], cc: ['apolites@signus.com.au'] },
+  { id: 'signus', name: 'Signus', note: 'Jasper Hanson, prosthesis and stock control', to: ['jhanson@signus.com.au'], cc: ['apolites@signus.com.au'] },
   { id: 'kt', name: 'KT Medical', note: 'Firebird, Lonestar, Forza, connectors',
     to: ['kt@ktmedical.com.au'], cc: ['ben@ktmedical.com.au'] },
   { id: 'kt_allograft', name: 'KT allograft usage (DTBV / CBM / DBM)',

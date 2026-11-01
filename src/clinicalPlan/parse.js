@@ -1,4 +1,4 @@
-import { STAFF } from '../staffConfig.js'
+import { STAFF, parseRepNames } from '../staffConfig.js'
 import { parseKitSupplies } from './kitSupply.js'
 import {
   findSystems, findLoanSets, systemWords, findNavigation, resolveKit, isNavigationOnly
@@ -1642,6 +1642,9 @@ export function readBooking(title, description, { colourSurgeon, knownPatient } 
     // app was dropping it. Two reps on one case is normal.
     rep,
     reps,
+    // Who the team leader allocated (Task 10), from the "Planned rep:" line.
+    // Separate from `reps`, which is who actually went.
+    planned: parseRepNames(raw.planned),
     // The patient is paying for their own implants. Shown on the card, because
     // it changes what happens on the day and it was being lost in the parse.
     selfFunding: selfFunding || undefined,

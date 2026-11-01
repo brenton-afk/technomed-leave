@@ -59,7 +59,7 @@ export function planSignature(plan) {
         // nothing else on the card, so leaving it out meant the running order
         // reached Google and the app then threw the answer away as unchanged.
         parts.push([c.id, c.patient, c.surgeon, c.operation, c.system, c.supply, c.kit,
-          c.rep || '', c.unread || '', c.cancelled ? 'off' : '',
+          c.rep || '', (c.planned || []).join('/'), c.unread || '', c.cancelled ? 'off' : '',
           formatListPlace(c.listPlace),
           (c.notes || []).map(n => n.text).join('~')].join('\u0001'))
       }

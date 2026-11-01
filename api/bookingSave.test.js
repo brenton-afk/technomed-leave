@@ -165,3 +165,22 @@ describe('a No F2F Brainlab booking (Task 12)', () => {
     expect(created.description).toMatch(/No F2F required/)
   })
 })
+
+describe('allocating reps (Task 10)', () => {
+  it('lets the week\'s team leader allocate two reps', async () => {
+    // Toni is not an admin; make her the leader by stubbing the rota.
+    const tl = await import('../src/clinicalPlan/teamLeader.js')
+    const spy = vi.spyOn(tl, 'rosteredLeader')
+    spy.mockReturnValue({ email: 'toni@technomed.com.au' })
+    const res = await call('save', { method: 'POST', body: { eventId: 'evt-9', etag: '"v1"', fields: { planned: 'Ben / Aimee' } } })
+    spy.mockRestore()
+    expect(res.statusCode).toBe(200)
+    expect(patches[0].description).toMatch(/Planned rep: Ben \/ Aimee/)
+  })
+
+  it('refuses anybody else', async () => {
+    const res = await call('save', { method: 'POST', body: { eventId: 'evt-9', etag: '"v1"', fields: { planned: 'Ben' } } })
+    expect(res.statusCode).toBe(403)
+    expect(patches).toHaveLength(0)
+  })
+})

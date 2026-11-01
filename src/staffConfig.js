@@ -95,6 +95,24 @@ export function firstNameFor(email) {
  */
 export const ATTENDING_REPS = ['Ben', 'Aimee', 'Brent', 'Mat']
 
+/**
+ * Who a team leader can allocate to a case (Task 10). The spine reps plus the
+ * orthopaedic team, because ortho cases are allocated the same way.
+ */
+export const ALLOCATABLE_REPS = [...ATTENDING_REPS, 'Jeremy', 'April']
+
+/** "Ben / Aimee", "Ben and Aimee", "ben, aimee" → ['Ben', 'Aimee'], roster names only. */
+export function parseRepNames(value) {
+  const known = new Map(STAFF.flatMap(s => [s.firstName, ...(s.aka || [])]
+    .map(n => [String(n).toLowerCase(), s.firstName])))
+  const out = []
+  for (const part of String(value || '').split(/\s*(?:[/,&+]|\band\b)\s*/i)) {
+    const name = known.get(part.trim().toLowerCase())
+    if (name && !out.includes(name)) out.push(name)
+  }
+  return out
+}
+
 
 /**
  * Who approves leave, and so who is told the moment some is lodged.

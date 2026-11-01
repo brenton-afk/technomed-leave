@@ -33,7 +33,11 @@ export const LABELS = {
   // Where we are on the hospital's running order — "2nd · afternoon · from 1pm".
   // Read by src/clinicalPlan/listPlace.js, which owns what the line means. Named
   // here so it is consumed rather than repeated underneath the card as prose.
-  list: ['list']
+  list: ['list'],
+  // Who the team leader has allocated (Task 10), written "Planned rep: Ben /
+  // Aimee". Only the two-word forms: a bare "planned" turns up in prose — "as
+  // planned - confirmed" — and would be read as a label.
+  planned: ['planned rep', 'planned reps']
 }
 
 // Longest first, so "Procedure" is not matched as "Proc" and "Surgeon" is never
@@ -429,4 +433,17 @@ export function withDateFollowing(description, isoDate) {
 
   const written = datedLike(span.value, Number(on[1]), Number(on[2]), Number(on[3]))
   return span.value.trim() === written ? text : setLabelledValue(text, 'date', written)
+}
+
+
+/**
+ * The description with one labelled line taken out entirely — the label as
+ * well as the value — for a field that has been cleared.
+ */
+export function removeLabelledLine(description, field) {
+  const text = String(description || '').replace(/\r\n?/g, '\n')
+  const names = (LABELS[field] || []).slice().sort((a, b) => b.length - a.length)
+  if (!names.length) return text
+  const pattern = new RegExp(`^[ \\t]*(?:${names.join('|')})\\s*[:\\-–][^\\n]*\\n?`, 'gim')
+  return text.replace(pattern, '').replace(/\n{3,}/g, '\n\n').trimEnd()
 }

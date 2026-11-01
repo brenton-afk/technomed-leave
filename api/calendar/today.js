@@ -29,7 +29,7 @@ import {
 } from '../_googleCalendar.js'
 import {
   setLabelledValue, replaceSurname, labelledFieldSpans,
-  parseLabelledDescription, descriptionNotes, withDateFollowing
+  parseLabelledDescription, descriptionNotes, withDateFollowing, removeLabelledLine
 } from '../../src/clinicalPlan/labelledFields.js'
 import {
   readBooking, normaliseSurgeon, extractRep, stripIdentifiers,
@@ -61,9 +61,26 @@ import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
   readFiledCase, priorImplantsFor, describePrior
 } from '../../src/clinicalPlan/priorImplants.js'
-import { firstNameFor, getStaffByEmail as STAFF_BY_EMAIL } from '../../src/staffConfig.js'
+import { firstNameFor, getStaffByEmail as STAFF_BY_EMAIL, parseRepNames } from '../../src/staffConfig.js'
 import { sanitisePatient } from '../../src/clinicalPlan/parse.js'
 import { withAttribution, creatorTag } from '../../src/clinicalPlan/attribution.js'
+
+/**
+ * Whether this person may allocate reps to a case on this day (Task 10).
+ *
+ * "Team leader does the allocation." The leader for that week — the set cover
+ * if there is one, otherwise the rota — plus Brent and Erin, so a week whose
+ * leader is away is not a week nobody can allocate.
+ */
+async function canAllocate(session, day) {
+  if (STAFF_BY_EMAIL(session.email)?.isAdmin) return true
+  const monday = weekOf(String(day || '').slice(0, 10))
+  if (!monday) return false
+  let set = null
+  try { set = await getTeamLeader(monday) } catch { set = null }
+  const leader = set || rosteredLeader(monday)
+  return Boolean(leader?.email) && leader.email.toLowerCase() === String(session.email).toLowerCase()
+}
 
 /** Today in Hobart, YYYY-MM-DD — on the real zone, so daylight saving holds. */
 function hobartToday() {
@@ -411,7 +428,10 @@ async function handleBooking(req, res) {
         patient: surnameOf(labelled.patient, knownPatientOf(event)
           || readBooking(event.summary || '', description)?.patient)
       },
-      notes: descriptionNotes(description).join('\n')
+      notes: descriptionNotes(description).join('\n'),
+      // Task 10: who is allocated, and whether this person may change it.
+      planned: parseRepNames(labelled.planned),
+      canAllocate: await canAllocate(session, event.start?.dateTime || event.start?.date)
     })
   } catch (err) {
     return res.status(500).json({ error: err.message })
@@ -475,6 +495,17 @@ async function handleSave(req, res) {
             surnameOf(labelledFieldSpans(description).patient?.value, knownPatientOf(current)
               || readBooking(current.summary || '', current.description || '')?.patient))
           : value)
+    }
+
+    // Who is allocated (Task 10). Only the week's team leader, or an admin.
+    if (Object.prototype.hasOwnProperty.call(body.fields || {}, 'planned')) {
+      if (!(await canAllocate(session, current.start?.dateTime || current.start?.date))) {
+        return res.status(403).json({ error: 'Only the team leader for that week can allocate reps' })
+      }
+      const names = parseRepNames(body.fields.planned)
+      description = names.length
+        ? setLabelledValue(description, 'planned', names.join(' / '))
+        : removeLabelledLine(description, 'planned')
     }
 
     // Free notes are the unlabelled remainder, so they are rewritten wholesale:

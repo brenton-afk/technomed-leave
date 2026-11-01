@@ -8,6 +8,7 @@ import {
   fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature
 } from '../clinicalPlan/provider.js'
 import { useOnline } from '../online.js'
+import { firstNameFor } from '../staffConfig.js'
 import {
   resolveDefaultWeek, weekWindowFor, todayStr, parseDateStr, toDateStr,
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
@@ -596,6 +597,17 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, onOpen, busy, onSe
             {/* The name in its own element, so it can be read — and found —
                 as a name rather than as part of a sentence. */}
             Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
+          </span>
+        )}
+        {/* Who the team leader allocated, until somebody records who went —
+            then "Rep" says it. Outlined, not filled, because it is a plan. */}
+        {!surgicalCase.rep && surgicalCase.planned?.length > 0 && (
+          <span style={{
+            ...text('caption'), display: 'inline-flex', alignItems: 'center',
+            marginTop: 4, padding: '0 8px', borderRadius: radius.pill,
+            border: `1px solid ${ink.line}`, color: ink.ink
+          }}>
+            Planned: <strong style={{ fontWeight: 700, marginLeft: 3 }}>{surgicalCase.planned.join(' + ')}</strong>
           </span>
         )}
       </button>
@@ -1245,6 +1257,21 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   )
 }
 
+/** The plan with only the cases this person is planned for or attended. */
+export function onlyMine(plan, name) {
+  const isMine = c => (c.planned || []).includes(name)
+    || String(c.rep || '').split('/').map(s => s.trim()).includes(name)
+  return {
+    ...plan,
+    days: (plan.days || []).map(day => ({
+      ...day,
+      casesByHospital: (day.casesByHospital || [])
+        .map(group => ({ ...group, cases: (group.cases || []).filter(isMine) }))
+        .filter(group => group.cases.length)
+    }))
+  }
+}
+
 export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpokenDone }) {
   // A week in columns on a desktop, a list on a phone — different shapes of
   // screen, different right answer.
@@ -1297,8 +1324,14 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
   // The cache for the week being shown, which is always the week containing
   // today. It used to consult prefs.weekStart — a preference nothing has ever
   // written — so the branch was dead and the fallback did all the work.
-  const [plan, setPlan] = useState(
+  const [fullPlan, setPlan] = useState(
     () => readCachedPlan(resolveDefaultWeek().startDate)?.plan || null)
+  // "My cases" (Task 10): only the cases this person is planned for or went
+  // to. Everything else on the day — leave, reminders — stays, because it is
+  // still the day they are working in.
+  const me = firstNameFor(user?.email)
+  const [mine, setMine] = useState(() => Boolean(readPrefs().mineOnly))
+  const plan = useMemo(() => (mine && me && fullPlan ? onlyMine(fullPlan, me) : fullPlan), [fullPlan, mine, me])
   const [status, setStatus] = useState('loading')
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
@@ -1715,6 +1748,15 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
         right={(
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
             <SearchButton onClick={() => setSearching(true)} />
+            {me && (
+              <button type="button" aria-pressed={mine} onClick={() => {
+                setMine(m => { writePrefs({ ...readPrefs(), mineOnly: !m }); return !m })
+              }} style={{
+                height: 36, padding: '0 12px', flexShrink: 0, borderRadius: radius.pill, cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.18)', ...text('caption'), fontWeight: 700,
+                background: mine ? 'white' : 'rgba(255,255,255,0.08)', color: mine ? colour.navy : 'white'
+              }}>Mine</button>
+            )}
             <SpanToggle span={span}
               options={desktop ? ['week', 'lists'] : ['day', 'week', 'lists']}
               onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />

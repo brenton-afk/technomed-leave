@@ -513,6 +513,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // Who attended, or who is covering. Written into the title by
         // markAttendance when a usage form is scanned.
         rep: read.rep || undefined,
+        // Who the team leader allocated. See Task 10 / EditBooking.
+        planned: read.planned?.length ? read.planned : undefined,
         // Whatever the title said that no field claimed. Shown rather than
         // dropped — see leftoverOf in parse.js.
         unread: read.unread || undefined,

@@ -16,7 +16,7 @@ import { systemsInKit, findNavigation} from '../../clinicalPlan/systems.js'
 import {
   SUPPLY_OPTIONS, parseKitSupplies, setSupply, systemsToSupply, drawsOnLocalStock
 } from '../../clinicalPlan/kitSupply.js'
-import { ATTENDING_REPS } from '../../staffConfig.js'
+import { ATTENDING_REPS, ALLOCATABLE_REPS } from '../../staffConfig.js'
 import { queueBookingSave, isNetworkFailure } from '../../offlineQueue.js'
 import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 import { offerNotices } from '../../notices.js'
@@ -356,6 +356,9 @@ export default function EditBooking({
   // Who was in the room. Chosen, never typed: it goes into the booking title,
   // and a spelling the roster does not know is a rep the app cannot read back.
   const [reps, setReps] = useState([])
+  // Who the team leader has allocated (Task 10). Several, because reps often
+  // go together. Editable only by that week's team leader (or an admin).
+  const [planned, setPlanned] = useState([])
   // What else is booked on the day this booking is headed for. Refetched when
   // the date changes, because moving a booking onto a day whose kit is already
   // committed is the same clash as booking a second one there.
@@ -431,6 +434,7 @@ export default function EditBooking({
       setColorId(data.colorId || null)
       setColourChosen(false)
       setReps(data.reps || [])
+      setPlanned(data.planned || [])
       setStatus('ready')
     } catch (err) {
       setError(err.message)
@@ -497,10 +501,11 @@ export default function EditBooking({
   }, [fields.hospital, fields.kit, fields.system, dayCases, eventId])
 
   const repsChanged = Boolean(loaded && reps.join('/') !== (loaded.reps || []).join('/'))
+  const plannedChanged = Boolean(loaded && planned.join('/') !== (loaded.planned || []).join('/'))
 
   const changed = loaded && (
     FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields?.[f.key] || ''))
-    || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged)
+    || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged || plannedChanged)
 
   async function save({ withTitle, base = loaded } = {}) {
     setStatus('saving'); setError('')
@@ -518,6 +523,7 @@ export default function EditBooking({
           for (const f of FIELDS) {
             if ((fields[f.key] || '') !== (base.fields[f.key] || '')) patch[f.key] = fields[f.key] || ''
           }
+          if (plannedChanged) patch.planned = planned.join(' / ')
           return {
             eventId,
             etag: base.etag,
@@ -940,7 +946,54 @@ export default function EditBooking({
                   <span style={{
                     ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
                     display: 'block', marginBottom: 4
+                  }}>Planned</span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {(loaded.canAllocate
+                      ? [...ALLOCATABLE_REPS, ...planned.filter(r => !ALLOCATABLE_REPS.includes(r))]
+                      : planned
+                    ).map(name => {
+                      const on = planned.includes(name)
+                      return (
+                        <button key={name} type="button" aria-pressed={on} disabled={!loaded.canAllocate}
+                          aria-label={`Planned: ${name}`}
+                          onClick={() => setPlanned(list => (on ? list.filter(r => r !== name) : [...list, name]))}
+                          style={{
+                            padding: `6px ${space.md}px`, borderRadius: radius.pill,
+                            cursor: loaded.canAllocate ? 'pointer' : 'default', ...text('bodyStrong'),
+                            background: on ? colour.accentSoft : colour.surface,
+                            color: on ? colour.accentDeep : colour.inkMuted,
+                            border: `1px solid ${on ? colour.accent : colour.line}`
+                          }}>
+                          {name}
+                        </button>
+                      )
+                    })}
+                    {!loaded.canAllocate && !planned.length && (
+                      <span style={{ ...text('caption'), color: colour.inkFaint }}>Nobody allocated yet</span>
+                    )}
+                  </div>
+                  <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block', marginTop: 2 }}>
+                    {loaded.canAllocate
+                      ? 'Who you are sending — tap as many as are going'
+                      : 'Allocated by the team leader'}
+                  </span>
+                </div>
+
+                <div style={{ marginBottom: space.md }}>
+                  <span style={{
+                    ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
+                    display: 'block', marginBottom: 4
                   }}>Rep attending</span>
+                  {/* Actual defaults to planned: one tap when it went as allocated. */}
+                  {planned.length > 0 && reps.join('/') !== planned.join('/') && (
+                    <button type="button" onClick={() => setReps(planned)} style={{
+                      ...text('caption'), fontWeight: 700, cursor: 'pointer', marginBottom: 6,
+                      background: 'none', border: `1px solid ${colour.line}`, borderRadius: radius.pill,
+                      padding: `4px ${space.sm}px`, color: colour.accentDeep
+                    }}>
+                      As planned — {planned.join(' + ')}
+                    </button>
+                  )}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {/* The roster, plus anyone already on this booking who is
                         not on it. A locum or a name from another company would
