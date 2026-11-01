@@ -8,8 +8,9 @@ import {
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import {
   listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit,
-  saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList
+  saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath
 } from './_kits.js'
+import { temporaryLink } from './_dropbox.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
 
 // ─── Theatre guides ──────────────────────────────────────────────────────────
@@ -238,6 +239,12 @@ async function handleKits(req, res, session) {
       return res.status(200).json({ kits, settings, canEdit, isAdmin: Boolean(staff.isAdmin), today: hobartToday() })
     }
     if (what === 'history') return res.status(200).json({ history: await kitHistory(150) })
+    if (what === 'photo' && req.method === 'GET') {
+      // Fetched per view and never stored, like every other Dropbox link here.
+      const path = String(req.query.path || '')
+      if (!isTrayPhotoPath(path)) return res.status(400).json({ error: 'Not a tray photo' })
+      return res.status(200).json({ url: (await temporaryLink(path)).url })
+    }
     if (what === 'traylist' && req.method === 'GET') {
       return res.status(200).json({ list: await getTrayList(String(req.query.id || '')) })
     }

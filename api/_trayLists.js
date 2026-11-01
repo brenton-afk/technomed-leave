@@ -40,8 +40,10 @@ Ignore columns for lot numbers, "TM Out", "Hosp In", "Hosp Out", signatures, pag
 
 A tray heading looks like "TRAY 1 - INSTRUMENTS", "Tray 4 - 10 Degree Trials", "DNO TRAY", or a caddy name. If the document has no headings, it is one tray: name it after the document's title.
 
+Photographs of the trays appear in the text as markers like [PHOTO 3] (or, when you are given images, as the images themselves, numbered 1, 2, 3 in the order given). For each tray set "photo" to the number of the photograph that shows that tray — usually the one just under or beside its heading — or null if there is none. Never give two trays the same photo unless the document clearly shows one picture for both.
+
 Return ONLY JSON, with each line as a short array [code, description, qty, kind] where kind is "i" for implant or "m" for instrument — the list is long, so keep it compact:
-{"title":"","trays":[{"name":"","lines":[["2SEA-86-0052","ANGLED AWL 10MM",1,"m"]]}]}`
+{"title":"","trays":[{"name":"","photo":1,"lines":[["2SEA-86-0052","ANGLED AWL 10MM",1,"m"]]}]}`
 
 /** What kind of file this is, from its name and type. */
 export function fileKind(filename, mediaType = '') {
@@ -82,6 +84,7 @@ const clip = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n)
 export function cleanTrays(parsed) {
   const trays = (parsed?.trays || []).slice(0, MAX_TRAYS).map((t, i) => ({
     name: clip(t?.name, 80) || `Tray ${i + 1}`,
+    photo: Number.isInteger(Number(t?.photo)) && Number(t.photo) > 0 ? Number(t.photo) : null,
     lines: (t?.lines || []).slice(0, MAX_LINES).map(l => (Array.isArray(l)
       ? { code: l[0], description: l[1], qty: l[2], kind: l[3] }
       : l)).map(l => ({

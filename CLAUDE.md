@@ -259,6 +259,15 @@ past the request-body limit), read by `action=tray-read` with
 reading. For a tray living at a hospital, the hospital's copy wins over our
 master list. Saving replaces the kit's tray names with the list's.
 
+The phone unpacks the file (`kit/readTrayFile.js`: Word and PDF text, a
+scanned PDF's pages as images, photos shrunk) and sends only that — the Blob
+path stalled on hospital wifi. **Tray photos come across**: each picture in the
+document becomes a `[PHOTO n]` marker in the text, the reading returns which
+photo shows each tray, and on save each photo goes to Dropbox at
+`/Tray Lists/Tray Photos/{kit}/{tray}.jpg`; the list stores that path (only
+paths under that folder are accepted) and the screen shows it by a temporary
+link fetched per view.
+
 ### Surgeon preference cards (Task 18)
 
 Editable data, not a page. `api/_preferences.js` keeps them in Redis

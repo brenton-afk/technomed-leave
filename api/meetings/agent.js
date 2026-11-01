@@ -62,6 +62,7 @@ export default async function handler(req, res) {
   // big uploads and has the time a long PDF needs. See api/_trayLists.js.
   if (action === 'tray-read') return handleTrayRead(req, res, session)
   if (action === 'tray-keep') return handleTrayKeep(req, res, session)
+  if (action === 'tray-photo') return handleTrayPhoto(req, res, session)
 
   // ── The project page ──
   // "We want it similar to monday.com as a true project page." A project owns
@@ -787,7 +788,9 @@ async function keepTrayListOriginal(buffer, { url, filename, hospital, kitName }
       const folder = `/Tray Lists/Hospital Copies/${place}`
       await ensureFolder(folder)
       dropboxPath = `${folder}/${safe(kitName) || 'Kit'} - ${safe(filename) || 'tray list'}`
-      await uploadFile(dropboxPath, buffer)
+      const saved = await uploadFile(dropboxPath, buffer)
+      // Where Dropbox says it put it, which is what a person can go and find.
+      if (saved?.path_display) dropboxPath = saved.path_display
     } catch (err) {
       dropboxPath = ''
       dropboxError = err.message || 'Not saved to Dropbox'
@@ -819,5 +822,29 @@ async function handleTrayKeep(req, res, session) {
     return res.status(200).json(await keepTrayListOriginal(buffer, { url: ours ? url : '', filename, hospital, kitName }))
   } catch {
     return res.status(200).json({ dropboxPath: '', dropboxError: 'The original could not be saved to Dropbox' })
+  }
+}
+
+
+/**
+ * One tray's photograph, into Dropbox beside the lists:
+ * /Tray Lists/Tray Photos/{kit}/{tray}.jpg. The portal shows it from there.
+ */
+async function handleTrayPhoto(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const staff = STAFF.find(s => s.email === session?.email)
+  if (!staff?.isAdmin && !staff?.isClinicalTeam) return res.status(403).json({ error: 'Not allowed' })
+  const { data, kitName, trayName } = req.body || {}
+  if (typeof data !== 'string' || !data) return res.status(400).json({ error: 'No photo came through' })
+  if (!dropboxConfigured()) return res.status(400).json({ error: 'Dropbox is not connected, so the photo cannot be kept' })
+  const safe = v => String(v || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  try {
+    const folder = `/Tray Lists/Tray Photos/${safe(kitName) || 'Kit'}`
+    await ensureFolder(folder)
+    const path = `${folder}/${safe(trayName) || 'Tray'}.jpg`
+    const saved = await uploadFile(path, Buffer.from(data, 'base64'))
+    return res.status(200).json({ path, shown: saved?.path_display || path })
+  } catch (err) {
+    return res.status(400).json({ error: err.message || 'The photo was not saved' })
   }
 }

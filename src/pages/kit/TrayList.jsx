@@ -17,15 +17,34 @@ const PLACES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
 const ACCEPT = '.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf,image/*'
 
 
-function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine }) {
+/** A saved photo, from Dropbox by a link fetched when it is shown. */
+function SavedPhoto({ path, user, alt }) {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    let live = true
+    fetch(`/api/guides?kits=photo&path=${encodeURIComponent(path)}`, { headers: { Authorization: `Bearer ${user?.token || ''}` } })
+      .then(r => r.json()).then(d => live && d.url && setUrl(d.url)).catch(() => {})
+    return () => { live = false }
+  }, [path, user?.token])
+  if (!url) return <div style={{ height: 120, background: colour.lineSoft, borderRadius: radius.control, marginBottom: space.sm }} />
+  return <img src={url} alt={alt} style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: radius.control, background: colour.canvas, marginBottom: space.sm }} />
+}
+
+// "It would be better in a table with the instrument description and the qty
+// next to it. Nice and neat." Code, description, quantity — one row per line,
+// ruled, the quantity right-aligned so a column of numbers reads down.
+function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
+  const cell = { ...text('caption'), padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairlineSoft, verticalAlign: 'top' }
+  const head = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairline, textAlign: 'left', background: colour.canvas }
+  const hasPhoto = Boolean(photoData || tray.photo)
   return (
-    <div style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control, marginBottom: space.sm }}>
+    <div style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control, marginBottom: space.sm, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px` }}>
         <button onClick={onToggle} aria-expanded={open} style={{ flex: 1, background: 'none', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }}>
           <div style={{ ...text('bodyStrong'), color: colour.ink }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
-            {tray.lines.length} lines · {implants} implant{implants === 1 ? '' : 's'} counted · {tray.lines.length - implants} instruments ticked
+            {tray.lines.length} items · {implants} implant{implants === 1 ? '' : 's'}{hasPhoto ? ' · photo' : ' · no photo'}
           </div>
         </button>
         {onRemove && (
@@ -34,20 +53,36 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine }) {
         )}
       </div>
       {open && (
-        <div style={{ borderTop: border.hairlineSoft, padding: `0 ${space.md}px ${space.sm}px` }}>
-          {tray.lines.map((l, i) => (
-            <div key={`${l.code}-${i}`} style={{ display: 'flex', gap: space.sm, alignItems: 'baseline', padding: `${space.xs}px 0`, borderBottom: border.hairlineSoft }}>
-              <span style={{ ...text('caption'), color: colour.inkFaint, width: 92, flexShrink: 0, overflowWrap: 'anywhere' }}>{l.code || '—'}</span>
-              <span style={{ ...text('caption'), color: colour.ink, flex: 1 }}>{l.description}</span>
-              <span style={{ ...text('caption'), color: l.kind === 'implant' ? colour.accentDeep : colour.inkFaint, whiteSpace: 'nowrap' }}>
-                {l.kind === 'implant' ? `× ${l.qty}` : `${l.qty > 1 ? `${l.qty} ` : ''}inst.`}
-              </span>
-              {onRemoveLine && (
-                <button onClick={() => onRemoveLine(i)} aria-label={`Remove ${l.description}`}
-                  style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
-              )}
-            </div>
-          ))}
+        <div style={{ borderTop: border.hairlineSoft, padding: space.sm }}>
+          {photoData && <img src={`data:image/jpeg;base64,${photoData}`} alt={`${tray.name}`}
+            style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: radius.control, background: colour.canvas, marginBottom: space.sm }} />}
+          {!photoData && tray.photo && <SavedPhoto path={tray.photo} user={user} alt={tray.name} />}
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '30%' }} /><col /><col style={{ width: 48 }} />{onRemoveLine && <col style={{ width: 28 }} />}
+            </colgroup>
+            <thead>
+              <tr><th style={head}>Code</th><th style={head}>Description</th><th style={{ ...head, textAlign: 'right' }}>Qty</th>{onRemoveLine && <th style={head} />}</tr>
+            </thead>
+            <tbody>
+              {tray.lines.map((l, i) => (
+                <tr key={`${l.code}-${i}`} style={{ background: i % 2 ? colour.canvas : colour.surface }}>
+                  <td style={{ ...cell, color: colour.inkMuted, overflowWrap: 'anywhere' }}>{l.code || '—'}</td>
+                  <td style={{ ...cell, color: colour.ink }}>
+                    {l.description}
+                    {l.kind === 'implant' && <span style={{ ...text('micro'), color: colour.accentDeep, marginLeft: 6, textTransform: 'uppercase' }}>implant</span>}
+                  </td>
+                  <td style={{ ...cell, textAlign: 'right', fontWeight: 600, color: colour.ink }}>{l.qty}</td>
+                  {onRemoveLine && (
+                    <td style={{ ...cell, textAlign: 'center' }}>
+                      <button onClick={() => onRemoveLine(i)} aria-label={`Remove ${l.description}`}
+                        style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -131,12 +166,16 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     attempt.current = mine
     setError(''); setStage('preparing')
     try {
-      const payload = await trayFilePayload(file)
+      const { photos = [], note = '', ...payload } = await trayFilePayload(file)
       if (attempt.current !== mine) return
       setStage('reading')
       const data = await call('tray-read', { ...payload, filename: file.name }, 115000)
       if (attempt.current !== mine) return
-      setReview({ ...data, file: file.name, attempt: mine, keeping: true, note: payload.note || '' })
+      // Each tray's photo, matched by the number the reading gave it. Kept on
+      // the phone until the list is saved.
+      const byN = new Map(photos.map(p => [p.n, p.data]))
+      const trays = data.trays.map(t => ({ ...t, photoData: t.photo ? byN.get(t.photo) || null : null, photo: null }))
+      setReview({ ...data, trays, file: file.name, attempt: mine, keeping: true, note, photoCount: photos.length })
       setOpen('')
       keepOriginal(file, mine)
     } catch (err) {
@@ -153,8 +192,20 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
   async function save() {
     setStage('saving'); setError('')
     try {
+      // The photos first, one request each, into Dropbox; the list then
+      // carries where each one went.
+      const trays = []
+      for (const t of review.trays) {
+        let photo = null
+        if (t.photoData) {
+          const kept = await call('tray-photo', { data: t.photoData, trayName: t.name }, 60000)
+          photo = kept.path
+        }
+        const { photoData, ...rest } = t
+        trays.push({ ...rest, photo })
+      }
       const { list: saved } = await post('savelist', {
-        kitId: kit.id, trays: review.trays,
+        kitId: kit.id, trays,
         source: { file: review.file, hospital, dropboxPath: review.dropboxPath }
       })
       setList(saved); setReview(null)
@@ -173,11 +224,12 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
           Read from {review.file}: {review.trays.length} trays, {lines} lines.{review.note ? ` ${review.note}` : ''} Open each tray and check the codes and quantities
           against the paper. Leave out anything that is not part of this kit.
-          {review.keeping ? ' Saving the original to Dropbox…' : review.dropboxPath ? ' The original is saved in Dropbox under Tray Lists → Hospital Copies.' : ''}
+          {review.photoCount ? ` ${review.trays.filter(t => t.photoData).length} of ${review.trays.length} trays have a photo.` : ' No photos were found in this file.'}
+          {review.keeping ? ' Saving the original to Dropbox…' : review.dropboxPath ? ` Original saved in Dropbox: ${review.dropboxPath}` : ''}
           {review.dropboxError ? ` (Not saved to Dropbox: ${review.dropboxError})` : ''}
         </div>
         {review.trays.map((t, ti) => (
-          <TrayBlock key={t.name} tray={t} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
+          <TrayBlock key={t.name} tray={t} photoData={t.photoData} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
             onRemove={() => setReview(r => ({ ...r, trays: r.trays.filter((_, j) => j !== ti) }))}
             onRemoveLine={li => setReview(r => ({ ...r, trays: r.trays.map((x, j) => (j === ti ? { ...x, lines: x.lines.filter((_, k) => k !== li) } : x)) }))} />
         ))}
@@ -186,7 +238,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           <button disabled={stage === 'saving' || !review.trays.length} onClick={save} style={{
             flex: 2, ...text('bodyStrong'), padding: space.md, borderRadius: radius.control, border: 'none',
             background: colour.accent, color: 'white', cursor: 'pointer', opacity: stage === 'saving' ? 0.6 : 1
-          }}>{stage === 'saving' ? 'Saving…' : `Save to ${kit.name}`}</button>
+          }}>{stage === 'saving' ? 'Saving the list and photos…' : `Save to ${kit.name}`}</button>
           <button onClick={() => setReview(null)} style={{
             flex: 1, ...text('bodyStrong'), padding: space.md, borderRadius: radius.control, border: border.hairline,
             background: colour.surface, color: colour.ink, cursor: 'pointer'
@@ -216,9 +268,10 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             From {list.source?.file || 'an upload'}{list.source?.hospital ? ` (${PLACES[list.source.hospital]}'s copy)` : ''}
             {list.source?.by ? `, saved by ${list.source.by}` : ''}
             {list.source?.at ? ` on ${new Date(list.source.at).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.
+            {list.source?.dropboxPath ? ` Original in Dropbox: ${list.source.dropboxPath}` : ''}
           </div>
           {list.trays.map(t => (
-            <TrayBlock key={t.name} tray={t} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)} />
+            <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)} />
           ))}
         </>
       )}

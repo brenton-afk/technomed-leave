@@ -34,6 +34,15 @@ describe('reading a tray list', () => {
     ])
   })
 
+  it('carries which photo shows each tray — "the photo of the tray MUST come across"', () => {
+    const out = cleanTrays({ trays: [
+      { name: 'Tray 1', photo: 2, lines: [['X-1', 'AWL', 1, 'm']] },
+      { name: 'Tray 2', photo: null, lines: [['X-2', 'PLATE', 1, 'i']] },
+      { name: 'Tray 3', photo: 'none', lines: [['X-3', 'TAP', 1, 'm']] }
+    ] })
+    expect(out.trays.map(t => t.photo)).toEqual([2, null, null])
+  })
+
   it('keeps two trays printed with the same heading apart', () => {
     const line = { code: 'A', description: 'a', qty: 1 }
     const out = cleanTrays({ trays: [{ name: 'Screws', lines: [line] }, { name: 'Screws', lines: [line] }, { name: 'Empty', lines: [] }] })
@@ -68,6 +77,19 @@ describe('saving a tray list onto a kit', () => {
     }, 'Ben')
     expect((await getTrayList(kit.id)).source).toMatchObject({ file: 'RHH Shoreline.pdf', hospital: 'RHH', by: 'Ben' })
     expect((await listKits()).find(k => k.id === kit.id).trays).toEqual(['Tray 1 – Instruments', 'Tray 2 – Plates'])
+  })
+
+  it('keeps a tray photo only from the photos folder', async () => {
+    const { listKits, saveTrayList, getTrayList, isTrayPhotoPath } = await import('./_kits.js')
+    const kit = (await listKits())[0]
+    await saveTrayList(kit.id, { trays: [
+      { name: 'A', photo: '/Tray Lists/Tray Photos/Kit/A.jpg', lines: [{ code: 'X', description: 'x', qty: 1 }] },
+      { name: 'B', photo: '/ALL SURGEON USAGE/SPINE/case.pdf', lines: [{ code: 'Y', description: 'y', qty: 1 }] }
+    ] }, 'Ben')
+    expect((await getTrayList(kit.id)).trays.map(t => t.photo)).toEqual(['/Tray Lists/Tray Photos/Kit/A.jpg', null])
+    expect(isTrayPhotoPath('/Tray Lists/Tray Photos/Kit/A.jpg')).toBe(true)
+    expect(isTrayPhotoPath('/Tray Lists/Tray Photos/../ALL SURGEON USAGE/x.jpg')).toBe(false)
+    expect(isTrayPhotoPath('/ALL SURGEON USAGE/x.jpg')).toBe(false)
   })
 
   it('refuses an empty list rather than wiping the one there', async () => {

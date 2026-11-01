@@ -4,7 +4,12 @@ import { describe, it, expect, vi } from 'vitest'
 // needs reading. Made-up contents only.
 
 vi.mock('mammoth/mammoth.browser.js', () => ({
-  default: { extractRawText: vi.fn(async () => ({ value: 'TRAY 1\nX-1 AWL 1' })) }
+  default: {
+    images: { imgElement: fn => fn },
+    convertToHtml: vi.fn(async () => ({
+      value: '<h1>TRAY 1</h1><table><tr><td>X-1</td><td>AWL</td><td>1</td></tr></table>'
+    }))
+  }
 }))
 
 describe('what the phone sends', () => {
@@ -13,7 +18,10 @@ describe('what the phone sends', () => {
     const file = new File([new Uint8Array(5_000_000)], 'Shoreline Master.docx')
     file.arrayBuffer = async () => new ArrayBuffer(8)
     const payload = await trayFilePayload(file)
-    expect(payload).toEqual({ text: 'TRAY 1\nX-1 AWL 1' })
+    // The table keeps its shape: one row per line, cells split.
+    expect(payload.text).toContain('TRAY 1')
+    expect(payload.text).toContain('X-1 | AWL | 1 |')
+    expect(payload.photos).toEqual([])
   })
 
   it('sends a small spreadsheet as it is', async () => {

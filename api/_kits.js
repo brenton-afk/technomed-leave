@@ -416,6 +416,9 @@ export async function saveTrayList(kitId, { trays, source }, by) {
   if (!kit) throw new Error('No such kit')
   const clean = (trays || []).slice(0, 30).map(t => ({
     name: String(t?.name || '').trim().slice(0, 80),
+    // The tray's photograph, kept in Dropbox; only a path under the photos
+    // folder is accepted, so this cannot point the portal at any other file.
+    photo: /^\/Tray Lists\/Tray Photos\//.test(String(t?.photo || '')) ? String(t.photo).slice(0, 300) : null,
     lines: (t?.lines || []).slice(0, 400).map(l => ({
       code: String(l?.code || '').trim().slice(0, 40),
       description: String(l?.description || '').trim().slice(0, 120),
@@ -441,4 +444,10 @@ export async function saveTrayList(kitId, { trays, source }, by) {
     text: `Tray list saved — ${clean.length} trays, ${clean.reduce((n, t) => n + t.lines.length, 0)} lines${list.source.file ? ` (${list.source.file})` : ''}`
   })
   return list
+}
+
+
+/** A temporary link to a tray photo — only ever from the photos folder. */
+export function isTrayPhotoPath(path) {
+  return /^\/Tray Lists\/Tray Photos\/[^]+\.jpg$/.test(String(path || '')) && !String(path).includes('..')
 }
