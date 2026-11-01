@@ -124,6 +124,24 @@ test('webcal links are converted and people share a colour', () => {
   assert.notEqual(cfg[0].color, cfg[1].color);
 });
 
+test('the simple "Name: link" form works, curly-quoted JSON too', () => {
+  const cfg = readConfig(`
+Brent: https://calendar.google.com/calendar/ical/abc/private-1/basic.ics
+Kate:webcal://p52-caldav.icloud.com/published/2/XYZ
+
+Brent (Work): https://outlook.office365.com/owa/calendar/x/calendar.ics
+`);
+  assert.deepEqual(cfg.map((c) => [c.person, c.label, c.url]), [
+    ['Brent', '', 'https://calendar.google.com/calendar/ical/abc/private-1/basic.ics'],
+    ['Kate', '', 'https://p52-caldav.icloud.com/published/2/XYZ'],
+    ['Brent', 'Work', 'https://outlook.office365.com/owa/calendar/x/calendar.ics'],
+  ]);
+  assert.equal(cfg[0].color, cfg[2].color);
+  const curly = readConfig('[ { \u201Cperson\u201D: \u201CKate\u201D, \u201Curl\u201D: \u201Cwebcal://a/b\u201D }, ]');
+  assert.equal(curly[0].url, 'https://a/b');
+  assert.throws(() => readConfig('Brent https://x'), /line 1/);
+});
+
 test('the same event in two calendars shows once with both people; a broken feed is reported', async () => {
   const config = readConfig(JSON.stringify([
     { person: 'Kate', url: 'https://icloud/a' },

@@ -33,13 +33,36 @@ const PALETTE = ['#2f7de1', '#d6457a', '#2a9d6f', '#e08a1e', '#7b5cd6', '#1f9fb5
  * A person may have several calendars; they share that person's colour.
  * "color" is optional on any entry.
  */
+// The simple form, one calendar per line, so nobody has to type JSON:
+//   Brent: https://calendar.google.com/...basic.ics
+//   Kate: webcal://p52-caldav.icloud.com/...
+//   Brent (Work): https://...
+const LINE = /^\s*([^:()]+?)\s*(?:\(([^)]*)\))?\s*[:=]\s*((?:https?|webcals?):\/\/\S+)\s*$/i;
+
+function parseLines(raw) {
+  const list = [];
+  raw.split(/\r?\n/).forEach((line, i) => {
+    if (!line.trim()) return;
+    const m = line.match(LINE);
+    if (!m) throw new Error(`FAMILY_CALENDARS line ${i + 1} should look like "Name: link"`);
+    list.push({ person: m[1], label: m[2] || '', url: m[3] });
+  });
+  return list;
+}
+
 export function readConfig(raw = process.env.FAMILY_CALENDARS) {
-  if (!raw) throw new Error('FAMILY_CALENDARS is not set');
+  if (!raw || !raw.trim()) throw new Error('FAMILY_CALENDARS is not set');
+  // Notes and Word turn straight quotes into curly ones; undo that.
+  raw = raw.replace(/[\u201C\u201D\u201E\u2033]/g, '"').replace(/[\u2018\u2019]/g, "'").trim();
   let list;
-  try {
-    list = JSON.parse(raw);
-  } catch {
-    throw new Error('FAMILY_CALENDARS is not valid JSON');
+  if (raw.startsWith('[')) {
+    try {
+      list = JSON.parse(raw.replace(/,\s*([\]}])/g, '$1')); // forgive a trailing comma
+    } catch {
+      throw new Error('FAMILY_CALENDARS is not valid JSON');
+    }
+  } else {
+    list = parseLines(raw);
   }
   if (!Array.isArray(list) || list.length === 0) throw new Error('FAMILY_CALENDARS must be a non-empty list');
 

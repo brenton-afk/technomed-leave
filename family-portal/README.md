@@ -66,21 +66,20 @@ repository** (e.g. `family-calendar`), kept apart from the TechnoMed portal.
 | `FAMILY_CALENDARS` | The list of calendars; see below. |
 | `FAMILY_TIMEZONE` | *(optional)* Defaults to `Australia/Hobart`. |
 
-`FAMILY_CALENDARS` is a list like this (paste it as one value):
+`FAMILY_CALENDARS` is one calendar per line, written as the name, a colon, then the link:
 
-```json
-[
-  { "person": "Brent",  "url": "https://calendar.google.com/calendar/ical/.../basic.ics" },
-  { "person": "Kate",   "url": "webcal://p52-caldav.icloud.com/published/2/..." },
-  { "person": "Olivia", "url": "https://calendar.google.com/calendar/ical/.../basic.ics" },
-  { "person": "Brent",  "label": "Work", "url": "https://outlook.office365.com/owa/calendar/.../calendar.ics" }
-]
+```
+Brent: https://calendar.google.com/calendar/ical/.../basic.ics
+Kate: webcal://p52-caldav.icloud.com/published/2/...
+Olivia: https://calendar.google.com/calendar/ical/.../basic.ics
+Brent (Work): https://outlook.office365.com/owa/calendar/.../calendar.ics
 ```
 
-- `person`: the name shown on the screen. The same name on two lines gives that
-  person two calendars, shown in one colour.
-- `label`: *(optional)* tells two calendars of the same person apart.
-- `color`: *(optional)* such as `"#d6457a"`. Otherwise each person gets a colour automatically.
+- The name is what's shown on screen. The same name on two lines gives that
+  person two calendars in one colour; a word in brackets tells them apart.
+- No quote marks are needed. Blank lines are ignored.
+- *(Advanced)* A JSON list such as `[{ "person": "Kate", "url": "…", "color": "#d6457a" }]`
+  also works if you want to choose colours.
 
 4. Click **Deploy**. Vercel gives you an address like `family-calendar.vercel.app`.
    You can attach your own domain later under Settings → Domains.
