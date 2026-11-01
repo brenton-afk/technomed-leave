@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { askClaude } from './_anthropic.js'
 import { stripIdentifiers, normaliseSurgeon, sanitisePatient } from '../src/clinicalPlan/parse.js'
 import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { withoutPreOpNoise } from '../src/clinicalPlan/preOpNoise.js'
@@ -142,12 +142,16 @@ export async function readBookingDocument(email = {}) {
 
   content.push({ type: 'text', text: PROMPT })
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const reply = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4000,
-    thinking: { type: 'adaptive' },
-    messages: [{ role: 'user', content }]
+  const reply = await askClaude({
+    feature: 'booking-email',
+    whenUnavailable: 'The attachment could not be read automatically — open it '
+      + 'and enter the booking by hand.',
+    request: {
+      model: MODEL,
+      max_tokens: 4000,
+      thinking: { type: 'adaptive' },
+      messages: [{ role: 'user', content }]
+    }
   })
 
   const text = reply.content.filter(b => b.type === 'text').map(b => b.text).join('')

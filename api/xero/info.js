@@ -176,7 +176,7 @@ export default async function handler(req, res) {
         TWILIO_ACCOUNT_SID: 'Timesheet SMS reminders',
         TWILIO_AUTH_TOKEN: 'Timesheet SMS reminders',
         TWILIO_FROM_NUMBER: 'Timesheet SMS reminders',
-        EMAIL_FROM: 'Email sender (falls back to resend.dev)',
+        EMAIL_FROM: 'Email sender — required, must be on the verified domain',
         CRON_SECRET: 'Cron authentication',
         // Push was absent from this list, which is the other half of why it
         // went unnoticed: the screen that answers "what is this deploy

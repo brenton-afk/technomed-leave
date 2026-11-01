@@ -9,6 +9,7 @@ import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
 import { flagRepeats } from '../_worklistMatch.js'
 import { readActionList } from '../_actionItems.js'
+import { askClaude } from '../_anthropic.js'
 import {
   GENERAL, newProject, normaliseProject, movedTo, withComment,
   archived, restored, blockedFromArchiving,
@@ -201,14 +202,15 @@ ${transcript}
 """`
 
   try {
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
+    const claudeData = await askClaude({
+      feature: 'meeting-notes',
+      whenUnavailable: 'The action list could not be built right now — the '
+        + 'transcript is safe, try again shortly.',
+      // Longer than the default twenty seconds: forty action items with a line
+      // of context each is a legitimately slow answer, and cutting it short
+      // would break a working feature to fix an error message.
+      timeoutMs: 60000,
+      request: {
         model: 'claude-sonnet-4-6',
         // Was 2,000, which is where "unterminated string in JSON at position
         // 6964" came from: a long action list is more than 2,000 tokens of
@@ -217,13 +219,8 @@ ${transcript}
         // cost of room that goes unused is nothing.
         max_tokens: 16000,
         messages: [{ role: 'user', content: prompt }]
-      })
+      }
     })
-    if (!claudeRes.ok) {
-      const errText = await claudeRes.text()
-      throw new Error(`Claude API error (${claudeRes.status}): ${errText}`)
-    }
-    const claudeData = await claudeRes.json()
     const textBlock = (claudeData.content || []).find(b => b.type === 'text')
     if (!textBlock) throw new Error('No text in Claude response')
 
@@ -345,16 +342,12 @@ async function handleReadFile(req, res) {
 
     // A PDF, read by Claude rather than parsed. Asked for the words only:
     // anything it adds of its own becomes a task somebody is told to do.
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
-    const claude = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
+    const body = await askClaude({
+      feature: 'meeting-notes',
+      whenUnavailable: 'That file could not be read right now — paste the text '
+        + 'in instead, or try again shortly.',
+      timeoutMs: 60000,
+      request: {
         model: 'claude-sonnet-4-5',
         max_tokens: 8000,
         messages: [{
@@ -372,12 +365,8 @@ async function handleReadFile(req, res) {
             }
           ]
         }]
-      })
+      }
     })
-    if (!claude.ok) {
-      throw new Error(`Could not read the PDF (${claude.status})`)
-    }
-    const body = await claude.json()
     const text = (body.content || []).filter(c => c.type === 'text').map(c => c.text).join('')
     return res.status(200).json({ text })
   } catch (err) {

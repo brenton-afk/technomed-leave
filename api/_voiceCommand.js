@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { askClaude } from './_anthropic.js'
 import { transcribe, readDictatedBooking } from './_readDictatedBooking.js'
 import { stripIdentifiers } from '../src/clinicalPlan/parse.js'
 import {
@@ -36,7 +36,6 @@ const MODEL = process.env.BOOKING_VISION_MODEL || 'claude-opus-5'
  * @returns {{transcript: string, command: object, booking?: object}}
  */
 export async function readVoiceCommand({ audio, contentType, now = new Date() } = {}) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('Voice needs ANTHROPIC_API_KEY')
   if (!audio) throw new Error('No recording was received')
 
   const transcript = await transcribe(audio, contentType, SPOKEN_VOCABULARY)
@@ -47,15 +46,19 @@ export async function readVoiceCommand({ audio, contentType, now = new Date() } 
   const civil = zonedCivil(now, TZ)
   const today = toDateStr(civil)
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const reply = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1500,
-    thinking: { type: 'adaptive' },
-    messages: [{
-      role: 'user',
-      content: commandPrompt(transcript, { today, weekday: weekdayName(today) })
-    }]
+  const reply = await askClaude({
+    feature: 'voice-command',
+    whenUnavailable: 'Voice commands are unavailable right now — you can still '
+      + 'do this from the screen it belongs to.',
+    request: {
+      model: MODEL,
+      max_tokens: 1500,
+      thinking: { type: 'adaptive' },
+      messages: [{
+        role: 'user',
+        content: commandPrompt(transcript, { today, weekday: weekdayName(today) })
+      }]
+    }
   })
 
   const text = reply.content.filter(b => b.type === 'text').map(b => b.text).join('')

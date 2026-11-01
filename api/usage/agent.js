@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { streamClaude } from '../_anthropic.js'
 import { requireSession } from '../_auth.js'
 import { markAttendance } from '../_googleCalendar.js'
 import { STAFF, firstNameFor } from '../../src/staffConfig.js'
@@ -159,19 +159,22 @@ async function handleScan(req, res, session) {
   }
 
   const pages = validatePages(req.body?.pages)
-  const client = new Anthropic()
 
   // Streaming so a long extraction cannot trip the HTTP request timeout.
-  const stream = client.messages.stream({
-    model: VISION_MODEL,
-    max_tokens: 16000,
-    output_config: { effort: 'high' },
-    messages: [{
-      role: 'user',
-      content: [...contentBlocksFor(pages), { type: 'text', text: EXTRACTION_PROMPT }]
-    }]
+  const message = await streamClaude({
+    feature: 'usage-scan',
+    whenUnavailable: 'The scan could not be read right now — the form can still '
+      + 'be entered by hand, or try again shortly.',
+    request: {
+      model: VISION_MODEL,
+      max_tokens: 16000,
+      output_config: { effort: 'high' },
+      messages: [{
+        role: 'user',
+        content: [...contentBlocksFor(pages), { type: 'text', text: EXTRACTION_PROMPT }]
+      }]
+    }
   })
-  const message = await stream.finalMessage()
 
   if (message.stop_reason === 'refusal') {
     throw new Error('The document could not be processed. Please contact Brenton.')

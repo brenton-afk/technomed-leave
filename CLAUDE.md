@@ -161,6 +161,14 @@ colours, which are the ones carrying real meaning.
 
 Session lives in `sessionStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a one-hour age limit on restore and re-checks every minute, matching the server-side Redis TTL in `api/_auth.js` — keep the two constants in step.
 
+### Talking to Claude
+
+Every call goes through `askClaude` / `streamClaude` in `api/_anthropic.js`. Nothing calls the SDK or `api.anthropic.com` directly — the point is that one failure is handled one way wherever it happens.
+
+- **The API's own words never reach a screen.** `AiUnavailable` carries the caller's sentence as `message` and the real cause as `detail`. The caller supplies the sentence, because only it knows what the person was trying to do: "Voice booking is unavailable right now — please fill in the form below."
+- **Timeout is 20s, retries are cut to 1.** The SDK defaults — ten minutes, two retries — are sane for a server job and wrong inside a Vercel function that is killed at its `maxDuration`: a call still waiting when that happens is a 504, which is the one failure the app cannot turn into a sentence. A streamed scan gets 55s instead, because a vision pass over six pages legitimately takes most of a minute.
+- **Billing and auth failures email `ALERT_EMAIL`, once per feature per day.** Nobody knew the account had run out of credit until a rep hit it in a corridor at RHH. `busy` and `timeout` do not alert — they clear on their own, and an alert nobody can act on teaches people to ignore the sender.
+
 ### Email sender
 
 `onboarding@resend.dev` is Resend's *test* address and can only ever deliver to

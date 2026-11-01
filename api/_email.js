@@ -554,3 +554,69 @@ export async function sendMeetingSummaryEmail(staff, meeting, myItems) {
   })
 }
 
+
+
+// ─── When a service the portal depends on stops working ──────────────────────
+// "On billing/auth errors send one alert email per day to brenton@ saying the
+// voice feature is down and why."
+//
+// Nobody knew the Anthropic account had run out of credit until Ben hit it in a
+// corridor at RHH. The whole point of this email is that the next time, the
+// person who can fix it finds out before the person who cannot.
+//
+// Deliberately spare: what broke, which kind of failure, and the API's own
+// words. No case, no patient, nothing from the request — the failure is about
+// an account, not about whatever somebody happened to be doing at the time.
+
+const FAULT_WORDS = {
+  billing: 'the account is out of credit, or billing has failed',
+  auth: 'the API key is missing, wrong, or not allowed to do this',
+  busy: 'the service is overloaded',
+  timeout: 'the service did not answer in time',
+  unknown: 'an unexpected error'
+}
+
+const FEATURE_WORDS = {
+  'voice-booking': 'Speaking a booking',
+  'voice-command': 'The voice command button',
+  'booking-email': 'Reading booking emails',
+  'usage-scan': 'Scanning usage forms',
+  'meeting-notes': 'Meeting action lists'
+}
+
+export async function sendServiceAlertEmail({ feature, fault, detail }) {
+  const what = FEATURE_WORDS[feature] || feature
+  const why = FAULT_WORDS[fault] || FAULT_WORDS.unknown
+  const to = String(process.env.ALERT_EMAIL || 'brenton@technomed.com.au').trim()
+
+  const action = (fault === 'billing' || fault === 'auth')
+    ? 'This will keep failing for everyone until it is fixed. '
+      + 'Check console.anthropic.com → Billing, and ANTHROPIC_API_KEY in Vercel.'
+    : 'This may clear on its own. If it does not, check status.anthropic.com.'
+
+  const line = `${what} is not working — ${why}.`
+
+  return send({
+    to: [to],
+    kind: 'notification',
+    subject: `Portal: ${what.toLowerCase()} is down`,
+    html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#b42318;padding:22px 28px;">
+  <div style="font-size:11px;color:rgba(255,255,255,0.6);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Portal alert</div>
+  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(line)}</div>
+  </td></tr>
+  <tr><td style="padding:22px 28px;font-size:14px;color:#042746;line-height:1.6;">
+  ${escapeHtml(action)}
+  <div style="margin-top:14px;font-size:12px;color:#6b7a8d;">Staff are being shown a message asking them to do it by hand instead, so nothing is lost — but the feature is off until this is sorted.</div>
+  ${detail ? `<div style="margin-top:14px;padding:10px 12px;background:#f6f8fa;border-radius:8px;font-family:ui-monospace,monospace;font-size:11.5px;color:#4b5b68;word-break:break-word;">${escapeHtml(String(detail).slice(0, 300))}</div>` : ''}
+  <div style="margin-top:14px;font-size:12px;color:#aab0bb;">One of these is sent per feature per day, however many times it fails.</div>
+  </td></tr>
+  <tr><td style="padding:0 28px 22px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Portal · technomed.com.au</td></tr>
+  </table></td></tr></table>
+  </body></html>`,
+    text: `${line}\n\n${action}\n\n${detail ? String(detail).slice(0, 300) + '\n\n' : ''}`
+      + 'Staff are being asked to do it by hand instead. One alert per feature per day.'
+  })
+}

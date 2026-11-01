@@ -176,3 +176,59 @@ describe('what came back', () => {
       expect(screen.getByText(/Nothing could be heard/)).toBeInTheDocument())
   })
 })
+
+// ─── Task 2: when the API will not answer ────────────────────────────────────
+// Ben got a raw 400 invalid_request_error on this screen, reading "Your credit
+// balance is too low to access the Anthropic API". The API's own JSON on a
+// phone reads as the app being broken rather than a bill being unpaid.
+describe('when Claude is unavailable', () => {
+  const failWith = message => {
+    global.fetch = vi.fn(async () => ({
+      ok: false, status: 400, json: async () => ({ error: message })
+    }))
+  }
+
+  // What the server sends now: the sentence, never the cause.
+  const FRIENDLY = 'Voice booking is unavailable right now — please fill in the form below.'
+
+  it('shows the sentence, not the API’s JSON', async () => {
+    failWith(FRIENDLY)
+    show()
+    await speak()
+    await waitFor(() =>
+      expect(screen.getByText(/Voice booking is unavailable right now/)).toBeInTheDocument())
+  })
+
+  it('tells the person what to do instead', async () => {
+    // The manual form is right underneath. That is what makes this a workable
+    // answer rather than a dead end.
+    failWith(FRIENDLY)
+    show()
+    await speak()
+    await waitFor(() =>
+      expect(screen.getByText(/fill in the form below/)).toBeInTheDocument())
+  })
+
+  it('leaves the way out, so the form can be used', async () => {
+    const onClose = vi.fn()
+    failWith(FRIENDLY)
+    show({ onClose })
+    await speak()
+    await waitFor(() =>
+      expect(screen.getByText(/Voice booking is unavailable/)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Close|Cancel/i }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('never puts a status code or a request id on screen', async () => {
+    // The guard against this regressing: the screen shows whatever the server
+    // sends, so the discipline has to hold on the server. If it ever sends the
+    // raw thing again, this is what notices.
+    failWith(FRIENDLY)
+    show()
+    await speak()
+    await waitFor(() =>
+      expect(screen.getByText(/Voice booking is unavailable/)).toBeInTheDocument())
+    expect(document.body.textContent).not.toMatch(/invalid_request_error|request_id|\b400\b/)
+  })
+})

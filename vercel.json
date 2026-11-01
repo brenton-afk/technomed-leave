@@ -11,13 +11,14 @@
   ],
   "functions": {
     "api/meetings/agent.js": {
-      "includeFiles": "node_modules/@vercel/blob/**"
+      "includeFiles": "node_modules/@vercel/blob/**",
+      "maxDuration": 120
     },
     "api/chat.js": {
       "includeFiles": "node_modules/@vercel/blob/**"
     },
     "api/calendar/today.js": {
-      "maxDuration": 60,
+      "maxDuration": 120,
       "memory": 1024
     },
     "api/usage/agent.js": {

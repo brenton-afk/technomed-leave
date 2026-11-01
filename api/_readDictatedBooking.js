@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { askClaude } from './_anthropic.js'
 import { stripIdentifiers, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
 import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { SURGEON_COLOUR_NAMES } from '../src/clinicalPlan/colours.js'
@@ -155,7 +155,6 @@ Put in "unclear" a short plain-English note about anything you could not make ou
  * @returns {Promise<{transcript: string, fields: object, unclear: string}>}
  */
 export async function readDictatedBooking({ audio, contentType } = {}) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('Dictation needs ANTHROPIC_API_KEY')
   if (!audio) throw new Error('No recording was received')
 
   const transcript = await transcribe(audio, contentType)
@@ -164,12 +163,18 @@ export async function readDictatedBooking({ audio, contentType } = {}) {
   }
 
   const today = toDateStr(zonedCivil(new Date(), TZ))
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const reply = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1500,
-    thinking: { type: 'adaptive' },
-    messages: [{ role: 'user', content: promptFor(transcript, today) }]
+  const reply = await askClaude({
+    feature: 'voice-booking',
+    // The manual form is right there underneath, which is what makes this a
+    // workable answer rather than a dead end.
+    whenUnavailable: 'Voice booking is unavailable right now — please fill in '
+      + 'the form below.',
+    request: {
+      model: MODEL,
+      max_tokens: 1500,
+      thinking: { type: 'adaptive' },
+      messages: [{ role: 'user', content: promptFor(transcript, today) }]
+    }
   })
 
   const text = reply.content.filter(b => b.type === 'text').map(b => b.text).join('')
