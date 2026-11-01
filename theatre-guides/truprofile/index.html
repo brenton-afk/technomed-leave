@@ -1,5 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style><!-- Google Fonts link removed when this guide was installed. A theatre guide is read on a phone in a building with no signal, and a webfont that cannot load is a page that reflows while somebody is reading it. The font-family stacks below fall back to the system face, which is what they were going to do in theatre anyway. Nothing else was changed. See api/guides.test.js. -->
-</head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
 <meta name="theme-color" content="#0F2540"/>
 <title>TruProfile ACS</title>
+<!-- Google Fonts link removed when this guide was installed. A theatre guide is read on a phone in a building with no signal, and a webfont that cannot load is a page that reflows while somebody is reading it. The font-family stacks below fall back to the system face, which is what they were going to do in theatre anyway. Nothing else was changed. See api/guides.test.js. -->
 <style>
 :root{
   --navy:#122A4A; --navy2:#0B1D34; --orange:#DD6B20; --orange2:#B9560F; --orange-tint:#FCEEE1;
@@ -215,7 +215,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .foot .fwm{font-size:13px;font-weight:800;color:var(--navy);letter-spacing:.02em;margin-bottom:9px}
 .foot p{margin:0 0 5px;font-size:9.5px;color:var(--g4);line-height:1.5;font-weight:500}
 .foot p.dis{color:var(--g5);font-weight:600}
-</style>
+</style><style>.tmx-card{background:var(--card,#fff);border-radius:16px;box-shadow:0 1px 2px rgba(20,22,28,.06),0 6px 18px rgba(20,22,28,.06);padding:14px;margin:0 0 12px;border-left:4px solid var(--tmx-c)}.tmx-card.gen{background:#FBFBFA;border-left-style:dashed}.tmx-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}.tmx-av{width:34px;height:34px;border-radius:50%;background:var(--tmx-c);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 34px}.tmx-card.gen .tmx-av{background:#fff;color:var(--tmx-c);border:1.5px solid var(--tmx-c)}.tmx-h b{display:block;font-size:14px;font-weight:800;color:#16202E}.tmx-h span{display:block;font-size:10.5px;color:#6C707A;font-weight:600}.tmx-list{margin:0;padding:0;list-style:none}.tmx-list li{display:flex;gap:9px;padding:7px 0;border-top:1px solid #ECEEF1;font-size:12px;color:#494D55;line-height:1.5}.tmx-list li:first-child{border-top:none}.tmx-list .k{flex:0 0 88px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:#9A9EA8;padding-top:2px}.tmx-list b,.tmx-plain b{color:#16202E;font-weight:700}.tmx-head{font-size:11px;color:#6C707A;font-weight:600;margin:6px 2px 12px;line-height:1.5}.tmx-plain{margin:0;padding-left:18px;font-size:12px;color:#494D55;line-height:1.5}.tmx-plain li{padding:4px 0}.tmx-alert{margin-top:10px;background:#FBEDEE;border:1px solid #F1CDD0;border-radius:11px;padding:9px 11px;font-size:11px;color:#7A1720;font-weight:600}.tmx-alert b{display:block;font-size:9.5px;color:#9A1822;margin-bottom:3px}.tmx-sub{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6C707A;margin:16px 2px 10px}</style>
 </head>
 <body>
 <div class="app">
@@ -473,43 +473,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 
   <!-- ============ PREFERENCES ============ -->
   <section class="panel" id="prefs">
-    <div class="notice" style="margin-top:6px">
-      <div class="ic">i</div>
-      <p>Individual surgeon preferences for <b>TruProfile™</b> theatre set-up. Confirm against the day's list &mdash; preferences vary by case.</p>
-    </div>
-
-    <div class="surg">
-      <div class="surg-h"><span class="name">Thani</span><span class="tool drill">Mini Drill</span></div>
-      <ul>
-        <li><b>18&times;15mm</b> cage (black trial)</li>
-        <li><b>16mm</b> screws (magenta)</li>
-        <li><b>2-hole or 4-hole</b> plate &mdash; will specify</li>
-        <li><b>10° trials</b> and 10° plate (hyper-lordotic)</li>
-        <li>Mini drill for pilot holes and screws</li>
-      </ul>
-      <div class="alertbox"><b>Tell Thani before surgery if</b><span>very shallow disc space, or screws not 16mm.</span></div>
-    </div>
-
-    <div class="surg">
-      <div class="surg-h"><span class="name">Ibbett</span><span class="tool hand">No Mini Drill</span></div>
-      <ul>
-        <li><b>No mini drill</b></li>
-        <li>Charged battery + spare on the shelf</li>
-        <li>Straight variable guide on drill; angled variable guide on hand instruments</li>
-        <li>Cage, plate and screw sizes confirmed on the day</li>
-      </ul>
-    </div>
-
-    <div class="surg" style="margin-bottom:6px">
-      <div class="surg-h"><span class="name">Gupta</span><span class="tool hand">Hand Tools</span></div>
-      <ul>
-        <li>Hand instruments only &mdash; no power</li>
-        <li><b>18&times;15 &ndash; 20&times;15mm</b> cages</li>
-        <li><b>3-hole</b> plate; multi-level as needed</li>
-        <li><b>10° trials</b> and 10° plate (hyper-lordotic)</li>
-        <li>Big screws &mdash; <b>18mm bronze</b> (20mm purple to order)</li>
-      </ul>
-    </div>
+    <div class="tmx-head">Synced with the Surgeon Preferences app. Confirm against the day's list &mdash; preferences vary by case.</div><div class="tmx-card" style="--tmx-c:#DD6B20"><div class="tmx-h"><div class="tmx-av">T</div><div><b>Thani</b><span>Shoreline &middot; TruProfile</span></div></div><ul class="tmx-plain"><li><b>18&times;15mm</b> cage (black trial)</li><li><b>2-hole or 4-hole</b> plate &mdash; will specify</li><li><b>10&deg;</b> trials and 10&deg; plate (hyper-lordotic)</li><li><b>16mm</b> screws (magenta)</li><li>Mini drill for pilot holes and screws</li></ul><div class="tmx-alert"><b>Tell Thani before surgery if</b>very shallow disc space, or screws not 16mm.</div></div><div class="tmx-card" style="--tmx-c:#DD6B20"><div class="tmx-h"><div class="tmx-av">I</div><div><b>Ibbett</b><span>Shoreline &middot; TruProfile</span></div></div><ul class="tmx-plain"><li>Cage, plate and screw sizes <b>confirmed on the day</b></li><li><b>No mini drill</b></li><li>Charged battery + spare on the shelf</li><li>Straight variable guide on drill; angled variable guide on hand instruments</li></ul></div><div class="tmx-card" style="--tmx-c:#DD6B20"><div class="tmx-h"><div class="tmx-av">G</div><div><b>Gupta</b><span>Shoreline &middot; TruProfile</span></div></div><ul class="tmx-plain"><li><b>18&times;15 &ndash; 20&times;15mm</b> cages</li><li><b>3-hole</b> plate rarely &mdash; only at surgeon's request</li><li><b>10&deg;</b> trials and 10&deg; plate (hyper-lordotic)</li><li><b>18mm bronze</b> screws (20mm purple to order)</li><li>Hand instruments only &mdash; no power</li></ul></div>
   </section>
 
   <footer class="foot">

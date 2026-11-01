@@ -1,6 +1,6 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style><!-- Google Fonts link removed when this guide was installed. A theatre guide is read on a phone in a building with no signal, and a webfont that cannot load is a page that reflows while somebody is reading it. The font-family stacks below fall back to the system face, which is what they were going to do in theatre anyway. Nothing else was changed. See api/guides.test.js. -->
-</head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>MARINER® MIS · Theatre Guide</title>
+<!-- Google Fonts link removed when this guide was installed. A theatre guide is read on a phone in a building with no signal, and a webfont that cannot load is a page that reflows while somebody is reading it. The font-family stacks below fall back to the system face, which is what they were going to do in theatre anyway. Nothing else was changed. See api/guides.test.js. -->
 <style>
 :root{
   --navy:#132029; --navy-2:#0C161C; --orange:#E2541F; --orange-2:#C0430F; --orange-tint:#FDECE4;
@@ -165,7 +165,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 .foot .rule{height:1px;background:var(--g3);margin:6px 0 14px}
 .foot p{margin:0 0 5px;font-size:9.5px;color:var(--g4);line-height:1.55;font-weight:500}
 .foot p.dis{color:var(--g5);font-weight:600}
-</style>
+</style><style>.tmx-card{background:var(--card,#fff);border-radius:16px;box-shadow:0 1px 2px rgba(20,22,28,.06),0 6px 18px rgba(20,22,28,.06);padding:14px;margin:0 0 12px;border-left:4px solid var(--tmx-c)}.tmx-card.gen{background:#FBFBFA;border-left-style:dashed}.tmx-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}.tmx-av{width:34px;height:34px;border-radius:50%;background:var(--tmx-c);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 34px}.tmx-card.gen .tmx-av{background:#fff;color:var(--tmx-c);border:1.5px solid var(--tmx-c)}.tmx-h b{display:block;font-size:14px;font-weight:800;color:#16202E}.tmx-h span{display:block;font-size:10.5px;color:#6C707A;font-weight:600}.tmx-list{margin:0;padding:0;list-style:none}.tmx-list li{display:flex;gap:9px;padding:7px 0;border-top:1px solid #ECEEF1;font-size:12px;color:#494D55;line-height:1.5}.tmx-list li:first-child{border-top:none}.tmx-list .k{flex:0 0 88px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:#9A9EA8;padding-top:2px}.tmx-list b,.tmx-plain b{color:#16202E;font-weight:700}.tmx-head{font-size:11px;color:#6C707A;font-weight:600;margin:6px 2px 12px;line-height:1.5}.tmx-plain{margin:0;padding-left:18px;font-size:12px;color:#494D55;line-height:1.5}.tmx-plain li{padding:4px 0}.tmx-alert{margin-top:10px;background:#FBEDEE;border:1px solid #F1CDD0;border-radius:11px;padding:9px 11px;font-size:11px;color:#7A1720;font-weight:600}.tmx-alert b{display:block;font-size:9.5px;color:#9A1822;margin-bottom:3px}.tmx-sub{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6C707A;margin:16px 2px 10px}</style>
 
 <div class="app">
   <input class="tabradio" type="radio" name="tab" id="t-implants" checked>
@@ -415,61 +415,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   <!-- PREFS -->
   <section class="panel" id="prefs">
     <div class="section-h" style="margin-top:2px"><span class="dot"></span><h3>Surgeon Preferences</h3><span class="sub">navigated-instrument choices</span></div>
-
-    <div class="surg-card">
-      <div class="surg-hd"><b>Gupta</b><span class="tag2">Navigated k-wire<br>workflow</span></div>
-      <ul>
-        <li>Pointer &rarr; drill guide (RHH: long nut + trocar) &rarr; k-wire</li>
-        <li>Fascia splitter, over the k-wire</li>
-        <li><b>Navigated tap</b>, over the k-wire</li>
-        <li><b>Navigated screwdriver</b> with <b>towers</b> for MIS, over the wire</li>
-        <li>K-wire out</li>
-        <li><b>S2AI:</b> Navigated TM probe (Calvary)</li>
-      </ul>
-    </div>
-
-    <div class="surg-card">
-      <div class="surg-hd"><b>Thani</b><span class="tag2">Navigated TM probe +<br>power screwdriver</span></div>
-      <ul>
-        <li><b>TM probe:</b> navigated TM probe</li>
-        <li><b>Screwdriver:</b> power screwdriver, in place of hand T-handle</li>
-        <li><b>S2AI:</b> Navigated TM probe (Calvary)</li>
-      </ul>
-    </div>
-
-    <div class="surg-card">
-      <div class="surg-hd"><b>JPW</b><span class="tag2">Navigated drill guide +<br>navigated tap + driver</span></div>
-      <ul>
-        <li><b>Drill guide:</b> navigated drill guide onto planned pedicle trajectory</li>
-        <li><b>Tap: navigated tap, 5.5mm</b></li>
-        <li><b>Screwdriver:</b> navigated screwdriver</li>
-      </ul>
-    </div>
-
-    <div class="surg-card">
-      <div class="surg-hd"><b>Atallah / Registrars</b><span class="tag2">Navigated<br>drill guide</span></div>
-      <ul>
-        <li><b>Drill guide:</b> navigated drill guide</li>
-        <li><b>Drill guide (RHH):</b> long nut + trocar for MIS</li>
-        <li><b>Probe:</b> long navigated pedicle probe, calibrated</li>
-      </ul>
-    </div>
-
-    <div class="surg-card">
-      <div class="surg-hd"><b>Ibbett</b><span class="tag2">Bicortical S1/S2 +<br>power screws</span></div>
-      <ul>
-        <li><b>Screws:</b> bicortical at S1 and S2</li>
-        <li><b>Insertion:</b> power screw insertion</li>
-        <li><b>S2AI:</b> Navigated TM probe (Calvary)</li>
-      </ul>
-    </div>
-
-    <div class="add-surgeon">
-      <div class="plus">+</div>
-      Add a surgeon<br>Add preference details here for another card.
-    </div>
-
-    <div class="pref-note">Preferences on file for Mariner MIS — instrument choices for the Brainlab/AIRO navigated technique used routinely for these cases, described on the Technique tab.</div>
+    <div class="tmx-head">Synced with the Surgeon Preferences app. Confirm against the day's list &mdash; preferences vary by case.</div><div class="tmx-card" style="--tmx-c:#E2541F"><div class="tmx-h"><div class="tmx-av">T</div><div><b>Thani</b><span>Mariner MIS</span></div></div><ul class="tmx-plain"><li><b>Navigated TM probe</b></li><li><b>Power screwdriver</b>, in place of hand T-handle</li><li><b>S2AI:</b> Navigated TM probe (Calvary)</li></ul></div><div class="tmx-card" style="--tmx-c:#E2541F"><div class="tmx-h"><div class="tmx-av">I</div><div><b>Ibbett</b><span>Mariner MIS</span></div></div><ul class="tmx-plain"><li><b>Bicortical</b> screws at S1 and S2</li><li><b>Power</b> screw insertion</li><li><b>S2AI:</b> Navigated TM probe (Calvary)</li><li>MIS: pointer &rarr; <b>fascia splitter</b> first to make the cut</li><li><b>Extended tab tulips</b></li><li>Keeps the <b>rod measurer</b> in &mdash; makes it easier to get the MIS rod through</li></ul></div><div class="tmx-card" style="--tmx-c:#E2541F"><div class="tmx-h"><div class="tmx-av">G</div><div><b>Gupta</b><span>Mariner MIS</span></div></div><ul class="tmx-plain"><li>Pointer &rarr; drill guide (RHH: long nut + trocar) &rarr; k-wire</li><li>Fascia splitter, over the k-wire</li><li><b>Navigated tap</b>, over the k-wire</li><li><b>Navigated screwdriver</b> with <b>towers</b> for MIS, over the wire</li><li>K-wire out</li><li><b>S2AI:</b> Navigated TM probe (Calvary)</li></ul></div><div class="tmx-card" style="--tmx-c:#E2541F"><div class="tmx-h"><div class="tmx-av">J</div><div><b>JPW</b><span>Mariner MIS</span></div></div><ul class="tmx-plain"><li><b>Navigated drill guide</b> onto planned pedicle trajectory</li><li><b>5.5mm navigated tap</b></li><li><b>Navigated screwdriver</b></li></ul></div><div class="tmx-card" style="--tmx-c:#E2541F"><div class="tmx-h"><div class="tmx-av">A</div><div><b>Atallah / Regs</b><span>Mariner MIS</span></div></div><ul class="tmx-plain"><li><b>Navigated drill guide</b></li><li>RHH: long nut + trocar for MIS</li><li><b>Long navigated pedicle probe</b>, calibrated</li></ul></div>
   </section>
 
   <!-- FOOTER -->
