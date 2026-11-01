@@ -12,7 +12,7 @@ import {
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import {
-  getXeroToken, findEmployee, leaveBalances, listEmployees
+  getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees
 } from '../_xeroClient.js'
 import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
@@ -403,24 +403,29 @@ async function handleBalances(req, res, session) {
     return res.status(200).json({ connected: false, people: [] })
   }
 
-  const people = await Promise.all(who.map(async person => {
+  // One employee list for everybody and one person at a time — Xero allows
+  // five calls at once, and the whole team in parallel was well over that.
+  let employees = null
+  try { employees = await listEmployees(token, tenantId) } catch { /* each falls back to its own lookup */ }
+  const people = []
+  for (const person of who) {
     try {
-      const employee = await findStaffInXero(token, tenantId, person)
+      const employee = await findStaffInXero(token, tenantId, person, employees)
       const balances = await leaveBalances(token, tenantId, employee.EmployeeID)
       // TOIL from every record and every TOIL line, the same figure the
       // timesheet and leave screens show — see toilInXero.
-      const toil = await toilInXero(token, tenantId, person).catch(() => null)
+      const toil = await toilInXero(token, tenantId, person, employees).catch(() => null)
       if (balances && toil && toil.hours !== null) {
         balances.toil = { ...(balances.toil || { kind: 'toil', units: 'Hours' }),
           name: toil.parts.length === 1 ? toil.parts[0].name : 'TOIL',
           hours: toil.hours, parts: toil.parts }
       }
-      return { name: person.name, email: person.email, matched: true, balances }
+      people.push({ name: person.name, email: person.email, matched: true, balances })
     } catch {
       // One person's lookup failing must not take the other eight with it.
-      return { name: person.name, email: person.email, matched: false, balances: null }
+      people.push({ name: person.name, email: person.email, matched: false, balances: null })
     }
-  }))
+  }
 
   return res.status(200).json({ connected: true, people })
 }
@@ -436,7 +441,21 @@ async function handleToil(req, res, session) {
     getAllApplications().catch(() => ({ approved: [], pending: [] }))
   ])
 
-  const people = await Promise.all(who.map(async person => {
+  // Xero once for the whole team — the token and the employee list — then one
+  // person at a time. Asking about seven people at once was ~25 calls in
+  // parallel against Xero's limit of five, and each one refused came back as
+  // an error on that person's card.
+  let xero = null
+  let xeroDown = ''
+  try {
+    const { token, tenantId } = await getXeroToken()
+    xero = { token, tenantId, employees: await listEmployees(token, tenantId) }
+  } catch (err) {
+    xeroDown = err.message || 'Xero could not be read'
+  }
+
+  const people = []
+  for (const person of who) people.push(await (async () => {
     const opening = await getToilOpening(person.email).catch(() => null)
     const ours = toilBalanceFor({ timesheets, leave, email: person.email, opening })
     const ledger = toilLedgerFor({ timesheets, leave, email: person.email, opening })
@@ -447,14 +466,18 @@ async function handleToil(req, res, session) {
     let inXero = null
     let xeroParts = []
     let xeroError = ''
-    try {
-      const { token, tenantId } = await getXeroToken()
-      const found = await toilInXero(token, tenantId, person)
-      inXero = found.hours
-      xeroParts = found.parts
-      xeroError = found.error
-    } catch (err) {
-      xeroError = err.message || 'Xero could not be read'
+    let xeroNote = ''
+    if (xero) {
+      try {
+        const found = await toilInXero(xero.token, xero.tenantId, person, xero.employees)
+        inXero = found.hours
+        xeroParts = found.parts
+        // Not having TOIL set up in Xero is a fact about the person, not a
+        // fault — most of the team never accrue any. Said quietly.
+        if (found.hours === null) xeroNote = found.error
+      } catch (err) {
+        xeroError = plainXeroError(err, person)
+      }
     }
     return {
       name: person.name,
@@ -463,6 +486,7 @@ async function handleToil(req, res, session) {
       xero: inXero,
       xeroParts,
       xeroError,
+      xeroNote,
       // What staff see as "in the bank": Xero's, where Xero answered, plus
       // nothing the app has not yet sent there. The app's own sum is the
       // check, shown to admins beside it.
@@ -472,9 +496,27 @@ async function handleToil(req, res, session) {
       ledger,
       openingNote: opening?.note || ''
     }
-  }))
+  })())
 
-  return res.status(200).json({ ok: true, people: everyone ? people : undefined, me: people[0] })
+  return res.status(200).json({
+    ok: true, people: everyone ? people : undefined, me: people[0],
+    // Said once, at the top, when Xero itself could not be reached — not as
+    // the same error on every card.
+    xeroError: xeroDown ? plainXeroError(new Error(xeroDown)) : ''
+  })
+}
+
+/** A Xero failure as a sentence an admin can act on, not Xero's raw words. */
+function plainXeroError(err, person = null) {
+  const text = String(err?.message || err || '')
+  if (/not found in Xero/i.test(text)) {
+    return `${person?.name || 'This person'} is not in Xero under that name — check the employee's name in Xero payroll.`
+  }
+  if (/429|rate limit|too many/i.test(text)) return 'Xero was busy — refresh the page in a minute.'
+  if (/401|403|token|unauthori[sz]ed|forbidden|connect/i.test(text)) {
+    return 'Xero needs reconnecting — Admin → Xero → Connect.'
+  }
+  return `Xero could not be read (${text.slice(0, 120)})`
 }
 
 /**
@@ -483,12 +525,14 @@ async function handleToil(req, res, session) {
  * Mat is "Mat Usher" on the roster and may be "Matthew Usher" in Xero; the
  * roster's `aka` already lists that, so it is tried before giving up.
  */
-async function findStaffInXero(token, tenantId, person) {
+async function findStaffInXero(token, tenantId, person, employees = null) {
   const names = [person.name, ...(person.aka || []).filter(n => /\s/.test(n))]
   let lastError = null
   for (const name of names) {
     try {
-      const found = await findEmployee(token, tenantId, name)
+      const found = employees
+        ? matchEmployee(employees, name)
+        : await findEmployee(token, tenantId, name)
       if (found) return found
     } catch (err) {
       lastError = err
@@ -507,12 +551,12 @@ async function findStaffInXero(token, tenantId, person) {
  *
  * @returns {{hours: number|null, parts: Array<{name, hours}>, error: string}}
  */
-export async function toilInXero(token, tenantId, person) {
-  const primary = await findStaffInXero(token, tenantId, person)
+export async function toilInXero(token, tenantId, person, employees = null) {
+  const primary = await findStaffInXero(token, tenantId, person, employees)
   const fullName = e => `${e.FirstName || ''} ${e.LastName || ''}`.trim().toLowerCase()
   let records = [primary]
   try {
-    const everyone = await listEmployees(token, tenantId)
+    const everyone = employees || await listEmployees(token, tenantId)
     records = [primary, ...everyone.filter(e =>
       e.EmployeeID !== primary.EmployeeID && fullName(e) === fullName(primary))]
   } catch {

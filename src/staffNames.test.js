@@ -96,7 +96,7 @@ describe('Xero still finds him', () => {
     // discovering at payroll.
     const source = readFileSync(
       join(__dirname, '..', 'api', '_xeroClient.js'), 'utf8')
-    expect(source).toMatch(/e\.LastName\.toLowerCase\(\) === lastName/)
+    expect(source).toMatch(/String\(e\.LastName \|\| .{2}\)\.toLowerCase\(\) === lastName/)
     expect(mat.name.split(' ').pop()).toBe('Usher')
   })
 })

@@ -195,3 +195,36 @@ describe('TOIL across roles', () => {
     expect(got.error).toMatch(/no TOIL balance.*Annual Leave/)
   })
 })
+
+describe('the whole team at once', () => {
+  beforeEach(() => vi.resetModules())
+  afterEach(() => vi.restoreAllMocks())
+
+  it('waits out Xero being busy instead of reporting an error', async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    global.fetch = vi.fn(async () => {
+      calls += 1
+      if (calls === 1) return { ok: false, status: 429, headers: { get: () => '1' }, text: async () => '' }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ Employees: [{ EmployeeID: 'e1', FirstName: 'Test', LastName: 'Person' }] }) }
+    })
+    const { listEmployees } = await import('./_xeroClient.js')
+    const pending = listEmployees('tok', 'tenant')
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(await pending).toHaveLength(1)
+    expect(calls).toBe(2)
+    vi.useRealTimers()
+  })
+
+  it('reads the employee list once, not once per person', async () => {
+    const list = [{ EmployeeID: 'a', FirstName: 'Test', LastName: 'Person' }]
+    global.fetch = vi.fn(async url => {
+      if (/\/Employees\/a/.test(String(url))) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ Employees: [{ EmployeeID: 'a', LeaveBalances: [{ LeaveName: 'TOIL', NumberOfUnits: 4 }] }] }) }
+      }
+      throw new Error('the list should not be fetched again')
+    })
+    const { toilInXero } = await import('./timesheet/agent.js')
+    expect((await toilInXero('tok', 'tenant', { name: 'Test Person' }, list)).hours).toBe(4)
+  })
+})

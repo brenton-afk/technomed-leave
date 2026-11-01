@@ -104,7 +104,17 @@ function xeroHeaders(token, tenantId) {
 }
 
 async function xeroGet(path, token, tenantId) {
-  const res = await fetch(`${XERO_API_BASE}${path}`, { headers: xeroHeaders(token, tenantId) })
+  // Xero allows five calls at once per organisation and sixty a minute, and
+  // answers anything over that with 429. A screen that asks about the whole
+  // team trips it easily, so a 429 is waited out and tried again rather than
+  // shown to somebody as an error.
+  let res
+  for (let attempt = 0; ; attempt += 1) {
+    res = await fetch(`${XERO_API_BASE}${path}`, { headers: xeroHeaders(token, tenantId) })
+    if (res.status !== 429 || attempt >= 2) break
+    const wait = Math.min(Number(res.headers?.get?.('retry-after')) || 1, 3)
+    await new Promise(resolve => setTimeout(resolve, wait * 1000))
+  }
   const { ok, data, error } = await readXero(res, `Xero ${path}`)
   if (!ok) throw new Error(error)
   return data
@@ -116,12 +126,16 @@ export async function listEmployees(token, tenantId) {
 }
 
 export async function findEmployee(token, tenantId, name) {
-  const employees = await listEmployees(token, tenantId)
+  return matchEmployee(await listEmployees(token, tenantId), name)
+}
+
+/** findEmployee against a list already fetched, so a team costs one call. */
+export function matchEmployee(employees, name) {
   const nameLower = String(name).toLowerCase().trim()
   const lastName = nameLower.split(' ').pop()
   const match = employees.find(e => {
     const full = `${e.FirstName} ${e.LastName}`.toLowerCase()
-    return full === nameLower || full.includes(nameLower) || e.LastName.toLowerCase() === lastName
+    return full === nameLower || full.includes(nameLower) || String(e.LastName || '').toLowerCase() === lastName
   })
   if (!match) {
     const available = employees.map(e => `${e.FirstName} ${e.LastName}`).join(', ')

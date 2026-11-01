@@ -16,6 +16,7 @@ export default function ToilLedger({ user }) {
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [xeroDown, setXeroDown] = useState('')
   const [open, setOpen] = useState(null)
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState({ hours: '', note: '', asAt: '' })
@@ -29,6 +30,7 @@ export default function ToilLedger({ user }) {
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Could not load TOIL')
       setPeople(data.people || [])
+      setXeroDown(data.xeroError || '')
     } catch (err) {
       setError(err.message)
     }
@@ -81,6 +83,11 @@ export default function ToilLedger({ user }) {
   return (
     <div>
       {loading && <div style={{ textAlign: 'center', padding: 40, color: '#6b7a8d' }}>Loading…</div>}
+      {xeroDown && (
+        <div role="alert" style={{ background: '#fff7e6', color: '#b45309', padding: '12px 14px', borderRadius: 10, marginBottom: 12, fontSize: 13 }}>
+          {xeroDown} Showing the portal's own figures until then.
+        </div>
+      )}
       {error && <div role="alert" style={{ background: '#fdecea', color: '#c0392b', padding: '12px 14px', borderRadius: 10, marginBottom: 12, fontSize: 13 }}>{error}</div>}
 
       {!loading && people.map(p => (
@@ -95,10 +102,13 @@ export default function ToilLedger({ user }) {
             </div>
           )}
           <div style={{ fontSize: 12.5, color: p.check?.agrees === false ? '#b45309' : '#6b7a8d', marginTop: 2 }}>
-            {p.xero != null ? `Xero ${p.xero}h · portal ${p.balance}h — ` : `Portal ${p.balance}h — `}{p.check?.note}
+            {p.xero != null ? `Xero ${p.xero}h · portal ${p.balance}h — ${p.check?.note || ''}` : `Portal ${p.balance}h`}
           </div>
           {p.xeroError && (
-            <div style={{ fontSize: 12.5, color: '#b45309', marginTop: 2 }}>Xero: {p.xeroError}</div>
+            <div style={{ fontSize: 12.5, color: '#b45309', marginTop: 2 }}>{p.xeroError}</div>
+          )}
+          {p.xeroNote && (
+            <div style={{ fontSize: 12.5, color: '#6b7a8d', marginTop: 2 }}>{p.xeroNote}</div>
           )}
           {(p.pending?.accrued > 0 || p.pending?.taken > 0) && (
             <div style={{ fontSize: 12.5, color: '#6b7a8d' }}>
