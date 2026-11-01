@@ -97,3 +97,16 @@ describe('Admin → Notices', () => {
     expect(res.payload.notices[0].to).toEqual(['newperson@signus.com.au'])
   })
 })
+
+describe('a loan set request (Task 8)', () => {
+  it('is offered for an E4 distributor loan, and remembered once sent', async () => {
+    const res = await call('create', { date: '2026-11-12',
+      fields: { patient: 'Testa', surgeon: 'Ibbett', kit: 'Dakota (Distributor Loan)', hospital: 'CLV' } })
+    const loan = res.payload.notices.find(n => /loan set request/i.test(n.name))
+    expect(loan.to).toEqual(['bookings@e4surgical.com'])
+    expect(sentMail).toEqual([])
+    await call('notify', { ids: [loan.id] })
+    expect(sentMail).toHaveLength(1)
+    expect(JSON.parse(store.get('loanreq:evt-new001:e4'))).toMatchObject({ date: '2026-11-12', hospital: 'CLV' })
+  })
+})

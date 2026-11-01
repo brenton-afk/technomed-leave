@@ -1,0 +1,66 @@
+import { describe, it, expect } from 'vitest'
+import { loanRequestsFor, describeBooking, DEFAULT_CONTACTS, DEFAULT_RULES, DEFAULT_LOAN_REQUESTS } from './_bookingNotices.js'
+
+// ─── Task 8: loan-set requests to E4 and Globus ─────────────────────────────
+// Fake patients. Nothing here sends.
+
+const settings = { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES, loanRequests: DEFAULT_LOAN_REQUESTS }
+const booking = ({ kit = 'Dakota (Distributor Loan)', hospital = 'CLV', date = '2026-11-12' } = {}) => describeBooking({
+  id: 'evt-loan01', summary: 'Testa DAKOTA - Ibbett',
+  description: `Surg - Ibbett\nPt - Testa\nProcedure - C5/6 ACDF\nKit - ${kit}\nHospital - ${hospital}`,
+  start: { dateTime: `${date}T09:00:00+11:00` }
+})
+
+describe('a new booking with an E4 distributor loan', () => {
+  it('writes a request to E4, with when the set has to arrive', () => {
+    const [req, ...rest] = loanRequestsFor({ kind: 'new', after: booking(), eventId: 'evt-loan01', settings })
+    expect(rest).toEqual([])
+    expect(req.to).toEqual(['bookings@e4surgical.com'])
+    expect(req.subject).toBe('Loan set request — Dakota — CLV 12/11/2026 — Ibbett — Pt Testa — Ref TM-LOAN01')
+    expect(req.text).toMatch(/Please send the following loan set: Dakota\./)
+    expect(req.text).toMatch(/Needed at the hospital by: 10\/11\/2026/)
+    expect(req.loan).toMatchObject({ distributor: 'e4', status: 'request' })
+  })
+
+  it('asks nothing when the set is consigned', () => {
+    expect(loanRequestsFor({ kind: 'new', after: booking({ kit: 'Dakota (Consignment)' }), eventId: 'x', settings })).toEqual([])
+  })
+
+  it('does not ask twice once a request has gone', () => {
+    const sent = { e4: { date: '2026-11-12', hospital: 'CLV', systems: ['Dakota'] } }
+    expect(loanRequestsFor({ kind: 'changed', after: booking(), eventId: 'x', settings, sent })).toEqual([])
+  })
+})
+
+describe('after a request has gone', () => {
+  const sent = { e4: { date: '2026-11-12', hospital: 'CLV', systems: ['Dakota'] } }
+  it('a move redirects it, saying old and new', () => {
+    const [req] = loanRequestsFor({ kind: 'moved', before: booking(), after: booking({ date: '2026-11-19' }), eventId: 'x', settings, sent })
+    expect(req.loan.status).toBe('update')
+    expect(req.text).toMatch(/Date: 12\/11\/2026 → 19\/11\/2026/)
+  })
+  it('a cancellation calls it off', () => {
+    const [req] = loanRequestsFor({ kind: 'cancelled', before: booking(), eventId: 'x', settings, sent })
+    expect(req.loan.status).toBe('cancel')
+    expect(req.subject).toMatch(/^Loan set no longer needed — Dakota/)
+  })
+  it('switching to consignment calls it off too', () => {
+    const [req] = loanRequestsFor({ kind: 'changed', before: booking(), after: booking({ kit: 'Dakota (Consignment)' }), eventId: 'x', settings, sent })
+    expect(req.loan.status).toBe('cancel')
+  })
+})
+
+describe('Globus, and everybody else', () => {
+  it('a Globus loan goes to Globus', () => {
+    const [req] = loanRequestsFor({ kind: 'new', after: booking({ kit: 'Nuvasive (Distributor Loan)' }), eventId: 'x', settings })
+    expect(req.contactId).toBe('globus')
+    expect(req.to).toContain('jlagoon@globusmedical.com')
+  })
+  it('a Device loan writes nothing — not one of the two asked for', () => {
+    expect(loanRequestsFor({ kind: 'new', after: booking({ kit: 'Mariner (Distributor Loan)' }), eventId: 'x', settings })).toEqual([])
+  })
+  it('a request is always shown first', () => {
+    const [req] = loanRequestsFor({ kind: 'new', after: booking(), eventId: 'x', settings })
+    expect(req.autoSend).toBe(false)
+  })
+})

@@ -85,6 +85,25 @@ export default function NoticeSettings({ user }) {
         )
       })}
 
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#042746', margin: '12px 0 8px' }}>Loan set requests</div>
+      <div style={card}>
+        <div style={{ fontSize: 12.5, color: '#6b7a8d', marginBottom: 6 }}>
+          When a booking's kit says Distributor Loan for one of these, a request is written for you to check and send.
+          A move or cancellation after that sends a follow-up.
+        </div>
+        {(settings.loanRequests || []).map((l, i) => {
+          const contact = settings.contacts.find(c => c.id === l.contactId)
+          return (
+            <label key={l.distributor} style={{ display: 'block', fontSize: 14, color: '#042746', padding: '4px 0' }}>
+              <input type="checkbox" style={{ fontSize: 16 }} checked={l.enabled}
+                onChange={e => setSettings(st => ({ ...st,
+                  loanRequests: st.loanRequests.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)) }))} />{' '}
+              {contact?.name || l.distributor}
+            </label>
+          )
+        })}
+      </div>
+
       <div style={{ fontSize: 15, fontWeight: 700, color: '#042746', margin: '12px 0 8px' }}>Contacts</div>
       {settings.contacts.map((c, i) => (
         <div key={c.id} style={card}>

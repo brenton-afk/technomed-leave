@@ -1,7 +1,8 @@
 import { redis, redisSetBody } from './_redis.js'
 import { readBooking, detectHospital } from '../src/clinicalPlan/parse.js'
 import { systemsInKit } from '../src/clinicalPlan/systems.js'
-import { inventoryFor } from '../src/clinicalPlan/inventory.js'
+import { inventoryFor, kitArrivalBy, isRush } from '../src/clinicalPlan/inventory.js'
+import { parseKitSupplies } from '../src/clinicalPlan/kitSupply.js'
 import { escapeHtml } from './_email.js'
 
 // ─── Telling suppliers about bookings (Tasks 8 and 9) ────────────────────────
@@ -42,6 +43,13 @@ export const DEFAULT_CONTACTS = [
 
 export const EVENTS = ['new', 'changed', 'moved', 'cancelled']
 
+// Task 8: loan-set requests, by distributor. Separate from the notices above:
+// a notice says a booking exists; a request asks for a tray to be sent.
+export const DEFAULT_LOAN_REQUESTS = [
+  { distributor: 'e4', contactId: 'e4', enabled: true },
+  { distributor: 'globus', contactId: 'globus', enabled: true }
+]
+
 export const DEFAULT_RULES = [
   { id: 'signus-all', contactId: 'signus', distributor: 'signus', hospital: '', events: EVENTS, autoSend: false },
   { id: 'kt-rhh', contactId: 'kt', distributor: 'kt', hospital: 'RHH', events: EVENTS, autoSend: false }
@@ -51,15 +59,15 @@ export async function getNoticeSettings() {
   try {
     const raw = await redis('get', KEY)
     const saved = raw ? JSON.parse(raw) : null
-    if (saved?.contacts && saved?.rules) return saved
+    if (saved?.contacts && saved?.rules) return { loanRequests: DEFAULT_LOAN_REQUESTS, ...saved }
   } catch { /* fall through to the first copy */ }
-  return { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES }
+  return { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES, loanRequests: DEFAULT_LOAN_REQUESTS }
 }
 
 const isEmail = v => /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[a-z]{2,}$/i.test(String(v || '').trim())
 
 /** Checks and stores edited settings. Throws a sentence on anything malformed. */
-export async function saveNoticeSettings({ contacts, rules }) {
+export async function saveNoticeSettings({ contacts, rules, loanRequests = DEFAULT_LOAN_REQUESTS }) {
   if (!Array.isArray(contacts) || !Array.isArray(rules)) throw new Error('Contacts and rules are both needed')
   const cleanContacts = contacts.map(c => {
     const to = (c.to || []).map(String).map(s => s.trim()).filter(Boolean)
@@ -79,7 +87,11 @@ export async function saveNoticeSettings({ contacts, rules }) {
       autoSend: Boolean(r.autoSend)
     }
   })
-  const settings = { contacts: cleanContacts, rules: cleanRules }
+  const cleanLoans = (loanRequests || []).map(l => {
+    if (!ids.has(l.contactId)) throw new Error('A loan request names a contact that does not exist')
+    return { distributor: String(l.distributor), contactId: String(l.contactId), enabled: Boolean(l.enabled) }
+  })
+  const settings = { contacts: cleanContacts, rules: cleanRules, loanRequests: cleanLoans }
   await redisSetBody(KEY, JSON.stringify(settings))
   return settings
 }
@@ -90,7 +102,16 @@ export function describeBooking(event) {
   const read = readBooking(event.summary || '', event.description || '',
     { knownPatient: event.extendedProperties?.private?.tmPatient }) || {}
   const kit = [read.system, read.kit].filter(Boolean).join(' ')
+  // Which distributors this booking has a distributor loan from, and of what.
+  const loans = {}
+  for (const { system, supply } of (read.supplies?.length ? read.supplies : parseKitSupplies(kit))) {
+    if (supply !== 'Distributor Loan') continue
+    const d = inventoryFor(system)?.distributor
+    if (d) (loans[d] ||= []).push(system)
+  }
   return {
+    startIso: event.start?.dateTime || null,
+    loans,
     date: String(event.start?.dateTime || event.start?.date || event.start || '').slice(0, 10),
     hospital: read.hospital || detectHospital(event.location, event.description, { caseEvent: true }) || '',
     surgeon: read.surgeon || '',
@@ -193,4 +214,91 @@ export async function takeNotice(id) {
 /** Preview for the client: who and what, without anything it could alter. */
 export function previewOf(notice, id) {
   return { id, name: notice.name, to: notice.to, cc: notice.cc, subject: notice.subject, text: notice.text }
+}
+
+
+// ─── Loan-set requests (Task 8) ──────────────────────────────────────────────
+// A booking whose kit says "Distributor Loan" for an E4 or Globus system is a
+// tray somebody has to ask for. The portal writes the request and shows it,
+// the same way as a notice; once it has gone, the booking remembers, so a
+// move or a cancellation sends a follow-up and a second save does not ask
+// twice.
+//
+//   request   first time the booking needs a loan set from them
+//   update    a request went, and the date or hospital has since changed
+//   cancel    a request went, and the case is off or no longer needs the set
+
+export async function loanStateFor(eventId, distributors) {
+  const out = {}
+  await Promise.all(distributors.map(async d => {
+    try {
+      const raw = await redis('get', `loanreq:${eventId}:${d}`)
+      if (raw) out[d] = JSON.parse(raw)
+    } catch { /* unknown is treated as not sent */ }
+  }))
+  return out
+}
+
+/** Records what a confirmed request said, or forgets it once cancelled. */
+export async function recordLoanRequest(notice) {
+  if (!notice?.loan) return
+  const key = `loanreq:${notice.eventId}:${notice.loan.distributor}`
+  if (notice.loan.status === 'cancel') await redis('del', key)
+  else await redisSetBody(key, JSON.stringify({ date: notice.loan.date, hospital: notice.loan.hospital,
+    systems: notice.loan.systems, sentAt: new Date().toISOString() }))
+}
+
+const LOAN_WORD = { request: 'Loan set request', update: 'Loan set — booking changed', cancel: 'Loan set no longer needed' }
+
+export function loanRequestsFor({ kind, before, after, eventId, settings, sent = {} }) {
+  const out = []
+  const contacts = new Map(settings.contacts.map(c => [c.id, c]))
+  const ref = `TM-${String(eventId || '').replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}`
+  for (const rule of settings.loanRequests || []) {
+    if (!rule.enabled) continue
+    const contact = contacts.get(rule.contactId)
+    if (!contact) continue
+    const d = rule.distributor
+    const had = sent[d]
+    const needs = kind !== 'cancelled' && after?.loans?.[d]?.length
+
+    let status = null
+    if (needs && !had) status = 'request'
+    else if (had && !needs) status = 'cancel'
+    else if (had && needs && (had.date !== after.date || had.hospital !== after.hospital)) status = 'update'
+    if (!status) continue
+
+    const b = status === 'cancel' ? (after || before) : after
+    const systems = status === 'cancel' ? (had?.systems || []) : after.loans[d]
+    const arrive = b?.startIso ? kitArrivalBy(b.startIso) : null
+    const rush = b?.startIso ? isRush(b.startIso) : false
+    const subject = `${LOAN_WORD[status]} — ${systems.join(' + ')} — ${b?.hospital || ''} ${shortDate(b?.date)}`
+      + ` — ${b?.surgeon || ''} — Pt ${b?.patient || 'TBC'} — Ref ${ref}`
+    const ask = status === 'request'
+      ? `Please send the following loan set${systems.length > 1 ? 's' : ''}: ${systems.join(' + ')}.`
+      : status === 'update'
+        ? `This case has changed — please redirect the loan set (${systems.join(' + ')}).`
+          + `${had.date !== b.date ? ` Date: ${shortDate(had.date)} → ${shortDate(b.date)}.` : ''}`
+          + `${had.hospital !== b.hospital ? ` Hospital: ${had.hospital} → ${b.hospital}.` : ''}`
+        : `This case ${kind === 'cancelled' ? 'has been cancelled' : 'no longer needs the loan set'} — please do not send ${systems.join(' + ')}, or recall it if it is on its way.`
+    const rows = [
+      ['Surgery', shortDate(b?.date)], ['Hospital', b?.hospital], ['Surgeon', b?.surgeon],
+      ['Procedure', b?.procedure], ['Patient', b?.patient || 'To be confirmed'],
+      ...(status !== 'cancel' && arrive ? [['Needed at the hospital by', rush
+        ? 'As soon as possible — less than 48 hours to surgery'
+        : `${shortDate(arrive.date)} ${arrive.time}`]] : [])
+    ]
+    const greeting = `Hi ${contact.name.split(/[\s(/]/)[0]} team,`
+    const text = [greeting, '', ask, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '',
+      'Please reply to confirm.', `Reference: ${ref}`, '', 'TechnoMed'].join('\n')
+    const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
+<p>${escapeHtml(greeting)}</p><p><strong>${escapeHtml(ask)}</strong></p>
+<table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
+  `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
+<p>Please reply to confirm.</p><p style="color:#6b7a8d">Reference: ${ref}</p><p>TechnoMed</p></div>`
+    out.push({ ruleId: `loan-${d}`, contactId: contact.id, name: `${contact.name} — ${LOAN_WORD[status].toLowerCase()}`,
+      to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
+      loan: { distributor: d, status, date: b?.date, hospital: b?.hospital, systems } })
+  }
+  return out
 }

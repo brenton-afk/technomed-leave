@@ -8,7 +8,7 @@ import {
 import { requireSession, requireAdmin } from '../_auth.js'
 import {
   getNoticeSettings, saveNoticeSettings, noticesFor, describeBooking,
-  holdNotice, takeNotice, previewOf
+  holdNotice, takeNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest
 } from '../_bookingNotices.js'
 import { sendBookingNotice } from '../_email.js'
 import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
@@ -1948,11 +1948,14 @@ function staffSender(session) {
 async function prepareNotices({ kind, beforeEvent, afterEvent, eventId, session }) {
   try {
     const settings = await getNoticeSettings()
-    const notices = noticesFor({
-      kind, eventId, settings,
-      before: beforeEvent ? describeBooking(beforeEvent) : null,
-      after: afterEvent ? describeBooking(afterEvent) : null
-    })
+    const before = beforeEvent ? describeBooking(beforeEvent) : null
+    const after = afterEvent ? describeBooking(afterEvent) : null
+    const sentLoans = await loanStateFor(eventId, (settings.loanRequests || []).map(l => l.distributor))
+    const notices = [
+      ...noticesFor({ kind, eventId, settings, before, after }),
+      // Task 8: a request for a loan set, a change to one, or calling it off.
+      ...loanRequestsFor({ kind, eventId, settings, before, after, sent: sentLoans })
+    ]
     const previews = []
     const sent = []
     const failed = []
@@ -1960,6 +1963,7 @@ async function prepareNotices({ kind, beforeEvent, afterEvent, eventId, session 
       if (notice.autoSend) {
         try {
           await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: eventId })
+          await recordLoanRequest(notice).catch(() => {})
           sent.push(notice.name)
         } catch (err) {
           failed.push({ name: notice.name, error: err.message })
@@ -1987,6 +1991,9 @@ async function handleNotify(req, res) {
     if (!notice) { results.push({ id, ok: false, error: 'This notice has expired or was already sent' }); continue }
     try {
       await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: notice.eventId })
+      // A loan request is remembered once it has gone, so a later move or
+      // cancellation follows it up and a second save does not ask again.
+      await recordLoanRequest(notice).catch(() => {})
       results.push({ id, ok: true, name: notice.name })
     } catch (err) {
       results.push({ id, ok: false, name: notice.name, error: err.message || 'Email not sent' })
