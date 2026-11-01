@@ -21,7 +21,30 @@
     <title>TechnoMed — Staff Portal</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- What shows while the app is arriving. Inside #root, so React replaces it
+         the moment the app draws. On a weak signal — the Calvary corridor,
+         theatre 6 — the app could take most of a minute, and this used to be a
+         blank navy screen with no sign anything was happening or what to do. -->
+    <div id="root">
+      <div id="tm-boot" style="min-height:100vh;display:flex;align-items:center;justify-content:center;
+        text-align:center;padding:24px;box-sizing:border-box;color:#fff;
+        font:16px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif">
+        <div>
+          <div style="font-weight:700;font-size:18px">TechnoMed</div>
+          <div id="tm-boot-slow" style="display:none;margin-top:12px;opacity:.9">
+            <p style="margin:0 0 16px">Still loading — the signal here may be weak.</p>
+            <button onclick="location.reload()" style="font:inherit;font-weight:700;padding:12px 28px;
+              border:0;border-radius:10px;background:#189a85;color:#fff">Try again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      setTimeout(function () {
+        var slow = document.getElementById('tm-boot-slow')
+        if (slow) slow.style.display = 'block'
+      }, 8000)
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

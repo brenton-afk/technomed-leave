@@ -7,6 +7,7 @@ import { matchCase } from '../voice/command.js'
 import {
   fetchWeekPlan, readCachedPlan, readPrefs, writePrefs, planSignature
 } from '../clinicalPlan/provider.js'
+import { useOnline } from '../online.js'
 import {
   resolveDefaultWeek, weekWindowFor, todayStr, parseDateStr, toDateStr,
   addCivilDays, civilWeekday, weekdayName, formatWeekRange, formatWeekRangeShort, formatStamp
@@ -1298,6 +1299,11 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
   const [status, setStatus] = useState('loading')
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
+  // When the plan on screen was actually fetched. Not the same as checkedAt:
+  // a check that failed and fell back to the saved plan is a check at 9:40
+  // showing data from 7:15, and the banner used to say 9:40.
+  const [dataFrom, setDataFrom] = useState(null)
+  const online = useOnline()
   const [notice, setNotice] = useState('')
   // The case whose place on the hospital's list is being recorded.
   const [placing, setPlacing] = useState(null)
@@ -1322,6 +1328,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
     try {
       const result = await fetchWeekPlan(win, { token, force: quiet })
       setCheckedAt(Date.now())
+      setDataFrom(result.fromCache && result.cachedAt ? result.cachedAt : Date.now())
       setSourceErrors(result.sourceErrors || [])
       setStale(Boolean(result.error))
       // Replaced only when something visible changed, so a poll does not rebuild
@@ -1793,10 +1800,14 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
         }}>
         {promptBanner}
         {notice && <Banner tone="danger">{notice}</Banner>}
-        {stale && (
+        {(stale || (!online && dataFrom)) && (
           <Banner tone="warning">
-            Not updating — showing the last plan that loaded
-            {checkedAt ? ` · checked ${formatStamp(new Date(checkedAt).toISOString())}` : ''}
+            {online ? 'Not updating' : 'Offline'}
+            {dataFrom
+              ? ` — showing data from ${formatStamp(new Date(dataFrom).toISOString())}`
+              : ' — showing the last plan that loaded'}
+            {checkedAt && dataFrom && checkedAt - dataFrom > 60 * 1000
+              ? ` · last tried ${formatStamp(new Date(checkedAt).toISOString())}` : ''}
           </Banner>
         )}
         {status === 'loading' && !plan && (

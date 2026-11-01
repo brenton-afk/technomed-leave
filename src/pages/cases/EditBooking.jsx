@@ -6,7 +6,9 @@ import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
 } from '../../clinicalPlan/colours.js'
 import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
-import { extractRep, isCancelled, normaliseSurgeon} from '../../clinicalPlan/parse.js'
+import {
+  extractRep, isCancelled, isSelfFunding, normaliseSurgeon, parseCaseTitle
+} from '../../clinicalPlan/parse.js'
 import { needsPriorImplants } from '../../clinicalPlan/priorImplants.js'
 import { fetchDayCases } from '../../clinicalPlan/provider.js'
 import { dayShortfall } from '../../clinicalPlan/inventory.js'
@@ -38,7 +40,11 @@ const FIELDS = [
   { key: 'patient', label: 'Patient surname', hint: 'Surname only — anything else in the booking is kept' },
   { key: 'surgeon', label: 'Surgeon' },
   { key: 'procedure', label: 'Procedure' },
-  { key: 'kit', label: 'Kit', hint: 'System and supply, as written: "Diplomat (Consignment)"' },
+  // The hint is a fixed format example, and it used to say "as written:
+  // \"Diplomat (Consignment)\"" under a booking whose kit was CYLOX — which
+  // read as another booking's data leaking in. It now only appears while the
+  // field is empty, and says plainly that it is an example.
+  { key: 'kit', label: 'Kit', emptyHint: 'System, then supply in brackets — for example "Diplomat (Consignment)"' },
   { key: 'hospital', label: 'Hospital' }
 ]
 
@@ -100,6 +106,29 @@ export function staleTitle(summary, before, after) {
     const was = String(before?.[key] || '').trim()
     const now = String(after?.[key] || '').trim()
     if (!was || !now || was === now) continue
+
+    // Already says it. "Lloyd" corrected to "Lloyd Jones" over a title that
+    // already reads "Lloyd Jones DIPLOMAT" would otherwise match "Lloyd" and
+    // write "Lloyd Jones Jones".
+    if (new RegExp(`\\b${escape(now)}\\b`, 'i').test(title)) continue
+
+    // The title's surname is spelled differently from the field — "the event
+    // title had a different spelling from the surname field" — so the old
+    // value is not in it to be found. The surname leads the title by the
+    // team's own convention, so the leading words are replaced, as many as
+    // the old value had. The title follows the fields, never the reverse.
+    if (key === 'patient' && !new RegExp(`\\b${escape(was)}\\b`, 'i').test(title)) {
+      // Only where the title plainly opens with the surname: a title that
+      // leads with CANCELLED or a self-funding marker is left for a person.
+      if (isCancelled(title, '') || isSelfFunding(title, '')) continue
+      const read = parseCaseTitle(extractRep(title).rest)
+      const lead = read?.patient ? title.trim().slice(0, read.patient.length) : ''
+      if (lead && lead.toLowerCase() === read.patient.toLowerCase()
+        && /\s/.test(title.trim().charAt(lead.length))) {
+        return { field: key, was: lead, now, proposed: now + title.trim().slice(lead.length) }
+      }
+      continue
+    }
 
     // The whole value first, then its last word. A description reads
     // "Surg - Dr Ibbett" while the title says only "Ibbett" — the live
@@ -310,6 +339,8 @@ export default function EditBooking({
   // surgeon, so sending nothing is how "automatic" is expressed.
   const [colourChosen, setColourChosen] = useState(false)
   const [status, setStatus] = useState('loading')
+  // The day Google confirmed a moved booking is now on.
+  const [movedTo, setMovedTo] = useState(null)
   const [error, setError] = useState('')
   // Two taps, deliberately. A booking removed by accident is a case nobody
   // knows about, and the calendar keeps no undo the team can reach.
@@ -421,7 +452,11 @@ export default function EditBooking({
     ? { date: civilParts(loaded.start)?.date || '', start: civilParts(loaded.start)?.time || '',
         end: civilParts(loaded.end)?.time || '' }
     : null
-  const movedTime = Boolean(originalWhen && when.date !== originalWhen.date)
+  // Only a real change of day. A booking whose loaded start cannot be read
+  // (all-day, or a shape this sheet does not expect) has no date to have
+  // moved from, and announcing "Moving this booking to…" over it is exactly
+  // the false message that was reported.
+  const movedTime = Boolean(originalWhen?.date && when.date && when.date !== originalWhen.date)
   const recoloured = colourChosen
 
   /** RHH or CLV, from any of the ways a hospital is written. */
@@ -463,35 +498,43 @@ export default function EditBooking({
     FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields?.[f.key] || ''))
     || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged)
 
-  async function save({ withTitle } = {}) {
+  async function save({ withTitle, base = loaded } = {}) {
     setStatus('saving'); setError('')
     try {
-      // Only what actually changed. A field sent unchanged is a field that can
-      // be reformatted by a round trip for no reason.
-      const patch = {}
-      for (const f of FIELDS) {
-        if ((fields[f.key] || '') !== (loaded.fields[f.key] || '')) patch[f.key] = fields[f.key] || ''
-      }
+      // The title pass sends the title and nothing else. Everything else
+      // landed in the first pass; resending it against the booking as it was
+      // *before* that pass is what made the portal's own save look like
+      // somebody else's — see the two-pass note below.
+      const body = withTitle
+        ? { eventId, etag: base.etag, fields: {}, summary: withTitle }
+        : (() => {
+          // Only what actually changed. A field sent unchanged is a field that
+          // can be reformatted by a round trip for no reason.
+          const patch = {}
+          for (const f of FIELDS) {
+            if ((fields[f.key] || '') !== (base.fields[f.key] || '')) patch[f.key] = fields[f.key] || ''
+          }
+          return {
+            eventId,
+            etag: base.etag,
+            fields: patch,
+            ...(notes !== (base.notes || '') ? { notes } : {}),
+            // Naive local times plus the zone on the server, never an offset
+            // worked out here: the phone's timezone must not move a theatre list.
+            ...(movedTime && when.date && when.start && when.end
+              ? { start: `${when.date}T${when.start}:00`, end: `${when.date}T${when.end}:00` }
+              : {}),
+            ...(colourChosen ? { colorId } : {}),
+            // Who attended lives in the title — "(Aimee/Mat)" — so recording it
+            // is a title change, written from the chosen names rather than typed.
+            ...(repsChanged ? { summary: withReps(base.summary, reps) } : {})
+          }
+        })()
 
       const res = await fetch('/api/calendar/today?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...auth },
-        body: JSON.stringify({
-          eventId,
-          etag: loaded.etag,
-          fields: patch,
-          ...(notes !== (loaded.notes || '') ? { notes } : {}),
-          // Naive local times plus the zone on the server, never an offset
-          // worked out here: the phone's timezone must not move a theatre list.
-          ...(movedTime && when.date && when.start && when.end
-            ? { start: `${when.date}T${when.start}:00`, end: `${when.date}T${when.end}:00` }
-            : {}),
-          ...(colourChosen ? { colorId } : {}),
-          // Who attended lives in the title — "(Aimee/Mat)" — so recording it is
-          // a title change, written from the chosen names rather than typed.
-          ...(repsChanged && !withTitle ? { summary: withReps(loaded.summary, reps) } : {}),
-          ...(withTitle ? { summary: withTitle } : {})
-        })
+        body: JSON.stringify(body)
       })
       const data = await res.json()
 
@@ -518,13 +561,38 @@ export default function EditBooking({
       // Saved in two passes rather than one, because the description has to
       // land first: a title rewritten from fields that failed to save would be
       // the one genuinely bad outcome here.
+      //
+      // The second pass carries the version marker the *first* pass got back.
+      // It used to read `loaded` from the render that started the save — the
+      // marker from before this sheet's own write — so Google refused it, and
+      // the sheet said "Somebody changed this booking in Google while you had
+      // it open" about a change it had made itself, and the title never saved.
       if (!withTitle) {
-        const stale = staleTitle(data.event?.summary || loaded.summary, loaded.fields, fields)
+        const stale = staleTitle(data.event?.summary || base.summary, base.fields, fields)
         if (stale) {
-          setLoaded({ ...loaded, ...data.event, fields: { ...fields }, notes })
-          await save({ withTitle: stale.proposed })
+          const next = {
+            ...base,
+            etag: data.event?.etag || base.etag,
+            summary: data.event?.summary || base.summary,
+            fields: { ...fields },
+            notes
+          }
+          setLoaded(next)
+          await save({ withTitle: stale.proposed, base: next })
           return
         }
+      }
+
+      // A move is confirmed rather than closed on. "Show the user a confirmation
+      // of the new date after the calendar update succeeds" — the server only
+      // answers once Google has the event on the new day, so this is the
+      // calendar's word, not the form's.
+      const landed = String(data.event?.start || '').slice(0, 10)
+      if (movedTime && landed) {
+        onSaved?.()
+        setMovedTo(landed)
+        setStatus('moved')
+        return
       }
 
       onSaved?.()
@@ -633,6 +701,25 @@ export default function EditBooking({
               of all eleven scroll regions in the app, and is now spelled out
               in every one of them. See the guard in sheets.test.jsx. */}
           <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
+            {status === 'moved' && movedTo && (
+              <div role="status" style={{
+                background: colour.successSoft, border: `1px solid ${colour.line}`,
+                borderRadius: radius.control, padding: space.md, marginBottom: space.md
+              }}>
+                <div style={{ ...text('bodyStrong'), color: colour.success }}>
+                  Moved to {weekdayName(movedTo)} {movedTo}
+                </div>
+                <div style={{ ...text('caption'), color: colour.ink, marginTop: 2 }}>
+                  The calendar entry itself has moved — there is one booking, on the new day.
+                </div>
+                <button onClick={onClose} style={{
+                  marginTop: space.sm, width: '100%', padding: space.sm, cursor: 'pointer',
+                  ...text('bodyStrong'), color: 'white', background: colour.accent,
+                  border: 'none', borderRadius: radius.control
+                }}>Done</button>
+              </div>
+            )}
+
             {status === 'loading' && (
               <div style={{ ...text('body'), color: colour.inkFaint, textAlign: 'center', padding: space.lg }}>
                 Loading the booking…
@@ -683,7 +770,7 @@ export default function EditBooking({
               </div>
             )}
 
-            {loaded && status !== 'loading' && !loaded.allDay && (
+            {loaded && status !== 'loading' && status !== 'moved' && !loaded.allDay && (
               <>
                 <Field label="Date" type="date" value={when.date}
                   onChange={v => setWhen(c => ({ ...c, date: v }))} />
@@ -700,11 +787,12 @@ export default function EditBooking({
               </>
             )}
 
-            {loaded && status !== 'loading' && (
+            {loaded && status !== 'loading' && status !== 'moved' && (
               <>
                 {FIELDS.map((f, i) => (
                   <React.Fragment key={f.key}>
-                    <Field label={f.label} hint={f.hint} autoFocus={i === 0}
+                    <Field label={f.label} autoFocus={i === 0}
+                      hint={f.hint || (!(fields[f.key] || '').trim() ? f.emptyHint : undefined)}
                       value={fields[f.key] || ''}
                       onChange={v => setFields(c => ({ ...c, [f.key]: v }))} />
                     {/* Under the kit field, because it writes into it. Tapping
@@ -944,6 +1032,7 @@ export default function EditBooking({
             )}
           </div>
 
+          {status !== 'moved' && (
           <div style={{
             padding: `${space.sm}px ${space.md}px calc(${space.md}px + env(safe-area-inset-bottom, 0px))`,
             borderTop: `1px solid ${colour.line}`, display: 'flex', gap: space.sm, flexShrink: 0
@@ -1008,6 +1097,7 @@ export default function EditBooking({
               </>
             )}
           </div>
+          )}
         </div>
       </div>
     </Overlay>

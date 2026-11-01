@@ -484,7 +484,8 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       // One reader for the whole booking, shared with the calendar view, so each
       // fact lands in exactly one field however the booking is written and both
       // screens say the same thing. See readBooking.
-      const read = readBooking(event.rawTitle, event.description, { colourSurgeon })
+      const read = readBooking(event.rawTitle, event.description,
+        { colourSurgeon, knownPatient: event.knownPatient })
       if (!read) continue
       allCases.push({
         id: event.id,

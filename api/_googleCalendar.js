@@ -389,7 +389,9 @@ export async function createTaskEvent({ summary, description, date, colorId }) {
   return res.json()
 }
 
-export async function createBookingEvent({ summary, description, date, colorId, location, hour = 8 }) {
+export async function createBookingEvent({
+  summary, description, date, colorId, location, hour = 8, extendedProperties
+}) {
   const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
   const calendarId = getCalendarId()
 
@@ -403,6 +405,7 @@ export async function createBookingEvent({ summary, description, date, colorId, 
   }
   if (colorId) body.colorId = String(colorId)
   if (location) body.location = location
+  if (extendedProperties) body.extendedProperties = extendedProperties
 
   const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,

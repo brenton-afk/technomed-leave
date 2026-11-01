@@ -162,7 +162,7 @@ export async function fetchDayCases(date, { token } = {}) {
   return (data.events || [])
     .filter(e => e.source !== 'leave')
     .map(e => {
-      const read = readBooking(e.summary || '', e.description || '')
+      const read = readBooking(e.summary || '', e.description || '', { knownPatient: e.knownPatient })
       if (!read?.patient) return null
       return {
         id: e.id,

@@ -52,6 +52,18 @@ Start with Task 1.
 
 ---
 
+## Progress (updated 1 Nov 2026)
+
+- Tasks 1–3: done and on `main`. Task 1's silent BCC archive copy removed.
+- Tasks 4–7: done on branch `claude/beautiful-babbage-jkavq3`, waiting on a pull request
+  (Claude needed GitHub write access to push). Open questions from them:
+  - Task 5: change notifications on a move wait for Tasks 8/9.
+  - Task 7: queueing changes made offline is not built — Brenton to decide which actions,
+    if any.
+  - Task 4: older bookings with two-word surnames are not guessed from the title (risk of
+    showing a first name); saving the corrected surname once fixes each.
+- Tasks 8, 9 and 14: details updated 1 Nov 2026 (below). Not started.
+
 ## PRIORITY 1 — Broken now
 
 ### Task 1 — Email sending (usage emails and leave emails)
@@ -375,7 +387,8 @@ Required behaviour:
      cc ben@ktmedical.com.au
    - KT allograft usage (DTBV / CBM / DBM): to allograft@ktmedical.com.au,
      cc dtbvutilization@vifm.org (spelled with a z; confirmed from VIFM's own replies)
-   Other loan-kit suppliers (Device Technologies, E4, Globus etc.): Brenton to supply.
+   Other loan-kit suppliers (Device Technologies, E4, Globus): ask Brenton before
+   adding them. Do not guess addresses.
 2. On create/change/move/cancel of a booking that has a loan kit (supply = Distributor
    Loan / TM Loan / RHH Loan as relevant) or neurophysiology booked, show the user a
    preview: "These people will be notified: ..." with the email text, and send on confirm.
@@ -400,8 +413,8 @@ Signus and KT when added to the calendar. Reschedules and cancellations must be 
 Required behaviour:
 1. Make this rule-based in settings: distributor + optional hospital filter + recipients +
    events to notify on (new, changed, moved, cancelled). Seed two rules: Signus (all
-   hospitals) and KT Medical (RHH only), using the Signus and KT Medical contacts
-   seeded in Task 8.
+   hospitals) and KT Medical (RHH only). Both rules use the same Signus and KT
+   Medical contacts seeded in Task 8 (from the contacts table, never hard-coded).
 2. Use the same preview/confirm and logging approach as Task 8. Option to set a rule to
    "send automatically without preview" once trusted.
 3. Include a reference so repeat notices about the same booking thread together.
@@ -508,10 +521,27 @@ Required behaviour:
 3. Show balances and requests in hours (with days as a secondary display).
 4. Existing requests: convert to hours using each person's pattern; flag any that can't be
    converted cleanly for manual review.
+5. Xero sync is the key part. Xero AU payroll has no per-day work pattern: if the portal
+   sends a date range, Xero spreads the weekly ordinary hours evenly over Mon-Fri (Toni:
+   16.5 / 5 = 3.3 hours a day, including her days off). So the portal must calculate the
+   hours itself from the work pattern and send them to Xero explicitly, split by Xero pay
+   period (leave periods / number of units per pay period), never leaving Xero to work
+   them out. First show me how the portal currently creates leave in Xero.
+6. No duplicates. Before creating a Xero leave request, check for an existing one for
+   that employee overlapping those dates (e.g. lodged directly in Xero). If one is found,
+   do not create another; show the user the existing one. On 27 Oct 2026 the portal
+   created a SICK request for Toni on top of her own three single-day Xero requests, and
+   it was paid twice in the draft pay run.
+7. Seed Toni Hoppitt's work pattern: Mon 5.5, Tue 0, Wed 5.5, Thu 5.5, Fri 0
+   (16.5 hrs/week). Other staff: ask Brenton.
 
 Acceptance criteria:
 - A part-time test user (3 days/week) requesting Monday to Friday leave is charged only
   for their 3 working days' hours.
+- In a Xero test/demo organisation (never the live one), a Toni-style request for
+  Tue 27 Oct to Mon 2 Nov creates one request with 11 hours in the fortnight ending
+  1 Nov and 5.5 hours in the fortnight ending 15 Nov.
+- Lodging the same dates twice does not create a second request.
 ```
 
 ### Task 15 — TOIL in hours, synced with timesheets

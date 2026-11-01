@@ -128,6 +128,16 @@ the title is often a placeholder like "Booking" — and both sides are tokenised
 the same function, because splitting them differently reported `C4/5` as unread
 while it was on screen, and a check that cries wolf gets ignored.
 
+**The patient's surname is stored on the event, not only inferred.** The
+portal writes it to `extendedProperties.private.tmPatient` on create and on any
+save that edits the surname, and `readBooking(..., { knownPatient })` uses it to
+decide how many words of the title or `Pt` line are the surname. A two-word
+surname without a particle ("Testa Rossa") cannot be told apart from a first
+name or an operation by any rule, so it was being cut to its first word. It is
+honoured only while the title or label still starts with it — a booking retyped
+in Google wins. Other fields are not duplicated there: the labelled description
+is already their structured record, and a second copy would drift from it.
+
 Anything added to a case must also go into `planSignature` in `provider.js`. The
 plan is only replaced when that string changes, so a field left out of it can
 change in Google and never reach the screen — and the rep is added to a booking
@@ -159,7 +169,25 @@ colours, which are the ones carrying real meaning.
 
 `src/pages/FileBrowser.jsx` serves both Resources and filed usage sheets from Dropbox, since they are the same problem. Paths are constrained server-side to the usage and resources roots (`assertAllowedPath` in `api/usage/agent.js`); without that, any signed-in user could read the whole Dropbox account. Temporary links are fetched per tap and never stored — a persisted one would be a public URL to patient data.
 
-Session lives in `sessionStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a one-hour age limit on restore and re-checks every minute, matching the server-side Redis TTL in `api/_auth.js` — keep the two constants in step.
+Session lives in `localStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a 30-day age limit (`SESSION_MAX_AGE_MS`) on restore and re-checks every minute, matching `SESSION_TTL_SECONDS` in `api/_auth.js` — keep the two constants in step.
+
+### Weak signal and offline
+
+`public/sw.js` now has a fetch handler, under narrow rules written at the top of
+the file: the page is **network first** (the saved copy only on failure or a 5s
+stall, so a deploy is never hidden), content-hashed `/assets/` are cache first,
+`/api/` is **never** intercepted, and `/vendor/` is left to the HTTP cache. The
+shell is saved at install, because the first visit loads before the worker is in
+control. Saved files are matched with `ignoreVary` — the server sends
+`Vary: Origin` and a module request carries an Origin the install fetch did not.
+
+Offline, the Cases tab draws from the week plan `provider.js` already keeps in
+`localStorage`, with "Offline — showing data from <time>". Screens other than
+Cases are split out (`src/lazyScreens.jsx`) and prefetched in the background once
+signed in, so they are cached before the next dead spot. `index.html` carries a
+boot message inside `#root` that offers a retry after 8s.
+
+Not built, and needing a decision first: queueing changes made offline.
 
 ### Talking to Claude
 

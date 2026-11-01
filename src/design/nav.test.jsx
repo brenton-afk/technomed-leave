@@ -64,11 +64,12 @@ describe('bottom navigation', () => {
     expect(screen.queryByText('Admin portal')).not.toBeInTheDocument()
   })
 
-  it('opens Messages from the bar', () => {
+  it('opens Messages from the bar', async () => {
     signIn(REP)
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Messages' }))
-    expect(screen.getByText('Channels')).toBeInTheDocument()
+    // Loaded when opened, so it arrives a moment later. See lazyScreens.jsx.
+    expect(await screen.findByText('Channels')).toBeInTheDocument()
   })
 
   it('never exceeds five tabs — the point of the restructure', () => {
