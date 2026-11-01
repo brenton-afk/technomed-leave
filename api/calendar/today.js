@@ -11,6 +11,7 @@ import {
   holdNotice, takeNotice, previewOf
 } from '../_bookingNotices.js'
 import { sendBookingNotice } from '../_email.js'
+import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
 import {
   taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX
 } from '../../src/clinicalPlan/tasks.js'
@@ -171,6 +172,7 @@ export default async function handler(req, res) {
   if (req.query.action === 'prior') return handlePrior(req, res)
   if (req.query.action === 'search') return handleSearch(req, res)
   if (req.query.action === 'notify') return handleNotify(req, res)
+  if (req.query.action === 'nousage') return handleNoUsage(req, res)
   if (req.query.action === 'noticesettings') return handleNoticeSettings(req, res)
 
   // Everything below this line is the bookings calendar in full: surgeons,
@@ -431,6 +433,8 @@ async function handleBooking(req, res) {
       notes: descriptionNotes(description).join('\n'),
       // Task 10: who is allocated, and whether this person may change it.
       planned: parseRepNames(labelled.planned),
+      // Marked as having no usage, which stops the 6pm reminder (Task 11).
+      noUsage: await isMarkedNoUsage(event.id),
       canAllocate: await canAllocate(session, event.start?.dateTime || event.start?.date)
     })
   } catch (err) {
@@ -2002,4 +2006,21 @@ async function handleNoticeSettings(req, res) {
   } catch (err) {
     return res.status(400).json({ error: err.message })
   }
+}
+
+
+/**
+ * "No usage for this case" (Task 11). Clears the 6pm reminder and the next
+ * morning's note to the team leader. Kept in Redis, not on the booking: it is
+ * a fact about our paperwork, not about the case.
+ */
+async function handleNoUsage(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  const eventId = String(body.eventId || '').trim()
+  if (!eventId) return res.status(400).json({ error: 'eventId is required' })
+  await markNoUsage(eventId, firstNameFor(session.email) || session.email, body.on !== false)
+  return res.status(200).json({ ok: true, noUsage: body.on !== false })
 }

@@ -629,3 +629,22 @@ export async function sendBookingNotice({ to, cc, subject, html, text, sender, c
     replyTo: [sender?.email, 'bookings@technomed.com.au'].filter(Boolean)
   })
 }
+
+/** "Usage not sent" (Task 11) — to a rep, or to the team leader the next morning. */
+export async function sendUsageReminderEmail({ to, firstName, lines, escalation = false }) {
+  const intro = escalation
+    ? `These cases from yesterday still have no usage sent:`
+    : `Hi ${firstName}, these cases of yours today have no usage sent yet:`
+  const text = [intro, '', ...lines.map(l => `• ${l}`), '',
+    'Send it from Scan in the portal, or open the booking and tap "No usage" if there was none.',
+    'https://leave.technomed.com.au'].join('\n')
+  const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
+<p>${escapeHtml(intro)}</p><ul>${lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
+<p>Send it from <strong>Scan</strong> in the portal, or open the booking and tap <strong>No usage</strong> if there was none.</p>
+<p><a href="https://leave.technomed.com.au">Open the portal</a></p></div>`
+  return send({
+    kind: 'notification', to: [to],
+    subject: escalation ? 'Usage still not sent from yesterday' : 'Usage not sent yet today',
+    html, text
+  })
+}

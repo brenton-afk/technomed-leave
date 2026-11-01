@@ -2,12 +2,63 @@ import { STAFF } from '../../src/staffConfig.js'
 import { getAllTimesheets } from '../_redis.js'
 import { currentPeriod, todayAest } from '../_fortnight.js'
 import { sendSms, toE164, twilioConfigured } from '../_twilio.js'
+import { owingFor, caseLine, leaderEmailFor } from '../_usageReminders.js'
+import { sendUsageReminderEmail } from '../_email.js'
+import { notify } from '../_push.js'
+import { TZ, zonedCivil, toDateStr, addCivilDays } from '../../src/clinicalPlan/week.js'
 
-// Vercel cron, Friday and Saturday 22:00 UTC = Saturday and Sunday 8am AEST.
-// Tasmania observes daylight saving (AEDT, UTC+11) from October to April, so
-// between those months this lands at 9am local rather than 8am. The schedule is
-// held in UTC because that is what Vercel accepts; shifting it seasonally would
-// need two crons and the Hobby plan allows two in total.
+// ─── The two daily runs ──────────────────────────────────────────────────────
+// Vercel's Hobby plan allows two scheduled jobs, so both share this function
+// and say which they are with ?job=:
+//
+//   evening  07:00 UTC — 6pm in Hobart during daylight saving (5pm in winter).
+//            "Usage not sent" reminders to each rep for today's cases (Task 11).
+//   morning  22:00 UTC — 9am Hobart in summer (8am in winter).
+//            Yesterday's still-unsent usage to the week's team leader, and on
+//            Saturday and Sunday the timesheet reminders, as before.
+//
+// Held in UTC because that is what Vercel takes; a seasonal second pair would
+// need more jobs than the plan allows.
+
+function hobartToday() {
+  return toDateStr(zonedCivil(new Date(), TZ))
+}
+
+function hobartWeekday() {
+  return new Intl.DateTimeFormat('en-AU', { timeZone: TZ, weekday: 'short' }).format(new Date())
+}
+
+async function usageEvening() {
+  const day = hobartToday()
+  const { byEmail } = await owingFor(day)
+  const sent = []
+  const failed = []
+  for (const { staff, cases } of byEmail.values()) {
+    const lines = cases.map(caseLine)
+    try {
+      await sendUsageReminderEmail({ to: staff.email, firstName: staff.firstName, lines })
+      sent.push(staff.firstName)
+    } catch (err) {
+      failed.push({ name: staff.firstName, error: err.message })
+    }
+    await notify([staff.email], {
+      title: 'Usage not sent yet', body: lines.join('; '), tag: 'usage-reminder', url: '/'
+    }).catch(() => {})
+  }
+  return { day, reminded: sent, failed }
+}
+
+async function usageMorning() {
+  const yesterday = toDateStr(addCivilDays(zonedCivil(new Date(), TZ), -1))
+  const { owing } = await owingFor(yesterday)
+  if (!owing.length) return { day: yesterday, escalated: 0 }
+  const leader = await leaderEmailFor(yesterday)
+  if (!leader) return { day: yesterday, escalated: 0, skipped: 'no team leader for that week' }
+  const lines = owing.map(c => `${caseLine(c)} — ${c.who.join(' + ')}`)
+  await sendUsageReminderEmail({ to: leader, lines, escalation: true })
+  return { day: yesterday, escalated: owing.length, to: leader }
+}
+
 export default async function handler(req, res) {
   // Vercel signs cron invocations with CRON_SECRET. This used to check the
   // signature only when the secret happened to be set, which meant a missing
@@ -19,6 +70,33 @@ export default async function handler(req, res) {
   if (!secret) return res.status(503).json({ error: 'CRON_SECRET is not configured' })
   if ((req.headers?.authorization || '') !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorised' })
+  }
+
+  const job = String(req.query?.job || '')
+
+  // Each part in its own try, so a calendar that will not answer does not stop
+  // the timesheet reminders, and the other way round.
+  if (job === 'evening') {
+    try {
+      return res.status(200).json({ ran: 'evening', usage: await usageEvening() })
+    } catch (err) {
+      console.error('usage reminder (evening) failed:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+  }
+
+  let usage = null
+  if (job === 'morning') {
+    try {
+      usage = await usageMorning()
+    } catch (err) {
+      console.error('usage reminder (morning) failed:', err.message)
+      usage = { error: err.message }
+    }
+    // Timesheet reminders only at the weekend, as when this ran Sat/Sun only.
+    if (!['Sat', 'Sun'].includes(hobartWeekday())) {
+      return res.status(200).json({ ran: 'morning', usage, timesheets: 'not a weekend' })
+    }
   }
 
   try {
@@ -35,7 +113,7 @@ export default async function handler(req, res) {
 
     if (!twilioConfigured()) {
       return res.status(200).json({
-        ran: true, period: period.start,
+        ran: true, usage, period: period.start,
         skippedAll: 'Twilio is not configured',
         owing: owing.map(s => s.name)
       })
@@ -61,6 +139,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ran: true,
+      usage,
       today: todayAest(),
       period: { start: period.start, end: period.end },
       owing: owing.length,

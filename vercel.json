@@ -39,12 +39,12 @@
   },
   "crons": [
     {
-      "path": "/api/cron/timesheet-reminder",
-      "schedule": "0 22 * * 5"
+      "path": "/api/cron/timesheet-reminder?job=evening",
+      "schedule": "0 7 * * *"
     },
     {
-      "path": "/api/cron/timesheet-reminder",
-      "schedule": "0 22 * * 6"
+      "path": "/api/cron/timesheet-reminder?job=morning",
+      "schedule": "0 22 * * *"
     }
   ],
   "headers": [

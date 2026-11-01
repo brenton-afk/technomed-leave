@@ -5,7 +5,7 @@ import { colour, text, space, radius } from '../../design/tokens.js'
 import {
   GOOGLE_COLOR_NAMES, GOOGLE_COLOR_HEX, guideColorIdFor, colourNameFor
 } from '../../clinicalPlan/colours.js'
-import { zonedCivil, toDateStr, weekdayName, TZ } from '../../clinicalPlan/week.js'
+import { zonedCivil, toDateStr, weekdayName, TZ, todayStr } from '../../clinicalPlan/week.js'
 import {
   extractRep, isCancelled, isSelfFunding, normaliseSurgeon, parseCaseTitle
 } from '../../clinicalPlan/parse.js'
@@ -359,6 +359,9 @@ export default function EditBooking({
   // Who the team leader has allocated (Task 10). Several, because reps often
   // go together. Editable only by that week's team leader (or an admin).
   const [planned, setPlanned] = useState([])
+  // "No usage for this case" — stops the 6pm reminder. Saved straight away,
+  // separately from the booking, because it is not a change to the case.
+  const [noUsage, setNoUsage] = useState(false)
   // What else is booked on the day this booking is headed for. Refetched when
   // the date changes, because moving a booking onto a day whose kit is already
   // committed is the same clash as booking a second one there.
@@ -435,6 +438,7 @@ export default function EditBooking({
       setColourChosen(false)
       setReps(data.reps || [])
       setPlanned(data.planned || [])
+      setNoUsage(Boolean(data.noUsage))
       setStatus('ready')
     } catch (err) {
       setError(err.message)
@@ -1021,6 +1025,38 @@ export default function EditBooking({
                     Goes into the booking title, as the team already writes it
                   </span>
                 </div>
+
+                {/* Only once the case has happened or is happening. */}
+                {when.date && when.date <= todayStr() && (
+                  <div style={{ marginBottom: space.md }}>
+                    <button type="button" aria-pressed={noUsage}
+                      onClick={async () => {
+                        const next = !noUsage
+                        setNoUsage(next)
+                        try {
+                          const res = await fetch('/api/calendar/today?action=nousage', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+                            body: JSON.stringify({ eventId, on: next })
+                          })
+                          if (!res.ok) throw new Error()
+                        } catch {
+                          setNoUsage(!next)
+                          setError('Could not save "No usage" — try again')
+                        }
+                      }}
+                      style={{
+                        padding: `6px ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer', ...text('bodyStrong'),
+                        background: noUsage ? colour.accent : colour.surface,
+                        color: noUsage ? 'white' : colour.inkMuted,
+                        border: `1px solid ${noUsage ? colour.accent : colour.line}`
+                      }}>
+                      No usage
+                    </button>
+                    <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block', marginTop: 2 }}>
+                      Nothing was used — stops the 6pm "usage not sent" reminder
+                    </span>
+                  </div>
+                )}
 
                 {/* "No F2F" as a button rather than a phrase to remember. It
                     writes the line the team already writes by hand, which is
