@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import PinScreen from './pages/PinScreen.jsx'
 import LockScreen from './pages/LockScreen.jsx'
+import { trimCachedPlans } from './clinicalPlan/provider.js'
 import { browserSupportsWebAuthn } from '@simplewebauthn/browser'
 import Success from './pages/Success.jsx'
 import Cases from './pages/Cases.jsx'
@@ -108,6 +109,31 @@ const ADMIN_STEP_UP = false
 const STORE = 'tm_user'
 const STAMP = 'tm_login_time'
 
+/**
+ * Saves the sign-in, and makes room for it if the phone's storage is full.
+ *
+ * It used to be two bare setItem calls. When the saved weeks had filled the
+ * few MB an installed app gets, they threw, the person was let in anyway for
+ * that launch, and the next open asked for the PIN again — every time, with
+ * nothing on screen to say why. The sign-in matters more than any cached
+ * week, so those go first.
+ */
+export function saveSession(userData) {
+  const write = () => {
+    localStorage.setItem(STORE, JSON.stringify(userData))
+    localStorage.setItem(STAMP, Date.now().toString())
+  }
+  try {
+    write()
+  } catch {
+    trimCachedPlans(0)
+    try { write() } catch { /* storage blocked entirely: signed in for this launch only */ }
+  }
+  // Ask the phone to keep this app's storage rather than clear it when space
+  // is short. Granted or not, nothing else depends on the answer.
+  try { navigator.storage?.persist?.() } catch { /* not offered here */ }
+}
+
 function loadStoredSession() {
   const saved = localStorage.getItem(STORE)
   const loginTime = parseInt(localStorage.getItem(STAMP) || '0', 10)
@@ -172,6 +198,8 @@ export default function App() {
   useEffect(() => watchZoom(), [])
 
   useEffect(() => {
+    // A phone that filled up before the cap existed gets its room back here.
+    trimCachedPlans()
     const restored = loadStoredSession()
     if (!restored) { clearSession(); return }
     setUser(restored)
@@ -213,8 +241,7 @@ export default function App() {
     // Every route in — PIN, first-time setup, passkey — arrives here, so this is
     // the one place the device's person is recorded.
     rememberUser(userData.email)
-    localStorage.setItem(STORE, JSON.stringify(userData))
-    localStorage.setItem(STAMP, Date.now().toString())
+    saveSession(userData)
     setNav({ tab: 'cases', sub: null })
   }
 

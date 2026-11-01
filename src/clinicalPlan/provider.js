@@ -109,11 +109,45 @@ export function readCachedPlan(weekStart) {
   }
 }
 
-function writeCachedPlan(weekStart, plan) {
+// Weeks kept on the phone for offline. Every week anyone looked at used to
+// stay for good, and an installed web app has a few MB in all — when it filled,
+// saving the sign-in failed silently and the portal asked for a PIN on every
+// open ("the app is suddenly asking me to log in every time").
+const KEEP_WEEKS = 8
+
+function cachedWeekKeys() {
+  const keys = []
   try {
-    localStorage.setItem(cacheKey(weekStart), JSON.stringify({ plan, cachedAt: Date.now() }))
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('tm_clinical_plan:')) keys.push(key)
+    }
+  } catch { /* storage blocked */ }
+  return keys
+}
+
+/** Clears saved weeks, keeping the `keep` most recently saved. */
+export function trimCachedPlans(keep = KEEP_WEEKS, except = '') {
+  const dated = cachedWeekKeys().filter(k => k !== except).map(key => {
+    let at = 0
+    try { at = JSON.parse(localStorage.getItem(key) || '{}').cachedAt || 0 } catch { at = 0 }
+    return { key, at }
+  }).sort((a, b) => b.at - a.at)
+  for (const { key } of dated.slice(Math.max(0, keep))) {
+    try { localStorage.removeItem(key) } catch { /* nothing to do */ }
+  }
+}
+
+function writeCachedPlan(weekStart, plan) {
+  const value = JSON.stringify({ plan, cachedAt: Date.now() })
+  try {
+    localStorage.setItem(cacheKey(weekStart), value)
+    trimCachedPlans(KEEP_WEEKS)
   } catch {
-    // A full quota must never break the view.
+    // Full: keep only this week and try once more. A full quota must never
+    // break the view — and must never crowd out the sign-in.
+    trimCachedPlans(0, cacheKey(weekStart))
+    try { localStorage.setItem(cacheKey(weekStart), value) } catch { /* leave it */ }
   }
 }
 
