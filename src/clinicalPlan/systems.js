@@ -56,7 +56,10 @@ export const SYSTEMS = [
   // nothing at all — no loan verdict, no clash check, on every PLIF that named
   // its cage properly. Two naming schemes for one product, and neither side
   // knew about the other.
-  { name: 'Global BMD ALIF', test: /\b(?:e4\s*)?global\s*(?:bmd\s*)?alif\b/i },
+  // Catenary is the cage's proper name and Nova writes it on his bookings. It
+  // is the same cage as the E4 Global ALIF (Brent, 2 Nov 2026), so it is read
+  // as that system — the booking keeps the word as typed.
+  { name: 'Global BMD ALIF', test: /\b(?:(?:e4\s*)?global\s*(?:bmd\s*)?alif|catenary)\b/i },
   { name: 'Global BMD PLIF', test: /\b(?:e4\s*)?global\s*(?:bmd\s*)?plif\b/i },
   { name: 'E4 Cages', test: /\be4\b(?:\s*global)?(?:\s*cages?)?/i },
   { name: 'Lonestar', test: /\blone\s*star\b/i },
@@ -390,7 +393,7 @@ export function findNavigation(text) {
  */
 // An E4 product named outright. Nothing to resolve, and resolving anyway would
 // turn a Dakota into a PLIF cage.
-const NAMES_AN_E4_PRODUCT = /global\s*(?:bmd\s*)?(?:plif|alif)|global\s*bmd|dakota|reform/i
+const NAMES_AN_E4_PRODUCT = /global\s*(?:bmd\s*)?(?:plif|alif)|global\s*bmd|dakota|reform|catenary/i
 // Pedicle screws either side of it, or the procedure saying so outright. Thani
 // writes "E4 cages" and means the Global BMD PLIF cage; on a PLIF there is no
 // other E4 product it could be.

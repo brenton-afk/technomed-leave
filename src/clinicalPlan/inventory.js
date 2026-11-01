@@ -101,7 +101,7 @@ export const INVENTORY = [
   },
   {
     system: 'Global BMD ALIF', distributor: 'e4',
-    aka: ['Global ALIF', 'BMD ALIF'],
+    aka: ['Global ALIF', 'BMD ALIF', 'Catenary'],
     consigned: { CLV: 1 },
     note: 'Calvary only, with sterile implants.'
   },

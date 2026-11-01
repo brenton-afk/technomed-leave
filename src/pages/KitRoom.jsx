@@ -4,6 +4,7 @@ import { colour, text, space, radius, border, card } from '../design/tokens.js'
 import { IconKit, IconSearch } from '../design/icons.jsx'
 import MoveSheet from './kit/MoveSheet.jsx'
 import KitDetail from './kit/KitDetail.jsx'
+import { inventoryFor } from '../clinicalPlan/inventory.js'
 
 // ─── Kit room ────────────────────────────────────────────────────────────────
 // Where every set is, and moving one. Rebuilt 1 Nov 2026: the old page kept
@@ -24,7 +25,20 @@ export const DISTRIBUTORS = {
   device: { name: 'Device Technologies', logo: '/logos/devicetech.png' },
   kt: { name: 'KT Medical' },
   globus: { name: 'Globus / NuVasive' },
-  technomed: { name: 'TechnoMed', logo: '/logo.png' }
+  technomed: { name: 'TechnoMed', logo: '/logos/technomed.png' }
+}
+
+// A system made by somebody other than its distributor shows its maker: KT
+// distribute Firebird, but the tray says Orthofix.
+const SYSTEM_LOGOS = { 'Orthofix Firebird': '/logos/orthofix.png' }
+
+/** The distributor, from the kit or else from what the inventory says it is. */
+export function distributorOf(kit) {
+  return kit.distributor || inventoryFor(kit.system)?.distributor || ''
+}
+
+function logoFor(kit) {
+  return SYSTEM_LOGOS[kit.system] || DISTRIBUTORS[distributorOf(kit)]?.logo || null
 }
 
 const KIND = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
@@ -80,12 +94,12 @@ export default function KitRoom({ user, onBack }) {
   const unchecked = kits.filter(k => !k.checkedAt).length
 
   const shown = kits.filter(k => (place === 'all' || k.at === place)
-    && (!distributor || k.distributor === distributor)
+    && (!distributor || distributorOf(k) === distributor)
     && (!query || `${k.name} ${k.system} ${(k.trays || []).join(' ')} ${DISTRIBUTORS[k.distributor]?.name || ''}`
       .toLowerCase().includes(query.toLowerCase())))
   const away = shown.filter(k => k.away)
   const home = shown.filter(k => !k.away)
-  const presentDistributors = [...new Set(kits.map(k => k.distributor).filter(Boolean))]
+  const presentDistributors = [...new Set(kits.map(distributorOf).filter(Boolean))]
 
   return (
     <Page>
@@ -216,7 +230,8 @@ function SectionTitle({ children }) {
 }
 
 function KitCard({ kit, onOpen, onMove, onReturn, busy }) {
-  const dist = DISTRIBUTORS[kit.distributor]
+  const dist = DISTRIBUTORS[distributorOf(kit)]
+  const logo = logoFor(kit)
   const trayCount = (kit.trays || []).length
   const awayTrays = kit.away?.trays?.length
   return (
@@ -224,11 +239,13 @@ function KitCard({ kit, onOpen, onMove, onReturn, busy }) {
       <div style={{ width: 4, background: kit.away ? colour.warning : kit.checkedAt ? colour.accent : colour.line }} />
       <button onClick={onOpen} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', textAlign: 'left',
         padding: `${space.md}px`, cursor: 'pointer', display: 'flex', gap: space.md, alignItems: 'center' }}>
-        <div style={{ width: 40, height: 40, flexShrink: 0, borderRadius: radius.control, background: colour.canvas,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          {dist?.logo
-            ? <img src={dist.logo} alt="" style={{ maxWidth: 34, maxHeight: 30, objectFit: 'contain' }} />
-            : <span style={{ ...text('micro'), color: colour.inkFaint }}>{(dist?.name || kit.system).slice(0, 3).toUpperCase()}</span>}
+        {/* Wide rather than square: every one of these is a wordmark, and a
+            wordmark squeezed into a square tile is a smudge. */}
+        <div style={{ width: 64, height: 40, flexShrink: 0, borderRadius: radius.control, background: colour.canvas,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: 4, boxSizing: 'border-box' }}>
+          {logo
+            ? <img src={logo} alt={dist?.name || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            : <span style={{ ...text('micro'), color: colour.navy, textAlign: 'center' }}>{(dist?.name || kit.system).split(/[\s/]+/)[0].slice(0, 6).toUpperCase()}</span>}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ ...text('bodyStrong'), color: colour.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kit.name}</div>

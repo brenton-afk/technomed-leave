@@ -59,6 +59,7 @@ Two things the surgeons write that mean something specific:
   · "BLabs" or "Brainlab" means Brainlab navigation — keep it in kit as written,
     including any "no F2F required", which means nobody from the distributor is
     needed in theatre.
+  · "Catenary" is the E4 Global BMD ALIF cage. Keep it in kit as written.
   · "E4 cages" on a PLIF means the E4 Global BMD PLIF cage. Return that in full.
     On any other procedure, "E4" alone is ambiguous — return it as written and
     let a person decide.
