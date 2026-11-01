@@ -514,7 +514,24 @@ The second resolves every import in each route and fails on a missing named expo
 
 ## Environment
 
-Required: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RESEND_API_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`. Optional: `GOOGLE_CALENDAR_ID`, `EMAIL_FROM`, `EMAIL_TO_1..3`, `XERO_TENANT_ID` (fallback only — the OAuth callback stores the real tenant in Redis). `.env.example` is current; the `process.env` reads in `api/` remain authoritative.
+Required: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`. Optional: `GOOGLE_CALENDAR_ID`, `EMAIL_ARCHIVE`, `EMAIL_TO_1..3`, `XERO_TENANT_ID` (fallback only — the OAuth callback stores the real tenant in Redis). `.env.example` is current; the `process.env` reads in `api/` remain authoritative.
+
+### Email
+
+`technomed.com.au` must be a **verified domain in Resend**. Without it every outgoing email is refused with a 403 — which is how the portal spent weeks unable to send anything at all, with the only symptom being raw Resend JSON on a phone screen.
+
+Senders, decided in `fromAddress()` in `api/_email.js`:
+
+| Email | From | Why |
+|---|---|---|
+| Usage to a distributor | the rep's own `@technomed.com.au` address | "Distributors must be able to reply directly to a usage email, so a noreply sender is not acceptable." Reply reaches whoever was in the theatre. |
+| Everything else | `EMAIL_FROM` | Leave decisions, timesheet notices, meeting minutes — these are from the portal, not a person. |
+
+`EMAIL_FROM` is **required** and must be on the verified domain. An `@resend.dev` address is refused by the app before Resend sees it, because Resend's own error for that case ("you can only send testing emails to your own email address") reads like a broken feature rather than a setting nobody updated.
+
+There is **no fallback sender**. A rejected send fails loudly: staff see `Email not sent — please contact Brenton.` and the technical cause goes to the server log and the sent-email log. The previous silent retry — reported as success — is what let a usage go out from an address the distributor could not reply to.
+
+Every send is recorded by `api/_emailLog.js`, readable at Admin → Email. **The subject is deliberately not stored**: for a usage email it is the case folder name, which is built from the patient's surname. The case id is the link back instead.
 
 ## Conventions
 

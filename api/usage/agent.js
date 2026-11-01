@@ -363,6 +363,7 @@ async function handleEmail(req, res, session) {
         to,
         cc,
         subject: record.folderName,
+        caseId: record.id,
         distributorLabel: distributor.name,
         xlsx,
         xlsxFilename: `${record.folderName}_Usage_Sheet.xlsx`,
@@ -375,7 +376,6 @@ async function handleEmail(req, res, session) {
       results.push({
         key, name: distributor.name, to, itemCount: items.length, ok: true, test,
         from: sent?.from || session.email,
-        senderFellBack: Boolean(sent?.senderFellBack),
         scanAttached: Boolean(scanPdf),
         sentAt: new Date().toISOString()
       })

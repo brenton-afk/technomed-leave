@@ -1,4 +1,5 @@
 import { STAFF } from '../src/staffConfig.js'
+import { recordEmail } from './_emailLog.js'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -115,116 +116,159 @@ function buildEmailHtml(application, variant, declineReason) {
   </body></html>`
 }
 
+// ─── Who an email comes from ─────────────────────────────────────────────────
+// Rewritten after every outgoing email failed in production with a Resend 403.
+// Two faults, and only one of them was a bug:
+//
+//   · EMAIL_FROM pointed at Resend's test address, which can only ever deliver
+//     to the Resend account's own owner. Every leave email to anybody else was
+//     refused. That is configuration, and the fix is in Vercel, not here.
+//
+//   · A rejected sender was quietly retried as the fallback and reported as
+//     success. That was written as a kindness — "the usage still goes out" —
+//     and it was the wrong call. Toni: "distributors must be able to reply
+//     directly to a usage email, so a noreply sender is not acceptable." A send
+//     that silently becomes something the recipient cannot reply to has not
+//     succeeded; it has failed quietly, which is worse, because nobody knows to
+//     go and fix it. It is gone.
+//
+// technomed.com.au is a verified domain in Resend now, so a rep's own address
+// is a legitimate sender and a distributor hitting reply reaches the person who
+// was in the theatre. That is the whole point, and it needs no Reply-To.
+
+const VERIFIED_DOMAIN = /@technomed\.com\.au\s*>?\s*$/i
+
+/** Resend's test addresses, which deliver to one inbox and look like a bug. */
+const TEST_ADDRESS = /@resend\.dev/i
+
 /**
- * The sender.
+ * An email that did not send.
  *
- * `onboarding@resend.dev` is Resend's test address, and it can only ever deliver
- * to the Resend account's own owner. Any other recipient is refused. So this is
- * the last resort and not a working default — if `EMAIL_FROM` is unset, mail to
- * a distributor fails, and it fails in a way that looks like the feature being
- * broken rather than the configuration being absent.
+ * `message` is what a person reads, and is deliberately the same short sentence
+ * every time. Every existing caller already shows `err.message` to staff, so
+ * making the friendly line the message is what keeps raw Resend JSON off a
+ * phone screen without having to touch eight call sites.
  *
- * `sender` is a staff member's name and work address, used where the message is
- * genuinely from a person: a rep's usage sheet reads better, and replies land with
- * them rather than in a shared inbox. It requires technomed.com.au to be a
- * verified domain in Resend; where it is not, Resend says so and that error is
- * surfaced rather than swallowed.
+ * `detail` is the technical cause. It goes to the server log and the sent-email
+ * log, and nowhere near a user.
  */
-function fromAddress(sender) {
-  if (sender?.email) {
-    const name = String(sender.name || '').replace(/[<>"@]/g, '').trim()
+export class EmailNotSent extends Error {
+  constructor(detail) {
+    super('Email not sent — please contact Brenton.')
+    this.name = 'EmailNotSent'
+    this.detail = String(detail || '')
+  }
+}
+
+/**
+ * The address an email is sent from.
+ *
+ * A staff member on the verified domain sends as themselves. Everything else —
+ * leave decisions, timesheet notices, meeting minutes — comes from the portal,
+ * at whatever EMAIL_FROM names.
+ */
+export function fromAddress(sender) {
+  if (sender?.email && VERIFIED_DOMAIN.test(sender.email)) {
+    // Stripped of the characters that would end the display name early and let
+    // the rest of it be read as an address of its own.
+    const name = String(sender.name || '').replace(/[<>"@,;]/g, '').trim()
     return name ? `${name} <${sender.email}>` : sender.email
   }
-  return process.env.EMAIL_FROM || 'TechnoMed Portal <onboarding@resend.dev>'
+
+  const configured = String(process.env.EMAIL_FROM || '').trim()
+  if (!configured) {
+    throw new EmailNotSent('EMAIL_FROM is not set. Set it to an address on the '
+      + 'verified domain, e.g. "TechnoMed Portal <portal@technomed.com.au>".')
+  }
+  // Caught here rather than at Resend, because the message Resend gives for it
+  // ("you can only send testing emails to your own email address") reads like a
+  // broken feature rather than a setting nobody has updated.
+  if (TEST_ADDRESS.test(configured)) {
+    throw new EmailNotSent(`EMAIL_FROM is ${configured}, which is Resend's test `
+      + 'address and can only deliver to the Resend account owner. Set it to an '
+      + 'address on technomed.com.au.')
+  }
+  return configured
 }
 
-/** Whether a rejection is Resend saying "not from a domain you own". */
-function isSenderRejection(status, body) {
-  const raw = String(body || '')
-  if (status !== 403 && status !== 422) return false
-  return /not verified|verify your domain|only send testing emails|domain is not/i.test(raw)
+/**
+ * Where the silent copy of every usage email goes.
+ *
+ * Bcc rather than cc, so a distributor sees an ordinary email from one person
+ * rather than something addressed to an office. The archive answers "was that
+ * usage ever sent, and what exactly went" months later, with the attachments
+ * that actually went still attached to it.
+ */
+export function archiveAddress() {
+  return String(process.env.EMAIL_ARCHIVE || 'usage@technomed.com.au').trim()
 }
 
-async function send({ to, cc, subject, html, text, attachments, sender, replyTo }) {
+async function send({
+  to, cc, bcc, subject, html, text, attachments, sender, replyTo, kind, caseId
+}) {
   const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) throw new Error('RESEND_API_KEY not configured')
+  if (!apiKey) throw new EmailNotSent('RESEND_API_KEY not configured')
 
-  const recipients = to.filter(Boolean)
-  if (recipients.length === 0) throw new Error('No recipients for email')
+  const recipients = (to || []).filter(Boolean)
+  if (recipients.length === 0) throw new EmailNotSent('No recipients for email')
 
-  const post = async from => {
-    const payload = { from, to: recipients, subject, html, text }
-    if (replyTo) payload.reply_to = replyTo
-    if (cc?.length) payload.cc = cc.filter(Boolean)
-    if (attachments?.length) payload.attachments = attachments
+  const from = fromAddress(sender)
+  const copies = (cc || []).filter(Boolean)
+  const quiet = (bcc || []).filter(Boolean)
 
-    const res = await fetch('https://api.resend.com/emails', {
+  const payload = { from, to: recipients, subject, html, text }
+  if (replyTo) payload.reply_to = replyTo
+  if (copies.length) payload.cc = copies
+  if (quiet.length) payload.bcc = quiet
+  if (attachments?.length) payload.attachments = attachments
+
+  const note = (status, extra) => recordEmail({
+    kind,
+    sentByEmail: sender?.email,
+    from,
+    to: recipients,
+    cc: copies,
+    bcc: quiet,
+    caseId,
+    status,
+    ...extra
+  })
+
+  let res
+  let body = ''
+  try {
+    res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
-    return { ok: res.ok, status: res.status, body: res.ok ? '' : await res.text() }
+    body = await res.text()
+  } catch (err) {
+    const failure = new EmailNotSent(`Could not reach Resend: ${err.message}`)
+    await note('failed', { detail: failure.detail })
+    throw failure
   }
 
-  const preferred = fromAddress(sender)
-  const fallback = fromAddress(null)
-
-  let attempt = await post(preferred)
-
-  // Sending as the rep is nicer but it requires their domain to be verified in
-  // Resend, and that is a DNS change nobody can make from inside the app. So a
-  // rejection on those grounds falls back to the configured sender rather than
-  // failing: the reply-to still carries the rep, so a distributor replying
-  // reaches them either way, and the usage still goes out.
-  //
-  // This exists because it happened. Switching the sender to the rep's own
-  // address broke sending that had been working, and the only visible symptom was
-  // "the email failed" — the feature should not depend on a DNS record having
-  // been added.
-  let usedFallback = false
-  if (!attempt.ok && preferred !== fallback && isSenderRejection(attempt.status, attempt.body)) {
-    const retried = await post(fallback)
-    if (retried.ok) {
-      usedFallback = true
-      attempt = retried
-    } else {
-      // Report the original failure, which names the real problem.
-      throw new Error(explainSendFailure(attempt.status, attempt.body, preferred))
-    }
+  if (!res.ok) {
+    const failure = new EmailNotSent(`Resend ${res.status}: ${body.slice(0, 300)}`)
+    // Recorded before it is thrown, so a failure is on the record even though
+    // the caller is about to turn this into one line on a screen.
+    await note('failed', { detail: failure.detail })
+    // The cause, where somebody reading a server log can act on it. Never the
+    // patient: the subject carries a surname, so the subject is not in here.
+    console.error(`Email failed (${kind || 'unknown'}): Resend ${res.status}`)
+    throw failure
   }
 
-  if (!attempt.ok) throw new Error(explainSendFailure(attempt.status, attempt.body, preferred))
-
-  return {
-    sent: true,
-    recipients,
-    from: usedFallback ? fallback : preferred,
-    // So the app can say the nicer sender is one DNS change away.
-    senderFellBack: usedFallback
+  let messageId = ''
+  try {
+    messageId = JSON.parse(body)?.id || ''
+  } catch {
+    // Resend accepted it; an unparseable body costs us the id and nothing else.
   }
-}
 
-/**
- * Resend's own words, plus what they mean here.
- *
- * The two failures this app actually hits both report as a flat 403 with prose
- * nobody reading a phone screen will act on. Naming the cause and the fix turns
- * "the email failed" into something someone can go and do.
- */
-function explainSendFailure(status, body, from) {
-  const raw = String(body || '').slice(0, 400)
-  const detail = `Resend ${status}: ${raw}`
-
-  if (/only send testing emails to your own email/i.test(raw) || /resend\.dev/i.test(from)) {
-    return `${detail} — the sender is Resend's test address, which can only deliver to the `
-      + 'Resend account owner. Set EMAIL_FROM, or verify technomed.com.au in Resend so mail '
-      + `can be sent as a staff member. Sending as: ${from}`
-  }
-  if (/domain is not verified|not verified/i.test(raw)) {
-    return `${detail} — ${from} is not on a domain verified in Resend. Verify technomed.com.au `
-      + 'there, or set EMAIL_FROM to an address on a domain that is.'
-  }
-  return `${detail} (sending as ${from})`
+  await note('sent', { messageId })
+  return { sent: true, recipients, from, messageId }
 }
 
 function summaryText(application, prefix, extra = '') {
@@ -236,6 +280,7 @@ function summaryText(application, prefix, extra = '') {
 export async function sendNotificationEmail(application) {
   const leaveLabel = LEAVE_LABELS[application.leaveType] || application.leaveType
   return send({
+    kind: 'leave',
     to: adminRecipients(),
     subject: `Leave Application — ${application.name} (${leaveLabel})`,
     html: buildEmailHtml(application, 'submitted'),
@@ -247,6 +292,7 @@ export async function sendNotificationEmail(application) {
 export async function sendApprovalEmail(application) {
   const leaveLabel = LEAVE_LABELS[application.leaveType] || application.leaveType
   return send({
+    kind: 'leave',
     to: [employeeEmail(application), ...adminRecipients()],
     subject: `Leave Approved — ${application.name} (${leaveLabel})`,
     html: buildEmailHtml(application, 'approved'),
@@ -258,6 +304,7 @@ export async function sendApprovalEmail(application) {
 export async function sendDeclineEmail(application, declineReason = '') {
   const leaveLabel = LEAVE_LABELS[application.leaveType] || application.leaveType
   return send({
+    kind: 'leave',
     to: [employeeEmail(application), ...adminRecipients()],
     subject: `Leave Declined — ${application.name} (${leaveLabel})`,
     html: buildEmailHtml(application, 'declined', declineReason),
@@ -295,6 +342,7 @@ export async function sendPinResetRequestEmail(staff) {
   </body></html>`
 
   return send({
+    kind: 'pin',
     to: approvers,
     subject: `PIN reset requested — ${staff.name}`,
     html,
@@ -339,6 +387,7 @@ function timesheetHtml({ heading, banner, record, extraRows = [] }) {
 
 export async function sendTimesheetSubmittedEmail(record) {
   return send({
+    kind: 'timesheet',
     to: TIMESHEET_APPROVERS,
     subject: `Timesheet submitted — ${record.staffName} (${record.periodStart} to ${record.periodEnd})`,
     html: timesheetHtml({ heading: 'Timesheet submitted for approval', record }),
@@ -349,6 +398,7 @@ export async function sendTimesheetSubmittedEmail(record) {
 export async function sendTimesheetDecisionEmail(record, decision, reason = '') {
   const approved = decision === 'approved'
   return send({
+    kind: 'timesheet',
     to: [record.email, ...TIMESHEET_APPROVERS],
     subject: `Timesheet ${approved ? 'approved' : 'returned'} — ${record.periodStart} to ${record.periodEnd}`,
     html: timesheetHtml({
@@ -379,7 +429,7 @@ export async function sendTimesheetDecisionEmail(record, decision, reason = '') 
  */
 export async function sendUsageEmail({
   to, cc, subject, distributorLabel, xlsx, xlsxFilename,
-  scanPdf, scanPdfFilename, test, sender
+  scanPdf, scanPdfFilename, test, sender, caseId
 }) {
   // A test send goes to the person testing and nowhere else, and has to be
   // impossible to mistake for the real thing — in the inbox list, in the subject,
@@ -418,6 +468,11 @@ export async function sendUsageEmail({
   return send({
     to,
     cc,
+    // The record copy. Not on a test send — a test is for the person testing,
+    // and an archive full of tests is an archive nobody trusts.
+    bcc: test ? [] : [archiveAddress()],
+    kind: 'usage',
+    caseId,
     subject: heading,
     html,
     text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${body}\n\nWarm regards,\nTechnoMed`,
@@ -428,7 +483,9 @@ export async function sendUsageEmail({
       ...(scanPdf ? [{ filename: scanPdfFilename || 'Scan.pdf', content: scanPdf.toString('base64') }] : [])
     ],
     // From the rep who scanned it, so a distributor replying reaches the person
-    // who was in the theatre rather than a shared inbox.
+    // who was in the theatre rather than a shared inbox. Reply-To is kept as
+    // well: it costs nothing, and it still carries the rep in the one case
+    // where the sender is somehow not on the verified domain.
     sender,
     replyTo: sender?.email
   })
@@ -477,25 +534,23 @@ function buildMeetingEmailHtml(staff, meeting, myItems) {
   </body></html>`
 }
 
+/**
+ * Meeting minutes, to one staff member.
+ *
+ * This used to build its own Resend request with `onboarding@resend.dev`
+ * hard-coded as the sender, bypassing the shared sender entirely — so it was
+ * refused for all nine staff but whoever owns the Resend account, whatever
+ * EMAIL_FROM was set to, and it threw Resend's own JSON at the caller. One
+ * sender for everything is the point: a second path is a second thing to find
+ * out is broken.
+ */
 export async function sendMeetingSummaryEmail(staff, meeting, myItems) {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) throw new Error('RESEND_API_KEY not configured')
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: 'TechnoMed Operations Hub <onboarding@resend.dev>',
-      to: [staff.email],
-      subject: `Meeting minutes — ${meeting.title}`,
-      html: buildMeetingEmailHtml(staff, meeting, myItems),
-      text: `${meeting.title} (${meeting.date})\n\n${meeting.summary}\n\nYour action items:\n${myItems.length ? myItems.map(i => `- ${i.task} [${i.priority}]${i.due_date ? ' due ' + i.due_date : ''}`).join('\n') : 'None from this meeting.'}`
-    })
+  return send({
+    to: [staff.email],
+    kind: 'meeting',
+    subject: `Meeting minutes — ${meeting.title}`,
+    html: buildMeetingEmailHtml(staff, meeting, myItems),
+    text: `${meeting.title} (${meeting.date})\n\n${meeting.summary}\n\nYour action items:\n${myItems.length ? myItems.map(i => `- ${i.task} [${i.priority}]${i.due_date ? ' due ' + i.due_date : ''}`).join('\n') : 'None from this meeting.'}`
   })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Resend error ${res.status}: ${err}`)
-  }
-  return { sent: true }
 }
+

@@ -140,6 +140,28 @@ export async function deleteWorklistItem(id) {
   await redis('lrem', 'worklist:all', '0', id)
 }
 
+// ─── SENT EMAIL LOG ─────────────────────────────────────────
+// Capped rather than kept forever. The question this answers — "did that usage
+// go, and when?" — is asked about recent sends; a log that grows without limit
+// is a storage bill for data nobody reads.
+
+const EMAIL_LOG_KEEP = 2000
+
+export async function saveEmailLogEntry(entry) {
+  await redisSetBody(`email:${entry.id}`, JSON.stringify(entry))
+  await redis('lpush', 'email:all', entry.id)
+  await redis('ltrim', 'email:all', '0', String(EMAIL_LOG_KEEP - 1))
+}
+
+export async function getEmailLog(limit = 200) {
+  const ids = await redis('lrange', 'email:all', '0', String(Math.max(0, limit - 1))) || []
+  const rows = await Promise.all(ids.map(async id => {
+    const data = await redis('get', `email:${id}`)
+    return data ? JSON.parse(data) : null
+  }))
+  return rows.filter(Boolean)
+}
+
 // ─── PROJECTS ───────────────────────────────────────────────
 // A project owns its tasks. Stored the same way the worklist is — one key per
 // row, one list of ids — because the whole board is read at once anyway and a
