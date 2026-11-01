@@ -131,21 +131,41 @@ describe('what staff are shown when it fails', () => {
   })
 })
 
-describe('the record copy', () => {
-  it('bccs the archive on a real usage', async () => {
+// ─── No second copy of a usage, anywhere ─────────────────────────────────────
+// A silent Bcc to an archive mailbox was built and then removed, by Brent:
+//
+//   "Don't send an archive copy of usage emails to usage@ or bookings@. The
+//    Admin → Email log is the record that a usage was sent; the usage documents
+//    themselves stay in Dropbox as the system of record."
+//
+// Which is the rule that was already written down on 4 October — Dropbox is the
+// store of record and the app never keeps a copy — and a mailbox full of
+// attachments is exactly the second copy that rule exists to prevent. Two
+// copies means "has this been filed?" has two answers that drift apart.
+describe('what a usage email copies to', () => {
+  it('sends a silent copy to nobody', async () => {
     await usage()
-    expect(posted[0].bcc).toEqual(['usage@technomed.com.au'])
+    expect(posted[0].bcc).toBeUndefined()
   })
 
-  it('leaves a test send out of the archive', async () => {
-    // An archive full of tests is an archive nobody trusts.
-    await usage({ test: { wouldSendTo: ['orders@signus.com.au'] } })
-    expect(posted[0].bcc).toBeUndefined()
+  it('goes only to the distributor it is for', async () => {
+    await usage()
+    expect(posted[0].to).toEqual(['orders@signus.com.au'])
+    expect(posted[0].cc).toBeUndefined()
   })
 
   it('still carries the rep as reply-to', async () => {
     await usage()
     expect(posted[0].reply_to).toBe('ben@technomed.com.au')
+  })
+
+  it('records that it went without keeping what went', async () => {
+    // The log is the proof a usage was sent. The documents live in Dropbox,
+    // and nothing about the attachments is stored here.
+    await usage()
+    const row = JSON.stringify(stored[0])
+    expect(stored[0]).toMatchObject({ kind: 'usage', status: 'sent' })
+    expect(row).not.toMatch(/xlsx|pdf|attachment|base64/i)
   })
 })
 

@@ -625,6 +625,48 @@ Required behaviour:
 
 ---
 
+## Possible future task — file the sent usage sheet into its Dropbox case folder (PLAN ONLY)
+
+> **Not started. Do not build.** Written down on 1 Nov 2026 so the reasoning is
+> not lost. Only start if Brenton asks for it.
+
+**Why this is smaller than it sounds.** Most of it already happens. On every
+usage save, `api/usage/agent.js` already writes two files into the case folder
+`/ALL SURGEON USAGE/SPINE/{SURGEON}/{MONTH YEAR}/{Surname_DDMMYYYY_...}/`:
+
+- `{folder}_Usage_Scan.pdf` — the scanned signed form
+- `{folder}_Usage_Sheet.xlsx` — an **internal** workbook with every
+  distributor's items together, including rows that never left the building
+
+**The actual gap.** What is *not* filed is the per-distributor workbook that was
+genuinely attached to the email — the document the distributor received. Today
+the only copy of that exact file is in the distributor's inbox. So "what did we
+send Signus for this case?" is answerable by inference from the internal sheet,
+but not by producing the artefact.
+
+**The shape of the work, if it is ever wanted.**
+
+1. `buildUsageWorkbook(caseRecord, included, { internal: false })` is already
+   called per distributor to make the attachment. Keep that same buffer rather
+   than rebuilding it, and write it alongside the others as
+   `{folder}_Usage_{Distributor}_Sent.xlsx`.
+2. Write it **after** the email is accepted, not before, so a file named
+   "Sent" is never in the folder for an email that failed. The current order
+   (Dropbox first, then email) is deliberate for the other two files and should
+   stay as it is — this one is the exception and needs the opposite order.
+3. On a resend, do not overwrite: add `_2`, `_3`. A resend is a separate fact
+   and the first attempt is part of the history.
+4. Record the filed path on the existing email-log entry, so Admin → Email can
+   link straight to the document rather than only asserting it was sent.
+5. Nothing new is stored in the app. No attachment bytes in Redis, no second
+   mailbox — the whole point of the task is that Dropbox holds the document and
+   the log holds the fact.
+
+**Open question for Brenton before any of this is built:** is the per-distributor
+sheet worth a third file in every case folder, or is the internal workbook plus
+the email log already enough to answer every question anybody actually asks? If
+it is the latter, this task should be closed rather than built.
+
 ## Not code — follow up with the team
 
 - Toni: confirm the full list of parties to notify per distributor (feeds Tasks 8 and 9).

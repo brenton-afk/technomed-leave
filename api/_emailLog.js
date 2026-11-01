@@ -51,7 +51,7 @@ export function scrubDetail(text) {
  * would be raised after Resend had already accepted the message.
  */
 export async function recordEmail({
-  kind, sentByEmail, from, to, cc, bcc, caseId, status, messageId, detail, at
+  kind, sentByEmail, from, to, cc, caseId, status, messageId, detail, at
 }) {
   try {
     await saveEmailLogEntry({
@@ -62,7 +62,6 @@ export async function recordEmail({
       from: String(from || '').slice(0, 120),
       to: (to || []).filter(Boolean).slice(0, 12),
       cc: (cc || []).filter(Boolean).slice(0, 12),
-      bcc: (bcc || []).filter(Boolean).slice(0, 12),
       // The link back to the patient, rather than the patient.
       caseId: caseId || '',
       status: status === 'sent' ? 'sent' : 'failed',

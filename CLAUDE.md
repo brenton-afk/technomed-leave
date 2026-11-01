@@ -533,6 +533,8 @@ Senders, decided in `fromAddress()` in `api/_email.js`:
 | Email | From | Why |
 |---|---|---|
 | Usage to a distributor | the rep's own `@technomed.com.au` address | "Distributors must be able to reply directly to a usage email, so a noreply sender is not acceptable." Reply reaches whoever was in the theatre. |
+
+A usage email goes **only to the distributor it is for** — no Bcc, no archive mailbox, no second copy. A silent Bcc to `usage@` was built and removed on Brent's instruction, because it contradicts a rule set on 4 October: Dropbox is the store of record and the app never keeps a copy. A mailbox full of attachments is exactly the second copy that rule exists to prevent — two copies means "has this been filed?" has two answers that drift. The sent-email log is the record **that** a usage went; the documents themselves are in the Dropbox case folder.
 | Everything else | `EMAIL_FROM` | Leave decisions, timesheet notices, meeting minutes — these are from the portal, not a person. |
 
 `EMAIL_FROM` is **required** and must be on the verified domain. An `@resend.dev` address is refused by the app before Resend sees it, because Resend's own error for that case ("you can only send testing emails to your own email address") reads like a broken feature rather than a setting nobody updated.

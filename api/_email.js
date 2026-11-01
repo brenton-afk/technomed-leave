@@ -191,20 +191,8 @@ export function fromAddress(sender) {
   return configured
 }
 
-/**
- * Where the silent copy of every usage email goes.
- *
- * Bcc rather than cc, so a distributor sees an ordinary email from one person
- * rather than something addressed to an office. The archive answers "was that
- * usage ever sent, and what exactly went" months later, with the attachments
- * that actually went still attached to it.
- */
-export function archiveAddress() {
-  return String(process.env.EMAIL_ARCHIVE || 'usage@technomed.com.au').trim()
-}
-
 async function send({
-  to, cc, bcc, subject, html, text, attachments, sender, replyTo, kind, caseId
+  to, cc, subject, html, text, attachments, sender, replyTo, kind, caseId
 }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new EmailNotSent('RESEND_API_KEY not configured')
@@ -214,12 +202,10 @@ async function send({
 
   const from = fromAddress(sender)
   const copies = (cc || []).filter(Boolean)
-  const quiet = (bcc || []).filter(Boolean)
 
   const payload = { from, to: recipients, subject, html, text }
   if (replyTo) payload.reply_to = replyTo
   if (copies.length) payload.cc = copies
-  if (quiet.length) payload.bcc = quiet
   if (attachments?.length) payload.attachments = attachments
 
   const note = (status, extra) => recordEmail({
@@ -228,7 +214,6 @@ async function send({
     from,
     to: recipients,
     cc: copies,
-    bcc: quiet,
     caseId,
     status,
     ...extra
@@ -468,9 +453,6 @@ export async function sendUsageEmail({
   return send({
     to,
     cc,
-    // The record copy. Not on a test send — a test is for the person testing,
-    // and an archive full of tests is an archive nobody trusts.
-    bcc: test ? [] : [archiveAddress()],
     kind: 'usage',
     caseId,
     subject: heading,

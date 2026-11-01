@@ -149,7 +149,6 @@ export default function EmailLog({ user }) {
           <div style={{ fontSize: 12.5, color: '#6b7a8d', marginTop: 4, lineHeight: 1.5 }}>
             <div>From {e.from || '—'}</div>
             <div>To {(e.to || []).join(', ') || '—'}</div>
-            {(e.bcc || []).length > 0 && <div>Bcc {e.bcc.join(', ')}</div>}
           </div>
 
           {/* The technical cause, which is why an admin is on this screen. It
