@@ -166,12 +166,26 @@ export function setLabelledValue(description, field, value) {
  * "Mitchell (Donna)" with a new surname of "Marsh" becomes "Marsh (Donna)". The
  * portal never shows the first name and must not be the reason it disappears.
  */
-export function replaceSurname(existing, surname) {
+export function replaceSurname(existing, surname, previous) {
   const text = String(existing || '').trim()
   const clean = String(surname || '').trim()
   if (!text) return clean
-  // Everything after the first token — a parenthetical, a second name, a note.
-  const rest = text.replace(/^\S+/, '').trim()
+  // How many leading words are the surname being replaced. One, unless the
+  // value already starts with the new surname (somebody completing a name the
+  // app had cut short: "Lloyd" corrected to "Lloyd Jones" over a field that
+  // already says "Lloyd Jones") or with the previous one ("Van der Berg"
+  // becoming "Marsh"). Replacing only the first word in either case wrote
+  // "Lloyd Jones Jones".
+  const words = text.split(/\s+/)
+  const leading = name => {
+    const want = String(name || '').trim().split(/\s+/).filter(Boolean)
+    if (!want.length || want.length > words.length) return 0
+    const norm = w => w.toLowerCase().replace(/[^a-z'’-]/g, '')
+    return want.every((w, i) => norm(w) && norm(w) === norm(words[i])) ? want.length : 0
+  }
+  const take = leading(clean) || leading(previous) || 1
+  // Everything after the surname — a parenthetical, a first name, a note.
+  const rest = words.slice(take).join(' ').trim()
   return rest ? `${clean} ${rest}` : clean
 }
 

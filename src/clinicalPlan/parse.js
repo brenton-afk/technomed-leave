@@ -111,7 +111,7 @@ export function stripIdentifiers(text) {
 
 // Surname only. A calendar entry may carry "Jackson, Mary" or "Mary Jackson";
 // either way exactly one name token survives, and never a numeric one.
-export function sanitisePatient(raw) {
+export function sanitisePatient(raw, { known } = {}) {
   const cleaned = stripIdentifiers(raw)
   if (!cleaned) return ''
   // "Surname, First" → the part before the comma is the surname.
@@ -125,7 +125,7 @@ export function sanitisePatient(raw) {
   // name, and on the sheet that went to the distributor. It also meant the
   // booking could not be corrected by hand, because typing the space back in
   // was undone by this function on the way through.
-  const take = surnameLength(words)
+  const take = knownSurnameLength(words, known) || surnameLength(words)
   const kept = words.slice(0, take)
     .map(word => word.replace(/[^A-Za-z'’\-]/g, ''))
     .filter(Boolean)
@@ -559,6 +559,31 @@ export function surnameLength(words) {
   return n + 1
 }
 
+/**
+ * How many leading words are the surname the portal itself recorded.
+ *
+ * "A patient surname with particles displays as only the first word in the
+ * list/day view, while the calendar shows it correctly." The particle list
+ * covers La Pietra and Van der Berg; it cannot cover a two-word surname that
+ * starts with an ordinary word, and no rule read off a title can tell that
+ * name from a first name or an operation. So the surname is written down when
+ * somebody types it — on the event, in extendedProperties, as `tmPatient` —
+ * and read back here as a fact rather than inferred.
+ *
+ * Only honoured while the text still starts with it. If somebody has since
+ * retyped the booking in Google, what they typed wins and this returns 0: the
+ * app must never say something the calendar does not.
+ */
+export function knownSurnameLength(words, known) {
+  const want = String(known || '').trim().split(/\s+/).filter(Boolean)
+  if (!want.length || want.length > words.length) return 0
+  const norm = w => String(w || '').toLowerCase().replace(/[^a-z'’-]/g, '').replace(/’/g, "'")
+  for (let i = 0; i < want.length; i++) {
+    if (!norm(want[i]) || norm(words[i]) !== norm(want[i])) return 0
+  }
+  return want.length
+}
+
 /** Words that describe the operation rather than the person having it. */
 const OPERATION_WORDS = new Set([
   'acdf', 'plif', 'tlif', 'alif', 'xlif', 'llif', 'olif', 'adr',
@@ -662,8 +687,8 @@ export function parseCaseTitle(title, hint = {}) {
   // reads like a surname, so "Theatre 3 list" does not become a patient.
   if (surgeonSource === 'colour' && !looksLikeSurname(words[0])) return null
 
-  const take = surnameLength(words)
-  const patient = sanitisePatient(words.slice(0, take).join(' '))
+  const take = knownSurnameLength(words, hint.knownPatient) || surnameLength(words)
+  const patient = sanitisePatient(words.slice(0, take).join(' '), { known: hint.knownPatient })
   if (!patient) return null
 
   return {
@@ -1041,7 +1066,9 @@ export function normaliseEvent(event) {
     start: startIso,
     end: endIso,
     startDate: startIso ? null : (event.start?.date || null),
-    endDate: endIso ? null : (event.end?.date || null)
+    endDate: endIso ? null : (event.end?.date || null),
+    // The surname as typed into the portal, when it was. See knownSurnameLength.
+    knownPatient: event.knownPatient || event.extendedProperties?.private?.tmPatient || null
   }
 }
 
@@ -1317,7 +1344,7 @@ export function plainDescription(description) {
     .trim()
 }
 
-export function readBooking(title, description, { colourSurgeon } = {}) {
+export function readBooking(title, description, { colourSurgeon, knownPatient } = {}) {
   // Before anything reads it. See plainDescription: a booking Google stored as
   // HTML has no line breaks the parser can see, so every labelled field runs
   // together and the card comes back blank rather than merely imperfect.
@@ -1357,7 +1384,7 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
       [field, stripCancellation(stripSelfFunding(stripIdentifiers(value)))]))
   // Resolved before anything reads it, so a booking accepted onto the calendar
   // with "Implanet" on it still shows the system somebody can actually bring.
-  const fromTitle = parseCaseTitle(title, { colourSurgeon })
+  const fromTitle = parseCaseTitle(title, { colourSurgeon, knownPatient })
 
   // ── Repairing a description written before surnames could have spaces ──
   //
@@ -1376,7 +1403,7 @@ export function readBooking(title, description, { colourSurgeon } = {}) {
   // particle — never a surname on its own — and the title's reading of the
   // same booking starts with that particle and carries on. Both conditions
   // together describe one thing: a name this app cut in half.
-  const labelledPatient = sanitisePatient(labelled.patient)
+  const labelledPatient = sanitisePatient(labelled.patient, { known: knownPatient })
   const titlePatient = fromTitle?.patient
   const severed = Boolean(labelledPatient && titlePatient
     && isBareParticle(labelledPatient)

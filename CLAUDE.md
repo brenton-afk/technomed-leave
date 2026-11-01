@@ -128,6 +128,16 @@ the title is often a placeholder like "Booking" — and both sides are tokenised
 the same function, because splitting them differently reported `C4/5` as unread
 while it was on screen, and a check that cries wolf gets ignored.
 
+**The patient's surname is stored on the event, not only inferred.** The
+portal writes it to `extendedProperties.private.tmPatient` on create and on any
+save that edits the surname, and `readBooking(..., { knownPatient })` uses it to
+decide how many words of the title or `Pt` line are the surname. A two-word
+surname without a particle ("Testa Rossa") cannot be told apart from a first
+name or an operation by any rule, so it was being cut to its first word. It is
+honoured only while the title or label still starts with it — a booking retyped
+in Google wins. Other fields are not duplicated there: the labelled description
+is already their structured record, and a second copy would drift from it.
+
 Anything added to a case must also go into `planSignature` in `provider.js`. The
 plan is only replaced when that string changes, so a field left out of it can
 change in Google and never reach the screen — and the rep is added to a booking

@@ -56,6 +56,26 @@ import {
   readFiledCase, priorImplantsFor, describePrior
 } from '../../src/clinicalPlan/priorImplants.js'
 import { firstNameFor } from '../../src/staffConfig.js'
+import { sanitisePatient } from '../../src/clinicalPlan/parse.js'
+
+/**
+ * The patient's surname as somebody typed it into the portal.
+ *
+ * Written to the event's private extendedProperties on every create and every
+ * save that changes the surname, because a title cannot say where a two-word
+ * surname ends and the parser had been cutting them to one. Private
+ * properties are visible only to this calendar's own API callers, never shown
+ * in Google's UI, and hold nothing the title does not already.
+ */
+export function knownPatientOf(event) {
+  return event?.extendedProperties?.private?.tmPatient || null
+}
+
+/** The structured properties a patient surname is stored under. */
+function patientProperties(surname) {
+  const clean = sanitisePatient(surname, { known: surname })
+  return clean ? { private: { tmPatient: clean } } : null
+}
 
 // The Staff Leave sub-calendar. Read alongside bookings for the clinical plan
 // so leave shows up in the week without a second round trip.
@@ -251,7 +271,9 @@ async function handleWeek(req, res) {
           // Google's version marker, carried so an edit can be rejected when
           // somebody else changed the booking in between.
           etag: e.etag || null,
-          start: e.start, end: e.end, source: cal.source
+          start: e.start, end: e.end, source: cal.source,
+          // The surname as typed into the portal — see knownSurnameLength.
+          knownPatient: knownPatientOf(e)
         }))
       }
     }))
@@ -362,7 +384,10 @@ async function handleBooking(req, res) {
       // surnames only, and the rest is preserved on save rather than displayed.
       fields: {
         ...labelled,
-        patient: surnameOf(labelled.patient)
+        // The whole surname, however many words it is. This used to take the
+        // first word, so "Van der Berg" opened as "Van" — and saving that
+        // back would have cut the name on the calendar too.
+        patient: surnameOf(labelled.patient, knownPatientOf(event))
       },
       notes: descriptionNotes(description).join('\n')
     })
@@ -371,10 +396,20 @@ async function handleBooking(req, res) {
   }
 }
 
-/** The first token of a patient value: "Mitchell (Donna)" → "Mitchell". */
-function surnameOf(value) {
-  const match = /^\S+/.exec(String(value || '').trim())
-  return match ? match[0] : ''
+/**
+ * The surname out of a patient value: "Mitchell (Donna)" → "Mitchell".
+ *
+ * As written — not re-cased — because the edit form sends a field back only
+ * when it differs from this, and a value tidied on the way out would look
+ * changed on the way back in. The word count comes from the shared reader, so
+ * the form and the case card agree on where the name ends.
+ */
+function surnameOf(value, known) {
+  const words = String(value || '').trim().split(',')[0].trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return ''
+  const read = sanitisePatient(words.join(' '), { known })
+  const take = read ? read.split(/\s+/).length : 1
+  return words.slice(0, take).join(' ')
 }
 
 // ─── Amending a booking ───────────────────────────────────────────────────────
@@ -413,7 +448,9 @@ async function handleSave(req, res) {
         // A surname replaces only the first token, so anything after it — a
         // first name, a note — stays exactly where the team put it.
         field === 'patient'
-          ? replaceSurname((labelledFieldSpans(description).patient?.value || '').trim(), value)
+          ? replaceSurname(
+            (labelledFieldSpans(description).patient?.value || '').trim(), value,
+            surnameOf(labelledFieldSpans(description).patient?.value, knownPatientOf(current)))
           : value)
     }
 
@@ -431,6 +468,13 @@ async function handleSave(req, res) {
 
     const patch = { description }
     if (summary !== (current.summary || '')) patch.summary = summary
+
+    // The surname, recorded as a fact rather than left to be re-read from the
+    // title. Patched as a map, so any other private property is kept.
+    if (Object.prototype.hasOwnProperty.call(body.fields || {}, 'patient')) {
+      const props = patientProperties(body.fields.patient)
+      if (props) patch.extendedProperties = props
+    }
 
     // Naive local times plus the zone, never an offset computed on the client.
     // A phone in another timezone — or one whose clock is simply wrong — would
@@ -490,7 +534,14 @@ async function handleSave(req, res) {
       ok: true,
       event: {
         id: saved.id, summary: saved.summary || '', description: saved.description || '',
-        etag: saved.etag || null, start: saved.start, end: saved.end
+        etag: saved.etag || null,
+        // Strings, in the same shape as action=booking. These went back as
+        // Google's {dateTime, timeZone} objects, the edit sheet merged them
+        // over the booking it had loaded, and the date it compared against
+        // then read as empty — so every save that rewrote the title announced
+        // "Moving this booking to…" and sent the times again.
+        start: saved.start?.dateTime || saved.start?.date || null,
+        end: saved.end?.dateTime || saved.end?.date || null
       }
     })
   } catch (err) {
@@ -625,7 +676,8 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId }, e
     date: day,
     colorId: colour,
     location: String(fields.hospital || '').trim() || undefined,
-    hour
+    hour,
+    extendedProperties: patientProperties(patient) || undefined
   })
 
   // Packed here rather than in each handler, so every route that makes a
@@ -858,7 +910,7 @@ async function bookingsOnCalendar(from, to) {
   return (data.items || [])
     .filter(e => !isDistributorEmail(e.organizer?.email))
     .map(e => {
-      const read = readBooking(e.summary || '', e.description || '')
+      const read = readBooking(e.summary || '', e.description || '', { knownPatient: knownPatientOf(e) })
       if (!read?.patient) return null
       const start = e.start?.dateTime || e.start?.date || ''
       return {
@@ -912,7 +964,7 @@ async function tidyDay(date, preferred = null) {
     .filter(e => e.start?.dateTime)
     .filter(e => !isDistributorEmail(e.organizer?.email))
     .map(e => {
-      const read = readBooking(e.summary || '', e.description || '')
+      const read = readBooking(e.summary || '', e.description || '', { knownPatient: knownPatientOf(e) })
       // A cancelled case keeps its place in the calendar but not in the
       // running order — the day should close up around it, the same as if it
       // had been deleted.
