@@ -22,6 +22,7 @@ import {
 } from './design/icons.jsx'
 import { useNewBuild } from './appVersion.js'
 import { useOnline } from './online.js'
+import { useOfflineQueue, dismissChange } from './offlineQueue.js'
 import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
 import { watchZoom } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
@@ -123,6 +124,8 @@ export default function App() {
   const newBuild = useNewBuild()
   const online = useOnline()
   const [user, setUser] = useState(null)
+  // Booking changes made with no signal, waiting to go. See offlineQueue.js.
+  const pending = useOfflineQueue(user)
   // A session read back from the device, not yet unlocked on this launch.
   // When the admin portal was last unlocked on this device. Everything else
   // opens straight away; this is the one place worth a check, because it holds
@@ -464,14 +467,36 @@ export default function App() {
           in step with the bar's height. */}
       {/* Says what will not work, not that something is broken. What is on
           screen stays readable; saving needs the network. */}
-      {user && !online && (
+      {user && pending.filter(c => !c.email || c.email === user.email).map(change => (
+        <div key={change.id} role="status" style={{
+          flexShrink: 0, padding: '6px 16px', display: 'flex', gap: 8, alignItems: 'center',
+          ...text('caption'),
+          background: change.status === 'waiting' ? colour.warningSoft : colour.dangerSoft,
+          color: change.status === 'waiting' ? colour.warning : colour.danger,
+          borderBottom: `1px solid ${change.status === 'waiting' ? colour.warningLine : colour.dangerLine}`
+        }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <strong>{change.label}</strong>
+            {change.status === 'waiting'
+              ? ' — change saved on this phone, waiting for signal to send.'
+              : ` — ${change.error}`}
+          </span>
+          {change.status !== 'waiting' && (
+            <button onClick={() => dismissChange(change.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: 'inherit',
+              ...text('caption'), fontWeight: 700, padding: 4
+            }}>OK</button>
+          )}
+        </div>
+      ))}
+            {user && !online && (
         <div role="status" style={{
           flexShrink: 0, padding: '6px 16px', textAlign: 'center',
           ...text('caption'), fontWeight: 700,
           background: colour.warningSoft, color: colour.warning,
           borderBottom: `1px solid ${colour.warningLine}`
         }}>
-          Offline — you can read what has loaded; changes will not save until you are back in range.
+          Offline — showing what has loaded. Booking edits are kept on this phone and sent when you are back in range.
         </div>
       )}
       <div className="tm-scroll">

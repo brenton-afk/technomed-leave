@@ -80,3 +80,23 @@ describe('the edit sheet', () => {
     expect(screen.queryByText(/Moved to/)).not.toBeInTheDocument()
   })
 })
+
+describe('saving with no signal', () => {
+  it('keeps the change on the phone instead of losing it', async () => {
+    localStorage.clear()
+    global.fetch = vi.fn(async (url) => {
+      url = String(url)
+      if (url.includes('action=booking')) return { ok: true, status: 200, json: async () => BOOKING }
+      if (url.includes('action=week')) return { ok: true, status: 200, json: async () => ({ events: [] }) }
+      throw new TypeError('Failed to fetch')
+    })
+    render(<EditBooking eventId="evt-1" user={{ token: 't', email: 'toni@technomed.com.au' }} onClose={() => {}} />)
+    await waitFor(() => expect(screen.getByDisplayValue('L4/5 TLIF')).toBeInTheDocument())
+    fireEvent.change(screen.getByDisplayValue('L4/5 TLIF'), { target: { value: 'L4/5 PLIF' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save to calendar/ }))
+    await waitFor(() => expect(screen.getByText(/saved on this phone/)).toBeInTheDocument())
+    const held = JSON.parse(localStorage.getItem('tm_pending_changes'))
+    expect(held).toHaveLength(1)
+    expect(held[0].body).toMatchObject({ eventId: 'evt-1', etag: '"v1"', fields: { procedure: 'L4/5 PLIF' } })
+  })
+})

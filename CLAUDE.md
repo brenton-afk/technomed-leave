@@ -194,7 +194,22 @@ Cases are split out (`src/lazyScreens.jsx`) and prefetched in the background onc
 signed in, so they are cached before the next dead spot. `index.html` carries a
 boot message inside `#root` that offers a retry after 8s.
 
-Not built, and needing a decision first: queueing changes made offline.
+**Booking edits made offline are queued** (`src/offlineQueue.js`, in
+`localStorage` under `tm_pending_changes`) and sent when the phone is back
+online, by the person who made them, with the version marker from when they
+were made — so a booking changed in Google meanwhile is refused (409) and shown
+as "make the change again", never overwritten. Only Edit booking saves are
+queued. Nothing that emails a distributor is ever queued.
+
+**Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
+`action=search` in `api/calendar/today.js`): Google's own full-text search over
+2020 to a year ahead, each hit read through `readBooking`, cases only.
+
+**Surnames from every reader go through `surnameFromField` in `parse.js`** —
+emails, dictation, the RHH list and usage forms. It keeps a surname field whole
+and drops a given name after a comma or in lower case after a capitalised
+surname. Titles typed by hand use `handTypedSurnameLength` plus title/Pt-line
+agreement. Never go back to "first word" (or, for usage forms, "last word").
 
 ### Talking to Claude
 

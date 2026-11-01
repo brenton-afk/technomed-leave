@@ -17,6 +17,7 @@ import {
   SUPPLY_OPTIONS, parseKitSupplies, setSupply, systemsToSupply, drawsOnLocalStock
 } from '../../clinicalPlan/kitSupply.js'
 import { ATTENDING_REPS } from '../../staffConfig.js'
+import { queueBookingSave, isNetworkFailure } from '../../offlineQueue.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -531,11 +532,32 @@ export default function EditBooking({
           }
         })()
 
-      const res = await fetch('/api/calendar/today?action=save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...auth },
-        body: JSON.stringify(body)
-      })
+      // No signal: the change is kept on this phone and sent when there is.
+      // One pass rather than two — the title goes with the fields — because
+      // nobody will be here to start a second pass. See offlineQueue.js.
+      const holdForLater = () => {
+        const stale = withTitle ? null : staleTitle(base.summary, base.fields, fields)
+        queueBookingSave({
+          eventId,
+          body: stale ? { ...body, summary: stale.proposed } : body,
+          label: [fields.patient, fields.surgeon].filter(Boolean).join(' / '),
+          email: user?.email
+        })
+        setStatus('queued')
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) { holdForLater(); return }
+
+      let res
+      try {
+        res = await fetch('/api/calendar/today?action=save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...auth },
+          body: JSON.stringify(body)
+        })
+      } catch (err) {
+        if (isNetworkFailure(err)) { holdForLater(); return }
+        throw err
+      }
       const data = await res.json()
 
       if (res.status === 409) {
@@ -720,6 +742,26 @@ export default function EditBooking({
               </div>
             )}
 
+            {status === 'queued' && (
+              <div role="status" style={{
+                background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+                borderRadius: radius.control, padding: space.md, marginBottom: space.md
+              }}>
+                <div style={{ ...text('bodyStrong'), color: colour.ink }}>
+                  No signal — saved on this phone
+                </div>
+                <div style={{ ...text('caption'), color: colour.ink, marginTop: 2 }}>
+                  It will go to the calendar by itself as soon as you are back in range.
+                  The bar at the top of the app shows it until it has.
+                </div>
+                <button onClick={onClose} style={{
+                  marginTop: space.sm, width: '100%', padding: space.sm, cursor: 'pointer',
+                  ...text('bodyStrong'), color: 'white', background: colour.accent,
+                  border: 'none', borderRadius: radius.control
+                }}>Done</button>
+              </div>
+            )}
+
             {status === 'loading' && (
               <div style={{ ...text('body'), color: colour.inkFaint, textAlign: 'center', padding: space.lg }}>
                 Loading the booking…
@@ -770,7 +812,7 @@ export default function EditBooking({
               </div>
             )}
 
-            {loaded && status !== 'loading' && status !== 'moved' && !loaded.allDay && (
+            {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && !loaded.allDay && (
               <>
                 <Field label="Date" type="date" value={when.date}
                   onChange={v => setWhen(c => ({ ...c, date: v }))} />
@@ -787,7 +829,7 @@ export default function EditBooking({
               </>
             )}
 
-            {loaded && status !== 'loading' && status !== 'moved' && (
+            {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && (
               <>
                 {FIELDS.map((f, i) => (
                   <React.Fragment key={f.key}>
@@ -1032,7 +1074,7 @@ export default function EditBooking({
             )}
           </div>
 
-          {status !== 'moved' && (
+          {!['moved', 'queued'].includes(status) && (
           <div style={{
             padding: `${space.sm}px ${space.md}px calc(${space.md}px + env(safe-area-inset-bottom, 0px))`,
             borderTop: `1px solid ${colour.line}`, display: 'flex', gap: space.sm, flexShrink: 0
