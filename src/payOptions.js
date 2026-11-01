@@ -30,6 +30,8 @@ export const PAY_ITEMS = {
   overtime_1_5: 'Overtime 1.5×',
   overtime_double: 'Overtime — Double',
   toil_accrued: 'TOIL Accrued',
+  toil_toni_admin: 'TOIL — Admin',
+  toil_toni_scientific: 'TOIL — Scientific',
   call_in: 'Call-In Allowance',
   on_call: 'On-Call Hours'
 }
@@ -37,7 +39,7 @@ export const PAY_ITEMS = {
 /**
  * What somebody is offered when their row does not say.
  *
- * Everything the app knows about, less the two rates that exist only for Toni's
+ * Everything the app knows about, less the rates that exist only for Toni's
  * split. That is what the code did before, expressed as a list instead of as a
  * pair of exclusions.
  */
@@ -58,10 +60,14 @@ export const PAY_OPTIONS = {
     // Toni's ordinary hours are split between two rates so the scientific
     // portion is costed separately. The split is why the timesheet offers her a
     // slider rather than one box.
+    // TOIL likewise, one per role. `toil_accrued` stays as the fallback for
+    // a Xero org that has only the one TOIL rate, so she is never left with
+    // nowhere to claim it.
     items: ['ordinary_toni_admin', 'ordinary_toni_scientific',
-      'overtime_1_5', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+      'overtime_1_5', 'overtime_double',
+      'toil_toni_admin', 'toil_toni_scientific', 'toil_accrued', 'call_in', 'on_call'],
     reviewed: true,
-    note: 'Ordinary hours split between admin and scientific rates.'
+    note: 'Ordinary hours and TOIL each split between admin and scientific rates.'
   }
 }
 

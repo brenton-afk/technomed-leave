@@ -38,8 +38,43 @@ export const DEFAULT_CONTACTS = [
   { id: 'globus', name: 'Globus / NuVasive',
     to: ['vicdistribution@globusmedical.com', 'jlagoon@globusmedical.com'], cc: ['cmckenzie@globusmedical.com', 'mlyfordpike@globusmedical.com'] },
   { id: 'device', name: 'Device Technologies (loan requests only — no booking notices)',
-    to: ['DL_VICLoans@device.com.au'], cc: ['asherhammond@device.com.au', 'kwatson@device.com.au', 'dl_spine_marketing@device.com.au'] }
+    to: ['DL_VICLoans@device.com.au'], cc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] }
 ]
+
+// Corrections to contacts already saved in Redis. A saved copy replaces the
+// defaults above whole, so changing a default alone never reaches the live
+// portal. Each runs once — recorded in `applied` — so an admin can still
+// change the same contact afterwards without it being put back.
+export const CONTACT_CORRECTIONS = [
+  // Brent, 1 Nov 2026: "Kaye Maree Watson needed to be removed… We need Asher
+  // and the other DL-Spine marketing email included."
+  { id: 'device-2026-11-01', contactId: 'device',
+    remove: ['kwatson@device.com.au'],
+    addCc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] }
+]
+
+/** Applies any correction not yet applied. Returns null when nothing changed. */
+export function applyCorrections(saved) {
+  const applied = new Set(saved.applied || [])
+  const due = CONTACT_CORRECTIONS.filter(c => !applied.has(c.id))
+  if (!due.length) return null
+  const lower = v => String(v).trim().toLowerCase()
+  let contacts = saved.contacts
+  for (const fix of due) {
+    contacts = contacts.map(c => {
+      if (c.id !== fix.contactId) return c
+      const gone = new Set(fix.remove.map(lower))
+      const to = (c.to || []).filter(a => !gone.has(lower(a)))
+      const cc = (c.cc || []).filter(a => !gone.has(lower(a)))
+      const have = new Set([...to, ...cc].map(lower))
+      for (const a of fix.addCc) if (!have.has(lower(a))) cc.push(a)
+      return { ...c, to: to.length ? to : (c.to || []), cc }
+    })
+    applied.add(fix.id)
+  }
+  return { ...saved, contacts, applied: [...applied] }
+}
+
 
 export const EVENTS = ['new', 'changed', 'moved', 'cancelled']
 
@@ -47,8 +82,21 @@ export const EVENTS = ['new', 'changed', 'moved', 'cancelled']
 // a notice says a booking exists; a request asks for a tray to be sent.
 export const DEFAULT_LOAN_REQUESTS = [
   { distributor: 'e4', contactId: 'e4', enabled: true },
-  { distributor: 'globus', contactId: 'globus', enabled: true }
+  { distributor: 'globus', contactId: 'globus', enabled: true },
+  // Offered, switched off: ticking it in Admin → Notices is what starts
+  // requests going to Device, since it means emails to a supplier.
+  { distributor: 'device', contactId: 'device', enabled: false }
 ]
+
+/** A saved loan list with any distributor added since it was saved. */
+function withNewLoanRequests(saved, contacts) {
+  const list = Array.isArray(saved) ? [...saved] : []
+  const ids = new Set(contacts.map(c => c.id))
+  for (const d of DEFAULT_LOAN_REQUESTS) {
+    if (!list.some(l => l.distributor === d.distributor) && ids.has(d.contactId)) list.push(d)
+  }
+  return list
+}
 
 export const DEFAULT_RULES = [
   { id: 'signus-all', contactId: 'signus', distributor: 'signus', hospital: '', events: EVENTS, autoSend: false },
@@ -58,8 +106,15 @@ export const DEFAULT_RULES = [
 export async function getNoticeSettings() {
   try {
     const raw = await redis('get', KEY)
-    const saved = raw ? JSON.parse(raw) : null
-    if (saved?.contacts && saved?.rules) return { loanRequests: DEFAULT_LOAN_REQUESTS, ...saved }
+    let saved = raw ? JSON.parse(raw) : null
+    if (saved?.contacts && saved?.rules) {
+      const corrected = applyCorrections(saved)
+      if (corrected) {
+        saved = corrected
+        await redisSetBody(KEY, JSON.stringify(saved)).catch(() => {})
+      }
+      return { ...saved, loanRequests: withNewLoanRequests(saved.loanRequests, saved.contacts) }
+    }
   } catch { /* fall through to the first copy */ }
   return { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES, loanRequests: DEFAULT_LOAN_REQUESTS }
 }
@@ -91,7 +146,10 @@ export async function saveNoticeSettings({ contacts, rules, loanRequests = DEFAU
     if (!ids.has(l.contactId)) throw new Error('A loan request names a contact that does not exist')
     return { distributor: String(l.distributor), contactId: String(l.contactId), enabled: Boolean(l.enabled) }
   })
-  const settings = { contacts: cleanContacts, rules: cleanRules, loanRequests: cleanLoans }
+  // Corrections already in force stay recorded as applied, so saving does not
+  // bring one back round to run again.
+  const settings = { contacts: cleanContacts, rules: cleanRules, loanRequests: cleanLoans,
+    applied: CONTACT_CORRECTIONS.map(c => c.id) }
   await redisSetBody(KEY, JSON.stringify(settings))
   return settings
 }

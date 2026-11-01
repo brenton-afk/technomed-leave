@@ -85,3 +85,30 @@ describe('when Xero cannot be asked', () => {
     expect(keys(cats)).not.toContain('ordinary')
   })
 })
+
+// "Yes her Science role can earn TOIL." Toni's TOIL is banked per role in
+// Xero, so she claims it per role — fake rate IDs throughout.
+describe('TOIL for each of Toni\'s roles', () => {
+  const WITH_ROLE_TOIL = [...RATES,
+    rate('r-toil-admin', 'TOIL Accrued - Admin'),
+    rate('r-toil-sci', 'TOIL Accrued - Science')]
+
+  it('offers Toni a TOIL box for each role when Xero has a rate for each', () => {
+    const cats = categoriesForStaff(WITH_ROLE_TOIL, 'toni@technomed.com.au')
+    const byKey = Object.fromEntries(cats.map(c => [c.key, c.earningsRateID]))
+    expect(byKey.toil_toni_admin).toBe('r-toil-admin')
+    expect(byKey.toil_toni_scientific).toBe('r-toil-sci')
+  })
+
+  it('still offers her the one TOIL box when Xero has only one', () => {
+    const cats = categoriesForStaff(RATES, 'toni@technomed.com.au')
+    expect(keys(cats)).toContain('toil_accrued')
+    expect(keys(cats)).not.toContain('toil_toni_scientific')
+  })
+
+  it('does not put Toni\'s role TOIL on anybody else\'s timesheet', () => {
+    const cats = categoriesForStaff(WITH_ROLE_TOIL, 'ben@technomed.com.au')
+    expect(keys(cats)).not.toContain('toil_toni_admin')
+    expect(cats.map(c => c.earningsRateID)).not.toContain('r-toil-sci')
+  })
+})

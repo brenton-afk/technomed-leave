@@ -22,7 +22,8 @@
 // would have somebody book time off against hours nobody has agreed to. They
 // are reported alongside so the number can be read either way.
 
-const TOIL_KEYS = ['toil_accrued']
+// Every TOIL category: the generic one, and Toni's one per role.
+const TOIL_KEYS = ['toil_accrued', 'toil_toni_admin', 'toil_toni_scientific']
 
 /** Whether a stored leave application is TOIL. */
 const isToil = application => /^toil$/i.test(String(application?.leaveType || '').trim())

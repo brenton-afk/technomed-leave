@@ -150,3 +150,12 @@ describe('against what Xero says', () => {
     expect(compareWithXero(ours, undefined).note).toMatch(/no TOIL balance/)
   })
 })
+
+describe('TOIL claimed against either of Toni\'s roles', () => {
+  it('counts both towards the bank', async () => {
+    const { toilHoursOn } = await import('./toil.js')
+    expect(toilHoursOn({ entries: {
+      toil_toni_admin: { '2026-11-02': 2 }, toil_toni_scientific: { '2026-11-03': 1.5 }
+    } })).toBe(3.5)
+  })
+})

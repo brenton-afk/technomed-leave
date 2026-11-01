@@ -21,6 +21,12 @@ export const CATEGORY_RULES = [
   { key: 'ordinary_toni_scientific', pattern: /ordinary.*toni.*scientific/i, label: 'Ordinary — Scientific', kind: 'ordinary', unit: 'hours', colour: 'blue' },
   { key: 'overtime_double', pattern: /double\s*time|overtime.*(2x|double)/i, label: 'Overtime — Double', kind: 'overtime', unit: 'hours', colour: 'amber' },
   { key: 'overtime_1_5', pattern: /overtime/i, label: 'Overtime 1.5×', kind: 'overtime', unit: 'hours', colour: 'amber' },
+  // Toni earns TOIL in both roles, and Xero banks each in its own balance
+  // (admin 12h, science 13.5h on 1 Nov 2026). One TOIL box would put every
+  // hour into whichever rate it happened to match. Tested before the generic
+  // rule, as the ordinary split is.
+  { key: 'toil_toni_admin', pattern: /toil.*admin|admin.*toil/i, label: 'TOIL — Admin', kind: 'toil', unit: 'hours', colour: 'teal' },
+  { key: 'toil_toni_scientific', pattern: /toil.*scien|scien.*toil/i, label: 'TOIL — Scientific', kind: 'toil', unit: 'hours', colour: 'teal' },
   { key: 'toil_accrued', pattern: /toil/i, label: 'TOIL Accrued', kind: 'toil', unit: 'hours', colour: 'teal' },
   // No dollar figures here any more. These said "$450 per callout" and "$4.50
   // per hour"; the callout rate is $250. A number written down in two places
@@ -250,6 +256,8 @@ const DEMO_RATES = {
   overtime_1_5: 72.75,
   overtime_double: 97,
   toil_accrued: 0,
+  toil_toni_admin: 0,
+  toil_toni_scientific: 0,
   call_in: 250,
   on_call: 4.5
 }

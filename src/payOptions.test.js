@@ -16,7 +16,9 @@ describe('nobody\'s entitlement changed when this moved', () => {
   // rules as they were before the change.
   const BEFORE = {
     'toni@technomed.com.au': ['ordinary_toni_admin', 'ordinary_toni_scientific',
-      'overtime_1_5', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+      'overtime_1_5', 'overtime_double', 'toil_accrued', 'call_in', 'on_call',
+      // Added 1 Nov 2026: "her Science role can earn TOIL" — one TOIL per role.
+      'toil_toni_admin', 'toil_toni_scientific'],
     everyoneElse: ['ordinary', 'overtime_1_5', 'overtime_double',
       'toil_accrued', 'call_in', 'on_call']
   }

@@ -9,8 +9,58 @@ const EVENT_LABELS = { new: 'New', changed: 'Changed', moved: 'Moved', cancelled
 const DISTRIBUTORS = [['signus', 'Signus systems'], ['kt', 'KT Medical systems'], ['e4', 'E4 systems'],
   ['globus', 'Globus / NuVasive'], ['device', 'Device Technologies']]
 
-const list = v => (Array.isArray(v) ? v.join(', ') : String(v || ''))
-const unlist = v => String(v || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
+const isEmail = v => /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[a-z]{2,}$/i.test(String(v || '').trim())
+
+/**
+ * One address per row, each with its own remove button, and a box to add one.
+ *
+ * This was a single text box holding every address joined by commas, rebuilt
+ * from the list on every keystroke — so a comma or space typed to start the
+ * next address vanished as it was typed, and taking one person out meant
+ * picking their address out of a long line on a phone. Reported as "really
+ * tricky to edit" when Kaye needed removing from Device.
+ */
+function AddressList({ label, addresses, onChange, who }) {
+  const [draft, setDraft] = useState('')
+  const [problem, setProblem] = useState('')
+  const add = () => {
+    const found = draft.split(/[,;\s]+/).map(a => a.trim()).filter(Boolean)
+    if (!found.length) return
+    const bad = found.find(a => !isEmail(a))
+    if (bad) { setProblem(`"${bad}" is not an email address`); return }
+    const have = new Set(addresses.map(a => a.toLowerCase()))
+    onChange([...addresses, ...found.filter(a => !have.has(a.toLowerCase()))])
+    setDraft(''); setProblem('')
+  }
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 12.5, color: '#6b7a8d' }}>{label}</div>
+      {addresses.length === 0 && <div style={{ fontSize: 13, color: '#6b7a8d', padding: '4px 0' }}>Nobody</div>}
+      {addresses.map(a => (
+        <div key={a} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #eef1f5' }}>
+          <span style={{ flex: 1, fontSize: 14, color: '#042746', overflowWrap: 'anywhere' }}>{a}</span>
+          <button type="button" onClick={() => onChange(addresses.filter(x => x !== a))}
+            aria-label={`Remove ${a} from ${who} ${label}`}
+            style={{ padding: '4px 10px', borderRadius: 14, border: '1px solid #f0c9c4', background: 'white', color: '#c0392b', fontSize: 13, cursor: 'pointer' }}>
+            Remove
+          </button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <input value={draft} type="email" inputMode="email" autoCapitalize="none" autoCorrect="off"
+          placeholder="Add an address" aria-label={`Add to ${who} ${label}`}
+          onChange={e => { setDraft(e.target.value); setProblem('') }}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+          style={{ flex: 1, padding: '8px 10px', border: '1px solid #dfe5ec', borderRadius: 8, fontSize: 16, boxSizing: 'border-box', minWidth: 0 }} />
+        <button type="button" onClick={add} disabled={!draft.trim()}
+          style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#042746', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          Add
+        </button>
+      </div>
+      {problem && <div role="alert" style={{ color: '#c0392b', fontSize: 12.5, marginTop: 4 }}>{problem}</div>}
+    </div>
+  )
+}
 
 export default function NoticeSettings({ user }) {
   const [settings, setSettings] = useState(null)
@@ -36,7 +86,7 @@ export default function NoticeSettings({ user }) {
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || 'Not saved')
-      setSettings(data); setSaved('Saved.')
+      setSettings(data); setSaved('Saved. The next email uses these addresses.')
     } catch (err) { setError(err.message) }
     setSaving(false)
   }
@@ -109,18 +159,16 @@ export default function NoticeSettings({ user }) {
         <div key={c.id} style={card}>
           <strong style={{ color: '#042746' }}>{c.name}</strong>
           {c.note && <div style={{ fontSize: 12.5, color: '#6b7a8d' }}>{c.note}</div>}
-          <label style={label}>To
-            <input value={list(c.to)} onChange={e => setContact(i, { to: unlist(e.target.value) })} style={input} aria-label={`${c.name} to`} />
-          </label>
-          <label style={label}>Cc
-            <input value={list(c.cc)} onChange={e => setContact(i, { cc: unlist(e.target.value) })} style={input} aria-label={`${c.name} cc`} />
-          </label>
+          <AddressList label="To" who={c.name} addresses={c.to || []} onChange={to => setContact(i, { to })} />
+          <AddressList label="Cc" who={c.name} addresses={c.cc || []} onChange={cc => setContact(i, { cc })} />
         </div>
       ))}
 
       {error && <div role="alert" style={{ color: '#c0392b', fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {saved && <div style={{ color: '#189a85', fontSize: 13, marginBottom: 8 }}>{saved}</div>}
-      <button onClick={save} disabled={saving} style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none',
+      {/* Kept in view: the contacts run long, and a change is not kept until
+          this is pressed. */}
+      <button onClick={save} disabled={saving} style={{ position: 'sticky', bottom: 8, width: '100%', padding: 12, borderRadius: 10, border: 'none',
         background: '#189a85', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
         {saving ? 'Saving…' : 'Save'}
       </button>
