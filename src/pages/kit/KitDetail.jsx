@@ -17,10 +17,28 @@ export default function KitDetail({ kit, canEdit, post, onClose, onChanged, onMo
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const [confirmed, setConfirmed] = useState('')
+
   async function run(fn) {
     setBusy(true); setError('')
     try { await fn(); await onChanged() } catch (err) { setError(err.message) }
     setBusy(false)
+  }
+
+  // "Tapping 'it's here' makes it go green and acknowledges that the staff
+  // member has put it in the right place." One tap: it saves, says so in
+  // green, and the sheet closes itself — nothing left to cancel out of.
+  async function check(place) {
+    setBusy(true); setError('')
+    try {
+      await post('check', { kitId: kit.id, at: place })
+      setConfirmed(place === kit.at ? `Checked — ${kit.name} is at ${PLACES[place]}` : `Updated — ${kit.name} is at ${PLACES[place]}`)
+      await onChanged()
+      setTimeout(onClose, 900)
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
   }
 
   function startEdit() {
@@ -53,6 +71,12 @@ export default function KitDetail({ kit, canEdit, post, onClose, onChanged, onMo
           </div>
 
           <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
+            {confirmed && (
+              <div role="status" style={{ ...text('bodyStrong'), background: colour.successSoft, color: colour.accentDeep,
+                border: `1px solid ${colour.accent}`, borderRadius: radius.control, padding: space.md, marginBottom: space.sm }}>
+                ✓ {confirmed}
+              </div>
+            )}
             {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{error}</div>}
 
             {!editing && (
@@ -65,9 +89,11 @@ export default function KitDetail({ kit, canEdit, post, onClose, onChanged, onMo
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: space.sm }}>
                   {Object.keys(PLACES).map(p => (
-                    <button key={p} disabled={busy} onClick={() => run(() => post('check', { kitId: kit.id, at: p }))}
-                      style={btn(p === kit.at && !kit.checkedAt)}>
-                      {p === kit.at ? "It's here" : `At ${PLACES[p]}`}
+                    <button key={p} disabled={busy} onClick={() => check(p)}
+                      style={p === kit.at
+                        ? { ...btn(true), ...(kit.checkedAt ? { background: colour.successSoft, color: colour.accentDeep, border: `1px solid ${colour.accent}` } : {}) }
+                        : btn(false)}>
+                      {p === kit.at ? (kit.checkedAt ? '✓ Here' : "It's here") : `At ${PLACES[p]}`}
                     </button>
                   ))}
                 </div>

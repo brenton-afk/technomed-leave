@@ -135,8 +135,8 @@ export default function KitRoom({ user, onBack }) {
           <div style={{ ...card(), padding: space.md, marginBottom: space.md }}>
             <div style={{ ...text('bodyStrong'), color: colour.ink }}>Stock-take: {kits.length - unchecked} of {kits.length} checked</div>
             <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>
-              Open each kit where it sits and tap <strong>It's here</strong>, or pick where it really is.
-              This is what makes the emails right.
+              Tap <strong>It's here</strong> on each kit you can see where the list says it is — it turns green.
+              If it is somewhere else, open it and pick where it really is.
             </div>
             <div style={{ height: 6, background: colour.lineSoft, borderRadius: radius.pill, marginTop: space.sm, overflow: 'hidden' }}>
               <div style={{ width: `${((kits.length - unchecked) / Math.max(kits.length, 1)) * 100}%`, height: '100%', background: colour.accent }} />
@@ -200,7 +200,8 @@ export default function KitRoom({ user, onBack }) {
           <div key={p}>
             <SectionTitle>{PLACE_NAMES[p]} · {home.filter(k => k.at === p).length}</SectionTitle>
             {home.filter(k => k.at === p).map(k => (
-              <KitCard key={k.id} kit={k} onOpen={() => setOpen(k)} onMove={() => setMoving(k)} busy={busy === k.id} />
+              <KitCard key={k.id} kit={k} onOpen={() => setOpen(k)} onMove={() => setMoving(k)} busy={busy === k.id}
+                onCheck={() => act(k.id, () => post('check', { kitId: k.id, at: k.at }))} />
             ))}
           </div>
         ))}
@@ -229,13 +230,14 @@ function SectionTitle({ children }) {
   return <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }}>{children}</div>
 }
 
-function KitCard({ kit, onOpen, onMove, onReturn, busy }) {
+function KitCard({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
   const dist = DISTRIBUTORS[distributorOf(kit)]
   const logo = logoFor(kit)
   const trayCount = (kit.trays || []).length
   const awayTrays = kit.away?.trays?.length
   return (
-    <div style={{ ...card(), marginBottom: space.sm, display: 'flex', overflow: 'hidden' }}>
+    <div style={{ ...card(), marginBottom: space.sm, display: 'flex', overflow: 'hidden',
+      ...(!kit.away && kit.checkedAt ? { background: colour.successSoft, borderColor: 'rgba(24,154,133,0.35)' } : {}) }}>
       <div style={{ width: 4, background: kit.away ? colour.warning : kit.checkedAt ? colour.accent : colour.line }} />
       <button onClick={onOpen} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', textAlign: 'left',
         padding: `${space.md}px`, cursor: 'pointer', display: 'flex', gap: space.md, alignItems: 'center' }}>
@@ -252,13 +254,23 @@ function KitCard({ kit, onOpen, onMove, onReturn, busy }) {
           <div style={{ ...text('caption'), color: kit.away ? colour.warning : colour.inkFaint }}>
             {kit.away
               ? `At ${PLACE_NAMES[kit.at]} · ${sinceText(kit.away.since)}${awayTrays && awayTrays < trayCount ? ` · ${awayTrays}/${trayCount} trays` : ''}`
-              : `${KIND[kit.kind] || ''}${trayCount ? ` · ${trayCount} trays` : ''}${kit.checkedAt ? '' : ' · not checked'}`}
+              : `${KIND[kit.kind] || ''}${trayCount ? ` · ${trayCount} trays` : ''}`}
+            {!kit.away && kit.checkedAt && (
+              <span style={{ color: colour.accentDeep, fontWeight: 600 }}> · ✓ checked{kit.checkedBy ? ` by ${kit.checkedBy}` : ''}</span>
+            )}
           </div>
         </div>
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: space.md }}>
         {kit.away && onReturn && (
           <button onClick={onReturn} disabled={busy} style={pill(false)}>{busy ? '…' : 'Returned'}</button>
+        )}
+        {/* The stock-take from the list itself: one tap, the card goes green. */}
+        {!kit.away && !kit.checkedAt && onCheck && (
+          <button onClick={onCheck} disabled={busy} aria-label={`${kit.name} is here`}
+            style={{ ...pill(false), border: `1px solid ${colour.accent}`, color: colour.accentDeep }}>
+            {busy ? '…' : "It's here"}
+          </button>
         )}
         <button onClick={onMove} style={pill(true)}>Move</button>
       </div>
