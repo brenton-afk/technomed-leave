@@ -192,3 +192,11 @@ export const IconPlan = p => (
     <circle cx="15.5" cy="13" r="1.2" fill="currentColor" stroke="none" />
   </Svg>
 )
+
+// A lens and a handle — the same mark every calendar uses for search.
+export const IconSearch = p => (
+  <Svg {...p}>
+    <circle cx="10.5" cy="10.5" r="6" />
+    <path d="M15 15l5 5" />
+  </Svg>
+)

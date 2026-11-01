@@ -1,4 +1,6 @@
-import { SURGEON_KEYS, normaliseSurgeon, stripIdentifiers } from './parse.js'
+import {
+  SURGEON_KEYS, normaliseSurgeon, stripIdentifiers, sanitisePatient, isBareParticle
+} from './parse.js'
 import { toDateStr } from './week.js'
 
 // ─── Reading an RHH theatre list out of an email ─────────────────────────────
@@ -47,12 +49,20 @@ export function readPatientCell(text) {
   // than as a case with a confidently wrong one.
   //
   // Apostrophes and hyphens are part of a surname: O'BRIEN, PETERS-WILLKE.
-  const m = /^([A-Z][A-Z'’\-]{2,})\b/.exec(raw)
+  //
+  // Every capitalised word, not only the first: the given name follows in
+  // ordinary case, so "VAN DER BERG Johanna" is the surname Van der Berg and
+  // "LLOYD JONES Mary" is Lloyd Jones. A leading two-letter word is allowed
+  // only when it is a particle — "DE SILVA" — which keeps "KT Lonestar" out.
+  const m = /^((?:[A-Z][A-Z'’\-]+\s+)*[A-Z][A-Z'’\-]+)(?=\s|$)/.exec(raw)
   if (!m) return null
-  const surname = m[1]
+  const words = m[1].split(/\s+/)
+  if (words[0].length < 3 && !isBareParticle(words[0])) return null
   // A cell that is only a heading word is not a patient.
-  if (['THEATRE', 'LIST', 'NEUROSURGERY', 'ORTHOPAEDICS', 'KIT', 'DOB'].includes(surname)) return null
-  return surname.charAt(0) + surname.slice(1).toLowerCase()
+  if (['THEATRE', 'LIST', 'NEUROSURGERY', 'ORTHOPAEDICS', 'KIT', 'DOB'].includes(words[0])) return null
+  // Never more than four words; past that it is not a name in this column.
+  const surname = words.slice(0, 4).join(' ')
+  return sanitisePatient(surname, { known: surname })
 }
 
 /** Whether a cell names one of the surgeons, in any of the ways they are written. */

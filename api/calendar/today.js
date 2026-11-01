@@ -147,6 +147,7 @@ export default async function handler(req, res) {
   if (req.query.action === 'cancel') return handleCancel(req, res)
   // What this patient already has in, for a revision or a removal.
   if (req.query.action === 'prior') return handlePrior(req, res)
+  if (req.query.action === 'search') return handleSearch(req, res)
 
   // Everything below this line is the bookings calendar in full: surgeons,
   // patient surnames, hospitals, procedures, kit. It was served to anyone who
@@ -400,7 +401,8 @@ async function handleBooking(req, res) {
         // The whole surname, however many words it is. This used to take the
         // first word, so "Van der Berg" opened as "Van" — and saving that
         // back would have cut the name on the calendar too.
-        patient: surnameOf(labelled.patient, knownPatientOf(event))
+        patient: surnameOf(labelled.patient, knownPatientOf(event)
+          || readBooking(event.summary || '', description)?.patient)
       },
       notes: descriptionNotes(description).join('\n')
     })
@@ -463,7 +465,8 @@ async function handleSave(req, res) {
         field === 'patient'
           ? replaceSurname(
             (labelledFieldSpans(description).patient?.value || '').trim(), value,
-            surnameOf(labelledFieldSpans(description).patient?.value, knownPatientOf(current)))
+            surnameOf(labelledFieldSpans(description).patient?.value, knownPatientOf(current)
+              || readBooking(current.summary || '', current.description || '')?.patient))
           : value)
     }
 
@@ -1767,5 +1770,91 @@ async function handlePrior(req, res) {
   } catch (err) {
     // A history that cannot be read must not stop anybody opening a booking.
     return res.status(200).json({ ok: true, matches: [], unavailable: err.message })
+  }
+}
+
+
+// ─── Searching every booking ──────────────────────────────────────────────────
+// "The search for patients who are booked or who have been booked needs to be
+// somewhere on the cases page, similar to how Google Calendar has a search
+// glass at the top."
+//
+// Google's own full-text search does the finding, over every booking from
+// 2020 to a year ahead, so nothing is copied out of the calendar to be
+// searched. Each hit is then read through readBooking, the same reader every
+// other screen uses, so a result says exactly what its card says — a surname,
+// never a first name, even when the first name in the notes is what matched.
+//
+// Only cases come back. Leave, meetings and reminders mention surgeons too,
+// and a list of those under a patient search is noise.
+
+export const SEARCH_FROM = '2020-01-01'
+const SEARCH_MAX = 60
+
+/** Whether a read case answers the query, on the fields the card shows. */
+export function caseMatches(read, query) {
+  const want = String(query || '').toLowerCase().split(/\s+/).filter(Boolean)
+  if (!want.length || !read) return false
+  const hay = [read.patient, read.surgeon, read.operation, read.system, read.kit, read.hospital]
+    .filter(Boolean).join(' ').toLowerCase()
+  return want.every(word => hay.includes(word))
+}
+
+async function handleSearch(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+
+  const query = String(req.query.q || '').trim().slice(0, 60)
+  if (query.length < 2) return res.status(200).json({ ok: true, results: [] })
+
+  try {
+    const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+    const until = toDateStr(addCivilDays(parseDateStr(hobartToday()), 366))
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
+      + `?q=${encodeURIComponent(query)}`
+      + `&timeMin=${encodeURIComponent(`${SEARCH_FROM}T00:00:00+11:00`)}`
+      + `&timeMax=${encodeURIComponent(`${until}T23:59:59+10:00`)}`
+      + '&singleEvents=true&orderBy=startTime&maxResults=2500'
+      + `&timeZone=${encodeURIComponent(QUERY_TZ)}`
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const data = await r.json()
+    if (data.error) throw new Error(data.error.message)
+
+    const results = (data.items || [])
+      .filter(e => e.start?.dateTime)
+      .filter(e => !isDistributorEmail(e.organizer?.email))
+      .map(e => {
+        const read = readBooking(e.summary || '', e.description || '', { knownPatient: knownPatientOf(e) })
+        if (!read || (!read.patient && !read.awaitingName)) return null
+        // Google matched somewhere in the event — often the notes. Kept only
+        // where the match is in what the card shows, or the patient's own
+        // line, so a search for a surgeon does not return every booking
+        // whose notes mention them in passing.
+        const labelledPatient = parseLabelledDescription(e.description || '').patient || ''
+        if (!caseMatches(read, query)
+          && !String(labelledPatient).toLowerCase().includes(query.toLowerCase())) return null
+        return {
+          id: e.id,
+          date: e.start.dateTime.slice(0, 10),
+          patient: read.patient || '',
+          surgeon: read.surgeon || '',
+          operation: read.operation || '',
+          system: read.system || '',
+          hospital: read.hospital || '',
+          cancelled: isCancelled(e.summary || '', e.description || '')
+        }
+      })
+      .filter(Boolean)
+      // Newest first: the case somebody is looking for is usually the latest.
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+
+    return res.status(200).json({
+      ok: true,
+      results: results.slice(0, SEARCH_MAX),
+      more: results.length > SEARCH_MAX
+    })
+  } catch (err) {
+    console.error('calendar/search failed:', err.message)
+    return res.status(500).json({ error: 'Search is unavailable right now. Try again in a moment.' })
   }
 }

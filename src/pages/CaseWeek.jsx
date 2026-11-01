@@ -23,6 +23,7 @@ import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
 import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
+import CaseSearch, { SearchButton } from './cases/CaseSearch.jsx'
 import ListPlace from './cases/ListPlace.jsx'
 import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
 import { weekOf, withinWeek } from '../clinicalPlan/teamLeader.js'
@@ -1251,6 +1252,8 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
   // The booking being edited, if any. Tapping a case opens the sheet; the sheet
   // loads it fresh from the calendar rather than editing what is on screen.
   const [editing, setEditing] = useState(null)
+  // The search sheet. A result opens the same edit sheet a card does.
+  const [searching, setSearching] = useState(false)
   // The day the sheet should open on, or null when it is closed.
   const [adding, setAdding] = useState(null)
   // Fields from a booking spoken at the mic, applied when the form opens.
@@ -1710,9 +1713,12 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
         // real summary — how many cases, how many days — still earns its line.
         subtitle={plan?.summaryLine || (desktop ? undefined : 'Every booking, as the calendar has it')}
         right={(
-          <SpanToggle span={span}
-            options={desktop ? ['week', 'lists'] : ['day', 'week', 'lists']}
-            onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+            <SearchButton onClick={() => setSearching(true)} />
+            <SpanToggle span={span}
+              options={desktop ? ['week', 'lists'] : ['day', 'week', 'lists']}
+              onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />
+          </div>
         )}>
         {switcher}
 
@@ -2041,6 +2047,12 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
           // A booking accepted here lands on the calendar, so the week has to be
           // read again for it to appear.
           onAccepted={() => { countQueue(); load(window_, { quiet: true }) }} />
+      )}
+
+      {searching && (
+        <CaseSearch user={user}
+          onClose={() => setSearching(false)}
+          onOpen={result => { setSearching(false); setEditing({ id: result.id }) }} />
       )}
 
       {editing && (

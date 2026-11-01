@@ -1,5 +1,5 @@
 import { askClaude } from './_anthropic.js'
-import { stripIdentifiers, normaliseSurgeon, sanitisePatient } from '../src/clinicalPlan/parse.js'
+import { stripIdentifiers, normaliseSurgeon, surnameFromField } from '../src/clinicalPlan/parse.js'
 import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { withoutPreOpNoise } from '../src/clinicalPlan/preOpNoise.js'
 import { sniffMediaType } from './_gmail.js'
@@ -61,7 +61,8 @@ Two things the surgeons write that mean something specific:
 
 NEVER return a patient's given name, initials, date of birth, UR number, MRN or
 any other identifier. If the document shows "SMITH John 12/3/1958", return only
-"Smith". This is a firm rule: the surname is the only patient detail permitted.
+"Smith". A surname can be more than one word — "VAN DER BERG Johanna" is
+"Van der Berg", "LLOYD JONES Mary" is "Lloyd Jones" — and must be returned whole. This is a firm rule: the surname is the only patient detail permitted.
 
 Do not guess. If a field is not stated, return "" for it. If you cannot tell
 whether something is a case at all, leave it out — a person reviews everything
@@ -75,11 +76,9 @@ Return ONLY JSON, no prose, of this shape:
 
 /** Anything that is not a surname, removed on the way out regardless of the prompt. */
 function cleanCase(raw) {
-  const surname = stripIdentifiers(String(raw?.surname || ''))
-    .trim()
-    // First token only, so "Smith John" cannot survive a model that ignored the
-    // instruction.
-    .split(/\s+/)[0] || ''
+  // The whole surname, however many words — see surnameFromField. The first
+  // word only, as this used to take, turned Van der Berg into "Van".
+  const surname = surnameFromField(String(raw?.surname || ''))
   // Aliases applied here as well as asked for in the prompt. A model told to
   // substitute a name usually does; "usually" is not a basis for which tray
   // arrives in a theatre.
@@ -90,7 +89,7 @@ function cleanCase(raw) {
     // version of it. This one lower-cased everything after the first letter,
     // so "La Pietra" came out of an email as "La pietra" — a third spelling,
     // beside the title's and the description's, for one person.
-    patient: sanitisePatient(surname),
+    patient: surname,
     surgeon: normaliseSurgeon(raw?.surgeon) || stripIdentifiers(String(raw?.surgeon || '')).trim(),
     date: /^\d{4}-\d{2}-\d{2}$/.test(String(raw?.date || '')) ? raw.date : null,
     procedure: stripIdentifiers(String(raw?.procedure || '')),

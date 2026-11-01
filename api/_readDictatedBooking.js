@@ -1,5 +1,5 @@
 import { askClaude } from './_anthropic.js'
-import { stripIdentifiers, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
+import { stripIdentifiers, normaliseSurgeon, surnameFromField } from '../src/clinicalPlan/parse.js'
 import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { SURGEON_COLOUR_NAMES } from '../src/clinicalPlan/colours.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
@@ -140,7 +140,8 @@ Return each field, or "" where nothing was said:
 
 NEVER return a given name, date of birth, UR number or any other patient
 identifier, even if one was dictated. The surname is the only patient detail
-permitted, and if a full name was said, return only the surname.
+permitted, and if a full name was said, return only the surname. A surname can
+be more than one word ("Van der Berg", "Lloyd Jones"): return all of it.
 
 Return ONLY JSON:
 {"surname":"","surgeon":"","date":"","hospital":"","procedure":"","kit":"","note":"","unclear":""}
@@ -187,8 +188,9 @@ export async function readDictatedBooking({ audio, contentType } = {}) {
   }
 
   // Identifiers stripped on the way out whatever the prompt asked for, and the
-  // surname taken as the first token so a full name cannot survive.
-  const surname = stripIdentifiers(String(parsed.surname || '')).trim().split(/\s+/)[0] || ''
+  // surname kept whole however many words it is — the first word only, as
+  // this used to take, turned "Van der Berg" into "Van". See surnameFromField.
+  const surname = surnameFromField(String(parsed.surname || ''))
   // Through the same resolver as every other path, so a spoken "E4 cages" on a
   // PLIF names the cage rather than the distributor.
   const kit = resolveKit(
@@ -201,7 +203,7 @@ export async function readDictatedBooking({ audio, contentType } = {}) {
     transcript,
     unclear: stripIdentifiers(String(parsed.unclear || '')),
     fields: {
-      patient: surname ? surname.charAt(0).toUpperCase() + surname.slice(1).toLowerCase() : '',
+      patient: surname,
       surgeon: normaliseSurgeon(parsed.surgeon) || '',
       date: /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.date || '')) ? parsed.date : '',
       hospital: /rhh|royal/i.test(String(parsed.hospital || '')) ? 'RHH'

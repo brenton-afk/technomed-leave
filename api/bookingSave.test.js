@@ -141,3 +141,15 @@ describe('who entered it (Task 6)', () => {
     expect(patches[0].description).toMatch(/Entered by Mat · amended by Toni/)
   })
 })
+
+describe('a two-word surname typed into Google, opened in the portal', () => {
+  it('opens with the whole surname, with nothing stored on the event', async () => {
+    event = {
+      ...event, extendedProperties: undefined,
+      summary: 'Lloyd Jones CYLOX - Ibbett',
+      description: 'Surg - Dr Ibbett\nPt - Lloyd Jones (Jo)\nProcedure - L4/5 TLIF'
+    }
+    const res = await call('booking', { query: { id: 'evt-9' } })
+    expect(res.payload.fields.patient).toBe('Lloyd Jones')
+  })
+})

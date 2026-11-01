@@ -10,15 +10,17 @@ import { replaceSurname } from './labelledFields.js'
 
 describe('a surname recorded on the event', () => {
   it('is read whole from the title', () => {
-    expect(parseCaseTitle('Testa Rossa CYLOX - Ibbett').patient).toBe('Testa')
-    expect(parseCaseTitle('Testa Rossa CYLOX - Ibbett', { knownPatient: 'Testa Rossa' }).patient)
+    // In block capitals, the title alone cannot say where the name ends; the
+    // stored surname can.
+    expect(parseCaseTitle('TESTA ROSSA CYLOX - Ibbett').patient).toBe('Testa')
+    expect(parseCaseTitle('TESTA ROSSA CYLOX - Ibbett', { knownPatient: 'Testa Rossa' }).patient)
       .toBe('Testa Rossa')
   })
 
   it('is read whole from a labelled booking', () => {
-    const description = 'Surg - Dr Ibbett\nPt - Testa Rossa Bianca (Jo)\nProcedure - L4/5 TLIF\nKit - CYLOX (Loan)'
-    expect(readBooking('Testa Rossa Bianca CYLOX - Ibbett', description).patient).toBe('Testa')
-    expect(readBooking('Testa Rossa Bianca CYLOX - Ibbett', description,
+    const description = 'Surg - Dr Ibbett\nPt - TESTA ROSSA BIANCA (Jo)\nProcedure - L4/5 TLIF\nKit - CYLOX (Loan)'
+    expect(readBooking('TESTA ROSSA BIANCA CYLOX - Ibbett', description).patient).toBe('Testa')
+    expect(readBooking('TESTA ROSSA BIANCA CYLOX - Ibbett', description,
       { knownPatient: 'Testa Rossa Bianca' }).patient).toBe('Testa Rossa Bianca')
   })
 

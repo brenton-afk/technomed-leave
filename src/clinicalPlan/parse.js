@@ -584,6 +584,87 @@ export function knownSurnameLength(words, known) {
   return want.length
 }
 
+/**
+ * A surname out of a field that is meant to hold only a surname.
+ *
+ * The readers of emails, dictation and usage forms each ask for "the surname
+ * only" and then took the first word of whatever came back — or, for usage
+ * forms, the last — so "Van der Berg" arrived as "Van", and on a usage form as
+ * "Berg". Here the whole value is the surname, because that is what the field
+ * is for, with two guards for a reader that ignored the instruction:
+ *
+ *   · "Surname, Given" — everything after the comma goes;
+ *   · "VAN DER BERG Johanna" — the hospital label convention, surname in
+ *     capitals and given name not — only the capitalised run is kept.
+ *
+ * At most four words. Anything longer is not a surname, and the first word is
+ * the safest answer for it.
+ */
+export function surnameFromField(value) {
+  const cleaned = stripIdentifiers(value).split(',')[0]
+    .replace(/\b(dr|mr|mrs|ms|miss|mx|prof)\b\.?/gi, ' ')
+    .replace(/[^A-Za-z'’\- ]/g, ' ')
+    .replace(/\s+/g, ' ').trim()
+  if (!cleaned) return ''
+  let words = cleaned.split(' ')
+  const caps = w => /[A-Z]/.test(w) && w === w.toUpperCase()
+  if (caps(words[0]) && words.some(w => !caps(w))) {
+    const run = []
+    for (const w of words) { if (!caps(w)) break; run.push(w) }
+    words = run
+  }
+  if (words.length > 4) words = words.slice(0, 1)
+  const joined = words.join(' ')
+  return sanitisePatient(joined, { known: joined })
+}
+
+/**
+ * Words that sit after a surname in a title and are not part of it — the
+ * procedure, the anatomy, the kit, the hospital, the list. Used only to decide
+ * where a multi-word surname typed straight into Google Calendar ends.
+ */
+const NOT_NAME_WORDS = new Set([
+  'disc', 'disk', 'replacement', 'arthroplasty', 'kyphoplasty', 'vertebroplasty', 'stimulator',
+  'spinal', 'spine', 'cord', 'neck', 'back', 'hip', 'knee', 'shoulder', 'ankle', 'wrist', 'elbow',
+  'femur', 'tibia', 'pelvis', 'pelvic', 'sacral', 'sacrum', 'skull', 'jaw', 'mandible', 'maxilla',
+  'orbital', 'orbit', 'facial', 'plate', 'plating', 'plates', 'screw', 'screws', 'nail', 'nailing',
+  'cage', 'cages', 'rod', 'rods', 'fixation', 'insertion', 'exchange', 'extension', 'level',
+  'levels', 'left', 'right', 'lt', 'rt', 'trauma', 'fracture', 'orif', 'tka', 'tha', 'tkr', 'thr',
+  'urgent', 'emergency', 'private', 'public', 'cancelled', 'canceled', 'postponed', 'booking',
+  'rhh', 'calvary', 'clv', 'hobart', 'lenah', 'valley', 'royal', 'hospital', 'navigation',
+  'airo', 'curve', 'brainlab', 'mazor', 'robot', 'robotic', 'kit', 'kits', 'tray', 'trays',
+  'consignment', 'stage', 'staged', 'tumour', 'tumor', 'infection', 'cervical', 'lumbar',
+  'thoracic', 'with', 'and', 'for', 'plus', 'via', 'redo', 'repeat', 'second', 'first',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
+])
+
+/**
+ * How many leading words of a title are a multi-word surname typed by hand.
+ *
+ * "Testa Rossa ACDF - Ibbett" and "Testa Rossa CYLOX - Ibbett": the team writes
+ * the surname first, in ordinary capitals, and what follows it is the system in
+ * block capitals, an operation, or a level. So the surname runs over the
+ * leading Title-case words and stops at the first word that is anything else —
+ * a system, an operation, anatomy, a hospital, a surgeon, a number, or a word
+ * in block capitals. At most three words.
+ *
+ * Only ever lengthens: a title whose first word is not Title case is left to
+ * the rules above it.
+ */
+export function handTypedSurnameLength(words) {
+  const titleCase = w => /^[A-Z][a-z'’]+(?:-[A-Za-z][a-z'’]+)*$/.test(String(w || ''))
+  if (!titleCase(words[0])) return 1
+  let n = 1
+  while (n < Math.min(words.length, 3)) {
+    const w = words[n]
+    const bare = String(w).toLowerCase().replace(/[^a-z]/g, '')
+    if (!titleCase(w) || NOT_NAME_WORDS.has(bare) || NOT_A_SURNAME.has(bare)
+      || isOperationWord(w) || findSystems(w).length || normaliseSurgeon(w, { near: false })) break
+    n++
+  }
+  return n
+}
+
 /** Words that describe the operation rather than the person having it. */
 const OPERATION_WORDS = new Set([
   'acdf', 'plif', 'tlif', 'alif', 'xlif', 'llif', 'olif', 'adr',
@@ -687,8 +768,12 @@ export function parseCaseTitle(title, hint = {}) {
   // reads like a surname, so "Theatre 3 list" does not become a patient.
   if (surgeonSource === 'colour' && !looksLikeSurname(words[0])) return null
 
-  const take = knownSurnameLength(words, hint.knownPatient) || surnameLength(words)
-  const patient = sanitisePatient(words.slice(0, take).join(' '), { known: hint.knownPatient })
+  // The surname as recorded, then a particle name, then a hand-typed one.
+  const particles = surnameLength(words)
+  const take = knownSurnameLength(words, hint.knownPatient)
+    || (particles > 1 ? particles : handTypedSurnameLength(words))
+  const known = take > 1 ? words.slice(0, take).join(' ') : hint.knownPatient
+  const patient = sanitisePatient(words.slice(0, take).join(' '), { known })
   if (!patient) return null
 
   return {
@@ -1436,7 +1521,16 @@ export function readBooking(title, description, { colourSurgeon, knownPatient } 
   // half a surname on the front of it is what started all this.
   const kitField = parseKitField(resolveKit(labelled.kit, labelled.procedure || ''))
 
-  const typed = severed ? titlePatient : labelledPatient
+  // The title and the Pt line agree on a longer name. "Pt - Testa Rossa (Jo)"
+  // under "Testa Rossa CYLOX - Ibbett": the label alone cannot say whether
+  // Rossa is a second surname or a first name, and the title alone is a
+  // reading of hand-typed words — but both starting with the same two words is
+  // the team writing the surname twice.
+  const labelWords = String(labelled.patient || '').split(',')[0].trim().split(/\s+/)
+  const agreed = !severed && titlePatient && labelledPatient
+    && titlePatient.split(/\s+/).length > labelledPatient.split(/\s+/).length
+    && knownSurnameLength(labelWords, titlePatient) > 0
+  const typed = severed || agreed ? titlePatient : labelledPatient
   const surgeon = normaliseSurgeon(labelled.surgeon) || fromTitle?.surgeon
 
   // Where the name came from decides how hard it is questioned.

@@ -1,4 +1,5 @@
 // ─── Usage case normalisation ─────────────────────────────────────────────────
+import { surnameFromField } from '../src/clinicalPlan/parse.js'
 // Turns whatever the vision extraction returned into a normalised case record:
 // distributors resolved by our own rules, peripherals dropped, uncertain rows
 // flagged, and the Dropbox folder name derived. Deliberately does not trust the
@@ -245,7 +246,10 @@ function plausibleScanDate(raw) {
  * is late or the date was misread, and only they can say which.
  */
 export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
-  const patientSurname = surnameOf(extracted.patientSurname) ||
+  // The whole surname. surnameOf keeps the *last* word, which is right for a
+  // surgeon written "Dr Andrew Thani" and wrong for a patient: "Van der Berg"
+  // was filed in Dropbox as "Berg". See surnameFromField.
+  const patientSurname = surnameFromField(extracted.patientSurname) ||
     str(extracted.patientSurname)
   const surgeonSurname = surnameOf(extracted.surgeonName)
   const dateOnForm = normaliseDate(extracted.date)
