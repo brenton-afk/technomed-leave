@@ -114,6 +114,30 @@ describe('creating a booking', () => {
       body: { fields: { patient: 'Testa Rossa', surgeon: 'Ibbett', kit: 'CYLOX (Loan)' }, date: '2026-11-04' }
     })
     expect(created.summary).toMatch(/^Testa Rossa CYLOX - Ibbett/)
-    expect(created.extendedProperties).toEqual({ private: { tmPatient: 'Testa Rossa' } })
+    expect(created.extendedProperties.private.tmPatient).toBe('Testa Rossa')
+  })
+})
+
+describe('who entered it (Task 6)', () => {
+  it('records the signed-in creator in the notes and on the event', async () => {
+    await call('create', {
+      method: 'POST',
+      body: { fields: { patient: 'Testa', surgeon: 'Ibbett' }, date: '2026-11-04' }
+    })
+    expect(created.description).toMatch(/Entered by Toni$/)
+    expect(created.extendedProperties.private.tmEnteredBy).toBe('Toni')
+  })
+
+  it('does not make the editor the creator of a booking typed into Google', async () => {
+    event.extendedProperties = undefined
+    await call('save', { method: 'POST', body: { eventId: 'evt-9', etag: '"v1"', fields: { procedure: 'X' } } })
+    expect(patches[0].description).not.toMatch(/Entered by Toni/)
+    expect(patches[0].description).toMatch(/Amended by Toni \d{1,2}\/\d{1,2}\/\d{4}$/)
+  })
+
+  it('keeps the creator recorded on the event', async () => {
+    event.extendedProperties = { private: { tmEnteredBy: 'Mat' } }
+    await call('save', { method: 'POST', body: { eventId: 'evt-9', etag: '"v1"', fields: { procedure: 'X' } } })
+    expect(patches[0].description).toMatch(/Entered by Mat · amended by Toni/)
   })
 })

@@ -134,7 +134,8 @@ describe('accepting a moved booking', () => {
     const move = patches.find(p => p.patch.start).patch
     expect(move.description).toMatch(/06\/11\/2026/)
     expect(move.description).not.toMatch(/04\/11\/2026/)
-    expect(move.description).toMatch(/Entered by Toni/)
+    // No creator line on this booking, so the move is an amendment, not an entry.
+    expect(move.description).toMatch(/Amended by Toni/)
   })
 
   it('moves it between hospitals too', async () => {
@@ -178,5 +179,17 @@ describe('moving from the edit sheet', () => {
   it('moves the location with the hospital', async () => {
     await call('save', { eventId: 'evt-1', etag: '"v1"', fields: { hospital: 'CLV' } })
     expect(patches[0].patch.location).toBe('CLV')
+  })
+})
+
+describe('a booking accepted from the email check (Task 6)', () => {
+  it('says who confirmed it, and that it came from email', async () => {
+    candidate = { ...candidate, moves: undefined }
+    await call('accept', {
+      id: 'bk_1', date: '2026-11-06',
+      fields: { patient: 'Testa', surgeon: 'Ibbett', kit: 'CYLOX (Loan)', hospital: 'RHH' }
+    })
+    expect(creates[0].description).toMatch(/Entered by Toni \(from email\)$/)
+    expect(creates[0].extendedProperties.private.tmEnteredBy).toBe('Toni (from email)')
   })
 })

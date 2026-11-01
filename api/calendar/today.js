@@ -58,6 +58,17 @@ import {
 } from '../../src/clinicalPlan/priorImplants.js'
 import { firstNameFor } from '../../src/staffConfig.js'
 import { sanitisePatient } from '../../src/clinicalPlan/parse.js'
+import { withAttribution, creatorTag } from '../../src/clinicalPlan/attribution.js'
+
+/** Today in Hobart, YYYY-MM-DD — on the real zone, so daylight saving holds. */
+function hobartToday() {
+  return toDateStr(zonedCivil(new Date(), TZ))
+}
+
+/** Who the portal recorded as entering this booking, if it did. */
+function knownCreatorOf(event) {
+  return event?.extendedProperties?.private?.tmEnteredBy || null
+}
 
 /**
  * The patient's surname as somebody typed it into the portal.
@@ -73,9 +84,10 @@ export function knownPatientOf(event) {
 }
 
 /** The structured properties a patient surname is stored under. */
-function patientProperties(surname) {
+function patientProperties(surname, extra = {}) {
   const clean = sanitisePatient(surname, { known: surname })
-  return clean ? { private: { tmPatient: clean } } : null
+  const props = { ...(clean ? { tmPatient: clean } : {}), ...extra }
+  return Object.keys(props).length ? { private: props } : null
 }
 
 // The Staff Leave sub-calendar. Read alongside bookings for the clinical plan
@@ -528,7 +540,8 @@ async function handleSave(req, res) {
     const onDay = (patch.start?.dateTime || '').slice(0, 10) || wasOn
     patch.description = withDateFollowing(patch.description, onDay)
 
-    patch.description = withAttribution(patch.description, firstNameFor(session.email))
+    patch.description = withAttribution(patch.description, firstNameFor(session.email),
+      { knownCreator: knownCreatorOf(current), today: hobartToday() })
     const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })
 
     // A move is only reported once Google says the event is on the new day.
@@ -625,7 +638,7 @@ function bookingTitle({ patient, system, surgeon, rep }) {
  * team typed — same title convention, same labelled notes, same colour rule.
  * Two writers would drift apart within a month.
  */
-async function writeBooking({ fields: given = {}, date, notes, rep, colorId }, enteredBy) {
+async function writeBooking({ fields: given = {}, date, notes, rep, colorId }, enteredBy, { source } = {}) {
   let fields = given
   const patient = String(fields.patient || '').trim()
   const surgeon = String(fields.surgeon || '').trim()
@@ -691,12 +704,15 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId }, e
 
   const created = await createBookingEvent({
     summary,
-    description: withAttribution(description.trim(), enteredBy, { created: true }),
+    description: withAttribution(description.trim(), enteredBy, { created: true, source }),
     date: day,
     colorId: colour,
     location: String(fields.hospital || '').trim() || undefined,
     hour,
-    extendedProperties: patientProperties(patient) || undefined
+    // Who entered it, kept apart from the notes so a line tidied away in
+    // Google cannot lose it. See attribution.js.
+    extendedProperties: patientProperties(patient,
+      enteredBy ? { tmEnteredBy: creatorTag(enteredBy, { source }) } : {}) || undefined
   })
 
   // Packed here rather than in each handler, so every route that makes a
@@ -737,24 +753,8 @@ async function handleCreate(req, res) {
  * not end up with five lines of signature. Who entered it is kept; who last
  * amended it replaces the previous amender.
  */
-const BY_LINE = /^Entered by [^\n]*$/mi
-
-function withAttribution(description, name, { created = false } = {}) {
-  const who = String(name || '').trim()
-  if (!who) return description
-  const text = String(description || '').replace(/\r\n?/g, '\n').trimEnd()
-
-  if (created || !BY_LINE.test(text)) {
-    return `${text}${text ? '\n\n' : ''}Entered by ${who}`
-  }
-  return text.replace(BY_LINE, line => {
-    const enteredBy = /^Entered by ([^·\n]+)/i.exec(line)?.[1]?.trim() || who
-    // Somebody amending their own booking is not two people.
-    return enteredBy.toLowerCase() === who.toLowerCase()
-      ? `Entered by ${enteredBy}`
-      : `Entered by ${enteredBy} · amended by ${who}`
-  })
-}
+// withAttribution lives in src/clinicalPlan/attribution.js, where it is
+// tested on its own.
 
 /**
  * Adds a task to a day.
@@ -1303,7 +1303,8 @@ export async function moveBooking(eventId, day, { hospital, by, etag } = {}) {
     description = setLabelledValue(description, 'hospital', site)
     patch.location = site
   }
-  patch.description = withAttribution(description, by)
+  patch.description = withAttribution(description, by,
+    { knownCreator: knownCreatorOf(current), today: hobartToday() })
 
   const saved = await updateCalendarEvent(eventId, patch, { etag: etag || current.etag })
   const to = (saved.start?.dateTime || saved.start?.date || '').slice(0, 10)
@@ -1364,7 +1365,7 @@ async function handleAccept(req, res) {
       notes: body.notes ?? candidate.note,
       rep: body.rep,
       colorId: body.colorId
-    }, firstNameFor(session.email))
+    }, firstNameFor(session.email), { source: 'email' })
 
     const accepted = await updateBookingCandidate(id, {
       status: 'accepted',
