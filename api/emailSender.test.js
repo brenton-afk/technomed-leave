@@ -29,7 +29,6 @@ beforeEach(() => {
   posted = []
   process.env.RESEND_API_KEY = 'test-key'
   process.env.EMAIL_FROM = 'TechnoMed Portal <portal@technomed.com.au>'
-  process.env.EMAIL_ARCHIVE = 'usage@technomed.com.au'
   global.fetch = vi.fn(async (url, init) => {
     posted.push(JSON.parse(init.body))
     return { ok: true, status: 200, text: async () => JSON.stringify({ id: 'msg_123' }) }
