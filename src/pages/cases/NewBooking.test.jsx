@@ -391,7 +391,7 @@ describe('Brainlab', () => {
   it('needs an answer about attendance before it can be added', async () => {
     show()
     fill()
-    fireEvent.click(screen.getByRole('button', { name: 'AIRO' }))
+    fireEvent.click(screen.getByRole('button', { name: 'AIRO + Curve' }))
     expect(screen.getByRole('button', { name: /Add to calendar/ })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
     expect(screen.getByRole('button', { name: /Add to calendar/ })).not.toBeDisabled()
@@ -400,11 +400,11 @@ describe('Brainlab', () => {
   it('a No F2F booking says so in the kit, the notes and to the server', async () => {
     show()
     fill()
-    fireEvent.click(screen.getByRole('button', { name: 'AIRO' }))
+    fireEvent.click(screen.getByRole('button', { name: 'AIRO + Curve' }))
     fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
     fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
     await waitFor(() => expect(posted).toBeTruthy())
-    expect(posted.fields.kit).toMatch(/BRAINLAB AIRO$/)
+    expect(posted.fields.kit).toMatch(/BRAINLAB AIRO & CURVE$/)
     expect(posted.notes).toMatch(/No F2F required/)
     expect(posted.attendance).toBe('No F2F')
   })
@@ -412,7 +412,7 @@ describe('Brainlab', () => {
   it('an attended case does not', async () => {
     show()
     fill()
-    fireEvent.click(screen.getByRole('button', { name: 'CURVE' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Curve only' }))
     fireEvent.click(screen.getByRole('button', { name: 'Attendance required' }))
     fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
     await waitFor(() => expect(posted).toBeTruthy())

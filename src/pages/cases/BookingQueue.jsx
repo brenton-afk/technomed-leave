@@ -243,6 +243,12 @@ function Candidate({ candidate, user, onDone }) {
       <Value label="Hospital" value={fields.hospital} onChange={v => set('hospital', v)}
         options={['RHH', 'CLV']} />
       <Value label="Kit" value={fields.kit} onChange={v => set('kit', v)} />
+      {candidate.attendance === 'No F2F' && (
+        <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>
+          <strong>Brainlab · No F2F</strong> — the list says nobody from TechnoMed is needed.
+          It will be booked that way.
+        </div>
+      )}
       <Value label="Procedure" value={fields.procedure} onChange={v => set('procedure', v)} />
 
       {/* What the reader actually worked from.

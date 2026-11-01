@@ -236,7 +236,7 @@ describe('navigation on a kit line', () => {
     // want from them.
     const read = readBooking('Oakley MARINER - Gupta',
       `Surg: Gupta\nPt: Oakley\nHosp: CLV\nProcedure: L4/5 PLIF\nKit: ${OAKLEY}`)
-    expect(read.navigation).toBe('AIRO')
+    expect(read.navigation).toBe('AIRO + Curve') // AIRO always goes with the Curve cart
     // The words are still on the booking — in this convention the Kit: label
     // is the system field — so the badge keeps working. Only the question
     // about supplying them went away.
@@ -335,17 +335,17 @@ describe('navigation on a removal', () => {
   it('still badges one where something is going back in', () => {
     // A revision takes metal out and puts metal back, and the putting back is
     // navigated like any other construct.
-    expect(findNavigation('Revision L1-L3 pedicle screws')).toEqual(['AIRO'])
+    expect(findNavigation('Revision L1-L3 pedicle screws')).toEqual(['AIRO', 'Curve'])
     expect(findNavigation('Removal of pedicle screws and refixation L2-L4'))
-      .toEqual(['AIRO'])
+      .toEqual(['AIRO', 'Curve'])
     expect(findNavigation('L1-L3 pedicle screw removal and L4/5 PLIF'))
-      .toEqual(['AIRO'])
+      .toEqual(['AIRO', 'Curve'])
   })
 
   it('leaves every other AIRO case exactly as it was', () => {
     for (const operation of ['L1-L3 Pedicle Screw Fixation', 'L4/5 PLIF',
       'T10-L2 Pedicle Fixation for T12 Fracture', 'Max fax AIRO spin']) {
-      expect(findNavigation(operation), operation).toEqual(['AIRO'])
+      expect(findNavigation(operation), operation).toEqual(['AIRO', 'Curve'])
     }
   })
 })

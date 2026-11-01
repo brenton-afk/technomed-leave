@@ -164,3 +164,16 @@ export function addressOf(from) {
   const m = /<([^>]+)>/.exec(String(from || ''))
   return (m ? m[1] : String(from || '')).trim().toLowerCase()
 }
+
+/**
+ * Who a message is from, without downloading it.
+ *
+ * The mailbox check used to fetch every new message in full — attachments and
+ * all — only to find most were not from a hospital. This asks for one header.
+ */
+export async function senderOf(id) {
+  const message = await gmail(
+    `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From`)
+  const header = (message.payload?.headers || []).find(h => /^from$/i.test(h.name))
+  return header?.value || ''
+}

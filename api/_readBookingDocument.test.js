@@ -24,7 +24,8 @@ describe('what it can be given', () => {
     await readBookingDocument({
       attachments: [
         { mediaType: 'application/pdf', data: 'AAA' },
-        { mediaType: 'image/jpeg', data: 'BBB' }
+        // Big enough not to be taken for a signature logo (anything under 20KB).
+        { mediaType: 'image/jpeg', data: 'B'.repeat(40_000) }
       ]
     })
     const sent = create.mock.calls[0][0].messages[0].content

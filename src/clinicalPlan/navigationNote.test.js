@@ -17,7 +17,7 @@ import { findNavigation } from './systems.js'
 // spins had never been detected at all.
 
 describe('the rules Brent listed', () => {
-  const badged = text => expect(findNavigation(text), text).toEqual(['AIRO'])
+  const badged = text => expect(findNavigation(text), text).toEqual(['AIRO', 'Curve'])
 
   it('covers the screws, by acronym and in full', () => {
     for (const operation of [
@@ -61,7 +61,7 @@ describe('the rules Brent listed', () => {
     expect(findNavigation('L1-L3 pedicle screw removal')).toEqual([])
     expect(findNavigation('C1/2 screw removal')).toEqual([])
     // And still badges one where something is going back in.
-    expect(findNavigation('Revision L1-L3 pedicle screws')).toEqual(['AIRO'])
+    expect(findNavigation('Revision L1-L3 pedicle screws')).toEqual(['AIRO', 'Curve'])
   })
 })
 

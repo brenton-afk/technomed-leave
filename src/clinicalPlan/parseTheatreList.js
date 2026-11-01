@@ -1,6 +1,7 @@
 import {
   SURGEON_KEYS, normaliseSurgeon, stripIdentifiers, sanitisePatient, isBareParticle
 } from './parse.js'
+import { brainlabFromKit } from './attendance.js'
 import { toDateStr } from './week.js'
 
 // ─── Reading an RHH theatre list out of an email ─────────────────────────────
@@ -54,7 +55,9 @@ export function readPatientCell(text) {
   // ordinary case, so "VAN DER BERG Johanna" is the surname Van der Berg and
   // "LLOYD JONES Mary" is Lloyd Jones. A leading two-letter word is allowed
   // only when it is a particle — "DE SILVA" — which keeps "KT Lonestar" out.
-  const m = /^((?:[A-Z][A-Z'’\-]+\s+)*[A-Z][A-Z'’\-]+)(?=\s|$)/.exec(raw)
+  // A comma may follow the surname — "PHILLIPS, Michelle" — and that row was
+  // being missed altogether.
+  const m = /^((?:[A-Z][A-Z'’\-]+\s+)*[A-Z][A-Z'’\-]+)(?=[\s,]|$)/.exec(raw)
   if (!m) return null
   const words = m[1].split(/\s+/)
   if (words[0].length < 3 && !isBareParticle(words[0])) return null
@@ -154,11 +157,14 @@ export function parseTheatreList({ html, text } = {}) {
       .filter(cell => cell && !NOISE.test(cell) && !/^\d+$/.test(cell))
     const procedure = after.sort((a, b) => b.length - a.length)[0] || ''
 
+    // "BLabs no F2F required": Brainlab, and nobody needed. See attendance.js.
+    const read = brainlabFromKit(stripIdentifiers(kit))
     cases.push({
       date,
       patient,
       surgeon,
-      kit: stripIdentifiers(kit),
+      kit: read.kit,
+      ...(read.attendance ? { attendance: read.attendance, note: 'No F2F required' } : {}),
       procedure,
       theatre,
       hospital: 'RHH',

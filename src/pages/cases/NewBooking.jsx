@@ -39,7 +39,9 @@ const SUPPLY = SUPPLY_OPTIONS
 // Which platform, then whether anybody from here is wanted in the room — a
 // required answer, because the second decides whether a rep goes and whether
 // the case is invoiced as clinical support.
-const BRAINLAB = ['AIRO', 'CURVE', 'Other']
+// AIRO always comes with the Curve cart; the Curve can be used on its own.
+const BRAINLAB = ['AIRO + Curve', 'Curve only', 'Other']
+const BRAINLAB_KIT = { 'AIRO + Curve': 'BRAINLAB AIRO & CURVE', 'Curve only': 'BRAINLAB CURVE', Other: 'BRAINLAB' }
 const ATTENDANCE = ['Attendance required', 'No F2F']
 
 /** The next weekday, since a booking is far more often ahead than today. */
@@ -315,7 +317,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
       const noF2F = use.brainlab && use.attendance === 'No F2F'
       const kit = [
         ...use.systems.map(s => [s.name, s.supply ? `(${s.supply})` : ''].filter(Boolean).join(' ')),
-        use.brainlab ? `BRAINLAB${use.brainlab === 'Other' ? '' : ` ${use.brainlab}`}` : ''
+        use.brainlab ? BRAINLAB_KIT[use.brainlab] : ''
       ].filter(Boolean).join(' + ')
       const res = await fetch('/api/calendar/today?action=create', {
         method: 'POST',

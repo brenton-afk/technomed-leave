@@ -363,7 +363,12 @@ export function findNavigation(text) {
   }
   const found = NAVIGATION.filter(n => n.test.test(haystack) && !excluded(n))
   const named = found.filter(n => !n.onlyIfNothingElse)
-  return (named.length ? named : found).map(n => n.name)
+  const names = (named.length ? named : found).map(n => n.name)
+  // "If AIRO is used, so is Curve." The Curve is the navigation cart the AIRO
+  // scan is used through, so an AIRO case is always AIRO + Curve. The Curve
+  // can be used without the AIRO, so it is never the other way round.
+  if (names.includes('AIRO') && !names.includes('Curve')) names.splice(names.indexOf('AIRO') + 1, 0, 'Curve')
+  return names
 }
 
 

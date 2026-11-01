@@ -53,3 +53,32 @@ export function attendanceNotRequired(text) {
  * something else was not required — the kit, the navigation — so it names us.
  */
 export const NOT_REQUIRED_LABEL = 'We are not needed'
+
+/**
+ * A kit cell that names Brainlab, read into what the booking should say.
+ *
+ * Toby's RHH lists write "BLabs no F2F required" where the kit goes: a
+ * navigation-only case, and nobody from here is wanted in the room. Read
+ * here so an email accepted into the calendar comes out exactly as if it had
+ * been entered with the Brainlab and No F2F buttons — kit BRAINLAB, the
+ * "No F2F required" line, "(No F2F)" in the title.
+ *
+ * Anything else in the cell is kept: "Mariner + BLabs" is still a Mariner.
+ */
+const BRAINLAB_WORD = /\b(?:b\s*-?\s*labs?|brain\s*-?\s*lab)\b/i
+
+export function brainlabFromKit(kit) {
+  const text = String(kit || '')
+  if (!BRAINLAB_WORD.test(text)) return { kit: text, attendance: null }
+  const noF2F = attendanceNotRequired(text)
+  const rest = text
+    .replace(BRAINLAB_WORD, ' ')
+    .replace(/\bno\s+f2f(?:\s+req(?:uired|'?d)?)?\b|\bf2f\s+not\s+req(?:uired|'?d)?\b/ig, ' ')
+    .replace(/^[\s,+/&-]+|[\s,+/&-]+$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return {
+    kit: [rest, 'BRAINLAB'].filter(Boolean).join(' + '),
+    attendance: noF2F ? 'No F2F' : null
+  }
+}

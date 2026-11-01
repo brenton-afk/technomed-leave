@@ -111,7 +111,11 @@ describe('a navigation case', () => {
       'scoliotic curve correction',
       'main curve 52 degrees'
     ]) {
-      expect(findNavigation(text), text).not.toContain('Curve')
+      // The word "curve" never makes a Curve badge on its own. A PSF carries
+      // AIRO, and AIRO always comes with the Curve cart (Brent, 1 Nov 2026) —
+      // so the Curve there is the AIRO's, not the anatomy's.
+      const found = findNavigation(text)
+      if (!found.includes('AIRO')) expect(found, text).not.toContain('Curve')
     }
     expect(findNavigation('scoliotic curve correction')).toEqual([])
   })
@@ -228,7 +232,7 @@ describe('which platform a case needs', () => {
 
   it('names the platform rather than the vendor when it knows which', () => {
     // A case should not carry both "AIRO" and "Brainlab".
-    expect(findNavigation('Brainlab AIRO spin')).toEqual(['AIRO'])
+    expect(findNavigation('Brainlab AIRO spin')).toEqual(['AIRO', 'Curve'])
     expect(findNavigation('Brainlab support')).toEqual(['Brainlab'])
   })
 })
@@ -238,9 +242,9 @@ describe('lateral mass and Reform Cervical', () => {
     // Reform Cervical screws *are* lateral mass screws. A booking may name the
     // anatomy or the product, so both have to be recognised — and neither is
     // redundant, which is worth pinning before somebody tidies one away.
-    expect(findNavigation('C3-C6 lateral mass screws')).toEqual(['AIRO'])
-    expect(findNavigation('Kit: Reform Cervical (Consignment)')).toEqual(['AIRO'])
-    expect(findNavigation('C4-C7 lateral mass fixation, Reform Cervical')).toEqual(['AIRO'])
+    expect(findNavigation('C3-C6 lateral mass screws')).toEqual(['AIRO', 'Curve'])
+    expect(findNavigation('Kit: Reform Cervical (Consignment)')).toEqual(['AIRO', 'Curve'])
+    expect(findNavigation('C4-C7 lateral mass fixation, Reform Cervical')).toEqual(['AIRO', 'Curve'])
   })
 })
 

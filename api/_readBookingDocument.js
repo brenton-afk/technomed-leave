@@ -3,6 +3,7 @@ import { stripIdentifiers, normaliseSurgeon, surnameFromField } from '../src/cli
 import { systemsInKit, resolveKit } from '../src/clinicalPlan/systems.js'
 import { withoutPreOpNoise } from '../src/clinicalPlan/preOpNoise.js'
 import { sniffMediaType } from './_gmail.js'
+import { brainlabFromKit } from '../src/clinicalPlan/attendance.js'
 
 // ─── Reading a booking out of whatever arrived ───────────────────────────────
 // Bookings turn up as a pasted theatre-list table, a PDF from the spine service,
@@ -55,6 +56,9 @@ somebody needed to read.
 
 Two things the surgeons write that mean something specific:
   · "Implanet" on a pedicle screw case means Diplomat. Return "Diplomat".
+  · "BLabs" or "Brainlab" means Brainlab navigation — keep it in kit as written,
+    including any "no F2F required", which means nobody from the distributor is
+    needed in theatre.
   · "E4 cages" on a PLIF means the E4 Global BMD PLIF cage. Return that in full.
     On any other procedure, "E4" alone is ambiguous — return it as written and
     let a person decide.
@@ -82,7 +86,10 @@ function cleanCase(raw) {
   // Aliases applied here as well as asked for in the prompt. A model told to
   // substitute a name usually does; "usually" is not a basis for which tray
   // arrives in a theatre.
-  const kit = resolveKit(stripIdentifiers(String(raw?.kit || '')), String(raw?.procedure || ''))
+  // "BLabs no F2F required" → kit BRAINLAB and No F2F, the same reading as the
+  // RHH list parser. See brainlabFromKit.
+  const brainlab = brainlabFromKit(stripIdentifiers(String(raw?.kit || '')))
+  const kit = resolveKit(brainlab.kit, String(raw?.procedure || ''))
 
   return {
     // Through the same cleaner the calendar uses, rather than a private
@@ -101,9 +108,10 @@ function cleanCase(raw) {
     // The pre-operative workup, out of the note as well as out of the prompt.
     // Asking the model not to return it is not the same as not showing it, and
     // the note is exactly where it ends up when the model is being helpful.
-    note: withoutPreOpNoise(
+    note: [withoutPreOpNoise(
       stripIdentifiers(String(raw?.note || '')).split(/\n|(?<=\.)\s+(?=[A-Z])/)
-    ).join(' ').trim()
+    ).join(' ').trim(), brainlab.attendance ? 'No F2F required' : ''].filter(Boolean).join('\n'),
+    ...(brainlab.attendance ? { attendance: brainlab.attendance } : {})
   }
 }
 
@@ -130,6 +138,10 @@ export async function readBookingDocument(email = {}) {
       return { ...a, data, mediaType: sniffMediaType(data, a.mediaType) }
     })
     .filter(a => a.data && ACCEPTED_MEDIA.includes(a.mediaType))
+    // Signature logos. Every RHH email carries one, and sending it to be read
+    // as a booking costs time and reads nothing. A real form or photographed
+    // list is far larger than 20KB; a PDF is always kept.
+    .filter(a => a.mediaType === 'application/pdf' || a.data.length * 0.75 > 20_000)
 
   const content = attachments.map(a => (a.mediaType === 'application/pdf'
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.data } }
