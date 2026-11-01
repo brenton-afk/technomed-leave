@@ -119,6 +119,8 @@ describe('no screen is left out', () => {
     'projects/ProjectList.jsx', 'projects/ProjectBoard.jsx', 'projects/TaskSheet.jsx',
     // A sheet over everything, with its own fixed backdrop.
     'voice/VoiceSheet.jsx',
+    // A section of the kit sheet, which owns the backdrop.
+    'kit/TrayList.jsx',
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',

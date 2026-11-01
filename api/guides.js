@@ -8,7 +8,7 @@ import {
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import {
   listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit,
-  saveKitDef, removeKitDef, getKitSettings, saveKitSettings
+  saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList
 } from './_kits.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
 
@@ -238,6 +238,9 @@ async function handleKits(req, res, session) {
       return res.status(200).json({ kits, settings, canEdit, isAdmin: Boolean(staff.isAdmin), today: hobartToday() })
     }
     if (what === 'history') return res.status(200).json({ history: await kitHistory(150) })
+    if (what === 'traylist' && req.method === 'GET') {
+      return res.status(200).json({ list: await getTrayList(String(req.query.id || '')) })
+    }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
     if (what === 'move') return res.status(200).json(await prepareMove({ ...body, today: hobartToday() }, sender))
@@ -252,6 +255,10 @@ async function handleKits(req, res, session) {
     if (what === 'return') { await returnKit(body.kitId, sender); return res.status(200).json({ ok: true }) }
     if (what === 'check') { await checkKit(body.kitId, body.at, sender.firstName || sender.email); return res.status(200).json({ ok: true }) }
 
+    if (what === 'savelist') {
+      if (!canEdit) return res.status(403).json({ error: 'Only admins and the clinical team can change tray lists' })
+      return res.status(200).json({ list: await saveTrayList(String(body.kitId || ''), body, sender.firstName) })
+    }
     if (what === 'save' || what === 'remove') {
       if (!canEdit) return res.status(403).json({ error: 'Only admins and the clinical team can change the kit list' })
       if (what === 'save') return res.status(200).json({ kit: await saveKitDef(body.kit, sender.firstName) })

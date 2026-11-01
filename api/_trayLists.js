@@ -1,0 +1,134 @@
+import { streamClaude } from './_anthropic.js'
+
+// ─── Reading a tray list ─────────────────────────────────────────────────────
+// "We will ask the hospital for digital copies of the trays that live at the
+// hospital on consignment and upload them to the portal so we always have
+// record of what trays are where when we move trays and when we open trays.
+// This will also mean we can perform real time stock takes." — Brent, 2 Nov
+//
+// The lists come as Word documents (ours, in Dropbox: TECHNOMED/Tray Lists),
+// PDFs and photographs (the hospitals'), and the odd spreadsheet. Every one is
+// laid out differently, so the model reads it and a person checks what it
+// read before anything is saved — the same shape as reading a booking.
+//
+// Where the hospital's copy and our master list differ, the hospital's wins for
+// a tray that lives at that hospital: it is the list they count against.
+//
+// Two kinds of line, because they are counted differently (Brent's call):
+//   implant     implants, consumables, anything that is used up and restocked —
+//               counted, the number goes down with usage and up with restock
+//   instrument  everything that comes back — ticked present or missing
+
+const MODEL = process.env.TRAY_LIST_MODEL || process.env.USAGE_VISION_MODEL || 'claude-opus-5'
+
+export const MAX_TRAYS = 30
+export const MAX_LINES = 400
+
+const PROMPT = `This is a surgical instrument and implant tray list (set list) for a spinal implant distributor. It may cover one tray or several.
+
+Return every tray and every line on it, in the order printed. For each line:
+  code         the reference / catalogue / material number exactly as printed, or ""
+  description  the item description as printed
+  qty          the quantity the tray should hold (the "Qty" or "Par" column), a number
+  kind         "implant" for implants, consumables, screws, plates, cages, rods, set screws, caps, pins, guide wires and anything single use; "instrument" for everything else
+
+Ignore columns for lot numbers, "TM Out", "Hosp In", "Hosp Out", signatures, page footers, phone numbers and picture placeholders. Do not invent lines or quantities: if a quantity is not printed, use 1 for an instrument and 0 for an implant.
+
+A tray heading looks like "TRAY 1 - INSTRUMENTS", "Tray 4 - 10 Degree Trials", "DNO TRAY", or a caddy name. If the document has no headings, it is one tray: name it after the document's title.
+
+Return ONLY JSON:
+{"title":"","trays":[{"name":"","lines":[{"code":"","description":"","qty":1,"kind":"instrument"}]}]}`
+
+/** What kind of file this is, from its name and type. */
+export function fileKind(filename, mediaType = '') {
+  const ext = String(filename || '').toLowerCase().split('.').pop()
+  if (ext === 'docx' || /wordprocessingml/.test(mediaType)) return 'docx'
+  if (ext === 'xlsx' || /spreadsheetml/.test(mediaType)) return 'xlsx'
+  if (ext === 'pdf' || mediaType === 'application/pdf') return 'pdf'
+  if (['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext) || /^image\//.test(mediaType)) return 'image'
+  return null
+}
+
+async function textOf(buffer, kind) {
+  if (kind === 'docx') {
+    const { default: mammoth } = await import('mammoth')
+    return (await mammoth.extractRawText({ buffer })).value
+  }
+  if (kind === 'xlsx') {
+    const { default: ExcelJS } = await import('exceljs')
+    const book = new ExcelJS.Workbook()
+    await book.xlsx.load(buffer)
+    const out = []
+    book.eachSheet(sheet => {
+      out.push(`## ${sheet.name}`)
+      sheet.eachRow(row => {
+        const cells = (row.values || []).slice(1).map(v => (v && typeof v === 'object' ? (v.text ?? v.result ?? '') : v ?? ''))
+        if (cells.some(c => String(c).trim())) out.push(cells.join(' | '))
+      })
+    })
+    return out.join('\n')
+  }
+  return null
+}
+
+const num = v => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0 }
+const clip = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n)
+
+/** The model's answer, held to a shape the kit room can trust. */
+export function cleanTrays(parsed) {
+  const trays = (parsed?.trays || []).slice(0, MAX_TRAYS).map((t, i) => ({
+    name: clip(t?.name, 80) || `Tray ${i + 1}`,
+    lines: (t?.lines || []).slice(0, MAX_LINES).map(l => ({
+      code: clip(l?.code, 40),
+      description: clip(l?.description, 120),
+      qty: num(l?.qty),
+      kind: l?.kind === 'implant' ? 'implant' : 'instrument'
+    })).filter(l => l.code || l.description)
+  })).filter(t => t.lines.length)
+  // Two trays printed with the same heading would collide as names.
+  const seen = new Map()
+  for (const t of trays) {
+    const n = (seen.get(t.name) || 0) + 1
+    seen.set(t.name, n)
+    if (n > 1) t.name = `${t.name} (${n})`
+  }
+  return { title: clip(parsed?.title, 120), trays }
+}
+
+/** A tray list file, read into trays and lines for a person to check. */
+export async function readTrayList(buffer, filename, mediaType) {
+  const kind = fileKind(filename, mediaType)
+  if (!kind) throw new Error('That file type cannot be read. Use a PDF, Word document, spreadsheet or photo.')
+
+  const content = []
+  const text = await textOf(buffer, kind)
+  if (text != null) {
+    if (!text.trim()) throw new Error('That document has no text in it to read.')
+    content.push({ type: 'text', text: `File: ${filename}\n\n${text.slice(0, 120000)}` })
+  } else if (kind === 'pdf') {
+    content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } })
+  } else {
+    const media = /png$/i.test(filename) ? 'image/png' : /webp$/i.test(filename) ? 'image/webp' : 'image/jpeg'
+    content.push({ type: 'image', source: { type: 'base64', media_type: media, data: buffer.toString('base64') } })
+  }
+  content.push({ type: 'text', text: PROMPT })
+
+  const reply = await streamClaude({
+    feature: 'tray-list',
+    whenUnavailable: 'The tray list could not be read automatically right now — try again shortly.',
+    timeoutMs: 100000,
+    request: { model: MODEL, max_tokens: 32000, messages: [{ role: 'user', content }] }
+  })
+  const out = (reply.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
+  const json = /\{[\s\S]*\}/.exec(out)
+  if (!json) throw new Error('The tray list could not be read — check it is a tray list and try again.')
+  let parsed
+  try { parsed = JSON.parse(json[0]) } catch {
+    // A cut-off answer is a partial list, and a partial list is worse than
+    // none: somebody would count against it.
+    throw new Error('The tray list was too long to read in one go — split it into smaller files.')
+  }
+  const result = cleanTrays(parsed)
+  if (!result.trays.length) throw new Error('No trays were found in that file.')
+  return result
+}

@@ -1,0 +1,70 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { cleanTrays, fileKind } from './_trayLists.js'
+
+// Tray lists for the kit room. Made-up item codes only.
+
+describe('reading a tray list', () => {
+  it('knows the file types the hospitals send', () => {
+    expect(fileKind('RHH Diplomat.pdf')).toBe('pdf')
+    expect(fileKind('Shoreline Master.docx')).toBe('docx')
+    expect(fileKind('Screws.xlsx')).toBe('xlsx')
+    expect(fileKind('IMG_0042.jpeg')).toBe('image')
+    expect(fileKind('notes.pages')).toBeNull()
+  })
+
+  it('keeps implants and instruments apart, and never invents a quantity', () => {
+    const out = cleanTrays({ trays: [{ name: 'TRAY 2 – PLATES AND SCREWS', lines: [
+      { code: 'X-85-0705', description: '5MM 4-HOLE PLATE', qty: 2, kind: 'implant' },
+      { code: 'X-86-0072', description: 'PACKING BLOCK', qty: '1', kind: 'instrument' },
+      { code: '', description: '', qty: 3, kind: 'implant' },
+      { code: 'X-86-9915', description: 'SCREW CADDY', qty: 'two', kind: 'tool' }
+    ] }] })
+    expect(out.trays[0].lines).toEqual([
+      { code: 'X-85-0705', description: '5MM 4-HOLE PLATE', qty: 2, kind: 'implant' },
+      { code: 'X-86-0072', description: 'PACKING BLOCK', qty: 1, kind: 'instrument' },
+      { code: 'X-86-9915', description: 'SCREW CADDY', qty: 0, kind: 'instrument' }
+    ])
+  })
+
+  it('keeps two trays printed with the same heading apart', () => {
+    const line = { code: 'A', description: 'a', qty: 1 }
+    const out = cleanTrays({ trays: [{ name: 'Screws', lines: [line] }, { name: 'Screws', lines: [line] }, { name: 'Empty', lines: [] }] })
+    expect(out.trays.map(t => t.name)).toEqual(['Screws', 'Screws (2)'])
+  })
+})
+
+const store = new Map()
+const lists = new Map()
+vi.mock('./_redis.js', () => ({
+  redis: vi.fn(async (cmd, ...args) => {
+    if (cmd === 'get') return store.get(args[0]) ?? null
+    if (cmd === 'mget') return args.map(k => store.get(k) ?? null)
+    if (cmd === 'lpush') { lists.set(args[0], [args[1], ...(lists.get(args[0]) || [])]); return 1 }
+    if (cmd === 'ltrim' || cmd === 'del' || cmd === 'expire') return 1
+    if (cmd === 'lrange') return lists.get(args[0]) || []
+    return null
+  }),
+  redisSetBody: vi.fn(async (k, v) => { store.set(k, v); return 'OK' })
+}))
+
+describe('saving a tray list onto a kit', () => {
+  beforeEach(() => { store.clear(); lists.clear() })
+
+  it('stores the lines and makes the kit\'s trays the list\'s trays', async () => {
+    const { listKits, saveTrayList, getTrayList } = await import('./_kits.js')
+    const kit = (await listKits()).find(k => k.system === 'Shoreline' && k.home === 'RHH')
+    await saveTrayList(kit.id, {
+      trays: [{ name: 'Tray 1 – Instruments', lines: [{ code: 'X-1', description: 'AWL', qty: 1, kind: 'instrument' }] },
+        { name: 'Tray 2 – Plates', lines: [{ code: 'X-2', description: 'PLATE', qty: 2, kind: 'implant' }] }],
+      source: { file: 'RHH Shoreline.pdf', hospital: 'RHH' }
+    }, 'Ben')
+    expect((await getTrayList(kit.id)).source).toMatchObject({ file: 'RHH Shoreline.pdf', hospital: 'RHH', by: 'Ben' })
+    expect((await listKits()).find(k => k.id === kit.id).trays).toEqual(['Tray 1 – Instruments', 'Tray 2 – Plates'])
+  })
+
+  it('refuses an empty list rather than wiping the one there', async () => {
+    const { listKits, saveTrayList } = await import('./_kits.js')
+    const kit = (await listKits())[0]
+    await expect(saveTrayList(kit.id, { trays: [{ name: 'x', lines: [] }] }, 'Ben')).rejects.toThrow(/nothing/)
+  })
+})

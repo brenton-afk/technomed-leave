@@ -392,3 +392,53 @@ export async function returnKit(kitId, sender) {
     text: `Returned ${PLACES[kit.at]?.short || kit.at} → ${PLACES[kit.home].short}`
   })
 }
+
+// ─── Tray lists ──────────────────────────────────────────────────────────────
+// What each tray in a kit should hold, read from the hospital's own copy (or
+// ours) by api/_trayLists.js and checked by a person before it is saved. Kept
+// apart from the kit list because a set's lines run to hundreds, and the kit
+// list is read on every visit to the kit room.
+
+const LIST = id => `kits:list:${id}`
+
+export async function getTrayList(kitId) {
+  const raw = await redis('get', LIST(kitId))
+  return raw ? JSON.parse(raw) : null
+}
+
+/**
+ * Saves a checked tray list onto a kit. The kit's tray names become the
+ * list's, so a move ticks the same trays the list counts.
+ */
+export async function saveTrayList(kitId, { trays, source }, by) {
+  const defs = await getDefs()
+  const kit = defs.find(k => k.id === kitId)
+  if (!kit) throw new Error('No such kit')
+  const clean = (trays || []).slice(0, 30).map(t => ({
+    name: String(t?.name || '').trim().slice(0, 80),
+    lines: (t?.lines || []).slice(0, 400).map(l => ({
+      code: String(l?.code || '').trim().slice(0, 40),
+      description: String(l?.description || '').trim().slice(0, 120),
+      qty: Math.max(0, Math.round(Number(l?.qty) || 0)),
+      kind: l?.kind === 'implant' ? 'implant' : 'instrument'
+    })).filter(l => l.code || l.description)
+  })).filter(t => t.name && t.lines.length)
+  if (!clean.length) throw new Error('There is nothing in that tray list to save')
+
+  const list = {
+    trays: clean,
+    source: {
+      file: String(source?.file || '').slice(0, 160),
+      hospital: ['CLV', 'RHH', 'office'].includes(source?.hospital) ? source.hospital : '',
+      dropboxPath: String(source?.dropboxPath || '').slice(0, 300),
+      by, at: new Date().toISOString()
+    }
+  }
+  await redisSetBody(LIST(kitId), JSON.stringify(list))
+  await redisSetBody(DEFS, JSON.stringify(defs.map(k => (k.id === kitId ? { ...k, trays: clean.map(t => t.name) } : k))))
+  await addHistory({
+    kind: 'edit', kitId, kitName: kit.name, by,
+    text: `Tray list saved — ${clean.length} trays, ${clean.reduce((n, t) => n + t.lines.length, 0)} lines${list.source.file ? ` (${list.source.file})` : ''}`
+  })
+  return list
+}

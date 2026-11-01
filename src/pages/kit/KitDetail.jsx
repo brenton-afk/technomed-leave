@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
+import TrayList from './TrayList.jsx'
 
 // ─── One kit: its trays, the stock-take, and editing ─────────────────────────
 // The stock-take lives here because it is done standing in front of the kit:
@@ -9,7 +10,7 @@ import { colour, text, space, radius, border } from '../../design/tokens.js'
 const PLACES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
 const KINDS = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
 
-export default function KitDetail({ kit, canEdit, post, onClose, onChanged, onMove }) {
+export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged, onMove }) {
   const isNew = !kit.id
   const [editing, setEditing] = useState(isNew)
   const [draft, setDraft] = useState(isNew ? { name: '', system: '', distributor: '', kind: 'consignment', home: 'office', trays: [] } : null)
@@ -123,6 +124,8 @@ export default function KitDetail({ kit, canEdit, post, onClose, onChanged, onMo
                     </div>
                   )
                 })}
+
+                {!isNew && <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} />}
               </>
             )}
 

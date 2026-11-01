@@ -1,4 +1,7 @@
 import { handleUpload } from '@vercel/blob/client'
+import { del } from '@vercel/blob'
+import { readTrayList } from '../_trayLists.js'
+import { dropboxConfigured, ensureFolder, uploadFile } from '../_dropbox.js'
 import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
   saveMeeting, getMeeting, updateMeetingStatus,
@@ -55,6 +58,9 @@ export default async function handler(req, res) {
   if (action === 'read-file') return handleReadFile(req, res)
   // And a task that came from nobody's meeting — the thing agreed in the car.
   if (action === 'add-task') return handleAddTask(req, res)
+  // The kit room's tray lists: read here because this function already takes
+  // big uploads and has the time a long PDF needs. See api/_trayLists.js.
+  if (action === 'tray-read') return handleTrayRead(req, res, session)
 
   // ── The project page ──
   // "We want it similar to monday.com as a true project page." A project owns
@@ -86,6 +92,17 @@ async function handleBlobUpload(req, res) {
         const session = await getSession(token)
         if (!session) throw new Error('Not signed in, or your session has expired')
 
+        // Tray lists for the kit room ride the same handshake: a hospital's
+        // PDF runs to 7MB, past what a request body can carry.
+        if (String(pathname).startsWith('traylists/')) {
+          return {
+            allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+            addRandomSuffix: true,
+            tokenPayload: JSON.stringify({ by: session.email })
+          }
+        }
         return {
           allowedContentTypes: ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/x-m4a'],
           addRandomSuffix: true,
@@ -716,4 +733,54 @@ async function handleTask(req, res, session) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
+}
+
+
+// ─── Kit room: read an uploaded tray list ─────────────────────────────────────
+
+async function handleTrayRead(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const staff = STAFF.find(s => s.email === session?.email)
+  if (!staff?.isAdmin && !staff?.isClinicalTeam) {
+    return res.status(403).json({ error: 'Only admins and the clinical team can upload tray lists' })
+  }
+  const { url, filename, mediaType, hospital, kitName } = req.body || {}
+  // Only our own upload store, never an address from anywhere else.
+  if (!/^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/traylists\//i.test(String(url || ''))) {
+    return res.status(400).json({ error: 'Upload the file again' })
+  }
+  let buffer
+  try {
+    const got = await fetch(url)
+    if (!got.ok) throw new Error(String(got.status))
+    buffer = Buffer.from(await got.arrayBuffer())
+  } catch {
+    return res.status(400).json({ error: 'The upload could not be read back — try again' })
+  }
+
+  // The original goes to Dropbox beside our own lists, so there is always the
+  // document behind what the portal holds. Not fatal if Dropbox is not there.
+  let dropboxPath = ''
+  let dropboxError = ''
+  if (dropboxConfigured()) {
+    try {
+      const place = hospital === 'CLV' ? 'Calvary' : hospital === 'RHH' ? 'RHH' : 'TechnoMed'
+      const safe = s => String(s || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim()
+      const folder = `/Tray Lists/Hospital Copies/${place}`
+      await ensureFolder(folder)
+      dropboxPath = `${folder}/${safe(kitName) || 'Kit'} - ${safe(filename) || 'tray list'}`
+      await uploadFile(dropboxPath, buffer)
+    } catch (err) {
+      dropboxPath = ''
+      dropboxError = err.message || 'Not saved to Dropbox'
+    }
+  }
+  try { await del(url) } catch { /* expires anyway; nothing in it is patient data */ }
+
+  try {
+    const read = await readTrayList(buffer, String(filename || ''), String(mediaType || ''))
+    return res.status(200).json({ ...read, dropboxPath, dropboxError })
+  } catch (err) {
+    return res.status(400).json({ error: err.message, dropboxPath, dropboxError })
+  }
 }

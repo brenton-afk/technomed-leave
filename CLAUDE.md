@@ -248,6 +248,17 @@ it left; into the office or back home: nobody. **Hospital emails are off
 then a move shows the email it would have sent and sends nothing. A move whose
 email fails is not recorded, so it can be retried.
 
+**Tray lists** (`kits:list:{id}`): what each tray should hold, `{code,
+description, qty, kind}` with `kind` implant (counted) or instrument (ticked).
+Uploaded from the kit sheet (`kit/TrayList.jsx`) through the Blob handshake in
+`api/meetings/agent.js` (paths under `traylists/`, because a hospital PDF is
+past the request-body limit), read by `action=tray-read` with
+`api/_trayLists.js`, shown to a person, and only saved on their confirm
+(`guides.js?kits=savelist`). The original goes to Dropbox under
+`/Tray Lists/Hospital Copies/{Calvary|RHH|TechnoMed}`; the blob is deleted after
+reading. For a tray living at a hospital, the hospital's copy wins over our
+master list. Saving replaces the kit's tray names with the list's.
+
 ### Surgeon preference cards (Task 18)
 
 Editable data, not a page. `api/_preferences.js` keeps them in Redis
