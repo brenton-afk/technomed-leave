@@ -92,6 +92,27 @@ describe('saving a tray list onto a kit', () => {
     expect(isTrayPhotoPath('/ALL SURGEON USAGE/x.jpg')).toBe(false)
   })
 
+  it('renames a tray everywhere — "edit the tray name from an existing kit"', async () => {
+    const { listKits, saveTrayList, getTrayList, saveKitDef } = await import('./_kits.js')
+    const kit = (await listKits()).find(k => k.system === 'Shoreline' && k.home === 'RHH')
+    await saveTrayList(kit.id, { trays: [
+      { name: 'Tray 1', photo: '/Tray Lists/Tray Photos/Kit/Tray 1.jpg', lines: [{ code: 'X-1', description: 'AWL', qty: 1 }] },
+      { name: 'Tray 2', lines: [{ code: 'X-2', description: 'PLATE', qty: 2, kind: 'implant' }] }
+    ] }, 'Ben')
+    const now = (await listKits()).find(k => k.id === kit.id)
+    await saveKitDef({ ...now, trays: ['Instruments', 'Tray 2'] }, 'Brent', [{ from: 'Tray 1', to: 'Instruments' }])
+    expect((await listKits()).find(k => k.id === kit.id).trays).toEqual(['Instruments', 'Tray 2'])
+    const list = await getTrayList(kit.id)
+    expect(list.trays[0]).toMatchObject({ name: 'Instruments', photo: '/Tray Lists/Tray Photos/Kit/Tray 1.jpg' })
+    expect(list.trays[0].lines[0].code).toBe('X-1')
+  })
+
+  it('refuses two trays of the same name', async () => {
+    const { listKits, saveKitDef } = await import('./_kits.js')
+    const kit = (await listKits())[0]
+    await expect(saveKitDef({ ...kit, trays: ['Screws', 'screws'] }, 'Brent')).rejects.toThrow(/Two trays/)
+  })
+
   it('refuses an empty list rather than wiping the one there', async () => {
     const { listKits, saveTrayList } = await import('./_kits.js')
     const kit = (await listKits())[0]

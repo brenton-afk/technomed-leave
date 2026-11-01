@@ -268,7 +268,7 @@ async function handleKits(req, res, session) {
     }
     if (what === 'save' || what === 'remove') {
       if (!canEdit) return res.status(403).json({ error: 'Only admins and the clinical team can change the kit list' })
-      if (what === 'save') return res.status(200).json({ kit: await saveKitDef(body.kit, sender.firstName) })
+      if (what === 'save') return res.status(200).json({ kit: await saveKitDef(body.kit, sender.firstName, body.renames) })
       await removeKitDef(body.kitId, sender.firstName)
       return res.status(200).json({ ok: true })
     }

@@ -43,7 +43,10 @@ export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged
   }
 
   function startEdit() {
-    setDraft({ id: kit.id, name: kit.name, system: kit.system, distributor: kit.distributor, kind: kit.kind, home: kit.home, trays: [...(kit.trays || [])] })
+    // `was` remembers each tray's name when editing began, so a rename can be
+    // carried into the tray list and onto a kit that is away.
+    setDraft({ id: kit.id, name: kit.name, system: kit.system, distributor: kit.distributor, kind: kit.kind, home: kit.home,
+      trays: [...(kit.trays || [])], was: [...(kit.trays || [])] })
     setEditing(true)
   }
 
@@ -148,18 +151,22 @@ export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged
                   {Object.entries(KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
                 <div style={label}>Trays</div>
+                {/* Each name can be typed over. "I need to be able to edit the
+                    tray name from an existing kit." */}
                 {draft.trays.map((t, i) => (
-                  <div key={`${t}-${i}`} style={{ display: 'flex', gap: space.sm, alignItems: 'center', padding: `${space.xs}px 0`, borderBottom: border.hairlineSoft }}>
-                    <span style={{ flex: 1, ...text('body'), color: colour.ink }}>{t}</span>
-                    <button onClick={() => setDraft(d => ({ ...d, trays: d.trays.filter((_, j) => j !== i) }))}
+                  <div key={i} style={{ display: 'flex', gap: space.sm, alignItems: 'center', padding: `${space.xs}px 0`, borderBottom: border.hairlineSoft }}>
+                    <input value={t} aria-label={`Tray name ${i + 1}`}
+                      onChange={e => setDraft(d => ({ ...d, trays: d.trays.map((x, j) => (j === i ? e.target.value : x)) }))}
+                      style={{ ...field, flex: 1, minWidth: 0 }} />
+                    <button onClick={() => setDraft(d => ({ ...d, trays: d.trays.filter((_, j) => j !== i), was: (d.was || []).filter((_, j) => j !== i) }))}
                       aria-label={`Remove tray ${t}`} style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
                   </div>
                 ))}
                 <div style={{ display: 'flex', gap: space.sm, marginTop: space.sm }}>
                   <input value={newTray} onChange={e => setNewTray(e.target.value)} placeholder="Add a tray" aria-label="New tray"
-                    onKeyDown={e => { if (e.key === 'Enter' && newTray.trim()) { setDraft(d => ({ ...d, trays: [...d.trays, newTray.trim()] })); setNewTray('') } }}
+                    onKeyDown={e => { if (e.key === 'Enter' && newTray.trim()) { setDraft(d => ({ ...d, trays: [...d.trays, newTray.trim()], was: [...(d.was || []), null] })); setNewTray('') } }}
                     style={{ ...field, flex: 1, minWidth: 0 }} />
-                  <button disabled={!newTray.trim()} onClick={() => { setDraft(d => ({ ...d, trays: [...d.trays, newTray.trim()] })); setNewTray('') }} style={btn(false)}>Add</button>
+                  <button disabled={!newTray.trim()} onClick={() => { setDraft(d => ({ ...d, trays: [...d.trays, newTray.trim()], was: [...(d.was || []), null] })); setNewTray('') }} style={btn(false)}>Add</button>
                 </div>
               </>
             )}
@@ -170,7 +177,13 @@ export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged
             {!editing && canEdit && <button onClick={startEdit} style={{ ...btn(false), flex: 1 }}>Edit</button>}
             {editing && (
               <>
-                <button disabled={busy} onClick={() => run(async () => { await post('save', { kit: draft }); if (isNew) onClose(); else setEditing(false) })} style={{ ...btn(true), flex: 2 }}>
+                <button disabled={busy} onClick={() => run(async () => {
+                  const renames = (draft.was || []).map((from, i) => ({ from, to: String(draft.trays[i] || '').trim() }))
+                    .filter(r => r.from && r.to && r.from !== r.to)
+                  const { was, ...kitDraft } = draft
+                  await post('save', { kit: kitDraft, renames })
+                  if (isNew) onClose(); else setEditing(false)
+                })} style={{ ...btn(true), flex: 2 }}>
                   {busy ? 'Saving…' : 'Save'}
                 </button>
                 <button onClick={() => (isNew ? onClose() : setEditing(false))} style={{ ...btn(false), flex: 1 }}>Cancel</button>

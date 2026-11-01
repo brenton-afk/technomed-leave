@@ -195,12 +195,15 @@ export async function kitHistory(limit = 100) {
 }
 
 /** Adds, edits or removes a kit in the list. Trays are the usual reason. */
-export async function saveKitDef(kit, by) {
+export async function saveKitDef(kit, by, renames = []) {
   const defs = await getDefs()
   const name = String(kit?.name || '').trim().slice(0, 60)
   if (!name) throw new Error('A kit needs a name')
   if (!PLACES[kit.home]) throw new Error('Choose where the kit lives')
   const trays = (kit.trays || []).map(t => String(t).trim().slice(0, 80)).filter(Boolean).slice(0, 40)
+  // Two trays of one name would be one tray to a move or a stock-take.
+  const dup = trays.find((t, i) => trays.findIndex(x => x.toLowerCase() === t.toLowerCase()) !== i)
+  if (dup) throw new Error(`Two trays are called "${dup}" — give one a different name`)
   const id = kit.id || `${slug(name)}-${Date.now().toString(36)}`
   const clean = {
     id, name, system: String(kit.system || name).slice(0, 60),
@@ -211,8 +214,33 @@ export async function saveKitDef(kit, by) {
   const at = defs.findIndex(k => k.id === id)
   const next = at >= 0 ? defs.map(k => (k.id === id ? clean : k)) : [...defs, clean]
   await redisSetBody(DEFS, JSON.stringify(next))
-  await addHistory({ kind: 'edit', kitId: id, kitName: name, text: at >= 0 ? 'Kit details changed' : 'Kit added', by })
+  const renamed = at >= 0 ? await renameTrays(id, renames) : []
+  await addHistory({
+    kind: 'edit', kitId: id, kitName: name, by,
+    text: at < 0 ? 'Kit added'
+      : renamed.length ? `Tray renamed: ${renamed.map(r => `${r.from} → ${r.to}`).join(', ')}` : 'Kit details changed'
+  })
   return clean
+}
+
+/**
+ * A tray renamed on the kit carries its new name everywhere the old one was
+ * written: the tray list (contents and photo stay with it) and a kit that is
+ * away with that tray. Without this the list and the kit would disagree.
+ */
+async function renameTrays(kitId, renames) {
+  const map = new Map((renames || [])
+    .map(r => [String(r?.from || '').trim(), String(r?.to || '').trim().slice(0, 80)])
+    .filter(([from, to]) => from && to && from !== to))
+  if (!map.size) return []
+  const rename = n => (map.has(n) ? map.get(n) : n)
+  const list = await getTrayList(kitId)
+  if (list?.trays?.length) {
+    await redisSetBody(LIST(kitId), JSON.stringify({ ...list, trays: list.trays.map(t => ({ ...t, name: rename(t.name) })) }))
+  }
+  const loc = await getLoc(kitId)
+  if (loc?.trays?.length) await setLoc(kitId, { ...loc, trays: loc.trays.map(rename) })
+  return [...map].map(([from, to]) => ({ from, to }))
 }
 
 export async function removeKitDef(id, by) {
