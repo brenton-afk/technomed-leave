@@ -2,21 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react'
 import PinScreen from './pages/PinScreen.jsx'
 import LockScreen from './pages/LockScreen.jsx'
 import { browserSupportsWebAuthn } from '@simplewebauthn/browser'
-import LeaveForm from './pages/LeaveForm.jsx'
 import Success from './pages/Success.jsx'
-import KitRoom from './pages/KitRoom.jsx'
-import Projects from './pages/Projects.jsx'
-import UsageScan from './pages/UsageScan.jsx'
 import Cases from './pages/Cases.jsx'
-import TheatreGuides from './pages/TheatreGuides.jsx'
-import Chat from './pages/Chat.jsx'
-import Timesheets from './pages/Timesheets.jsx'
-import AdminPortal from './pages/admin/AdminPortal.jsx'
+import { Screens, LazyScreen, prefetchScreens } from './lazyScreens.jsx'
+// Loaded when opened rather than with the app — see lazyScreens.jsx.
+const {
+  LeaveForm, KitRoom, Projects, UsageScan, TheatreGuides, Chat, Timesheets,
+  AdminPortal, FileBrowser, PatientHistory, Notifications
+} = Screens
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
 import { rememberUser } from './lastUser.js'
-import FileBrowser from './pages/FileBrowser.jsx'
-import PatientHistory from './pages/PatientHistory.jsx'
-import Notifications from './pages/Notifications.jsx'
 import { KitHub, MeHub, ComingSoonSection } from './pages/Hubs.jsx'
 import PromptBanner from './pages/PromptBanner.jsx'
 import { colour, text, font, radius } from './design/tokens.js'
@@ -26,6 +21,7 @@ import {
   IconStock, IconPayslip, IconLock, IconBack
 } from './design/icons.jsx'
 import { useNewBuild } from './appVersion.js'
+import { useOnline } from './online.js'
 import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
 import { watchZoom } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
@@ -125,6 +121,7 @@ export default function App() {
   // Whether a newer build has shipped since this tab was opened. Same reason for
   // being up here: the login screen is exactly where a stale tab tends to sit.
   const newBuild = useNewBuild()
+  const online = useOnline()
   const [user, setUser] = useState(null)
   // A session read back from the device, not yet unlocked on this launch.
   // When the admin portal was last unlocked on this device. Everything else
@@ -177,6 +174,10 @@ export default function App() {
     // The admin portal is different and still asks — see below. Step up where
     // the stakes are, rather than taxing every screen equally.
   }, [])
+
+  // Every other screen, fetched in the background once somebody is signed in,
+  // so the service worker has it before the next dead spot. See lazyScreens.jsx.
+  useEffect(() => { if (user) prefetchScreens() }, [user])
 
   // The stored login time is checked, not just written, so a session really does
   // expire after its hour.
@@ -461,7 +462,21 @@ export default function App() {
       {/* The one scrolling region. The tab bar is a sibling below it rather than
           something this has to leave room for, so there is no clearance to keep
           in step with the bar's height. */}
-      <div className="tm-scroll">{renderContent()}</div>
+      {/* Says what will not work, not that something is broken. What is on
+          screen stays readable; saving needs the network. */}
+      {user && !online && (
+        <div role="status" style={{
+          flexShrink: 0, padding: '6px 16px', textAlign: 'center',
+          ...text('caption'), fontWeight: 700,
+          background: colour.warningSoft, color: colour.warning,
+          borderBottom: `1px solid ${colour.warningLine}`
+        }}>
+          Offline — you can read what has loaded; changes will not save until you are back in range.
+        </div>
+      )}
+      <div className="tm-scroll">
+        <LazyScreen screenKey={`${nav.tab}/${nav.sub || ''}`}>{renderContent()}</LazyScreen>
+      </div>
 
       {/* ── The microphone ──
           Above the bar rather than in it: the bar is full at five, and a sixth

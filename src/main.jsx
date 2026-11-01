@@ -15,7 +15,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 // tap in the Messages screen, because iOS silently refuses a prompt that did not
 // come from one and a refusal cannot be asked for again.
 //
-// It caches nothing — see public/sw.js for why that is deliberate.
+// It also lets the app open on a weak signal, without ever pinning an old
+// build or keeping patient data — see public/sw.js for the rules.
 registerWorker().catch(() => {
   // A browser that will not register one still runs the whole app. There is
   // nothing to tell anybody here; the Messages screen says what is possible on
