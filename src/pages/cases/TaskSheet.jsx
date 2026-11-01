@@ -15,7 +15,7 @@ function shortDate(dateStr) {
   return d.toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short' })
 }
 
-export default function TaskSheet({ task, onClose, onDone }) {
+export default function TaskSheet({ task, onClose, onDone, kind = 'Task' }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -46,7 +46,7 @@ export default function TaskSheet({ task, onClose, onDone }) {
           display: 'flex', flexDirection: 'column'
         }}>
           <div style={{ padding: space.md, borderBottom: border.hairline, display: 'flex', alignItems: 'baseline', gap: space.sm }}>
-            <div style={{ flex: 1, ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint }}>Task · {shortDate(task.date)}</div>
+            <div style={{ flex: 1, ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint }}>{kind}{task.date ? ` · due ${shortDate(task.date)}` : ''}</div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', ...text('bodyStrong'), color: colour.inkFaint, cursor: 'pointer' }}>Close</button>
           </div>
 
@@ -65,10 +65,10 @@ export default function TaskSheet({ task, onClose, onDone }) {
             {result && (
               <div role="status" style={{ ...text('body'), marginTop: space.md, padding: space.md, borderRadius: radius.control,
                 background: result.done ? colour.successSoft : colour.surface, border: border.hairline, color: colour.ink }}>
-                <strong>{result.done ? 'Done — thanks.' : 'Back on the list.'}</strong>
+                <strong>{result.done ? 'Done — thanks. It stays on the day, ticked.' : 'Back on the list.'}</strong>
                 {result.copies.length > 0 && (
                   <div style={{ ...text('caption'), marginTop: 4 }}>
-                    The same task on {result.copies.map(shortDate).join(', ')} {result.done ? 'is ticked off too' : 'is back on too'}.
+                    The same task on the calendar for {result.copies.map(shortDate).join(', ')} {result.done ? 'is ticked off too' : 'is back on too'}.
                   </div>
                 )}
                 {result.projectItems.length > 0 && (

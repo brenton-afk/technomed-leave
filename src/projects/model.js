@@ -405,8 +405,14 @@ export function dueBy(day, tasks = []) {
  */
 export function dueOnDay(day, tasks = [], today = '') {
   if (!day) return []
-  if (today && day === today) return dueBy(day, tasks)
-  return (tasks || [])
-    .filter(t => t && !t.archived && t.status !== 'done')
-    .filter(t => t.due_date === day)
+  const open = today && day === today
+    ? dueBy(day, tasks)
+    : (tasks || []).filter(t => t && !t.archived && t.status !== 'done').filter(t => t.due_date === day)
+  // Finished ones stay, after what is still to do, struck through. "We don't
+  // want them disappearing" — a ticked task that vanishes leaves nobody able
+  // to see it was done, or to untick one tapped by mistake. Kept on the day
+  // it was due, and on today as well when it was finished today.
+  const finished = (tasks || []).filter(t => t && !t.archived && t.status === 'done' && t.due_date
+    && (t.due_date === day || (today && day === today && String(t.doneAt || '').slice(0, 10) === today)))
+  return [...open, ...finished]
 }

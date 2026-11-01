@@ -637,10 +637,20 @@ async function handleTask(req, res, session) {
   }
 
   if (req.method === 'PATCH') {
-    const { id, column, projectId, assignee, priority, due_date: dueDate, task, archive } = req.body || {}
+    const { id, projectId, assignee, priority, due_date: dueDate, task, archive, done } = req.body || {}
+    let { column } = req.body || {}
     if (!id) return res.status(400).json({ error: 'id is required' })
     const item = await getWorklistItem(id)
     if (!item) return res.status(404).json({ error: 'That task is not there' })
+    // "Done" or "not done" from the day view, which knows nothing of a
+    // project's own column names. Not done goes back where it was.
+    if (done !== undefined) {
+      const board = item.projectId ? normaliseProject(await getProject(item.projectId)) : GENERAL
+      const cols = board?.columns?.length ? board.columns : GENERAL.columns
+      column = done
+        ? (cols.find(c => c.done) || cols[cols.length - 1]).key
+        : (cols.find(c => c.key === item.reopenTo && !c.done) || cols[0]).key
+    }
 
     let next = { ...item }
     if (projectId !== undefined) {
@@ -673,12 +683,27 @@ async function handleTask(req, res, session) {
     if (archive === true) next = archived(next, { by, at: nowStamp() })
     if (archive === false) next = restored(next)
 
+    // Who finished it and when, so the day view can keep it on the day it was
+    // done and say so; and where it was, so "not done" puts it back there.
+    const becameDone = item.status !== 'done' && next.status === 'done'
+    if (becameDone) {
+      next = { ...next, doneAt: nowStamp(), doneBy: STAFF.find(s => s.email === session?.email)?.firstName || by, reopenTo: item.column || '' }
+    }
+    if (item.status === 'done' && next.status !== 'done') next = { ...next, doneAt: null, doneBy: null }
+
     // Saved whole rather than merged. updateWorklistItem spreads the stored
     // row under the changes, which would quietly put archivedBy and archivedAt
     // back on a task that had just been taken out of the archive.
     const updated = { ...next, updatedAt: nowStamp() }
     await saveWorklistItem(updated)
-    return res.status(200).json({ item: updated })
+    // Its copies on the calendar follow (api/_taskDone.js). Best effort.
+    let calendar = []
+    if (becameDone) {
+      const who = STAFF.find(s => s.email === session?.email)?.firstName || ''
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+      calendar = await settleWorklistItem(updated, who, today).catch(() => [])
+    }
+    return res.status(200).json({ item: updated, calendar })
   }
 
   if (req.method === 'DELETE') {

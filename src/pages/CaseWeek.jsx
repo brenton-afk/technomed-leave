@@ -226,23 +226,26 @@ function TaskRow({ task, onDone, compact }) {
  * eight.
  */
 function DueRow({ task, today, onDone, compact }) {
-  const late = task.due_date && today && task.due_date < today
+  const done = task.status === 'done'
+  const late = !done && task.due_date && today && task.due_date < today
   return (
     <button type="button"
       onClick={() => onDone?.(task)}
-      aria-label={`Tick off ${task.task}`}
+      aria-label={`${task.task}${done ? ' — done' : ''} — open`}
       style={{
         display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
         padding: compact ? '4px 7px' : `6px ${space.sm}px`, marginBottom: 4,
         borderRadius: radius.control, background: colour.surface,
         border: `1px solid ${late ? colour.dangerLine : colour.line}`,
         ...text('micro'), textTransform: 'none', letterSpacing: 0, lineHeight: 1.35,
-        color: colour.ink, fontWeight: 600
+        color: done ? colour.inkFaint : colour.ink, fontWeight: done ? 400 : 600,
+        ...(done ? { textDecoration: 'line-through' } : {})
       }}>
-      <span aria-hidden="true" style={{ marginRight: 6 }}>☐</span>
+      <span aria-hidden="true" style={{ marginRight: 6 }}>{done ? '✓' : '☐'}</span>
       {task.task}
       <span style={{ fontWeight: 400, color: colour.inkMuted }}>
-        {task.assignee && task.assignee !== 'Unassigned' ? ` · ${task.assignee}` : ''}
+        {done && task.doneBy ? ` · ${task.doneBy}`
+          : task.assignee && task.assignee !== 'Unassigned' ? ` · ${task.assignee}` : ''}
         {late ? ' · overdue' : ''}
       </span>
     </button>
@@ -1593,19 +1596,26 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spoken, plan])
 
-  const markDueDone = useCallback(async task => {
-    setWorklist(items => items.map(it =>
-      (it.id === task.id ? { ...it, status: 'done', column: 'done' } : it)))
+  // Opened first, like a calendar task — a tap used to tick it and take it
+  // off the day in one go. See cases/TaskSheet.jsx.
+  const markDueDone = useCallback(async (task, done) => {
     try {
-      await fetch('/api/meetings/agent?action=task', {
+      const res = await fetch('/api/meetings/agent?action=task', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: task.id, column: 'done' })
+        body: JSON.stringify({ id: task.id, done })
       })
+      if (!res.ok) return null
+      const data = await res.json()
+      if (data.item) setWorklist(items => items.map(it => (it.id === task.id ? data.item : it)))
+      return { ok: true, copies: data.calendar || [], projectItems: [] }
     } catch {
       await loadWorklist()
+      return null
     }
   }, [token, loadWorklist])
+  const [openDue, setOpenDue] = useState(null)
+  const openDueSheet = useCallback(task => setOpenDue(task), [])
   const dayPlan = (plan?.days || []).find(d => d.date === activeDay)
 
   function goWeek(by) {
@@ -1946,7 +1956,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
             <AddBookingRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing}
-                  due={dueFor(activeDay)} today={today} onDueDone={markDueDone}
+                  due={dueFor(activeDay)} today={today} onDueDone={openDueSheet}
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
                   hasPreferences={hasPreferences}
@@ -1962,7 +1972,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
             is most of what somebody opens the week for. */}
         {plan && span === 'week' && desktop && (
           <WeekGrid
-            dueFor={dueFor} onDueDone={markDueDone}
+            dueFor={dueFor} onDueDone={openDueSheet}
             plan={plan}
             today={today}
             onOpen={setEditing}
@@ -1997,7 +2007,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
                 find the day first, in a view that had no arrows, meant the one
                 thing this was built for was the awkward one. */}
             <DayPanel day={day} onOpen={setEditing}
-              due={dueFor(day.date)} today={today} onDueDone={markDueDone}
+              due={dueFor(day.date)} today={today} onDueDone={openDueSheet}
               onSetPlace={setPlacing} leader={leader}
               onPreferences={openPreferences}
               hasPreferences={hasPreferences}
@@ -2083,6 +2093,16 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
 
       {openTask && (
         <TaskSheet task={openTask} onDone={markTaskDone} onClose={() => setOpenTask(null)} />
+      )}
+      {openDue && (
+        <TaskSheet kind="Project task" onClose={() => setOpenDue(null)}
+          task={{
+            id: openDue.id, what: openDue.task, who: openDue.assignee !== 'Unassigned' ? openDue.assignee : '',
+            note: openDue.notes, date: openDue.due_date, addedBy: openDue.sourceMeetingTitle ? `${openDue.sourceMeetingTitle} (meeting)` : '',
+            done: openDue.status === 'done', doneBy: openDue.doneBy,
+            doneOn: openDue.doneAt ? String(openDue.doneAt).slice(0, 10) : ''
+          }}
+          onDone={(t, done) => markDueDone(openDue, done)} />
       )}
       {addingTask && (
         <NewTask

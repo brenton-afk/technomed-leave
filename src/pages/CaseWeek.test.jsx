@@ -1526,12 +1526,13 @@ describe('project tasks that fall due', () => {
     expect(screen.queryByText(/Book the Calvary in-service/)).not.toBeInTheDocument()
   })
 
-  it('leaves out what is already done', async () => {
+  it('keeps what is already done on its day, ticked rather than gone', async () => {
+    // "We don't want them disappearing."
     withWorklist()
     show()
     await waitFor(() =>
       expect(screen.getByText(/Get the Athlet tray back/)).toBeInTheDocument())
-    expect(screen.queryByText(/Already handled/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Already handled — done — open')).toBeInTheDocument()
   })
 
   it('names who has it, so the day view says whose job it is', async () => {
@@ -1542,17 +1543,20 @@ describe('project tasks that fall due', () => {
         .toMatch(/Ben Cassidy/))
   })
 
-  it('ticks one off without leaving the week', async () => {
-    // The point of putting these here is clearing them without changing tab.
+  it('opens one, then ticks it off without leaving the week', async () => {
+    // The point of putting these here is clearing them without changing tab —
+    // and a tap opens it first, so a stray tap ticks nothing.
     withWorklist()
     show()
     const row = await waitFor(() =>
-      screen.getByLabelText('Tick off Get the Athlet tray back from RHH'))
+      screen.getByLabelText('Get the Athlet tray back from RHH — open'))
     fireEvent.click(row)
+    expect(global.fetch.mock.calls.filter(c => String(c[0]).includes('action=task'))).toHaveLength(0)
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark as done' }))
     await waitFor(() => {
       const calls = global.fetch.mock.calls.filter(c => String(c[0]).includes('action=task'))
       expect(calls.length).toBeGreaterThan(0)
-      expect(JSON.parse(calls[0][1].body)).toMatchObject({ id: 'w1', column: 'done' })
+      expect(JSON.parse(calls[0][1].body)).toMatchObject({ id: 'w1', done: true })
     })
   })
 

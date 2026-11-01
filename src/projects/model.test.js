@@ -395,7 +395,7 @@ describe('a day in the week view', () => {
   ]
 
   it('meets you again on today with what is overdue', () => {
-    expect(dueOnDay('2026-10-13', TASKS, '2026-10-13').map(t => t.id))
+    expect(dueOnDay('2026-10-13', TASKS, '2026-10-13').filter(t => t.status !== 'done').map(t => t.id))
       .toEqual(['late', 'today'])
   })
 
@@ -406,9 +406,11 @@ describe('a day in the week view', () => {
       .toEqual(['thursday'])
   })
 
-  it('leaves out what is finished', () => {
+  it('keeps what is finished on its day, after what is still to do', () => {
+    // "We don't want them disappearing."
     expect(dueOnDay('2026-10-13', TASKS, '2026-10-13').map(t => t.id))
-      .not.toContain('done')
+      .toEqual(['late', 'today', 'done'])
+    expect(dueOnDay('2026-10-15', TASKS, '2026-10-13').map(t => t.id)).not.toContain('done')
   })
 
   it('copes with no day', () => {
