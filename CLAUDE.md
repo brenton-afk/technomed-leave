@@ -222,6 +222,18 @@ the client shows them in `cases/NoticeSheet.jsx` and confirms by id
 on its own. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
+### Tasks are done once, everywhere
+
+Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the
+spot. `taskdone` then runs `settleTask` (`api/_taskDone.js`): copies of the same
+task (same words, same "For") within -30/+60 days get the same state, and open
+project items that are the same task (same person; identical words or 0.8
+similarity) are closed — and reopened on undo, from the ids it recorded. A
+project item ticked on the Projects page ticks its calendar copies the same way.
+`settleCopies` in `tasks.js` also shows a copy as done in the week view when a
+twin is done. Exact words for calendar copies: the same trip written on two
+days may be two trips.
+
 ### Kit room
 
 `api/_kits.js`, served from `api/guides.js?kits=` (no new function). Kits are

@@ -4,7 +4,7 @@
 // the UI, the text copy and the .docx export without any of them diverging.
 
 import { classifyItem } from './itemKind.js'
-import { readTask } from './tasks.js'
+import { readTask, settleCopies } from './tasks.js'
 import './types.js'
 import {
   normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking, isCancelled
@@ -564,7 +564,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
   }
 
   // Third pass: the day blocks.
-  const dayPlans = days.map(dayDate => {
+  const dayPlans = settleCopies(days.map(dayDate => {
     const dayEvents = buckets.get(dayDate) || []
     const cases = allCases.filter(c => c.dayDate === dayDate)
     const caseIds = new Set(cases.map(c => c.id))
@@ -675,7 +675,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       otherRollup,
       needsAttention
     }
-  })
+  }))
 
   const surgeons = surgeonsWithCases.slice().sort()
   const hospitals = [...new Set(allCases.map(c => c.hospital))]

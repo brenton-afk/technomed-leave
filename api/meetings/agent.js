@@ -8,6 +8,7 @@ import {
 import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
 import { flagRepeats } from '../_worklistMatch.js'
+import { settleWorklistItem } from '../_taskDone.js'
 import { readActionList } from '../_actionItems.js'
 import { askClaude } from '../_anthropic.js'
 import {
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
   if (action === 'status') return handleStatus(req, res)
   if (action === 'analyze') return handleAnalyze(req, res)
   if (action === 'finalize') return handleFinalize(req, res)
-  if (action === 'worklist') return handleWorklist(req, res)
+  if (action === 'worklist') return handleWorklist(req, res, session)
   // "Could she dump a transcript from a meeting into that section and have the
   // Claude agent build out a task and action list?" The extraction already
   // takes raw text, so pasting needs nothing here. A file does: this turns one
@@ -457,7 +458,7 @@ async function handleFinalize(req, res) {
 
 // ─── Worklist: list, update status, delete ─────────────────
 
-async function handleWorklist(req, res) {
+async function handleWorklist(req, res, session) {
   if (req.method === 'GET') {
     const { items } = await getWorklist()
     return res.status(200).json({ items })
@@ -466,7 +467,15 @@ async function handleWorklist(req, res) {
     const { id, status } = req.body
     if (!id || !status) return res.status(400).json({ error: 'id and status are required' })
     const updated = await updateWorklistItem(id, { status })
-    return res.status(200).json({ item: updated })
+    // Ticked off on the project list: any copy of it on the calendar follows,
+    // so the day view stops listing it. Best effort; the tick is saved.
+    let calendar = []
+    if (status === 'done') {
+      const who = STAFF.find(s => s.email === session?.email)?.firstName || ''
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+      calendar = await settleWorklistItem(updated, who, today).catch(() => [])
+    }
+    return res.status(200).json({ item: updated, calendar })
   }
   if (req.method === 'DELETE') {
     const { id } = req.query

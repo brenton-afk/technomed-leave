@@ -1,3 +1,4 @@
+import { settleTask } from '../_taskDone.js'
 import {
   TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr, parseDateStr
 } from '../../src/clinicalPlan/week.js'
@@ -908,9 +909,17 @@ async function handleTaskDone(req, res) {
       colorId: done ? '8' : TASK_COLOR_ID
     }, { etag: body.etag })
 
+    // Its copies on other days, and the project list. See api/_taskDone.js.
+    const settled = await settleTask({
+      event: { ...current, description }, done,
+      who: firstNameFor(session.email), when: todayInHobart(), taskColour: TASK_COLOR_ID
+    })
+
     return res.status(200).json({
       ok: true, done,
-      event: { id: saved.id, summary: saved.summary || '', etag: saved.etag || null }
+      event: { id: saved.id, summary: saved.summary || '', etag: saved.etag || null },
+      copies: settled.copies,
+      projectItems: settled.projectItems
     })
   } catch (err) {
     if (err.code === 'conflict') {
@@ -1746,7 +1755,9 @@ async function handleTeamLeader(req, res) {
 
 /** Today in Hobart, whatever zone the server thinks it is in. */
 function todayInHobart() {
-  return new Date(Date.now() + 10 * 3600 * 1000).toISOString().slice(0, 10)
+  // Through the zone database, not a fixed +10: in daylight saving that was
+  // an hour out, and just after midnight it named yesterday.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
 }
 
 /**

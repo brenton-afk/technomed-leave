@@ -132,6 +132,37 @@ export function taskDescription({ kind, thing, from, to, who, note, addedBy } = 
   return lines.filter(l => l !== null).join('\n').trim()
 }
 
+/**
+ * What makes two calendar tasks the same task: the same words, for the same
+ * person. Toni entered the Dropbox task on Monday and again on Tuesday; ticked
+ * on one, it is done on both. Exact words only — "Get Athlet back from RHH" on
+ * Monday and again on Thursday can be two trips, and the same words written
+ * twice two minutes apart is a double-up, not a guess.
+ */
+export function taskKey(task) {
+  const words = String(task?.what || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  return `${words}|${String(task?.who || '').toLowerCase().trim()}`
+}
+
+/**
+ * Copies of a done task on other days, shown as done too. The server ticks
+ * them as well (api/_taskDone.js); this covers a copy ticked before that
+ * existed, or one the calendar has not caught up with.
+ */
+export function settleCopies(days) {
+  const done = new Map()
+  for (const day of days) {
+    for (const t of day.tasks || []) if (t.done && !done.has(taskKey(t))) done.set(taskKey(t), t)
+  }
+  return days.map(day => ({
+    ...day,
+    tasks: (day.tasks || []).map(t => {
+      const twin = !t.done && done.get(taskKey(t))
+      return twin ? { ...t, done: true, doneBy: twin.doneBy, doneOn: twin.doneOn, doneElsewhere: twin.date } : t
+    })
+  }))
+}
+
 /** Whether a calendar entry is one of these. */
 export function isTask(summary) {
   return new RegExp(`^\\s*${TASK_PREFIX}`, 'i').test(String(summary || ''))

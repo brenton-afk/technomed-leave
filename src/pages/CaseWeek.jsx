@@ -34,6 +34,7 @@ import { suggestSupply } from '../clinicalPlan/inventory.js'
 import { preferencesFor } from '../clinicalPlan/preferences.js'
 import { GuideView } from './TheatreGuides.jsx'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
+import TaskSheet from './cases/TaskSheet.jsx'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -187,7 +188,7 @@ function TaskRow({ task, onDone, compact }) {
     <button type="button"
       onClick={() => onDone?.(task, !done)}
       aria-pressed={done}
-      aria-label={`${task.what}${done ? ' — done' : ' — mark as done'}`}
+      aria-label={`${task.what}${done ? ' — done' : ''} — open`}
       style={{
         display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
         padding: compact ? '4px 7px' : `6px ${space.sm}px`, marginBottom: 4,
@@ -1288,6 +1289,8 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
   // The day a task is being added to, or null. Separate from `adding` so that
   // opening one does not look like opening the other.
   const [addingTask, setAddingTask] = useState(null)
+  // A tapped task opens rather than ticking itself. See cases/TaskSheet.jsx.
+  const [openTask, setOpenTask] = useState(null)
   const prefs = useMemo(() => readPrefs(), [])
   const [chosenSpan, setSpan] = useState(
     ['week', 'lists'].includes(prefs.caseSpan) ? prefs.caseSpan : 'day')
@@ -1701,13 +1704,17 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user?.token}` },
         body: JSON.stringify({ eventId: task.id, done })
       })
-      if (!res.ok) return
+      if (!res.ok) return null
+      const data = await res.json()
       await load(window_, { quiet: true })
+      return data
     } catch {
       // A tick that did not save leaves the task where it was, which is the
       // safe direction: somebody sees it still outstanding and taps again.
+      return null
     }
   }, [user, load, window_])
+  const openTaskSheet = useCallback(task => setOpenTask(task), [])
 
   const countQueue = useCallback(async () => {
     try {
@@ -1943,7 +1950,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
                   hasPreferences={hasPreferences}
-                  onTaskDone={markTaskDone} />
+                  onTaskDone={openTaskSheet} />
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing booked.</div>}
           </>
         )}
@@ -1962,7 +1969,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
             onSetPlace={setPlacing}
             onPreferences={openPreferences}
             hasPreferences={hasPreferences}
-            onTaskDone={markTaskDone} />
+            onTaskDone={openTaskSheet} />
         )}
 
         {plan && span === 'week' && !desktop && (plan.days || []).map(day => (
@@ -1994,7 +2001,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
               onSetPlace={setPlacing} leader={leader}
               onPreferences={openPreferences}
               hasPreferences={hasPreferences}
-              onTaskDone={markTaskDone} />
+              onTaskDone={openTaskSheet} />
           </div>
         ))}
 
@@ -2074,6 +2081,9 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
           onCreated={() => load(window_, { quiet: true })} />
       )}
 
+      {openTask && (
+        <TaskSheet task={openTask} onDone={markTaskDone} onClose={() => setOpenTask(null)} />
+      )}
       {addingTask && (
         <NewTask
           user={user}
