@@ -49,9 +49,38 @@ const KNOWN_TRAYS = {
 // they never need a distributor's loan set.
 const TECHNOMED_KITS = [
   { system: 'TM Screw Removal', distributor: 'technomed', home: 'CLV', kind: 'technomed' },
-  { system: 'TM Locking Distractor', distributor: 'technomed', home: 'CLV', kind: 'technomed' },
-  { system: 'Reform Lumbar', distributor: 'e4', home: 'office', kind: 'floating' }
+  { system: 'TM Locking Distractor', distributor: 'technomed', home: 'CLV', kind: 'technomed' }
+  // Reform Lumbar was here as a TM loan at the office; it went back to E4
+  // Surgical (Brent, 2 Nov 2026).
 ]
+
+// Changes to a kit list already saved in Redis. The seed only runs once, so a
+// correction to it alone never reaches the live portal. Each runs once.
+export const KIT_CORRECTIONS = [
+  { id: 'outrigger-consigned-clv-2026-11-02',
+    replace: { from: 'mariner-outrigger-floating', to: {
+      id: 'mariner-outrigger-clv', name: 'Mariner Outrigger', system: 'Mariner Outrigger',
+      distributor: 'device', kind: 'consignment', home: 'CLV' } } },
+  { id: 'reform-lumbar-returned-2026-11-02', remove: 'reform-lumbar-office' }
+]
+
+/** Applies corrections not yet applied. Returns null when nothing changed. */
+export function correctKits(defs, applied = []) {
+  const due = KIT_CORRECTIONS.filter(c => !applied.includes(c.id))
+  if (!due.length) return null
+  let kits = defs
+  for (const fix of due) {
+    if (fix.remove) kits = kits.filter(k => k.id !== fix.remove)
+    if (fix.replace) {
+      const old = kits.find(k => k.id === fix.replace.from)
+      const next = { trays: old?.trays || [], ...fix.replace.to }
+      kits = old
+        ? kits.map(k => (k.id === fix.replace.from ? next : k))
+        : kits.some(k => k.id === next.id) ? kits : [...kits, next]
+    }
+  }
+  return { kits, applied: [...applied, ...due.map(c => c.id)] }
+}
 
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -106,12 +135,26 @@ export async function saveKitSettings({ emailsOn }, by) {
   return settings
 }
 
+const APPLIED = 'kits:applied'
+
 async function getDefs() {
   const raw = await redis('get', DEFS)
-  if (raw) return JSON.parse(raw)
-  const kits = seedKits()
-  await redisSetBody(DEFS, JSON.stringify(kits))
-  return kits
+  if (!raw) {
+    const kits = seedKits()
+    await redisSetBody(DEFS, JSON.stringify(kits))
+    await redisSetBody(APPLIED, JSON.stringify(KIT_CORRECTIONS.map(c => c.id)))
+    return kits
+  }
+  const defs = JSON.parse(raw)
+  let applied = []
+  try { applied = JSON.parse((await redis('get', APPLIED)) || '[]') } catch { applied = [] }
+  const corrected = correctKits(defs, applied)
+  if (!corrected) return defs
+  await redisSetBody(DEFS, JSON.stringify(corrected.kits))
+  await redisSetBody(APPLIED, JSON.stringify(corrected.applied))
+  // Where the old kit was recorded, the new one starts fresh at its home.
+  await redis('del', LOC('mariner-outrigger-floating')).catch(() => {})
+  return corrected.kits
 }
 
 /** Every kit with where it is now. */

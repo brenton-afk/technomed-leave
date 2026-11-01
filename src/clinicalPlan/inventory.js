@@ -81,9 +81,10 @@ export const INVENTORY = [
   {
     system: 'Mariner Outrigger', distributor: 'device',
     aka: ['Outrigger'],
-    consigned: {},
-    floating: 1,
-    note: 'Connector set. TechnoMed floating kit, mostly lives at Calvary.'
+    // "Mariner Outrigger now lives at Calvary as a consignment kit." — Brent,
+    // 2 Nov 2026. It was a TechnoMed floating kit.
+    consigned: { CLV: 1 },
+    note: 'Connector set. Consigned at Calvary.'
   },
 
   // ── E4 Surgical ──

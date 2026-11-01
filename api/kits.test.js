@@ -81,6 +81,30 @@ describe('the starting list', () => {
   })
 })
 
+describe('the kit list as Brent corrected it on 2 Nov', () => {
+  it('has the Outrigger consigned at Calvary and no Reform Lumbar, for a new list', () => {
+    const kits = seedKits()
+    expect(kits.find(k => k.system === 'Mariner Outrigger')).toMatchObject({ kind: 'consignment', home: 'CLV' })
+    expect(kits.some(k => k.system === 'Reform Lumbar')).toBe(false)
+    expect(kits.filter(k => k.kind === 'floating').map(k => [k.system, k.home]))
+      .toEqual([['Shoreline', 'office'], ['Dakota', 'office']])
+  })
+
+  it('corrects a list saved before, once', async () => {
+    const old = [
+      { id: 'mariner-outrigger-floating', name: 'Mariner Outrigger (TM loan)', system: 'Mariner Outrigger', distributor: 'device', kind: 'floating', home: 'office', trays: ['Connectors'] },
+      { id: 'reform-lumbar-office', name: 'Reform Lumbar', system: 'Reform Lumbar', distributor: 'e4', kind: 'floating', home: 'office', trays: [] }
+    ]
+    store.set('kits:defs', JSON.stringify(old))
+    const kits = await listKits()
+    expect(kits).toHaveLength(1)
+    expect(kits[0]).toMatchObject({ id: 'mariner-outrigger-clv', kind: 'consignment', home: 'CLV', at: 'CLV', trays: ['Connectors'] })
+    // A later edit is not undone by the correction running again.
+    store.set('kits:defs', JSON.stringify([...kits.map(({ at, away, checkedAt, checkedBy, ...k }) => k), old[1]]))
+    expect((await listKits()).map(k => k.id)).toContain('reform-lumbar-office')
+  })
+})
+
 describe('moving and returning', () => {
   it('moves nothing until the move is confirmed, and sends nothing while emails are off', async () => {
     const kit = (await listKits()).find(k => k.home === 'CLV' && k.system === 'Diplomat')

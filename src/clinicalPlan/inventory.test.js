@@ -45,7 +45,6 @@ describe('where the sets are', () => {
     // and Dakota kits are the same shape. Neither is a distributor request,
     // but both need somebody to confirm the kit is free.
     expect(loanNeed('Athlet', 'CLV').need).toBe('move')
-    expect(loanNeed('Mariner Outrigger', 'CLV').need).toBe('move')
   })
 
   it('records where each floating kit sits', () => {
@@ -61,12 +60,10 @@ describe('where the sets are', () => {
     }
   })
 
-  it('names the office when the floating kit is the one covering a case', () => {
-    // Reachable where the system is not consigned at that site. Mariner
-    // Outrigger has no floatingAt, so it keeps the older, vaguer wording —
-    // which is correct, because nobody has said where that one lives.
-    expect(loanNeed('Mariner Outrigger', 'CLV').reason)
-      .toMatch(/floating TechnoMed kit/)
+  it('has the Mariner Outrigger consigned at Calvary', () => {
+    // 2 Nov 2026: no longer a floating kit — it lives at Calvary.
+    expect(inventoryFor('Mariner Outrigger').consigned).toEqual({ CLV: 1 })
+    expect(inventoryFor('Mariner Outrigger').floating).toBeUndefined()
   })
 
   it('has the Global BMD PLIF kit at RHH, not floating', () => {
@@ -404,9 +401,7 @@ describe('working out the supply from what is where', () => {
     // The Shoreline and the Dakota loan kits sit at the TechnoMed office.
     // Somebody puts one in a car and no request is made at all, which is a
     // different job from fetching a tray out of RHH. Only visible where the
-    // system is not already consigned at that hospital — both of these are,
-    // so Mariner Outrigger is the one that shows it.
-    expect(suggestSupply('Mariner Outrigger', 'CLV')).toBe('RHH Loan')
+    // system is not already consigned at that hospital — both of these are.
     expect(inventoryFor('Shoreline').floatingAt).toBe('office')
     expect(inventoryFor('Dakota').floatingAt).toBe('office')
   })
