@@ -13,6 +13,13 @@ npm run preview  # Serve the built dist/
 
 There is no test runner, linter, or formatter configured. Deployment is Vercel (production: `leave.technomed.com.au`); pushing to `main` deploys.
 
+**Brent's standing instruction (1 Nov 2026): deploy without asking.** Once a change
+passes `npx vitest run`, `npm run build` and the `api/` import check below, commit it
+and push straight to `main` (which deploys). Do not open a pull request or wait for
+approval for routine fixes. Still stop and ask first for anything that changes how
+staff use the portal, touches patient data, sends real emails, or changes real
+calendar events.
+
 ## Architecture
 
 A mobile-first PWA staff portal for TechnoMed (a Tasmanian surgical device distributor). React 18 + Vite SPA, with Vercel serverless functions under `api/`. No database — **Upstash Redis (REST API) is the only persistence layer**, accessed by hand-rolled `fetch` calls to the REST endpoint rather than a client library.
