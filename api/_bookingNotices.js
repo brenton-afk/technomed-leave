@@ -38,7 +38,14 @@ export const DEFAULT_CONTACTS = [
   { id: 'globus', name: 'Globus / NuVasive',
     to: ['vicdistribution@globusmedical.com', 'jlagoon@globusmedical.com'], cc: ['cmckenzie@globusmedical.com', 'mlyfordpike@globusmedical.com'] },
   { id: 'device', name: 'Device Technologies (loan requests only — no booking notices)',
-    to: ['DL_VICLoans@device.com.au'], cc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] }
+    to: ['DL_VICLoans@device.com.au'], cc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] },
+  // Kit room moves (see api/_kits.js). From the team's own transfer emails:
+  // Calvary is Sharon plus the loan-sets mailbox, RHH is Katelin's
+  // coordinator mailbox. `greeting` is how the email opens.
+  { id: 'calvary_loans', name: 'Calvary loans team', greeting: 'Sharon and Loans team',
+    note: 'Kit movements into or out of Calvary', to: ['Sharon.Ashworth@calvarycare.org.au', 'TAS-LVH-Loansets@calvarycare.org.au'], cc: [] },
+  { id: 'rhh_loans', name: 'RHH loans coordinator', greeting: 'Katelin',
+    note: 'Kit movements into or out of RHH', to: ['rhhcsdloancoordinator@ths.tas.gov.au'], cc: [] }
 ]
 
 // Corrections to contacts already saved in Redis. A saved copy replaces the
@@ -50,7 +57,10 @@ export const CONTACT_CORRECTIONS = [
   // and the other DL-Spine marketing email included."
   { id: 'device-2026-11-01', contactId: 'device',
     remove: ['kwatson@device.com.au'],
-    addCc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] }
+    addCc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] },
+  // The kit room's two hospital contacts, added to a copy saved before they
+  // existed.
+  { id: 'kit-hospitals-2026-11-01', addContacts: ['calvary_loans', 'rhh_loans'] }
 ]
 
 /** Applies any correction not yet applied. Returns null when nothing changed. */
@@ -61,6 +71,14 @@ export function applyCorrections(saved) {
   const lower = v => String(v).trim().toLowerCase()
   let contacts = saved.contacts
   for (const fix of due) {
+    if (fix.addContacts) {
+      for (const id of fix.addContacts) {
+        const seed = DEFAULT_CONTACTS.find(c => c.id === id)
+        if (seed && !contacts.some(c => c.id === id)) contacts = [...contacts, seed]
+      }
+      applied.add(fix.id)
+      continue
+    }
     contacts = contacts.map(c => {
       if (c.id !== fix.contactId) return c
       const gone = new Set(fix.remove.map(lower))
@@ -130,7 +148,8 @@ export async function saveNoticeSettings({ contacts, rules, loanRequests = DEFAU
     if (!c.id || !c.name) throw new Error('Every contact needs a name')
     if (!to.length) throw new Error(`${c.name} needs at least one address to send to`)
     for (const a of [...to, ...cc]) if (!isEmail(a)) throw new Error(`"${a}" is not an email address`)
-    return { id: String(c.id), name: String(c.name).slice(0, 80), note: String(c.note || '').slice(0, 120), to, cc }
+    return { id: String(c.id), name: String(c.name).slice(0, 80), note: String(c.note || '').slice(0, 120),
+      ...(c.greeting ? { greeting: String(c.greeting).slice(0, 60) } : {}), to, cc }
   })
   const ids = new Set(cleanContacts.map(c => c.id))
   const cleanRules = rules.map(r => {

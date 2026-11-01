@@ -222,6 +222,20 @@ the client shows them in `cases/NoticeSheet.jsx` and confirms by id
 on its own. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
+### Kit room
+
+`api/_kits.js`, served from `api/guides.js?kits=` (no new function). Kits are
+one Redis key (`kits:defs`, seeded once from `inventory.js`); each kit's
+whereabouts is its own key (`kits:loc:{id}`) so two moves cannot overwrite each
+other; `kits:history` is the log. A move is two steps — `move` returns the
+drafted email, `confirm` does it — and the location changes only on confirm.
+Recipients come from the `calvary_loans` / `rhh_loans` contacts in Admin →
+Notices, never from the request. Into a hospital: that hospital, plus the one
+it left; into the office or back home: nobody. **Hospital emails are off
+(`kits:settings`) until an admin turns them on after the stock-take** — until
+then a move shows the email it would have sent and sends nothing. A move whose
+email fails is not recorded, so it can be retried.
+
 ### Surgeon preference cards (Task 18)
 
 Editable data, not a page. `api/_preferences.js` keeps them in Redis

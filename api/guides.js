@@ -5,7 +5,12 @@ import { requireSession } from './_auth.js'
 import {
   getPreferences, editCard, preferenceHistory, restoreVersion, canEditPreferences
 } from './_preferences.js'
-import { firstNameFor } from '../src/staffConfig.js'
+import { firstNameFor, STAFF } from '../src/staffConfig.js'
+import {
+  listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit,
+  saveKitDef, removeKitDef, getKitSettings, saveKitSettings
+} from './_kits.js'
+import { sendBookingNotice, escapeHtml } from './_email.js'
 
 // ─── Theatre guides ──────────────────────────────────────────────────────────
 // Eleven field references for the systems the team carries, plus Surgeon
@@ -120,6 +125,8 @@ export default async function handler(req, res) {
   // The editable surgeon preference cards (Task 18), here rather than in a
   // function of their own: the plan allows twelve and the app is at twelve.
   if (req.query.prefs) return handlePreferences(req, res, session)
+  // The kit room, here for the same reason.
+  if (req.query.kits) return handleKits(req, res, session)
 
   const slug = String(req.query.guide || '').trim()
 
@@ -206,5 +213,59 @@ async function handlePreferences(req, res, session) {
   } catch (err) {
     if (err.code === 'stale') return res.status(409).json({ error: err.message, code: 'stale' })
     return res.status(400).json({ error: err.message })
+  }
+}
+
+
+// ─── Kit room ────────────────────────────────────────────────────────────────
+// See api/_kits.js. Anyone signed in can see kits and move them — the team
+// moving kits is the whole point. Editing the list of kits and their trays is
+// for admins and the clinical team; switching hospital emails on is admin only.
+
+function hobartToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+}
+
+async function handleKits(req, res, session) {
+  const staff = STAFF.find(s => s.email === session.email) || {}
+  const sender = { name: staff.name || session.name || '', email: staff.email || session.email, firstName: staff.firstName }
+  const canEdit = Boolean(staff.isAdmin || staff.isClinicalTeam)
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  const what = String(req.query.kits)
+  try {
+    if (what === 'list') {
+      const [kits, settings] = await Promise.all([listKits(), getKitSettings()])
+      return res.status(200).json({ kits, settings, canEdit, isAdmin: Boolean(staff.isAdmin), today: hobartToday() })
+    }
+    if (what === 'history') return res.status(200).json({ history: await kitHistory(150) })
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+    if (what === 'move') return res.status(200).json(await prepareMove({ ...body, today: hobartToday() }, sender))
+    if (what === 'confirm') {
+      return res.status(200).json(await confirmMove(body, sender, (email, from) => sendBookingNotice({
+        to: email.to, cc: email.cc, subject: email.subject, text: email.text,
+        html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.5">${
+          escapeHtml(email.text).replace(/\n/g, '<br>')}</div>`,
+        sender: { name: from.name, email: from.email }
+      })))
+    }
+    if (what === 'return') { await returnKit(body.kitId, sender); return res.status(200).json({ ok: true }) }
+    if (what === 'check') { await checkKit(body.kitId, body.at, sender.firstName || sender.email); return res.status(200).json({ ok: true }) }
+
+    if (what === 'save' || what === 'remove') {
+      if (!canEdit) return res.status(403).json({ error: 'Only admins and the clinical team can change the kit list' })
+      if (what === 'save') return res.status(200).json({ kit: await saveKitDef(body.kit, sender.firstName) })
+      await removeKitDef(body.kitId, sender.firstName)
+      return res.status(200).json({ ok: true })
+    }
+    if (what === 'settings') {
+      if (!staff.isAdmin) return res.status(403).json({ error: 'Admins only' })
+      return res.status(200).json(await saveKitSettings(body, sender.firstName))
+    }
+    return res.status(400).json({ error: 'Unknown kit action' })
+  } catch (err) {
+    // Every message thrown in _kits.js is a sentence for a person; nothing in
+    // it carries patient detail.
+    return res.status(400).json({ error: err.message || 'That did not work' })
   }
 }

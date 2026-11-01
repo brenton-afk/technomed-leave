@@ -1,282 +1,288 @@
-import React, { useState, useEffect } from 'react'
-import { Page, Header, Body } from '../design/Shell.jsx'
-import { colour, text, space, radius, border } from '../design/tokens.js'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { Page, Header, Banner, EmptyState, Skeleton } from '../design/Shell.jsx'
+import { colour, text, space, radius, border, card } from '../design/tokens.js'
+import { IconKit, IconSearch } from '../design/icons.jsx'
+import MoveSheet from './kit/MoveSheet.jsx'
+import KitDetail from './kit/KitDetail.jsx'
 
+// ─── Kit room ────────────────────────────────────────────────────────────────
+// Where every set is, and moving one. Rebuilt 1 Nov 2026: the old page kept
+// nothing — a move lived in one phone's memory until the app was reloaded —
+// and took three taps through a hospital and a category to reach a kit.
+//
+// One list now, filtered rather than drilled into. The three places across the
+// top are both the summary ("what is at RHH?") and the filter. Kits away from
+// home float to the top, because "what has not come back" is the question the
+// page is most often opened to answer.
 
-const DISTRIBUTORS = {
-  signus: { name: 'Signus', logo: '/logos/signus.png', color: colour.danger, kits: ['Diplomat', 'Athlet', 'Ascot', 'MOBIS'] },
-  e4surgical: { name: 'E4 Surgical', logo: '/logos/e4surgical.png', color: '#2c3e6b', kits: ['Dakota', 'Reform Cervical', 'Reform Lumbar', 'E4 Global PLIF', 'E4 Global ALIF'] },
-  devicetech: { name: 'Device Technologies', logo: '/logos/devicetech.png', color: '#8e24aa', kits: ['Mariner', 'Shoreline'] },
-  orthofix: { name: 'Orthofix', logo: '/logos/orthofix.png', color: '#0077c8', kits: ['Orthofix Connectors'] },
-  technomed: { name: 'TechnoMed', logo: '/logo.png', color: colour.navy, kits: ['TM Screw Removal', 'TM Locking Distractor'] },
+export const PLACE_NAMES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
+const PLACE_ORDER = ['office', 'CLV', 'RHH']
+
+export const DISTRIBUTORS = {
+  signus: { name: 'Signus', logo: '/logos/signus.png' },
+  e4: { name: 'E4 Surgical', logo: '/logos/e4surgical.png' },
+  device: { name: 'Device Technologies', logo: '/logos/devicetech.png' },
+  kt: { name: 'KT Medical' },
+  globus: { name: 'Globus / NuVasive' },
+  technomed: { name: 'TechnoMed', logo: '/logo.png' }
 }
 
-function getDistributor(kitName) {
-  for (const [id, dist] of Object.entries(DISTRIBUTORS)) {
-    if (dist.kits.includes(kitName)) return { id, ...dist }
-  }
-  return null
+const KIND = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
+
+function sinceText(iso) {
+  if (!iso) return ''
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days} days`
 }
-
-const LOCATIONS = [
-  {
-    id: 'calvary',
-    name: 'Calvary Lenah Valley',
-    icon: '🏥',
-    address: 'Lenah Valley, TAS',
-    color: '#1a7a6e',
-    categories: {
-      consignment: [
-        'Diplomat', 'Shoreline', 'Dakota', 'MOBIS', 'E4 Global PLIF',
-        'E4 Global ALIF', 'Ascot', 'TM Screw Removal', 'Orthofix Connectors', 'TM Locking Distractor'
-      ],
-      loan: [],
-      loanset: []
-    }
-  },
-  {
-    id: 'rhh',
-    name: 'Royal Hobart Hospital',
-    icon: '🏨',
-    address: 'Liverpool St, Hobart TAS',
-    color: colour.navy,
-    categories: {
-      consignment: [
-        'Diplomat', 'Mariner', 'E4 Global PLIF', 'Ascot',
-        'Athlet', 'Shoreline', 'Dakota', 'Reform Cervical'
-      ],
-      loan: [],
-      loanset: []
-    }
-  },
-  {
-    id: 'warehouse',
-    name: 'TechnoMed Warehouse',
-    icon: '🏭',
-    address: '295 Elizabeth St, North Hobart',
-    color: '#2a3a5c',
-    categories: {
-      consignment: null,
-      loan: ['Reform Lumbar', 'Dakota'],
-      loanset: []
-    }
-  }
-]
-
-const CAT_LABELS = {
-  consignment: 'Consignment',
-  loan: 'TM Long Term Loan',
-  loanset: 'Loan Set'
-}
-
-const STATUS_OPTIONS = [
-  { id: 'ok', label: 'In Stock', color: '#1a7a6e', bg: '#e6f4f2' },
-  { id: 'low', label: 'Needs Restock', color: '#856404', bg: '#fff3cd' },
-  { id: 'out', label: 'Out of Stock', color: colour.danger, bg: colour.dangerSoft },
-  { id: 'away', label: 'On Loan', color: '#5c6bc0', bg: '#ede7f6' }
-]
 
 export default function KitRoom({ user, onBack }) {
-  const [selectedLocation, setSelectedLocation] = useState(null)
-  const [selectedCat, setSelectedCat] = useState(null)
-  const [kitStatuses, setKitStatuses] = useState({})
-  const [editingKit, setEditingKit] = useState(null)
-  const [moveModal, setMoveModal] = useState(null)
-  const [moveTarget, setMoveTarget] = useState('')
-  const [comment, setComment] = useState('')
-  const [history, setHistory] = useState([])
-  const [showHistory, setShowHistory] = useState(false)
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  const [place, setPlace] = useState('all')
+  const [query, setQuery] = useState('')
+  const [distributor, setDistributor] = useState('')
+  const [moving, setMoving] = useState(null)
+  const [open, setOpen] = useState(null)
+  const [busy, setBusy] = useState('')
+  const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
-  function getStatus(locationId, cat, kitName) {
-    return kitStatuses[`${locationId}:${cat}:${kitName}`] || 'ok'
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/guides?kits=list', { headers })
+      const json = await res.json()
+      if (!res.ok || json.error) throw new Error(json.error || 'Could not load the kit room')
+      setData(json); setError('')
+    } catch (err) { setError(err.message) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.token])
+
+  useEffect(() => { load() }, [load])
+
+  async function post(what, body) {
+    const res = await fetch(`/api/guides?kits=${what}`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    })
+    const json = await res.json()
+    if (!res.ok || json.error) throw new Error(json.error || 'That did not work')
+    return json
   }
 
-  function setStatus(locationId, cat, kitName, status) {
-    const key = `${locationId}:${cat}:${kitName}`
-    setKitStatuses(prev => ({ ...prev, [key]: status }))
-    addHistory(`${kitName} status updated to "${STATUS_OPTIONS.find(s=>s.id===status)?.label}" by ${user?.name?.split(' ')[0]}`)
+  async function act(key, fn) {
+    setBusy(key); setError('')
+    try { await fn(); await load() } catch (err) { setError(err.message) }
+    setBusy('')
   }
 
-  function addHistory(entry) {
-    const now = new Date()
-    const time = now.toLocaleString('en-AU', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
-    setHistory(prev => [{ text: entry, time }, ...prev].slice(0, 50))
-  }
+  const kits = data?.kits || []
+  const counts = useMemo(() => Object.fromEntries(PLACE_ORDER.map(p => [p, kits.filter(k => k.at === p).length])), [kits])
+  const unchecked = kits.filter(k => !k.checkedAt).length
 
-  function handleMove() {
-    if (!moveTarget || !moveModal) return
-    const { kitName } = moveModal
-    addHistory(`${kitName} moved from ${selectedLocation.name} to ${LOCATIONS.find(l=>l.id===moveTarget)?.name}${comment ? ` — ${comment}` : ''} by ${user?.name?.split(' ')[0]}`)
-    setMoveModal(null)
-    setMoveTarget('')
-    setComment('')
-  }
+  const shown = kits.filter(k => (place === 'all' || k.at === place)
+    && (!distributor || k.distributor === distributor)
+    && (!query || `${k.name} ${k.system} ${(k.trays || []).join(' ')} ${DISTRIBUTORS[k.distributor]?.name || ''}`
+      .toLowerCase().includes(query.toLowerCase())))
+  const away = shown.filter(k => k.away)
+  const home = shown.filter(k => !k.away)
+  const presentDistributors = [...new Set(kits.map(k => k.distributor).filter(Boolean))]
 
-  const statusInfo = (s) => STATUS_OPTIONS.find(o => o.id === s) || STATUS_OPTIONS[0]
+  return (
+    <Page>
+      <Header eyebrow="Kit and stock" title="Kit room" onBack={onBack}
+        subtitle={data ? `${kits.length} kits · ${kits.filter(k => k.away).length} away from home` : 'Loading…'} />
+      <div className="tm-measure" style={{ padding: space.lg, paddingBottom: space.xxxl }}>
 
-  // Location list view
-  if (!selectedLocation) {
-    return (
-      <Page style={{ display:'flex', flexDirection:'column' }}>
-        <Header eyebrow="Kit and stock" title="Kit Room" subtitle="Select a location to view kits" onBack={onBack} />
+        {error && <Banner tone="danger">{error}</Banner>}
 
-        <div className="tm-measure" style={{ padding:16, flex:1 }}>
-          {LOCATIONS.map(loc => (
-            <button key={loc.id} onClick={() => setSelectedLocation(loc)} style={{ width:'100%', background:'white', border:'1px solid rgba(26,43,74,0.08)', borderRadius:14, padding:0, marginBottom:12, cursor:'pointer', overflow:'hidden', textAlign:'left', display:'block' }}>
-              <div style={{ background:loc.color, padding:'16px 18px', display:'flex', alignItems:'center', gap:12 }}>
-                <span style={{ fontSize:28 }}>{loc.icon}</span>
-                <div>
-                  <div style={{ fontSize:16, fontWeight:700, color:'white' }}>{loc.name}</div>
-                  <div style={{ fontSize:12.5, color:'rgba(255,255,255,0.6)', marginTop:2 }}>📍 {loc.address}</div>
-                </div>
+        {data && !data.settings?.emailsOn && (
+          <Banner tone="warning">
+            <strong>Hospital emails are off.</strong> Moves are recorded and you will see the email that would go
+            to Calvary or RHH, but nothing is sent. {data.isAdmin
+              ? 'Turn them on once the stock-take below is finished.'
+              : 'Brent or Erin will turn them on once the stock-take is done.'}
+            {data.isAdmin && unchecked === 0 && (
+              <div style={{ marginTop: space.sm }}>
+                <button onClick={() => act('emails', () => post('settings', { emailsOn: true }))}
+                  disabled={busy === 'emails'} style={pill(true)}>Turn hospital emails on</button>
               </div>
-              <div style={{ padding:'12px 18px', display:'flex', gap:8, flexWrap:'wrap' }}>
-                {Object.entries(loc.categories).filter(([,kits]) => kits && kits.length > 0).map(([cat, kits]) => (
-                  <span key={cat} style={{ fontSize:12.5, background:colour.canvas, color:colour.inkFaint, padding:'4px 10px', borderRadius:20, fontWeight:500 }}>
-                    {CAT_LABELS[cat]} ({kits.length})
-                  </span>
-                ))}
-              </div>
-            </button>
-          ))}
+            )}
+          </Banner>
+        )}
+        {data?.settings?.emailsOn && data.isAdmin && (
+          <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.md }}>
+            Hospital emails are on.{' '}
+            <button onClick={() => act('emails', () => post('settings', { emailsOn: false }))}
+              style={{ ...linkButton }}>Turn off</button>
+          </div>
+        )}
 
-          {history.length > 0 && (
-            <button onClick={() => setShowHistory(!showHistory)} style={{ width:'100%', padding:'12px 16px', background:'white', border:'1px solid rgba(26,43,74,0.08)', borderRadius:12, cursor:'pointer', textAlign:'left', marginTop:4 }}>
-              <div style={{ fontSize:14, fontWeight:600, color:colour.navy }}>📋 Movement History {showHistory ? '▲' : '▼'}</div>
-            </button>
-          )}
-
-          {showHistory && history.map((h, i) => (
-            <div key={i} style={{ background:'white', borderRadius:10, padding:'10px 14px', marginTop:6, border:'1px solid rgba(26,43,74,0.06)' }}>
-              <div style={{ fontSize:14, color:colour.navy }}>{h.text}</div>
-              <div style={{ fontSize:12.5, color:colour.inkFainter, marginTop:3 }}>{h.time}</div>
+        {data && unchecked > 0 && (
+          <div style={{ ...card(), padding: space.md, marginBottom: space.md }}>
+            <div style={{ ...text('bodyStrong'), color: colour.ink }}>Stock-take: {kits.length - unchecked} of {kits.length} checked</div>
+            <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>
+              Open each kit where it sits and tap <strong>It's here</strong>, or pick where it really is.
+              This is what makes the emails right.
             </div>
-          ))}
-        </div>
-      </Page>
-    )
-  }
-
-  // Category list view
-  if (!selectedCat) {
-    const cats = Object.entries(selectedLocation.categories).filter(([,kits]) => kits !== null)
-    return (
-      <div style={{ minHeight:'100%', background:colour.canvas, fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
-        <div style={{ background:selectedLocation.color, paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
-          <button onClick={() => setSelectedLocation(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', padding:0, marginBottom:12 }}>← All Locations</button>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <span style={{ fontSize:36 }}>{selectedLocation.icon}</span>
-            <div>
-              <div style={{ fontSize:19, fontWeight:700, color:'white' }}>{selectedLocation.name}</div>
-              <div style={{ fontSize:12.5, color:'rgba(255,255,255,0.55)' }}>📍 {selectedLocation.address}</div>
+            <div style={{ height: 6, background: colour.lineSoft, borderRadius: radius.pill, marginTop: space.sm, overflow: 'hidden' }}>
+              <div style={{ width: `${((kits.length - unchecked) / Math.max(kits.length, 1)) * 100}%`, height: '100%', background: colour.accent }} />
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="tm-measure" style={{ padding:16, flex:1 }}>
-          {cats.map(([cat, kits]) => {
-            const statusCounts = kits.reduce((acc, kit) => {
-              const s = getStatus(selectedLocation.id, cat, kit)
-              acc[s] = (acc[s] || 0) + 1
-              return acc
-            }, {})
-            const hasIssues = statusCounts.low > 0 || statusCounts.out > 0
+        {/* The three places: summary and filter at once. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: space.sm, marginBottom: space.md }}>
+          {PLACE_ORDER.map(p => {
+            const on = place === p
             return (
-              <button key={cat} onClick={() => setSelectedCat(cat)} style={{ width:'100%', background:'white', border:`1px solid ${hasIssues ? '#f6c026' : 'rgba(26,43,74,0.08)'}`, borderRadius:14, padding:'16px 18px', marginBottom:12, cursor:'pointer', textAlign:'left', display:'block' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                  <div>
-                    <div style={{ fontSize:16, fontWeight:700, color:colour.navy, marginBottom:4 }}>{CAT_LABELS[cat]}</div>
-                    <div style={{ fontSize:14, color:colour.inkFaint }}>{kits.length} kit{kits.length!==1?'s':''}</div>
-                  </div>
-                  {hasIssues && <span style={{ fontSize:19 }}>⚠️</span>}
-                </div>
-                <div style={{ display:'flex', gap:6, marginTop:10, flexWrap:'wrap' }}>
-                  {Object.entries(statusCounts).map(([s, count]) => {
-                    const si = statusInfo(s)
-                    return <span key={s} style={{ fontSize:12.5, background:si.bg, color:si.color, padding:'3px 8px', borderRadius:20, fontWeight:500 }}>{count} {si.label}</span>
-                  })}
-                </div>
+              <button key={p} onClick={() => setPlace(on ? 'all' : p)} aria-pressed={on}
+                style={{
+                  ...card(), padding: `${space.md}px ${space.sm}px`, textAlign: 'left', cursor: 'pointer',
+                  background: on ? colour.navy : colour.surface, borderColor: on ? colour.navy : colour.line
+                }}>
+                <div style={{ ...text('title'), color: on ? 'white' : colour.ink }}>{data ? counts[p] : '–'}</div>
+                <div style={{ ...text('caption'), color: on ? 'rgba(255,255,255,0.75)' : colour.inkFaint }}>{PLACE_NAMES[p]}</div>
               </button>
             )
           })}
         </div>
-      </div>
-    )
-  }
 
-  // Kit list view
-  const kits = selectedLocation.categories[selectedCat] || []
+        <div style={{ position: 'relative', marginBottom: space.sm }}>
+          <span style={{ position: 'absolute', left: 12, top: 11, color: colour.inkFainter, display: 'flex' }}><IconSearch size={18} /></span>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search kits or trays"
+            aria-label="Search kits" style={{
+              width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 38px', ...text('field'),
+              border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink
+            }} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, marginBottom: space.lg }}>
+          <button onClick={() => setDistributor('')} style={pill(!distributor)}>All</button>
+          {presentDistributors.map(d => (
+            <button key={d} onClick={() => setDistributor(distributor === d ? '' : d)} style={pill(distributor === d)}>
+              {DISTRIBUTORS[d]?.name || d}
+            </button>
+          ))}
+        </div>
+
+        {!data && !error && [0, 1, 2, 3].map(i => <Skeleton key={i} height={64} style={{ borderRadius: radius.card }} />)}
+
+        {data && shown.length === 0 && (
+          <EmptyState icon={IconKit} title="No kits match" detail="Try another place, distributor or search." />
+        )}
+
+        {away.length > 0 && (
+          <>
+            <SectionTitle>Away from home · {away.length}</SectionTitle>
+            {away.map(k => (
+              <KitCard key={k.id} kit={k} onOpen={() => setOpen(k)}
+                onMove={() => setMoving(k)} busy={busy === k.id}
+                onReturn={() => act(k.id, () => post('return', { kitId: k.id }))} />
+            ))}
+          </>
+        )}
+
+        {PLACE_ORDER.filter(p => home.some(k => k.at === p)).map(p => (
+          <div key={p}>
+            <SectionTitle>{PLACE_NAMES[p]} · {home.filter(k => k.at === p).length}</SectionTitle>
+            {home.filter(k => k.at === p).map(k => (
+              <KitCard key={k.id} kit={k} onOpen={() => setOpen(k)} onMove={() => setMoving(k)} busy={busy === k.id} />
+            ))}
+          </div>
+        ))}
+
+        {data?.canEdit && (
+          <button onClick={() => setOpen({ id: '', name: '', trays: [] })} style={{ ...pill(false), marginTop: space.lg }}>+ Add a kit</button>
+        )}
+
+        {data && <HistoryLink user={user} />}
+      </div>
+
+      {moving && (
+        <MoveSheet kit={moving} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
+          post={post} onClose={() => setMoving(null)} onDone={() => { setMoving(null); load() }} />
+      )}
+      {open && (
+        <KitDetail key={open.id || 'new'} kit={(open.id && kits.find(k => k.id === open.id)) || open} canEdit={Boolean(data?.canEdit)} user={user} post={post}
+          onClose={() => setOpen(null)} onChanged={load}
+          onMove={() => { setMoving(kits.find(k => k.id === open.id) || open); setOpen(null) }} />
+      )}
+    </Page>
+  )
+}
+
+function SectionTitle({ children }) {
+  return <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }}>{children}</div>
+}
+
+function KitCard({ kit, onOpen, onMove, onReturn, busy }) {
+  const dist = DISTRIBUTORS[kit.distributor]
+  const trayCount = (kit.trays || []).length
+  const awayTrays = kit.away?.trays?.length
   return (
-    <div style={{ minHeight:'100%', background:colour.canvas, fontFamily:'-apple-system,sans-serif', display:'flex', flexDirection:'column' }}>
-      <div style={{ background:selectedLocation.color, paddingTop:56, paddingLeft:20, paddingRight:20, paddingBottom:24 }}>
-        <button onClick={() => setSelectedCat(null)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer', padding:0, marginBottom:12 }}>← {selectedLocation.name}</button>
-        <div style={{ fontSize:19, fontWeight:700, color:'white', marginBottom:2 }}>{CAT_LABELS[selectedCat]}</div>
-        <div style={{ fontSize:14, color:'rgba(255,255,255,0.55)' }}>{kits.length} kits</div>
-      </div>
-
-      <div className="tm-measure" style={{ padding:16, flex:1, paddingBottom:100 }}>
-        {kits.map(kit => {
-          const s = getStatus(selectedLocation.id, selectedCat, kit)
-          const si = statusInfo(s)
-          const isEditing = editingKit === `${selectedLocation.id}:${selectedCat}:${kit}`
-          return (
-            <div key={kit} style={{ background:'white', borderRadius:12, marginBottom:10, overflow:'hidden', border:'1px solid rgba(26,43,74,0.06)' }}>
-              <div style={{ padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                  {getDistributor(kit) && <img src={getDistributor(kit).logo} alt={getDistributor(kit).name} style={{ height:28, width:'auto', objectFit:'contain', maxWidth:70 }} />}
-                  <div>
-                    <div style={{ fontSize:14, fontWeight:600, color:colour.navy }}>{kit}</div>
-                    <span style={{ fontSize:12.5, background:si.bg, color:si.color, padding:'2px 8px', borderRadius:20, fontWeight:500, display:'inline-block', marginTop:4 }}>{si.label}</span>
-                  </div>
-                </div>
-                <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={() => setMoveModal({ kitName: kit })} style={{ padding:'6px 12px', background:colour.canvas, border:'none', borderRadius:8, fontSize:12.5, color:colour.inkFaint, cursor:'pointer' }}>Move</button>
-                  <button onClick={() => setEditingKit(isEditing ? null : `${selectedLocation.id}:${selectedCat}:${kit}`)} style={{ padding:'6px 12px', background: isEditing?colour.navy:colour.canvas, border:'none', borderRadius:8, fontSize:12.5, color: isEditing?'white':colour.inkFaint, cursor:'pointer' }}>Update</button>
-                </div>
-              </div>
-              {isEditing && (
-                <div style={{ padding:'0 16px 14px', borderTop:'1px solid rgba(26,43,74,0.06)' }}>
-                  <div style={{ fontSize:12.5, color:colour.inkFaint, marginBottom:8, marginTop:10 }}>Update kit status:</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                    {STATUS_OPTIONS.map(opt => (
-                      <button key={opt.id} onClick={() => { setStatus(selectedLocation.id, selectedCat, kit, opt.id); setEditingKit(null) }}
-                        style={{ padding:'10px 8px', background: s===opt.id ? opt.bg : '#f8f9fc', border:`1.5px solid ${s===opt.id ? opt.color : 'transparent'}`, borderRadius:8, fontSize:14, color: opt.color, cursor:'pointer', fontWeight: s===opt.id?'700':'400' }}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {moveModal && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:20, zIndex:1000 }}>
-          <div style={{ background:'white', borderRadius:16, padding:24, width:'100%', maxWidth:400 }}>
-            <div style={{ fontSize:19, fontWeight:700, color:colour.navy, marginBottom:6 }}>Move Kit</div>
-            <div style={{ fontSize:14, color:colour.inkFaint, marginBottom:16 }}>Move <strong>{moveModal.kitName}</strong> from {selectedLocation.name} to:</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
-              {LOCATIONS.filter(l => l.id !== selectedLocation.id).map(loc => (
-                <button key={loc.id} onClick={() => setMoveTarget(loc.id)}
-                  style={{ padding:'12px 14px', background: moveTarget===loc.id?'#e6f4f2':'#f8f9fc', border:`1.5px solid ${moveTarget===loc.id?'#1a7a6e':'transparent'}`, borderRadius:10, fontSize:14, color:colour.navy, cursor:'pointer', textAlign:'left' }}>
-                  {loc.icon} {loc.name}
-                </button>
-              ))}
-            </div>
-            <textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add a note (optional)..." rows={2}
-              style={{ width:'100%', padding:'10px 12px', border:'1px solid rgba(26,43,74,0.15)', borderRadius:8, fontSize: 16, resize:'none', outline:'none', boxSizing:'border-box', marginBottom:14, fontFamily:'inherit' }} />
-            <div style={{ display:'flex', gap:10 }}>
-              <button onClick={() => { setMoveModal(null); setMoveTarget(''); setComment('') }} style={{ flex:1, padding:12, background:colour.canvas, border:'none', borderRadius:8, fontSize:14, cursor:'pointer', color:colour.inkFaint }}>Cancel</button>
-              <button onClick={handleMove} disabled={!moveTarget}
-                style={{ flex:2, padding:12, background: moveTarget?colour.navy:'#ccc', color:'white', border:'none', borderRadius:8, fontSize:14, fontWeight:600, cursor: moveTarget?'pointer':'not-allowed' }}>
-                Confirm Move
-              </button>
-            </div>
+    <div style={{ ...card(), marginBottom: space.sm, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ width: 4, background: kit.away ? colour.warning : kit.checkedAt ? colour.accent : colour.line }} />
+      <button onClick={onOpen} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', textAlign: 'left',
+        padding: `${space.md}px`, cursor: 'pointer', display: 'flex', gap: space.md, alignItems: 'center' }}>
+        <div style={{ width: 40, height: 40, flexShrink: 0, borderRadius: radius.control, background: colour.canvas,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          {dist?.logo
+            ? <img src={dist.logo} alt="" style={{ maxWidth: 34, maxHeight: 30, objectFit: 'contain' }} />
+            : <span style={{ ...text('micro'), color: colour.inkFaint }}>{(dist?.name || kit.system).slice(0, 3).toUpperCase()}</span>}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...text('bodyStrong'), color: colour.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kit.name}</div>
+          <div style={{ ...text('caption'), color: kit.away ? colour.warning : colour.inkFaint }}>
+            {kit.away
+              ? `At ${PLACE_NAMES[kit.at]} · ${sinceText(kit.away.since)}${awayTrays && awayTrays < trayCount ? ` · ${awayTrays}/${trayCount} trays` : ''}`
+              : `${KIND[kit.kind] || ''}${trayCount ? ` · ${trayCount} trays` : ''}${kit.checkedAt ? '' : ' · not checked'}`}
           </div>
         </div>
-      )}
+      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: space.md }}>
+        {kit.away && onReturn && (
+          <button onClick={onReturn} disabled={busy} style={pill(false)}>{busy ? '…' : 'Returned'}</button>
+        )}
+        <button onClick={onMove} style={pill(true)}>Move</button>
+      </div>
     </div>
   )
 }
+
+function HistoryLink({ user }) {
+  const [history, setHistory] = useState(null)
+  async function show() {
+    if (history) { setHistory(null); return }
+    try {
+      const res = await fetch('/api/guides?kits=history', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
+      setHistory((await res.json()).history || [])
+    } catch { setHistory([]) }
+  }
+  return (
+    <div style={{ marginTop: space.xl }}>
+      <button onClick={show} style={{ ...linkButton, ...text('bodyStrong') }}>
+        {history ? 'Hide movement history' : 'Movement history'}
+      </button>
+      {history && history.length === 0 && <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: space.sm }}>Nothing yet.</div>}
+      {history && history.map((h, i) => (
+        <div key={i} style={{ padding: `${space.sm}px 0`, borderBottom: border.hairlineSoft }}>
+          <div style={{ ...text('body'), color: colour.ink }}>{h.kitName ? <strong>{h.kitName}</strong> : null}{h.kitName ? ' — ' : ''}{h.text}</div>
+          <div style={{ ...text('caption'), color: colour.inkFainter }}>
+            {new Date(h.at).toLocaleString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+            {h.by ? ` · ${h.by}` : ''}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function pill(on) {
+  return {
+    ...text('caption'), fontWeight: 600, padding: '6px 12px', borderRadius: radius.pill, whiteSpace: 'nowrap',
+    border: on ? 'none' : border.hairline, background: on ? colour.navy : colour.surface,
+    color: on ? 'white' : colour.ink, cursor: 'pointer'
+  }
+}
+
+const linkButton = { background: 'none', border: 'none', padding: 0, color: colour.accentDeep, cursor: 'pointer', ...text('caption'), fontWeight: 600 }
