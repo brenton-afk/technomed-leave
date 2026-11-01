@@ -26,10 +26,23 @@ calendar, so treat it like a password. Never post it anywhere.
    ("Public" here only means "anyone with the link"; the calendar isn't listed
    anywhere.)
 
-**Google** (on a computer, at calendar.google.com):
-1. Click ⚙ **Settings**, then click the calendar's name on the left under *Settings for my calendars*.
-2. Scroll to **Integrate calendar**.
-3. Copy **Secret address in iCal format** (it ends in `basic.ics`).
+**Google.** The Google Calendar *app* doesn't show this link, so use Safari
+(or a computer).
+1. In **Safari**, go to `calendar.google.com/calendar/r/settings` and sign in.
+   If you land on a simple mobile page with no settings, tap **aA** (or the page
+   icon) in the address bar, choose **Request Desktop Website**, then open the
+   address again.
+2. On the left, under **Settings for my calendars**, tap your name (or the
+   calendar you want). Zoom in with two fingers if it's small.
+3. Scroll down to **Integrate calendar**.
+4. Find **Secret address in iCal format**. Tap the copy icon beside it (or
+   the eye icon to show it, then press and hold to copy). It ends in `basic.ics`.
+   Don't use the "Public address" just above it, which only works if the
+   calendar is made public.
+
+If there's no *Secret address* section, the account is probably a work
+(Google Workspace) account where the administrator has turned it off.
+It's under Admin console → Apps → Google Workspace → Calendar → Sharing settings.
 
 **Outlook / Microsoft 365**: Settings → Calendar → Shared calendars → *Publish a
 calendar* → choose the calendar and "Can view all details" → copy the **ICS** link.
