@@ -107,6 +107,40 @@ describe('saving a tray list onto a kit', () => {
     expect(list.trays[0].lines[0].code).toBe('X-1')
   })
 
+  it('is a live list — quantities, lines and names change after saving', async () => {
+    // "It needs to be a live ecosystem, not a static read only page."
+    const { listKits, saveTrayList, editTrayList, kitHistory } = await import('./_kits.js')
+    const kit = (await listKits()).find(k => k.system === 'Diplomat')
+    await saveTrayList(kit.id, { trays: [{ name: 'Screws', lines: [
+      { code: 'S-1', description: 'SCREW 5X40', qty: 4, kind: 'implant' },
+      { code: 'I-1', description: 'DRIVER', qty: 1, kind: 'instrument' }
+    ] }] }, 'Ben')
+    const expectS1 = { code: 'S-1', description: 'SCREW 5X40' }
+
+    let list = await editTrayList(kit.id, { op: 'set', tray: 'Screws', index: 0, expect: expectS1, line: { code: 'S-1', description: 'SCREW 5X40', qty: 3, kind: 'implant' } }, 'Mat')
+    expect(list.trays[0].lines[0].qty).toBe(3)
+    expect(list.trays[0].updatedBy).toBe('Mat')
+    expect((await kitHistory())[0].text).toBe('Screws — SCREW 5X40: qty 4 → 3')
+
+    list = await editTrayList(kit.id, { op: 'add', tray: 'Screws', line: { code: 'S-2', description: 'SCREW 5X45', qty: 2, kind: 'implant' } }, 'Mat')
+    expect(list.trays[0].lines).toHaveLength(3)
+
+    list = await editTrayList(kit.id, { op: 'remove', tray: 'Screws', index: 1, expect: { code: 'I-1', description: 'DRIVER' } }, 'Mat')
+    expect(list.trays[0].lines.map(l => l.code)).toEqual(['S-1', 'S-2'])
+
+    list = await editTrayList(kit.id, { op: 'rename', tray: 'Screws', name: 'Pedicle screws' }, 'Mat')
+    expect(list.trays[0].name).toBe('Pedicle screws')
+    expect((await listKits()).find(k => k.id === kit.id).trays).toContain('Pedicle screws')
+  })
+
+  it('refuses a change made against a line somebody else has since changed', async () => {
+    const { listKits, saveTrayList, editTrayList } = await import('./_kits.js')
+    const kit = (await listKits())[0]
+    await saveTrayList(kit.id, { trays: [{ name: 'T', lines: [{ code: 'A', description: 'ONE', qty: 1 }] }] }, 'Ben')
+    await expect(editTrayList(kit.id, { op: 'set', tray: 'T', index: 0, expect: { code: 'A', description: 'OLD NAME' }, line: { code: 'A', description: 'ONE', qty: 9 } }, 'Mat'))
+      .rejects.toMatchObject({ code: 'conflict' })
+  })
+
   it('refuses two trays of the same name', async () => {
     const { listKits, saveKitDef } = await import('./_kits.js')
     const kit = (await listKits())[0]

@@ -268,6 +268,14 @@ photo shows each tray, and on save each photo goes to Dropbox at
 paths under that folder are accepted) and the screen shows it by a temporary
 link fetched per view.
 
+**A saved tray list is live, not read-only.** Anyone signed in can edit a tray
+(`kit/EditableTray.jsx`): quantity steppers, code, description, implant or
+instrument, add and remove lines, rename. Each change is one call to
+`guides.js?kits=editlist` → `editTrayList` (set | add | remove | rename), sent
+with the line it was made against; if that line has changed meanwhile it is a
+409 with the current list. Every change is in `kits:history` with who made it,
+and the open list refreshes through `useLiveRefresh` (not while editing).
+
 ### Surgeon preference cards (Task 18)
 
 Editable data, not a page. `api/_preferences.js` keeps them in Redis

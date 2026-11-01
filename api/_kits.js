@@ -479,3 +479,94 @@ export async function saveTrayList(kitId, { trays, source }, by) {
 export function isTrayPhotoPath(path) {
   return /^\/Tray Lists\/Tray Photos\/[^]+\.jpg$/.test(String(path || '')) && !String(path).includes('..')
 }
+
+// ─── Editing a saved tray list ───────────────────────────────────────────────
+// "It needs to be a live ecosystem, not a static read only page." Staff change
+// quantities, codes and descriptions as the kits change, add and remove lines,
+// and rename a tray — one change at a time, saved as it is made, each logged
+// with who made it.
+//
+// A change names the line it was made against (`expect`: the code and
+// description the person was looking at). If somebody else has changed or
+// removed that line meanwhile, the change is refused and the screen reloads,
+// rather than one person's edit silently landing on another's line.
+
+const cleanLine = l => ({
+  code: String(l?.code || '').trim().slice(0, 40),
+  description: String(l?.description || '').trim().slice(0, 120),
+  qty: Math.max(0, Math.min(999, Math.round(Number(l?.qty) || 0))),
+  kind: l?.kind === 'implant' ? 'implant' : 'instrument'
+})
+
+function stale() {
+  const err = new Error('Somebody else has just changed this tray — it has been reloaded, make the change again')
+  err.code = 'conflict'
+  return err
+}
+
+/**
+ * One change to a saved tray list. `op` is one of
+ *   set      replace line `index` with `line`
+ *   add      append `line`
+ *   remove   take line `index` out
+ *   rename   rename the tray to `name`
+ * Returns the whole list as it now stands.
+ */
+export async function editTrayList(kitId, { op, tray, index, line, expect, name }, by) {
+  const list = await getTrayList(kitId)
+  if (!list) throw new Error('This kit has no tray list yet')
+  const t = list.trays.find(x => x.name === tray)
+  if (!t) throw stale()
+  const defs = await getDefs()
+  const kit = defs.find(k => k.id === kitId)
+  let note = ''
+
+  const at = Number(index)
+  const matches = () => Number.isInteger(at) && t.lines[at]
+    && t.lines[at].code === String(expect?.code ?? '') && t.lines[at].description === String(expect?.description ?? '')
+
+  if (op === 'set') {
+    if (!matches()) throw stale()
+    const next = cleanLine(line)
+    if (!next.code && !next.description) throw new Error('A line needs a code or a description')
+    const was = t.lines[at]
+    t.lines[at] = next
+    const what = next.description || next.code
+    note = was.qty !== next.qty && was.code === next.code && was.description === next.description && was.kind === next.kind
+      ? `${what}: qty ${was.qty} → ${next.qty}`
+      : `${what}: line changed`
+  } else if (op === 'add') {
+    const next = cleanLine(line)
+    if (!next.code && !next.description) throw new Error('A line needs a code or a description')
+    if (t.lines.length >= 400) throw new Error('That tray is full')
+    t.lines.push(next)
+    note = `${next.description || next.code}: added (qty ${next.qty})`
+  } else if (op === 'remove') {
+    if (!matches()) throw stale()
+    const [gone] = t.lines.splice(at, 1)
+    note = `${gone.description || gone.code}: removed`
+  } else if (op === 'rename') {
+    const to = String(name || '').trim().slice(0, 80)
+    if (!to) throw new Error('A tray needs a name')
+    if (to !== t.name && list.trays.some(x => x.name.toLowerCase() === to.toLowerCase())) {
+      throw new Error(`There is already a tray called "${to}"`)
+    }
+    const from = t.name
+    t.name = to
+    if (kit) {
+      await redisSetBody(DEFS, JSON.stringify(defs.map(k => (k.id === kitId
+        ? { ...k, trays: (k.trays || []).map(n => (n === from ? to : n)) } : k))))
+      const loc = await getLoc(kitId)
+      if (loc?.trays?.length) await setLoc(kitId, { ...loc, trays: loc.trays.map(n => (n === from ? to : n)) })
+    }
+    note = `tray renamed ${from} → ${to}`
+  } else {
+    throw new Error('Unknown change')
+  }
+
+  t.updatedBy = by
+  t.updatedAt = new Date().toISOString()
+  await redisSetBody(LIST(kitId), JSON.stringify(list))
+  await addHistory({ kind: 'edit', kitId, kitName: kit?.name || kitId, by, text: `${t.name} — ${note}` })
+  return list
+}

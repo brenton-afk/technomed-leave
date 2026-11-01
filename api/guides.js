@@ -8,7 +8,7 @@ import {
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import {
   listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit,
-  saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath
+  saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
 import { temporaryLink } from './_dropbox.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
@@ -262,6 +262,19 @@ async function handleKits(req, res, session) {
     if (what === 'return') { await returnKit(body.kitId, sender); return res.status(200).json({ ok: true }) }
     if (what === 'check') { await checkKit(body.kitId, body.at, sender.firstName || sender.email); return res.status(200).json({ ok: true }) }
 
+    // Anyone signed in may keep a tray list up to date — "the staff have
+    // freedom to make changes as the kits change". Every change is logged
+    // with who made it.
+    if (what === 'editlist') {
+      try {
+        return res.status(200).json({ list: await editTrayList(String(body.kitId || ''), body, sender.firstName || sender.email) })
+      } catch (err) {
+        if (err.code === 'conflict') {
+          return res.status(409).json({ error: err.message, list: await getTrayList(String(body.kitId || '')) })
+        }
+        throw err
+      }
+    }
     if (what === 'savelist') {
       if (!canEdit) return res.status(403).json({ error: 'Only admins and the clinical team can change tray lists' })
       return res.status(200).json({ list: await saveTrayList(String(body.kitId || ''), body, sender.firstName) })

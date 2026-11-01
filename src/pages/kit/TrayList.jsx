@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { trayFilePayload, originalIfSmall } from './readTrayFile.js'
+import EditableTray from './EditableTray.jsx'
+import { useLiveRefresh } from '../../liveRefresh.js'
 
 // ─── What is in each tray ────────────────────────────────────────────────────
 // A kit's tray list: uploaded from the hospital's own copy (a PDF, a Word
@@ -33,7 +35,7 @@ function SavedPhoto({ path, user, alt }) {
 // "It would be better in a table with the instrument description and the qty
 // next to it. Nice and neat." Code, description, quantity — one row per line,
 // ruled, the quantity right-aligned so a column of numbers reads down.
-function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user }) {
+function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
   const cell = { ...text('caption'), padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairlineSoft, verticalAlign: 'top' }
   const head = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairline, textAlign: 'left', background: colour.canvas }
@@ -45,14 +47,26 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
           <div style={{ ...text('bodyStrong'), color: colour.ink }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
             {tray.lines.length} items · {implants} implant{implants === 1 ? '' : 's'}{hasPhoto ? ' · photo' : ' · no photo'}
+            {tray.updatedBy ? ` · updated by ${tray.updatedBy}${tray.updatedAt ? ` ${new Date(tray.updatedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}` : ''}` : ''}
           </div>
         </button>
+        {onStartEdit && !editing && (
+          <button onClick={onStartEdit} aria-label={`Edit ${tray.name}`}
+            style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: 'none', border: `1px solid ${colour.accent}`,
+              borderRadius: radius.pill, padding: '4px 12px', cursor: 'pointer' }}>Edit</button>
+        )}
         {onRemove && (
           <button onClick={onRemove} aria-label={`Leave out ${tray.name}`}
             style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer' }}>Leave out</button>
         )}
       </div>
-      {open && (
+      {editing && (
+        <div style={{ borderTop: border.hairlineSoft }}>
+          {tray.photo && <div style={{ padding: `${space.sm}px ${space.sm}px 0` }}><SavedPhoto path={tray.photo} user={user} alt={tray.name} /></div>}
+          <EditableTray tray={tray} onEdit={onEdit} onDone={onEditDone} />
+        </div>
+      )}
+      {open && !editing && (
         <div style={{ borderTop: border.hairlineSoft, padding: space.sm }}>
           {photoData && <img src={`data:image/jpeg;base64,${photoData}`} alt={`${tray.name}`}
             style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: radius.control, background: colour.canvas, marginBottom: space.sm }} />}
@@ -96,7 +110,36 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
   const [review, setReview] = useState(null)
   const [hospital, setHospital] = useState(kit.home)
   const [error, setError] = useState('')
+  const [editingTray, setEditingTray] = useState('')
+  const [editError, setEditError] = useState('')
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
+
+  // Live: somebody else's changes appear within a minute, and at once when the
+  // phone comes back to the portal. Not while this person is editing a tray —
+  // a refresh under their fingers would undo what they are typing.
+  useLiveRefresh(() => {
+    if (editingTray || review) return
+    fetch(`/api/guides?kits=traylist&id=${encodeURIComponent(kit.id)}`, { headers })
+      .then(r => r.json()).then(d => { if (d.list !== undefined) setList(d.list || null) }).catch(() => {})
+  }, [kit.id, editingTray, review])
+
+  // One change to the saved list. A refusal because somebody else changed the
+  // same tray comes back with the list as it now is, which replaces ours.
+  async function editList(body) {
+    setEditError('')
+    try {
+      const res = await fetch('/api/guides?kits=editlist', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kitId: kit.id, ...body })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (data.list) setList(data.list)
+      if (!res.ok || data.error) throw new Error(data.error || 'Not saved — try again')
+      if (body.op === 'rename') { setEditingTray(body.name); setOpen(body.name); onSaved?.() }
+    } catch (err) {
+      setEditError(err.message)
+    }
+  }
 
   useEffect(() => {
     let live = true
@@ -275,8 +318,11 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             {list.source?.at ? ` on ${new Date(list.source.at).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.
             {list.source?.dropboxPath ? ` Original in Dropbox: ${list.source.dropboxPath}` : ''}
           </div>
+          {editError && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{editError}</div>}
           {list.trays.map(t => (
-            <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)} />
+            <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
+              editing={editingTray === t.name} onStartEdit={() => { setEditingTray(t.name); setOpen(t.name) }}
+              onEditDone={() => setEditingTray('')} onEdit={editList} />
           ))}
         </>
       )}
