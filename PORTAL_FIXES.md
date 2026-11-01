@@ -52,17 +52,29 @@ Start with Task 1.
 
 ---
 
-## Progress (updated 1 Nov 2026)
+## Progress (updated 1 Nov 2026, evening)
 
-- Tasks 1–3: done and on `main`. Task 1's silent BCC archive copy removed.
-- Tasks 4–7: done on branch `claude/beautiful-babbage-jkavq3`, waiting on a pull request
-  (Claude needed GitHub write access to push). Open questions from them:
-  - Task 5: change notifications on a move wait for Tasks 8/9.
-  - Task 7: queueing changes made offline is not built — Brenton to decide which actions,
-    if any.
-  - Task 4: older bookings with two-word surnames are not guessed from the title (risk of
-    showing a first name); saving the corrected surname once fixes each.
-- Tasks 8, 9 and 14: details updated 1 Nov 2026 (below). Not started.
+Live:
+- Tasks 1–7: done. Task 7's offline queue built (booking edits only). Brent: no further
+  work on Calvary signal — not a portal problem.
+- Task 9: Signus (any hospital) and KT Medical (RHH only) notices, shown before sending.
+  Contacts and rules in Admin → Notices. Device Technologies on no rule (they asked not
+  to get booking notices).
+- Task 12: Brainlab AIRO/CURVE/Other + Attendance required / No F2F; No F2F button in Edit
+  booking; Calvary Loan added beside RHH Loan.
+- Task 13: lodged leave emails Erin only, with an Approve link (and push).
+- Task 14: Toni (Mon/Wed/Thu 5.5, 16.5h) and Erin (24h, flexible) apply in hours; Xero gets
+  explicit hours per pay period and nothing is sent if Xero already has overlapping leave.
+  Tested against a fake Xero only — check the first real approval in Xero.
+- Task 15: TOIL in hours for everyone, leave shown on timesheets, ledger and opening
+  balances in Admin → TOIL.
+- Task 16: search on the Cases page. Task 17/19 were already done.
+- Task 18 (part): Aimee's guides and surgeon preferences of 28 Oct installed.
+- Surnames read whole from every source.
+
+Waiting on Brent: Task 10 go-ahead (planned rep — see chat), Task 11 after 10 (6pm daily),
+Task 18 in-portal editing approach, Task 8 loan-kit rules (contacts are in Admin → Notices).
+On hold: 21, 22, 23.
 
 ## PRIORITY 1 — Broken now
 
