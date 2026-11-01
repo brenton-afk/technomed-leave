@@ -584,6 +584,15 @@ Fortnightly timesheets under Payroll → Timesheets, submitted to Xero AU Payrol
 - **`api/_timesheetValidate.js`** — totals and validation. `src/pages/Timesheets.jsx` mirrors `computeTotals` so the running total a staff member sees is the number that gets validated; **change both together.** A `unit: 'count'` category (call-in allowance) must never add to the hours total.
 - **`api/_timesheetXero.js`** — `NumberOfUnits` has **one value per day of the period, so 14 for a fortnight.** The spec's example showed 7; a 7-value array silently drops the second week. Length is derived from the period rather than written down.
 
+**No per-day limit.** Staff enter the hours they worked; the old "over the 7.6h
+standard day" warning and overtime nudge are gone (Erin works 8-hour days).
+**Hours over a full-time contract become TOIL**: `src/timesheetRules.js`
+`toilOverflow`, for roster rows with `contract: { fortnightHours: 76,
+overflowToToil: true }` (Aimee, Ben, Mat). Ordinary hours over 76 less approved
+leave move to `toil_accrued` from the end of the fortnight back; double time
+entered stays double time. The screen shows the split before submit and the
+server applies the same function on submit (idempotent).
+
 Flow and invariants:
 
 - Staff submit → Xero as `DRAFT`. Admin approve → the **same** Xero timesheet (`TimesheetID` included in the POST, which makes it an update) flips to `APPROVED`. That is how the spec's "submit to Xero" and later "approval triggers the pay run" both hold.

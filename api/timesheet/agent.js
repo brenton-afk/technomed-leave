@@ -16,6 +16,7 @@ import {
 } from '../_xeroClient.js'
 import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
+import { toilOverflow, contractFor } from '../../src/timesheetRules.js'
 import {
   onCallHoursFor, totalHours as onCallTotal
 } from '../../src/clinicalPlan/onCall.js'
@@ -253,7 +254,17 @@ async function handleSubmit(req, res, session) {
   if (isDemo(req.body?.categories) || isDemo(categories)) {
     return res.status(400).json({ error: 'Those are demonstration pay items and cannot be filed.' })
   }
-  const entries = normaliseEntries(req.body?.entries, categories, period.days)
+  const entered = normaliseEntries(req.body?.entries, categories, period.days)
+
+  // Ordinary hours past a full-time contract go to TOIL — the same split the
+  // screen showed before submit. See src/timesheetRules.js.
+  const leave = await getAllApplications().catch(() => ({ approved: [] }))
+  const leaveHours = Object.values(leaveOnDays({ leave, email: staff.email, days: period.days }))
+    .reduce((sum, d) => sum + Number(d.hours || 0), 0)
+  const overflow = toilOverflow({
+    entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours
+  })
+  const entries = overflow.entries
 
   const check = validate(entries, categories, period.days)
   if (!check.ok) return res.status(400).json({ error: check.errors[0], errors: check.errors })
@@ -278,7 +289,13 @@ async function handleSubmit(req, res, session) {
     entries,
     categories: categories.map(c => ({ key: c.key, label: c.label, unit: c.unit, earningsRateID: c.earningsRateID })),
     totals: check.totals,
-    warnings: check.warnings,
+    warnings: [
+      ...check.warnings,
+      ...(overflow.moved.length ? [`${overflow.excess}h over the ${overflow.limit}h fortnight banked as TOIL`] : []),
+      ...(overflow.excess > 0 && !overflow.toilKey
+        ? [`${overflow.excess}h over the ${overflow.limit}h fortnight, but there is no TOIL pay item to bank it in — check with Brent`] : [])
+    ],
+    toilOverflow: overflow.moved.length ? { excess: overflow.excess, limit: overflow.limit, moved: overflow.moved } : null,
     status: 'submitted',
     xero,
     submittedAt: new Date().toISOString()

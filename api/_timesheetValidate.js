@@ -1,7 +1,6 @@
 // ─── Timesheet validation and totals ──────────────────────────────────────────
 // Shared by the API and mirrored by the UI, so the running totals a staff
 // member sees are the same numbers that get validated on submit.
-import { STANDARD_DAY_HOURS, STANDARD_WEEK_HOURS } from './_fortnight.js'
 
 const MAX_HOURS_PER_DAY = 24
 const MAX_CALLOUTS_PER_DAY = 9
@@ -92,16 +91,10 @@ export function validate(entries, categories, days) {
   }
   if (t.totalHours === 0 && t.callouts === 0) errors.push('Enter some hours before submitting')
 
-  // Advisory only — long days and weeks are real, they just deserve a look.
-  for (const [day, hours] of Object.entries(t.byDay)) {
-    if (hours > STANDARD_DAY_HOURS) {
-      const ot = (entries?.overtime_1_5?.[day] || 0) + (entries?.overtime_double?.[day] || 0)
-      if (!ot) warnings.push(`${day} is ${hours}h — over the ${STANDARD_DAY_HOURS}h standard day with no overtime recorded`)
-    }
-  }
-  t.weekHours.forEach((hours, i) => {
-    if (hours > STANDARD_WEEK_HOURS) warnings.push(`Week ${i + 1} is ${hours}h — over the ${STANDARD_WEEK_HOURS}h standard week`)
-  })
+  // No "over the 7.6h standard day" warning any more. "Can you allow staff to
+  // just enter the hours they worked?" — Erin works 8-hour days and was
+  // flagged on every one of them. Hours past a full-time contract are dealt
+  // with as TOIL on submit (src/timesheetRules.js), not flagged.
 
   return { ok: errors.length === 0, errors, warnings, totals: t }
 }

@@ -7,6 +7,11 @@
 // rather than derived: Brenton is Brent and Matthew is Mat, and no rule gets from
 // one to the other. It goes on the bookings calendar to show who attended, so it
 // has to match what everyone already writes there by hand.
+// Full time, 76 hours a fortnight; ordinary hours past that are banked as
+// TOIL automatically unless entered as double time (Brent, 2 Nov 2026). See
+// src/timesheetRules.js.
+const FULL_TIME_TOIL = { fortnightHours: 76, overflowToToil: true }
+
 export const STAFF = [
   { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', firstName: 'Brent', division: 'Operations', role: 'Managing Director', isAdmin: true, isClinicalTeam: true, hasTimesheets: false, mobileNumber: '' },
   // The one leave approver (Brent, 1 Nov 2026): lodged leave is sent to her.
@@ -18,7 +23,7 @@ export const STAFF = [
   // Wednesday and Thursday at 5.5 (her own email of 26 Oct 2026). See leaveHours.js.
   { name: 'Toni Hoppitt', email: 'toni@technomed.com.au', firstName: 'Toni', division: 'Operations', role: 'Operations Coordinator', isAdmin: false, hasTimesheets: true, mobileNumber: '',
     workPattern: { kind: 'fixed', days: [5.5, 0, 5.5, 5.5, 0, 0, 0] } },
-  { name: 'Ben Cassidy', email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' },
+  { name: 'Ben Cassidy', email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, mobileNumber: '' },
   // "All references to Mat Usher in the portal should be Mat not Matt."
   //
   // `firstName` was already Mat and the rep names on a booking already tidy
@@ -30,10 +35,10 @@ export const STAFF = [
   // never displayed; it is what lets an old worklist item assigned to
   // "Matthew Usher" still be his, and what lets a transcript saying "Matt"
   // find him. Removing them would fix the display and break the reading.
-  { name: 'Mat Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' },
+  { name: 'Mat Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, mobileNumber: '' },
   { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'April Foale', email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
-  { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, mobileNumber: '' }
+  { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, mobileNumber: '' }
 ]
 /**
  * Who may open the timesheet screen.

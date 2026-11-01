@@ -3,6 +3,7 @@ import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { extraDoubleTime, COVERED_HOURS } from '../clinicalPlan/callIn.js'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
+import { toilOverflow, contractFor } from '../timesheetRules.js'
 import { workPatternFor } from '../staffConfig.js'
 
 const LEAVE_NAMES = { ANNUAL_LEAVE: 'annual leave', SICK: 'personal leave', TOIL: 'TOIL' }
@@ -21,7 +22,6 @@ const BORDER = tokenColour.line
 const COLOURS = { navy: NAVY, teal: TEAL, blue: BLUE, amber: AMBER, purple: PURPLE }
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const STANDARD_DAY = 7.6
-const STANDARD_WEEK = 38
 
 // ─── Helpers (mirror api/_timesheetValidate.js) ──────────────
 
@@ -497,27 +497,15 @@ export default function Timesheets({ user, onBack }) {
     })
   }
 
-  // Days over the standard day with no overtime recorded — offered as a nudge,
-  // never applied automatically.
-  const overtimeNudges = useMemo(() => {
-    const ot = categories.filter(c => c.kind === 'overtime')
-    if (!ot.length) return []
-    return days.map((day, i) => {
-      const total = totals.byDay[day] || 0
-      const recorded = ot.reduce((s, c) => s + Number(entries[c.key]?.[day] || 0), 0)
-      if (total <= STANDARD_DAY || recorded > 0) return null
-      return { day, dayIndex: i, excess: round2(total - STANDARD_DAY) }
-    }).filter(Boolean)
-  }, [days, totals, entries, categories])
-
-  function applyOvertime(nudge) {
-    const ordinary = categories.find(c => c.kind === 'ordinary')
-    const overtime = categories.find(c => c.key === 'overtime_1_5') || categories.find(c => c.kind === 'overtime')
-    if (!ordinary || !overtime) return
-    const current = Number(entries[ordinary.key]?.[nudge.day] || 0)
-    setCell(ordinary.key, nudge.day, round2(Math.max(0, current - nudge.excess)))
-    addToCell(overtime.key, nudge.day, nudge.excess)
-  }
+  // Hours past a full-time contract, banked as TOIL on submit — shown here
+  // first so nobody is surprised by their payslip. No per-day flag: "allow
+  // staff to just enter the hours they worked". See src/timesheetRules.js.
+  const overflow = useMemo(() => toilOverflow({
+    entries, categories, days, contract: contractFor(user?.email),
+    leaveHours: Object.values(leaveDays || {}).reduce((sum, d) => sum + Number(d?.hours || 0), 0)
+  }), [entries, categories, days, user?.email, leaveDays])
+  const filed = overflow.entries
+  const filedTotals = useMemo(() => computeTotals(filed, categories, days), [filed, categories, days])
 
   async function saveDraft() {
     setBusy(true)
@@ -540,7 +528,7 @@ export default function Timesheets({ user, onBack }) {
       const res = await fetch('/api/timesheet/agent?action=submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ periodStart: period.start, entries })
+        body: JSON.stringify({ periodStart: period.start, entries: filed })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -606,17 +594,22 @@ export default function Timesheets({ user, onBack }) {
         {error && <div style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12 }}>{error}</div>}
 
         <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
-          {categories.filter(c => totals.byCategory[c.key]).map(c => (
+          {categories.filter(c => filedTotals.byCategory[c.key]).map(c => (
             <div key={c.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(26,43,74,0.06)' }}>
               <span style={{ fontSize: 14, color: NAVY, display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: COLOURS[c.colour] || NAVY }} />{c.label}
               </span>
-              <strong style={{ fontSize: 14, color: NAVY }}>{totals.byCategory[c.key]}{c.unit === 'count' ? '' : 'h'}</strong>
+              <strong style={{ fontSize: 14, color: NAVY }}>{filedTotals.byCategory[c.key]}{c.unit === 'count' ? '' : 'h'}</strong>
             </div>
           ))}
+          {overflow.moved.length > 0 && (
+            <div style={{ fontSize: 12.5, color: MUTED, padding: '8px 0' }}>
+              Includes {overflow.excess}h TOIL: ordinary hours over your {overflow.limit}h fortnight.
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 11, marginTop: 4 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>Total hours</span>
-            <strong style={{ fontSize: 16, color: TEAL }}>{totals.totalHours}h</strong>
+            <strong style={{ fontSize: 16, color: TEAL }}>{filedTotals.totalHours}h</strong>
           </div>
         </div>
 
@@ -770,17 +763,13 @@ export default function Timesheets({ user, onBack }) {
           </div>
         ))}
 
-        {overtimeNudges.filter(n => Math.floor(n.dayIndex / 7) === activeWeek).map(n => (
-          <div key={n.day} style={{ background: '#fff8e6', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <div style={{ fontSize: 12.5, color: '#8a5a00', lineHeight: 1.4 }}>
-              <strong>{DAY_NAMES[n.dayIndex % 7]}</strong> is {round2(totals.byDay[n.day])}h — {n.excess}h over a standard day.
-            </div>
-            <button onClick={() => applyOvertime(n)}
-              style={{ padding: '8px 11px', background: AMBER, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              → Overtime
-            </button>
+        {overflow.excess > 0 && (
+          <div style={{ background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
+            {overflow.toilKey
+              ? <><strong>{overflow.excess}h over your {overflow.limit}h fortnight</strong> will be banked as TOIL when you submit. To be paid it as double time instead, enter those hours under Overtime — Double.</>
+              : <><strong>{overflow.excess}h over your {overflow.limit}h fortnight.</strong> There is no TOIL pay item on your timesheet to bank it in — check with Brent before submitting.</>}
           </div>
-        ))}
+        )}
 
         {/* The whole weekend in one tap. On call runs 17:00 Friday to 07:00
             Monday — 62 hours across four days — and entering that by hand
@@ -927,7 +916,7 @@ export default function Timesheets({ user, onBack }) {
             {weekDays.map(day => {
               const v = round2(totals.byDay[day] || 0)
               return (
-                <div key={day} style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, padding: '7px 0', color: v > STANDARD_DAY ? AMBER : (v ? NAVY : 'rgba(26,43,74,0.22)') }}>
+                <div key={day} style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, padding: '7px 0', color: v ? NAVY : 'rgba(26,43,74,0.22)' }}>
                   {v || '·'}
                 </div>
               )
