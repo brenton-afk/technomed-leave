@@ -1,0 +1,12 @@
+{
+  "name": "family-portal",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --test tests/feeds.check.mjs"
+  },
+  "dependencies": {
+    "ical.js": "2.2.1"
+  },
+  "engines": { "node": ">=20" }
+}
