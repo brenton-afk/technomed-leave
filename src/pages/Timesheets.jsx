@@ -706,7 +706,7 @@ export default function Timesheets({ user, onBack }) {
         {/* The bank, where somebody can see it before deciding whether to
             claim more or take some back. It was only ever a number in Brent's
             head and a manual adjustment in Xero. */}
-        {toil && (toil.balance !== 0 || toil.accrued !== 0) && (
+        {toil && ((toil.bank ?? toil.balance) !== 0 || toil.accrued !== 0) && (
           <div style={{
             background: '#e6f4f2', border: `1px solid rgba(42,181,160,0.3)`,
             borderRadius: 10, padding: '10px 13px', marginBottom: 12,
@@ -717,8 +717,13 @@ export default function Timesheets({ user, onBack }) {
               {toil.pending.accrued > 0 && (
                 <span style={{ color: MUTED }}> · {toil.pending.accrued}h awaiting approval</span>
               )}
+              {(toil.xeroParts || []).length > 1 && (
+                <span style={{ display: 'block', color: MUTED, fontSize: 12.5 }}>
+                  {toil.xeroParts.map(p => `${p.name} ${p.hours}h`).join(' · ')}
+                </span>
+              )}
             </span>
-            <strong style={{ fontSize: 16, color: TEAL }}>{toil.balance}h</strong>
+            <strong style={{ fontSize: 16, color: TEAL }}>{toil.bank ?? toil.balance}h</strong>
           </div>
         )}
 

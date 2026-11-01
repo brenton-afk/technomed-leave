@@ -299,7 +299,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
     ? workingDaysBetween(form.startDate, form.endDate)
     : 0
   const chosen = LEAVE_TYPES.find(t => t.id === form.leaveType)
-  const toilHours = toil?.balance ?? null
+  const toilHours = toil?.bank ?? toil?.balance ?? null
   // The hours this leave comes to: stated, for part-time staff; a standard
   // day per working day for everyone else.
   const leaveHoursTotal = pattern ? totalHours(hours) : days * STANDARD_DAY

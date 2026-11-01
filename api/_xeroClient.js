@@ -175,6 +175,12 @@ export async function toilBalanceInXero(token, tenantId, employeeId) {
   return balances?.toil?.hours ?? null
 }
 
+/** Every TOIL balance Xero holds for somebody, each named — Toni has two. */
+export async function toilPartsInXero(token, tenantId, employeeId) {
+  const balances = await leaveBalances(token, tenantId, employeeId)
+  return balances?.toil?.parts || []
+}
+
 /**
  * Every leave balance Xero holds for somebody, named and sorted.
  *
@@ -223,10 +229,25 @@ export async function leaveBalances(token, tenantId, employeeId) {
   })
 
   const of = kind => balances.find(b => b.kind === kind) || null
+  // TOIL can be more than one leave type. Toni has one per role — admin and
+  // science — and taking the first of them showed 12h of her 25.5. Every TOIL
+  // line is added up, and the parts kept so the screen can say where it sits.
+  const toilLines = balances.filter(b => b.kind === 'toil')
+  const toil = toilLines.length
+    ? {
+      name: toilLines.length === 1 ? toilLines[0].name : 'TOIL',
+      kind: 'toil',
+      hours: toilLines.some(b => b.hours !== null)
+        ? Math.round(toilLines.reduce((s, b) => s + (b.hours || 0), 0) * 10000) / 10000
+        : null,
+      units: toilLines[0].units,
+      parts: toilLines.map(b => ({ name: b.name, hours: b.hours }))
+    }
+    : null
   return {
     annual: of('annual'),
     sick: of('sick'),
-    toil: of('toil'),
+    toil,
     other: balances.filter(b => b.kind === 'other'),
     all: balances
   }

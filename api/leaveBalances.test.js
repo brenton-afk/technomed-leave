@@ -121,3 +121,77 @@ describe('leaveBalances', () => {
     expect(toil).toBe(all.toil.hours)
   })
 })
+
+// ─── TOIL that payroll keeps in more than one place ─────────────────────────
+// "Mat Usher has 15.96 hours TOIL, Toni has 12 hours TOIL for her admin role
+// and 13.5 for her science role. The portal is telling me only 12 for Toni and
+// none for Mat Usher." Fake employees and fake IDs throughout.
+
+describe('TOIL across roles', () => {
+  const reply = body => ({ ok: true, status: 200, text: async () => JSON.stringify(body) })
+
+  function xero({ list, records }) {
+    global.fetch = vi.fn(async url => {
+      const id = /\/Employees\/([^/?]+)/.exec(String(url))?.[1]
+      if (id) return reply({ Employees: records[id] ? [records[id]] : [] })
+      return reply({ Employees: list })
+    })
+  }
+
+  beforeEach(() => vi.resetModules())
+  afterEach(() => vi.restoreAllMocks())
+
+  it('adds up two TOIL lines on one record, and says which is which', async () => {
+    xero({
+      list: [],
+      records: { t1: { EmployeeID: 't1', LeaveBalances: [
+        { LeaveName: 'TOIL - Admin', NumberOfUnits: 12, TypeOfUnits: 'Hours' },
+        { LeaveName: 'TOIL - Science', NumberOfUnits: 13.5, TypeOfUnits: 'Hours' }
+      ] } }
+    })
+    const { leaveBalances } = await import('./_xeroClient.js')
+    const got = await leaveBalances('tok', 'tenant', 't1')
+    expect(got.toil.hours).toBe(25.5)
+    expect(got.toil.parts).toEqual([
+      { name: 'TOIL - Admin', hours: 12 }, { name: 'TOIL - Science', hours: 13.5 }
+    ])
+  })
+
+  it('adds up TOIL held on two employee records under one name', async () => {
+    xero({
+      list: [
+        { EmployeeID: 'a', FirstName: 'Toni', LastName: 'Hoppitt' },
+        { EmployeeID: 'b', FirstName: 'Toni', LastName: 'Hoppitt' }
+      ],
+      records: {
+        a: { EmployeeID: 'a', LeaveBalances: [{ LeaveName: 'Time Off In Lieu', NumberOfUnits: 12 }] },
+        b: { EmployeeID: 'b', LeaveBalances: [{ LeaveName: 'Time Off In Lieu', NumberOfUnits: 13.5 }] }
+      }
+    })
+    const { toilInXero } = await import('./timesheet/agent.js')
+    const got = await toilInXero('tok', 'tenant', { name: 'Toni Hoppitt' })
+    expect(got.hours).toBe(25.5)
+    expect(got.error).toBe('')
+  })
+
+  it('finds Mat under the name Xero has him as', async () => {
+    xero({
+      list: [{ EmployeeID: 'm', FirstName: 'Matthew', LastName: 'Usher' }],
+      records: { m: { EmployeeID: 'm', LeaveBalances: [{ LeaveName: 'TOIL', NumberOfUnits: 15.96 }] } }
+    })
+    const { toilInXero } = await import('./timesheet/agent.js')
+    const got = await toilInXero('tok', 'tenant', { name: 'Mat Usher', aka: ['Matt', 'Matthew Usher'] })
+    expect(got.hours).toBe(15.96)
+  })
+
+  it('says why, when Xero has no TOIL for somebody, instead of showing none', async () => {
+    xero({
+      list: [{ EmployeeID: 'm', FirstName: 'Matthew', LastName: 'Usher' }],
+      records: { m: { EmployeeID: 'm', LeaveBalances: [{ LeaveName: 'Annual Leave', NumberOfUnits: 40 }] } }
+    })
+    const { toilInXero } = await import('./timesheet/agent.js')
+    const got = await toilInXero('tok', 'tenant', { name: 'Mat Usher' })
+    expect(got.hours).toBeNull()
+    expect(got.error).toMatch(/no TOIL balance.*Annual Leave/)
+  })
+})

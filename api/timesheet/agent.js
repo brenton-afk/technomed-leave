@@ -12,7 +12,7 @@ import {
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import {
-  getXeroToken, findEmployee, toilBalanceInXero, leaveBalances
+  getXeroToken, findEmployee, leaveBalances, listEmployees
 } from '../_xeroClient.js'
 import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
@@ -47,6 +47,7 @@ export default async function handler(req, res) {
     if (action === 'payaudit') return await handlePayAudit(req, res)
     if (action === 'toil') return await handleToil(req, res, session)
     if (action === 'toilopening') return await handleToilOpening(req, res)
+    if (action === 'toilmatch') return await handleToilMatch(req, res)
     if (action === 'leavedays') return await handleLeaveDays(req, res, session)
     if (action === 'balances') return await handleBalances(req, res, session)
     return res.status(400).json({ error: 'Unknown or missing action' })
@@ -404,16 +405,17 @@ async function handleBalances(req, res, session) {
 
   const people = await Promise.all(who.map(async person => {
     try {
-      const employee = await findEmployee(token, tenantId, person.name)
-      if (!employee) {
-        return { name: person.name, email: person.email, matched: false, balances: null }
+      const employee = await findStaffInXero(token, tenantId, person)
+      const balances = await leaveBalances(token, tenantId, employee.EmployeeID)
+      // TOIL from every record and every TOIL line, the same figure the
+      // timesheet and leave screens show — see toilInXero.
+      const toil = await toilInXero(token, tenantId, person).catch(() => null)
+      if (balances && toil && toil.hours !== null) {
+        balances.toil = { ...(balances.toil || { kind: 'toil', units: 'Hours' }),
+          name: toil.parts.length === 1 ? toil.parts[0].name : 'TOIL',
+          hours: toil.hours, parts: toil.parts }
       }
-      return {
-        name: person.name,
-        email: person.email,
-        matched: true,
-        balances: await leaveBalances(token, tenantId, employee.EmployeeID)
-      }
+      return { name: person.name, email: person.email, matched: true, balances }
     } catch {
       // One person's lookup failing must not take the other eight with it.
       return { name: person.name, email: person.email, matched: false, balances: null }
@@ -438,21 +440,34 @@ async function handleToil(req, res, session) {
     const opening = await getToilOpening(person.email).catch(() => null)
     const ours = toilBalanceFor({ timesheets, leave, email: person.email, opening })
     const ledger = toilLedgerFor({ timesheets, leave, email: person.email, opening })
-    // Compared, never corrected. Xero's is the number that pays people.
+    // Xero's is the number that pays people, so it is the one staff are shown.
+    // Every TOIL line is read — Toni has one per role — and a failure to find
+    // somebody is said, not swallowed: "none" for Mat was indistinguishable
+    // from Xero saying he had none.
     let inXero = null
+    let xeroParts = []
+    let xeroError = ''
     try {
       const { token, tenantId } = await getXeroToken()
-      const employee = await findEmployee(token, tenantId, person.name)
-      inXero = await toilBalanceInXero(token, tenantId, employee?.EmployeeID)
-    } catch {
-      // Xero unreachable, or no matching employee. The app's own balance is
-      // still worth having and is still the arithmetic nobody has to do.
+      const found = await toilInXero(token, tenantId, person)
+      inXero = found.hours
+      xeroParts = found.parts
+      xeroError = found.error
+    } catch (err) {
+      xeroError = err.message || 'Xero could not be read'
     }
     return {
       name: person.name,
       email: person.email,
       ...ours,
       xero: inXero,
+      xeroParts,
+      xeroError,
+      // What staff see as "in the bank": Xero's, where Xero answered, plus
+      // nothing the app has not yet sent there. The app's own sum is the
+      // check, shown to admins beside it.
+      bank: inXero !== null ? inXero : ours.balance,
+      bankSource: inXero !== null ? 'xero' : 'portal',
       check: compareWithXero(ours, inXero),
       ledger,
       openingNote: opening?.note || ''
@@ -460,6 +475,104 @@ async function handleToil(req, res, session) {
   }))
 
   return res.status(200).json({ ok: true, people: everyone ? people : undefined, me: people[0] })
+}
+
+/**
+ * A staff member's Xero employee record, trying every name they go by.
+ *
+ * Mat is "Mat Usher" on the roster and may be "Matthew Usher" in Xero; the
+ * roster's `aka` already lists that, so it is tried before giving up.
+ */
+async function findStaffInXero(token, tenantId, person) {
+  const names = [person.name, ...(person.aka || []).filter(n => /\s/.test(n))]
+  let lastError = null
+  for (const name of names) {
+    try {
+      const found = await findEmployee(token, tenantId, name)
+      if (found) return found
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw lastError || new Error(`${person.name} was not found in Xero`)
+}
+
+/**
+ * Everything Xero holds as TOIL for one staff member, added up.
+ *
+ * Two ways a person's TOIL can be split, and both are read: several TOIL leave
+ * types on one employee record, or — where payroll keeps a second role as a
+ * second employee — several records under the same name. Toni has 12h for her
+ * admin role and 13.5h for her science role; showing either alone is wrong.
+ *
+ * @returns {{hours: number|null, parts: Array<{name, hours}>, error: string}}
+ */
+export async function toilInXero(token, tenantId, person) {
+  const primary = await findStaffInXero(token, tenantId, person)
+  const fullName = e => `${e.FirstName || ''} ${e.LastName || ''}`.trim().toLowerCase()
+  let records = [primary]
+  try {
+    const everyone = await listEmployees(token, tenantId)
+    records = [primary, ...everyone.filter(e =>
+      e.EmployeeID !== primary.EmployeeID && fullName(e) === fullName(primary))]
+  } catch {
+    // The primary record alone is still a correct answer for most people.
+  }
+  const parts = []
+  const seen = []
+  for (const record of records) {
+    const balances = await leaveBalances(token, tenantId, record.EmployeeID)
+    for (const part of balances?.toil?.parts || []) parts.push(part)
+    for (const line of balances?.all || []) seen.push(line.name)
+  }
+  const counted = parts.filter(p => p.hours !== null)
+  const hours = counted.length
+    ? Math.round(counted.reduce((sum, p) => sum + p.hours, 0) * 100) / 100
+    : null
+  const error = hours !== null ? ''
+    : `Xero has no TOIL balance for ${person.name}`
+      + (seen.length ? ` (it has: ${[...new Set(seen)].join(', ')})` : '')
+  return { hours, parts, error }
+}
+
+/**
+ * Sets the portal's TOIL history to agree with Xero, today. Admin only.
+ *
+ * "We need to make sure these are accurate and talking to each other." The
+ * portal's own balance starts from what it has seen — approved timesheets and
+ * TOIL leave since it began — so anything earlier was missing, which is why it
+ * showed nothing for Mat. This sets the opening balance to whatever makes the
+ * portal's total equal Xero's now, with a note saying so; from then on the
+ * two move together and any difference is a real one.
+ */
+async function handleToilMatch(req, res) {
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const person = STAFF.find(s => s.email === req.body?.email && s.hasTimesheets)
+  if (!person) return res.status(400).json({ error: 'Not somebody on timesheets' })
+  const { token, tenantId } = await getXeroToken()
+  const found = await toilInXero(token, tenantId, person)
+  const xero = found.hours
+  if (xero === null) {
+    return res.status(400).json({ error: found.error || 'Xero has no TOIL balance for this person to match' })
+  }
+  const [timesheets, leave] = await Promise.all([
+    getAllTimesheets(200), getAllApplications().catch(() => ({ approved: [], pending: [] }))
+  ])
+  const without = toilBalanceFor({ timesheets, leave, email: person.email, opening: 0 })
+  const hours = Math.round((xero - without.balance) * 100) / 100
+  const today = new Date().toISOString().slice(0, 10)
+  const opening = {
+    hours,
+    note: `Matched to Xero (${xero}h${found.parts.length > 1
+      ? ` — ${found.parts.map(p => `${p.name} ${p.hours}h`).join(', ')}` : ''}) on ${today}`,
+    asAt: today,
+    by: admin.name || admin.email,
+    at: new Date().toISOString()
+  }
+  await setToilOpening(person.email, opening)
+  return res.status(200).json({ ok: true, opening, xero })
 }
 
 /**

@@ -38,6 +38,25 @@ export default function ToilLedger({ user }) {
 
   useEffect(() => { load() }, [load])
 
+  // Sets the portal's history so its total equals Xero's today. Xero is the
+  // number that pays people; this is how the two are made to agree.
+  async function matchXero(email) {
+    setSaving(true); setError('')
+    try {
+      const res = await fetch('/api/timesheet/agent?action=toilmatch', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Not matched')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+    setSaving(false)
+  }
+
   async function saveOpening(email) {
     setSaving(true); setError('')
     try {
@@ -68,11 +87,19 @@ export default function ToilLedger({ user }) {
         <div key={p.email} style={card}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <strong style={{ flex: 1, color: '#042746', fontSize: 15 }}>{p.name}</strong>
-            <strong style={{ color: '#189a85', fontSize: 16 }}>{p.balance}h</strong>
+            <strong style={{ color: '#189a85', fontSize: 16 }}>{p.bank ?? p.balance}h</strong>
           </div>
+          {(p.xeroParts || []).length > 1 && (
+            <div style={{ fontSize: 12.5, color: '#6b7a8d', marginTop: 2 }}>
+              {p.xeroParts.map(part => `${part.name} ${part.hours}h`).join(' · ')}
+            </div>
+          )}
           <div style={{ fontSize: 12.5, color: p.check?.agrees === false ? '#b45309' : '#6b7a8d', marginTop: 2 }}>
-            {p.xero != null ? `Xero ${p.xero}h — ` : ''}{p.check?.note}
+            {p.xero != null ? `Xero ${p.xero}h · portal ${p.balance}h — ` : `Portal ${p.balance}h — `}{p.check?.note}
           </div>
+          {p.xeroError && (
+            <div style={{ fontSize: 12.5, color: '#b45309', marginTop: 2 }}>Xero: {p.xeroError}</div>
+          )}
           {(p.pending?.accrued > 0 || p.pending?.taken > 0) && (
             <div style={{ fontSize: 12.5, color: '#6b7a8d' }}>
               Awaiting approval: {p.pending.accrued > 0 ? `+${p.pending.accrued}h earned ` : ''}
@@ -92,6 +119,12 @@ export default function ToilLedger({ user }) {
               style={{ padding: '6px 12px', borderRadius: 16, border: '1px solid #dfe5ec', background: 'white', fontSize: 13, cursor: 'pointer' }}>
               Opening balance{p.opening ? ` (${p.opening}h)` : ''}
             </button>
+            {p.xero != null && p.check?.agrees === false && (
+              <button disabled={saving} onClick={() => matchXero(p.email)}
+                style={{ padding: '6px 12px', borderRadius: 16, border: 'none', background: '#189a85', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                Match Xero
+              </button>
+            )}
           </div>
 
           {editing === p.email && (
