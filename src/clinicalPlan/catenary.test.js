@@ -22,3 +22,14 @@ describe('Catenary', () => {
     expect(systemsInKit(`${b.system || ''} ${b.kit || ''}`)).toContain('Global BMD ALIF')
   })
 })
+
+describe('Nova', () => {
+  it('is Dr Thani, by first name or in full', () => {
+    expect(readBooking('Testa L5/S1 ALIF Catenary - Nova', '').surgeon).toBe('Thani')
+    expect(readBooking('Testa L5/S1 ALIF - Dr Nova Thani', '').surgeon).toBe('Thani')
+  })
+
+  it('is not found inside a product name', () => {
+    expect(readBooking('Testa L4/5 PLIF Novabone - Fowler', '').surgeon).toBe('Fowler')
+  })
+})

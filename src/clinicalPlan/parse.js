@@ -53,6 +53,11 @@ const SURGEON_ALIASES = {
   'peters willke': 'JPW',
   'jens peters willke': 'JPW',
 
+  // "Nova is Nova Thani" — Brent, 2 Nov 2026. Bookings are sometimes signed
+  // with the first name, and "- Nova" was read as no surgeon at all.
+  'nova thani': 'Thani',
+  'nova': 'Thani',
+
   // The orthopaedic list, written out in full the way a hospital list gives
   // them and the way Brent sent them through. The app files everybody under a
   // surname; these are the other strings that reach the same person.
