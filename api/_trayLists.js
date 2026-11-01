@@ -19,7 +19,11 @@ import { streamClaude } from './_anthropic.js'
 //               counted, the number goes down with usage and up with restock
 //   instrument  everything that comes back — ticked present or missing
 
-const MODEL = process.env.TRAY_LIST_MODEL || process.env.USAGE_VISION_MODEL || 'claude-opus-5'
+// A transcription job, not a judgement one: the fast model reads a table as
+// well as the careful one and in a fraction of the time ("uploading tray lists
+// is super slow"). Falls back to the usage model if this one is refused.
+const MODEL = process.env.TRAY_LIST_MODEL || 'claude-sonnet-5-5'
+const FALLBACK_MODEL = process.env.USAGE_VISION_MODEL || 'claude-opus-5'
 
 export const MAX_TRAYS = 30
 export const MAX_LINES = 400
@@ -36,8 +40,8 @@ Ignore columns for lot numbers, "TM Out", "Hosp In", "Hosp Out", signatures, pag
 
 A tray heading looks like "TRAY 1 - INSTRUMENTS", "Tray 4 - 10 Degree Trials", "DNO TRAY", or a caddy name. If the document has no headings, it is one tray: name it after the document's title.
 
-Return ONLY JSON:
-{"title":"","trays":[{"name":"","lines":[{"code":"","description":"","qty":1,"kind":"instrument"}]}]}`
+Return ONLY JSON, with each line as a short array [code, description, qty, kind] where kind is "i" for implant or "m" for instrument — the list is long, so keep it compact:
+{"title":"","trays":[{"name":"","lines":[["2SEA-86-0052","ANGLED AWL 10MM",1,"m"]]}]}`
 
 /** What kind of file this is, from its name and type. */
 export function fileKind(filename, mediaType = '') {
@@ -78,11 +82,13 @@ const clip = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n)
 export function cleanTrays(parsed) {
   const trays = (parsed?.trays || []).slice(0, MAX_TRAYS).map((t, i) => ({
     name: clip(t?.name, 80) || `Tray ${i + 1}`,
-    lines: (t?.lines || []).slice(0, MAX_LINES).map(l => ({
+    lines: (t?.lines || []).slice(0, MAX_LINES).map(l => (Array.isArray(l)
+      ? { code: l[0], description: l[1], qty: l[2], kind: l[3] }
+      : l)).map(l => ({
       code: clip(l?.code, 40),
       description: clip(l?.description, 120),
       qty: num(l?.qty),
-      kind: l?.kind === 'implant' ? 'implant' : 'instrument'
+      kind: l?.kind === 'implant' || l?.kind === 'i' ? 'implant' : 'instrument'
     })).filter(l => l.code || l.description)
   })).filter(t => t.lines.length)
   // Two trays printed with the same heading would collide as names.
@@ -95,13 +101,18 @@ export function cleanTrays(parsed) {
   return { title: clip(parsed?.title, 120), trays }
 }
 
-/** A tray list file, read into trays and lines for a person to check. */
-export async function readTrayList(buffer, filename, mediaType) {
-  const kind = fileKind(filename, mediaType)
+/**
+ * A tray list file, read into trays and lines for a person to check.
+ *
+ * `text` instead of a file when the phone has already pulled the words out of
+ * a Word document — those run to 15MB of photographs around a few KB of table.
+ */
+export async function readTrayList(buffer, filename, mediaType, { text: given } = {}) {
+  const kind = given != null ? 'text' : fileKind(filename, mediaType)
   if (!kind) throw new Error('That file type cannot be read. Use a PDF, Word document, spreadsheet or photo.')
 
   const content = []
-  const text = await textOf(buffer, kind)
+  const text = given != null ? String(given) : await textOf(buffer, kind)
   if (text != null) {
     if (!text.trim()) throw new Error('That document has no text in it to read.')
     content.push({ type: 'text', text: `File: ${filename}\n\n${text.slice(0, 120000)}` })
@@ -113,12 +124,20 @@ export async function readTrayList(buffer, filename, mediaType) {
   }
   content.push({ type: 'text', text: PROMPT })
 
-  const reply = await streamClaude({
+  const ask = model => streamClaude({
     feature: 'tray-list',
     whenUnavailable: 'The tray list could not be read automatically right now — try again shortly.',
     timeoutMs: 100000,
-    request: { model: MODEL, max_tokens: 32000, messages: [{ role: 'user', content }] }
+    request: { model, max_tokens: 32000, messages: [{ role: 'user', content }] }
   })
+  let reply
+  try {
+    reply = await ask(MODEL)
+  } catch (err) {
+    // A model this account does not have is a setting, not an outage.
+    if (!/model/i.test(String(err?.detail || err?.message || '')) || MODEL === FALLBACK_MODEL) throw err
+    reply = await ask(FALLBACK_MODEL)
+  }
   const out = (reply.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
   const json = /\{[\s\S]*\}/.exec(out)
   if (!json) throw new Error('The tray list could not be read — check it is a tray list and try again.')

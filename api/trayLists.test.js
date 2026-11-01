@@ -26,6 +26,14 @@ describe('reading a tray list', () => {
     ])
   })
 
+  it('reads the compact form the model now answers in — "super slow" was mostly writing', () => {
+    const out = cleanTrays({ trays: [{ name: 'Tray 1', lines: [['X-1', 'AWL 10MM', 1, 'm'], ['X-2', 'PLATE 5MM', 2, 'i']] }] })
+    expect(out.trays[0].lines).toEqual([
+      { code: 'X-1', description: 'AWL 10MM', qty: 1, kind: 'instrument' },
+      { code: 'X-2', description: 'PLATE 5MM', qty: 2, kind: 'implant' }
+    ])
+  })
+
   it('keeps two trays printed with the same heading apart', () => {
     const line = { code: 'A', description: 'a', qty: 1 }
     const out = cleanTrays({ trays: [{ name: 'Screws', lines: [line] }, { name: 'Screws', lines: [line] }, { name: 'Empty', lines: [] }] })

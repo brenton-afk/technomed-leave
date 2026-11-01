@@ -15,6 +15,23 @@ import { colour, text, space, radius, border } from '../../design/tokens.js'
 const PLACES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
 const ACCEPT = '.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf,image/*'
 
+/** A photo shrunk to 2000px on its long side — legible, and a fraction of the upload. */
+async function shrink(file) {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height))
+    if (scale === 1) return file
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    return blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file
+  } catch {
+    return file
+  }
+}
+
 function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
   return (
@@ -69,28 +86,73 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kit.id])
 
+  // Types named from the extension: a phone often reports a Word document
+  // with no type at all, which the upload would refuse.
+  const TYPES = {
+    pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  }
+
+  function toStore(file, contentType) {
+    const safeName = file.name.replace(/[^\w.\- ]+/g, '_')
+    return upload(`traylists/${Date.now()}-${safeName}`, file, {
+      access: 'public', contentType,
+      handleUploadUrl: '/api/meetings/agent?action=blob-upload',
+      clientPayload: JSON.stringify({ token: user?.token || null })
+    })
+  }
+
+  async function ask(body) {
+    const res = await fetch('/api/meetings/agent?action=tray-read', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, hospital, kitName: kit.name })
+    })
+    const data = await res.json()
+    if (!res.ok || data.error) throw new Error(data.error || 'The tray list could not be read')
+    return data
+  }
+
+  // "Uploading tray lists to the portal is super slow." Our Word lists are
+  // 2–15MB of photographs around a few KB of table, and the whole file used
+  // to go up before anything was read. Now the words are pulled out on the
+  // phone and read straight away; the file itself goes to Dropbox afterwards,
+  // in the background. Photos are shrunk first, as the usage scanner does.
   async function read(file) {
     if (!file) return
-    setError(''); setStage('uploading')
+    setError('')
+    const ext = file.name.toLowerCase().split('.').pop()
+    const contentType = TYPES[ext] || file.type
     try {
-      const safeName = file.name.replace(/[^\w.\- ]+/g, '_')
-      const uploaded = await upload(`traylists/${Date.now()}-${safeName}`, file, {
-        access: 'public',
-        handleUploadUrl: '/api/meetings/agent?action=blob-upload',
-        clientPayload: JSON.stringify({ token: user?.token || null })
-      })
+      if (ext === 'docx') {
+        setStage('reading')
+        const { default: mammoth } = await import('mammoth/mammoth.browser.js')
+        const { value } = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+        const data = await ask({ text: value, filename: file.name })
+        setReview({ ...data, file: file.name, keeping: true })
+        setOpen('')
+        setStage('')
+        // The original, kept without anybody waiting on it.
+        toStore(file, contentType)
+          .then(up => fetch('/api/meetings/agent?action=tray-keep', {
+            method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: up.url, filename: file.name, hospital, kitName: kit.name })
+          }).then(r => r.json()))
+          .then(kept => setReview(r => (r && r.file === file.name ? { ...r, ...kept, keeping: false } : r)))
+          .catch(() => setReview(r => (r && r.file === file.name
+            ? { ...r, keeping: false, dropboxError: 'The original could not be saved to Dropbox' } : r)))
+        return
+      }
+      setStage('uploading')
+      const sending = /^image\//.test(contentType) ? await shrink(file) : file
+      const uploaded = await toStore(sending, contentType)
       setStage('reading')
-      const res = await fetch('/api/meetings/agent?action=tray-read', {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: uploaded.url, filename: file.name, mediaType: file.type, hospital, kitName: kit.name })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'The tray list could not be read')
+      const data = await ask({ url: uploaded.url, filename: file.name, mediaType: contentType })
       setReview({ ...data, file: file.name })
       setOpen('')
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'The tray list could not be read')
     }
     setStage('')
   }
@@ -118,7 +180,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
           Read from {review.file}: {review.trays.length} trays, {lines} lines. Open each tray and check the codes and quantities
           against the paper. Leave out anything that is not part of this kit.
-          {review.dropboxPath ? ' The original is saved in Dropbox under Tray Lists → Hospital Copies.' : ''}
+          {review.keeping ? ' Saving the original to Dropbox…' : review.dropboxPath ? ' The original is saved in Dropbox under Tray Lists → Hospital Copies.' : ''}
           {review.dropboxError ? ` (Not saved to Dropbox: ${review.dropboxError})` : ''}
         </div>
         {review.trays.map((t, ti) => (
@@ -184,7 +246,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             border: `1px dashed ${colour.accent}`, color: colour.accentDeep, background: colour.surface,
             cursor: stage ? 'default' : 'pointer', opacity: stage ? 0.6 : 1
           }}>
-            {stage === 'uploading' ? 'Uploading…' : stage === 'reading' ? 'Reading the tray list — this can take a minute…'
+            {stage === 'uploading' ? 'Uploading…' : stage === 'reading' ? 'Reading the tray list…'
               : list ? 'Upload a new tray list' : 'Upload tray list (PDF, Word, Excel or photo)'}
             <input type="file" accept={ACCEPT} disabled={Boolean(stage)} style={{ display: 'none', fontSize: 16 }}
               onChange={e => { read(e.target.files?.[0]); e.target.value = '' }} />
