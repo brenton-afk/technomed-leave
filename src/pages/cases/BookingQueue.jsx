@@ -182,6 +182,17 @@ function Candidate({ candidate, user, onDone }) {
     }
   }
 
+  // The case is already on the calendar on another day. Moving it is the
+  // default answer; adding it as a second case is still possible, because the
+  // match is a surname and a surgeon and a person may know better.
+  const moves = candidate.moves?.from && candidate.moves.from !== fields.date ? candidate.moves : null
+
+  const move = () => send('accept', {
+    move: true,
+    date: fields.date,
+    fields: { hospital: fields.hospital.trim() }
+  })
+
   const accept = () => send('accept', {
     date: fields.date,
     fields: {
@@ -296,6 +307,19 @@ function Candidate({ candidate, user, onDone }) {
           which we do: two consignment kits of it at Calvary. */}
       <LoanNote systems={systemsInKit(fields.kit)} hospital={fields.hospital} />
 
+      {moves && (
+        <div role="note" style={{
+          ...text('caption'), color: colour.ink, marginTop: space.sm,
+          background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+          borderRadius: radius.control, padding: space.sm
+        }}>
+          <strong>Already booked for {prettyDate(moves.from) || moves.from}.</strong>{' '}
+          This email has it on {prettyDate(fields.date) || fields.date}, so it looks like
+          the case has moved. Moving it keeps the one calendar entry — nothing is
+          added beside it.
+        </div>
+      )}
+
       {error && (
         <div style={{ ...text('caption'), color: colour.danger, marginTop: space.xs }}>{error}</div>
       )}
@@ -324,15 +348,26 @@ function Candidate({ candidate, user, onDone }) {
         }}>
           {status === 'dismiss' ? 'Dismissing…' : 'Not a booking'}
         </button>
-        <button onClick={accept} disabled={!ready || busy} style={{
+        <button onClick={moves ? move : accept} disabled={!ready || busy} style={{
           flex: 2, padding: space.sm, ...text('bodyStrong'), color: 'white', border: 'none',
           borderRadius: radius.control,
           background: (!ready || busy) ? colour.inkFainter : colour.accent,
           cursor: (!ready || busy) ? 'default' : 'pointer'
         }}>
-          {status === 'accept' ? 'Adding…' : 'Add to calendar'}
+          {moves
+            ? (status === 'accept' ? 'Moving…' : `Move it to ${prettyDate(fields.date) || fields.date}`)
+            : (status === 'accept' ? 'Adding…' : 'Add to calendar')}
         </button>
       </div>
+      {moves && (
+        <button onClick={accept} disabled={!ready || busy} style={{
+          width: '100%', marginTop: space.xs, padding: space.xs, cursor: busy ? 'default' : 'pointer',
+          background: 'none', border: 'none', ...text('caption'), color: colour.inkMuted,
+          textDecoration: 'underline'
+        }}>
+          It is a different case — add it as a new booking
+        </button>
+      )}
     </div>
   )
 }

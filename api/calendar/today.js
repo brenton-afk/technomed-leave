@@ -43,7 +43,8 @@ import { readBookingDocument } from '../_readBookingDocument.js'
 import { readDictatedBooking } from '../_readDictatedBooking.js'
 import { readVoiceCommand } from '../_voiceCommand.js'
 import {
-  sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar
+  sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar,
+  movedOnCalendar
 } from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
@@ -469,6 +470,14 @@ async function handleSave(req, res) {
     const patch = { description }
     if (summary !== (current.summary || '')) patch.summary = summary
 
+    // The hospital is also the event's location — it is what Google shows and
+    // what a phone's map opens. Written on create and never on an edit, so a
+    // booking moved from RHH to Calvary still said RHH under its title.
+    if (Object.prototype.hasOwnProperty.call(body.fields || {}, 'hospital')) {
+      const site = String(body.fields.hospital || '').trim()
+      if (site && site !== (current.location || '')) patch.location = site
+    }
+
     // The surname, recorded as a fact rather than left to be re-read from the
     // title. Patched as a map, so any other private property is kept.
     if (Object.prototype.hasOwnProperty.call(body.fields || {}, 'patient')) {
@@ -521,6 +530,16 @@ async function handleSave(req, res) {
 
     patch.description = withAttribution(patch.description, firstNameFor(session.email))
     const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag || current.etag })
+
+    // A move is only reported once Google says the event is on the new day.
+    if (patch.start) {
+      const landed = (saved.start?.dateTime || saved.start?.date || '').slice(0, 10)
+      if (landed !== patch.start.dateTime.slice(0, 10)) {
+        return res.status(502).json({
+          error: `The calendar did not take the new date (it still says ${landed || 'nothing'})`
+        })
+      }
+    }
 
     // Both days, when a booking moves: the one it left has a hole and the one it
     // arrived on has two cases in one hour. Tidying only the destination leaves
@@ -1072,14 +1091,20 @@ async function handleIngest(req, res) {
     // Filled lazily, once something with a date is actually found. Most runs
     // read nothing new and should not touch the calendar at all.
     let onCalendar = null
+    let span = null
     const calendarFor = async date => {
-      if (!onCalendar) {
-        // A fortnight either side: theatre lists arrive well ahead, and a case
-        // already entered may sit anywhere in that span.
-        const from = toDateStr(addCivilDays(parseDateStr(date), -14))
-        const to = toDateStr(addCivilDays(parseDateStr(date), 21))
+      // Four weeks either side: theatre lists arrive well ahead, a case
+      // already entered may sit anywhere in that span, and a case that has
+      // moved may have moved by weeks. Re-read when a later candidate falls
+      // outside what was read — the window used to be fixed by whichever
+      // booking happened to come first, so a week's list starting on Monday
+      // could not see the calendar past the Monday after next.
+      if (!onCalendar || date < span.from || date > span.to) {
+        const from = toDateStr(addCivilDays(parseDateStr(date), -28))
+        const to = toDateStr(addCivilDays(parseDateStr(date), 28))
+        span = { from: span && span.from < from ? span.from : from, to: span && span.to > to ? span.to : to }
         try {
-          onCalendar = await bookingsOnCalendar(from, to)
+          onCalendar = await bookingsOnCalendar(span.from, span.to)
         } catch {
           // A calendar that cannot be read is a reason to show the candidate,
           // not to hide it. Better a duplicate somebody can dismiss than a
@@ -1197,6 +1222,16 @@ async function handleIngest(req, res) {
             })
             continue
           }
+
+          // Not on its own day, but on another one: the case has moved. Still
+          // queued — a person confirms a move like anything else read out of
+          // an email — but the card offers to move the existing entry rather
+          // than add a second one beside it.
+          const movedFrom = movedOnCalendar(
+            candidate, (await calendarFor(candidate.date)).filter(c => !c.cancelled))
+          if (movedFrom) {
+            candidate.moves = { eventId: movedFrom.id, from: movedFrom.date, summary: movedFrom.summary }
+          }
         }
 
         // The same case from CNS and from Calvary is one booking. Merging keeps
@@ -1233,6 +1268,51 @@ async function handleIngest(req, res) {
   }
 }
 
+/**
+ * Moves an existing booking to another day, keeping its hours.
+ *
+ * One event, patched in place — never a second event and a deletion, which
+ * would lose the booking's history, thread and attendance, and leave both if
+ * the second step failed. The written date in the notes follows (see
+ * withDateFollowing), the hospital and its location follow when given, and
+ * both days are tidied.
+ *
+ * The result is checked against what was asked for, so "moved" is only ever
+ * reported once Google says the event is on the new day.
+ */
+export async function moveBooking(eventId, day, { hospital, by, etag } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day || ''))) {
+    throw Object.assign(new Error('A date is needed to move the booking'), { status: 400 })
+  }
+  const current = await getCalendarEvent(eventId)
+  const from = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
+  if (!current.start?.dateTime) {
+    throw Object.assign(new Error('That booking is an all-day entry and cannot be moved from here'), { status: 400 })
+  }
+  const clock = iso => {
+    const c = zonedCivil(new Date(iso), TZ)
+    return `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}:00`
+  }
+  const patch = {
+    start: { dateTime: `${day}T${clock(current.start.dateTime)}`, timeZone: TZ },
+    end: { dateTime: `${day}T${clock(current.end?.dateTime || current.start.dateTime)}`, timeZone: TZ }
+  }
+  let description = withDateFollowing(current.description || '', day)
+  const site = String(hospital || '').trim()
+  if (site && site !== String(parseLabelledDescription(description).hospital || '').trim()) {
+    description = setLabelledValue(description, 'hospital', site)
+    patch.location = site
+  }
+  patch.description = withAttribution(description, by)
+
+  const saved = await updateCalendarEvent(eventId, patch, { etag: etag || current.etag })
+  const to = (saved.start?.dateTime || saved.start?.date || '').slice(0, 10)
+  if (to !== day) throw new Error(`The calendar did not take the new date (it says ${to || 'nothing'})`)
+
+  for (const d of [...new Set([from, to].filter(Boolean))]) await tidyDay(d).catch(() => {})
+  return { id: saved.id, from, to, summary: saved.summary || '', etag: saved.etag || null }
+}
+
 /** Accept: the candidate, as edited on screen, goes to the calendar. */
 async function handleAccept(req, res) {
   const session = await requireSession(req, res)
@@ -1247,6 +1327,26 @@ async function handleAccept(req, res) {
     if (candidate.status === 'accepted') {
       // Two taps on a slow connection must not make two bookings.
       return res.status(200).json({ ok: true, alreadyAccepted: true, candidate })
+    }
+
+    // A booking that has moved: the existing entry is moved, not copied.
+    if (body.move && candidate.moves?.eventId) {
+      const day = String(body.date || candidate.date || '')
+      const result = await moveBooking(candidate.moves.eventId, day, {
+        hospital: body.fields?.hospital ?? candidate.hospital,
+        by: firstNameFor(session.email)
+      })
+      const accepted = await updateBookingCandidate(id, {
+        status: 'accepted',
+        acceptedBy: firstNameFor(session.email),
+        acceptedAt: new Date().toISOString(),
+        eventId: result.id,
+        movedFrom: result.from
+      })
+      return res.status(200).json({
+        ok: true, moved: true, from: result.from, to: result.to, candidate: accepted,
+        event: { id: result.id, summary: result.summary, etag: result.etag }
+      })
     }
 
     // What the screen shows is what gets written — the team corrects the reading

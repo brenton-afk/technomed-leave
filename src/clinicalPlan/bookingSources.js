@@ -233,3 +233,39 @@ export function mergeBookings(existing, incoming) {
   merged.sources = [...new Set([...(existing?.sources || []), ...(incoming?.sources || [])])]
   return merged
 }
+
+/**
+ * The calendar entry an emailed booking has moved from, if it has.
+ *
+ * "The portal did not recognise that a booking that moved needed to move
+ * places in the calendar." alreadyInCalendar looks only on the email's own
+ * day, so a hospital writing to say a case is now on Thursday found nothing on
+ * Thursday, the case was offered as new, and accepting it made a second event
+ * while the first stayed where it was.
+ *
+ * Stricter than alreadyInCalendar, because the answer is acted on: the same
+ * surname, a surgeon named on both sides and agreeing, a different day within
+ * four weeks, and only one such entry. Two candidates is a question for a
+ * person, not a guess — moving the wrong case is worse than offering a
+ * duplicate somebody can see.
+ *
+ * Only called when nothing matched on the email's own day.
+ */
+export function movedOnCalendar(candidate, events = [], { withinDays = 28 } = {}) {
+  if (!candidate?.date || !candidate?.patient || !candidate?.surgeon) return null
+  const same = (x, y) => String(x || '').trim().toLowerCase() === String(y || '').trim().toLowerCase()
+  const dayNumber = date => {
+    const [y, m, d] = String(date || '').split('-').map(Number)
+    return y ? Date.UTC(y, m - 1, d) / 86400000 : NaN
+  }
+  const target = dayNumber(candidate.date)
+
+  const matches = events.filter(event => {
+    if (!event || event.cancelled) return false
+    if (!event.date || event.date === candidate.date) return false
+    if (Math.abs(dayNumber(event.date) - target) > withinDays) return false
+    if (!same(event.patient, candidate.patient)) return false
+    return Boolean(event.surgeon) && same(event.surgeon, candidate.surgeon)
+  })
+  return matches.length === 1 ? matches[0] : null
+}

@@ -339,6 +339,8 @@ export default function EditBooking({
   // surgeon, so sending nothing is how "automatic" is expressed.
   const [colourChosen, setColourChosen] = useState(false)
   const [status, setStatus] = useState('loading')
+  // The day Google confirmed a moved booking is now on.
+  const [movedTo, setMovedTo] = useState(null)
   const [error, setError] = useState('')
   // Two taps, deliberately. A booking removed by accident is a case nobody
   // knows about, and the calendar keeps no undo the team can reach.
@@ -581,6 +583,18 @@ export default function EditBooking({
         }
       }
 
+      // A move is confirmed rather than closed on. "Show the user a confirmation
+      // of the new date after the calendar update succeeds" — the server only
+      // answers once Google has the event on the new day, so this is the
+      // calendar's word, not the form's.
+      const landed = String(data.event?.start || '').slice(0, 10)
+      if (movedTime && landed) {
+        onSaved?.()
+        setMovedTo(landed)
+        setStatus('moved')
+        return
+      }
+
       onSaved?.()
       onClose?.()
     } catch (err) {
@@ -687,6 +701,25 @@ export default function EditBooking({
               of all eleven scroll regions in the app, and is now spelled out
               in every one of them. See the guard in sheets.test.jsx. */}
           <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
+            {status === 'moved' && movedTo && (
+              <div role="status" style={{
+                background: colour.successSoft, border: `1px solid ${colour.line}`,
+                borderRadius: radius.control, padding: space.md, marginBottom: space.md
+              }}>
+                <div style={{ ...text('bodyStrong'), color: colour.success }}>
+                  Moved to {weekdayName(movedTo)} {movedTo}
+                </div>
+                <div style={{ ...text('caption'), color: colour.ink, marginTop: 2 }}>
+                  The calendar entry itself has moved — there is one booking, on the new day.
+                </div>
+                <button onClick={onClose} style={{
+                  marginTop: space.sm, width: '100%', padding: space.sm, cursor: 'pointer',
+                  ...text('bodyStrong'), color: 'white', background: colour.accent,
+                  border: 'none', borderRadius: radius.control
+                }}>Done</button>
+              </div>
+            )}
+
             {status === 'loading' && (
               <div style={{ ...text('body'), color: colour.inkFaint, textAlign: 'center', padding: space.lg }}>
                 Loading the booking…
@@ -737,7 +770,7 @@ export default function EditBooking({
               </div>
             )}
 
-            {loaded && status !== 'loading' && !loaded.allDay && (
+            {loaded && status !== 'loading' && status !== 'moved' && !loaded.allDay && (
               <>
                 <Field label="Date" type="date" value={when.date}
                   onChange={v => setWhen(c => ({ ...c, date: v }))} />
@@ -754,7 +787,7 @@ export default function EditBooking({
               </>
             )}
 
-            {loaded && status !== 'loading' && (
+            {loaded && status !== 'loading' && status !== 'moved' && (
               <>
                 {FIELDS.map((f, i) => (
                   <React.Fragment key={f.key}>
@@ -999,6 +1032,7 @@ export default function EditBooking({
             )}
           </div>
 
+          {status !== 'moved' && (
           <div style={{
             padding: `${space.sm}px ${space.md}px calc(${space.md}px + env(safe-area-inset-bottom, 0px))`,
             borderTop: `1px solid ${colour.line}`, display: 'flex', gap: space.sm, flexShrink: 0
@@ -1063,6 +1097,7 @@ export default function EditBooking({
               </>
             )}
           </div>
+          )}
         </div>
       </div>
     </Overlay>
