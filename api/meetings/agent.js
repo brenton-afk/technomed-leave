@@ -248,7 +248,7 @@ ${transcript}
     // somebody asked for.
     let flagged = actionItems
     try {
-      flagged = flagRepeats(actionItems, await getWorklist())
+      flagged = flagRepeats(actionItems, (await getWorklist()).items)
     } catch (err) {
       console.error('repeat check skipped:', err.message)
     }
@@ -459,7 +459,7 @@ async function handleFinalize(req, res) {
 
 async function handleWorklist(req, res) {
   if (req.method === 'GET') {
-    const items = await getWorklist()
+    const { items } = await getWorklist()
     return res.status(200).json({ items })
   }
   if (req.method === 'PATCH') {
@@ -494,9 +494,18 @@ async function handleBoard(req, res) {
   // Both at once on purpose: progress, counts and the "which column" question
   // all need the tasks and the projects together, and two round trips from a
   // phone on hospital wifi is the difference between instant and visibly slow.
-  const [items, stored] = await Promise.all([getWorklist(), getProjects()])
+  const [worklist, stored] = await Promise.all([getWorklist(), getProjects()])
   const projects = stored.map(normaliseProject).filter(Boolean)
-  return res.status(200).json({ items, projects, general: GENERAL })
+  // `unreadable` travels with the board rather than being swallowed. A row
+  // that cannot be read is somebody's task, and a board that quietly drops it
+  // is worse than one that says so — it is also the only way anybody learns a
+  // row needs repairing.
+  return res.status(200).json({
+    items: worklist.items,
+    unreadable: worklist.unreadable,
+    projects,
+    general: GENERAL
+  })
 }
 
 /** A project created, edited, put away or brought back. */
@@ -533,7 +542,7 @@ async function handleProject(req, res, session) {
       // Checked here and not only in the app: the warning on screen is a
       // courtesy, and this is the rule. Archiving takes a project's tasks off
       // everybody's board at once, including somebody else's "Mine" list.
-      const why = blockedFromArchiving(project, await getWorklist())
+      const why = blockedFromArchiving(project, (await getWorklist()).items)
       if (why) return res.status(400).json({ error: why })
       project = archived(project, { by, at: nowStamp() })
     } else if (archive === false) {
@@ -585,7 +594,8 @@ async function handleColumn(req, res) {
       // column are written back before the column goes. Order matters: a
       // project saved without the column while tasks still point at it is a
       // board that looks right and is not.
-      const { project: next, moved } = removedColumn(project, key, await getWorklist())
+      const { items } = await getWorklist()
+      const { project: next, moved } = removedColumn(project, key, items)
       await Promise.all(moved.map(t => saveWorklistItem(t)))
       await saveProject(next)
       return res.status(200).json({ project: next, moved: moved.length })

@@ -121,10 +121,50 @@ export async function getWorklistItem(id) {
   return data ? JSON.parse(data) : null
 }
 
+/**
+ * One stored row, or nothing.
+ *
+ * "Unterminated string in JSON at position 6964" took out the whole Projects
+ * page. One row that cannot be read should cost one row — a board of thirty
+ * tasks that refuses to draw because of one of them is thirty tasks nobody can
+ * reach, and the one that broke is not even the one being looked for.
+ *
+ * Two things could write an unreadable row, and both are now closed: a model
+ * answer that ran out of room mid-word (capped at 2,000 tokens, raised in
+ * October and salvaged since), and a value long enough to be cut short on its
+ * way into Redis — worklist rows went by URL path until they moved to the body
+ * form. This is the third line of defence: whatever wrote it, the page opens.
+ */
+function readRow(raw) {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The worklist, and anything in it that could not be read.
+ *
+ * `unreadable` is returned rather than swallowed. A board that quietly drops a
+ * row is a board that has silently lost somebody's task, which is worse than
+ * one that says so — and it is the only way anybody would learn that a row
+ * needs repairing.
+ */
 export async function getWorklist() {
   const ids = await redis('lrange', 'worklist:all', '0', '-1') || []
-  const items = await Promise.all(ids.map(id => getWorklistItem(id)))
-  return items.filter(Boolean)
+  const raw = await Promise.all(ids.map(id => redis('get', `worklist:${id}`)))
+
+  const items = []
+  const unreadable = []
+  raw.forEach((data, i) => {
+    if (!data) return
+    const row = readRow(data)
+    if (row) items.push(row)
+    else unreadable.push(ids[i])
+  })
+  return { items, unreadable }
 }
 
 export async function updateWorklistItem(id, updates) {
@@ -155,11 +195,8 @@ export async function saveEmailLogEntry(entry) {
 
 export async function getEmailLog(limit = 200) {
   const ids = await redis('lrange', 'email:all', '0', String(Math.max(0, limit - 1))) || []
-  const rows = await Promise.all(ids.map(async id => {
-    const data = await redis('get', `email:${id}`)
-    return data ? JSON.parse(data) : null
-  }))
-  return rows.filter(Boolean)
+  const rows = await Promise.all(ids.map(id => redis('get', `email:${id}`)))
+  return rows.map(readRow).filter(Boolean)
 }
 
 // ─── PROJECTS ───────────────────────────────────────────────
@@ -183,8 +220,9 @@ export async function getProject(id) {
 
 export async function getProjects() {
   const ids = await redis('lrange', 'project:all', '0', '-1') || []
-  const rows = await Promise.all(ids.map(id => getProject(id)))
-  return rows.filter(Boolean)
+  const raw = await Promise.all(ids.map(id => redis('get', `project:${id}`)))
+  // Same rule as the worklist: one unreadable project must not cost the board.
+  return raw.map(readRow).filter(Boolean)
 }
 
 export async function deleteProject(id) {

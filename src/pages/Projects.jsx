@@ -72,6 +72,10 @@ export default function Projects({ user, onBack }) {
 
   const [worklist, setWorklist] = useState([])
   const [loadingBoard, setLoadingBoard] = useState(true)
+  // Rows that could not be read back. Named rather than dropped: one of them
+  // is somebody's task, and a board that quietly loses it is worse than one
+  // that admits it.
+  const [unreadable, setUnreadable] = useState([])
 
   // ── The project layer ──
   //
@@ -111,6 +115,7 @@ export default function Projects({ user, onBack }) {
       const data = await res.json()
       setWorklist(data.items || [])
       setProjects((data.projects || []).map(normaliseProject).filter(Boolean))
+      setUnreadable(data.unreadable || [])
     } catch (err) {
       console.error(err)
     }
@@ -757,6 +762,23 @@ export default function Projects({ user, onBack }) {
             on"; Mine is the four things that are actually yours, which is what
             somebody between cases came for; Capture is how work gets in. A
             project opened replaces all three — a phone has room for one. */}
+        {/* "Unterminated string in JSON at position 6964" used to take the
+            whole page with it. Now it costs one row, and says which. */}
+        {unreadable.length > 0 && (
+          <div style={{
+            background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+            borderRadius: radius.control, padding: `${space.sm}px ${space.md}px`,
+            marginBottom: space.md, ...text('caption'), color: colour.ink, lineHeight: 1.5
+          }}>
+            {unreadable.length === 1 ? 'One item' : `${unreadable.length} items`} could
+            not be read and {unreadable.length === 1 ? 'is' : 'are'} not shown below.
+            Everything else on this page is complete. Send this to Brenton:{' '}
+            <span style={{ fontFamily: 'ui-monospace, monospace' }}>
+              {unreadable.join(', ')}
+            </span>
+          </div>
+        )}
+
         {!board && (
           <div style={{ display: 'flex', gap: 6, marginBottom: space.md }} role="tablist">
             {[
