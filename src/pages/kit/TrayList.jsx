@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
+import { trayFilePayload, originalIfSmall } from './readTrayFile.js'
 
 // ─── What is in each tray ────────────────────────────────────────────────────
 // A kit's tray list: uploaded from the hospital's own copy (a PDF, a Word
@@ -15,22 +16,6 @@ import { colour, text, space, radius, border } from '../../design/tokens.js'
 const PLACES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
 const ACCEPT = '.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf,image/*'
 
-/** A photo shrunk to 2000px on its long side — legible, and a fraction of the upload. */
-async function shrink(file) {
-  try {
-    const bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height))
-    if (scale === 1) return file
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(bitmap.width * scale)
-    canvas.height = Math.round(bitmap.height * scale)
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
-    return blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file
-  } catch {
-    return file
-  }
-}
 
 function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
@@ -93,67 +78,75 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   }
+  const attempt = useRef(0)
 
-  function toStore(file, contentType) {
-    const safeName = file.name.replace(/[^\w.\- ]+/g, '_')
-    return upload(`traylists/${Date.now()}-${safeName}`, file, {
-      access: 'public', contentType,
-      handleUploadUrl: '/api/meetings/agent?action=blob-upload',
-      clientPayload: JSON.stringify({ token: user?.token || null })
-    })
+  async function call(action, body, ms) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), ms)
+    try {
+      const res = await fetch(`/api/meetings/agent?action=${action}`, {
+        method: 'POST', signal: ctrl.signal,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, hospital, kitName: kit.name })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || 'The tray list could not be read')
+      return data
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('That took too long — check the connection and try again.')
+      throw err
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
-  async function ask(body) {
-    const res = await fetch('/api/meetings/agent?action=tray-read', {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, hospital, kitName: kit.name })
-    })
-    const data = await res.json()
-    if (!res.ok || data.error) throw new Error(data.error || 'The tray list could not be read')
-    return data
+  // The original, into Dropbox, without anybody waiting on it. Sent whole when
+  // it is small; a big one goes through the upload service, and if that does
+  // not come back the list is still read and saved — only the copy is missed.
+  function keepOriginal(file, mine) {
+    const done = kept => setReview(r => (r && r.attempt === mine ? { ...r, ...kept, keeping: false } : r))
+    ;(async () => {
+      const data = await originalIfSmall(file)
+      if (data) return call('tray-keep', { data, filename: file.name }, 60000)
+      const ext = file.name.toLowerCase().split('.').pop()
+      const up = await Promise.race([
+        upload(`traylists/${Date.now()}-${file.name.replace(/[^\w.\- ]+/g, '_')}`, file, {
+          access: 'public', contentType: TYPES[ext] || file.type,
+          handleUploadUrl: '/api/meetings/agent?action=blob-upload',
+          clientPayload: JSON.stringify({ token: user?.token || null })
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('slow')), 120000))
+      ])
+      return call('tray-keep', { url: up.url, filename: file.name }, 60000)
+    })().then(done, () => done({ dropboxPath: '', dropboxError: 'The original could not be saved to Dropbox — add it there by hand' }))
   }
 
-  // "Uploading tray lists to the portal is super slow." Our Word lists are
-  // 2–15MB of photographs around a few KB of table, and the whole file used
-  // to go up before anything was read. Now the words are pulled out on the
-  // phone and read straight away; the file itself goes to Dropbox afterwards,
-  // in the background. Photos are shrunk first, as the usage scanner does.
+  // "Uploading tray lists to the portal is super slow… Still uploading."
+  // The phone now unpacks the file and only what needs reading is sent, in an
+  // ordinary request — see readTrayFile.js. Nothing waits on the upload
+  // service, and nothing can spin for ever: there is a time limit and Cancel.
   async function read(file) {
     if (!file) return
-    setError('')
-    const ext = file.name.toLowerCase().split('.').pop()
-    const contentType = TYPES[ext] || file.type
+    const mine = attempt.current + 1
+    attempt.current = mine
+    setError(''); setStage('preparing')
     try {
-      if (ext === 'docx') {
-        setStage('reading')
-        const { default: mammoth } = await import('mammoth/mammoth.browser.js')
-        const { value } = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
-        const data = await ask({ text: value, filename: file.name })
-        setReview({ ...data, file: file.name, keeping: true })
-        setOpen('')
-        setStage('')
-        // The original, kept without anybody waiting on it.
-        toStore(file, contentType)
-          .then(up => fetch('/api/meetings/agent?action=tray-keep', {
-            method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: up.url, filename: file.name, hospital, kitName: kit.name })
-          }).then(r => r.json()))
-          .then(kept => setReview(r => (r && r.file === file.name ? { ...r, ...kept, keeping: false } : r)))
-          .catch(() => setReview(r => (r && r.file === file.name
-            ? { ...r, keeping: false, dropboxError: 'The original could not be saved to Dropbox' } : r)))
-        return
-      }
-      setStage('uploading')
-      const sending = /^image\//.test(contentType) ? await shrink(file) : file
-      const uploaded = await toStore(sending, contentType)
+      const payload = await trayFilePayload(file)
+      if (attempt.current !== mine) return
       setStage('reading')
-      const data = await ask({ url: uploaded.url, filename: file.name, mediaType: contentType })
-      setReview({ ...data, file: file.name })
+      const data = await call('tray-read', { ...payload, filename: file.name }, 115000)
+      if (attempt.current !== mine) return
+      setReview({ ...data, file: file.name, attempt: mine, keeping: true, note: payload.note || '' })
       setOpen('')
+      keepOriginal(file, mine)
     } catch (err) {
-      setError(err.message || 'The tray list could not be read')
+      if (attempt.current === mine) setError(err.message || 'The tray list could not be read')
     }
+    if (attempt.current === mine) setStage('')
+  }
+
+  function cancel() {
+    attempt.current += 1
     setStage('')
   }
 
@@ -178,7 +171,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
       <div>
         <div style={label}>Check the tray list before saving</div>
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
-          Read from {review.file}: {review.trays.length} trays, {lines} lines. Open each tray and check the codes and quantities
+          Read from {review.file}: {review.trays.length} trays, {lines} lines.{review.note ? ` ${review.note}` : ''} Open each tray and check the codes and quantities
           against the paper. Leave out anything that is not part of this kit.
           {review.keeping ? ' Saving the original to Dropbox…' : review.dropboxPath ? ' The original is saved in Dropbox under Tray Lists → Hospital Copies.' : ''}
           {review.dropboxError ? ` (Not saved to Dropbox: ${review.dropboxError})` : ''}
@@ -246,11 +239,16 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             border: `1px dashed ${colour.accent}`, color: colour.accentDeep, background: colour.surface,
             cursor: stage ? 'default' : 'pointer', opacity: stage ? 0.6 : 1
           }}>
-            {stage === 'uploading' ? 'Uploading…' : stage === 'reading' ? 'Reading the tray list…'
+            {stage === 'preparing' ? 'Opening the file…' : stage === 'reading' ? 'Reading the tray list…'
               : list ? 'Upload a new tray list' : 'Upload tray list (PDF, Word, Excel or photo)'}
             <input type="file" accept={ACCEPT} disabled={Boolean(stage)} style={{ display: 'none', fontSize: 16 }}
               onChange={e => { read(e.target.files?.[0]); e.target.value = '' }} />
           </label>
+          {stage && (
+            <button onClick={cancel} style={{ ...text('caption'), marginTop: space.sm, background: 'none', border: 'none', color: colour.inkFaint, cursor: 'pointer', textDecoration: 'underline' }}>
+              Cancel
+            </button>
+          )}
           {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginTop: space.sm }}>{error}</div>}
         </div>
       )}

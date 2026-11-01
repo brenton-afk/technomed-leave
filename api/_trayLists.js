@@ -107,7 +107,17 @@ export function cleanTrays(parsed) {
  * `text` instead of a file when the phone has already pulled the words out of
  * a Word document — those run to 15MB of photographs around a few KB of table.
  */
-export async function readTrayList(buffer, filename, mediaType, { text: given } = {}) {
+export async function readTrayList(buffer, filename, mediaType, { text: given, images } = {}) {
+  if (Array.isArray(images) && images.length) {
+    // Pages or photos the phone has already drawn and shrunk.
+    const content = images.slice(0, 12).map(img => ({
+      type: 'image',
+      source: { type: 'base64', media_type: /png/.test(img?.mediaType) ? 'image/png' : 'image/jpeg', data: String(img?.data || '') }
+    })).filter(b => b.source.data)
+    if (!content.length) throw new Error('Nothing came through to read — try again.')
+    content.push({ type: 'text', text: `File: ${filename}` })
+    return askForTrays(content)
+  }
   const kind = given != null ? 'text' : fileKind(filename, mediaType)
   if (!kind) throw new Error('That file type cannot be read. Use a PDF, Word document, spreadsheet or photo.')
 
@@ -122,6 +132,10 @@ export async function readTrayList(buffer, filename, mediaType, { text: given } 
     const media = /png$/i.test(filename) ? 'image/png' : /webp$/i.test(filename) ? 'image/webp' : 'image/jpeg'
     content.push({ type: 'image', source: { type: 'base64', media_type: media, data: buffer.toString('base64') } })
   }
+  return askForTrays(content)
+}
+
+async function askForTrays(content) {
   content.push({ type: 'text', text: PROMPT })
 
   const ask = model => streamClaude({

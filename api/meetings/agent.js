@@ -745,13 +745,15 @@ async function handleTrayRead(req, res, session) {
   if (!staff?.isAdmin && !staff?.isClinicalTeam) {
     return res.status(403).json({ error: 'Only admins and the clinical team can upload tray lists' })
   }
-  const { url, text, filename, mediaType, hospital, kitName } = req.body || {}
+  const { url, text, images, data, filename, mediaType, hospital, kitName } = req.body || {}
   const fromOurStore = u => /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/traylists\//i.test(String(u || ''))
   // Only our own upload store, never an address from anywhere else.
   if (url && !fromOurStore(url)) return res.status(400).json({ error: 'Upload the file again' })
-  if (!url && typeof text !== 'string') return res.status(400).json({ error: 'Upload the file again' })
+  if (!url && typeof text !== 'string' && !Array.isArray(images) && typeof data !== 'string') {
+    return res.status(400).json({ error: 'Upload the file again' })
+  }
 
-  let buffer = null
+  let buffer = typeof data === 'string' ? Buffer.from(data, 'base64') : null
   if (url) {
     try {
       const got = await fetch(url)
@@ -766,9 +768,9 @@ async function handleTrayRead(req, res, session) {
   // and the reading waited for it.
   const [read, kept] = await Promise.all([
     readTrayList(buffer, String(filename || ''), String(mediaType || ''),
-      typeof text === 'string' ? { text: text.slice(0, 200000) } : {})
+      typeof text === 'string' ? { text: text.slice(0, 200000) } : Array.isArray(images) ? { images } : {})
       .then(r => ({ r }), err => ({ err })),
-    buffer ? keepTrayListOriginal(buffer, { url, filename, hospital, kitName }) : Promise.resolve({})
+    url ? keepTrayListOriginal(buffer, { url, filename, hospital, kitName }) : Promise.resolve({})
   ])
   if (read.err) return res.status(400).json({ error: read.err.message, ...kept })
   return res.status(200).json({ ...read.r, ...kept })
@@ -791,7 +793,7 @@ async function keepTrayListOriginal(buffer, { url, filename, hospital, kitName }
       dropboxError = err.message || 'Not saved to Dropbox'
     }
   }
-  try { await del(url) } catch { /* expires anyway; nothing in it is patient data */ }
+  if (url) { try { await del(url) } catch { /* expires anyway; nothing in it is patient data */ } }
   return { dropboxPath, dropboxError }
 }
 
@@ -803,15 +805,18 @@ async function handleTrayKeep(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const staff = STAFF.find(s => s.email === session?.email)
   if (!staff?.isAdmin && !staff?.isClinicalTeam) return res.status(403).json({ error: 'Not allowed' })
-  const { url, filename, hospital, kitName } = req.body || {}
-  if (!/^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/traylists\//i.test(String(url || ''))) {
-    return res.status(400).json({ error: 'Upload the file again' })
-  }
+  const { url, data, filename, hospital, kitName } = req.body || {}
+  const ours = /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/traylists\//i.test(String(url || ''))
+  if (!ours && typeof data !== 'string') return res.status(400).json({ error: 'Upload the file again' })
   try {
-    const got = await fetch(url)
-    if (!got.ok) throw new Error(String(got.status))
-    const buffer = Buffer.from(await got.arrayBuffer())
-    return res.status(200).json(await keepTrayListOriginal(buffer, { url, filename, hospital, kitName }))
+    let buffer
+    if (typeof data === 'string') buffer = Buffer.from(data, 'base64')
+    else {
+      const got = await fetch(url)
+      if (!got.ok) throw new Error(String(got.status))
+      buffer = Buffer.from(await got.arrayBuffer())
+    }
+    return res.status(200).json(await keepTrayListOriginal(buffer, { url: ours ? url : '', filename, hospital, kitName }))
   } catch {
     return res.status(200).json({ dropboxPath: '', dropboxError: 'The original could not be saved to Dropbox' })
   }
