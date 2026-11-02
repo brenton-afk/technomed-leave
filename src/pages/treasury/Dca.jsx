@@ -2,13 +2,14 @@ import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Banner, Button } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
 import { aud, btc, ENTITIES } from '../../treasury/logic.js'
-import { useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, treasuryCall, Locked } from './ui.jsx'
+import { useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, treasuryCall, Locked, BuyForm, SmallButton } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
 
 // ─── Dynamic DCA ─────────────────────────────────────────────────────────────
-// The rules, applied to the latest stored readings. The server works the buy
-// out again when it is logged, so what is saved is what the rules said.
+// The rules, applied to the latest stored readings. Logging asks first, with
+// the amounts as actually bought — the plan's figure is only the starting
+// point — and can be undone straight after.
 
 const show = n => (n > 0 ? `+${n}` : n === 0 ? '0' : `${n}`)
 
@@ -17,6 +18,8 @@ export default function Dca({ user, onBack, onLocked }) {
   const [form, setForm] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [justLogged, setJustLogged] = useState(null)
   const plan = data?.plan
   const s = data?.settings
 
@@ -58,11 +61,35 @@ export default function Dca({ user, onBack, onLocked }) {
             ]} />
             <Note>Readings as of {plan.asOf}. Buy rounded to A$50 and never more than the Amber cash entered.</Note>
 
-            {data.loggedThisWeek
-              ? <Banner>This week's buy is logged: {aud(data.loggedThisWeek.aud)} on {data.loggedThisWeek.date}.</Banner>
-              : <Button disabled={busy || !(plan.total > 0)} onClick={() => run('dca-log', {}, "Logged. Amber cash reduced and the sats added to holdings.")}>
-                  Log this week's buy · {aud(plan.total)}
-                </Button>}
+            {justLogged && (
+              <Banner action={<SmallButton disabled={busy} onClick={async () => {
+                await run('dca-delete', { id: justLogged.id }, 'Undone. Amber cash and holdings are back as they were.')
+                setJustLogged(null)
+              }}>Undo</SmallButton>}>
+                Logged {aud(justLogged.aud)} on {justLogged.date}. Amber cash reduced and the sats added to holdings.
+              </Banner>
+            )}
+            {data.loggedThisWeek && !justLogged && (
+              <Banner>This week's buy is logged: {aud(data.loggedThisWeek.aud)} on {data.loggedThisWeek.date}. To change or remove it, use the purchase log on Holdings.</Banner>
+            )}
+            {!data.loggedThisWeek && !confirming && (
+              <Button disabled={busy || !(plan.total > 0)} onClick={() => setConfirming(true)}>
+                I've made this week's buy — record it
+              </Button>
+            )}
+            {confirming && (
+              <BuyForm entities={ENTITIES} title="Record this week's buy"
+                note="Only once the purchase has gone through on Amber. Enter what was actually bought — it may differ from the plan."
+                initial={{ date: data.today, aud: String(plan.total), sats: '', priceAud: data.price?.aud ? String(Math.round(data.price.aud)) : '', entity: s.dcaEntity || 'company', note: '' }}
+                submitLabel="Record it" onCancel={() => setConfirming(false)}
+                onSubmit={async b => {
+                  setMsg(null)
+                  try {
+                    const r = await treasuryCall(user, 'dca-log', { method: 'POST', body: b })
+                    setJustLogged(r.entry); setConfirming(false); reload()
+                  } catch (err) { if (err instanceof Locked) onLocked(); else setMsg(err.message) }
+                }} />
+            )}
           </>
         )}
         {msg && <Note>{msg}</Note>}
@@ -93,7 +120,7 @@ export default function Dca({ user, onBack, onLocked }) {
         <SectionLabel>Purchase log</SectionLabel>
         <Table head={['Date', 'A$', 'Sats', 'Price']} align={['left', 'right', 'right', 'right']}
           rows={(data?.log || []).map(d => [d.date, aud(d.aud), d.sats == null ? '—' : btc(d.sats), aud(d.priceAud)])} />
-        <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: space.xs }}>Add or remove past buys on the Holdings screen.</div>
+        <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: space.xs }}>Edit, remove or add buys on the Holdings screen.</div>
       </Body>
     </Page>
   )

@@ -9,7 +9,7 @@ import {
 } from './_treasuryXero.js'
 import {
   DEFAULT_SETTINGS, ENTITIES, SATS, dcaPlan, latestOf, keyLevels, summaryLine, slice,
-  holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC, dcaEntityOf
+  holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC, dcaEntityOf, parseBtc
 } from '../src/treasury/logic.js'
 import { mapTracker } from '../src/treasury/importMap.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
@@ -89,7 +89,7 @@ async function homeData({ force = false } = {}) {
   return {
     today: day, price, xero,
     onchain: { values: chain.values, dates: chain.dates, lastRun: chain.meta.lastRun || null },
-    dca: { plan: planFor(chain.values, chain.dates, s, day), loggedThisWeek: dca.find(d => d.week === week) || null },
+    dca: { plan: planFor(chain.values, chain.dates, s, day), loggedThisWeek: dca.find(d => d.week === week && !d.manual) || null },
     holdings: holdingsView(holdings, price?.aud, s),
     ato: atoOutlook(ato, day),
     settings: s
@@ -116,6 +116,47 @@ async function takeSnapshot() {
   list.sort((a, b) => a.month.localeCompare(b.month))
   await tset('snapshots', list)
   return snap
+}
+
+// ─── A DCA buy ───────────────────────────────────────────────────────────────
+
+/** A buy from what was typed, with defaults; derives sats or price from the other. */
+function buyFrom(b = {}, defaults = {}) {
+  const date = isDay(b.date) ? b.date : null
+  const aud = b.aud != null && b.aud !== '' ? money(b.aud) : defaults.aud ?? null
+  if (!date && !defaults.aud) throw new Invalid('A date and an amount are needed.')
+  if (!(aud > 0)) throw new Invalid('The amount spent has to be more than A$0.')
+  let sats = b.sats != null && b.sats !== '' ? Math.round(Number(String(b.sats).replace(/[,\s]/g, ''))) : null
+  if (sats != null && !(sats >= 0 && sats <= MAX_BTC * SATS)) throw new Invalid('Sats received is not a sensible number.')
+  // Sats received are the fact; a price is only used to estimate them. Given
+  // both, the price is worked out from the sats so the two cannot disagree.
+  let priceAud = b.priceAud != null && b.priceAud !== '' ? money(b.priceAud) : defaults.priceAud ?? null
+  if (sats > 0) priceAud = Math.round(aud / (sats / SATS))
+  else if (sats == null && priceAud > 0) sats = Math.round(aud / priceAud * SATS)
+  const day = date || today()
+  return {
+    id: b.id || newId(), date: day, week: weekStart(day), aud, sats, priceAud,
+    entity: ENTITIES.some(e => e.id === b.entity) ? b.entity : defaults.entity ?? null,
+    note: str(b.note)
+  }
+}
+
+/**
+ * Applies a logged buy (sign +1) or takes it back out (-1): sats and cost on
+ * the entity's holding, and the cash off the DCA's Amber balance.
+ */
+function applyBuy(holdings, s, entry, sign) {
+  const h = { ...holdings }
+  if (entry.entity) {
+    const cur = h[entry.entity] || { exchangeSats: 0, coldSats: 0, costAud: 0 }
+    h[entry.entity] = {
+      ...cur,
+      exchangeSats: Math.max(0, (Number(cur.exchangeSats) || 0) + sign * (entry.sats || 0)),
+      costAud: Math.max(0, Math.round(((Number(cur.costAud) || 0) + sign * entry.aud) * 100) / 100)
+    }
+  }
+  const amber = Math.max(0, Math.round(((Number(s.amberCash) || 0) - sign * entry.aud) * 100) / 100)
+  return { holdings: h, settings: { ...s, amberCash: amber, amberCashAt: new Date().toISOString() } }
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -240,66 +281,67 @@ const ACTIONS = {
       readings: { mvrvZ: chain.values.mvrvZ, sthSopr: chain.values.sthSopr, sthMvrv: chain.values.sthMvrv },
       dates: chain.dates,
       log: [...log].sort((a, b) => b.date.localeCompare(a.date)),
-      loggedThisWeek: log.find(d => d.week === week) || null
+      loggedThisWeek: log.find(d => d.week === week && !d.manual) || null
     })
   },
 
   /**
-   * Records this week's buy. The plan is worked out again here from stored
-   * data rather than taken from the phone, so what is logged is what the rules
-   * said. The amount actually bought may differ (an exchange minimum, a fill);
-   * `aud` and `sats` override it when given.
+   * Records this week's buy — only once it has actually been made. The screen
+   * asks for confirmation with the amounts as bought; the plan's figure is
+   * only the default. `aud`, `sats`, `priceAud`, `date` and `entity` override.
    */
   async 'dca-log'(req, res) {
     const day = today()
-    const week = weekStart(day)
     const [chain, s, log, price, holdings] = await Promise.all([onchainNow(), settings(), tget('dca', []), getPrice(), tget('holdings', {})])
-    if (log.some(d => d.week === week) && !req.body?.again) return res.status(409).json({ error: "This week's buy is already logged." })
     const plan = planFor(chain.values, chain.dates, s, day)
-    const audAmount = req.body?.aud != null ? money(req.body.aud) : plan.total
-    if (!(audAmount > 0)) throw new Invalid('Nothing to log — the buy for this week is A$0.')
-    const priceAud = money(req.body?.priceAud) || price?.aud || null
-    const sats = req.body?.sats != null ? Math.round(Number(req.body.sats)) : priceAud ? Math.round(audAmount / priceAud * SATS) : null
-    const entity = ENTITIES.some(e => e.id === req.body?.entity) ? req.body.entity : s.dcaEntity
-    const entry = {
-      id: newId(), date: isDay(req.body?.date) ? req.body.date : day, week, aud: audAmount, sats, priceAud,
-      entity, multiplier: plan.ready ? plan.multiplier : null, note: str(req.body?.note)
-    }
+    const date = isDay(req.body?.date) ? req.body.date : day
+    const week = weekStart(date)
+    if (log.some(d => d.week === week && !d.manual) && !req.body?.again) return res.status(409).json({ error: "This week's buy is already logged. Edit it on Holdings instead." })
+    const entry = buyFrom({ ...req.body, date }, { aud: plan.total, priceAud: price?.aud || null, entity: dcaEntityOf(s) })
+    entry.multiplier = plan.ready ? plan.multiplier : null
     log.push(entry)
-    const h = { ...holdings }
-    const cur = h[entity] || { exchangeSats: 0, coldSats: 0, costAud: 0 }
-    h[entity] = { ...cur, exchangeSats: (cur.exchangeSats || 0) + (sats || 0), costAud: (cur.costAud || 0) + audAmount }
-    const next = { ...s, amberCash: Math.max(0, (Number(s.amberCash) || 0) - audAmount), amberCashAt: new Date().toISOString() }
-    await Promise.all([tset('dca', log), tset('holdings', h), tset('settings', next)])
-    return res.json({ entry, settings: next })
+    const after = applyBuy(holdings, s, entry, +1)
+    await Promise.all([tset('dca', log), tset('holdings', after.holdings), tset('settings', after.settings)])
+    return res.json({ entry, settings: after.settings })
   },
 
   /** Takes a logged buy back out, and undoes what logging it did. */
   async 'dca-delete'(req, res) {
     const [log, s, holdings] = await Promise.all([tget('dca', []), settings(), tget('holdings', {})])
     const entry = log.find(d => d.id === req.body?.id)
-    if (!entry) return res.status(404).json({ error: 'Not found' })
-    const h = { ...holdings }
-    const cur = h[entry.entity]
-    if (cur) h[entry.entity] = { ...cur, exchangeSats: Math.max(0, (cur.exchangeSats || 0) - (entry.sats || 0)), costAud: Math.max(0, (cur.costAud || 0) - entry.aud) }
-    const next = { ...s, amberCash: (Number(s.amberCash) || 0) + (req.body?.restoreAmber === false ? 0 : entry.aud) }
-    await Promise.all([tset('dca', log.filter(d => d.id !== entry.id)), tset('holdings', h), tset('settings', next)])
+    if (!entry) return res.status(404).json({ error: 'That buy is no longer in the log.' })
+    const after = entry.manual ? { holdings, settings: s } : applyBuy(holdings, s, entry, -1)
+    await Promise.all([tset('dca', log.filter(d => d.id !== entry.id)), tset('holdings', after.holdings), tset('settings', after.settings)])
     return res.json({ ok: true })
+  },
+
+  /**
+   * Corrects a logged buy. A buy logged from the DCA screen moved sats into
+   * holdings and cash out of Amber, so its old effect is taken back out and the
+   * corrected one put in — holdings and Amber cash stay right without being
+   * re-typed. A past buy entered by hand only ever touched the log.
+   */
+  async 'dca-edit'(req, res) {
+    const [log, s, holdings] = await Promise.all([tget('dca', []), settings(), tget('holdings', {})])
+    const i = log.findIndex(d => d.id === req.body?.id)
+    if (i < 0) return res.status(404).json({ error: 'That buy is no longer in the log.' })
+    const old = log[i]
+    const fresh = buyFrom(req.body, {})
+    const entry = { ...old, ...fresh, id: old.id, multiplier: old.multiplier ?? null, manual: old.manual || false }
+    let after = { holdings, settings: s }
+    if (!old.manual) {
+      after = applyBuy(holdings, s, old, -1)
+      after = applyBuy(after.holdings, after.settings, entry, +1)
+    }
+    log[i] = entry
+    await Promise.all([tset('dca', log), tset('holdings', after.holdings), tset('settings', after.settings)])
+    return res.json({ entry })
   },
 
   async 'dca-entry'(req, res) {
     // A historical buy, typed in by hand. Recorded in the log only — holdings
     // and Amber cash are set directly on their own screens.
-    const b = req.body || {}
-    if (!isDay(b.date) || !(money(b.aud) > 0)) throw new Invalid('A date and an amount are needed.')
-    const entry = {
-      id: b.id || newId(), date: b.date, week: weekStart(b.date), aud: money(b.aud),
-      sats: b.sats != null && b.sats !== '' ? Math.round(Number(b.sats)) : null,
-      priceAud: money(b.priceAud), entity: ENTITIES.some(e => e.id === b.entity) ? b.entity : null,
-      multiplier: null, note: str(b.note), manual: true
-    }
-    if (entry.sats == null && entry.priceAud > 0) entry.sats = Math.round(entry.aud / entry.priceAud * SATS)
-    if (entry.priceAud == null && entry.sats > 0) entry.priceAud = Math.round(entry.aud / (entry.sats / SATS))
+    const entry = { ...buyFrom(req.body, {}), multiplier: null, manual: true }
     await upsert('dca', entry)
     return res.json({ entry })
   },
@@ -352,6 +394,33 @@ const ACTIONS = {
 
   async snapshots(req, res) { return res.json({ list: await tget('snapshots', []) }) },
   async 'snapshot-now'(req, res) { return res.json({ snapshot: await takeSnapshot() }) },
+
+  /** Corrects the figures in one month's snapshot. Blank clears a figure. */
+  async 'snapshot-save'(req, res) {
+    const b = req.body?.snapshot || {}
+    const list = await tget('snapshots', [])
+    const i = list.findIndex(x => x.month === b.month)
+    if (i < 0) return res.status(404).json({ error: 'That snapshot is no longer there.' })
+    const next = { ...list[i], edited: new Date().toISOString() }
+    for (const k of ['cash', 'receivables', 'overdue', 'payables', 'profitFy', 'btcAud', 'btcValueAud', 'amberCash', 'ato90', 'netWorth']) {
+      if (b[k] === undefined) continue
+      next[k] = b[k] === '' || b[k] == null ? null : money(b[k])
+    }
+    if (b.totalBtc !== undefined) {
+      const { sats, error } = parseBtc(b.totalBtc)
+      if (error) throw new Invalid(`Total BTC: ${error}`)
+      next.totalSats = b.totalBtc === '' ? null : sats
+    }
+    list[i] = next
+    await tset('snapshots', list)
+    return res.json({ list })
+  },
+
+  async 'snapshot-delete'(req, res) {
+    const list = (await tget('snapshots', [])).filter(x => x.month !== req.body?.month)
+    await tset('snapshots', list)
+    return res.json({ list })
+  },
 
   async 'import-preview'(req, res) {
     const { data, report } = mapTracker(req.body?.json)

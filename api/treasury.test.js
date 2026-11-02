@@ -248,6 +248,49 @@ describe('Amber cash per entity', () => {
   })
 })
 
+describe('correcting a logged buy', () => {
+  it('moves holdings and Amber cash with the correction, not just the log', async () => {
+    const t = await unlocked()
+    await call({ action: 'settings-save', method: 'POST', token: t, body: { settings: { amberCash: 10000, dcaEntity: 'company' } } })
+    const logged = await call({ action: 'dca-log', method: 'POST', token: t, body: { aud: 2000, sats: 2000000 } })
+    expect(logged.body.entry).toMatchObject({ aud: 2000, sats: 2000000, priceAud: 100000, entity: 'company' })
+    expect((await tget('settings')).amberCash).toBe(8000)
+
+    // Actually bought 1,500 worth, for the SMSF.
+    const id = logged.body.entry.id
+    const r = await call({ action: 'dca-edit', method: 'POST', token: t, body: { id, date: logged.body.entry.date, aud: '1,500', sats: '1400000', entity: 'smsf' } })
+    expect(r.body.entry).toMatchObject({ aud: 1500, sats: 1400000, entity: 'smsf', id })
+    const h = await tget('holdings')
+    expect(h.company).toMatchObject({ exchangeSats: 0, costAud: 0 })
+    expect(h.smsf).toMatchObject({ exchangeSats: 1400000, costAud: 1500 })
+    expect((await tget('settings')).amberCash).toBe(8500)
+    expect(await tget('dca')).toHaveLength(1)
+  })
+
+  it('a past buy entered by hand stays in the log only, and does not block this week', async () => {
+    const t = await unlocked()
+    await call({ action: 'settings-save', method: 'POST', token: t, body: { settings: { amberCash: 1000 } } })
+    const today = (await call({ action: 'dca', token: t })).body.today
+    await call({ action: 'dca-entry', method: 'POST', token: t, body: { date: today, aud: 300, sats: 300000, entity: 'personal' } })
+    expect(await tget('holdings')).toBe(null)
+    expect((await call({ action: 'dca', token: t })).body.loggedThisWeek).toBe(null)
+    const r = await call({ action: 'dca-log', method: 'POST', token: t, body: { aud: 100, sats: 100000 } })
+    expect(r.statusCode).toBe(200)
+  })
+})
+
+describe('snapshots can be corrected and deleted', () => {
+  it('edits figures, clears a blank one, and deletes', async () => {
+    const t = await unlocked()
+    const snap = await call({ action: 'snapshot-now', method: 'POST', token: t })
+    const month = snap.body.snapshot.month
+    const r = await call({ action: 'snapshot-save', method: 'POST', token: t, body: { snapshot: { month, cash: '$12,000', totalBtc: '1,5', amberCash: '' } } })
+    expect(r.body.list[0]).toMatchObject({ month, cash: 12000, totalSats: 150_000_000, amberCash: null })
+    const d = await call({ action: 'snapshot-delete', method: 'POST', token: t, body: { month } })
+    expect(d.body.list).toEqual([])
+  })
+})
+
 describe('import', () => {
   const FILE = {
     ato: [{ label: 'BAS Q1', amount: '1,234.00', due: '28/10/2026', status: 'due' }],

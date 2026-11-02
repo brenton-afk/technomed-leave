@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Button } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
 import { aud, btc, pct, ENTITIES, parseBtc, parseMoney, satsToBtcText, isLargeBtc, LARGE_BTC } from '../../treasury/logic.js'
-import { useTreasury, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, Grid, Figure } from './ui.jsx'
+import { useTreasury, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, Grid, Figure, BuyForm } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
 
@@ -119,32 +119,29 @@ export default function Holdings({ user, onBack, onLocked }) {
         {msg && <Note>{msg}</Note>}
 
         <SectionLabel>DCA purchase log</SectionLabel>
+        <Note>Tap Edit to correct a buy. One recorded from the DCA screen also moved sats into holdings and cash out of Amber, and editing or removing it keeps those right.</Note>
         <Table head={['Date', 'A$', 'Sats', 'Price', '']} align={['left', 'right', 'right', 'right', 'right']}
           rows={[...(data?.dca || [])].sort((a, b) => b.date.localeCompare(a.date)).map(d => [
             d.date, aud(d.aud), d.sats == null ? '—' : d.sats.toLocaleString('en-AU'), aud(d.priceAud),
-            <SmallButton key="x" tone="danger" onClick={() => {
-              if (window.confirm(`Remove the ${d.date} buy of ${aud(d.aud)}?${d.manual ? '' : ' Its sats come off holdings and the A$ goes back on Amber cash.'}`)) {
-                call('dca-delete', { id: d.id, restoreAmber: !d.manual }, 'Removed.')
-              }
-            }}>Remove</SmallButton>
+            <SmallButton key="e" onClick={() => setEntry({
+              id: d.id, manual: d.manual, date: d.date, aud: String(d.aud), sats: d.sats == null ? '' : String(d.sats),
+              priceAud: d.priceAud == null ? '' : String(Math.round(d.priceAud)), entity: d.entity || data?.settings?.dcaEntity || 'company', note: d.note || ''
+            })}>Edit</SmallButton>
           ])} />
-        {!entry && <SmallButton onClick={() => setEntry({ date: '', aud: '', sats: '', priceAud: '', entity: data?.settings?.dcaEntity || 'company' })}>Add a past buy</SmallButton>}
+        {!entry && <SmallButton onClick={() => setEntry({ date: '', aud: '', sats: '', priceAud: '', entity: data?.settings?.dcaEntity || 'company', note: '' })}>Add a past buy</SmallButton>}
         {entry && (
-          <Card>
-            <Field label="Date"><input style={inputStyle} type="date" value={entry.date} onChange={e => setEntry({ ...entry, date: e.target.value })} /></Field>
-            <Field label="A$ spent"><input style={inputStyle} inputMode="decimal" value={entry.aud} onChange={e => setEntry({ ...entry, aud: e.target.value })} /></Field>
-            <Field label="Sats received" hint="Or leave blank and give the price."><input style={inputStyle} inputMode="numeric" value={entry.sats} onChange={e => setEntry({ ...entry, sats: e.target.value })} /></Field>
-            <Field label="Price (A$ per BTC)"><input style={inputStyle} inputMode="decimal" value={entry.priceAud} onChange={e => setEntry({ ...entry, priceAud: e.target.value })} /></Field>
-            <Field label="Entity">
-              <select style={inputStyle} value={entry.entity} onChange={e => setEntry({ ...entry, entity: e.target.value })}>
-                {ENTITIES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
-              </select>
-            </Field>
-            <Note>A past buy goes in the log only. Holdings and Amber cash are set above and on the DCA screen.</Note>
-            <Button onClick={async () => { if (await call('dca-entry', entry, 'Added to the log.')) setEntry(null) }}>Add to log</Button>
-            <div style={{ height: space.sm }} />
-            <Button variant="quiet" onClick={() => setEntry(null)}>Cancel</Button>
-          </Card>
+          <BuyForm key={entry.id || 'new'} entities={ENTITIES} initial={entry}
+            title={entry.id ? 'Edit buy' : 'Add a past buy'}
+            note={entry.id
+              ? (entry.manual ? 'Entered by hand, so it is in the log only.' : 'Recorded from the DCA screen: holdings and Amber cash follow any change here.')
+              : 'A past buy goes in the log only. Holdings and Amber cash are set above.'}
+            submitLabel={entry.id ? 'Save changes' : 'Add to log'}
+            onCancel={() => setEntry(null)}
+            onSubmit={async b => { if (await call(entry.id ? 'dca-edit' : 'dca-entry', b, entry.id ? 'Buy updated.' : 'Added to the log.')) setEntry(null) }}
+            onDelete={entry.id ? async () => {
+              if (window.confirm(`Remove the ${entry.date} buy of ${aud(Number(entry.aud))}?${entry.manual ? '' : ' Its sats come off holdings and the A$ goes back on Amber cash.'}`)
+                && await call('dca-delete', { id: entry.id }, 'Removed.')) setEntry(null)
+            } : null} />
         )}
       </Body>
     </Page>

@@ -149,3 +149,45 @@ export function SmallButton({ children, onClick, disabled, tone }) {
     }}>{children}</button>
   )
 }
+
+const buyInputStyle = { ...fieldBox, ...text('field') }
+
+/**
+ * One buy: date, A$ spent, sats received, price, entity, note. Used to confirm
+ * this week's buy before it is logged, to add a past one and to correct any
+ * logged one — so a buy is only ever recorded as it actually happened.
+ */
+export function BuyForm({ initial, entities, title, submitLabel, onSubmit, onCancel, onDelete, note }) {
+  const [b, setB] = useState(initial)
+  const [busy, setBusy] = useState(false)
+  const set = k => e => setB({ ...b, [k]: e.target.value })
+  async function go(fn) { setBusy(true); try { await fn() } finally { setBusy(false) } }
+  return (
+    <div style={{ ...card(), padding: space.md + 2, marginBottom: space.sm }}>
+      {title && <div style={{ ...text('heading'), color: colour.ink, marginBottom: space.sm }}>{title}</div>}
+      {note && <Note>{note}</Note>}
+      <Field label="Date"><input style={buyInputStyle} type="date" value={b.date || ''} onChange={set('date')} /></Field>
+      <Field label="A$ spent"><input style={buyInputStyle} inputMode="decimal" value={b.aud ?? ''} onChange={set('aud')} /></Field>
+      <Field label="Sats received" hint="From Amber's confirmation. Leave blank to work it out from the price.">
+        <input style={buyInputStyle} inputMode="numeric" value={b.sats ?? ''} onChange={set('sats')} />
+      </Field>
+      <Field label="Price (A$ per BTC)" hint="Leave blank to work it out from the sats.">
+        <input style={buyInputStyle} inputMode="decimal" value={b.priceAud ?? ''} onChange={set('priceAud')} />
+      </Field>
+      <Field label="Entity">
+        <select style={buyInputStyle} value={b.entity || ''} onChange={set('entity')}>
+          {entities.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
+        </select>
+      </Field>
+      <Field label="Note"><input style={buyInputStyle} value={b.note || ''} onChange={set('note')} /></Field>
+      <div style={{ display: 'grid', gap: space.sm }}>
+        <button disabled={busy} onClick={() => go(() => onSubmit(b))} style={{
+          ...text('bodyStrong'), padding: `${space.md + 1}px ${space.lg}px`, borderRadius: radius.control,
+          border: 'none', background: colour.accent, color: 'white', cursor: 'pointer', opacity: busy ? 0.5 : 1
+        }}>{submitLabel}</button>
+        {onDelete && <SmallButton tone="danger" disabled={busy} onClick={() => go(onDelete)}>Remove this buy</SmallButton>}
+        <SmallButton disabled={busy} onClick={onCancel}>Cancel</SmallButton>
+      </div>
+    </div>
+  )
+}
