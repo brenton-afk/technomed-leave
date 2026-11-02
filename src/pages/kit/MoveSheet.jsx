@@ -10,7 +10,7 @@ import { parseDateStr, addCivilDays, toDateStr } from '../../clinicalPlan/week.j
 // Move without emailing, or Back. "We don't want inaccurate comms going to
 // either team." Nothing is moved until the second step is confirmed.
 
-const PLACES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
+const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 
 function shortDay(dateStr) {
   const d = new Date(`${dateStr}T00:00:00Z`)

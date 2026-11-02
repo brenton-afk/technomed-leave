@@ -7,7 +7,7 @@ import TrayList from './TrayList.jsx'
 // The stock-take lives here because it is done standing in front of the kit:
 // "It's here" if the list is right, or the place it really is if not.
 
-const PLACES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
+const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 const KINDS = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
 
 export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged, onMove }) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Page, Header, Banner, EmptyState, Skeleton } from '../design/Shell.jsx'
-import { colour, text, space, radius, border, card } from '../design/tokens.js'
+import { colour, text, space, radius, border, card, site } from '../design/tokens.js'
 import { IconKit, IconSearch } from '../design/icons.jsx'
 import MoveSheet from './kit/MoveSheet.jsx'
 import KitDetail from './kit/KitDetail.jsx'
@@ -17,12 +17,20 @@ import { systemsInKit } from '../clinicalPlan/systems.js'
 // home float to the top, because "what has not come back" is the question the
 // page is most often opened to answer.
 
-export const PLACE_NAMES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
-const PLACE_ORDER = ['office', 'CLV', 'RHH']
+export const PLACE_NAMES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
+// Calvary first, RHH second, the office third (Brent, 2 Nov 2026).
+const PLACE_ORDER = ['CLV', 'RHH', 'office']
+
+// A hospital's own logo where one has been added to public/logos, else its
+// name in its colour. Replace by dropping calvary.png / rhh.png in that folder
+// and naming it here.
+const PLACE_LOGOS = { office: '/email-logo.png' }
 
 export const DISTRIBUTORS = {
   signus: { name: 'Signus', logo: '/logos/signus.png' },
-  e4: { name: 'E4 Surgical', logo: '/logos/e4surgical.png' },
+  // Cropped and darkened: the original is 85% empty space and hairline grey,
+  // which at tile size on a phone drew as nothing at all.
+  e4: { name: 'E4 Surgical', logo: '/logos/e4surgical-v2.png' },
   device: { name: 'Device Technologies', logo: '/logos/devicetech.png' },
   kt: { name: 'KT Medical' },
   globus: { name: 'Globus / NuVasive' },
@@ -172,10 +180,10 @@ export default function KitRoom({ user, onBack }) {
               <button key={p} onClick={() => setPlace(on ? 'all' : p)} aria-pressed={on}
                 style={{
                   ...card(), padding: `${space.md}px ${space.sm}px`, textAlign: 'left', cursor: 'pointer',
-                  background: on ? colour.navy : colour.surface, borderColor: on ? colour.navy : colour.line
+                  background: on ? site[p].ink : site[p].soft, borderColor: on ? site[p].ink : site[p].line
                 }}>
-                <div style={{ ...text('title'), color: on ? 'white' : colour.ink }}>{data ? counts[p] : '–'}</div>
-                <div style={{ ...text('caption'), color: on ? 'rgba(255,255,255,0.75)' : colour.inkFaint }}>{PLACE_NAMES[p]}</div>
+                <div style={{ ...text('title'), color: on ? 'white' : site[p].ink }}>{data ? counts[p] : '–'}</div>
+                <div style={{ ...text('caption'), fontWeight: 600, color: on ? 'rgba(255,255,255,0.85)' : site[p].ink }}>{PLACE_NAMES[p]}</div>
               </button>
             )
           })}
@@ -222,7 +230,7 @@ export default function KitRoom({ user, onBack }) {
 
         {PLACE_ORDER.filter(p => home.some(k => k.at === p)).map(p => (
           <div key={p}>
-            <SectionTitle>{PLACE_NAMES[p]} · {home.filter(k => k.at === p).length}</SectionTitle>
+            <PlaceHeading place={p} count={home.filter(k => k.at === p).length} />
             <TileGrid>
               {byDistributor(home.filter(k => k.at === p)).map(k => (
                 <KitTile key={k.id} kit={k} onOpen={() => setOpen(k)} onMove={() => setMoving(k)} busy={busy === k.id}
@@ -249,6 +257,31 @@ export default function KitRoom({ user, onBack }) {
           onMove={() => { setMoving(kits.find(k => k.id === open.id) || open); setOpen(null) }} />
       )}
     </Page>
+  )
+}
+
+function PlaceBadge({ place, size = 'heading' }) {
+  const look = site[place] || site.office
+  if (PLACE_LOGOS[place]) {
+    return <img src={PLACE_LOGOS[place]} alt={look.name} style={{ height: 28, maxWidth: 120, objectFit: 'contain' }} />
+  }
+  // Until the logo is added: a block of the hospital's colour. Its name in a
+  // badge beside its name in the heading said the same thing twice.
+  return <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 4, background: look.ink, flexShrink: 0 }} />
+}
+
+/** A place's heading: bigger than a section label, with its badge and colour. */
+function PlaceHeading({ place, count }) {
+  const look = site[place] || site.office
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: space.sm,
+      margin: `${space.xl}px 0 ${space.sm}px`, paddingBottom: 6, borderBottom: `2px solid ${look.line}`
+    }}>
+      <PlaceBadge place={place} />
+      <span style={{ ...text('heading'), color: look.ink }}>{PLACE_NAMES[place]}</span>
+      <span style={{ ...text('caption'), color: colour.inkFaint }}>{count} {count === 1 ? 'kit' : 'kits'}</span>
+    </div>
   )
 }
 
@@ -285,6 +318,7 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
   const trayCount = (kit.trays || []).length
   const awayTrays = kit.away?.trays?.length
   const checked = !kit.away && kit.checkedAt
+  const tint = site[kit.at] || site.office
   const status = kit.away
     ? `At ${PLACE_NAMES[kit.at]} · ${sinceText(kit.away.since)}${awayTrays && awayTrays < trayCount ? ` · ${awayTrays}/${trayCount} trays` : ''}`
     : `${KIND[kit.kind] || ''}${trayCount ? ` · ${trayCount} ${trayCount === 1 ? 'tray' : 'trays'}` : ''}`
@@ -293,8 +327,10 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
   return (
     <div style={{
       ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
-      borderTop: `3px solid ${kit.away ? colour.warning : checked ? colour.accent : colour.line}`,
-      ...(checked ? { background: colour.successSoft } : {})
+      // Tinted by where it is now, so a Calvary set reads as Calvary wherever
+      // it is listed; the top edge carries its state.
+      background: tint.soft, borderColor: tint.line,
+      borderTop: `3px solid ${kit.away ? colour.warning : checked ? colour.accent : tint.line}`
     }}>
       <button onClick={onOpen} aria-label={`Open ${kit.name}`} style={{
         background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer',

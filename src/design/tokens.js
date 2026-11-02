@@ -41,6 +41,17 @@ export const colour = {
   successSoft: '#e8f4f2'
 }
 
+// Where a kit lives, told apart at a glance in the kit room (Brent, 2 Nov
+// 2026): Calvary pale blue to go with its logo, RHH pale red, the TechnoMed
+// office the brand's own teal. Kept apart from `colour` on purpose — these
+// name places, they are not warnings, and RHH's red must never be read as an
+// error, nor danger's red reused for a hospital.
+export const site = {
+  CLV: { soft: '#edf4fc', line: '#bcd4ee', ink: '#1d5a9e', name: 'Calvary' },
+  RHH: { soft: '#fcf0ef', line: '#efc3be', ink: '#a3271d', name: 'RHH' },
+  office: { soft: '#e8f4f2', line: '#b5ddd5', ink: '#0f7566', name: 'TM office / Warehouse' }
+}
+
 // Closed set. `size` is px, `line` is a unitless line-height.
 export const type = {
   display: { size: 25, line: 1.18, weight: 700, spacing: '-0.4px' },

@@ -15,7 +15,7 @@ import { useLiveRefresh } from '../../liveRefresh.js'
 // Implants are counted, instruments are ticked (Brent, 2 Nov 2026), so each
 // line carries which it is and the reviewer can see the split.
 
-const PLACES = { office: 'TM office', CLV: 'Calvary', RHH: 'RHH' }
+const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 const ACCEPT = '.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf,image/*'
 
 
