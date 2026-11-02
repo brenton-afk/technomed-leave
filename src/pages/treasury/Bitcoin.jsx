@@ -9,6 +9,11 @@ import { useTreasury, Segmented, Table, Note, Problem, Stale, SmallButton, treas
 // Four charts on one range control, the key levels as a table (which is also
 // the charts' table view), and one plain-English line.
 
+/** A plain-English line or two under each chart, for anyone not steeped in on-chain jargon. */
+function Explain({ children }) {
+  return <div style={{ ...text('caption'), color: colour.inkMuted, margin: `0 0 ${space.sm}px` }}>{children}</div>
+}
+
 const RANGES = [{ id: '3m', label: '3 months' }, { id: '1y', label: '1 year' }, { id: 'all', label: 'All' }]
 
 const money = (v, axis) => axis
@@ -58,6 +63,12 @@ export default function Bitcoin({ user, onBack, onLocked }) {
         </div>
 
         <SectionLabel style={{ marginTop: 0 }}>Price and cost bases (USD{range === 'all' ? ', log scale' : ''})</SectionLabel>
+        <Explain>
+          A <b>cost basis</b> is the average price a group of holders paid. <b>Realised price</b> is what every coin last changed
+          hands at, roughly what the whole market paid. <b>Short-term holders (STH)</b> bought in about the last five months;
+          <b> long-term holders (LTH)</b> have held longer. Price above the STH cost basis means recent buyers are in profit,
+          and a fall below it has often meant a correction.
+        </Explain>
         <Card>
           <LineChart title="Price against short-term, realised and long-term holder cost basis" log={range === 'all'} format={money}
             series={[
@@ -69,6 +80,11 @@ export default function Bitcoin({ user, onBack, onLocked }) {
         </Card>
 
         <SectionLabel>STH-SOPR</SectionLabel>
+        <Explain>
+          Of the coins short-term holders sold that day, the sale price divided by what they paid. Above 1 they are selling at a
+          profit; below 1 at a loss, which tends to happen near local lows as nervous buyers give up. Below 0.98 adds to the
+          weekly DCA buy, and above 1.03 trims it.
+        </Explain>
         <Card>
           <LineChart title="Short-term holder SOPR" format={ratio}
             refs={[{ y: 0.98, label: '0.98' }, { y: 1, label: '1.00' }, { y: 1.04, label: '1.04' }]}
@@ -77,12 +93,24 @@ export default function Bitcoin({ user, onBack, onLocked }) {
         </Card>
 
         <SectionLabel>STH-MVRV</SectionLabel>
+        <Explain>
+          Today's price divided by the short-term holders' cost basis. At 1.0 recent buyers are breaking even. Above 1.2 they are
+          comfortably in profit and the market is running hot, so the DCA buys a little less. Below 0.9 they are underwater, so
+          it buys a little more.
+        </Explain>
         <Card>
           <LineChart title="Short-term holder MVRV" format={ratio} refs={[{ y: 1, label: '1.0' }]}
             series={[{ id: 'sthmvrv', label: 'STH-MVRV', data: s.sthMvrv || [], color: SERIES[1] }]} />
         </Card>
 
         <SectionLabel>MVRV, Z-score and LTH-MVRV</SectionLabel>
+        <Explain>
+          <b>MVRV</b> is price against the realised price: how far the market sits above what everyone paid on average. Near 1 has
+          been cheap; above about 3 has come late in past bull markets. <b>Z-score</b> is the same gap measured against how
+          volatile it has been through Bitcoin's history. Below 0 has marked major lows and above 7 major tops, and it sets the
+          main band of the DCA multiplier. <b>LTH-MVRV</b> is price against long-term holders' cost basis: the profit the patient
+          money is sitting on. When it runs very high they have tended to start selling.
+        </Explain>
         <Card>
           <LineChart title="MVRV ratio, MVRV Z-score and long-term holder MVRV" format={ratio}
             series={[
@@ -93,6 +121,7 @@ export default function Bitcoin({ user, onBack, onLocked }) {
         </Card>
 
         <SectionLabel>Key levels</SectionLabel>
+        <Explain>Each cost basis in US dollars, and how far today's price is above (+) or below (−) it.</Explain>
         <Table head={['Level', 'USD', 'Price vs level']} align={['left', 'right', 'right']}
           rows={(data?.levels || []).map(l => [l.label, l.level ? usd(l.level) : '—', pct(l.pct)])} />
 
