@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   zBand, soprAdjust, sthMvrvAdjust, dcaPlan, keyLevels, summaryLine, slice, holdingsView,
   atoOutlook, cashForecast, payDates, fyLabel, trustTotals, trustCsv, weekStart,
-  parseBtc, satsToBtcText, parseMoney
+  parseBtc, satsToBtcText, parseMoney, isLargeBtc
 } from './logic.js'
 
 // Made-up figures throughout.
@@ -189,5 +189,12 @@ describe('typing a BTC amount', () => {
   it('reads dollars with a sign and commas', () => {
     expect(parseMoney('$563,993')).toBe(563993)
     expect(parseMoney('abc')).toBe(null)
+  })
+})
+
+describe('an amount worth a second look', () => {
+  it('flags a field over 100 BTC, not an ordinary holding', () => {
+    expect(isLargeBtc(parseBtc('1436.7').sats)).toBe(true)
+    expect(isLargeBtc(parseBtc('4.20005325').sats)).toBe(false)
   })
 })

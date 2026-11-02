@@ -193,6 +193,16 @@ export function parseBtc(input) {
   return { sats: Math.round(btc * SATS), error: null }
 }
 
+/**
+ * More than any one entity here plausibly holds. Not a limit — a prompt to
+ * look again: a stray 1,436.7 in the wrong field passed every other check.
+ */
+export const LARGE_BTC = 100
+
+export function isLargeBtc(sats) {
+  return sats > LARGE_BTC * SATS
+}
+
 /** Sats as a plain BTC string for a field — never exponent notation. */
 export function satsToBtcText(sats) {
   if (!sats) return ''

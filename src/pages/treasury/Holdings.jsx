@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Button } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
-import { aud, btc, pct, ENTITIES, parseBtc, parseMoney, satsToBtcText } from '../../treasury/logic.js'
+import { aud, btc, pct, ENTITIES, parseBtc, parseMoney, satsToBtcText, isLargeBtc, LARGE_BTC } from '../../treasury/logic.js'
 import { useTreasury, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, Grid, Figure } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
@@ -16,7 +16,9 @@ const inputStyle = { ...fieldBox, ...text('field') }
 function ReadBack({ text: typed }) {
   const { sats, error } = parseBtc(typed)
   if (error) return <span style={{ color: colour.danger }}>{error}</span>
-  return String(typed || '').trim() ? <span>Saves as {btc(sats)}</span> : null
+  if (!String(typed || '').trim()) return null
+  if (isLargeBtc(sats)) return <span style={{ color: colour.warning }}>Saves as {btc(sats)} — over {LARGE_BTC} BTC, is that right?</span>
+  return <span>Saves as {btc(sats)}</span>
 }
 
 export default function Holdings({ user, onBack, onLocked }) {
@@ -48,6 +50,8 @@ export default function Holdings({ user, onBack, onLocked }) {
     const holdings = Object.fromEntries(ENTITIES.map(e => [e.id, {
       exchangeSats: parseBtc(edit[e.id].exchange).sats, coldSats: parseBtc(edit[e.id].cold).sats, costAud: parseMoney(edit[e.id].cost)
     }]))
+    const large = ENTITIES.filter(e => isLargeBtc(holdings[e.id].exchangeSats) || isLargeBtc(holdings[e.id].coldSats))
+    if (large.length && !window.confirm(`${large.map(e => e.label).join(' and ')}: more than ${LARGE_BTC} BTC in one field. Save anyway?`)) return
     if (await call('holdings-save', { holdings }, 'Holdings saved.')) setEdit(null)
   }
 
