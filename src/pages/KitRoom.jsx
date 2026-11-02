@@ -199,7 +199,9 @@ export default function KitRoom({ user, onBack }) {
           ))}
         </div>
 
-        {!data && !error && [0, 1, 2, 3].map(i => <Skeleton key={i} height={64} style={{ borderRadius: radius.card }} />)}
+        {!data && !error && (
+          <TileGrid>{[0, 1, 2, 3, 4, 5].map(i => <Skeleton key={i} height={132} style={{ borderRadius: radius.card }} />)}</TileGrid>
+        )}
 
         {data && shown.length === 0 && (
           <EmptyState icon={IconKit} title="No kits match" detail="Try another place, distributor or search." />
@@ -208,21 +210,25 @@ export default function KitRoom({ user, onBack }) {
         {away.length > 0 && (
           <>
             <SectionTitle>Away from home · {away.length}</SectionTitle>
-            {away.map(k => (
-              <KitCard key={k.id} kit={k} onOpen={() => setOpen(k)}
-                onMove={() => setMoving(k)} busy={busy === k.id}
-                onReturn={() => act(k.id, () => post('return', { kitId: k.id }))} />
-            ))}
+            <TileGrid>
+              {byDistributor(away).map(k => (
+                <KitTile key={k.id} kit={k} onOpen={() => setOpen(k)}
+                  onMove={() => setMoving(k)} busy={busy === k.id}
+                  onReturn={() => act(k.id, () => post('return', { kitId: k.id }))} />
+              ))}
+            </TileGrid>
           </>
         )}
 
         {PLACE_ORDER.filter(p => home.some(k => k.at === p)).map(p => (
           <div key={p}>
             <SectionTitle>{PLACE_NAMES[p]} · {home.filter(k => k.at === p).length}</SectionTitle>
-            {home.filter(k => k.at === p).map(k => (
-              <KitCard key={k.id} kit={k} onOpen={() => setOpen(k)} onMove={() => setMoving(k)} busy={busy === k.id}
-                onCheck={() => act(k.id, () => post('check', { kitId: k.id, at: k.at }))} />
-            ))}
+            <TileGrid>
+              {byDistributor(home.filter(k => k.at === p)).map(k => (
+                <KitTile key={k.id} kit={k} onOpen={() => setOpen(k)} onMove={() => setMoving(k)} busy={busy === k.id}
+                  onCheck={() => act(k.id, () => post('check', { kitId: k.id, at: k.at }))} />
+              ))}
+            </TileGrid>
           </div>
         ))}
 
@@ -250,49 +256,88 @@ function SectionTitle({ children }) {
   return <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }}>{children}</div>
 }
 
-function KitCard({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
+// ─── Tiles, not rows ─────────────────────────────────────────────────────────
+// "The tabs in a list are hard to find. I'd prefer tiles on the page or similar
+// so you can see more kits on the screen at once." — Brent, 2 Nov 2026.
+//
+// Two across on a phone, as many as fit on a wider screen. The logo leads,
+// because it is what the eye finds first on a shelf of trays; within each place
+// the kits run distributor by distributor, so the logos fall into runs and a
+// kit is found by its maker before its name is read.
+
+/** Within a place, grouped by distributor, then by name. */
+function byDistributor(kits) {
+  const name = k => DISTRIBUTORS[distributorOf(k)]?.name || 'zz'
+  return [...kits].sort((a, b) => name(a).localeCompare(name(b)) || String(a.name).localeCompare(String(b.name)))
+}
+
+function TileGrid({ children }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: space.sm }}>
+      {children}
+    </div>
+  )
+}
+
+function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
   const dist = DISTRIBUTORS[distributorOf(kit)]
   const logo = logoFor(kit)
   const trayCount = (kit.trays || []).length
   const awayTrays = kit.away?.trays?.length
+  const checked = !kit.away && kit.checkedAt
+  const status = kit.away
+    ? `At ${PLACE_NAMES[kit.at]} · ${sinceText(kit.away.since)}${awayTrays && awayTrays < trayCount ? ` · ${awayTrays}/${trayCount} trays` : ''}`
+    : `${KIND[kit.kind] || ''}${trayCount ? ` · ${trayCount} ${trayCount === 1 ? 'tray' : 'trays'}` : ''}`
+  const small = { ...pill(false), padding: '5px 8px', flex: 1, textAlign: 'center' }
+
   return (
-    <div style={{ ...card(), marginBottom: space.sm, display: 'flex', overflow: 'hidden',
-      ...(!kit.away && kit.checkedAt ? { background: colour.successSoft, borderColor: 'rgba(24,154,133,0.35)' } : {}) }}>
-      <div style={{ width: 4, background: kit.away ? colour.warning : kit.checkedAt ? colour.accent : colour.line }} />
-      <button onClick={onOpen} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', textAlign: 'left',
-        padding: `${space.md}px`, cursor: 'pointer', display: 'flex', gap: space.md, alignItems: 'center' }}>
-        {/* Wide rather than square: every one of these is a wordmark, and a
-            wordmark squeezed into a square tile is a smudge. */}
-        <div style={{ width: 64, height: 40, flexShrink: 0, borderRadius: radius.control, background: colour.canvas,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: 4, boxSizing: 'border-box' }}>
+    <div style={{
+      ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
+      borderTop: `3px solid ${kit.away ? colour.warning : checked ? colour.accent : colour.line}`,
+      ...(checked ? { background: colour.successSoft } : {})
+    }}>
+      <button onClick={onOpen} aria-label={`Open ${kit.name}`} style={{
+        background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer',
+        padding: `${space.sm}px ${space.sm}px 6px`, flex: 1, minWidth: 0,
+        // A button centres its content; a tile beside a taller one must not
+        // have its logo and name drift down to meet it.
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch'
+      }}>
+        <div style={{
+          height: 34, marginBottom: 6, display: 'flex', alignItems: 'center',
+          justifyContent: 'flex-start', overflow: 'hidden'
+        }}>
           {logo
-            ? <img src={logo} alt={dist?.name || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-            : <span style={{ ...text('micro'), color: colour.navy, textAlign: 'center' }}>{(dist?.name || kit.system).split(/[\s/]+/)[0].slice(0, 6).toUpperCase()}</span>}
+            ? <img src={logo} alt={dist?.name || ''} style={{ maxWidth: '78%', maxHeight: '100%', objectFit: 'contain' }} />
+            : <span style={{ ...text('micro'), color: colour.navy, letterSpacing: '0.6px' }}>
+                {(dist?.name || kit.system || '').toUpperCase()}
+              </span>}
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ ...text('bodyStrong'), color: colour.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kit.name}</div>
-          <div style={{ ...text('caption'), color: kit.away ? colour.warning : colour.inkFaint }}>
-            {kit.away
-              ? `At ${PLACE_NAMES[kit.at]} · ${sinceText(kit.away.since)}${awayTrays && awayTrays < trayCount ? ` · ${awayTrays}/${trayCount} trays` : ''}`
-              : `${KIND[kit.kind] || ''}${trayCount ? ` · ${trayCount} trays` : ''}`}
-            {!kit.away && kit.checkedAt && (
-              <span style={{ color: colour.accentDeep, fontWeight: 600 }}> · ✓ checked{kit.checkedBy ? ` by ${kit.checkedBy}` : ''}</span>
-            )}
+        <div style={{
+          ...text('bodyStrong'), color: colour.ink, lineHeight: 1.25,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+        }}>{kit.name}</div>
+        <div style={{ ...text('caption'), color: kit.away ? colour.warning : colour.inkFaint, marginTop: 2 }}>
+          {status}
+        </div>
+        {checked && (
+          <div style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600 }}>
+            ✓ checked{kit.checkedBy ? ` by ${kit.checkedBy}` : ''}
           </div>
-        </div>
-      </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: space.md }}>
-        {kit.away && onReturn && (
-          <button onClick={onReturn} disabled={busy} style={pill(false)}>{busy ? '…' : 'Returned'}</button>
         )}
-        {/* The stock-take from the list itself: one tap, the card goes green. */}
+      </button>
+      <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px ${space.sm}px` }}>
+        {kit.away && onReturn && (
+          <button onClick={onReturn} disabled={busy} style={small}>{busy ? '…' : 'Returned'}</button>
+        )}
+        {/* The stock-take from the tile itself: one tap, it goes green. */}
         {!kit.away && !kit.checkedAt && onCheck && (
           <button onClick={onCheck} disabled={busy} aria-label={`${kit.name} is here`}
-            style={{ ...pill(false), border: `1px solid ${colour.accent}`, color: colour.accentDeep }}>
+            style={{ ...small, border: `1px solid ${colour.accent}`, color: colour.accentDeep }}>
             {busy ? '…' : "It's here"}
           </button>
         )}
-        <button onClick={onMove} style={pill(true)}>Move</button>
+        <button onClick={onMove} style={{ ...pill(true), padding: '5px 8px', flex: 1, textAlign: 'center' }}>Move</button>
       </div>
     </div>
   )
