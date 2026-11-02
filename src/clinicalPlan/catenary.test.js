@@ -33,3 +33,22 @@ describe('Nova', () => {
     expect(readBooking('Testa L4/5 PLIF Novabone - Fowler', '').surgeon).toBe('Fowler')
   })
 })
+
+describe('Mariner MIS and Mariner Open', () => {
+  it('are offered as two buttons in place of a plain Mariner', async () => {
+    const { SYSTEM_BUTTONS } = await import('./inventory.js')
+    expect(SYSTEM_BUTTONS).toContain('Mariner MIS')
+    expect(SYSTEM_BUTTONS).toContain('Mariner Open')
+    expect(SYSTEM_BUTTONS).not.toContain('Mariner')
+    expect(SYSTEM_BUTTONS).toContain('Mariner Outrigger')
+  })
+
+  it('are both Device\'s Mariner, needing a loan at Calvary and not at RHH', async () => {
+    const { inventoryFor, suggestSupply } = await import('./inventory.js')
+    for (const s of ['Mariner MIS', 'Mariner Open']) {
+      expect(inventoryFor(s).distributor).toBe('device')
+      expect(suggestSupply(s, 'CLV')).toBe('Distributor Loan')
+      expect(suggestSupply(s, 'RHH')).toBe('Consignment')
+    }
+  })
+})

@@ -4,7 +4,7 @@ import { offerNotices } from '../../notices.js'
 import DictateBooking from './DictateBooking.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
-import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall } from '../../clinicalPlan/inventory.js'
+import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall, SYSTEM_BUTTONS } from '../../clinicalPlan/inventory.js'
 import { drawsOnLocalStock, SUPPLY_OPTIONS } from '../../clinicalPlan/kitSupply.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayName } from '../../clinicalPlan/week.js'
@@ -28,7 +28,8 @@ import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayN
 
 // Grouped, not flattened. Spine and Max Fax are chosen from at different
 // moments, and one list of thirteen names makes the common eight harder to find.
-const SYSTEMS = INVENTORY.filter(i => !i.competitor).map(i => i.system)
+// Mariner is offered as MIS and Open — see SYSTEM_BUTTONS.
+const SYSTEMS = SYSTEM_BUTTONS
 const HOSPITALS = [{ id: 'RHH', label: 'RHH' }, { id: 'CLV', label: 'Calvary' }]
 // The same five as the edit sheet, so a booking made here and one corrected
 // there say the same thing. "Loan" on its own was one button for three jobs.

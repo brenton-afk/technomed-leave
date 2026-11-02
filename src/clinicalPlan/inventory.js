@@ -482,3 +482,13 @@ export function suggestSupply(system, hospital) {
   // Nothing of ours within reach: somebody has to request one.
   return 'Distributor Loan'
 }
+
+/**
+ * The systems as the booking buttons offer them.
+ *
+ * Mariner is two sets — MIS and Open — and the request to Device has to say
+ * which ("make sure you include Mariner MIS in the request email to DT").
+ * Both are still the one Mariner here: same distributor, same consignment.
+ */
+const BUTTON_VARIANTS = { Mariner: ['Mariner MIS', 'Mariner Open'] }
+export const SYSTEM_BUTTONS = INVENTORY.filter(i => !i.competitor).flatMap(i => BUTTON_VARIANTS[i.system] || [i.system])

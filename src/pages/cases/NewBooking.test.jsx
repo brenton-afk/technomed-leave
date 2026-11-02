@@ -27,7 +27,7 @@ const show = (props = {}) =>
 const fill = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
   fireEvent.change(screen.getByLabelText(/Surgeon/), { target: { value: 'Ibbett' } })
-  fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+  fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
   fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'L5/S1 PLIF' } })
   fireEvent.change(screen.getByLabelText(/Patient surname/), { target: { value: 'Marsh' } })
 }
@@ -45,7 +45,7 @@ describe('how little has to be typed', () => {
     const surgeons = screen.getByLabelText(/Surgeon/)
     const systems = screen.getByLabelText(/Add a system/)
     expect(surgeons.querySelectorAll('option').length).toBeGreaterThan(5)
-    expect([...systems.querySelectorAll('option')].map(o => o.value)).toContain('Mariner')
+    expect([...systems.querySelectorAll('option')].map(o => o.value)).toContain('Mariner MIS')
   })
 
   it('leaves a competitor\'s product out of the list', () => {
@@ -68,7 +68,7 @@ describe('the question a booking raises', () => {
     // made rather than discovered later.
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
     expect((await screen.findAllByText(/a loan set has to be requested/)).length).toBeGreaterThan(0)
     expect(screen.getByText(/Nothing consigned at CLV/)).toBeInTheDocument()
   })
@@ -76,7 +76,7 @@ describe('the question a booking raises', () => {
   it('gives the arrival deadline with it', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
     // Thursday 24 September, so the kit is due the Tuesday.
     expect(await screen.findByText(/2026-09-22/)).toBeInTheDocument()
   })
@@ -84,7 +84,7 @@ describe('the question a booking raises', () => {
   it('says nothing to order for the same system at RHH', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
     expect(await screen.findByText(/nothing to order/)).toBeInTheDocument()
   })
 
@@ -100,7 +100,7 @@ describe('the question a booking raises', () => {
   it('fills the supply in from the inventory', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Distributor Loan' })).toHaveAttribute('aria-pressed', 'true'))
   })
 })
@@ -137,11 +137,11 @@ describe('a case needing two systems', () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
     fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
     // One is consigned at Calvary and the other has to be ordered. A combined
     // answer would hide the one that matters.
     expect(await screen.findByText(/Diplomat — nothing to order/)).toBeInTheDocument()
-    expect(screen.getByText(/Mariner — a loan set has to be requested/)).toBeInTheDocument()
+    expect(screen.getByText(/Mariner MIS — a loan set has to be requested/)).toBeInTheDocument()
   })
 
   it('lets one be taken off again', async () => {
@@ -163,7 +163,7 @@ describe('what gets created', () => {
     expect(posted.fields.patient).toBe('Marsh')
     expect(posted.fields.surgeon).toBe('Ibbett')
     expect(posted.fields.hospital).toBe('CLV')
-    expect(posted.fields.kit).toBe('Mariner (Distributor Loan)')
+    expect(posted.fields.kit).toBe('Mariner MIS (Distributor Loan)')
     expect(posted.date).toBe('2026-09-24')
   })
 
@@ -424,7 +424,7 @@ describe('Brainlab', () => {
   it('offers the Calvary and RHH loans for a system', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
     expect(await screen.findByRole('button', { name: 'Calvary Loan' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'RHH Loan' })).toBeInTheDocument()
   })

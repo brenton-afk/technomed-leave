@@ -1,6 +1,6 @@
 import React from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { INVENTORY } from '../../clinicalPlan/inventory.js'
+import { SYSTEM_BUTTONS } from '../../clinicalPlan/inventory.js'
 import { SUPPLY_OPTIONS, parseKitSupplies, formatKitSupplies } from '../../clinicalPlan/kitSupply.js'
 
 // ─── The kit, chosen by tapping ──────────────────────────────────────────────
@@ -14,7 +14,7 @@ import { SUPPLY_OPTIONS, parseKitSupplies, formatKitSupplies } from '../../clini
 // which is what the notices and loan requests read, so a change here is a
 // change to who gets told.
 
-const SYSTEMS = INVENTORY.filter(i => !i.competitor).map(i => i.system)
+const SYSTEMS = SYSTEM_BUTTONS
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
 
 export default function KitPicker({ kit, onChange, systemsOnly = false }) {
@@ -48,7 +48,8 @@ export default function KitPicker({ kit, onChange, systemsOnly = false }) {
 
       {others.length > 0 && (
         <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
-          Also written: {others.map(e => e.system).join(', ')}{' '}
+          Also written: {others.map(e => e.system).join(', ')}
+          {others.some(e => same(e.system, 'Mariner')) ? ' — choose Mariner MIS or Mariner Open above' : ''}{' '}
           <button type="button" onClick={() => onChange(formatKitSupplies(entries.filter(e => SYSTEMS.some(s => same(s, e.system)))))}
             style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             take off
