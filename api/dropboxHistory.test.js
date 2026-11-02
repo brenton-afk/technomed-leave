@@ -16,6 +16,8 @@ beforeEach(() => {
   vi.resetModules()
   calls.length = 0
   process.env.DROPBOX_ACCESS_TOKEN = 'test-token'
+  // These test reading filed usage once it is allowed again.
+  process.env.DROPBOX_USAGE_READS = 'on'
   global.fetch = vi.fn(async (url, init) => {
     const endpoint = String(url).split('/2/')[1]
     calls.push({ endpoint, body: JSON.parse(init.body) })
@@ -37,7 +39,7 @@ beforeEach(() => {
     return reply({})
   })
 })
-afterEach(() => { vi.restoreAllMocks(); delete process.env.DROPBOX_ACCESS_TOKEN })
+afterEach(() => { vi.restoreAllMocks(); delete process.env.DROPBOX_ACCESS_TOKEN; delete process.env.DROPBOX_USAGE_READS })
 
 describe('patientHistory', () => {
   it('keeps the patient and drops the surgeon of the same name', async () => {

@@ -10,7 +10,9 @@ import {
   listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit,
   saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
-import { temporaryLink } from './_dropbox.js'
+import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus } from './_dropbox.js'
+import { randomUUID } from 'node:crypto'
+import { redis } from './_redis.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
 
 // ─── Theatre guides ──────────────────────────────────────────────────────────
@@ -120,8 +122,14 @@ export const COMING = [
 const ROOT = join(process.cwd(), 'theatre-guides')
 
 export default async function handler(req, res) {
+  // Dropbox sends the browser back here with no session header of ours, so
+  // this one is answered before the session check — and trusts nothing but a
+  // `state` this portal issued to an admin in the last ten minutes.
+  if (req.query.dropbox === 'callback') return handleDropboxCallback(req, res)
+
   const session = await requireSession(req, res)
   if (!session) return
+  if (req.query.dropbox) return handleDropbox(req, res, session)
 
   // The editable surgeon preference cards (Task 18), here rather than in a
   // function of their own: the plan allows twelve and the app is at twelve.
@@ -294,5 +302,47 @@ async function handleKits(req, res, session) {
     // Every message thrown in _kits.js is a sentence for a person; nothing in
     // it carries patient detail.
     return res.status(400).json({ error: err.message || 'That did not work' })
+  }
+}
+
+
+// ─── Connecting Dropbox (Admin → System) ─────────────────────────────────────
+// See api/_dropbox.js. Same shape as Xero: an admin starts it, approves it on
+// Dropbox, and comes back to the portal connected.
+
+function dropboxRedirectUri(req) {
+  if (process.env.DROPBOX_REDIRECT_URI) return process.env.DROPBOX_REDIRECT_URI
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  return `https://${host}/api/dropbox/callback`
+}
+
+async function handleDropbox(req, res, session) {
+  const staff = STAFF.find(s => s.email === session.email)
+  if (!staff?.isAdmin) return res.status(403).json({ error: 'Admins only' })
+  try {
+    if (req.query.dropbox === 'status') return res.status(200).json(await dropboxStatus())
+    if (req.query.dropbox === 'connect') {
+      const state = randomUUID()
+      await redis('set', `dropbox_state:${state}`, session.email, 'EX', '600')
+      return res.status(200).json({ url: dropboxConnectUrl(state, dropboxRedirectUri(req)), redirectUri: dropboxRedirectUri(req) })
+    }
+    return res.status(400).json({ error: 'Unknown Dropbox action' })
+  } catch (err) {
+    return res.status(400).json({ error: err.message })
+  }
+}
+
+async function handleDropboxCallback(req, res) {
+  const { code, state, error } = req.query
+  if (error) return res.redirect(302, '/?dropbox=declined')
+  const who = state ? await redis('get', `dropbox_state:${state}`).catch(() => null) : null
+  if (!who || !code) return res.redirect(302, '/?dropbox=expired')
+  await redis('del', `dropbox_state:${state}`).catch(() => {})
+  try {
+    const done = await finishDropboxConnect(String(code), dropboxRedirectUri(req))
+    return res.redirect(302, `/?dropbox=${done.root ? 'connected' : 'connected-no-team-folder'}`)
+  } catch (err) {
+    console.error('Dropbox connect failed:', err.message)
+    return res.redirect(302, '/?dropbox=failed')
   }
 }

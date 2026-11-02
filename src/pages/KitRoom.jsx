@@ -5,6 +5,7 @@ import { IconKit, IconSearch } from '../design/icons.jsx'
 import MoveSheet from './kit/MoveSheet.jsx'
 import KitDetail from './kit/KitDetail.jsx'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
+import { systemsInKit } from '../clinicalPlan/systems.js'
 
 // ─── Kit room ────────────────────────────────────────────────────────────────
 // Where every set is, and moving one. Rebuilt 1 Nov 2026: the old page kept
@@ -32,9 +33,28 @@ export const DISTRIBUTORS = {
 // distribute Firebird, but the tray says Orthofix.
 const SYSTEM_LOGOS = { 'Orthofix Firebird': '/logos/orthofix.png' }
 
-/** The distributor, from the kit or else from what the inventory says it is. */
+/**
+ * The distributor, from the kit, else from what the inventory says its system
+ * is, else from the systems its name or system mentions ("Dakota TM loan",
+ * "Catenary"), else from the distributor's own name in it ("E4 …").
+ *
+ * The E4 logos dropped off kits whose distributor was blank — added or edited
+ * without one — because only the exact system name was tried.
+ */
 export function distributorOf(kit) {
-  return kit.distributor || inventoryFor(kit.system)?.distributor || ''
+  if (kit.distributor) return kit.distributor
+  const words = `${kit.system || ''} ${kit.name || ''}`
+  for (const candidate of [kit.system, ...systemsInKit(words)]) {
+    const d = inventoryFor(candidate)?.distributor
+    if (d) return d
+  }
+  if (/\be4\b/i.test(words)) return 'e4'
+  if (/\bsignus\b/i.test(words)) return 'signus'
+  if (/\bdevice\b|seaspine/i.test(words)) return 'device'
+  if (/\bkt\b/i.test(words)) return 'kt'
+  if (/globus|nuvasive/i.test(words)) return 'globus'
+  if (/^tm\b|technomed/i.test(words)) return 'technomed'
+  return ''
 }
 
 function logoFor(kit) {

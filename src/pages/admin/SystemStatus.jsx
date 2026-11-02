@@ -226,6 +226,8 @@ export default function SystemStatus({ user }) {
         </div>
       )}
 
+      <DropboxCard user={user} />
+
       {env?.push && (
         /* Push, on its own line.
            
@@ -312,6 +314,72 @@ export default function SystemStatus({ user }) {
       <button onClick={load} style={{ width:'100%', padding:12, background:'transparent', border:`1px solid ${BORDER}`, borderRadius:8, fontSize:13, color:MUTED, cursor:'pointer', marginTop:4 }}>
         Re-check
       </button>
+    </div>
+  )
+}
+
+
+// ─── Dropbox ─────────────────────────────────────────────────────────────────
+// Connected like Xero: tap, approve on Dropbox, come back connected. Tray
+// photos and originals, usage filing and Resources all need it. The usage
+// folders stay locked for reading until the redaction is finished.
+function DropboxCard({ user }) {
+  const [status, setStatus] = useState(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const headers = { Authorization: `Bearer ${user?.token || ''}` }
+  const came = (() => { try { return new URLSearchParams(window.location.search).get('dropbox') || '' } catch { return '' } })()
+
+  useEffect(() => {
+    fetch('/api/guides?dropbox=status', { headers }).then(r => r.json()).then(setStatus).catch(() => setStatus({}))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.token])
+
+  async function connect() {
+    setBusy(true); setError('')
+    try {
+      const res = await fetch('/api/guides?dropbox=connect', { headers })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error || 'Could not start connecting Dropbox')
+      window.location.href = data.url
+    } catch (err) { setError(err.message); setBusy(false) }
+  }
+
+  if (!status) return null
+  const ok = status.connected
+  const note = {
+    connected: 'Dropbox connected to the TECHNOMED team folder.',
+    'connected-no-team-folder': 'Connected — but the TECHNOMED team folder was not found, so files go to the connecting person\'s own Dropbox. Tell Brent.',
+    declined: 'Dropbox was not connected — the approval was cancelled.',
+    expired: 'That took too long — tap Connect Dropbox again.',
+    failed: 'Dropbox did not connect — try again.'
+  }[came]
+
+  return (
+    <div style={{ background:'white', borderRadius:12, padding:15, marginBottom:12, border:`1px solid ${ok ? BORDER : 'rgba(245,158,11,0.35)'}` }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700, color:NAVY }}>Dropbox connection</div>
+          <div style={{ fontSize:11.5, color:MUTED, marginTop:2 }}>
+            {ok ? `Connected${status.by ? ` by ${status.by}` : ''}${status.teamFolder === false ? ' · team folder not found' : ''}`
+              : status.configured ? 'Not connected yet' : 'Dropbox app keys are not set in Vercel'}
+          </div>
+        </div>
+        <span style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:20, whiteSpace:'nowrap',
+          background: ok ? '#e6f4f2' : '#fff8e6', color: ok ? TEAL : '#b45309' }}>{ok ? 'Connected' : 'Not connected'}</span>
+      </div>
+      {note && <div style={{ fontSize:12.5, color: came.startsWith('connected') ? TEAL : RED, marginTop:8 }}>{note}</div>}
+      <div style={{ fontSize:12.5, color:MUTED, lineHeight:1.55, marginTop:8 }}>
+        Tray photos and tray list originals, usage filing and Resources use it.
+        {status.usageReads ? '' : ' Reading the filed usage folders stays locked until the redaction is finished.'}
+      </div>
+      {status.configured && (
+        <button onClick={connect} disabled={busy}
+          style={{ display:'block', width:'100%', marginTop:10, padding:12, background:TEAL, color:'white', border:'none', borderRadius:10, fontSize:14, fontWeight:700, cursor:'pointer', opacity: busy ? 0.6 : 1 }}>
+          {busy ? 'Opening Dropbox…' : ok ? 'Reconnect Dropbox' : 'Connect Dropbox →'}
+        </button>
+      )}
+      {error && <div role="alert" style={{ fontSize:12.5, color:RED, marginTop:8 }}>{error}</div>}
     </div>
   )
 }

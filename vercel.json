@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/dropbox/:action",
+      "destination": "/api/guides?dropbox=:action"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

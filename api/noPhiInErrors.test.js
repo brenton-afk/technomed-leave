@@ -44,8 +44,9 @@ describe('what a failure actually says', () => {
   beforeEach(() => {
     vi.resetModules()
     process.env.DROPBOX_ACCESS_TOKEN = 'test-token'
+    process.env.DROPBOX_USAGE_READS = 'on'
   })
-  afterEach(() => { vi.restoreAllMocks(); delete process.env.DROPBOX_ACCESS_TOKEN })
+  afterEach(() => { vi.restoreAllMocks(); delete process.env.DROPBOX_ACCESS_TOKEN; delete process.env.DROPBOX_USAGE_READS })
 
   it('keeps the surname out of a failed search', async () => {
     global.fetch = vi.fn(async () => ({

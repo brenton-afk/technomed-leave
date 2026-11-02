@@ -243,11 +243,18 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
       // The photos first, one request each, into Dropbox; the list then
       // carries where each one went.
       const trays = []
+      const photoMissed = []
       for (const t of review.trays) {
         let photo = null
         if (t.photoData) {
-          const kept = await call('tray-photo', { data: t.photoData, trayName: t.name }, 60000)
-          photo = kept.path
+          // A photo that cannot be kept (Dropbox not connected) must not cost
+          // the list: it saves without it, and says so.
+          try {
+            const kept = await call('tray-photo', { data: t.photoData, trayName: t.name }, 60000)
+            photo = kept.path
+          } catch (err) {
+            photoMissed.push(t.name)
+          }
         }
         const { photoData, ...rest } = t
         trays.push({ ...rest, photo })
@@ -257,6 +264,9 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
         source: { file: review.file, hospital, dropboxPath: review.dropboxPath }
       })
       setList(saved); setReview(null)
+      if (photoMissed.length) {
+        setError(`Saved — but the photo for ${photoMissed.join(', ')} could not be kept, as Dropbox is not connected yet. Upload the list again once it is.`)
+      }
       await onSaved?.()
     } catch (err) { setError(err.message) }
     setStage('')

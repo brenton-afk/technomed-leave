@@ -4,17 +4,152 @@
 // Folders are created on demand; an existing folder is added to, never replaced.
 
 import { parseFolderName } from './_usageCase.js'
+import { redis } from './_redis.js'
 
 const ROOT = '/ALL SURGEON USAGE/SPINE'
 
-export function dropboxConfigured() {
-  return Boolean(process.env.DROPBOX_ACCESS_TOKEN)
+// ─── Connecting ──────────────────────────────────────────────────────────────
+// Dropbox no longer issues access tokens that last: one pasted into an
+// environment variable stops working after four hours. So the portal is
+// connected the way Xero is — an admin taps Connect Dropbox, approves it once,
+// and the long-lived refresh token is kept in Redis (`dropbox_rt`). Each call
+// uses a short-lived access token minted from it and cached until just before
+// it expires.
+//
+// The team's files live in the TECHNOMED team folder, so calls are made with
+// that folder as their root (`dropbox_root`, found on connecting, or
+// DROPBOX_ROOT_NAMESPACE). That is what makes "/ALL SURGEON USAGE/SPINE" and
+// "/Tray Lists" mean /TECHNOMED/ALL SURGEON USAGE/SPINE and /TECHNOMED/Tray
+// Lists.
+//
+// DROPBOX_ACCESS_TOKEN still works on its own, for a quick test.
+
+export const DROPBOX_KEYS = { rt: 'dropbox_rt', at: 'dropbox_at', exp: 'dropbox_exp', root: 'dropbox_root', who: 'dropbox_who' }
+
+function appCredentials() {
+  const key = process.env.DROPBOX_APP_KEY
+  const secret = process.env.DROPBOX_APP_SECRET
+  return key && secret ? { key, secret } : null
 }
 
-function token() {
-  const t = process.env.DROPBOX_ACCESS_TOKEN
-  if (!t) throw new Error('DROPBOX_ACCESS_TOKEN not configured')
-  return t
+export function dropboxConfigured() {
+  return Boolean(process.env.DROPBOX_ACCESS_TOKEN || appCredentials())
+}
+
+async function accessToken() {
+  const app = appCredentials()
+  if (!app) {
+    const t = process.env.DROPBOX_ACCESS_TOKEN
+    if (!t) throw new Error('Dropbox is not set up')
+    return t
+  }
+  const [rt, at, exp] = await Promise.all([
+    redis('get', DROPBOX_KEYS.rt), redis('get', DROPBOX_KEYS.at), redis('get', DROPBOX_KEYS.exp)
+  ])
+  if (!rt) throw new Error('Dropbox needs connecting — Admin → System → Connect Dropbox')
+  if (at && Number(exp) > Date.now() + 60000) return at
+  const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: rt, client_id: app.key, client_secret: app.secret })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data.access_token) {
+    throw new Error('Dropbox has disconnected — reconnect it in Admin → System')
+  }
+  const until = Date.now() + Number(data.expires_in || 14400) * 1000
+  await Promise.all([
+    redis('set', DROPBOX_KEYS.at, data.access_token),
+    redis('set', DROPBOX_KEYS.exp, String(until))
+  ])
+  return data.access_token
+}
+
+/** The headers every call carries: the token, and the team folder as root. */
+async function authHeaders() {
+  const headers = { Authorization: `Bearer ${await accessToken()}` }
+  const root = process.env.DROPBOX_ROOT_NAMESPACE || (appCredentials() ? await redis('get', DROPBOX_KEYS.root) : null)
+  if (root) headers['Dropbox-API-Path-Root'] = JSON.stringify({ '.tag': 'namespace_id', namespace_id: String(root) })
+  return headers
+}
+
+/** The link an admin follows to connect the portal to Dropbox. */
+export function dropboxConnectUrl(state, redirectUri) {
+  const app = appCredentials()
+  if (!app) throw new Error('DROPBOX_APP_KEY and DROPBOX_APP_SECRET are not set in Vercel')
+  return 'https://www.dropbox.com/oauth2/authorize?' + new URLSearchParams({
+    client_id: app.key, response_type: 'code', token_access_type: 'offline', redirect_uri: redirectUri, state
+  })
+}
+
+/**
+ * Finishes connecting: swaps the code for a refresh token, finds the
+ * TECHNOMED team folder to use as the root, and records who connected it.
+ */
+export async function finishDropboxConnect(code, redirectUri) {
+  const app = appCredentials()
+  if (!app) throw new Error('Dropbox app keys are not set')
+  const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ code, grant_type: 'authorization_code', client_id: app.key, client_secret: app.secret, redirect_uri: redirectUri })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data.refresh_token) throw new Error(data.error_description || 'Dropbox did not return a connection')
+  await Promise.all([
+    redis('set', DROPBOX_KEYS.rt, data.refresh_token),
+    redis('set', DROPBOX_KEYS.at, data.access_token),
+    redis('set', DROPBOX_KEYS.exp, String(Date.now() + Number(data.expires_in || 14400) * 1000)),
+    redis('del', DROPBOX_KEYS.root)
+  ])
+  const auth = { Authorization: `Bearer ${data.access_token}`, 'Content-Type': 'application/json' }
+  const who = await fetch('https://api.dropboxapi.com/2/users/get_current_account', { method: 'POST', headers: { Authorization: auth.Authorization } })
+    .then(r => r.json()).catch(() => ({}))
+  // The TECHNOMED folder, looked up from the account's own root.
+  let root = process.env.DROPBOX_ROOT_NAMESPACE || ''
+  if (!root) {
+    const home = who?.root_info?.root_namespace_id
+    const meta = await fetch('https://api.dropboxapi.com/2/files/get_metadata', {
+      method: 'POST',
+      headers: { ...auth, ...(home ? { 'Dropbox-API-Path-Root': JSON.stringify({ '.tag': 'root', root: String(home) }) } : {}) },
+      body: JSON.stringify({ path: '/TECHNOMED' })
+    }).then(r => r.json()).catch(() => ({}))
+    root = meta?.shared_folder_id || meta?.sharing_info?.shared_folder_id || ''
+  }
+  if (root) await redis('set', DROPBOX_KEYS.root, String(root))
+  const name = who?.name?.display_name || who?.email || ''
+  await redis('set', DROPBOX_KEYS.who, JSON.stringify({ name, at: new Date().toISOString(), root: root || null }))
+  return { name, root: root || null }
+}
+
+export async function dropboxStatus() {
+  const configured = dropboxConfigured()
+  if (!appCredentials()) return { configured, connected: Boolean(process.env.DROPBOX_ACCESS_TOKEN), via: 'token' }
+  const [rt, who] = await Promise.all([redis('get', DROPBOX_KEYS.rt), redis('get', DROPBOX_KEYS.who)])
+  let info = {}
+  try { info = who ? JSON.parse(who) : {} } catch { info = {} }
+  return { configured, connected: Boolean(rt), by: info.name || '', at: info.at || '', teamFolder: Boolean(info.root), usageReads: usageReadsAllowed() }
+}
+
+// ─── The usage folders stay shut ─────────────────────────────────────────────
+// "I just don't want you reading the Usage folders please unless under
+// explicit instruction, until we have completed the redaction." — Brent,
+// 2 Nov 2026. Filing a new usage form (a write) carries on; anything that
+// would read what is already filed there is refused until
+// DROPBOX_USAGE_READS is set to "on".
+
+export function usageReadsAllowed() {
+  return String(process.env.DROPBOX_USAGE_READS || '').toLowerCase() === 'on'
+}
+
+function assertUsageReadable(path) {
+  const p = String(path || '').toLowerCase()
+  const usage = '/all surgeon usage'
+  if ((p === usage || p.startsWith(usage + '/')) && !usageReadsAllowed()) {
+    const err = new Error('Filed usage is locked until the redaction is finished')
+    err.code = 'locked'
+    throw err
+  }
 }
 
 // Dropbox rejects most punctuation in paths and treats a trailing space as a
@@ -55,7 +190,7 @@ async function rpc(endpoint, body) {
   const res = await fetch(`https://api.dropboxapi.com/2/${endpoint}`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token()}`,
+      ...(await authHeaders()),
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(body)
@@ -89,7 +224,7 @@ export async function uploadFile(path, buffer) {
   const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token()}`,
+      ...(await authHeaders()),
       'Content-Type': 'application/octet-stream',
       // `overwrite` keeps a re-run from littering the folder with (1) copies.
       'Dropbox-API-Arg': JSON.stringify({
@@ -144,6 +279,7 @@ export function usageRoot() {
 
 /** Folders and files directly under `path`, folders first. */
 export async function listFolder(path) {
+  assertUsageReadable(path)
   const { ok, data, status, text } = await rpc('files/list_folder', {
     path: path === '/' ? '' : path,
     recursive: false,
@@ -179,6 +315,7 @@ export async function listFolder(path) {
  * public URL to patient data long after anyone remembered it existed.
  */
 export async function temporaryLink(path) {
+  assertUsageReadable(path)
   const { ok, data, status, text } = await rpc('files/get_temporary_link', { path })
   if (!ok) {
     throw dropboxFault('open that file', status, data?.error_summary)
@@ -200,6 +337,7 @@ export async function temporaryLink(path) {
  * cases is thousands of folders, and Dropbox will do the matching for nothing.
  */
 export async function searchUsage(surname, { limit = 40 } = {}) {
+  assertUsageReadable(ROOT)
   const query = String(surname || '').trim()
   if (!query) return []
 
@@ -254,6 +392,7 @@ export async function searchUsage(surname, { limit = 40 } = {}) {
  * and deduplicating them afterwards is guesswork where listing is certain.
  */
 export async function patientHistory(surname, { limit = 25 } = {}) {
+  assertUsageReadable(ROOT)
   const query = String(surname || '').trim()
   if (query.length < 2) return { cases: [], query }
 

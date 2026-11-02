@@ -659,9 +659,28 @@ for f in $(find api -name '*.js' -not -name '_*'); do \
 
 The second resolves every import in each route and fails on a missing named export. Three shipped routes were broken that way (`sendApprovalEmail`/`sendDeclineEmail`, `getXeroToken`/`findEmployee`) because nothing type-checks the `api/` boundary — run it before pushing.
 
+### Dropbox connection
+
+`api/_dropbox.js`. Connected like Xero from Admin → System → **Connect
+Dropbox**: `guides.js?dropbox=connect` (admin) → Dropbox → `/api/dropbox/callback`
+(a `vercel.json` rewrite to `guides.js?dropbox=callback`, answered before the
+session check and trusting only a `state` issued in the last ten minutes). The
+refresh token is kept in Redis (`dropbox_rt`); access tokens are minted from it
+and cached (`dropbox_at`/`dropbox_exp`), because Dropbox access tokens now last
+four hours. Calls carry `Dropbox-API-Path-Root` set to the TECHNOMED team folder
+(`dropbox_root`, found on connecting, or `DROPBOX_ROOT_NAMESPACE`), which is what
+makes `/ALL SURGEON USAGE/...` and `/Tray Lists/...` land in /TECHNOMED.
+`DROPBOX_ACCESS_TOKEN` alone still works for a quick test.
+
+**Reading the usage folders is locked** until the redaction is finished
+(Brent, 2 Nov 2026): `listFolder`, `temporaryLink`, `searchUsage` and
+`patientHistory` refuse any path under `/ALL SURGEON USAGE` unless
+`DROPBOX_USAGE_READS=on`. Filing new usage (writes) is unaffected. Do not read
+those folders — through the app or otherwise — without Brent's explicit say-so.
+
 ## Environment
 
-Required: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`. Optional: `GOOGLE_CALENDAR_ID`, `ALERT_EMAIL`, `EMAIL_TO_1..3`, `XERO_TENANT_ID` (fallback only — the OAuth callback stores the real tenant in Redis). `.env.example` is current; the `process.env` reads in `api/` remain authoritative.
+Required: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`. Optional: `DROPBOX_APP_KEY` + `DROPBOX_APP_SECRET` (then connect in Admin → System), `DROPBOX_USAGE_READS`, `DROPBOX_ROOT_NAMESPACE`, `GOOGLE_CALENDAR_ID`, `ALERT_EMAIL`, `EMAIL_TO_1..3`, `XERO_TENANT_ID` (fallback only — the OAuth callback stores the real tenant in Redis). `.env.example` is current; the `process.env` reads in `api/` remain authoritative.
 
 ### Email
 

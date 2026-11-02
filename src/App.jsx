@@ -172,6 +172,9 @@ export default function App() {
         window.history.replaceState(null, '', window.location.pathname)
         return { tab: 'admin', sub: null }
       }
+      // Back from Dropbox: the admin portal opens on System with the result.
+      // The address keeps ?dropbox= until System has read it.
+      if (new URLSearchParams(window.location.search).get('dropbox')) return { tab: 'admin', sub: null }
     } catch { /* no window in tests that do not need one */ }
     return { tab: 'cases', sub: null }
   })

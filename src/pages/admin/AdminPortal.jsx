@@ -101,7 +101,11 @@ export default function AdminPortal({ user }) {
   const [declineModal, setDeclineModal] = useState(null)
   const [declineReason, setDeclineReason] = useState('')
   const [error, setError] = useState('')
-  const [domain, setDomain] = useState('leave')
+  // Back from connecting Dropbox (or Xero): open on System, where it says how
+  // that went.
+  const [domain, setDomain] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('dropbox') ? 'system' : 'leave' } catch { return 'leave' }
+  })
 
   // The admin endpoints authorise on the session token minted at PIN login —
   // there is no shared password in the client bundle.
