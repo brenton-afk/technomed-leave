@@ -104,7 +104,7 @@ describe('sets that are not ours', () => {
   it('says the same for Orthofix Firebird and Forza XP', () => {
     // Peters-Willke cases: we help at RHH, mostly not at Calvary.
     for (const system of ['Orthofix Firebird', 'Forza XP']) {
-      expect(loanNeed(system, 'CLV').reason, system).toMatch(/not us/)
+      expect(loanNeed(system, 'CLV').reason, system).toMatch(/KT Medical cover these unless they ask us to|not us/)
     }
   })
 

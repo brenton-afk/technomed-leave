@@ -255,7 +255,12 @@ export function loanNeed(system, hospital) {
   if (item.ours === false && item.weCover && !item.weCover[site]) {
     return {
       need: 'none',
-      reason: `${item.system} at ${site} is covered by ${item.distributor === 'kt' ? 'KT Medical' : 'the supplier'}, not us.`,
+      // Said as the stock it is first: a booking here is usually one the
+      // distributor has asked us to cover, and "covered by KT, not us" reads
+      // as though we should not be there at all.
+      reason: (item.consigned?.[site] || 0) > 0
+        ? `${item.consigned[site] === 1 ? 'One' : item.consigned[site] === 2 ? 'Two' : item.consigned[site]} consignment ${item.system} ${item.consigned[site] === 1 ? 'kit' : 'kits'} at ${site} — no loan set needed. ${item.distributor === 'kt' ? 'KT Medical' : 'The supplier'} cover these unless they ask us to.`
+        : `${item.system} at ${site} is covered by ${item.distributor === 'kt' ? 'KT Medical' : 'the supplier'}, not us.`,
       item
     }
   }

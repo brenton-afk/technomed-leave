@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { BRAINLAB, BRAINLAB_KIT } from '../../clinicalPlan/brainlab.js'
+import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { offerNotices } from '../../notices.js'
 import DictateBooking from './DictateBooking.jsx'
@@ -272,6 +273,21 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
     return need === 'none' ? 'Consignment' : need === 'order' ? 'Distributor Loan' : ''
   }
 
+  // JPW + ACDF is Lonestar: where a surgeon's kit for the operation has been
+  // dictated, it is put in as soon as surgeon and operation are both known —
+  // once per combination, so taking it off again is respected.
+  const assumedFor = useRef('')
+  const [assumedWhy, setAssumedWhy] = useState('')
+  useEffect(() => {
+    const key = `${surgeon}|${procedure}|${hospital}`
+    if (systems.length || assumedFor.current === key) return
+    const guess = assumedKit({ surgeon, procedure, hospital, kit: '' })
+    if (!guess) return
+    assumedFor.current = key
+    setSystems([{ name: guess.system, supply: guess.supply || supplyFor(guess.system) }])
+    setAssumedWhy(guess.why)
+  }, [surgeon, procedure, hospital]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function addSystem(name) {
     if (!name || systems.some(s => s.name === name)) return
     setSystems(list => [...list, { name, supply: supplyFor(name) }])
@@ -465,6 +481,11 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                 </div>
               )}
 
+              {assumedWhy && systems.length === 1 && assumedWhy.startsWith(systems[0].name) && (
+                <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>
+                  Assumed: {assumedWhy}
+                </div>
+              )}
               <select value="" onChange={e => addSystem(e.target.value)} style={inputStyle}
                 aria-label="Add a system">
                 <option value="">{systems.length ? 'Add another system…' : 'Choose a system…'}</option>

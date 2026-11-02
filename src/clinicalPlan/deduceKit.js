@@ -30,6 +30,7 @@
 import { systemsToSupply } from './kitSupply.js'
 import { findImplantProcedures } from './procedureImplants.js'
 import { preferenceFor, hasRecordedPreferences } from './surgeonPreferences.js'
+import { inventoryFor, siteCode, suggestSupply } from './inventory.js'
 
 /**
  * The implant question a booking raises, or null when it raises none.
@@ -130,4 +131,43 @@ function questionFor(acronyms, needs, preference, surgeon) {
     return `${what} — no kit named (nothing recorded for ${surgeon})`
   }
   return `${what} — no kit named, needs ${needs}`
+}
+
+// ─── Filling the kit in when a booking arrives without one ───────────────────
+// "Please update so the portal knows the kit that is required when the cases
+// are booked." — Brent, 2 November 2026, of JPW's ACDFs (Lonestar).
+//
+// The exception to "it asks, it does not answer" above, and a narrow one: only
+// where a surgeon's preference for that exact operation has been dictated, and
+// only on a booking that names no kit at all. It fills the kit line on the
+// inbox card, marked as assumed and saying why, where the person accepting it
+// sees it and can change it with one tap before anything is written.
+
+/**
+ * The kit to assume for a booking that names none, or null.
+ *
+ * @returns {null | { kit: string, system: string, supply: string|null, why: string }}
+ */
+export function assumedKit({ surgeon, procedure, hospital, kit } = {}) {
+  if (systemsToSupply({ kit }).length) return null
+  const found = findImplantProcedures(String(procedure || '')).filter(e => e.needs)
+  // One operation, one preference. "ACDF and PLIF" is two kits and asks.
+  if (found.length !== 1) return null
+  const preference = preferenceFor(surgeon, found[0].acronym, hospital)
+  if (!preference) return null
+
+  const site = siteCode(hospital)
+  const held = site ? (inventoryFor(preference.system)?.consigned?.[site] || 0) : 0
+  // Booked to us, so it is a case we are covering: a set on the shelf there is
+  // the answer even for a distributor's kit we do not usually attend with.
+  const supply = held > 0 ? 'Consignment' : suggestSupply(preference.system, hospital)
+  const where = held > 0
+    ? ` ${held === 1 ? 'One' : held === 2 ? 'Two' : held} consignment ${held === 1 ? 'kit' : 'kits'} at ${site === 'CLV' ? 'Calvary' : site} — no loan set needed.`
+    : ''
+  return {
+    system: preference.system,
+    supply: supply || null,
+    kit: supply ? `${preference.system} (${supply})` : preference.system,
+    why: `${preference.system} — ${surgeon}'s kit for an ${found[0].acronym}.${where}`
+  }
 }

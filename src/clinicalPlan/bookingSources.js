@@ -139,6 +139,22 @@ export function asksForCover(subject, snippet = '') {
   return ASKS_FOR_COVER.test(`${subject || ''}\n${snippet || ''}`)
 }
 
+// Who each distributor domain is, for saying where a cover request came from.
+// ben@ktmedical.com.au is Ben Reynolds, KT Medical — Lonestar (Orthofix),
+// Firebird and Forza; JPW's ACDFs are Lonestar (surgeonPreferences.js).
+const DISTRIBUTOR_NAMES = {
+  'device.com.au': 'Device Technologies', 'globusmedical.com': 'Globus / NuVasive',
+  'signus.com.au': 'Signus', 'e4surgical.com': 'E4 Surgical', 'ktmedical.com.au': 'KT Medical',
+  'atecspine.com': 'ATEC', 'neurophys.com.au': 'Neurophys', 'vifm.org': 'Donor Tissue Bank'
+}
+
+/** The distributor an address belongs to, by name, or null. */
+export function distributorNameOf(address) {
+  const at = String(address || '').trim().toLowerCase().split('@')[1] || ''
+  const domain = Object.keys(DISTRIBUTOR_NAMES).find(d => at === d || at.endsWith(`.${d}`))
+  return domain ? DISTRIBUTOR_NAMES[domain] : null
+}
+
 /** The source a distributor's cover request is read as. No hospital: the email says. */
 export const DISTRIBUTOR_REQUEST = {
   id: 'distributor',

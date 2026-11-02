@@ -479,3 +479,22 @@ describe('navigation in an email', () => {
     expect(calls.find(c => c.url.includes('action=accept')).body.fields.kit).toBe('Mariner MIS + BRAINLAB AIRO & CURVE')
   })
 })
+
+describe('a cover request from KT for a JPW ACDF', () => {
+  it('arrives with Lonestar filled in, says why, and names KT Medical', async () => {
+    const KT = { ...PENDING[0], id: 'bk_kt', surgeon: 'JPW', procedure: 'C5/6 ACDF', kit: '', hospital: 'CLV',
+      sources: ['distributor'], from: 'ben@ktmedical.com.au' }
+    global.fetch = vi.fn(async (url, init) => {
+      const text = String(url)
+      calls.push({ url: text, body: init?.body ? JSON.parse(init.body) : null })
+      if (text.includes('action=queue')) return { ok: true, status: 200, json: async () => ({ ok: true, pending: [KT] }) }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    })
+    show()
+    await waitFor(() => expect(screen.getByText(/Assumed: Lonestar — JPW's kit for an ACDF/)).toBeInTheDocument())
+    expect(screen.getByText('KT MEDICAL')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add to calendar' }))
+    await waitFor(() => expect(calls.some(c => c.url.includes('action=accept'))).toBe(true))
+    expect(calls.find(c => c.url.includes('action=accept')).body.fields.kit).toBe('Lonestar (Consignment)')
+  })
+})

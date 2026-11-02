@@ -7,6 +7,8 @@ import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
 import { resolveKit, systemsInKit } from '../../clinicalPlan/systems.js'
 import { BRAINLAB, navigationChoice, kitWithoutNavigation, kitWithNavigation } from '../../clinicalPlan/brainlab.js'
 import { loanNeed } from '../../clinicalPlan/inventory.js'
+import { assumedKit } from '../../clinicalPlan/deduceKit.js'
+import { distributorNameOf } from '../../clinicalPlan/bookingSources.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 import { offerNotices } from '../../notices.js'
 
@@ -149,6 +151,13 @@ function LoanNote({ systems, hospital }) {
 }
 
 function Candidate({ candidate, user, onDone }) {
+  // A booking that names no kit, for an operation whose kit this surgeon's
+  // preference settles (JPW's ACDFs are Lonestar), arrives filled in — marked
+  // as assumed, and one tap to change. See assumedKit.
+  const [assumed] = useState(() => assumedKit({
+    surgeon: candidate.surgeon, procedure: candidate.procedure, hospital: candidate.hospital,
+    kit: kitWithoutNavigation(resolveKit(candidate.kit || '', candidate.procedure || ''))
+  }))
   const [fields, setFields] = useState({
     patient: candidate.patient || '',
     surgeon: candidate.surgeon || '',
@@ -158,7 +167,7 @@ function Candidate({ candidate, user, onDone }) {
     // before that existed shows the system somebody can actually bring rather
     // than the name the surgeon happened to type.
     // Navigation comes off the kit line and onto the Brainlab button below.
-    kit: kitWithoutNavigation(resolveKit(candidate.kit || '', candidate.procedure || '')),
+    kit: kitWithoutNavigation(resolveKit(candidate.kit || '', candidate.procedure || '')) || assumed?.kit || '',
     hospital: candidate.hospital || ''
   })
   // Pre-tapped from what the email said: "AIRO" is the AIRO + Curve button.
@@ -228,7 +237,8 @@ function Candidate({ candidate, user, onDone }) {
         </span>
         {/* Where it came from, for the team and for nobody outside it. */}
         <span style={{ ...text('caption'), color: colour.inkFaint }}>
-          {(candidate.sources || []).join(' + ').toUpperCase()}
+          {(candidate.sources || []).map(id => (id === 'distributor'
+            ? distributorNameOf(candidate.from) || 'Distributor' : id)).join(' + ').toUpperCase()}
         </span>
       </div>
 
@@ -254,6 +264,11 @@ function Candidate({ candidate, user, onDone }) {
           was read (Diplomat → Mariner on a call with the surgeon) is two taps,
           and the notices and loan requests follow the kit as it now stands. */}
       <Value label="Kit" value={fields.kit} onChange={v => set('kit', v)} />
+      {assumed && fields.kit === assumed.kit && (
+        <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: -2, marginBottom: space.xs }}>
+          Assumed: {assumed.why}
+        </div>
+      )}
       <details style={{ marginBottom: space.xs }}>
         <summary style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600, cursor: 'pointer', marginBottom: space.xs }}>
           Change the system

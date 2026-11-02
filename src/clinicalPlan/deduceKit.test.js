@@ -370,3 +370,28 @@ describe('both cards say the same things', () => {
   both('says a booking is waiting on its name', /patientLabel\(surgicalCase\)/)
   both('leaves navigation out of the supply line', /suppliesFor\(surgicalCase\)/)
 })
+
+// "If the booking comes through for ACDFs with JPW, the portal can assume it
+// is Lonestar … two consignment Lonestar kits at Calvary so no loan set
+// required." — Brent, 2 Nov 2026.
+describe('the kit assumed for a booking that names none', async () => {
+  const { assumedKit } = await import('./deduceKit.js')
+  const { loanNeed } = await import('./inventory.js')
+
+  it('is Lonestar, from the shelf, for a JPW ACDF at either hospital', () => {
+    expect(assumedKit({ surgeon: 'JPW', procedure: 'C5/6 ACDF', hospital: 'CLV', kit: '' }))
+      .toMatchObject({ kit: 'Lonestar (Consignment)', supply: 'Consignment' })
+    expect(assumedKit({ surgeon: 'JPW', procedure: 'C5/6 + C6/7 ACDF', hospital: 'RHH', kit: '' }))
+      .toMatchObject({ kit: 'Lonestar (Consignment)' })
+  })
+
+  it('says no loan set is needed at Calvary', () => {
+    expect(loanNeed('Lonestar', 'CLV').reason).toMatch(/Two consignment Lonestar kits at CLV — no loan set needed/)
+  })
+
+  it('assumes nothing when a kit is named, the operation is another, or nothing is recorded', () => {
+    expect(assumedKit({ surgeon: 'JPW', procedure: 'C5/6 ACDF', hospital: 'CLV', kit: 'CYLOX' })).toBeNull()
+    expect(assumedKit({ surgeon: 'JPW', procedure: 'L5/S1 PLIF', hospital: 'CLV', kit: '' })).toBeNull()
+    expect(assumedKit({ surgeon: 'Dubey', procedure: 'C5/6 ACDF', hospital: 'CLV', kit: '' })).toBeNull()
+  })
+})

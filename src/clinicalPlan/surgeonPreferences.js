@@ -54,6 +54,18 @@ export const SURGEON_PREFERENCES = [
     since: '2026-10-11'
   },
 
+  // "KT Medical … supply Lonestar (Orthofix) to JPW. So if the booking comes
+  // through for ACDFs with JPW, the portal can assume it is Lonestar. … two
+  // consignment Lonestar kits at Calvary so no loan set required."
+  //  — Brent, 2 November 2026
+  {
+    surgeon: 'JPW',
+    acronym: 'ACDF',
+    system: 'Lonestar',
+    note: 'KT Medical (Orthofix). Consigned: two at Calvary, one at RHH — no loan set.',
+    since: '2026-11-02'
+  },
+
   // More as Brent dictates them. A row per combination that is genuinely
   // settled; anything that varies case by case is better left out than written
   // down as though it were a rule — see preferenceFor: no row means the app
