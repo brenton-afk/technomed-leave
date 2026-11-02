@@ -1935,9 +1935,10 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
             ...text(queueCount > 0 ? 'bodyStrong' : 'caption'),
             color: queueCount > 0 ? colour.ink : colour.inkFaint, flex: 1
           }}>
-            {queueCount > 0
-              ? `${queueCount} booking${queueCount === 1 ? '' : 's'} to confirm`
-              : 'Bookings inbox — nothing waiting'}
+            {/* Never "nothing waiting": this count is only what has already been
+                read, and the mailbox may hold more — opening it checks. */}
+            Check the bookings inbox
+            {queueCount > 0 ? ` · ${queueCount} to confirm` : ''}
           </span>
           <span style={{ ...text('body'), color: colour.inkFaint }}>›</span>
         </button>
