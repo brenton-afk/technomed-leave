@@ -6,6 +6,13 @@
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
 
 export const CALENDAR_SCOPE_WRITE = 'https://www.googleapis.com/auth/calendar'
+// The narrower scope used when acting as bookings@ (domain-wide delegation):
+// events only, not calendar settings or sharing.
+export const CALENDAR_SCOPE_EVENTS = 'https://www.googleapis.com/auth/calendar.events'
+// Staff Leave — "Calendar for TechnoMed Team's Approved Annual/Personal Leave",
+// owned by bookings@. GOOGLE_LEAVE_CALENDAR_ID overrides it.
+export const STAFF_LEAVE_CALENDAR_ID = 'c_3221a8751df15d78f4d747cffc90ab6b78e3218d70151dfaaf22f639f2c95639@group.calendar.google.com'
+const CALENDAR_OWNER = process.env.BOOKINGS_MAILBOX || 'bookings@technomed.com.au'
 export const CALENDAR_SCOPE_READONLY = 'https://www.googleapis.com/auth/calendar.readonly'
 
 // Google Calendar event colour ID 3 is Grape.
@@ -155,19 +162,38 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
   // only as a fallback, because a staff member filing leave at nine on a
   // Sunday night must not be told to come back when somebody has fixed a
   // sharing setting — the request still has to land somewhere.
-  const leaveCalendar = (process.env.GOOGLE_LEAVE_CALENDAR_ID || '').trim()
-  const targets = leaveCalendar
-    ? [{ id: leaveCalendar, preferred: true }, { id: GOOGLE_CALENDAR_ID, preferred: false }]
-    : [{ id: GOOGLE_CALENDAR_ID, preferred: false }]
+  //
+  // Written *as bookings@*, which owns Staff Leave, where it can be. Workspace
+  // will not let a calendar be shared for editing with an account outside the
+  // domain, and the service account is one — so "Make changes to events" is
+  // greyed out for it on Staff Leave (Brent, 2 Nov 2026). Acting as bookings@
+  // needs only the calendar.events scope added to the domain-wide delegation
+  // the bookings inbox already uses. Until that is granted, the token is
+  // refused and this carries on exactly as before.
+  const leaveCalendar = (process.env.GOOGLE_LEAVE_CALENDAR_ID || STAFF_LEAVE_CALENDAR_ID).trim()
+  const asOwner = async () => getGoogleToken(CALENDAR_SCOPE_EVENTS, { impersonate: CALENDAR_OWNER })
+  const targets = [
+    { id: leaveCalendar, preferred: true, token: asOwner },
+    { id: leaveCalendar, preferred: true, token: async () => token },
+    { id: GOOGLE_CALENDAR_ID, preferred: false, token: async () => token }
+  ]
 
   let lastError = null
   for (const target of targets) {
+    let bearer
+    try {
+      bearer = await target.token()
+    } catch (err) {
+      // Delegation not granted (yet): try the next way in.
+      lastError = { message: err.message }
+      continue
+    }
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(target.id)}/events`,
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${bearer}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(event)
@@ -182,7 +208,7 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
         calendarId: target.id,
         // Said out loud so the caller can say it too. A silent fallback would
         // recreate the duplicate quietly, which is the bug this is fixing.
-        fellBack: !target.preferred && targets.length > 1
+        fellBack: !target.preferred
       }
     }
     lastError = result.error

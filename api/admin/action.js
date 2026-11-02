@@ -66,8 +66,9 @@ export default async function handler(req, res) {
     // in the line: it is a configuration fault, not a person's business.
     if (calendarResult?.fellBack) {
       console.warn('Calendar: leave fell back to the bookings calendar — '
-        + 'the service account cannot write to GOOGLE_LEAVE_CALENDAR_ID. '
-        + 'Share that calendar with it to stop duplicate entries.')
+        + 'it could not write to Staff Leave as bookings@. Add the scope '
+        + 'https://www.googleapis.com/auth/calendar.events to the service '
+        + 'account\'s domain-wide delegation to stop duplicate entries.')
     }
   } catch (err) {
     calendarError = err.message
