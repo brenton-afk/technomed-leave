@@ -1351,14 +1351,78 @@ async function handleIngest(req, res) {
       await markBookingEmailSeen(messageId, found.length)
     }
 
+    const settled = await reconcileQueue(await getBookingQueue(), todayInHobart())
     const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
     return res.status(200).json({
       ok: true, read, skipped, remaining, unreadable, echoes, already,
+      returned: settled.returned, nowBooked: settled.nowBooked,
       found: queued.length, count: pending.length, pending
     })
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
+}
+
+// ─── Every booking email, checked against the calendar as it is now ──────────
+// "I want the portal to scan the bookings email, and KNOW whether it needs to
+// alert the user to the booking based on if it is already in the portal OR
+// not." — Brent, 2 Nov 2026, after removing Allen from the calendar: the email
+// was still in the mailbox and the inbox said nothing, because an email is
+// read once and its booking was marked added at the time.
+//
+// Re-reading every email on every check would mean a model call per email per
+// tap. The reading is already stored, so it is the *comparison* that is redone:
+// each upcoming booking the app added, or matched to the calendar itself, is
+// looked for again, and one that is no longer there comes back to be confirmed.
+// The other way round too — a waiting booking somebody has since entered by
+// hand is taken off the list.
+//
+// Left alone: anything a person dismissed ("Not a booking"), and anything a
+// person marked "Already in the calendar" — they said so because the app could
+// not find it, often a surname spelt differently, and re-checking would bring
+// it back on every tap. A cancelled entry still counts as on the calendar: the
+// portal knows about that case, struck through.
+export async function reconcileQueue(queue, today, readCalendar = bookingsOnCalendar) {
+  const out = { returned: 0, nowBooked: 0 }
+  const upcoming = queue.filter(c => c.date && c.date >= today && (
+    c.status === 'pending'
+    || c.status === 'accepted'
+    || (c.status === 'onCalendar' && !c.dismissedBy)))
+  if (!upcoming.length) return out
+
+  const dates = upcoming.map(c => c.date).sort()
+  let events
+  try {
+    events = await readCalendar(toDateStr(addCivilDays(parseDateStr(dates[0]), -28)),
+      toDateStr(addCivilDays(parseDateStr(dates[dates.length - 1]), 28)))
+  } catch {
+    // A calendar that cannot be read changes nothing either way.
+    return out
+  }
+  const ids = new Set(events.map(e => e.id))
+  const live = events.filter(e => !e.cancelled)
+
+  for (const c of upcoming) {
+    if (c.status === 'pending') {
+      const twin = alreadyInCalendar(c, live)
+      if (twin) {
+        await updateBookingCandidate(c.id, { status: 'onCalendar', matchedEventId: twin.id, matchedSummary: twin.summary })
+        out.nowBooked += 1
+      }
+      continue
+    }
+    const eventId = c.eventId || c.matchedEventId
+    if ((eventId && ids.has(eventId)) || alreadyInCalendar(c, events)) continue
+    const movedFrom = movedOnCalendar(c, live)
+    await updateBookingCandidate(c.id, {
+      status: 'pending',
+      returned: { was: c.status, by: c.acceptedBy || null, at: new Date().toISOString() },
+      eventId: null, matchedEventId: null,
+      moves: movedFrom ? { eventId: movedFrom.id, from: movedFrom.date, summary: movedFrom.summary } : null
+    })
+    out.returned += 1
+  }
+  return out
 }
 
 /**

@@ -328,6 +328,18 @@ function Candidate({ candidate, user, onDone }) {
           which we do: two consignment kits of it at Calvary. */}
       <LoanNote systems={systemsInKit(fields.kit)} hospital={fields.hospital} />
 
+      {candidate.returned && !moves && (
+        <div role="note" style={{
+          ...text('caption'), color: colour.ink, marginTop: space.sm,
+          background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+          borderRadius: radius.control, padding: space.sm
+        }}>
+          <strong>Not on the calendar any more.</strong>{' '}
+          {candidate.returned.by ? `${candidate.returned.by} added this` : 'This was on the calendar'},
+          and it has since been taken off. Add it back, or tap Not a booking if the case is off.
+        </div>
+      )}
+
       {moves && (
         <div role="note" style={{
           ...text('caption'), color: colour.ink, marginTop: space.sm,
@@ -427,7 +439,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
   const scan = useCallback(async () => {
     setScanning(true)
     setError(null)
-    const total = { read: 0, skipped: 0, already: 0, unreadable: 0, remaining: 0 }
+    const total = { read: 0, skipped: 0, already: 0, unreadable: 0, returned: 0, nowBooked: 0, remaining: 0 }
     try {
       for (let round = 0; round < 4; round++) {
         const res = await fetch('/api/calendar/today?action=ingest', {
@@ -436,7 +448,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Could not read the mailbox')
         if (Array.isArray(data.pending)) setPending(data.pending)
-        for (const k of ['read', 'skipped', 'already', 'unreadable']) total[k] += data[k] || 0
+        for (const k of ['read', 'skipped', 'already', 'unreadable', 'returned', 'nowBooked']) total[k] += data[k] || 0
         total.remaining = data.remaining || 0
         setLastScan({ ...total })
         if (!total.remaining) break
@@ -508,7 +520,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
               <div style={{
                 ...text('caption'), color: colour.inkMuted, marginBottom: space.md
               }}>
-                {lastScan.read === 0 && lastScan.skipped === 0
+                {lastScan.read === 0 && lastScan.skipped === 0 && !lastScan.returned && !lastScan.nowBooked
                   ? 'No new emails since the last check.'
                   : [
                     `Read ${lastScan.read} new booking email${lastScan.read === 1 ? '' : 's'}.`,
@@ -528,6 +540,14 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
                     lastScan.already
                       ? `${lastScan.already} ${lastScan.already === 1 ? 'was' : 'were'} `
                         + 'already on the calendar.'
+                      : null,
+                    lastScan.returned
+                      ? `${lastScan.returned} added earlier ${lastScan.returned === 1 ? 'is' : 'are'} `
+                        + 'no longer on the calendar — shown below.'
+                      : null,
+                    lastScan.nowBooked
+                      ? `${lastScan.nowBooked} waiting ${lastScan.nowBooked === 1 ? 'has' : 'have'} `
+                        + 'since been entered, so taken off the list.'
                       : null,
                     // Reported rather than swallowed: these are retried, and if
                     // the number does not fall it needs a person.

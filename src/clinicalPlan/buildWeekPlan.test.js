@@ -828,3 +828,31 @@ describe('the week’s staffing line', () => {
     expect(staffingLine([])).toBeUndefined()
   })
 })
+
+// "Toni - Personal leave for today is doubled up." The same leave, typed by
+// hand on Staff Leave and written by the portal on approval to the bookings
+// calendar: different titles, different ids, one person away.
+describe('leave on both calendars', () => {
+  const allDay = (id, summary, from, to, extra = {}) => ({ id, summary, start: { date: from }, end: { date: to }, ...extra })
+  const WEEK = weekWindowFor('2026-11-02')
+  const leaveOn = (plan, date) => plan.days.find(d => d.date === date).otherRollup.filter(i => i.kind === 'leave')
+
+  it('is shown once a day', () => {
+    const plan = buildWeekPlan([
+      allDay('hand', 'Toni - PERSONAL LEAVE', '2026-10-27', '2026-11-04'),
+      allDay('portal', 'Toni Hoppitt — Personal Leave', '2026-10-27', '2026-11-03', { colorId: '3' })
+    ], WEEK, { generatedAt: GENERATED })
+    expect(leaveOn(plan, '2026-11-02')).toHaveLength(1)
+    // The longer entry still covers the day the shorter one does not.
+    expect(leaveOn(plan, '2026-11-03')).toHaveLength(1)
+    expect(plan.away.map(p => p.firstName)).toEqual(['Toni'])
+  })
+
+  it('still shows two different people away the same day', () => {
+    const plan = buildWeekPlan([
+      allDay('a', 'Toni - PERSONAL LEAVE', '2026-11-02', '2026-11-03'),
+      allDay('b', 'Ben - ANNUAL LEAVE', '2026-11-02', '2026-11-03')
+    ], WEEK, { generatedAt: GENERATED })
+    expect(leaveOn(plan, '2026-11-02')).toHaveLength(2)
+  })
+})

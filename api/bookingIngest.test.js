@@ -119,3 +119,60 @@ describe('a Brainlab no-F2F case from Toby', () => {
     expect(created.description).toMatch(/No F2F required/)
   })
 })
+
+// "I want the portal to scan the bookings email, and KNOW whether it needs to
+// alert the user to the booking based on if it is already in the portal OR
+// not." — an email for a case that was added and then taken off the calendar
+// stayed marked as added, and the inbox said nothing.
+describe('every booking checked against the calendar as it is now', async () => {
+  const { reconcileQueue } = await import('./calendar/today.js')
+  const redisMod = await import('./_redis.js')
+  const TODAY = '2026-11-02'
+  const onCal = (id, patient, date, extra = {}) => ({ id, patient, surgeon: 'Dubey', date, summary: `${patient} - Dubey`, cancelled: false, ...extra })
+  const updates = () => redisMod.updateBookingCandidate.mock.calls.map(([id, up]) => ({ id, ...up }))
+  beforeEach(() => redisMod.updateBookingCandidate.mockClear())
+
+  it('brings back a booking the app added that has since been taken off the calendar', async () => {
+    const queue = [{ id: 'q1', status: 'accepted', eventId: 'evt-gone', acceptedBy: 'Brent', patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' }]
+    const result = await reconcileQueue(queue, TODAY, async () => [onCal('evt-other', 'Rossa', '2026-11-12')])
+    expect(result.returned).toBe(1)
+    expect(updates()[0]).toMatchObject({ id: 'q1', status: 'pending', returned: { was: 'accepted', by: 'Brent' } })
+  })
+
+  it('leaves it alone while it is still there, cancelled or not', async () => {
+    const queue = [
+      { id: 'q1', status: 'accepted', eventId: 'evt-1', patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' },
+      { id: 'q2', status: 'onCalendar', matchedEventId: 'evt-x', patient: 'Rossa', surgeon: 'Dubey', date: '2026-11-13' }
+    ]
+    const result = await reconcileQueue(queue, TODAY, async () => [
+      onCal('evt-1', 'Allan', '2026-11-12'), onCal('evt-9', 'Rossa', '2026-11-13', { cancelled: true })])
+    expect(result.returned).toBe(0)
+    expect(updates()).toEqual([])
+  })
+
+  it('takes a waiting booking off the list once somebody has entered it', async () => {
+    const queue = [{ id: 'q1', status: 'pending', patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' }]
+    const result = await reconcileQueue(queue, TODAY, async () => [onCal('evt-5', 'Allan', '2026-11-12')])
+    expect(result.nowBooked).toBe(1)
+    expect(updates()[0]).toMatchObject({ id: 'q1', status: 'onCalendar', matchedEventId: 'evt-5' })
+  })
+
+  it('never resurrects what a person settled, nor anything already past', async () => {
+    const queue = [
+      { id: 'q1', status: 'dismissed', patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' },
+      { id: 'q2', status: 'onCalendar', dismissedBy: 'Toni', patient: 'Alan', surgeon: 'Dubey', date: '2026-11-12' },
+      { id: 'q3', status: 'accepted', eventId: 'evt-old', patient: 'Rossa', surgeon: 'Dubey', date: '2026-10-20' }
+    ]
+    const read = vi.fn(async () => [])
+    const result = await reconcileQueue(queue, TODAY, read)
+    expect(result).toEqual({ returned: 0, nowBooked: 0 })
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('changes nothing when the calendar cannot be read', async () => {
+    const queue = [{ id: 'q1', status: 'accepted', eventId: 'e', patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' }]
+    const result = await reconcileQueue(queue, TODAY, async () => { throw new Error('down') })
+    expect(result.returned).toBe(0)
+    expect(updates()).toEqual([])
+  })
+})

@@ -167,6 +167,34 @@ const siteRank = h => {
  * the entry, so "Mat — TOIL", "Matthew Usher Annual Leave" and "Matt A/L" all
  * reach the same person, and an entry naming nobody reaches none.
  */
+/** The staff a leave entry is about, by any name the team writes them under. */
+function peopleNamedIn(text) {
+  return STAFF.filter(person => {
+    const names = [person.firstName, ...(person.aka || []), person.name.split(' ').pop()]
+    return names.some(n => n && new RegExp(`\\b${n}\\b`, 'i').test(String(text || '')))
+  })
+}
+
+// "Toni - Personal leave for today is doubled up." — Brent, 2 Nov 2026.
+//
+// The same leave can sit on both calendars the portal reads: typed by hand on
+// Staff Leave ("Toni - PERSONAL LEAVE") and written by the portal on approval
+// ("Toni Hoppitt — Personal Leave"), which falls back to the bookings calendar
+// when it cannot write to Staff Leave. Different titles, different ids, so
+// nothing caught it. One person away is said once a day: a later leave entry
+// is dropped when everybody it names is already away that day. An entry naming
+// nobody on the roster is always kept — it cannot be shown to be a repeat.
+function oncePerPerson(items) {
+  const away = new Set()
+  return items.filter(item => {
+    if (item.kind !== 'leave') return true
+    const people = peopleNamedIn(item.text || item.title).map(p => p.email)
+    if (people.length && people.every(e => away.has(e))) return false
+    people.forEach(e => away.add(e))
+    return true
+  })
+}
+
 function whoIsAway(dayPlans) {
   const found = new Map()
   for (const day of dayPlans) {
@@ -174,9 +202,7 @@ function whoIsAway(dayPlans) {
     for (const item of items) {
       if (item.kind !== 'leave') continue
       const text = String(item.text || item.title || '')
-      for (const person of STAFF) {
-        const names = [person.firstName, ...(person.aka || []), person.name.split(' ').pop()]
-        if (!names.some(n => n && new RegExp(`\\b${n}\\b`, 'i').test(text))) continue
+      for (const person of peopleNamedIn(text)) {
         const already = found.get(person.email) || { ...person, days: [] }
         if (!already.days.includes(day.date)) already.days.push(day.date)
         found.set(person.email, already)
@@ -672,7 +698,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       // the part of the week that actually goes wrong.
       tasks,
       nonSurgeonItems,
-      otherRollup,
+      otherRollup: oncePerPerson(otherRollup),
       needsAttention
     }
   }))
