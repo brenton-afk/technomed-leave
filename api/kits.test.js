@@ -61,7 +61,7 @@ describe('what they are told', () => {
     expect(email.text).toContain('Diplomat (1 of 2 trays):\n- Pedicle screws 2-5')
     expect(email.text).not.toContain('Rods and tulips')
     expect(email.text).toContain('needed for a case at RHH on Thursday 5 November — please assign it to pt Testa.')
-    expect(email.text).toMatch(/Thanks,\nBen$/)
+    expect(email.text).toMatch(/Any questions, let me know\.$/)
   })
 
   it('says "today" for a move today, and never claims more than it knows', () => {

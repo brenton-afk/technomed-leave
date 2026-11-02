@@ -325,7 +325,8 @@ export function draftKitEmail({ kit, from, to, trays, date, today, caseDate, sur
     lines.push('')
   }
   if (note && String(note).trim()) { lines.push(String(note).trim()); lines.push('') }
-  lines.push('Any questions, let me know.', '', 'Thanks,', sender?.firstName || sender?.name || 'TechnoMed')
+  // Signed off by sendBookingNotice, with the sender's name, role and details.
+  lines.push('Any questions, let me know.')
 
   const subject = `TechnoMed kit transfer — ${kit.system} to ${PLACES[to].short} ${shortDate(date || today)}`.trim()
   return { to: toList, cc: ccList, subject, text: lines.join('\n') }

@@ -284,7 +284,7 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
         : kind === 'new' ? 'A new case has been booked.' : 'This booking has changed.',
       ...(changeLines.length ? ['', ...changeLines] : []),
       '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`),
-      '', `Reference: ${ref}`, '', 'TechnoMed'
+      '', `Reference: ${ref}`
     ].join('\n')
     const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>Hi ${escapeHtml(contact.name.split(/[\s(/]/)[0])} team,</p>
@@ -292,7 +292,7 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
 ${changeLines.length ? `<ul>${changeLines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
 <table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-<p style="color:#6b7a8d">Reference: ${ref}</p><p>TechnoMed</p></div>`
+<p style="color:#6b7a8d">Reference: ${ref}</p></div>`
     out.push({ ruleId: rule.id, contactId: contact.id, name: contact.name, to: contact.to, cc: contact.cc,
       subject: title, text, html, autoSend: rule.autoSend, eventId, kind })
   }
@@ -421,12 +421,12 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
     const greeting = `Hi ${contact.greeting || contact.name},`
     const subject = `${{ request: 'Loan set ordered', update: 'Loan set — case changed', cancel: 'Loan set not coming' }[status]}`
       + ` — ${systems.join(' + ')} — ${shortDate(b?.date)} — Pt ${b?.patient || 'TBC'} — Ref ${ref}`
-    const text = [greeting, '', ...lines, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '', `Reference: ${ref}`, '', 'TechnoMed'].join('\n')
+    const text = [greeting, '', ...lines, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '', `Reference: ${ref}`].join('\n')
     const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>${escapeHtml(greeting)}</p>${lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')}
 <table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-<p style="color:#6b7a8d">Reference: ${ref}</p><p>TechnoMed</p></div>`
+<p style="color:#6b7a8d">Reference: ${ref}</p></div>`
     out.push({ ruleId: key, contactId: contact.id, name: `${contact.name} — ${status === 'request' ? 'loan set ordered' : status === 'update' ? 'case changed' : 'loan set not coming'}`,
       to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
       loan: { distributor: key, status, date: b?.date, hospital: b?.hospital, systems } })
@@ -474,12 +474,12 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
     ]
     const greeting = `Hi ${contact.name.split(/[\s(/]/)[0]} team,`
     const text = [greeting, '', ask, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '',
-      'Please reply to confirm.', `Reference: ${ref}`, '', 'TechnoMed'].join('\n')
+      'Please reply to confirm.', `Reference: ${ref}`].join('\n')
     const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>${escapeHtml(greeting)}</p><p><strong>${escapeHtml(ask)}</strong></p>
 <table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-<p>Please reply to confirm.</p><p style="color:#6b7a8d">Reference: ${ref}</p><p>TechnoMed</p></div>`
+<p>Please reply to confirm.</p><p style="color:#6b7a8d">Reference: ${ref}</p></div>`
     out.push({ ruleId: `loan-${d}`, contactId: contact.id, name: `${contact.name} — ${LOAN_WORD[status].toLowerCase()}`,
       to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
       loan: { distributor: d, status, date: b?.date, hospital: b?.hospital, systems } })
