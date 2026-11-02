@@ -136,14 +136,52 @@ describe('nothing reaches the calendar unseen', () => {
 })
 
 describe('reading the mailbox', () => {
-  it('checks on request rather than on every open', async () => {
+  it('checks the mailbox as soon as it opens', async () => {
+    // "I just want it to scan the email for bookings that haven't been added as
+    // soon as I tap the bookings inbox button." It used to show only the stored
+    // list and say "Nothing waiting" until a second button was found.
     show()
     await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
-    // Opening the queue reads what is stored; it does not spend a model call.
-    expect(calls.some(c => c.url.includes('action=ingest'))).toBe(false)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() => expect(calls.some(c => c.url.includes('action=ingest'))).toBe(true))
+    // The stored list is read first, so what is already waiting shows at once.
+    expect(calls.findIndex(c => c.url.includes('action=queue')))
+      .toBeLessThan(calls.findIndex(c => c.url.includes('action=ingest')))
+  })
+
+  it('never says nothing is waiting while it is still checking', async () => {
+    let finish
+    global.fetch = vi.fn(async (url, init) => {
+      const text = String(url)
+      calls.push({ url: text, body: null })
+      if (text.includes('action=queue')) return { ok: true, status: 200, json: async () => ({ ok: true, pending: [] }) }
+      if (text.includes('action=ingest')) {
+        await new Promise(r => { finish = r })
+        return { ok: true, status: 200, json: async () => ({ ok: true, pending: [], read: 1 }) }
+      }
+      return respond(text, init)
+    })
+    show()
+    await waitFor(() => expect(screen.getByText(/Checking the bookings inbox for anything/)).toBeInTheDocument())
+    expect(screen.queryByText(/Nothing waiting/)).not.toBeInTheDocument()
+    finish()
+    await waitFor(() => expect(screen.getByText(/Nothing waiting/)).toBeInTheDocument())
+  })
+
+  it('carries on by itself while there are emails left, and stops', async () => {
+    let rounds = 0
+    global.fetch = vi.fn(async (url, init) => {
+      const text = String(url)
+      calls.push({ url: text, body: null })
+      if (text.includes('action=ingest')) {
+        rounds++
+        return { ok: true, status: 200, json: async () => ({ ok: true, pending: PENDING, read: 5, remaining: rounds < 2 ? 3 : 0 }) }
+      }
+      return respond(text, init)
+    })
+    show()
+    await waitFor(() => expect(screen.getByText(/Read 10 new booking emails/)).toBeInTheDocument())
+    expect(rounds).toBe(2)
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument()
   })
 
   it('says so when the mailbox cannot be read', async () => {
@@ -161,7 +199,6 @@ describe('reading the mailbox', () => {
 
     show()
     await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
-    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     // The delegation is not set up until somebody sets it up, and a silent
     // failure here looks exactly like an empty mailbox.
     await waitFor(() => expect(screen.getByText(/cannot read bookings@/)).toBeInTheDocument())
@@ -186,7 +223,6 @@ describe('what a scan says it did', () => {
     scanning({ read: 5, skipped: 0, remaining: 7 })
     show()
     await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
-    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() => expect(screen.getByText(/7 still to read/)).toBeInTheDocument())
     // And says so on the button, so tapping again is the obvious next move.
     expect(screen.getByRole('button', { name: /Check the next 5/ })).toBeInTheDocument()
@@ -198,7 +234,6 @@ describe('what a scan says it did', () => {
     scanning({ read: 2, skipped: 9, remaining: 0 })
     show()
     await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
-    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() =>
       expect(screen.getByText(/9 emails from senders that are not booking sources/))
         .toBeInTheDocument())
@@ -208,7 +243,6 @@ describe('what a scan says it did', () => {
     scanning({ read: 0, skipped: 0, remaining: 0 })
     show()
     await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
-    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() => expect(screen.getByText(/No new emails/)).toBeInTheDocument())
   })
 
@@ -220,7 +254,6 @@ describe('what a scan says it did', () => {
     scanning({ read: 6, skipped: 0, remaining: 0, already: 5 })
     show()
     await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
-    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() =>
       expect(screen.getByText(/5 were already on the calendar/)).toBeInTheDocument())
   })
@@ -229,7 +262,6 @@ describe('what a scan says it did', () => {
     scanning({ read: 2, skipped: 0, remaining: 0, already: 1 })
     show()
     await waitFor(() => expect(screen.getAllByText('Marsh').length).toBeGreaterThan(0))
-    fireEvent.click(screen.getByRole('button', { name: 'Check for new bookings' }))
     await waitFor(() =>
       expect(screen.getByText(/1 was already on the calendar/)).toBeInTheDocument())
   })

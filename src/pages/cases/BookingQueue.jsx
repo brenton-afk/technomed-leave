@@ -416,24 +416,42 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
     }
   }, [headers])
 
-  useEffect(() => { load() }, [load])
-
-  async function scan() {
+  // "I just want it to scan the email for bookings that haven't been added as
+  // soon as I tap the bookings inbox button." — Brent, 2 Nov 2026.
+  //
+  // Opening the inbox shows what is already waiting at once, then reads the
+  // mailbox straight away, carrying on by itself while there are emails left to
+  // read (a few rounds, so it cannot run away). It used to open on the stored
+  // list alone and say "Nothing waiting" while a booking sat unread in the
+  // mailbox, until somebody found the second button.
+  const scan = useCallback(async () => {
     setScanning(true)
     setError(null)
+    const total = { read: 0, skipped: 0, already: 0, unreadable: 0, remaining: 0 }
     try {
-      const res = await fetch('/api/calendar/today?action=ingest', {
-        method: 'POST', headers: headers()
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Could not read the mailbox')
-      setPending(data.pending || [])
-      setLastScan(data)
+      for (let round = 0; round < 4; round++) {
+        const res = await fetch('/api/calendar/today?action=ingest', {
+          method: 'POST', headers: headers()
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Could not read the mailbox')
+        if (Array.isArray(data.pending)) setPending(data.pending)
+        for (const k of ['read', 'skipped', 'already', 'unreadable']) total[k] += data[k] || 0
+        total.remaining = data.remaining || 0
+        setLastScan({ ...total })
+        if (!total.remaining) break
+      }
     } catch (err) {
       setError(err.message)
     }
     setScanning(false)
-  }
+  }, [headers])
+
+  useEffect(() => {
+    let live = true
+    load().then(() => { if (live) scan() })
+    return () => { live = false }
+  }, [load, scan])
 
   function done(id) {
     setPending(list => (list || []).filter(c => c.id !== id))
@@ -521,7 +539,13 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
               </div>
             )}
 
-            {pending?.length === 0 && !error && (
+            {scanning && !pending?.length && (
+              <div style={{ ...text('body'), color: colour.inkMuted }}>
+                Checking the bookings inbox for anything not yet on the calendar…
+              </div>
+            )}
+
+            {pending?.length === 0 && !error && !scanning && (
               <div style={{ ...text('body'), color: colour.inkMuted }}>
                 Nothing waiting. Bookings emailed to bookings@technomed.com.au
                 turn up here before they reach the calendar.
@@ -537,14 +561,14 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
             padding: `${space.sm}px ${space.md}px calc(${space.md}px + env(safe-area-inset-bottom, 0px))`,
             borderTop: `1px solid ${colour.line}`, flexShrink: 0
           }}>
-            <button onClick={scan} disabled={scanning} style={{
+            <button onClick={() => scan()} disabled={scanning} style={{
               width: '100%', padding: space.sm, cursor: scanning ? 'default' : 'pointer',
               ...text('bodyStrong'), background: 'transparent', color: colour.inkMuted,
               border: `1px solid ${colour.line}`, borderRadius: radius.control
             }}>
-              {scanning ? 'Checking the mailbox…'
+              {scanning ? 'Checking the bookings inbox…'
                 : lastScan?.remaining ? `Check the next ${lastScan.remaining > 5 ? 5 : lastScan.remaining}`
-                  : 'Check for new bookings'}
+                  : 'Check again'}
             </button>
           </div>
         </div>

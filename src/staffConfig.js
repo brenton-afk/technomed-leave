@@ -12,8 +12,12 @@
 // src/timesheetRules.js.
 const FULL_TIME_TOIL = { fortnightHours: 76, overflowToToil: true }
 
+// `phone` is shown in the sign-off of booking emails (api/_email.js
+// bookingSignature). It is deliberately not `mobileNumber`: that field is what
+// the weekend timesheet reminder texts, so filling it in starts SMS to that
+// person. Set it only when they should get those texts.
 export const STAFF = [
-  { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', firstName: 'Brent', division: 'Operations', role: 'Managing Director', isAdmin: true, isClinicalTeam: true, hasTimesheets: false, mobileNumber: '' },
+  { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', firstName: 'Brent', division: 'Operations', role: 'Managing Director', isAdmin: true, isClinicalTeam: true, hasTimesheets: false, phone: '0400 997 550', mobileNumber: '' },
   // The one leave approver (Brent, 1 Nov 2026): lodged leave is sent to her.
   // Permanent part-time, 24 hours a week on days that change (Brent, 1 Nov 2026).
   { name: 'Erin Smallbon', email: 'erin@technomed.com.au', firstName: 'Erin', division: 'Operations', role: 'General Manager', isAdmin: true, isLeaveApprover: true, hasTimesheets: true, mobileNumber: '',
@@ -23,7 +27,7 @@ export const STAFF = [
   // Wednesday and Thursday at 5.5 (her own email of 26 Oct 2026). See leaveHours.js.
   { name: 'Toni Hoppitt', email: 'toni@technomed.com.au', firstName: 'Toni', division: 'Operations', role: 'Operations Coordinator', isAdmin: false, hasTimesheets: true, mobileNumber: '',
     workPattern: { kind: 'fixed', days: [5.5, 0, 5.5, 5.5, 0, 0, 0] } },
-  { name: 'Ben Cassidy', email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, mobileNumber: '' },
+  { name: 'Ben Cassidy', email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0409 437 131', mobileNumber: '' },
   // "All references to Mat Usher in the portal should be Mat not Matt."
   //
   // `firstName` was already Mat and the rep names on a booking already tidy
@@ -35,10 +39,10 @@ export const STAFF = [
   // never displayed; it is what lets an old worklist item assigned to
   // "Matthew Usher" still be his, and what lets a transcript saying "Matt"
   // find him. Removing them would fix the display and break the reading.
-  { name: 'Mat Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, mobileNumber: '' },
+  { name: 'Mat Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
   { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'April Foale', email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
-  { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, mobileNumber: '' }
+  { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0477 334 561', mobileNumber: '' }
 ]
 /**
  * Who may open the timesheet screen.

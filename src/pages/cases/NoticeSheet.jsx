@@ -105,7 +105,7 @@ export default function NoticeSheet({ user }) {
                     <span style={{ flex: 1 }}>
                       <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block' }}>{n.name}</span>
                       <span style={{ ...text('caption'), color: colour.inkMuted, display: 'block' }}>
-                        To {n.to.join(', ')}{n.cc?.length ? ` · cc ${n.cc.join(', ')}` : ''}
+                        To {n.to.join(', ')} · cc {[...(n.cc || []), 'bookings@'].join(', ')}
                       </span>
                       <span style={{ ...text('caption'), color: colour.ink, display: 'block', marginTop: 4 }}>{edit.subject ?? n.subject}</span>
                     </span>
@@ -123,6 +123,9 @@ export default function NoticeSheet({ user }) {
                       <textarea value={edit.text ?? n.text} rows={12} aria-label={`The email to ${n.name}`}
                         onChange={e => setEdits(x => ({ ...x, [n.id]: { ...x[n.id], text: e.target.value } }))}
                         style={{ ...field, resize: 'vertical' }} />
+                      <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 4 }}>
+                        Your name, role and TechnoMed details are added underneath as the sign-off.
+                      </div>
                     </div>
                   )}
                 </div>

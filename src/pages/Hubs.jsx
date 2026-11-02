@@ -120,6 +120,19 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false }) {
         <NavCard icon={IconLogout} label="Log out"
           detail={user?.email}
           onClick={onLogout} />
+
+        {/* Which version this phone is running. It was only on the sign-in
+            screen, which nobody sees once signed in for 30 days — so "am I on
+            the new version?" had no answer on a phone. Tapping it reloads past
+            any saved copy. */}
+        <button type="button" onClick={() => { window.location.href = `/?r=${Date.now()}` }}
+          style={{ display: 'block', width: '100%', marginTop: space.lg, background: 'none', border: 'none',
+            cursor: 'pointer', textAlign: 'center', ...text('micro'), color: colour.inkFaint }}>
+          Version {typeof __APP_COMMIT__ === 'undefined' ? 'dev' : __APP_COMMIT__}
+          {typeof __APP_BUILT_AT__ === 'undefined' ? '' : ` · ${new Date(__APP_BUILT_AT__).toLocaleString('en-AU', {
+            day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Hobart' })}`}
+          {' · tap to refresh'}
+        </button>
       </Body>
     </Page>
   )

@@ -622,11 +622,48 @@ export async function sendServiceAlertEmail({ feature, fault, detail }) {
  * confirmed it, replies to them and to bookings@ — the inbox the suppliers
  * already write back to. Logged like every other send.
  */
+// ─── Booking notices: signed, and copied to bookings@ ────────────────────────
+// "Can I ensure that the bookings email is cc'd so that I can see how the
+// email looks? Will it include our email signatures?" — Brent, 2 Nov 2026.
+//
+// These go out through Resend, not the sender's Gmail, so Gmail's signature is
+// never added. The sign-off is built here instead, from the roster, so every
+// supplier and hospital email ends the same way whoever sends it and whichever
+// draft it came from — including one the sender edited before sending.
+// bookings@ is copied on every one so there is a mailbox holding exactly what
+// went out.
+
+export const BOOKINGS_INBOX = 'bookings@technomed.com.au'
+// Served from the portal (public/email-logo.png, the logo on white, 480×120
+// for sharpness at 200px). Linked, not attached: an inline attachment shows up
+// as a paperclip on every notice, which reads as a document to open.
+const SIGNATURE_LOGO = 'https://leave.technomed.com.au/email-logo.png'
+
+export function bookingSignature(sender) {
+  const staff = STAFF.find(s => s.email.toLowerCase() === String(sender?.email || '').toLowerCase())
+  const name = staff?.name || String(sender?.name || '').trim()
+  const lines = [name, staff?.role, 'TechnoMed Pty Ltd', 'Hobart, Tasmania',
+    [staff?.phone, staff?.email || sender?.email].filter(Boolean).join(' · ')].filter(Boolean)
+  const text = ['', 'Kind regards,', '', ...lines].join('\n')
+  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.45;color:#042746;margin-top:18px">
+<p style="margin:0 0 10px">Kind regards,</p>${lines.map((l, i) => i === 0
+    ? `<div style="font-weight:700">${escapeHtml(l)}</div>`
+    : `<div style="color:#6b7a8d">${escapeHtml(l)}</div>`).join('')}
+<img src="${SIGNATURE_LOGO}" alt="TechnoMed — Surgical Solutions &amp; Support" width="200" height="50" style="display:block;margin-top:12px;border:0;width:200px;height:50px"></div>`
+  return { text, html }
+}
+
 export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId }) {
+  const sig = bookingSignature(sender)
+  const lower = a => String(a).toLowerCase()
+  const addressed = new Set((to || []).map(lower))
+  const copies = [...new Set([...(cc || []), BOOKINGS_INBOX].filter(a => !addressed.has(lower(a))).map(String))]
   return send({
     kind: 'notification',
-    to, cc, subject, html, text, sender, caseId,
-    replyTo: [sender?.email, 'bookings@technomed.com.au'].filter(Boolean)
+    to, cc: copies, subject, caseId, sender,
+    html: `${html || ''}${sig.html}`,
+    text: `${String(text || '').replace(/\s+$/, '')}\n${sig.text}`,
+    replyTo: [sender?.email, BOOKINGS_INBOX].filter(Boolean)
   })
 }
 

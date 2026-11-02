@@ -283,3 +283,29 @@ describe('a leave application being lodged (Task 13)', () => {
     expect(posted[0].html).toMatch(/Wed(nesday)?,? 4 Nov/)
   })
 })
+
+// "Can I ensure that the bookings email is cc'd so that I can see how the
+// email looks? Will it include our email signatures?" — Brent, 2 Nov 2026.
+describe('a booking notice to a supplier or hospital', () => {
+  const notice = (over = {}) => email.sendBookingNotice({
+    to: ['loans@hospital.example'], cc: ['team@hospital.example'], subject: 'Loan set ordered',
+    text: 'Hi team,\n\nA loan set has been ordered.\n', html: '<p>Hi team,</p>', sender: BEN, caseId: 'evt1', ...over
+  })
+
+  it('copies bookings@ in, once, beside the existing copies', async () => {
+    await notice()
+    await notice({ cc: ['bookings@technomed.com.au'] })
+    expect(posted[0].cc).toEqual(['team@hospital.example', 'bookings@technomed.com.au'])
+    expect(posted[1].cc).toEqual(['bookings@technomed.com.au'])
+  })
+
+  it('comes from the person sending it and is signed with their name and role', async () => {
+    await notice()
+    expect(posted[0].from).toBe('Ben Cassidy <ben@technomed.com.au>')
+    expect(posted[0].text).toMatch(/A loan set has been ordered\.\n\nKind regards,\n\nBen Cassidy\nClinical Support Specialist\nTechnoMed Pty Ltd/)
+    expect(posted[0].html).toContain('Kind regards,')
+    expect(posted[0].html).toContain('Clinical Support Specialist')
+    expect(posted[0].text).toContain('0409 437 131 · ben@technomed.com.au')
+    expect(posted[0].html).toContain('src="https://leave.technomed.com.au/email-logo.png"')
+  })
+})
