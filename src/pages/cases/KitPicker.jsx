@@ -1,6 +1,6 @@
 import React from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { SYSTEM_BUTTONS } from '../../clinicalPlan/inventory.js'
+import { SYSTEM_BUTTONS, variantOf } from '../../clinicalPlan/inventory.js'
 import { SUPPLY_OPTIONS, parseKitSupplies, formatKitSupplies } from '../../clinicalPlan/kitSupply.js'
 
 // ─── The kit, chosen by tapping ──────────────────────────────────────────────
@@ -22,9 +22,18 @@ export default function KitPicker({ kit, onChange, systemsOnly = false }) {
   const has = name => entries.some(e => same(e.system, name))
   const others = entries.filter(e => !SYSTEMS.some(s => same(s, e.system)))
 
-  const toggle = name => onChange(formatKitSupplies(has(name)
-    ? entries.filter(e => !same(e.system, name))
-    : [...entries, { system: name, supply: null }]))
+  // Mariner MIS and Mariner Open are the one Mariner, said precisely. Tapping
+  // either takes over a plain "Mariner" already on the booking — keeping where
+  // it is coming from — rather than sitting beside it as a second system
+  // ("Why do we have Mariner and Mariner MIS? They are not two different
+  // things.").
+  const toggle = name => {
+    if (has(name)) return onChange(formatKitSupplies(entries.filter(e => !same(e.system, name))))
+    const base = variantOf(name)
+    const plain = base && entries.find(e => same(e.system, base))
+    if (plain) return onChange(formatKitSupplies(entries.map(e => (e === plain ? { system: name, supply: e.supply } : e))))
+    return onChange(formatKitSupplies([...entries, { system: name, supply: null }]))
+  }
   const supply = (name, option) => onChange(formatKitSupplies(entries.map(e =>
     (same(e.system, name) ? { ...e, supply: e.supply === option ? null : option } : e))))
 
@@ -49,7 +58,7 @@ export default function KitPicker({ kit, onChange, systemsOnly = false }) {
       {others.length > 0 && (
         <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
           Also written: {others.map(e => e.system).join(', ')}
-          {others.some(e => same(e.system, 'Mariner')) ? ' — choose Mariner MIS or Mariner Open above' : ''}{' '}
+          {others.some(e => same(e.system, 'Mariner')) ? ' — tap Mariner MIS or Mariner Open above to say which' : ''}{' '}
           <button type="button" onClick={() => onChange(formatKitSupplies(entries.filter(e => SYSTEMS.some(s => same(s, e.system)))))}
             style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             take off

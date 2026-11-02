@@ -12,7 +12,7 @@ import {
   holdNotice, takeNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest,
   hospitalLoanNoticesFor, DEFAULT_HOSPITAL_LOAN_NOTICES
 } from '../_bookingNotices.js'
-import { sendBookingNotice } from '../_email.js'
+import { sendBookingNotice, escapeHtml } from '../_email.js'
 import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
 import {
   taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX
@@ -2029,6 +2029,17 @@ async function handleNotify(req, res) {
   for (const id of (body.ids || []).slice(0, 10)) {
     const notice = await takeNotice(id)
     if (!notice) { results.push({ id, ok: false, error: 'This notice has expired or was already sent' }); continue }
+    // "Ideally be able to edit them if needed." The wording and subject can be
+    // changed; who it goes to cannot — that stays as the server wrote it, so
+    // an edit can never turn a notice into an email to somebody else.
+    const edit = body.edits?.[id]
+    if (edit && (typeof edit.text === 'string' || typeof edit.subject === 'string')) {
+      const textBody = typeof edit.text === 'string' ? edit.text.slice(0, 8000) : notice.text
+      notice.text = textBody
+      notice.subject = typeof edit.subject === 'string' && edit.subject.trim() ? edit.subject.trim().slice(0, 300) : notice.subject
+      notice.html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">${
+        escapeHtml(textBody).replace(/\n/g, '<br>')}</div>`
+    }
     try {
       await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: notice.eventId })
       // A loan request is remembered once it has gone, so a later move or

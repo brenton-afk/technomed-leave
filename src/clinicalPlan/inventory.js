@@ -492,3 +492,11 @@ export function suggestSupply(system, hospital) {
  */
 const BUTTON_VARIANTS = { Mariner: ['Mariner MIS', 'Mariner Open'] }
 export const SYSTEM_BUTTONS = INVENTORY.filter(i => !i.competitor).flatMap(i => BUTTON_VARIANTS[i.system] || [i.system])
+
+/** The plain name a button stands in for: "Mariner MIS" → "Mariner". */
+export function variantOf(button) {
+  for (const [base, variants] of Object.entries(BUTTON_VARIANTS)) {
+    if (variants.some(v => v.toLowerCase() === String(button).toLowerCase())) return base
+  }
+  return null
+}

@@ -218,7 +218,10 @@ seeded from `DEFAULT_CONTACTS`/`DEFAULT_RULES`, edited in Admin → Notices). Ev
 booking route in `api/calendar/today.js` (create, save, move, cancel, delete,
 accept) calls `prepareNotices`, which returns previews held in Redis for a day;
 the client shows them in `cases/NoticeSheet.jsx` and confirms by id
-(`action=notify`) — the client never supplies the text. A rule may be set to send
+(`action=notify`). Each draft can be unticked (not sent) or opened and its
+subject and wording edited — `edits: {id: {subject, text}}` on `notify`, the
+html rebuilt from the edited text through `escapeHtml`. **Recipients are never
+taken from the client**; they stay as the server wrote them. A rule may be set to send
 on its own. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
@@ -230,7 +233,10 @@ the loan request. A cancellation is judged on the booking as it was.
 `DEFAULT_HOSPITAL_LOAN_NOTICES`: Calvary on, RHH off): ordered, changed (set or
 date), no longer coming — tracked per booking as `loanreq:{event}:hosp-CLV` so
 it is said once. The auto-add card and Edit booking choose systems by button
-(`cases/KitPicker.jsx`), writing the same kit line the notices read.
+(`cases/KitPicker.jsx`), writing the same kit line the notices read. Mariner is
+offered as **Mariner MIS** and **Mariner Open** (`SYSTEM_BUTTONS`, `variantOf`
+in `inventory.js`) — one Mariner said precisely; tapping either replaces a plain
+"Mariner" and keeps its supply.
 
 ### Tasks are done once, everywhere
 
