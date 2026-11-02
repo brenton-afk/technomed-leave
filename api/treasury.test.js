@@ -343,6 +343,35 @@ describe('the Amber import', () => {
   })
 })
 
+describe('the transfer form, as the phone sends it', () => {
+  it('saves a new transfer typed in by hand', async () => {
+    const t = await unlocked()
+    const r = await call({ action: 'transfer-save', method: 'POST', token: t, body: { transfer: {
+      date: '2026-10-04', btc: '1.71283228', priceAud: '122227.48', valueAud: '209361', from: 'Family trust', note: ''
+    } } })
+    expect(r.statusCode).toBe(200)
+    expect(r.body.list[0]).toMatchObject({ sats: 171283228, priceAud: 122227.48, valueAud: 209361 })
+  })
+
+  it('saves an edit of one already there, with the fields the form carries back', async () => {
+    const t = await unlocked()
+    const first = await call({ action: 'transfer-save', method: 'POST', token: t, body: { transfer: { date: '2026-10-04', btc: '1.7', valueAud: '200000' } } })
+    const saved = first.body.list[0]
+    const r = await call({ action: 'transfer-save', method: 'POST', token: t, body: { transfer: {
+      ...saved, btc: '1.71283228', priceAud: '122227.48', valueAud: '209361', from: 'Family trust', note: 'In specie'
+    } } })
+    expect(r.statusCode).toBe(200)
+    expect(r.body.list).toHaveLength(1)
+    expect(r.body.list[0]).toMatchObject({ id: saved.id, sats: 171283228, valueAud: 209361 })
+  })
+
+  it('a value typed with a $ and commas', async () => {
+    const t = await unlocked()
+    const r = await call({ action: 'transfer-save', method: 'POST', token: t, body: { transfer: { date: '2026-10-04', btc: '1.71283228', priceAud: '$122,227.48', valueAud: '$209,361' } } })
+    expect(r.statusCode).toBe(200)
+  })
+})
+
 describe('buys brought in from the old tracker', () => {
   it('are history: removing one does not touch holdings or Amber cash', async () => {
     const t = await unlocked()

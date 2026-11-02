@@ -27,9 +27,29 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
   const [log, setLog] = useState(false)
   const [group, setGroup] = useState('none')
   const [msg, setMsg] = useState(null)
+  // Which part of the section a message belongs to, so it is shown there.
+  const [msgAt, setMsgAt] = useState('top')
   const [preview, setPreview] = useState(null)
   const [csv, setCsv] = useState(null)
   const [transfer, setTransfer] = useState(null)
+  // Shown under the Save button. A message at the top of the section is three
+  // screens away from the form on a phone, so a refused save looked like a
+  // button that did nothing.
+  const [formProblem, setFormProblem] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  async function saveTransfer() {
+    setFormProblem(null)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(transfer.date || '')) { setFormProblem('Pick the date from the date field — it is still empty.'); return }
+    if (!String(transfer.btc || '').trim()) { setFormProblem('Enter the BTC received.'); return }
+    setSaving(true)
+    try {
+      await treasuryCall(user, 'transfer-save', { method: 'POST', body: { transfer } })
+      setTransfer(null); setMsgAt('transfers'); setMsg('Transfer saved.'); reload(); onChanged?.()
+    } catch (err) {
+      if (err instanceof Locked) onLocked(); else setFormProblem(err.message || 'That did not save. Try again.')
+    } finally { setSaving(false) }
+  }
 
   const rows = useMemo(() => data?.rows || [], [data])
   const transfers = useMemo(() => data?.transfers || [], [data])
@@ -60,8 +80,8 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
       : (rows.filter(r => r.type !== 'send_to_cold_storage').reduce((t, r) => t + (toCur(r.aud, r.date) || 0), 0)
         + transfers.reduce((t, x) => t + (toCur(Number(x.valueAud) || 0, x.date) || 0), 0)) / (summary.heldSats / SATS)
 
-  async function post(action, body, done) {
-    setMsg(null)
+  async function post(action, body, done, at = 'top') {
+    setMsg(null); setMsgAt(at)
     try { const r = await treasuryCall(user, action, { method: 'POST', body }); if (done) setMsg(done); reload(); onChanged?.(); return r } catch (err) {
       if (err instanceof Locked) onLocked(); else setMsg(err.message)
       return null
@@ -75,7 +95,7 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
     if (!f) return
     const content = await f.text()
     setCsv(content)
-    setPreview(await post('amber-preview', { csv: content }))
+    setPreview(await post('amber-preview', { csv: content }, null, 'import'))
   }
 
   const hasTransfers = transfers.length > 0
@@ -84,7 +104,7 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
         <SectionLabel>TechnoMed treasury</SectionLabel>
         <Note>{data?.importedAt ? `Purchases from the Amber export, imported ${when(data.importedAt)}, and transfers in.` : 'Purchases from the Amber export, and transfers in.'}</Note>
         <Problem>{error && 'Could not load purchases just now.'}</Problem>
-        {msg && <Note>{msg}</Note>}
+        {msg && msgAt === 'top' && <Note>{msg}</Note>}
 
         {(data?.suggestions || []).map(sug => (
           <Banner key={sug.date} action={<SmallButton onClick={() => post('transfer-save', { transfer: sug }, 'Transfer added to the treasury.')}>Add to the treasury</SmallButton>}>
@@ -151,8 +171,9 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
         <Note>Coins received rather than bought, such as a loan repaid in BTC. Shown as a separate marker and never counted as invested.</Note>
         <Table head={['Date', 'BTC', 'Price', 'From', '']} align={['left', 'right', 'right', 'left', 'right']}
           rows={transfers.map(t => [t.date, btc(t.sats), aud(t.priceAud), t.from || '—',
-            <SmallButton key="e" onClick={() => setTransfer({ ...t, btc: satsToBtcText(t.sats), priceAud: t.priceAud ? String(Math.round(t.priceAud * 100) / 100) : '', valueAud: t.valueAud ? String(Math.round(t.valueAud)) : '' })}>Edit</SmallButton>])} />
-        {!transfer && <SmallButton onClick={() => setTransfer({ date: '', btc: '', priceAud: '', valueAud: '', from: '', note: '' })}>Add a transfer in</SmallButton>}
+            <SmallButton key="e" onClick={() => { setFormProblem(null); setTransfer({ ...t, btc: satsToBtcText(t.sats), priceAud: t.priceAud ? String(Math.round(t.priceAud * 100) / 100) : '', valueAud: t.valueAud ? String(Math.round(t.valueAud)) : '' }) }}>Edit</SmallButton>])} />
+        {msg && msgAt === 'transfers' && <Note>{msg}</Note>}
+        {!transfer && <SmallButton onClick={() => { setFormProblem(null); setTransfer({ date: data?.today || '', btc: '', priceAud: '', valueAud: '', from: '', note: '' }) }}>Add a transfer in</SmallButton>}
         {transfer && (
           <Card>
             <Field label="Date"><input style={inputStyle} type="date" value={transfer.date} onChange={e => setTransfer({ ...transfer, date: e.target.value })} /></Field>
@@ -161,10 +182,11 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
             <Field label="Value (A$)"><input style={inputStyle} inputMode="decimal" value={transfer.valueAud} onChange={e => setTransfer({ ...transfer, valueAud: e.target.value })} /></Field>
             <Field label="From"><input style={inputStyle} value={transfer.from} placeholder="e.g. Family trust" onChange={e => setTransfer({ ...transfer, from: e.target.value })} /></Field>
             <Field label="Note"><input style={inputStyle} value={transfer.note} onChange={e => setTransfer({ ...transfer, note: e.target.value })} /></Field>
-            <Button onClick={async () => { if (await post('transfer-save', { transfer }, 'Saved.')) setTransfer(null) }}>Save</Button>
+            {formProblem && <Problem>{formProblem}</Problem>}
+            <Button disabled={saving} onClick={saveTransfer}>{saving ? 'Saving…' : 'Save'}</Button>
             <div style={{ height: space.sm }} />
-            {transfer.id && <><Button variant="danger" onClick={async () => { if (window.confirm('Delete this transfer?') && await post('transfer-delete', { id: transfer.id }, 'Deleted.')) setTransfer(null) }}>Delete</Button><div style={{ height: space.sm }} /></>}
-            <Button variant="quiet" onClick={() => setTransfer(null)}>Cancel</Button>
+            {transfer.id && <><Button variant="danger" onClick={async () => { if (window.confirm('Delete this transfer?') && await post('transfer-delete', { id: transfer.id }, 'Transfer deleted.', 'transfers')) setTransfer(null) }}>Delete</Button><div style={{ height: space.sm }} /></>}
+            <Button variant="quiet" onClick={() => { setTransfer(null); setFormProblem(null) }}>Cancel</Button>
           </Card>
         )}
 
@@ -174,6 +196,7 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
             Choose Amber's CSV export. Only settled rows are read; a newer export adds only what is new.
             The file itself is not kept, and no wallet address is ever stored.
           </Note>
+          {msg && msgAt === 'import' && <Problem>{msg}</Problem>}
           <input type="file" accept=".csv,text/csv" onChange={choose} style={{ ...text('field'), maxWidth: '100%', marginBottom: space.md }} />
           {preview && (
             <>
@@ -195,15 +218,15 @@ export function PurchasesSection({ user, onLocked, onChanged }) {
                 </Banner>
               )}
               <Button disabled={!preview.added} onClick={async () => {
-                const r = await post('amber-commit', { csv })
-                if (r) { setMsg(`Imported ${r.added} new row${r.added === 1 ? '' : 's'}.`); setPreview(null); setCsv(null) }
+                const r = await post('amber-commit', { csv }, null, 'import')
+                if (r) { setMsgAt('import'); setMsg(`Imported ${r.added} new row${r.added === 1 ? '' : 's'}.`); setPreview(null); setCsv(null) }
               }}>{preview.added ? `Import ${preview.added} new row${preview.added === 1 ? '' : 's'}` : 'Nothing new to import'}</Button>
             </>
           )}
           {rows.length > 0 && !preview && (
             <div style={{ marginTop: space.sm }}>
               <SmallButton tone="danger" onClick={async () => {
-                if (window.confirm('Remove every imported Amber row? Import the export again afterwards.')) await post('amber-clear', {}, 'Amber rows removed.')
+                if (window.confirm('Remove every imported Amber row? Import the export again afterwards.')) await post('amber-clear', {}, 'Amber rows removed.', 'import')
               }}>Remove the import</SmallButton>
             </div>
           )}
