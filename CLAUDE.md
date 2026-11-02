@@ -694,9 +694,45 @@ makes `/ALL SURGEON USAGE/...` and `/Tray Lists/...` land in /TECHNOMED.
 `DROPBOX_USAGE_READS=on`. Filing new usage (writes) is unaffected. Do not read
 those folders — through the app or otherwise — without Brent's explicit say-so.
 
+### Treasury (private)
+
+A financial and Bitcoin dashboard for Brent alone, under Me → Treasury.
+`api/treasury.js` is one function switched on `?action=`; the helpers are
+`api/_treasury*.js`; the arithmetic is `src/treasury/logic.js` (shared by both
+sides); the screens are `src/pages/treasury/`.
+
+- **Who.** `TREASURY_USERS` (comma-separated emails). Unset means nobody.
+  Everyone else — signed out, other staff, other admins — gets a plain 404
+  identical to a missing route, and the Me card only appears after the server
+  has answered `access` with a 200. The Treasury chunk is lazy-loaded from
+  `App.jsx` and deliberately **not** in `lazyScreens.jsx`, which is prefetched
+  onto every phone.
+- **Face ID is enforced by the server.** `LockScreen` hands its fresh sign-in
+  to `action=unlock`, which accepts it only if minted in the last two minutes
+  for the same person, destroys it, and records `treasury:unlock:{hash}` for 15
+  sliding minutes against the main session. Without it every action is a 403
+  `{locked: true}` — to that person only.
+- **Everything stored is encrypted** (AES-256-GCM, `TREASURY_ENC_KEY`) through
+  `tget`/`tset` in `_treasuryStore.js`, audit log included. Never write a
+  `treasury:` key with `redis()` directly.
+- **Every request is audited**, refusals included (`treasury:audit`, capped).
+- **Xero is read-only and separate.** Its own Xero app and tokens
+  (`TREASURY_XERO_*`), granular `.read` scopes only, and `_treasuryXero.js` has
+  exactly one accounting call, a GET. A test fails on any other method. Don't
+  reuse `_xeroClient.js` — that connection can write payroll.
+- **On-chain data** comes from BGeometrics (`bitcoin-data.com`), stored per
+  metric so charts work when it is down. The free tier is tiny: requests are
+  counted in `treasury:onchain:budget` and capped (8/hour, 15/day), six per run.
+  Price falls back to Kraken candles; MVRV/STH-MVRV/LTH-MVRV are extended from
+  price ÷ cost basis when their series stops.
+- **Cron:** `/api/treasury?action=cron` at 19:40 and 07:40 UTC (needs Pro — the
+  two Hobby slots are the timesheet jobs). It syncs on-chain, warms the price,
+  and takes the month's snapshot if there is none.
+- **No financial data in the repo or tests**, ever. Fixtures are invented.
+
 ## Environment
 
-Required: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`. Optional: `DROPBOX_APP_KEY` + `DROPBOX_APP_SECRET` (then connect in Admin → System), `DROPBOX_USAGE_READS`, `DROPBOX_ROOT_NAMESPACE`, `GOOGLE_CALENDAR_ID`, `ALERT_EMAIL`, `EMAIL_TO_1..3`, `XERO_TENANT_ID` (fallback only — the OAuth callback stores the real tenant in Redis). `.env.example` is current; the `process.env` reads in `api/` remain authoritative.
+Required: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RESEND_API_KEY`, `EMAIL_FROM`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`. Treasury: `TREASURY_USERS`, `TREASURY_ENC_KEY`, `TREASURY_XERO_CLIENT_ID`/`_SECRET`/`_REDIRECT_URI` (optional `TREASURY_XERO_TENANT`, `TREASURY_XERO_SCOPES`, `BGEOMETRICS_TOKEN`). Optional: `DROPBOX_APP_KEY` + `DROPBOX_APP_SECRET` (then connect in Admin → System), `DROPBOX_USAGE_READS`, `DROPBOX_ROOT_NAMESPACE`, `GOOGLE_CALENDAR_ID`, `ALERT_EMAIL`, `EMAIL_TO_1..3`, `XERO_TENANT_ID` (fallback only — the OAuth callback stores the real tenant in Redis). `.env.example` is current; the `process.env` reads in `api/` remain authoritative.
 
 ### Email
 

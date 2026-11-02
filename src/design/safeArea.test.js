@@ -138,6 +138,9 @@ describe('no screen is left out', () => {
     'cases/TeamLeaderStrip.jsx',
     // The theatre lists, drawn in the body of the Cases page under its Header.
     'cases/ListOrder.jsx',
+    // Cards, tables and fields shared by the Treasury screens, each of which
+    // has its own Header.
+    'treasury/ui.jsx',
   ])
 
   it('accounts for every screen that does not use the shared header', () => {
