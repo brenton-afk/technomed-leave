@@ -219,16 +219,30 @@ export function parseMoney(input) {
 
 // ─── Holdings ────────────────────────────────────────────────────────────────
 
-/** Each entity's BTC, value and unrealised P/L, and the total. */
-export function holdingsView(holdings, priceAud) {
+/** Whose Amber cash the DCA spends — that entity's cash is settings.amberCash. */
+export function dcaEntityOf(settings) {
+  return ENTITIES.some(e => e.id === settings?.dcaEntity) ? settings.dcaEntity : DEFAULT_SETTINGS.dcaEntity
+}
+
+/**
+ * Each entity's BTC, value, unrealised P/L and Amber cash, and the totals.
+ *
+ * Amber cash is kept per entity on the holdings, except for the entity the
+ * DCA buys for: its cash *is* the DCA screen's Amber cash (settings.amberCash),
+ * which logging a buy reduces. One number, read in two places, so the two
+ * screens cannot disagree.
+ */
+export function holdingsView(holdings, priceAud, settings = null) {
+  const dcaEntity = dcaEntityOf(settings)
   const rows = ENTITIES.map(e => {
     const h = holdings?.[e.id] || {}
+    const amberAud = e.id === dcaEntity && settings ? Number(settings.amberCash) || 0 : Number(h.amberAud) || 0
     const sats = Math.round((Number(h.exchangeSats) || 0) + (Number(h.coldSats) || 0))
     const cost = Number(h.costAud) || 0
     const value = priceAud > 0 ? (sats / SATS) * priceAud : null
     return {
       ...e, exchangeSats: Number(h.exchangeSats) || 0, coldSats: Number(h.coldSats) || 0,
-      sats, btc: sats / SATS, costAud: cost, value,
+      sats, btc: sats / SATS, costAud: cost, value, amberAud, dcaCash: e.id === dcaEntity,
       pl: value == null ? null : value - cost,
       plPct: value == null || cost <= 0 ? null : (value / cost - 1) * 100
     }
@@ -236,7 +250,8 @@ export function holdingsView(holdings, priceAud) {
   const sats = rows.reduce((s, r) => s + r.sats, 0)
   const cost = rows.reduce((s, r) => s + r.costAud, 0)
   const value = priceAud > 0 ? (sats / SATS) * priceAud : null
-  return { rows, total: { sats, btc: sats / SATS, costAud: cost, value, pl: value == null ? null : value - cost } }
+  const amberAud = rows.reduce((s, r) => s + r.amberAud, 0)
+  return { rows, total: { sats, btc: sats / SATS, costAud: cost, value, pl: value == null ? null : value - cost, amberAud } }
 }
 
 // ─── ATO and the 13-week cash view ───────────────────────────────────────────

@@ -39,16 +39,21 @@ export default function Holdings({ user, onBack, onLocked }) {
   function startEdit() {
     setEdit(Object.fromEntries(ENTITIES.map(e => {
       const h = data.holdings?.[e.id] || {}
-      return [e.id, { exchange: satsToBtcText(h.exchangeSats), cold: satsToBtcText(h.coldSats), cost: h.costAud ? String(h.costAud) : '' }]
+      const row = data.view?.rows?.find(r => r.id === e.id)
+      return [e.id, {
+        exchange: satsToBtcText(h.exchangeSats), cold: satsToBtcText(h.coldSats),
+        cost: h.costAud ? String(h.costAud) : '', amber: row?.amberAud ? String(row.amberAud) : ''
+      }]
     })))
   }
 
   const invalid = Boolean(edit) && ENTITIES.some(e => parseBtc(edit[e.id].exchange).error
-    || parseBtc(edit[e.id].cold).error || parseMoney(edit[e.id].cost) == null)
+    || parseBtc(edit[e.id].cold).error || parseMoney(edit[e.id].cost) == null || parseMoney(edit[e.id].amber) == null)
 
   async function saveEdit() {
     const holdings = Object.fromEntries(ENTITIES.map(e => [e.id, {
-      exchangeSats: parseBtc(edit[e.id].exchange).sats, coldSats: parseBtc(edit[e.id].cold).sats, costAud: parseMoney(edit[e.id].cost)
+      exchangeSats: parseBtc(edit[e.id].exchange).sats, coldSats: parseBtc(edit[e.id].cold).sats,
+      costAud: parseMoney(edit[e.id].cost), amberAud: parseMoney(edit[e.id].amber)
     }]))
     const large = ENTITIES.filter(e => isLargeBtc(holdings[e.id].exchangeSats) || isLargeBtc(holdings[e.id].coldSats))
     if (large.length && !window.confirm(`${large.map(e => e.label).join(' and ')}: more than ${LARGE_BTC} BTC in one field. Save anyway?`)) return
@@ -65,6 +70,7 @@ export default function Holdings({ user, onBack, onLocked }) {
           <Grid>
             <Figure label="Total BTC" value={btc(view.total.sats)} sub={aud(view.total.value)} />
             <Figure label="Unrealised P/L" value={aud(view.total.pl)} tone={view.total.pl < 0 ? 'danger' : undefined} sub={`Cost ${aud(view.total.costAud)}`} />
+            <Figure label="Amber cash, all entities" value={aud(view.total.amberAud, { cents: true })} sub="Waiting to buy BTC" />
           </Grid>
         )}
 
@@ -73,7 +79,10 @@ export default function Holdings({ user, onBack, onLocked }) {
           <>
             <Table head={['Entity', 'BTC', 'A$ value', 'Cost', 'P/L']} align={['left', 'right', 'right', 'right', 'right']}
               rows={view.rows.map(r => [
-                <span key="n">{r.label}{r.coldSats ? <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block' }}>{btc(r.coldSats)} cold</span> : null}</span>,
+                <span key="n">{r.label}
+                  {r.coldSats ? <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block' }}>{btc(r.coldSats)} cold</span> : null}
+                  {r.amberAud ? <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block' }}>{aud(r.amberAud, { cents: true })} cash on Amber</span> : null}
+                </span>,
                 btc(r.sats), aud(r.value), aud(r.costAud),
                 <span key="p" style={{ color: r.pl < 0 ? colour.danger : colour.ink }}>{aud(r.pl)}<span style={{ display: 'block', color: colour.inkFaint }}>{pct(r.plPct)}</span></span>
               ])} />
@@ -90,6 +99,11 @@ export default function Holdings({ user, onBack, onLocked }) {
                 </Field>
                 <Field label="Cold storage (BTC)" hint={<ReadBack text={edit[e.id].cold} />}>
                   <input style={inputStyle} inputMode="decimal" value={edit[e.id].cold} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], cold: ev.target.value } })} />
+                </Field>
+                <Field label="Amber cash (A$)" hint={parseMoney(edit[e.id].amber) == null
+                  ? <span style={{ color: colour.danger }}>Not a dollar amount</span>
+                  : data.view?.rows?.find(r => r.id === e.id)?.dcaCash ? 'Cash waiting to buy BTC. This is also the Amber cash on the DCA screen.' : 'Cash waiting to buy BTC — dollars, not BTC.'}>
+                  <input style={inputStyle} inputMode="decimal" value={edit[e.id].amber} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], amber: ev.target.value } })} />
                 </Field>
                 <Field label="Cost base (A$)" hint={parseMoney(edit[e.id].cost) == null ? <span style={{ color: colour.danger }}>Not a dollar amount</span> : null}>
                   <input style={inputStyle} inputMode="decimal" value={edit[e.id].cost} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], cost: ev.target.value } })} />

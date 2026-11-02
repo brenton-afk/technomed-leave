@@ -227,7 +227,24 @@ describe('holdings', () => {
     expect(r.statusCode).toBe(400)
     expect(r.body.error).toMatch(/SMSF/)
     const ok = await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: { smsf: { exchangeSats: 420005325, costAud: '$1,000' } } } })
-    expect(ok.body.holdings.smsf).toEqual({ exchangeSats: 420005325, coldSats: 0, costAud: 1000 })
+    expect(ok.body.holdings.smsf).toEqual({ exchangeSats: 420005325, coldSats: 0, costAud: 1000, amberAud: 0 })
+  })
+})
+
+describe('Amber cash per entity', () => {
+  it('saves each entity\'s cash; the DCA entity\'s is the DCA screen\'s figure', async () => {
+    const t = await unlocked()
+    await call({ action: 'settings-save', method: 'POST', token: t, body: { settings: { amberCash: 5000, dcaEntity: 'company' } } })
+    await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: {
+      company: { exchangeSats: 1, amberAud: 6000 }, smsf: { coldSats: 2, amberAud: '$1,436.70' }
+    } } })
+    expect((await tget('settings')).amberCash).toBe(6000)
+    expect((await tget('holdings')).smsf.amberAud).toBe(1436.7)
+    const h = await call({ action: 'holdings', token: t })
+    expect(h.body.view.total.amberAud).toBeCloseTo(7436.7)
+    // A save that does not mention Amber cash leaves it alone.
+    await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: { smsf: { coldSats: 3 } } } })
+    expect((await tget('holdings')).smsf.amberAud).toBe(1436.7)
   })
 })
 

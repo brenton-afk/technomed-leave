@@ -9,7 +9,7 @@ import {
 } from './_treasuryXero.js'
 import {
   DEFAULT_SETTINGS, ENTITIES, SATS, dcaPlan, latestOf, keyLevels, summaryLine, slice,
-  holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC
+  holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC, dcaEntityOf
 } from '../src/treasury/logic.js'
 import { mapTracker } from '../src/treasury/importMap.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
@@ -90,7 +90,7 @@ async function homeData({ force = false } = {}) {
     today: day, price, xero,
     onchain: { values: chain.values, dates: chain.dates, lastRun: chain.meta.lastRun || null },
     dca: { plan: planFor(chain.values, chain.dates, s, day), loggedThisWeek: dca.find(d => d.week === week) || null },
-    holdings: holdingsView(holdings, price?.aud),
+    holdings: holdingsView(holdings, price?.aud, s),
     ato: atoOutlook(ato, day),
     settings: s
   }
@@ -174,16 +174,29 @@ const ACTIONS = {
 
   async holdings(req, res) {
     const [h, dca, s, price] = await Promise.all([tget('holdings', {}), tget('dca', []), settings(), getPrice()])
-    return res.json({ view: holdingsView(h, price?.aud), holdings: h, dca, settings: s, price, entities: ENTITIES })
+    return res.json({ view: holdingsView(h, price?.aud, s), holdings: h, dca, settings: s, price, entities: ENTITIES })
   },
 
   async 'holdings-save'(req, res) {
     const input = req.body?.holdings || {}
+    const s = await settings()
+    const dcaEntity = dcaEntityOf(s)
+    let dcaCash = null
+    const prior = await tget('holdings', {})
     const h = {}
     for (const e of ENTITIES) {
       const x = input[e.id] || {}
       const sats = v => Math.max(0, Math.round(Number(v) || 0))
       h[e.id] = { exchangeSats: sats(x.exchangeSats), coldSats: sats(x.coldSats), costAud: Math.max(0, money(x.costAud) || 0) }
+      // Amber cash: the DCA entity's is the DCA's own figure, kept in settings;
+      // everyone else's lives here. A missing field leaves it as it was.
+      if (x.amberAud === undefined) {
+        if (e.id !== dcaEntity) h[e.id].amberAud = Number(prior?.[e.id]?.amberAud) || 0
+      } else if (e.id === dcaEntity) {
+        dcaCash = Math.max(0, money(x.amberAud) || 0)
+      } else {
+        h[e.id].amberAud = Math.max(0, money(x.amberAud) || 0)
+      }
       // No entity can hold more than every bitcoin there will ever be. This is
       // what a decimal point read as a thousands separator looks like.
       if (h[e.id].exchangeSats + h[e.id].coldSats > MAX_BTC * SATS) {
@@ -192,6 +205,9 @@ const ACTIONS = {
     }
     h.updatedAt = new Date().toISOString()
     await tset('holdings', h)
+    if (dcaCash != null && dcaCash !== Number(s.amberCash)) {
+      await tset('settings', { ...s, amberCash: dcaCash, amberCashAt: new Date().toISOString() })
+    }
     return res.json({ holdings: h })
   },
 

@@ -76,6 +76,8 @@ export default function TreasuryHome({ user, onBack, go, onLocked }) {
             stale={data?.price?.stale} onClick={() => go('bitcoin')} />
           <Figure label="BTC held, all entities" value={btc(data?.holdings?.total?.sats)}
             sub={data?.holdings?.total?.value != null ? aud(data.holdings.total.value) : ''} onClick={() => go('holdings')} />
+          <Figure label="Amber cash, all entities" value={aud(data?.holdings?.total?.amberAud)}
+            sub="Waiting to buy BTC" onClick={() => go('holdings')} />
           <Figure label="This week's DCA buy" value={plan?.ready ? aud(plan.total) : '—'}
             sub={plan?.ready ? `×${plan.multiplier.toFixed(2)}${data.dca.loggedThisWeek ? ' · logged' : ''}` : (plan?.reason || '')}
             stale={plan?.stale} onClick={() => go('dca')} />

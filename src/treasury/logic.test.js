@@ -192,6 +192,15 @@ describe('typing a BTC amount', () => {
   })
 })
 
+describe('Amber cash by entity', () => {
+  it('reads the DCA entity\'s cash from the DCA settings, the rest from holdings', () => {
+    const v = holdingsView({ smsf: { amberAud: 1436.7 }, company: { amberAud: 999 } }, 100000, { amberCash: 19000, dcaEntity: 'company' })
+    expect(v.rows.find(r => r.id === 'company')).toMatchObject({ amberAud: 19000, dcaCash: true })
+    expect(v.rows.find(r => r.id === 'smsf')).toMatchObject({ amberAud: 1436.7, dcaCash: false })
+    expect(v.total.amberAud).toBeCloseTo(20436.7)
+  })
+})
+
 describe('an amount worth a second look', () => {
   it('flags a field over 100 BTC, not an ordinary holding', () => {
     expect(isLargeBtc(parseBtc('1436.7').sats)).toBe(true)
