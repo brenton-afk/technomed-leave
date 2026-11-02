@@ -291,6 +291,84 @@ describe('snapshots can be corrected and deleted', () => {
   })
 })
 
+describe('the Amber import', () => {
+  const CSV = [
+    'datetime_hobart,type,status,aud_amount,btc_amount,price_aud_per_btc,fee_aud',
+    '2026-10-01 09:00:00,buy_on_deposit,settled,5000,0.05,100000,10',
+    '2026-10-02 15:03:00,buy_recurring,settled,150,0.0015,100000,0.3',
+    '2026-10-03 10:00:00,send_to_cold_storage,settled,,0.04,,',
+    '2026-10-04 10:00:00,buy,pending,999,0.009,111000,1'
+  ].join('\n')
+
+  it('previews, imports, feeds TechnoMed\'s BTC on Amber, and re-imports without doubling', async () => {
+    const t = await unlocked()
+    await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: { company: { exchangeSats: 123, coldSats: 400_000_000 } } } })
+    const p = await call({ action: 'amber-preview', method: 'POST', token: t, body: { csv: CSV } })
+    expect(p.body).toMatchObject({ added: 3, skippedCount: 1, file: { purchases: 2, invested: 5150, boughtSats: 5_150_000, sentSats: 4_000_000 } })
+    expect(await tget('amber')).toBe(null)
+
+    const c = await call({ action: 'amber-commit', method: 'POST', token: t, body: { csv: CSV } })
+    expect(c.body.added).toBe(3)
+    expect((await call({ action: 'amber-commit', method: 'POST', token: t, body: { csv: CSV } })).body.added).toBe(0)
+
+    const h = await call({ action: 'holdings', token: t })
+    const company = h.body.view.rows.find(r => r.id === 'company')
+    expect(company).toMatchObject({ exchangeSats: 1_150_000, coldSats: 400_000_000 })
+    expect(h.body.amberFed.entity).toBe('company')
+
+    const r = await call({ action: 'purchases', token: t })
+    expect(r.body.totals).toMatchObject({ purchases: 2, atAmberSats: 1_150_000 })
+    expect(JSON.stringify(await tget('amber'))).not.toMatch(/pending/)
+  })
+
+  it('once imported, buys are not also recorded by hand on the DCA screen', async () => {
+    const t = await unlocked()
+    await call({ action: 'amber-commit', method: 'POST', token: t, body: { csv: CSV } })
+    const r = await call({ action: 'dca-log', method: 'POST', token: t, body: { aud: 100, sats: 1000 } })
+    expect(r.statusCode).toBe(400)
+    expect(r.body.error).toMatch(/Amber import/)
+  })
+
+  it('refuses a file that is not an Amber export', async () => {
+    const t = await unlocked()
+    const r = await call({ action: 'amber-preview', method: 'POST', token: t, body: { csv: 'a,b\n1,2' } })
+    expect(r.statusCode).toBe(400)
+  })
+
+  it('a transfer in is kept apart from purchases', async () => {
+    const t = await unlocked()
+    const r = await call({ action: 'transfer-save', method: 'POST', token: t, body: { transfer: { date: '2026-10-04', btc: '1,5', valueAud: '150000', from: 'Family trust' } } })
+    expect(r.body.list[0]).toMatchObject({ sats: 150_000_000, priceAud: 100000, valueAud: 150000, from: 'Family trust' })
+    expect((await call({ action: 'purchases', token: t })).body.transfers).toHaveLength(1)
+  })
+})
+
+describe('buys brought in from the old tracker', () => {
+  it('are history: removing one does not touch holdings or Amber cash', async () => {
+    const t = await unlocked()
+    await call({ action: 'settings-save', method: 'POST', token: t, body: { settings: { amberCash: 1000 } } })
+    await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: { company: { coldSats: 500_000_000, costAud: 50000 } } } })
+    await call({ action: 'import-commit', method: 'POST', token: t, body: { json: { dca: { log: [{ a: 200, b: 0.002, d: '2026-10-30' }] } } } })
+    const [entry] = await tget('dca')
+    expect(entry.manual).toBe(true)
+    await call({ action: 'dca-delete', method: 'POST', token: t, body: { id: entry.id } })
+    expect((await tget('holdings')).company).toMatchObject({ coldSats: 500_000_000, costAud: 50000 })
+    expect((await tget('settings')).amberCash).toBe(1000)
+  })
+
+  it('even ones imported before they were marked', async () => {
+    const t = await unlocked()
+    await call({ action: 'settings-save', method: 'POST', token: t, body: { settings: { amberCash: 1000 } } })
+    await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: { company: { exchangeSats: 1000, costAud: 500 } } } })
+    // The shape the first importer wrote: no `manual`, no `multiplier`.
+    const { tset } = await import('./_treasuryStore.js')
+    await tset('dca', [{ id: 'old1', date: '2026-10-30', week: '2026-10-26', aud: 200, sats: 1000, priceAud: 1, entity: 'company', note: '' }])
+    await call({ action: 'dca-delete', method: 'POST', token: t, body: { id: 'old1' } })
+    expect((await tget('holdings')).company.exchangeSats).toBe(1000)
+    expect((await tget('settings')).amberCash).toBe(1000)
+  })
+})
+
 describe('import', () => {
   const FILE = {
     ato: [{ label: 'BAS Q1', amount: '1,234.00', due: '28/10/2026', status: 'due' }],

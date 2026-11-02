@@ -71,3 +71,85 @@ export async function getPrice({ fetchImpl = fetch, now = Date.now(), force = fa
     return cached ? { ...cached, stale: true } : null
   }
 }
+
+// ─── 24-hour change ──────────────────────────────────────────────────────────
+// Kraken's ticker gives today's open (from midnight UTC), not the price a day
+// ago, so the reference comes from its hourly candles: the close of the hour
+// 24 hours back. Fetched at most every ten minutes — the change does not need
+// the minute-by-minute freshness the price itself has.
+
+export const REF_TTL_MS = 10 * 60 * 1000
+
+/** The close of the last hourly candle at or before `target` (ms). */
+export function closeAt(body, target) {
+  const result = body?.result || {}
+  const key = Object.keys(result).find(k => k !== 'last')
+  let best = null
+  for (const c of result[key] || []) {
+    const t = Number(c[0]) * 1000
+    if (t <= target && (!best || t > best.t)) best = { t, close: Number(c[4]) }
+  }
+  return best?.close > 0 ? best.close : null
+}
+
+async function reference24h(fetchImpl, now) {
+  const cached = await tget('price:ref24')
+  if (cached && now - Date.parse(cached.fetchedAt) < REF_TTL_MS) return cached
+  try {
+    const since = Math.floor((now - 26 * 3600e3) / 1000)
+    const target = now - 24 * 3600e3
+    const [a, u] = await Promise.all(['XBTAUD', 'XBTUSD'].map(p =>
+      getJson(`https://api.kraken.com/0/public/OHLC?pair=${p}&interval=60&since=${since}`, fetchImpl)))
+    const ref = { aud: closeAt(a, target), usd: closeAt(u, target), fetchedAt: new Date(now).toISOString() }
+    if (ref.aud || ref.usd) await tset('price:ref24', ref)
+    return ref
+  } catch {
+    return cached || null
+  }
+}
+
+/** The price with its change over 24 hours, in % for each currency. */
+export async function getPriceWithChange({ fetchImpl = fetch, now = Date.now(), force = false } = {}) {
+  const price = await getPrice({ fetchImpl, now, force })
+  if (!price) return null
+  const ref = await reference24h(fetchImpl, now)
+  const pct = (a, b) => (a > 0 && b > 0 ? (a / b - 1) * 100 : null)
+  return { ...price, change24: { aud: pct(price.aud, ref?.aud), usd: pct(price.usd, ref?.usd) } }
+}
+
+// ─── Daily closing prices ────────────────────────────────────────────────────
+// For the purchase chart: one close a day in AUD and USD, stored so the chart
+// draws from here. Kraken's daily candles cover about two years, which reaches
+// back past the first purchase. Refreshed at most every six hours.
+
+export const HISTORY_TTL_MS = 6 * 3600e3
+
+export function dailyCloses(body) {
+  const result = body?.result || {}
+  const key = Object.keys(result).find(k => k !== 'last')
+  return (result[key] || [])
+    .map(c => [new Date(Number(c[0]) * 1000).toISOString().slice(0, 10), Number(c[4])])
+    .filter(([, v]) => v > 0)
+}
+
+function merge(stored = [], fresh = []) {
+  const m = new Map(stored)
+  for (const [d, v] of fresh) m.set(d, v)
+  return [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+}
+
+/** {aud: [[date, close]], usd: [...], fetchedAt, stale} — the last stored if Kraken is down. */
+export async function getPriceHistory({ fetchImpl = fetch, now = Date.now(), force = false } = {}) {
+  const stored = await tget('pricehist', { aud: [], usd: [], fetchedAt: null })
+  if (!force && stored.fetchedAt && now - Date.parse(stored.fetchedAt) < HISTORY_TTL_MS) return { ...stored, stale: false }
+  try {
+    const [a, u] = await Promise.all(['XBTAUD', 'XBTUSD'].map(p =>
+      getJson(`https://api.kraken.com/0/public/OHLC?pair=${p}&interval=1440`, fetchImpl)))
+    const next = { aud: merge(stored.aud, dailyCloses(a)), usd: merge(stored.usd, dailyCloses(u)), fetchedAt: new Date(now).toISOString() }
+    if (!next.aud.length) throw new Error('empty')
+    await tset('pricehist', next)
+    return { ...next, stale: false }
+  } catch {
+    return { ...stored, stale: true }
+  }
+}

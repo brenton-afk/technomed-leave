@@ -2,7 +2,7 @@ import { redis } from './_redis.js'
 import { treasuryGate, unlockTreasury, lockTreasury, notFound } from './_treasuryAccess.js'
 import { tokenHash, treasuryKey, TreasuryKeyMissing } from './_treasuryCrypto.js'
 import { tget, tset, audit, readAudit } from './_treasuryStore.js'
-import { getPrice } from './_treasuryPrice.js'
+import { getPrice, getPriceWithChange, getPriceHistory } from './_treasuryPrice.js'
 import { syncOnchain, readOnchain, METRICS } from './_treasuryOnchain.js'
 import {
   xeroFigures, connectUrl, consumeState, completeConnect, disconnect, connectionStatus, xeroConfigured
@@ -12,6 +12,7 @@ import {
   holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC, dcaEntityOf, parseBtc
 } from '../src/treasury/logic.js'
 import { mapTracker } from '../src/treasury/importMap.js'
+import { parseAmberCsv, mergeAmber, amberTotals, isPurchase } from '../src/treasury/amber.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
 
 // ─── Treasury ────────────────────────────────────────────────────────────────
@@ -79,6 +80,32 @@ function planFor(values, dates, s, day) {
   return dcaPlan(values, s, { asOf, today: day })
 }
 
+/**
+ * Holdings as shown: once an Amber export is imported, the DCA entity's BTC
+ * "on exchange" is what Amber says is still there — bought less sent to cold
+ * storage — rather than a number typed in. Cold storage stays as entered: it
+ * also holds coins that never went through Amber.
+ */
+async function holdingsShown(holdings, s) {
+  const amber = await tget('amber')
+  if (!amber?.rows?.length) return { holdings, amberFed: null }
+  const entity = dcaEntityOf(s)
+  const t = amberTotals(amber.rows)
+  const cur = holdings?.[entity] || { exchangeSats: 0, coldSats: 0, costAud: 0 }
+  return { holdings: { ...holdings, [entity]: { ...cur, exchangeSats: t.atAmberSats } }, amberFed: { entity, importedAt: amber.importedAt } }
+}
+
+/** What Amber bought this week, by the last import. */
+async function amberThisWeek(week) {
+  const amber = await tget('amber')
+  if (!amber?.rows?.length) return null
+  const buys = amber.rows.filter(r => isPurchase(r) && r.date >= week)
+  return { aud: buys.reduce((t, r) => t + r.aud, 0), sats: buys.reduce((t, r) => t + r.sats, 0), count: buys.length, importedAt: amber.importedAt }
+}
+
+/** A buy recorded from the DCA screen moved holdings and Amber cash; hand-entered and imported ones did not. */
+const movedHoldings = d => !d.manual && Object.hasOwn(d, 'multiplier')
+
 async function homeData({ force = false } = {}) {
   const day = today()
   const [price, xero, chain, s, holdings, ato, dca] = await Promise.all([
@@ -89,8 +116,8 @@ async function homeData({ force = false } = {}) {
   return {
     today: day, price, xero,
     onchain: { values: chain.values, dates: chain.dates, lastRun: chain.meta.lastRun || null },
-    dca: { plan: planFor(chain.values, chain.dates, s, day), loggedThisWeek: dca.find(d => d.week === week && !d.manual) || null },
-    holdings: holdingsView(holdings, price?.aud, s),
+    dca: { plan: planFor(chain.values, chain.dates, s, day), loggedThisWeek: dca.find(d => d.week === week && movedHoldings(d)) || null },
+    holdings: holdingsView((await holdingsShown(holdings, s)).holdings, price?.aud, s),
     ato: atoOutlook(ato, day),
     settings: s
   }
@@ -177,7 +204,7 @@ const ACTIONS = {
   },
 
   async price(req, res) {
-    return res.json({ price: await getPrice({ force: req.query.refresh === '1' }) })
+    return res.json({ price: await getPriceWithChange({ force: req.query.refresh === '1' }) })
   },
 
   async bitcoin(req, res) {
@@ -215,7 +242,8 @@ const ACTIONS = {
 
   async holdings(req, res) {
     const [h, dca, s, price] = await Promise.all([tget('holdings', {}), tget('dca', []), settings(), getPrice()])
-    return res.json({ view: holdingsView(h, price?.aud, s), holdings: h, dca, settings: s, price, entities: ENTITIES })
+    const shown = await holdingsShown(h, s)
+    return res.json({ view: holdingsView(shown.holdings, price?.aud, s), holdings: h, amberFed: shown.amberFed, dca, settings: s, price, entities: ENTITIES })
   },
 
   async 'holdings-save'(req, res) {
@@ -281,7 +309,8 @@ const ACTIONS = {
       readings: { mvrvZ: chain.values.mvrvZ, sthSopr: chain.values.sthSopr, sthMvrv: chain.values.sthMvrv },
       dates: chain.dates,
       log: [...log].sort((a, b) => b.date.localeCompare(a.date)),
-      loggedThisWeek: log.find(d => d.week === week && !d.manual) || null
+      loggedThisWeek: log.find(d => d.week === week && movedHoldings(d)) || null,
+      amberWeek: await amberThisWeek(week)
     })
   },
 
@@ -296,7 +325,8 @@ const ACTIONS = {
     const plan = planFor(chain.values, chain.dates, s, day)
     const date = isDay(req.body?.date) ? req.body.date : day
     const week = weekStart(date)
-    if (log.some(d => d.week === week && !d.manual) && !req.body?.again) return res.status(409).json({ error: "This week's buy is already logged. Edit it on Holdings instead." })
+    if (await tget('amber')) throw new Invalid('Buys now come from the Amber import. Import the latest Amber export on Purchases instead.')
+    if (log.some(d => d.week === week && movedHoldings(d)) && !req.body?.again) return res.status(409).json({ error: "This week's buy is already logged. Edit it on Holdings instead." })
     const entry = buyFrom({ ...req.body, date }, { aud: plan.total, priceAud: price?.aud || null, entity: dcaEntityOf(s) })
     entry.multiplier = plan.ready ? plan.multiplier : null
     log.push(entry)
@@ -310,7 +340,7 @@ const ACTIONS = {
     const [log, s, holdings] = await Promise.all([tget('dca', []), settings(), tget('holdings', {})])
     const entry = log.find(d => d.id === req.body?.id)
     if (!entry) return res.status(404).json({ error: 'That buy is no longer in the log.' })
-    const after = entry.manual ? { holdings, settings: s } : applyBuy(holdings, s, entry, -1)
+    const after = movedHoldings(entry) ? applyBuy(holdings, s, entry, -1) : { holdings, settings: s }
     await Promise.all([tset('dca', log.filter(d => d.id !== entry.id)), tset('holdings', after.holdings), tset('settings', after.settings)])
     return res.json({ ok: true })
   },
@@ -327,9 +357,9 @@ const ACTIONS = {
     if (i < 0) return res.status(404).json({ error: 'That buy is no longer in the log.' })
     const old = log[i]
     const fresh = buyFrom(req.body, {})
-    const entry = { ...old, ...fresh, id: old.id, multiplier: old.multiplier ?? null, manual: old.manual || false }
+    const entry = { ...old, ...fresh, id: old.id }
     let after = { holdings, settings: s }
-    if (!old.manual) {
+    if (movedHoldings(old)) {
       after = applyBuy(holdings, s, old, -1)
       after = applyBuy(after.holdings, after.settings, entry, +1)
     }
@@ -441,7 +471,8 @@ const ACTIONS = {
       const list = await tget(name, [])
       const seen = new Set(list.map(k))
       const fresh = data[name].filter(x => !seen.has(k(x)))
-      if (name === 'dca') fresh.forEach(x => { x.week = weekStart(x.date) })
+      // Imported buys are history: they go in the log and never move holdings.
+      if (name === 'dca') fresh.forEach(x => { x.week = weekStart(x.date); x.manual = true })
       if (fresh.length) await tset(name, [...list, ...fresh])
       added[name] = fresh.length
     }
@@ -456,6 +487,64 @@ const ACTIONS = {
     if (Object.keys(data.settings).length) { await tset('settings', { ...(await settings()), ...data.settings }); added.settings = Object.keys(data.settings).length }
     return res.json({ added, report })
   },
+
+  // ─── Purchases (the Amber import) ─────────────────────────────────────────
+
+  async purchases(req, res) {
+    const [amber, transfers, price, history] = await Promise.all([
+      tget('amber', { rows: [] }), tget('transfers', []), getPriceWithChange(), getPriceHistory()
+    ])
+    const rows = amber.rows || []
+    const first = [rows.find(isPurchase)?.date, ...transfers.map(t => t.date)].filter(Boolean).sort()[0] || null
+    const from = first ? first.slice(0, 7) + '-01' : null
+    return res.json({
+      today: today(), price, importedAt: amber.importedAt || null,
+      rows: rows.filter(r => isPurchase(r) || r.type === 'send_to_cold_storage'),
+      totals: amberTotals(rows),
+      transfers: [...transfers].sort((a, b) => a.date.localeCompare(b.date)),
+      history: { aud: from ? history.aud.filter(([d]) => d >= from) : [], usd: from ? history.usd.filter(([d]) => d >= from) : [], stale: history.stale, fetchedAt: history.fetchedAt }
+    })
+  },
+
+  /** Reads an Amber export and says what it would add. Saves nothing. */
+  async 'amber-preview'(req, res) {
+    const parsed = parseAmberCsv(req.body?.csv)
+    if (parsed.error) throw new Invalid(parsed.error)
+    const stored = await tget('amber', { rows: [] })
+    const merged = mergeAmber(stored.rows, parsed.rows)
+    return res.json({ file: amberTotals(parsed.rows), after: amberTotals(merged.rows), added: merged.added, skipped: parsed.skipped.slice(0, 50), skippedCount: parsed.skipped.length })
+  },
+
+  /** Adds the export's new rows. The file itself is not kept — only the columns read from it. */
+  async 'amber-commit'(req, res) {
+    const parsed = parseAmberCsv(req.body?.csv)
+    if (parsed.error) throw new Invalid(parsed.error)
+    const stored = await tget('amber', { rows: [] })
+    const merged = mergeAmber(stored.rows, parsed.rows)
+    await tset('amber', { rows: merged.rows, importedAt: new Date().toISOString() })
+    return res.json({ added: merged.added, totals: amberTotals(merged.rows) })
+  },
+
+  async 'amber-clear'(req, res) {
+    await tset('amber', { rows: [], importedAt: null })
+    return res.json({ ok: true })
+  },
+
+  /** Coins received rather than bought — the trust's repayment in specie. */
+  async 'transfer-save'(req, res) {
+    const b = req.body?.transfer || {}
+    if (!isDay(b.date)) throw new Invalid('A date is needed.')
+    const { sats, error } = parseBtc(b.btc)
+    if (error || !(sats > 0)) throw new Invalid(error ? `BTC: ${error}` : 'How much BTC came in?')
+    const valueAud = b.valueAud === '' || b.valueAud == null ? null : money(b.valueAud)
+    const priceAud = b.priceAud === '' || b.priceAud == null ? (valueAud ? valueAud / (sats / SATS) : null) : money(b.priceAud)
+    const item = {
+      id: b.id || newId(), date: b.date, sats, priceAud, valueAud: valueAud ?? (priceAud ? priceAud * sats / SATS : null),
+      from: str(b.from, 120), note: str(b.note, 300)
+    }
+    return res.json({ list: await upsert('transfers', item) })
+  },
+  async 'transfer-delete'(req, res) { return res.json({ list: await remove('transfers', req.body?.id) }) },
 
   async audit(req, res) { return res.json({ entries: await readAudit(300) }) },
 
@@ -489,6 +578,7 @@ async function cron(req, res) {
   const out = {}
   try { out.onchain = await syncOnchain() } catch { out.onchain = 'failed' }
   try { out.price = Boolean(await getPrice({ force: true })) } catch { out.price = false }
+  try { out.history = !(await getPriceHistory()).stale } catch { out.history = false }
   try {
     const month = today().slice(0, 7)
     const snaps = await tget('snapshots', [])
@@ -517,7 +607,7 @@ export default async function handler(req, res) {
     if (!session) return
     if (!fn) return notFound(res)
     // Writes are POSTs. A GET that changed something could be fired by a link.
-    const reads = new Set(['access', 'home', 'price', 'bitcoin', 'xero', 'holdings', 'dca', 'cash', 'trust', 'snapshots', 'audit', 'status'])
+    const reads = new Set(['access', 'home', 'price', 'bitcoin', 'xero', 'holdings', 'dca', 'cash', 'trust', 'snapshots', 'audit', 'status', 'purchases'])
     if (!reads.has(action) && req.method !== 'POST') return notFound(res)
     return await fn(req, res, session)
   } catch (err) {

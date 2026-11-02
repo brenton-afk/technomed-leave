@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { colour, text, space, radius, border, card } from '../../design/tokens.js'
-import { formatStamp } from '../../clinicalPlan/week.js'
+import { formatStamp, formatClock } from '../../clinicalPlan/week.js'
 
 // ─── Pieces every Treasury screen shares ─────────────────────────────────────
 
@@ -188,6 +188,48 @@ export function BuyForm({ initial, entities, title, submitLabel, onSubmit, onCan
         {onDelete && <SmallButton tone="danger" disabled={busy} onClick={() => go(onDelete)}>Remove this buy</SmallButton>}
         <SmallButton disabled={busy} onClick={onCancel}>Cancel</SmallButton>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The live price, the same on every Bitcoin page: AUD and USD, the change over
+ * 24 hours, and when it was read. From the server's 60-second Kraken cache,
+ * re-asked every minute while the screen is open. If Kraken is down it shows
+ * the last price it has, with the Stale badge.
+ */
+export function PriceBar({ user }) {
+  const [p, setP] = useState(null)
+  useEffect(() => {
+    let live = true
+    const load = () => {
+      if (document.visibilityState === 'hidden') return
+      treasuryCall(user, 'price').then(r => { if (live) setP(r.price) }).catch(() => {})
+    }
+    load()
+    const t = setInterval(load, 60 * 1000)
+    document.addEventListener('visibilitychange', load)
+    return () => { live = false; clearInterval(t); document.removeEventListener('visibilitychange', load) }
+  }, [user])
+  if (!p) return null
+  const chg = v => {
+    if (v == null || !Number.isFinite(v)) return null
+    const up = v >= 0
+    return <span style={{ color: up ? colour.success : colour.danger, fontWeight: 600 }}>{up ? '▲' : '▼'} {Math.abs(v).toFixed(2)}%</span>
+  }
+  const fmt = (n, cur) => new Intl.NumberFormat(cur === 'USD' ? 'en-US' : 'en-AU', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(n)
+  return (
+    <div role="status" aria-label="Bitcoin price" style={{
+      ...card(), display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: `${space.xs}px ${space.md}px`,
+      padding: `${space.sm + 2}px ${space.md}px`, marginBottom: space.md
+    }}>
+      <span style={{ ...text('micro'), color: colour.inkFaint, textTransform: 'uppercase' }}>BTC</span>
+      <span style={{ ...text('heading'), color: colour.ink }}>{fmt(p.aud, 'AUD')}</span>
+      <span style={{ ...text('caption'), color: colour.inkMuted }}>{chg(p.change24?.aud)}</span>
+      <span style={{ ...text('caption'), color: colour.inkMuted }}>US{fmt(p.usd, 'USD')} {chg(p.change24?.usd)}</span>
+      <span style={{ ...text('caption'), color: colour.inkFaint, marginLeft: 'auto' }}>
+        24h · updated {formatClock(p.at)}{p.stale && <Stale problem="Kraken did not answer; this is the last price stored" />}
+      </span>
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { Page, Header, Body, NavCard, SectionLabel, Banner } from '../../design/
 import { colour, text } from '../../design/tokens.js'
 import { IconChart, IconBitcoin, IconWallet, IconCalendar, IconFile, IconLock, IconClock } from '../../design/icons.jsx'
 import { aud, usd, btc } from '../../treasury/logic.js'
-import { useTreasury, Figure, Grid, Problem, SmallButton, when } from './ui.jsx'
+import { useTreasury, Figure, Grid, Problem, SmallButton, when, PriceBar } from './ui.jsx'
 
 // ─── Treasury home ───────────────────────────────────────────────────────────
 // The headline numbers, each with where it came from and when, and the way
@@ -27,6 +27,7 @@ export default function TreasuryHome({ user, onBack, go, onLocked }) {
         subtitle={data ? 'Only you can see this. Each figure shows when it was last updated.' : 'Loading…'}
         right={<SmallButton onClick={() => reload({ refresh: '1' })} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh now'}</SmallButton>} />
       <Body>
+        <PriceBar user={user} />
         <Problem>{error && 'Could not load the figures just now. Tap Refresh now, or try again shortly.'}</Problem>
         {data && !connected && (
           <Banner tone="warning" action={<SmallButton onClick={() => go('settings')}>Connect Xero</SmallButton>}>
@@ -89,6 +90,7 @@ export default function TreasuryHome({ user, onBack, go, onLocked }) {
         <SectionLabel>Sections</SectionLabel>
         <NavCard icon={IconBitcoin} label="Bitcoin" detail="Cost bases, SOPR, MVRV and key levels" onClick={() => go('bitcoin')} />
         <NavCard icon={IconWallet} label="Holdings" detail="BTC by entity and the purchase log" onClick={() => go('holdings')} />
+        <NavCard icon={IconBitcoin} label="Purchases" detail="Every Amber buy on the price chart, and the import" onClick={() => go('purchases')} />
         <NavCard icon={IconChart} label="Dynamic DCA" detail="This week's buy and the settings behind it" onClick={() => go('dca')} />
         <NavCard icon={IconCalendar} label="ATO and cash" detail="Payment schedule and 13 weeks ahead" onClick={() => go('cash')} />
         <NavCard icon={IconFile} label="Family trust ledger" detail="Distributions, loans, transfers · CSV" onClick={() => go('trust')} />

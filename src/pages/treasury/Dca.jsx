@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Banner, Button } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
 import { aud, btc, ENTITIES } from '../../treasury/logic.js'
-import { useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, treasuryCall, Locked, BuyForm, SmallButton } from './ui.jsx'
+import { useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, treasuryCall, Locked, BuyForm, SmallButton, PriceBar, when } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
 
@@ -36,6 +36,7 @@ export default function Dca({ user, onBack, onLocked }) {
     <Page>
       <Header eyebrow="Treasury" title="Dynamic DCA" onBack={onBack} subtitle={data ? `Week of ${data.week}` : 'Loading…'} />
       <Body>
+        <PriceBar user={user} />
         <Problem>{error && 'Could not load the plan just now.'}</Problem>
         {plan && !plan.ready && <Banner tone="warning">{plan.reason}. It arrives with the next scheduled run, or use “Update on-chain data now” on the Bitcoin screen.</Banner>}
         {plan?.ready && !(s?.amberCash > 0) && <Banner tone="warning">Amber cash is A$0, so the buy is capped at nothing. Enter the Amber balance in Settings below.</Banner>}
@@ -72,7 +73,14 @@ export default function Dca({ user, onBack, onLocked }) {
             {data.loggedThisWeek && !justLogged && (
               <Banner>This week's buy is logged: {aud(data.loggedThisWeek.aud)} on {data.loggedThisWeek.date}. To change or remove it, use the purchase log on Holdings.</Banner>
             )}
-            {!data.loggedThisWeek && !confirming && (
+            {data.amberWeek && (
+              <Banner>
+                Bought on Amber this week: <b>{aud(data.amberWeek.aud)}</b> in {data.amberWeek.count} buy{data.amberWeek.count === 1 ? '' : 's'}
+                {plan.total > 0 && <> — {data.amberWeek.aud >= plan.total ? 'this week\'s target is met' : `${aud(plan.total - data.amberWeek.aud)} still to buy for the target`}</>}.
+                {' '}From the Amber import of {when(data.amberWeek.importedAt)}; import a newer export on Purchases to update it.
+              </Banner>
+            )}
+            {!data.amberWeek && !data.loggedThisWeek && !confirming && (
               <Button disabled={busy || !(plan.total > 0)} onClick={() => setConfirming(true)}>
                 I've made this week's buy — record it
               </Button>

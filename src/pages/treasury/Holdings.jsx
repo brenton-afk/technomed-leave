@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Button } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
 import { aud, btc, pct, ENTITIES, parseBtc, parseMoney, satsToBtcText, isLargeBtc, LARGE_BTC } from '../../treasury/logic.js'
-import { useTreasury, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, Grid, Figure, BuyForm } from './ui.jsx'
+import { useTreasury, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, Grid, Figure, BuyForm, PriceBar, when } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
 
@@ -65,6 +65,7 @@ export default function Holdings({ user, onBack, onLocked }) {
       <Header eyebrow="Treasury" title="Holdings" onBack={onBack}
         subtitle={data?.price ? `At ${aud(data.price.aud)} a coin${data.price.stale ? ' (stale price)' : ''}` : 'Loading…'} />
       <Body>
+        <PriceBar user={user} />
         <Problem>{error && 'Could not load holdings just now.'}</Problem>
         {view && (
           <Grid>
@@ -94,9 +95,15 @@ export default function Holdings({ user, onBack, onLocked }) {
             {ENTITIES.map(e => (
               <div key={e.id} style={{ marginBottom: space.md }}>
                 <div style={{ ...text('bodyStrong'), color: colour.ink, marginBottom: space.sm }}>{e.label}</div>
-                <Field label="On exchange / Amber (BTC)" hint={<ReadBack text={edit[e.id].exchange} />}>
-                  <input style={inputStyle} inputMode="decimal" value={edit[e.id].exchange} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], exchange: ev.target.value } })} />
-                </Field>
+                {data.amberFed?.entity === e.id ? (
+                  <Field label="On Amber (BTC)" hint={`From the Amber import (${when(data.amberFed.importedAt)}): bought less sent to cold storage. Change it by importing a newer export on Purchases.`}>
+                    <input style={{ ...inputStyle, color: colour.inkFaint }} value={satsToBtcText(data.view.rows.find(r => r.id === e.id)?.exchangeSats)} readOnly />
+                  </Field>
+                ) : (
+                  <Field label="On exchange / Amber (BTC)" hint={<ReadBack text={edit[e.id].exchange} />}>
+                    <input style={inputStyle} inputMode="decimal" value={edit[e.id].exchange} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], exchange: ev.target.value } })} />
+                  </Field>
+                )}
                 <Field label="Cold storage (BTC)" hint={<ReadBack text={edit[e.id].cold} />}>
                   <input style={inputStyle} inputMode="decimal" value={edit[e.id].cold} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], cold: ev.target.value } })} />
                 </Field>

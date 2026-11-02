@@ -184,3 +184,20 @@ describe('encryption', () => {
     expect(() => decrypt(parts.join('.'))).toThrow()
   })
 })
+
+describe('the 24-hour change and the daily closes', () => {
+  it('takes the close of the hour 24 hours back', () => {
+    const body = { result: { XBTAUD: [[1000, '0', '0', '0', '90'], [4600, '0', '0', '0', '95'], [8200, '0', '0', '0', '99']], last: 1 } }
+    expect(price.closeAt(body, 5000 * 1000)).toBe(95)
+    expect(price.closeAt(body, 500 * 1000)).toBe(null)
+  })
+
+  it('reads daily candles into [date, close]', () => {
+    expect(price.dailyCloses({ result: { XXBTZUSD: [[1767225600, '0', '0', '0', '99000']], last: 1 } })).toEqual([['2026-01-01', 99000]])
+  })
+
+  it('history falls back to what is stored, marked stale', async () => {
+    const h = await price.getPriceHistory({ fetchImpl: async () => { throw new Error('down') } })
+    expect(h).toMatchObject({ aud: [], stale: true })
+  })
+})

@@ -3,7 +3,7 @@ import { Page, Header, Body, Card, SectionLabel, Banner } from '../../design/She
 import { colour, text, space } from '../../design/tokens.js'
 import LineChart, { SERIES } from '../../treasury/LineChart.jsx'
 import { usd, aud, pct } from '../../treasury/logic.js'
-import { useTreasury, Segmented, Table, Note, Problem, Stale, SmallButton, treasuryCall, when } from './ui.jsx'
+import { useTreasury, Segmented, Table, Note, Problem, Stale, SmallButton, treasuryCall, when, PriceBar } from './ui.jsx'
 
 // ─── Bitcoin ─────────────────────────────────────────────────────────────────
 // Four charts on one range control, the key levels as a table (which is also
@@ -40,6 +40,7 @@ export default function Bitcoin({ user, onBack, onLocked }) {
         subtitle={data?.price ? `${aud(data.price.aud)} · ${usd(data.price.usd)} · ${data.price.source} ${when(data.price.at)}` : 'Loading…'}
         right={data?.price?.stale ? <Stale /> : null} />
       <Body>
+        <PriceBar user={user} />
         <Problem>{error && 'Could not load the charts just now.'}</Problem>
         {data?.summary && (
           <Card style={{ background: colour.accentSoft, borderColor: 'transparent' }}>
