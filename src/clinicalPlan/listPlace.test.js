@@ -240,3 +240,13 @@ describe('the words somebody chose', () => {
     expect(parseListPlace(/^List:\s*(.*)$/m.exec(written)[1])).toEqual(place)
   })
 })
+
+describe('cases in front, as the team wrote them', () => {
+  it('keeps an operation it does not know by name, rather than calling it "Case"', async () => {
+    const { casesAhead } = await import('./listPlace.js')
+    expect(casesAhead('After a VNS Battery Change')).toEqual(['VNS Battery Change'])
+    expect(casesAhead('after two cranis and a discectomy')).toEqual(['Craniotomy', 'Craniotomy', 'Discectomy'])
+    expect(casesAhead('after 2 cases')).toEqual(['Case', 'Case'])
+    expect(casesAhead('after a spine case')).toEqual(['Spine case'])
+  })
+})

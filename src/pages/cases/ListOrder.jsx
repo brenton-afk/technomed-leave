@@ -178,6 +178,15 @@ function TheatreList({ surgeon, cases }) {
                 {' '}{row.surgicalCase.operation}
               </span>
             )}
+            {/* Who is going: the rep recorded on the case, or, until then,
+                who the team leader allocated. */}
+            {(row.surgicalCase.rep || row.surgicalCase.planned?.length > 0) && (
+              <span style={{ ...text('caption'), display: 'block', color: colour.accentDeep, lineHeight: 1.35 }}>
+                {row.surgicalCase.rep
+                  ? <>Rep: <strong>{row.surgicalCase.rep}</strong></>
+                  : <>Planned: <strong>{row.surgicalCase.planned.join(' + ')}</strong></>}
+              </span>
+            )}
             {kitLine(row.surgicalCase) && (
               <span style={{
                 ...text('micro'), textTransform: 'none', letterSpacing: 0,

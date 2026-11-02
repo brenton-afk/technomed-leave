@@ -299,3 +299,33 @@ describe('following the day strip', () => {
     expect(screen.getByText('Ashbury')).toBeInTheDocument()
   })
 })
+
+// "The List view in the portal needs to show who has been allocated to the
+// case. And the list view also needs to show what the other cases are not just
+// the word 'case'." — Brent, 2 Nov 2026. Invented patients.
+describe('who is going, and what is in front', () => {
+  it('shows who is planned for each case, and the rep once one is recorded', () => {
+    show([
+      ev('p', 'Testa LONESTAR - JPW',
+        'Surgeon: JPW\nPatient: Testa\nHospital: RHH\nProcedure: C5/6 ACDF\nKit: Lonestar (Consignment)\n'
+        + 'Planned rep: Ben\nList: 2nd · morning · After a VNS Battery Change', 10, 'RHH'),
+      ev('q', 'Rossa DIPLOMAT - Thani (Mat)',
+        'Surgeon: Thani\nPatient: Rossa\nHospital: CLV\nProcedure: L4/5 PLIF\nKit: Diplomat (Consignment)\n'
+        + 'Planned rep: Aimee / Mat\nList: 1st · morning', 8, 'Calvary')
+    ])
+    expect(screen.getByText('Ben')).toBeInTheDocument()
+    expect(screen.getByText(/Planned:/)).toBeInTheDocument()
+    expect(screen.getByText('Mat')).toBeInTheDocument()
+    expect(screen.getByText(/Rep:/)).toBeInTheDocument()
+  })
+
+  it('names the case in front as it was written, not as "Case"', () => {
+    show([
+      ev('p', 'Testa LONESTAR - JPW',
+        'Surgeon: JPW\nPatient: Testa\nHospital: RHH\nProcedure: C5/6 ACDF\nKit: Lonestar (Consignment)\n'
+        + 'List: 2nd · morning · After a VNS Battery Change', 10, 'RHH')
+    ])
+    expect(screen.getByText('VNS Battery Change')).toBeInTheDocument()
+    expect(screen.queryByText('Case')).not.toBeInTheDocument()
+  })
+})

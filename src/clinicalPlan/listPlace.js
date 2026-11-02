@@ -281,11 +281,19 @@ export function casesAhead(text) {
     if (count < 1 || count > 10) continue
 
     const found = PROCEDURES.find(([pattern]) => pattern.test(part))
-    // A count with no procedure on it is still a case somebody has to wait
-    // for; it just has no name yet.
-    const named = found ? found[1] : (digits || (word && COUNTS[word[1].toLowerCase()])
-      ? 'Case'
-      : null)
+    const counted = digits || (word && COUNTS[word[1].toLowerCase()])
+    // Counted but not a procedure on the list above: the words as the team
+    // typed them, not the word "Case". "After a VNS battery change" is a VNS
+    // battery change — "the list view also needs to show what the other cases
+    // are, not just the word 'case'" (Brent, 2 Nov 2026). Only a bare count
+    // ("two cases", "3") still has nothing better to say than "Case".
+    const asTyped = counted && part.replace(/^(\d{1,2}|[a-z]+)\s*(?:x\s*)?/i, '').trim()
+    const plain = asTyped && !/^(?:cases?|lists?|others?|more)?$/i.test(asTyped)
+    const named = found && found[1] !== 'Case'
+      ? found[1]
+      : plain
+        ? asTyped.charAt(0).toUpperCase() + asTyped.slice(1)
+        : (found || counted ? 'Case' : null)
     if (!named) continue
     for (let i = 0; i < count; i++) out.push(named)
   }
