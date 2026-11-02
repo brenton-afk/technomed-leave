@@ -305,5 +305,6 @@ describe('a booking notice to a supplier or hospital', () => {
     expect(posted[0].text).toMatch(/A loan set has been ordered\.\n\nKind regards,\n\nBen Cassidy\nClinical Support Specialist\nTechnoMed Pty Ltd/)
     expect(posted[0].html).toContain('Kind regards,')
     expect(posted[0].html).toContain('Clinical Support Specialist')
+    expect(posted[0].text).toContain('0409 437 131 · ben@technomed.com.au')
   })
 })

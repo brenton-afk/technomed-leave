@@ -639,7 +639,7 @@ export function bookingSignature(sender) {
   const staff = STAFF.find(s => s.email.toLowerCase() === String(sender?.email || '').toLowerCase())
   const name = staff?.name || String(sender?.name || '').trim()
   const lines = [name, staff?.role, 'TechnoMed Pty Ltd', 'Hobart, Tasmania',
-    [staff?.mobileNumber, staff?.email || sender?.email].filter(Boolean).join(' · ')].filter(Boolean)
+    [staff?.phone, staff?.email || sender?.email].filter(Boolean).join(' · ')].filter(Boolean)
   const text = ['', 'Kind regards,', '', ...lines].join('\n')
   const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.45;color:#042746;margin-top:18px">
 <p style="margin:0 0 10px">Kind regards,</p>${lines.map((l, i) => i === 0
