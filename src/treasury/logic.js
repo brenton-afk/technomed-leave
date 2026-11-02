@@ -373,3 +373,89 @@ export function pct(n, digits = 1) {
   if (n == null || !Number.isFinite(n)) return '—'
   return `${n > 0 ? '+' : ''}${n.toFixed(digits)}%`
 }
+
+// ─── What if: the scenario planner ───────────────────────────────────────────
+// Today's holdings, a price the market reaches by a date, and weekly buying
+// until then. The buying is simulated week by week along a price path, because
+// what a weekly buy gets depends on the price each week — a flat year buys more
+// coin than a steady climb to the same end. Arithmetic, not a forecast.
+
+export const PATHS = {
+  steady: 'Steady climb',
+  late: 'Flat, then a late rally',
+  dip: 'Dip, then recover'
+}
+
+/** Weeks of buying from `today` up to `until` (whole weeks, at least 0). */
+export function weeksBetween(today, until) {
+  return Math.max(0, Math.floor(daysBetween(today, until) / 7))
+}
+
+/**
+ * The A$ price in each buying week, from `start` to `end`.
+ *   steady  straight line
+ *   late    flat at today's price, then the last eighth of the time rallies
+ *   dip     down `dip` (25%) by the halfway point, then up to the target
+ */
+export function pricePath(start, end, weeks, path = 'steady', dip = 0.25) {
+  const out = []
+  for (let i = 0; i < weeks; i++) {
+    const f = weeks <= 1 ? 1 : i / (weeks - 1)
+    let p
+    if (path === 'late') {
+      const from = 7 / 8
+      p = f < from ? start : start + (end - start) * ((f - from) / (1 - from))
+    } else if (path === 'dip') {
+      const low = start * (1 - dip)
+      p = f < 0.5 ? start + (low - start) * (f / 0.5) : low + (end - low) * ((f - 0.5) / 0.5)
+    } else {
+      p = start + (end - start) * f
+    }
+    out.push(p)
+  }
+  return out
+}
+
+/**
+ * @param {object} p
+ * @param {Array} p.rows        holdingsView rows (sats, costAud per entity)
+ * @param {number} p.priceAudNow
+ * @param {number} p.targetUsd
+ * @param {number} p.fx          US$ per A$1 at the target date
+ * @param {number} p.weekly      A$ a week
+ * @param {number} p.weeks
+ * @param {string} p.path
+ * @param {string} p.buyer       entity id that does the buying
+ */
+export function runScenario({ rows, priceAudNow, targetUsd, fx, weekly, weeks, path = 'steady', buyer = 'company' }) {
+  const targetAud = fx > 0 ? targetUsd / fx : null
+  if (!(priceAudNow > 0) || !(targetAud > 0)) return null
+  const prices = pricePath(priceAudNow, targetAud, weeks, path)
+  const spend = (Number(weekly) || 0) * prices.length
+  const addedSats = prices.reduce((s, price) => s + Math.round((Number(weekly) || 0) / price * SATS), 0)
+  const entities = rows.map(r => {
+    const buys = r.id === buyer
+    const sats = r.sats + (buys ? addedSats : 0)
+    const cost = r.costAud + (buys ? spend : 0)
+    const valueNow = (r.sats / SATS) * priceAudNow
+    const valueAt = (sats / SATS) * targetAud
+    return {
+      id: r.id, label: r.label, nowSats: r.sats, addedSats: buys ? addedSats : 0, sats, cost,
+      valueNow, valueAt, gainNow: valueNow - r.costAud, gain: valueAt - cost,
+      gainPct: cost > 0 ? (valueAt / cost - 1) * 100 : null,
+      breakEvenAud: sats > 0 && cost > 0 ? cost / (sats / SATS) : null
+    }
+  }).filter(e => e.sats > 0 || e.cost > 0)
+  const sum = k => entities.reduce((s, e) => s + (e[k] || 0), 0)
+  const total = {
+    nowSats: sum('nowSats'), addedSats, sats: sum('sats'), cost: sum('cost'), spend,
+    valueNow: sum('valueNow'), valueAt: sum('valueAt'), gainNow: sum('gainNow'), gain: sum('gain')
+  }
+  total.gainPct = total.cost > 0 ? (total.valueAt / total.cost - 1) * 100 : null
+  total.breakEvenAud = total.sats > 0 ? total.cost / (total.sats / SATS) : null
+  return {
+    targetAud, weeks: prices.length, spend, addedSats,
+    averageBuyAud: addedSats > 0 ? spend / (addedSats / SATS) : null,
+    entities, total
+  }
+}

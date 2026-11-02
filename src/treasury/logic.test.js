@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   zBand, soprAdjust, sthMvrvAdjust, dcaPlan, keyLevels, summaryLine, slice, holdingsView,
   atoOutlook, cashForecast, payDates, fyLabel, trustTotals, trustCsv, weekStart,
-  parseBtc, satsToBtcText, parseMoney, isLargeBtc
+  parseBtc, satsToBtcText, parseMoney, isLargeBtc, runScenario, pricePath, weeksBetween
 } from './logic.js'
 
 // Made-up figures throughout.
@@ -205,5 +205,56 @@ describe('an amount worth a second look', () => {
   it('flags a field over 100 BTC, not an ordinary holding', () => {
     expect(isLargeBtc(parseBtc('1436.7').sats)).toBe(true)
     expect(isLargeBtc(parseBtc('4.20005325').sats)).toBe(false)
+  })
+})
+
+describe('the scenario planner', () => {
+  const rows = [
+    { id: 'company', label: 'TechnoMed', sats: 400_000_000, costAud: 500000 },
+    { id: 'trust', label: 'Family trust', sats: 0, costAud: 0 },
+    { id: 'smsf', label: 'SMSF', sats: 100_000_000, costAud: 150000 }
+  ]
+
+  it('values today\'s holdings at the target, with no buying', () => {
+    const r = runScenario({ rows, priceAudNow: 100000, targetUsd: 140000, fx: 0.7, weekly: 0, weeks: 0 })
+    expect(r.targetAud).toBeCloseTo(200000)
+    expect(r.total.valueAt).toBeCloseTo(1_000_000)
+    expect(r.total.gain).toBeCloseTo(350000)
+    expect(r.entities.map(e => e.id)).toEqual(['company', 'smsf'])
+  })
+
+  it('a flat year buys more coin than a steady climb to the same price', () => {
+    const base = { rows, priceAudNow: 100000, targetUsd: 140000, fx: 0.7, weekly: 1000, weeks: 52 }
+    const steady = runScenario({ ...base, path: 'steady' })
+    const late = runScenario({ ...base, path: 'late' })
+    const dip = runScenario({ ...base, path: 'dip' })
+    expect(steady.spend).toBe(52000)
+    expect(late.addedSats).toBeGreaterThan(steady.addedSats)
+    expect(dip.addedSats).toBeGreaterThan(late.addedSats)
+    // A straight line from 100k to 200k averages (P1−P0)/ln(P1/P0) per coin bought.
+    expect(steady.averageBuyAud).toBeGreaterThan(140000)
+    expect(steady.averageBuyAud).toBeLessThan(146000)
+  })
+
+  it('only the buying entity gets the coins and the cost', () => {
+    const r = runScenario({ rows, priceAudNow: 100000, targetUsd: 70000, fx: 0.7, weekly: 1000, weeks: 10, path: 'steady', buyer: 'smsf' })
+    const smsf = r.entities.find(e => e.id === 'smsf')
+    expect(smsf.addedSats).toBe(10_000_000)
+    expect(smsf.cost).toBe(160000)
+    expect(r.entities.find(e => e.id === 'company').addedSats).toBe(0)
+  })
+
+  it('counts whole weeks to the date', () => {
+    expect(weeksBetween('2026-11-02', '2027-11-01')).toBe(52)
+    expect(weeksBetween('2026-11-02', '2026-11-01')).toBe(0)
+  })
+
+  it('the path starts today and ends at the target', () => {
+    for (const path of ['steady', 'late', 'dip']) {
+      const p = pricePath(100, 200, 52, path)
+      expect(p[0]).toBe(100)
+      expect(p[51]).toBeCloseTo(200)
+    }
+    expect(Math.min(...pricePath(100, 200, 53, 'dip'))).toBeCloseTo(75)
   })
 })
