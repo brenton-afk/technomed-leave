@@ -222,6 +222,16 @@ the client shows them in `cases/NoticeSheet.jsx` and confirms by id
 on its own. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
+**A supplier is judged on the booking as it now stands** (the hospital, before
+or after): a case switched from Diplomat to Mariner offers Signus nothing — Brent
+does not want them told about a case that is no longer theirs — and Device gets
+the loan request. A cancellation is judged on the booking as it was.
+**The hospital's loans team is told about loan sets** (`hospitalLoanNoticesFor`,
+`DEFAULT_HOSPITAL_LOAN_NOTICES`: Calvary on, RHH off): ordered, changed (set or
+date), no longer coming — tracked per booking as `loanreq:{event}:hosp-CLV` so
+it is said once. The auto-add card and Edit booking choose systems by button
+(`cases/KitPicker.jsx`), writing the same kit line the notices read.
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the

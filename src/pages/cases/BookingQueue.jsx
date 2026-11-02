@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
@@ -67,6 +68,8 @@ const inputStyle = {
  * right?", which is the only question being asked.
  */
 function Value({ label, value, onChange, missing, options }) {
+  // Everything on the card can be changed before it is added — the pencil
+  // says so, where plain text looked final.
   const [editing, setEditing] = useState(false)
   const shown = String(value || '').trim()
 
@@ -104,6 +107,7 @@ function Value({ label, value, onChange, missing, options }) {
       <span style={{ ...text('body'), color: shown ? colour.ink : colour.danger }}>
         {shown || 'not read — tap to add'}
       </span>
+      {shown && <span aria-hidden="true" style={{ ...text('caption'), color: colour.accentDeep, marginLeft: 6 }}>✎ edit</span>}
     </button>
   )
 }
@@ -242,7 +246,16 @@ function Candidate({ candidate, user, onDone }) {
       )}
       <Value label="Hospital" value={fields.hospital} onChange={v => set('hospital', v)}
         options={['RHH', 'CLV']} />
+      {/* The kit by buttons, not typing — a system changed after the email
+          was read (Diplomat → Mariner on a call with the surgeon) is two taps,
+          and the notices and loan requests follow the kit as it now stands. */}
       <Value label="Kit" value={fields.kit} onChange={v => set('kit', v)} />
+      <details style={{ marginBottom: space.xs }}>
+        <summary style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600, cursor: 'pointer', marginBottom: space.xs }}>
+          Change the system
+        </summary>
+        <KitPicker kit={fields.kit} onChange={v => set('kit', v)} />
+      </details>
       {candidate.attendance === 'No F2F' && (
         <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>
           <strong>Brainlab · No F2F</strong> — the list says nobody from TechnoMed is needed.

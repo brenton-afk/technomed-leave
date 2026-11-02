@@ -77,3 +77,57 @@ describe('everyone else', () => {
     expect(DEFAULT_RULES.every(r => r.autoSend === false)).toBe(true)
   })
 })
+
+// ─── A case switched to another supplier ─────────────────────────────────────
+// Read as Diplomat (Signus, consignment) from the email; the surgeon then
+// wanted Mariner (Device Technologies, loan) at Calvary. Fake patient only.
+describe('a booking changed from Diplomat to Mariner', () => {
+  const base = { date: '2026-11-10', hospital: 'CLV', surgeon: 'Thani', patient: 'Testa', procedure: 'L4/5 PLIF', startIso: '2026-11-10T09:00:00+11:00' }
+  const before = { ...base, kit: 'Diplomat (Consignment)', distributors: ['signus'], loans: {} }
+  const after = { ...base, kit: 'Mariner (Distributor Loan)', distributors: ['device'], loans: { device: ['Mariner'] } }
+
+  it('does not tell Signus about a case that is no longer theirs', async () => {
+    const { noticesFor, DEFAULT_CONTACTS, DEFAULT_RULES } = await import('./_bookingNotices.js')
+    const out = noticesFor({ kind: 'changed', before, after, eventId: 'e1', settings: { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES } })
+    expect(out.map(n => n.contactId)).not.toContain('signus')
+  })
+
+  it('still tells Signus when a Signus case itself is cancelled', async () => {
+    const { noticesFor, DEFAULT_CONTACTS, DEFAULT_RULES } = await import('./_bookingNotices.js')
+    const out = noticesFor({ kind: 'cancelled', before, after: null, eventId: 'e1', settings: { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES } })
+    expect(out.map(n => n.contactId)).toContain('signus')
+  })
+
+  it('asks Device for the Mariner loan set', async () => {
+    const { loanRequestsFor, DEFAULT_CONTACTS, DEFAULT_LOAN_REQUESTS } = await import('./_bookingNotices.js')
+    const out = loanRequestsFor({ kind: 'changed', before, after, eventId: 'e1', settings: { contacts: DEFAULT_CONTACTS, loanRequests: DEFAULT_LOAN_REQUESTS } })
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ contactId: 'device', loan: { status: 'request', systems: ['Mariner'] } })
+  })
+
+  it('tells Calvary\'s loan sets team the set is coming, and that the booking changed', async () => {
+    const { hospitalLoanNoticesFor, DEFAULT_CONTACTS } = await import('./_bookingNotices.js')
+    const out = hospitalLoanNoticesFor({ kind: 'changed', before, after, eventId: 'e1', settings: { contacts: DEFAULT_CONTACTS } })
+    expect(out).toHaveLength(1)
+    expect(out[0].to).toContain('TAS-LVH-Loansets@calvarycare.org.au')
+    expect(out[0].text).toContain('A loan set has been ordered for this case: Mariner (Device Technologies).')
+    expect(out[0].text).toContain('The booking has changed: Diplomat (Consignment) → Mariner (Distributor Loan).')
+  })
+
+  it('tells Calvary once, then only when the set or date changes, and when it is off', async () => {
+    const { hospitalLoanNoticesFor, DEFAULT_CONTACTS } = await import('./_bookingNotices.js')
+    const settings = { contacts: DEFAULT_CONTACTS }
+    const sent = { 'hosp-CLV': { date: after.date, systems: ['Mariner (Device Technologies)'] } }
+    expect(hospitalLoanNoticesFor({ kind: 'changed', before: after, after: { ...after, procedure: 'L4/5 TLIF' }, eventId: 'e1', settings, sent })).toEqual([])
+    const moved = hospitalLoanNoticesFor({ kind: 'moved', before: after, after: { ...after, date: '2026-11-12' }, eventId: 'e1', settings, sent })
+    expect(moved[0].loan.status).toBe('update')
+    const off = hospitalLoanNoticesFor({ kind: 'cancelled', before: after, after: null, eventId: 'e1', settings, sent })
+    expect(off[0].loan.status).toBe('cancel')
+  })
+
+  it('says nothing to Calvary about a case at RHH', async () => {
+    const { hospitalLoanNoticesFor, DEFAULT_CONTACTS } = await import('./_bookingNotices.js')
+    const rhh = { ...after, hospital: 'RHH' }
+    expect(hospitalLoanNoticesFor({ kind: 'new', after: rhh, eventId: 'e1', settings: { contacts: DEFAULT_CONTACTS } })).toEqual([])
+  })
+})

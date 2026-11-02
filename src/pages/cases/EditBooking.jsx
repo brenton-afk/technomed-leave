@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { CaseThread } from '../Chat.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
@@ -857,6 +858,10 @@ export default function EditBooking({
                         a button and typing the same thing have to produce one
                         field, or the two disagree the first time somebody
                         uses both. */}
+                    {f.key === 'kit' && (
+                      <KitPicker systemsOnly kit={fields.kit || ''}
+                        onChange={next => setFields(c => ({ ...c, kit: next }))} />
+                    )}
                     {f.key === 'kit' && (
                       <KitSupply
                         kit={fields.kit || ''}

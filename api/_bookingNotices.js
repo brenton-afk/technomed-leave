@@ -248,9 +248,17 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
   const out = []
   for (const rule of settings.rules) {
     if (!rule.events.includes(kind)) continue
-    const relevant = [before, after].filter(Boolean)
-    const has = relevant.some(b => b.distributors.includes(rule.distributor))
-    const atHospital = !rule.hospital || relevant.some(b => b.hospital === rule.hospital)
+    // Judged on the booking as it now stands. It used to be before OR after,
+    // so a case switched from Diplomat to Mariner still offered Signus a
+    // "booking changed" email — telling them about a case that is no longer
+    // theirs ("I don't want them to receive notification that we are not
+    // booking the case with Diplomat"). A cancellation is judged on the
+    // booking as it was, since there is no "after" worth the name.
+    // Where the case is, though, counts before or after: a KT case moved off
+    // RHH is still news to KT.
+    const now = kind === 'cancelled' ? (before || after) : after
+    const has = Boolean(now?.distributors.includes(rule.distributor))
+    const atHospital = !rule.hospital || [before, after].filter(Boolean).some(b => b.hospital === rule.hospital)
     if (!has || !atHospital) continue
     const contact = contacts.get(rule.contactId)
     if (!contact) continue
@@ -337,6 +345,83 @@ export async function recordLoanRequest(notice) {
 }
 
 const LOAN_WORD = { request: 'Loan set request', update: 'Loan set — booking changed', cancel: 'Loan set no longer needed' }
+
+// ─── Telling the hospital a loan set is coming ───────────────────────────────
+// "We also need to inform Calvary loan sets of the loan set being ordered and
+// in this case the change in the booking." — Brent, 2 Nov 2026.
+//
+// The hospital's loans team receives and tracks every loan set, so they hear
+// when one is ordered for a case at their hospital, when the case changes
+// (date, or which set), and when it is no longer coming. Kept under its own
+// key per booking (`hosp-CLV`), the same way a distributor's request is, so a
+// second save does not tell them twice. Shown before sending, like the rest.
+
+export const DEFAULT_HOSPITAL_LOAN_NOTICES = [
+  { hospital: 'CLV', contactId: 'calvary_loans', enabled: true },
+  // Off until asked for: RHH's coordinator is told by the distributor today.
+  { hospital: 'RHH', contactId: 'rhh_loans', enabled: false }
+]
+
+const DISTRIBUTOR_NAMES = { signus: 'Signus', kt: 'KT Medical', e4: 'E4 Surgical', globus: 'Globus / NuVasive', device: 'Device Technologies' }
+
+/** Every loan set on a booking, named with who is sending it. */
+function loanSets(b) {
+  return Object.entries(b?.loans || {}).flatMap(([d, systems]) =>
+    systems.map(s => `${s} (${DISTRIBUTOR_NAMES[d] || d})`))
+}
+
+export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings, sent = {} }) {
+  const out = []
+  const contacts = new Map(settings.contacts.map(c => [c.id, c]))
+  const ref = `TM-${String(eventId || '').replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}`
+  for (const rule of settings.hospitalLoanNotices || DEFAULT_HOSPITAL_LOAN_NOTICES) {
+    if (!rule.enabled) continue
+    const contact = contacts.get(rule.contactId)
+    if (!contact) continue
+    const key = `hosp-${rule.hospital}`
+    const had = sent[key]
+    const sets = kind !== 'cancelled' && after?.hospital === rule.hospital ? loanSets(after) : []
+    const needs = sets.length > 0
+
+    let status = null
+    if (needs && !had) status = 'request'
+    else if (had && !needs) status = 'cancel'
+    else if (had && needs && (had.date !== after.date || (had.systems || []).join('|') !== sets.join('|'))) status = 'update'
+    if (!status) continue
+
+    const b = status === 'cancel' ? (after || before) : after
+    const systems = status === 'cancel' ? (had?.systems || []) : sets
+    const was = before ? loanSets(before) : []
+    const lines = status === 'request'
+      ? [`A loan set has been ordered for this case: ${systems.join(' + ')}.`,
+        ...(kind === 'changed' && before?.kit && before.kit !== after.kit ? [`The booking has changed: ${before.kit} → ${after.kit}.`] : [])]
+      : status === 'update'
+        ? [`This case has changed — the loan set for it is now: ${systems.join(' + ')}.`,
+          ...(had.date !== b.date ? [`Date: ${shortDate(had.date)} → ${shortDate(b.date)}.`] : []),
+          ...((had.systems || []).join('|') !== systems.join('|') ? [`Was: ${(had.systems || []).join(' + ') || '—'}.`] : [])]
+        : [`The loan set for this case is no longer coming: ${systems.join(' + ')}.`,
+          kind === 'cancelled' ? 'The case has been cancelled.' : (was.length ? '' : 'The booking no longer needs it.')].filter(Boolean)
+    const arrive = status !== 'cancel' && b?.startIso ? kitArrivalBy(b.startIso) : null
+    const rows = [
+      ['Surgery', shortDate(b?.date)], ['Surgeon', b?.surgeon], ['Procedure', b?.procedure],
+      ['Patient', b?.patient || 'To be confirmed'],
+      ...(arrive ? [['Due at the hospital by', `${shortDate(arrive.date)} ${arrive.time}`]] : [])
+    ]
+    const greeting = `Hi ${contact.greeting || contact.name},`
+    const subject = `${{ request: 'Loan set ordered', update: 'Loan set — case changed', cancel: 'Loan set not coming' }[status]}`
+      + ` — ${systems.join(' + ')} — ${shortDate(b?.date)} — Pt ${b?.patient || 'TBC'} — Ref ${ref}`
+    const text = [greeting, '', ...lines, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '', `Reference: ${ref}`, '', 'TechnoMed'].join('\n')
+    const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
+<p>${escapeHtml(greeting)}</p>${lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')}
+<table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
+  `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
+<p style="color:#6b7a8d">Reference: ${ref}</p><p>TechnoMed</p></div>`
+    out.push({ ruleId: key, contactId: contact.id, name: `${contact.name} — ${status === 'request' ? 'loan set ordered' : status === 'update' ? 'case changed' : 'loan set not coming'}`,
+      to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
+      loan: { distributor: key, status, date: b?.date, hospital: b?.hospital, systems } })
+  }
+  return out
+}
 
 export function loanRequestsFor({ kind, before, after, eventId, settings, sent = {} }) {
   const out = []

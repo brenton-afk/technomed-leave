@@ -9,7 +9,8 @@ import {
 import { requireSession, requireAdmin } from '../_auth.js'
 import {
   getNoticeSettings, saveNoticeSettings, noticesFor, describeBooking,
-  holdNotice, takeNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest
+  holdNotice, takeNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest,
+  hospitalLoanNoticesFor, DEFAULT_HOSPITAL_LOAN_NOTICES
 } from '../_bookingNotices.js'
 import { sendBookingNotice } from '../_email.js'
 import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
@@ -1984,11 +1985,16 @@ async function prepareNotices({ kind, beforeEvent, afterEvent, eventId, session 
     const settings = await getNoticeSettings()
     const before = beforeEvent ? describeBooking(beforeEvent) : null
     const after = afterEvent ? describeBooking(afterEvent) : null
-    const sentLoans = await loanStateFor(eventId, (settings.loanRequests || []).map(l => l.distributor))
+    const sentLoans = await loanStateFor(eventId, [
+      ...(settings.loanRequests || []).map(l => l.distributor),
+      ...(settings.hospitalLoanNotices || DEFAULT_HOSPITAL_LOAN_NOTICES).map(h => `hosp-${h.hospital}`)
+    ])
     const notices = [
       ...noticesFor({ kind, eventId, settings, before, after }),
       // Task 8: a request for a loan set, a change to one, or calling it off.
-      ...loanRequestsFor({ kind, eventId, settings, before, after, sent: sentLoans })
+      ...loanRequestsFor({ kind, eventId, settings, before, after, sent: sentLoans }),
+      // And the hospital's loans team, told the set is coming.
+      ...hospitalLoanNoticesFor({ kind, eventId, settings, before, after, sent: sentLoans })
     ]
     const previews = []
     const sent = []

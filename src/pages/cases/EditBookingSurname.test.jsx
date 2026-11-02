@@ -139,7 +139,8 @@ describe('the kit hint', () => {
     show()
     await ready()
     expect(screen.getByDisplayValue('CYLOX (Loan)')).toBeInTheDocument()
-    expect(screen.queryByText(/Diplomat/)).not.toBeInTheDocument()
+    // The hint, not the system buttons — Diplomat is rightly one of those.
+    expect(screen.queryByText(/for example "Diplomat/)).not.toBeInTheDocument()
   })
 
   it('shows the format, marked as an example, while the field is empty', async () => {
