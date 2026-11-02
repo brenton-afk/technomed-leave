@@ -118,6 +118,36 @@ export const DISTRIBUTOR_DOMAINS = [
   'vifm.org'              // Donor Tissue Bank
 ]
 
+// ─── Except when a rep asks us to cover a case ───────────────────────────────
+// "There's a new email in the bookings email from Ben Reynolds about case
+// support but the portal inbox checker isn't picking it up." — Brent, 2 Nov
+// 2026. KT (and others) write to bookings@ asking TechnoMed to support one of
+// their cases: "case coverage request for Thursday at Calvary; JPW L5/S1 PLIF".
+// That is a booking, not an echo, and every one was being set aside unread.
+//
+// Told apart on the subject and opening words, before anything is downloaded.
+// A calendar invite or reply about one of ours ("Invitation:", "Accepted:")
+// stays an echo whatever it says; anything else from a distributor is read
+// only when it asks for cover or support.
+
+const ECHO_SUBJECT = /^\s*(?:(?:updated\s+)?invitation|accepted|declined|tentative(?:ly accepted)?|cancell?ed(?:\s+event)?)\b/i
+const ASKS_FOR_COVER = /\b(?:case\s*(?:coverage|cover|support)|cover(?:age)?\s+(?:request|for)|support\s+(?:request|for)|(?:can|could)\s+(?:you|tm|technomed|team\s*tm)\s+(?:please\s+)?(?:cover|support|attend)|reps?\s+(?:required|needed|request)|need\s+(?:a\s+)?rep|clinical\s+support)\b/i
+
+/** Whether a distributor's email asks TechnoMed to cover or support a case. */
+export function asksForCover(subject, snippet = '') {
+  if (ECHO_SUBJECT.test(String(subject || ''))) return false
+  return ASKS_FOR_COVER.test(`${subject || ''}\n${snippet || ''}`)
+}
+
+/** The source a distributor's cover request is read as. No hospital: the email says. */
+export const DISTRIBUTOR_REQUEST = {
+  id: 'distributor',
+  label: 'Distributor asking for cover',
+  hospital: null,
+  from: [],
+  shape: 'single'
+}
+
 /**
  * Whether an address belongs to a distributor.
  *

@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const queue = new Map()
 const seen = new Set()
+const records = new Map()
 let mailbox
 let inFlight = 0
 let maxInFlight = 0
@@ -22,7 +23,7 @@ vi.mock('./_auth.js', () => ({
 }))
 vi.mock('./_gmail.js', () => ({
   searchMailbox: vi.fn(async () => Object.keys(mailbox)),
-  senderOf: vi.fn(async id => mailbox[id].from),
+  headersOf: vi.fn(async id => ({ from: mailbox[id].from, subject: mailbox[id].subject || '', snippet: mailbox[id].snippet || '' })),
   addressOf: v => String(v || '').replace(/.*</, '').replace(/>.*/, '').trim().toLowerCase(),
   readMessage: vi.fn(async id => {
     downloaded.push(id)
@@ -42,8 +43,8 @@ vi.mock('./_readBookingDocument.js', () => ({
 }))
 vi.mock('./_redis.js', () => ({
   redis: vi.fn(async () => null), redisSetBody: vi.fn(),
-  bookingEmailSeen: vi.fn(async id => seen.has(id)),
-  markBookingEmailSeen: vi.fn(async id => { seen.add(id) }),
+  bookingEmailRecord: vi.fn(async id => (seen.has(id) ? (records.get(id) || { count: 1, rule: 2 }) : null)),
+  markBookingEmailSeen: vi.fn(async (id, count, extra) => { seen.add(id); records.set(id, { count, rule: 2, ...extra }) }),
   markBookingEmailFailed: vi.fn(),
   saveBookingCandidate: vi.fn(async c => { queue.set(c.id, c) }),
   getBookingCandidate: vi.fn(async id => queue.get(id)),
@@ -72,7 +73,7 @@ async function call(action, body) {
 }
 
 beforeEach(() => {
-  queue.clear(); seen.clear(); downloaded.length = 0; inFlight = 0; maxInFlight = 0; created = null
+  queue.clear(); seen.clear(); records.clear(); downloaded.length = 0; inFlight = 0; maxInFlight = 0; created = null
   mailbox = {
     toby: { from: 'Tobias Long <tobias.long@ths.tas.gov.au>', html: TOBY },
     cns1: { from: 'bookings@cnstas.com.au', text: 'Booking' },
@@ -97,6 +98,39 @@ describe('reading the mailbox', () => {
 
   it('does not read an email twice', async () => {
     await call('ingest', {})
+    downloaded.length = 0
+    await call('ingest', {})
+    expect(downloaded).toEqual([])
+  })
+})
+
+// "There's a new email in the bookings email from Ben Reynolds about case
+// support but the portal inbox checker isn't picking it up." Distributor mail
+// is set aside as an echo of our own bookings — but a rep asking us to cover
+// one of their cases is a booking. Invented patient.
+describe('a distributor asking us to cover a case', () => {
+  const COVER = { from: 'Ben Reynolds <ben@ktmedical.com.au>', subject: 'Case coverage Thursday 12/11',
+    snippet: 'Hi team, case coverage request for Thursday at Calvary; JPW L5/S1 PLIF pt TESTA', text: 'case coverage request' }
+
+  it('is read, while their invites and confirmations stay echoes', async () => {
+    mailbox = { cover: COVER,
+      invite: { from: 'kt@ktmedical.com.au', subject: 'Invitation: Testa PLIF @ Thu 12 Nov' },
+      chat: { from: 'kt@ktmedical.com.au', subject: 'Invoice 2041', snippet: 'Please find attached' } }
+    const res = await call('ingest', {})
+    expect(downloaded).toEqual(['cover'])
+    expect(res.payload).toMatchObject({ echoes: 2, read: 1 })
+    expect([...queue.values()][0].sources).toEqual(['distributor'])
+  })
+
+  it('is looked at again if it was set aside before this change', async () => {
+    mailbox = { cover: COVER, cns1: { from: 'bookings@cnstas.com.au', text: 'Booking' } }
+    // Both marked seen under the old rule with nothing found.
+    seen.add('cover'); records.set('cover', { count: 0 })
+    seen.add('cns1'); records.set('cns1', { count: 0 })
+    await call('ingest', {})
+    // The cover request is read; the hospital email that genuinely had no case
+    // in it is not read a second time.
+    expect(downloaded).toEqual(['cover'])
     downloaded.length = 0
     await call('ingest', {})
     expect(downloaded).toEqual([])

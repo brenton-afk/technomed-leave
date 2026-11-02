@@ -177,3 +177,15 @@ export async function senderOf(id) {
   const header = (message.payload?.headers || []).find(h => /^from$/i.test(h.name))
   return header?.value || ''
 }
+
+/**
+ * Sender, subject and Gmail's snippet, still without downloading the message.
+ * Enough to tell a distributor's calendar echo from a rep asking us to cover
+ * a case (see asksForCover).
+ */
+export async function headersOf(id) {
+  const message = await gmail(
+    `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`)
+  const header = name => (message.payload?.headers || []).find(h => h.name.toLowerCase() === name)?.value || ''
+  return { from: header('from'), subject: header('subject'), snippet: message.snippet || '' }
+}

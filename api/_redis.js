@@ -418,10 +418,13 @@ export async function bookingEmailSeen(messageId) {
 }
 
 /** Remembers an email as read, so a re-scan does not queue it twice. */
-export async function markBookingEmailSeen(messageId, count = 0) {
+export async function markBookingEmailSeen(messageId, count = 0, extra = {}) {
   if (!messageId) return
+  // `rule: 2` marks a record written once distributors' cover requests were
+  // read (see asksForCover). Older records with nothing found are looked at
+  // again once, because some of them were cover requests set aside unread.
   await redis('set', `bookingQueue:seen:${messageId}`, JSON.stringify({
-    at: new Date().toISOString(), count
+    at: new Date().toISOString(), count, rule: 2, ...extra
   }))
 }
 

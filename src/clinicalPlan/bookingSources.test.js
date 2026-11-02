@@ -204,3 +204,15 @@ describe('a booking forwarded by the team', () => {
     expect(mayNotifyAboutBooking('Sharon.Ashworth@calvarycare.org.au')).toBe(false)
   })
 })
+
+describe('a distributor asking for cover', async () => {
+  const { asksForCover } = await import('./bookingSources.js')
+  it('is told apart from their echoes by what it says', () => {
+    expect(asksForCover('Case coverage Thursday 8/10', 'Hi team, case coverage request for Thursday at Calvary')).toBe(true)
+    expect(asksForCover('Thursday', 'Could you cover a JPW PLIF for us at Calvary?')).toBe(true)
+    expect(asksForCover('Rep required Monday', '')).toBe(true)
+    expect(asksForCover('Invitation: case coverage @ Thu', '')).toBe(false)
+    expect(asksForCover('Accepted: Testa PLIF', 'case support')).toBe(false)
+    expect(asksForCover('Invoice 2041', 'Please find attached')).toBe(false)
+  })
+})

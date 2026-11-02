@@ -41,17 +41,17 @@ import {
 import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
 import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
-  bookingEmailSeen, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
+  bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate,
   getTeamLeader, setTeamLeaderFor
 } from '../_redis.js'
-import { searchMailbox, readMessage, addressOf, senderOf } from '../_gmail.js'
+import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
 import { readDictatedBooking } from '../_readDictatedBooking.js'
 import { readVoiceCommand } from '../_voiceCommand.js'
 import {
-  sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar,
+  sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar, asksForCover, DISTRIBUTOR_REQUEST,
   movedOnCalendar
 } from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
@@ -1214,21 +1214,37 @@ async function handleIngest(req, res) {
     // seen-checks run together, the sender is read from one header, and only
     // booking emails are downloaded — several at once. What happens to each
     // booking afterwards is exactly as before, in the same order.
-    const seen = await Promise.all(messageIds.map(id => bookingEmailSeen(id).catch(() => false)))
-    const unseen = messageIds.filter((_, i) => !seen[i])
-    const senders = await inBatches(unseen, 8, id => senderOf(id).catch(() => ''))
+    const records = await Promise.all(messageIds.map(id => bookingEmailRecord(id).catch(() => null)))
+    // Unseen, or seen before cover requests were read and nothing came of it —
+    // those are looked at once more (see asksForCover). Anything that produced
+    // a booking, or is mid-retry, is settled as it was.
+    const recheck = r => r && !r.failed && !r.rule && !r.count
+    const unseen = messageIds.filter((_, i) => !records[i] || records[i].failed || recheck(records[i]))
+    const wasSeen = new Set(messageIds.filter((_, i) => recheck(records[i])))
+    const heads = await inBatches(unseen, 8, id => headersOf(id).catch(() => ({ from: '', subject: '', snippet: '' })))
 
     const toRead = []
     for (let i = 0; i < unseen.length; i++) {
-      const from = addressOf(senders[i])
+      const { from: rawFrom, subject, snippet } = heads[i]
+      const from = addressOf(rawFrom)
+      let source = sourceOf(from)
       if (isDistributorEmail(from)) {
-        echoes += 1
+        if (asksForCover(subject, snippet)) {
+          source = DISTRIBUTOR_REQUEST
+        } else {
+          echoes += 1
+          await markBookingEmailSeen(unseen[i], 0, { echo: true })
+          continue
+        }
+      }
+      if (!source) {
+        if (!wasSeen.has(unseen[i])) skipped += 1
         await markBookingEmailSeen(unseen[i], 0)
         continue
       }
-      const source = sourceOf(from)
-      if (!source) {
-        skipped += 1
+      // Read once already, from a booking source, and nothing in it: only the
+      // record is brought up to date — it is not read a second time.
+      if (wasSeen.has(unseen[i]) && source !== DISTRIBUTOR_REQUEST) {
         await markBookingEmailSeen(unseen[i], 0)
         continue
       }
