@@ -200,3 +200,33 @@ export const IconSearch = p => (
     <path d="M15 15l5 5" />
   </Svg>
 )
+
+// ── Treasury ──
+
+// A rising line over a baseline — a figure that changes over time.
+export const IconChart = p => (
+  <Svg {...p}>
+    <path d="M4 19.5h16" />
+    <path d="M5 15.5l4.5-4.5 3.5 3 6-6.5" />
+    <path d="M15 7.5h4v4" />
+  </Svg>
+)
+
+// The B with its two strokes through it, drawn in the same line as the rest.
+export const IconBitcoin = p => (
+  <Svg {...p}>
+    <path d="M8 5.5h5.5a3 3 0 010 6H8z" />
+    <path d="M8 11.5h6.5a3.25 3.25 0 010 6.5H8z" />
+    <path d="M8 5.5v12.5M10.5 3.5v2M13.5 3.5v2M10.5 18v2.5M13.5 18v2.5" />
+  </Svg>
+)
+
+// A wallet: a body, a flap and the clasp.
+export const IconWallet = p => (
+  <Svg {...p}>
+    <rect x="3.5" y="6.5" width="17" height="13" rx="2.5" />
+    <path d="M3.5 10h17" />
+    <path d="M6 6.5l9.5-3 1 3" />
+    <circle cx="16.5" cy="14.5" r="1.1" fill="currentColor" stroke="none" />
+  </Svg>
+)

@@ -47,7 +47,9 @@ export default function LockScreen({ user, onUnlock, onUsePin, reason, onCancel 
       })
       const data = await res.json()
       if (!data.valid) throw new Error(data.error || 'That did not work')
-      onUnlock()
+      // The fresh sign-in is handed on. The admin portal ignores it; the
+      // Treasury exchanges it for a server-side unlock (api/_treasuryAccess.js).
+      onUnlock(data)
     } catch {
       // Cancelled, no passkey on this device, or a face it would not take.
       // All of them mean the same thing here: offer it again, and offer the

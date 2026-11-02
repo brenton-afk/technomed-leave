@@ -12,6 +12,10 @@ const {
   AdminPortal, FileBrowser, PatientHistory, Notifications
 } = Screens
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
+// Not in lazyScreens' list on purpose: that list is prefetched onto every
+// signed-in phone, and the Treasury is one person's. Fetched only when opened.
+const Treasury = React.lazy(() => import('./pages/treasury/Treasury.jsx'))
+const OPEN_ON_TREASURY = 'tm_open_treasury'
 import { rememberUser } from './lastUser.js'
 import { KitHub, MeHub, ComingSoonSection } from './pages/Hubs.jsx'
 import PromptBanner from './pages/PromptBanner.jsx'
@@ -66,7 +70,7 @@ const SELF_BACK = new Set([
   'resources', 'guides', 'messages', 'stock', 'usagefiles', 'patient', 'security',
   'notifications', 'payslips',
   // Migrated to design/Shell.jsx's Header, so they draw their own.
-  'kitroom', 'projects', 'timesheets', 'leave'
+  'kitroom', 'projects', 'timesheets', 'leave', 'treasury'
 ])
 
 // Matches the server-side session TTL in api/_auth.js.
@@ -162,6 +166,18 @@ export default function App() {
   // The number on the Messages tab. Below the state it reads and above every
   // early return, which is the only place both rules are satisfied.
   const unread = useUnread(user?.token)
+  // Whether to show the Treasury card. Asked of the server, which answers 404
+  // for everyone not on TREASURY_USERS — so for them nothing appears.
+  const [treasuryAllowed, setTreasuryAllowed] = useState(false)
+  useEffect(() => {
+    setTreasuryAllowed(false)
+    if (!user?.token) return
+    let live = true
+    fetch('/api/treasury?action=access', { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => { if (live) setTreasuryAllowed(r.ok) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [user?.token])
   // "/?go=approvals" — the link in the leave email and notification — opens
   // the admin portal, whose first screen is Leave. Read once and then taken
   // off the address, so a reload does not keep landing there.
@@ -172,12 +188,31 @@ export default function App() {
         window.history.replaceState(null, '', window.location.pathname)
         return { tab: 'admin', sub: null }
       }
+      // The Treasury: "/?go=treasury", back from Xero ("?treasury=…"), or this
+      // device set to open there. The server decides whether there is anything
+      // to see; for anybody else the screen says so and offers the way back.
+      const params = new URLSearchParams(window.location.search)
+      // The address is tidied in an effect below, not here: an initialiser
+      // runs twice under StrictMode, and the second run must still see it.
+      if (go === 'treasury' || params.get('treasury')) {
+        return { tab: 'me', sub: 'treasury', notice: params.get('treasury') || null }
+      }
+      try { if (localStorage.getItem(OPEN_ON_TREASURY) === '1') return { tab: 'me', sub: 'treasury' } } catch { /* storage blocked */ }
       // Back from Dropbox: the admin portal opens on System with the result.
       // The address keeps ?dropbox= until System has read it.
       if (new URLSearchParams(window.location.search).get('dropbox')) return { tab: 'admin', sub: null }
     } catch { /* no window in tests that do not need one */ }
     return { tab: 'cases', sub: null }
   })
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('go') === 'treasury' || params.get('treasury')) {
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+    } catch { /* no window */ }
+  }, [])
 
   // ── The microphone ──
   //
@@ -428,10 +463,12 @@ export default function App() {
         case 'security':
           return <ComingSoonSection eyebrow="Account" title="Sign-in & Face ID" icon={IconLock} onBack={back}
             detail="Face ID is offered on the case plan the first time you sign in on a device. Managing enrolled devices from here is next." />
+        case 'treasury':
+          return <Treasury user={user} notice={nav.notice} onBack={back} />
         case 'payslips':
           return <ComingSoonSection eyebrow="Pay" title="Payslips" icon={IconPayslip} onBack={back}
             detail="Pay run history appears here once Xero payslip access is enabled." />
-        default: return <MeHub user={user} onNavigate={navigate} onLogout={handleLogout} />
+        default: return <MeHub user={user} onNavigate={navigate} onLogout={handleLogout} treasury={treasuryAllowed} />
       }
     }
 

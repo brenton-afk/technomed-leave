@@ -5,6 +5,10 @@
       "destination": "/api/guides?dropbox=:action"
     },
     {
+      "source": "/api/treasury/xero-callback",
+      "destination": "/api/treasury?action=xero-callback"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
@@ -39,6 +43,9 @@
       "includeFiles": "theatre-guides/**",
       "maxDuration": 30,
       "memory": 1024
+    },
+    "api/treasury.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -49,6 +56,14 @@
     {
       "path": "/api/cron/timesheet-reminder?job=morning",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/treasury?action=cron",
+      "schedule": "40 19 * * *"
+    },
+    {
+      "path": "/api/treasury?action=cron",
+      "schedule": "40 7 * * *"
     }
   ],
   "headers": [

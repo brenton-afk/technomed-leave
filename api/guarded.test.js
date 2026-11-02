@@ -68,8 +68,8 @@ describe('every API route', () => {
         return
       }
       expect(source, `${path} is reachable by anyone who knows the URL. `
-        + 'Guard it with requireSession/requireAdmin, or add it to EXEMPT with the reason.')
-        .toMatch(/requireSession|requireAdmin|getSession/)
+        + 'Guard it with requireSession/requireAdmin (or treasuryGate), or add it to EXEMPT with the reason.')
+        .toMatch(/requireSession|requireAdmin|getSession|treasuryGate/)
     })
   }
 })

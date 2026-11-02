@@ -1,0 +1,151 @@
+import React, { useCallback, useEffect, useState } from 'react'
+import { colour, text, space, radius, border, card } from '../../design/tokens.js'
+import { formatStamp } from '../../clinicalPlan/week.js'
+
+// ─── Pieces every Treasury screen shares ─────────────────────────────────────
+
+export class Locked extends Error {}
+
+/** One call to /api/treasury. A 403 means the 15-minute unlock ran out. */
+export async function treasuryCall(user, action, { method = 'GET', body, query = {} } = {}) {
+  const qs = new URLSearchParams({ action, ...query }).toString()
+  const res = await fetch(`/api/treasury?${qs}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  })
+  if (res.status === 403) throw new Locked()
+  if (res.status === 404) throw new Error('Not available.')
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.error) throw new Error(data.error || 'That did not go through.')
+  return data
+}
+
+/** Loads one action and offers a reload. Never shows a raw error. */
+export function useTreasury(user, action, { query = {}, onLocked, page } = {}) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(true)
+  const key = JSON.stringify(query)
+  const load = useCallback(async (extra = {}) => {
+    setBusy(true)
+    try {
+      setData(await treasuryCall(user, action, { query: { ...JSON.parse(key), ...(page ? { page } : {}), ...extra } }))
+      setError(null)
+    } catch (err) {
+      if (err instanceof Locked) onLocked?.()
+      else setError(err.message)
+    } finally { setBusy(false) }
+  }, [user, action, key, onLocked, page])
+  useEffect(() => { load() }, [load])
+  return { data, error, busy, reload: load, setData }
+}
+
+export function Stale({ problem }) {
+  return (
+    <span title={problem || 'Showing the last stored value'} style={{
+      ...text('micro'), color: colour.warning, background: colour.warningSoft,
+      border: `1px solid ${colour.warningLine}`, borderRadius: radius.pill, padding: '1px 6px', marginLeft: 6,
+      textTransform: 'uppercase', whiteSpace: 'nowrap'
+    }}>Stale</span>
+  )
+}
+
+export function when(iso) {
+  if (!iso) return 'never'
+  try { return formatStamp(iso) } catch { return iso }
+}
+
+/** A headline number. */
+export function Figure({ label, value, sub, stale, problem, tone, onClick }) {
+  const fg = tone === 'danger' ? colour.danger : tone === 'warning' ? colour.warning : colour.ink
+  return (
+    <div onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+      style={{ ...card(), padding: space.md, cursor: onClick ? 'pointer' : 'default', minWidth: 0 }}>
+      <div style={{ ...text('micro'), color: colour.inkFaint, textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        {stale && <Stale problem={problem} />}
+      </div>
+      <div style={{ ...text('title'), color: fg, marginTop: 4, overflowWrap: 'anywhere' }}>{value}</div>
+      {sub && <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
+}
+
+export function Grid({ children }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: space.sm, marginBottom: space.md }}>{children}</div>
+}
+
+/**
+ * The box every field shares. Each screen spreads it with text('field') in a
+ * local `inputStyle`, which is what design/noZoom.test.js can see: a field
+ * under 16px zooms an iPhone on focus and never zooms back.
+ */
+export const fieldBox = {
+  width: '100%', boxSizing: 'border-box', padding: `${space.sm + 2}px ${space.md}px`,
+  border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink
+}
+
+export function Field({ label, children, hint }) {
+  return (
+    <label style={{ display: 'block', marginBottom: space.md }}>
+      <span style={{ ...text('caption'), color: colour.inkMuted, display: 'block', marginBottom: 4 }}>{label}</span>
+      {children}
+      {hint && <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block', marginTop: 4 }}>{hint}</span>}
+    </label>
+  )
+}
+
+export function Segmented({ options, value, onChange }) {
+  return (
+    <div role="tablist" style={{ display: 'inline-flex', border: border.hairline, borderRadius: radius.pill, padding: 2, background: colour.surface }}>
+      {options.map(o => (
+        <button key={o.id} role="tab" aria-selected={value === o.id} onClick={() => onChange(o.id)}
+          style={{
+            ...text('caption'), fontWeight: 600, border: 'none', borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer',
+            background: value === o.id ? colour.navy : 'transparent', color: value === o.id ? 'white' : colour.inkMuted
+          }}>{o.label}</button>
+      ))}
+    </div>
+  )
+}
+
+export function Table({ head, rows, align = [] }) {
+  return (
+    <div style={{ overflowX: 'auto', ...card(), marginBottom: space.md }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', ...text('caption') }}>
+        <thead>
+          <tr>{head.map((h, i) => (
+            <th key={i} style={{ textAlign: align[i] || 'left', padding: `${space.sm}px ${space.md}px`, color: colour.inkFaint, fontWeight: 600, borderBottom: border.hairline, whiteSpace: 'nowrap' }}>{h}</th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, j) => (
+            <tr key={j}>{r.map((c, i) => (
+              <td key={i} style={{ textAlign: align[i] || 'left', padding: `${space.sm}px ${space.md}px`, color: colour.ink, borderBottom: j === rows.length - 1 ? 'none' : border.hairlineSoft, whiteSpace: i === 0 ? 'nowrap' : 'normal' }}>{c}</td>
+            ))}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export function Note({ children }) {
+  return <div style={{ ...text('caption'), color: colour.inkFaint, margin: `${space.xs}px 0 ${space.md}px` }}>{children}</div>
+}
+
+export function Problem({ children }) {
+  if (!children) return null
+  return <div role="alert" style={{ ...text('caption'), color: colour.warning, background: colour.warningSoft, border: `1px solid ${colour.warningLine}`, borderRadius: radius.control, padding: space.md, marginBottom: space.md }}>{children}</div>
+}
+
+export function SmallButton({ children, onClick, disabled, tone }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      ...text('caption'), fontWeight: 600, padding: '6px 12px', borderRadius: radius.pill, cursor: disabled ? 'default' : 'pointer',
+      border: tone === 'danger' ? `1px solid ${colour.dangerLine}` : border.hairline,
+      background: colour.surface, color: tone === 'danger' ? colour.danger : colour.navy, opacity: disabled ? 0.5 : 1
+    }}>{children}</button>
+  )
+}
