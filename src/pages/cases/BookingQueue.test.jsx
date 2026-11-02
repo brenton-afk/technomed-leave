@@ -459,3 +459,23 @@ describe('saying a case is already booked', () => {
     })
   })
 })
+
+// "AIRO doesn't need to transcribe into the booking from the email, just needs
+// to automatically tap the AIRO button in the booking."
+describe('navigation in an email', () => {
+  it('taps the AIRO button and stays off the kit line', async () => {
+    const AIRO_CASE = { ...PENDING[0], id: 'bk_airo', kit: 'Mariner MIS / AIRO' }
+    global.fetch = vi.fn(async (url, init) => {
+      const text = String(url)
+      calls.push({ url: text, body: init?.body ? JSON.parse(init.body) : null })
+      if (text.includes('action=queue')) return { ok: true, status: 200, json: async () => ({ ok: true, pending: [AIRO_CASE] }) }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    })
+    show()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'AIRO + Curve' })).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.queryByText(/Mariner MIS \/ AIRO/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add to calendar' }))
+    await waitFor(() => expect(calls.some(c => c.url.includes('action=accept'))).toBe(true))
+    expect(calls.find(c => c.url.includes('action=accept')).body.fields.kit).toBe('Mariner MIS + BRAINLAB AIRO & CURVE')
+  })
+})

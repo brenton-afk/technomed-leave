@@ -306,6 +306,9 @@ describe('a booking notice to a supplier or hospital', () => {
     expect(posted[0].html).toContain('Kind regards,')
     expect(posted[0].html).toContain('Clinical Support Specialist')
     expect(posted[0].text).toContain('0409 437 131 · ben@technomed.com.au')
-    expect(posted[0].html).toContain('src="https://leave.technomed.com.au/email-logo.png"')
+    expect(posted[0].html).toContain('src="cid:technomed-logo"')
+    // The logo travels inside the message; a linked one arrived as a broken box.
+    expect(posted[0].attachments).toEqual([expect.objectContaining({ content_id: 'technomed-logo', filename: 'technomed-logo.png' })])
+    expect(posted[0].attachments[0].content.length).toBeGreaterThan(1000)
   })
 })

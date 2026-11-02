@@ -18,7 +18,7 @@ describe('a Signus booking', () => {
     expect(rest).toEqual([])
     expect(notice.to).toEqual(['jhanson@signus.com.au'])
     expect(notice.cc).toEqual(['apolites@signus.com.au'])
-    expect(notice.subject).toBe('New booking — Testa 6/11/2026 CLV — Ref TM-ABC123')
+    expect(notice.subject).toBe('New booking — Testa 6/11/2026 CLV')
   })
 
   it('names the surname and never the first name', () => {
@@ -32,7 +32,7 @@ describe('a Signus booking', () => {
     const after = read(event({ start: { dateTime: '2026-11-09T09:00:00+11:00' } }))
     const [notice] = noticesFor({ kind: 'moved', before, after, eventId: 'evt-abc123', settings })
     expect(notice.text).toMatch(/Date: 6\/11\/2026 → 9\/11\/2026/)
-    expect(notice.subject).toMatch(/Ref TM-ABC123$/)
+    expect(notice.subject).not.toMatch(/Ref|TM-/)
   })
 
   it('a cancellation is a notice too', () => {

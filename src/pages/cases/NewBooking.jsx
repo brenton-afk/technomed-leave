@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { BRAINLAB, BRAINLAB_KIT } from '../../clinicalPlan/brainlab.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { offerNotices } from '../../notices.js'
 import DictateBooking from './DictateBooking.jsx'
@@ -41,8 +42,8 @@ const SUPPLY = SUPPLY_OPTIONS
 // required answer, because the second decides whether a rep goes and whether
 // the case is invoiced as clinical support.
 // AIRO always comes with the Curve cart; the Curve can be used on its own.
-const BRAINLAB = ['AIRO + Curve', 'Curve only', 'Other']
-const BRAINLAB_KIT = { 'AIRO + Curve': 'BRAINLAB AIRO & CURVE', 'Curve only': 'BRAINLAB CURVE', Other: 'BRAINLAB' }
+// The options and their kit wording live in clinicalPlan/brainlab.js, shared
+// with the bookings inbox.
 const ATTENDANCE = ['Attendance required', 'No F2F']
 
 /** The next weekday, since a booking is far more often ahead than today. */

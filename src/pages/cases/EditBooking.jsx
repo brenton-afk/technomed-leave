@@ -328,6 +328,15 @@ function KitSupply({ kit, system, onChange }) {
   )
 }
 
+// How a line in the booking's loan log reads. See api/_bookingNotices.js
+// recordLoanRequest.
+const LOAN_LOG_WORD = { request: 'Requested from', update: 'Change sent to', cancel: 'Called off with', hospital: 'Told' }
+function loanLogWhen(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Hobart' })
+}
+
 export default function EditBooking({
   eventId, user, onClose, onSaved, onPreferences, hasPreferences
 }) {
@@ -893,6 +902,30 @@ export default function EditBooking({
                     <span style={{ ...text('bodyStrong'), color: colour.ink }}>
                       {navigation}
                     </span>
+                  </div>
+                )}
+
+                {/* ── Loan sets asked for ──
+                    "Once the request for a loan set is sent to the
+                    distributor, the portal is updated to say that the request
+                    was made, by whom and at what time and date." Newest first,
+                    every request, change and call-off, and the hospital's
+                    loans team being told. */}
+                {(loaded?.loanLog || []).length > 0 && (
+                  <div style={{
+                    marginBottom: space.md, padding: `${space.sm}px ${space.md}px`,
+                    borderRadius: radius.control, background: colour.surface, border: `1px solid ${colour.line}`
+                  }}>
+                    <span style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, display: 'block', marginBottom: 4 }}>
+                      Loan sets
+                    </span>
+                    {loaded.loanLog.map((l, i) => (
+                      <div key={i} style={{ ...text('caption'), color: i === 0 ? colour.ink : colour.inkMuted, marginBottom: 2 }}>
+                        <strong>{LOAN_LOG_WORD[l.hospital ? 'hospital' : l.status] || 'Emailed'}</strong>
+                        {' '}{l.to}{l.systems?.length ? ` — ${l.systems.join(' + ')}` : ''}
+                        {' · '}{l.by || 'someone'}, {loanLogWhen(l.at)}
+                      </div>
+                    ))}
                   </div>
                 )}
 

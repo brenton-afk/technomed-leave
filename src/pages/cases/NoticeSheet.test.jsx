@@ -4,7 +4,7 @@ import NoticeSheet from './NoticeSheet.jsx'
 import { offerNotices, clearNotices } from '../../notices.js'
 
 const PREVIEW = { id: 'n_1_a', name: 'Signus', to: ['jhanson@signus.com.au'], cc: ['apolites@signus.com.au'],
-  subject: 'New booking — Testa 6/11/2026 CLV — Ref TM-ABC123', text: 'Hi Signus team,\n\nA new case has been booked.' }
+  subject: 'New booking — Testa 6/11/2026 CLV', text: 'Hi Signus team,\n\nA new case has been booked.' }
 
 beforeEach(() => { global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, results: [{ id: 'n_1_a', ok: true, name: 'Signus' }] }) })) })
 afterEach(() => { act(() => clearNotices()); vi.restoreAllMocks() })

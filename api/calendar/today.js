@@ -9,7 +9,7 @@ import {
 import { requireSession, requireAdmin } from '../_auth.js'
 import {
   getNoticeSettings, saveNoticeSettings, noticesFor, describeBooking,
-  holdNotice, takeNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest,
+  holdNotice, takeNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest, loanLogFor,
   hospitalLoanNoticesFor, DEFAULT_HOSPITAL_LOAN_NOTICES
 } from '../_bookingNotices.js'
 import { sendBookingNotice, escapeHtml } from '../_email.js'
@@ -437,6 +437,9 @@ async function handleBooking(req, res) {
       planned: parseRepNames(labelled.planned),
       // Marked as having no usage, which stops the 6pm reminder (Task 11).
       noUsage: await isMarkedNoUsage(event.id),
+      // Every loan set requested, changed or called off for this case, and who
+      // sent it when — shown in the booking.
+      loanLog: await loanLogFor(event.id).catch(() => []),
       canAllocate: await canAllocate(session, event.start?.dateTime || event.start?.date)
     })
   } catch (err) {
@@ -2067,7 +2070,7 @@ async function prepareNotices({ kind, beforeEvent, afterEvent, eventId, session 
       if (notice.autoSend) {
         try {
           await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: eventId })
-          await recordLoanRequest(notice).catch(() => {})
+          await recordLoanRequest(notice, firstNameFor(session.email)).catch(() => {})
           sent.push(notice.name)
         } catch (err) {
           failed.push({ name: notice.name, error: err.message })
@@ -2108,7 +2111,7 @@ async function handleNotify(req, res) {
       await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: notice.eventId })
       // A loan request is remembered once it has gone, so a later move or
       // cancellation follows it up and a second save does not ask again.
-      await recordLoanRequest(notice).catch(() => {})
+      await recordLoanRequest(notice, firstNameFor(session.email)).catch(() => {})
       results.push({ id, ok: true, name: notice.name })
     } catch (err) {
       results.push({ id, ok: false, name: notice.name, error: err.message || 'Email not sent' })

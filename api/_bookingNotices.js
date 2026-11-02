@@ -254,7 +254,6 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
   // colour — is not news to them.
   if ((kind === 'changed' || kind === 'moved') && !changes.length) return []
 
-  const ref = `TM-${String(eventId || '').replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}`
   const contacts = new Map(settings.contacts.map(c => [c.id, c]))
   const out = []
   for (const rule of settings.rules) {
@@ -274,7 +273,7 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
     const contact = contacts.get(rule.contactId)
     if (!contact) continue
 
-    const title = `${WORD[kind]} — ${subject.patient || 'patient TBC'} ${shortDate(subject.date)} ${subject.hospital} — Ref ${ref}`
+    const title = `${WORD[kind]} — ${subject.patient || 'patient TBC'} ${shortDate(subject.date)} ${subject.hospital}`
     const rows = FIELDS.map(([key, label]) => [label, key === 'date' ? shortDate(subject[key]) : subject[key]])
       .concat([['Patient', subject.patient || 'To be confirmed']])
     const changeLines = changes.map(c => `${c.label}: ${c.key === 'date' ? shortDate(c.was) : c.was} → ${c.key === 'date' ? shortDate(c.now) : c.now}`)
@@ -283,8 +282,7 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
       kind === 'cancelled' ? 'This booking has been cancelled.'
         : kind === 'new' ? 'A new case has been booked.' : 'This booking has changed.',
       ...(changeLines.length ? ['', ...changeLines] : []),
-      '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`),
-      '', `Reference: ${ref}`
+      '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`)
     ].join('\n')
     const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>Hi ${escapeHtml(contact.name.split(/[\s(/]/)[0])} team,</p>
@@ -292,7 +290,7 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
 ${changeLines.length ? `<ul>${changeLines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
 <table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-<p style="color:#6b7a8d">Reference: ${ref}</p></div>`
+</div>`
     out.push({ ruleId: rule.id, contactId: contact.id, name: contact.name, to: contact.to, cc: contact.cc,
       subject: title, text, html, autoSend: rule.autoSend, eventId, kind })
   }
@@ -346,13 +344,35 @@ export async function loanStateFor(eventId, distributors) {
   return out
 }
 
-/** Records what a confirmed request said, or forgets it once cancelled. */
-export async function recordLoanRequest(notice) {
+/**
+ * Records what a confirmed request said, or forgets it once cancelled — and
+ * logs it on the booking either way.
+ *
+ * "Once the request for a loan set is sent to the distributor, the portal is
+ * updated to say that the request was made, by whom and at what time and date
+ * the loan set was requested." — Brent, 2 Nov 2026. The state key above is
+ * what decides the next email and is removed on a cancellation; the log is
+ * what a person reads, so it keeps every request, change and call-off.
+ */
+export async function recordLoanRequest(notice, by = null) {
   if (!notice?.loan) return
+  const at = new Date().toISOString()
   const key = `loanreq:${notice.eventId}:${notice.loan.distributor}`
   if (notice.loan.status === 'cancel') await redis('del', key)
   else await redisSetBody(key, JSON.stringify({ date: notice.loan.date, hospital: notice.loan.hospital,
-    systems: notice.loan.systems, sentAt: new Date().toISOString() }))
+    systems: notice.loan.systems, sentAt: at, by }))
+  const log = `loanlog:${notice.eventId}`
+  await redis('lpush', log, JSON.stringify({
+    at, by, status: notice.loan.status, systems: notice.loan.systems || [],
+    to: String(notice.name || '').split(' — ')[0], hospital: String(notice.loan.distributor).startsWith('hosp-')
+  }))
+  await redis('ltrim', log, 0, 49)
+}
+
+/** Every loan email sent for a booking, newest first. */
+export async function loanLogFor(eventId) {
+  const raw = await redis('lrange', `loanlog:${eventId}`, 0, 49) || []
+  return raw.map(r => { try { return JSON.parse(r) } catch { return null } }).filter(Boolean)
 }
 
 const LOAN_WORD = { request: 'Loan set request', update: 'Loan set — booking changed', cancel: 'Loan set no longer needed' }
@@ -384,7 +404,6 @@ function loanSets(b) {
 export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings, sent = {} }) {
   const out = []
   const contacts = new Map(settings.contacts.map(c => [c.id, c]))
-  const ref = `TM-${String(eventId || '').replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}`
   for (const rule of settings.hospitalLoanNotices || DEFAULT_HOSPITAL_LOAN_NOTICES) {
     if (!rule.enabled) continue
     const contact = contacts.get(rule.contactId)
@@ -413,20 +432,24 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
         : [`The loan set for this case is no longer coming: ${systems.join(' + ')}.`,
           kind === 'cancelled' ? 'The case has been cancelled.' : (was.length ? '' : 'The booking no longer needs it.')].filter(Boolean)
     const arrive = status !== 'cancel' && b?.startIso ? kitArrivalBy(b.startIso) : null
+    // The set on its own line with the rest of the case, not only in the
+    // sentence above: the loans team works down these rows ("it still needs
+    // to be in the main body of the booking with Pt:, Surg:, Date:").
     const rows = [
       ['Surgery', shortDate(b?.date)], ['Surgeon', b?.surgeon], ['Procedure', b?.procedure],
       ['Patient', b?.patient || 'To be confirmed'],
+      [status === 'cancel' ? 'Loan set (not coming)' : 'Loan set', systems.join(' + ')],
       ...(arrive ? [['Due at the hospital by', `${shortDate(arrive.date)} ${arrive.time}`]] : [])
     ]
     const greeting = `Hi ${contact.greeting || contact.name},`
     const subject = `${{ request: 'Loan set ordered', update: 'Loan set — case changed', cancel: 'Loan set not coming' }[status]}`
-      + ` — ${systems.join(' + ')} — ${shortDate(b?.date)} — Pt ${b?.patient || 'TBC'} — Ref ${ref}`
-    const text = [greeting, '', ...lines, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '', `Reference: ${ref}`].join('\n')
+      + ` — ${systems.join(' + ')} — ${shortDate(b?.date)} — Pt ${b?.patient || 'TBC'}`
+    const text = [greeting, '', ...lines, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`)].join('\n')
     const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>${escapeHtml(greeting)}</p>${lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')}
 <table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-<p style="color:#6b7a8d">Reference: ${ref}</p></div>`
+</div>`
     out.push({ ruleId: key, contactId: contact.id, name: `${contact.name} — ${status === 'request' ? 'loan set ordered' : status === 'update' ? 'case changed' : 'loan set not coming'}`,
       to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
       loan: { distributor: key, status, date: b?.date, hospital: b?.hospital, systems } })
@@ -437,7 +460,6 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
 export function loanRequestsFor({ kind, before, after, eventId, settings, sent = {} }) {
   const out = []
   const contacts = new Map(settings.contacts.map(c => [c.id, c]))
-  const ref = `TM-${String(eventId || '').replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}`
   for (const rule of settings.loanRequests || []) {
     if (!rule.enabled) continue
     const contact = contacts.get(rule.contactId)
@@ -457,7 +479,7 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
     const arrive = b?.startIso ? kitArrivalBy(b.startIso) : null
     const rush = b?.startIso ? isRush(b.startIso) : false
     const subject = `${LOAN_WORD[status]} — ${systems.join(' + ')} — ${b?.hospital || ''} ${shortDate(b?.date)}`
-      + ` — ${b?.surgeon || ''} — Pt ${b?.patient || 'TBC'} — Ref ${ref}`
+      + ` — ${b?.surgeon || ''} — Pt ${b?.patient || 'TBC'}`
     const ask = status === 'request'
       ? `Please send the following loan set${systems.length > 1 ? 's' : ''}: ${systems.join(' + ')}.`
       : status === 'update'
@@ -468,18 +490,19 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
     const rows = [
       ['Surgery', shortDate(b?.date)], ['Hospital', b?.hospital], ['Surgeon', b?.surgeon],
       ['Procedure', b?.procedure], ['Patient', b?.patient || 'To be confirmed'],
+      [status === 'cancel' ? 'Loan set (not needed)' : 'Loan set', systems.join(' + ')],
       ...(status !== 'cancel' && arrive ? [['Needed at the hospital by', rush
         ? 'As soon as possible — less than 48 hours to surgery'
         : `${shortDate(arrive.date)} ${arrive.time}`]] : [])
     ]
     const greeting = `Hi ${contact.name.split(/[\s(/]/)[0]} team,`
     const text = [greeting, '', ask, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '',
-      'Please reply to confirm.', `Reference: ${ref}`].join('\n')
+      'Please reply to confirm.'].join('\n')
     const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>${escapeHtml(greeting)}</p><p><strong>${escapeHtml(ask)}</strong></p>
 <table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-<p>Please reply to confirm.</p><p style="color:#6b7a8d">Reference: ${ref}</p></div>`
+<p>Please reply to confirm.</p></div>`
     out.push({ ruleId: `loan-${d}`, contactId: contact.id, name: `${contact.name} — ${LOAN_WORD[status].toLowerCase()}`,
       to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
       loan: { distributor: d, status, date: b?.date, hospital: b?.hospital, systems } })

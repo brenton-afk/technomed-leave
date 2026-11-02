@@ -5,6 +5,7 @@ import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
 import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
 import { resolveKit, systemsInKit } from '../../clinicalPlan/systems.js'
+import { BRAINLAB, navigationChoice, kitWithoutNavigation, kitWithNavigation } from '../../clinicalPlan/brainlab.js'
 import { loanNeed } from '../../clinicalPlan/inventory.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 import { offerNotices } from '../../notices.js'
@@ -156,9 +157,12 @@ function Candidate({ candidate, user, onDone }) {
     // Resolved here as well as when the email was read, so a candidate queued
     // before that existed shows the system somebody can actually bring rather
     // than the name the surgeon happened to type.
-    kit: resolveKit(candidate.kit || '', candidate.procedure || ''),
+    // Navigation comes off the kit line and onto the Brainlab button below.
+    kit: kitWithoutNavigation(resolveKit(candidate.kit || '', candidate.procedure || '')),
     hospital: candidate.hospital || ''
   })
+  // Pre-tapped from what the email said: "AIRO" is the AIRO + Curve button.
+  const [brainlab, setBrainlab] = useState(() => navigationChoice(candidate.kit || ''))
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState(null)
 
@@ -205,7 +209,7 @@ function Candidate({ candidate, user, onDone }) {
       patient: fields.patient.trim(),
       surgeon: fields.surgeon.trim(),
       procedure: fields.procedure.trim(),
-      kit: fields.kit.trim(),
+      kit: kitWithNavigation(fields.kit, brainlab),
       hospital: fields.hospital.trim()
     },
     notes: candidate.note
@@ -256,6 +260,24 @@ function Candidate({ candidate, user, onDone }) {
         </summary>
         <KitPicker kit={fields.kit} onChange={v => set('kit', v)} />
       </details>
+      <div style={{ marginBottom: space.xs }}>
+        <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: 4 }}>Brainlab navigation</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {BRAINLAB.map(option => {
+            const on = brainlab === option
+            return (
+              <button key={option} type="button" aria-pressed={on}
+                onClick={() => setBrainlab(on ? '' : option)}
+                style={{
+                  padding: '7px 11px', borderRadius: radius.pill, cursor: 'pointer',
+                  border: `1px solid ${on ? colour.accent : colour.line}`,
+                  background: on ? colour.accentSoft : colour.surface,
+                  ...text('caption'), fontWeight: on ? 700 : 400, color: on ? colour.accentDeep : colour.inkMuted
+                }}>{option}</button>
+            )
+          })}
+        </div>
+      </div>
       {candidate.attendance === 'No F2F' && (
         <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>
           <strong>Brainlab · No F2F</strong> — the list says nobody from TechnoMed is needed.

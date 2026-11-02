@@ -1,5 +1,6 @@
 import { STAFF, leaveApprovers } from '../src/staffConfig.js'
 import { recordEmail } from './_emailLog.js'
+import { EMAIL_LOGO_PNG_BASE64 } from './_emailLogo.js'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -634,10 +635,15 @@ export async function sendServiceAlertEmail({ feature, fault, detail }) {
 // went out.
 
 export const BOOKINGS_INBOX = 'bookings@technomed.com.au'
-// Served from the portal (public/email-logo.png, the logo on white, 480×120
-// for sharpness at 200px). Linked, not attached: an inline attachment shows up
-// as a paperclip on every notice, which reads as a document to open.
-const SIGNATURE_LOGO = 'https://leave.technomed.com.au/email-logo.png'
+// Inline, by content id (api/_emailLogo.js). It was linked from the portal,
+// and arrived as "a blue box with a question mark" — remote images from an
+// unfamiliar sender are blocked or fail to load; an inline one is in the
+// message itself.
+const SIGNATURE_LOGO_CID = 'technomed-logo'
+const signatureLogo = () => ({
+  filename: 'technomed-logo.png', content: EMAIL_LOGO_PNG_BASE64,
+  content_id: SIGNATURE_LOGO_CID, content_type: 'image/png'
+})
 
 export function bookingSignature(sender) {
   const staff = STAFF.find(s => s.email.toLowerCase() === String(sender?.email || '').toLowerCase())
@@ -649,7 +655,7 @@ export function bookingSignature(sender) {
 <p style="margin:0 0 10px">Kind regards,</p>${lines.map((l, i) => i === 0
     ? `<div style="font-weight:700">${escapeHtml(l)}</div>`
     : `<div style="color:#6b7a8d">${escapeHtml(l)}</div>`).join('')}
-<img src="${SIGNATURE_LOGO}" alt="TechnoMed — Surgical Solutions &amp; Support" width="200" height="50" style="display:block;margin-top:12px;border:0;width:200px;height:50px"></div>`
+<img src="cid:${SIGNATURE_LOGO_CID}" alt="TechnoMed — Surgical Solutions &amp; Support" width="200" height="50" style="display:block;margin-top:12px;border:0;width:200px;height:50px"></div>`
   return { text, html }
 }
 
@@ -663,6 +669,7 @@ export async function sendBookingNotice({ to, cc, subject, html, text, sender, c
     to, cc: copies, subject, caseId, sender,
     html: `${html || ''}${sig.html}`,
     text: `${String(text || '').replace(/\s+$/, '')}\n${sig.text}`,
+    attachments: [signatureLogo()],
     replyTo: [sender?.email, BOOKINGS_INBOX].filter(Boolean)
   })
 }

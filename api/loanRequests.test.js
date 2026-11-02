@@ -16,7 +16,7 @@ describe('a new booking with an E4 distributor loan', () => {
     const [req, ...rest] = loanRequestsFor({ kind: 'new', after: booking(), eventId: 'evt-loan01', settings })
     expect(rest).toEqual([])
     expect(req.to).toEqual(['bookings@e4surgical.com'])
-    expect(req.subject).toBe('Loan set request — Dakota — CLV 12/11/2026 — Ibbett — Pt Testa — Ref TM-LOAN01')
+    expect(req.subject).toBe('Loan set request — Dakota — CLV 12/11/2026 — Ibbett — Pt Testa')
     expect(req.text).toMatch(/Please send the following loan set: Dakota\./)
     expect(req.text).toMatch(/Needed at the hospital by: 10\/11\/2026/)
     expect(req.loan).toMatchObject({ distributor: 'e4', status: 'request' })
@@ -68,5 +68,22 @@ describe('Globus, and everybody else', () => {
   it('a request is always shown first', () => {
     const [req] = loanRequestsFor({ kind: 'new', after: booking(), eventId: 'x', settings })
     expect(req.autoSend).toBe(false)
+  })
+})
+
+// "I don't need [the reference number]." and "the kit wasn't listed as its own
+// point under date, surgery etc." — Brent, 2 Nov 2026.
+describe('what the loan emails say', async () => {
+  const { hospitalLoanNoticesFor, DEFAULT_HOSPITAL_LOAN_NOTICES } = await import('./_bookingNotices.js')
+  const settings = { contacts: [{ id: 'calvary_loans', name: 'Calvary loan sets', greeting: 'Sharon and Loans team', to: ['loans@example.org'], cc: [] }],
+    hospitalLoanNotices: DEFAULT_HOSPITAL_LOAN_NOTICES }
+  const after = { hospital: 'CLV', date: '2026-11-12', surgeon: 'Dubey', procedure: 'L4/5 TLIF', patient: 'Testa',
+    loans: { device: ['Mariner MIS'] }, startIso: '2026-11-12T08:00:00+11:00' }
+
+  it('lists the loan set as its own line with the case details, and carries no reference', () => {
+    const [n] = hospitalLoanNoticesFor({ kind: 'new', after, eventId: 'evt-1', settings })
+    expect(n.text).toMatch(/Patient: Testa\nLoan set: Mariner MIS \(Device Technologies\)/)
+    expect(n.html).toContain('Loan set')
+    expect(`${n.subject}\n${n.text}\n${n.html}`).not.toMatch(/Reference|TM-|Ref /)
   })
 })
