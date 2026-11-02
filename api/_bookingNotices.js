@@ -1,7 +1,7 @@
 import { redis, redisSetBody } from './_redis.js'
 import { readBooking, detectHospital } from '../src/clinicalPlan/parse.js'
 import { systemsInKit } from '../src/clinicalPlan/systems.js'
-import { inventoryFor, kitArrivalBy, isRush } from '../src/clinicalPlan/inventory.js'
+import { inventoryFor, kitArrivalBy, isRush, suggestSupply } from '../src/clinicalPlan/inventory.js'
 import { parseKitSupplies } from '../src/clinicalPlan/kitSupply.js'
 import { escapeHtml } from './_email.js'
 
@@ -191,10 +191,21 @@ export function describeBooking(event) {
     { knownPatient: event.extendedProperties?.private?.tmPatient }) || {}
   const kit = [read.system, read.kit].filter(Boolean).join(' ')
   // Which distributors this booking has a distributor loan from, and of what.
+  //
+  // A system with no supply written is still a loan when the hospital does not
+  // hold it and the answer can only be the distributor's set — "Mariner MIS"
+  // for a Calvary case, read from an email, offered no request at all because
+  // nobody had typed "(Distributor Loan)" after it. Never inferred for a kit
+  // the hospital holds, even one there on long-term loan: that is on the shelf.
+  const hospital = read.hospital || detectHospital(event.location, event.description, { caseEvent: true }) || ''
   const loans = {}
   for (const { system, supply } of (read.supplies?.length ? read.supplies : parseKitSupplies(kit))) {
-    if (supply !== 'Distributor Loan') continue
-    const d = inventoryFor(system)?.distributor
+    const item = inventoryFor(system)
+    const site = hospital === 'CLV' || hospital === 'RHH' ? hospital : ''
+    const inferred = !supply && item && site && !((item.consigned?.[site] || 0) > 0)
+      && suggestSupply(system, site) === 'Distributor Loan'
+    if (supply !== 'Distributor Loan' && !inferred) continue
+    const d = item?.distributor
     if (d) (loans[d] ||= []).push(system)
   }
   return {
