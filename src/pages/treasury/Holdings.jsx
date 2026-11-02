@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Button } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
 import { aud, btc, pct, ENTITIES, parseBtc, parseMoney, satsToBtcText, isLargeBtc, LARGE_BTC } from '../../treasury/logic.js'
+import { PurchasesSection } from './Purchases.jsx'
 import { useTreasury, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, Grid, Figure, BuyForm, PriceBar, when } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
@@ -125,7 +126,9 @@ export default function Holdings({ user, onBack, onLocked }) {
         )}
         {msg && <Note>{msg}</Note>}
 
-        <SectionLabel>DCA purchase log</SectionLabel>
+        <PurchasesSection user={user} onLocked={onLocked} onChanged={reload} />
+
+        <SectionLabel>Buys entered by hand</SectionLabel>
         <Note>Tap Edit to correct a buy. One recorded from the DCA screen also moved sats into holdings and cash out of Amber, and editing or removing it keeps those right.</Note>
         <Table head={['Date', 'A$', 'Sats', 'Price', '']} align={['left', 'right', 'right', 'right', 'right']}
           rows={[...(data?.dca || [])].sort((a, b) => b.date.localeCompare(a.date)).map(d => [

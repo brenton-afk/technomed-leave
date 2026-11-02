@@ -12,7 +12,7 @@ import {
   holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC, dcaEntityOf, parseBtc
 } from '../src/treasury/logic.js'
 import { mapTracker } from '../src/treasury/importMap.js'
-import { parseAmberCsv, mergeAmber, amberTotals, isPurchase } from '../src/treasury/amber.js'
+import { parseAmberCsv, mergeAmber, amberTotals, isPurchase, transferSuggestions } from '../src/treasury/amber.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
 
 // ─── Treasury ────────────────────────────────────────────────────────────────
@@ -491,8 +491,8 @@ const ACTIONS = {
   // ─── Purchases (the Amber import) ─────────────────────────────────────────
 
   async purchases(req, res) {
-    const [amber, transfers, price, history] = await Promise.all([
-      tget('amber', { rows: [] }), tget('transfers', []), getPriceWithChange(), getPriceHistory()
+    const [amber, transfers, price, history, trust] = await Promise.all([
+      tget('amber', { rows: [] }), tget('transfers', []), getPriceWithChange(), getPriceHistory(), tget('trust', [])
     ])
     const rows = amber.rows || []
     const first = [rows.find(isPurchase)?.date, ...transfers.map(t => t.date)].filter(Boolean).sort()[0] || null
@@ -502,6 +502,7 @@ const ACTIONS = {
       rows: rows.filter(r => isPurchase(r) || r.type === 'send_to_cold_storage'),
       totals: amberTotals(rows),
       transfers: [...transfers].sort((a, b) => a.date.localeCompare(b.date)),
+      suggestions: transferSuggestions(trust, transfers),
       history: { aud: from ? history.aud.filter(([d]) => d >= from) : [], usd: from ? history.usd.filter(([d]) => d >= from) : [], stale: history.stale, fetchedAt: history.fetchedAt }
     })
   },

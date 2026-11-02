@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { Page, Header, Body, Card, SectionLabel, Button, Banner } from '../../design/Shell.jsx'
+import { Card, SectionLabel, Button, Banner } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
 import { aud, btc, pct, SATS, satsToBtcText } from '../../treasury/logic.js'
 import { purchaseSummary, monthlyTable, purchaseDots, cumulativeSteps } from '../../treasury/amber.js'
@@ -7,20 +7,21 @@ import PurchaseChart from '../../treasury/PurchaseChart.jsx'
 import LineChart, { SERIES } from '../../treasury/LineChart.jsx'
 import {
   useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, SmallButton, Segmented,
-  treasuryCall, Locked, PriceBar, Stale, when
+  treasuryCall, Locked, Stale, when
 } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
 
-// ─── Purchases ───────────────────────────────────────────────────────────────
-// TechnoMed's bitcoin buying, from the Amber export: every purchase on the
-// price line, what it all cost on average, and how that compares with now.
-// Amber's own rows are the record — imported, not retyped — and coins that
-// arrived without being bought are entered once, as transfers in.
+// ─── TechnoMed's treasury: purchases and transfers in ────────────────────────
+// A section of the Holdings screen. From the Amber export: every purchase on
+// the price line. Coins that arrived without being bought — the trust's
+// repayment in BTC — are transfers in, marked differently, and part of the
+// treasury: its BTC, its cost (their value on arrival) and the blended
+// average. Amber's own rows are the record — imported, not retyped.
 
 const day = d => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
-export default function Purchases({ user, onBack, onLocked }) {
+export function PurchasesSection({ user, onLocked, onChanged }) {
   const { data, error, reload } = useTreasury(user, 'purchases', { onLocked, page: 'purchases' })
   const [currency, setCurrency] = useState('AUD')
   const [log, setLog] = useState(false)
@@ -52,13 +53,16 @@ export default function Purchases({ user, onBack, onLocked }) {
   const prices = currency === 'AUD' ? data?.history?.aud || [] : data?.history?.usd || []
   const dots = useMemo(() => purchaseDots(rows, group), [rows, group])
   const current = currency === 'AUD' ? priceAud : data?.price?.usd
-  const averageCost = summary?.averageCost == null ? null
-    : currency === 'AUD' ? summary.averageCost
-      : rows.filter(r => r.type !== 'send_to_cold_storage').reduce((t, r) => t + (toCur(r.aud, r.date) || 0), 0) / (summary.boughtSats / SATS)
+  // The line is the treasury's average: purchases plus transfers in at their
+  // value on arrival. In US$, each A$ amount is converted on its own day.
+  const averageCost = summary?.blendedCost == null ? null
+    : currency === 'AUD' ? summary.blendedCost
+      : (rows.filter(r => r.type !== 'send_to_cold_storage').reduce((t, r) => t + (toCur(r.aud, r.date) || 0), 0)
+        + transfers.reduce((t, x) => t + (toCur(Number(x.valueAud) || 0, x.date) || 0), 0)) / (summary.heldSats / SATS)
 
   async function post(action, body, done) {
     setMsg(null)
-    try { const r = await treasuryCall(user, action, { method: 'POST', body }); if (done) setMsg(done); reload(); return r } catch (err) {
+    try { const r = await treasuryCall(user, action, { method: 'POST', body }); if (done) setMsg(done); reload(); onChanged?.(); return r } catch (err) {
       if (err instanceof Locked) onLocked(); else setMsg(err.message)
       return null
     }
@@ -74,14 +78,19 @@ export default function Purchases({ user, onBack, onLocked }) {
     setPreview(await post('amber-preview', { csv: content }))
   }
 
+  const hasTransfers = transfers.length > 0
   return (
-    <Page>
-      <Header eyebrow="Treasury" title="Purchases" onBack={onBack}
-        subtitle={data?.importedAt ? `TechnoMed on Amber · imported ${when(data.importedAt)}` : 'TechnoMed on Amber'} />
-      <Body>
-        <PriceBar user={user} />
+    <>
+        <SectionLabel>TechnoMed treasury</SectionLabel>
+        <Note>{data?.importedAt ? `Purchases from the Amber export, imported ${when(data.importedAt)}, and transfers in.` : 'Purchases from the Amber export, and transfers in.'}</Note>
         <Problem>{error && 'Could not load purchases just now.'}</Problem>
         {msg && <Note>{msg}</Note>}
+
+        {(data?.suggestions || []).map(sug => (
+          <Banner key={sug.date} action={<SmallButton onClick={() => post('transfer-save', { transfer: sug }, 'Transfer added to the treasury.')}>Add to the treasury</SmallButton>}>
+            The trust ledger shows <b>₿{sug.btc}</b> reaching TechnoMed on {day(sug.date)}{sug.valueAud ? <>, valued at <b>{aud(sug.valueAud)}</b></> : ''} ({sug.note || 'from the trust'}). It is not on the chart yet.
+          </Banner>
+        ))}
 
         {data && !rows.length && (
           <Banner>No Amber export imported yet. Choose the CSV at the bottom of this screen.</Banner>
@@ -89,15 +98,20 @@ export default function Purchases({ user, onBack, onLocked }) {
 
         {summary && rows.length > 0 && (
           <Grid>
+            {hasTransfers && <Figure label="Treasury BTC" value={btc(summary.heldSats)} sub="bought plus transferred in" />}
+            {hasTransfers && <Figure label="Treasury cost" value={aud(summary.cost)} sub={`${aud(summary.invested)} bought + ${aud(summary.transferCost)} transferred in`} />}
+            {hasTransfers && <Figure label="Average cost, all" value={aud(summary.blendedCost)} sub="per BTC, incl. transfers" />}
+            {hasTransfers && <Figure label="Treasury value" value={aud(summary.valueAll)} />}
+            {hasTransfers && <Figure label="Unrealised gain, all" value={aud(summary.gainAll)} sub={pct(summary.gainAllPct)} tone={summary.gainAll < 0 ? 'danger' : undefined} />}
             <Figure label="BTC bought" value={btc(summary.boughtSats)} sub={`${summary.purchases} purchases since ${day(summary.firstPurchase)}`} />
             <Figure label="A$ invested" value={aud(summary.invested)} />
-            <Figure label="Average cost" value={aud(summary.averageCost)} sub="per BTC" />
-            <Figure label="Value now" value={aud(summary.value)} />
-            <Figure label="Unrealised gain" value={aud(summary.gain)} sub={pct(summary.gainPct)} tone={summary.gain < 0 ? 'danger' : undefined} />
+            <Figure label={hasTransfers ? 'Average cost, buys' : 'Average cost'} value={aud(summary.averageCost)} sub="per BTC" />
+            {!hasTransfers && <Figure label="Value now" value={aud(summary.value)} />}
+            <Figure label={hasTransfers ? 'Gain on buys' : 'Unrealised gain'} value={aud(summary.gain)} sub={pct(summary.gainPct)} tone={summary.gain < 0 ? 'danger' : undefined} />
             <Figure label="Largest purchase" value={aud(summary.largest?.aud)} sub={summary.largest ? day(summary.largest.date) : ''} />
             <Figure label="Last 30 days" value={btc(summary.last30Sats)} sub="bought" />
             <Figure label="Still at Amber" value={btc(summary.atAmberSats)} sub={`${btc(summary.sentSats)} sent to cold storage`} />
-            {summary.transferSats > 0 && <Figure label="Transferred in" value={btc(summary.transferSats)} sub={`${aud(summary.transferValue)} now · not a purchase`} />}
+            {hasTransfers && <Figure label="Transferred in" value={btc(summary.transferSats)} sub={`${aud(summary.transferCost)} on arrival · ${aud(summary.transferValue)} now`} />}
           </Grid>
         )}
 
@@ -112,10 +126,10 @@ export default function Purchases({ user, onBack, onLocked }) {
               {data.history?.stale && <div style={{ marginBottom: space.sm }}><Stale problem="Kraken did not answer; prices are from the last fetch" /></div>}
               <PurchaseChart prices={prices} dots={dots} transfers={transfers} toCur={toCur}
                 averageCost={averageCost} current={current} currency={currency} log={log} />
-              {summary.gain != null && (
+              {summary.gainAll != null && (
                 <Note>
-                  Now {aud(priceAud)} against an average cost of {aud(summary.averageCost)}:
-                  {' '}{summary.gain >= 0 ? 'up' : 'down'} {aud(Math.abs(summary.gain))} ({pct(summary.gainPct)}) on what was bought.
+                  Now {aud(priceAud)} against an average cost of {aud(summary.blendedCost)}{hasTransfers ? ' (purchases and transfers in)' : ''}:
+                  {' '}{summary.gainAll >= 0 ? 'up' : 'down'} {aud(Math.abs(summary.gainAll))} ({pct(summary.gainAllPct)}) on the treasury.
                 </Note>
               )}
             </div>
@@ -197,7 +211,6 @@ export default function Purchases({ user, onBack, onLocked }) {
         <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: space.sm }}>
           TechnoMed's BTC on Amber, on Holdings, now comes from this import: bought less sent to cold storage.
         </div>
-      </Body>
-    </Page>
+    </>
   )
 }

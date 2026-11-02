@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseAmberCsv, mergeAmber, amberTotals, purchaseSummary, monthlyTable, purchaseDots,
-  cumulativeSteps, dotRadius, parseCsvText
+  cumulativeSteps, dotRadius, parseCsvText, transferSuggestions
 } from './amber.js'
 
 // An invented Amber export. Never the real file.
@@ -92,5 +92,27 @@ describe('what it adds up to', () => {
     expect(dotRadius(12500, 50000)).toBeCloseTo(10.25)
     expect(dotRadius(150, 50000)).toBeGreaterThan(4)
     expect(dotRadius(150, 50000)).toBeLessThan(dotRadius(300, 50000))
+  })
+})
+
+describe('a transfer in, as part of the treasury', () => {
+  const { rows } = parseAmberCsv(CSV)
+  it('counts its value on arrival as cost, for a blended average', () => {
+    const s = purchaseSummary(rows, [{ date: '2025-06-05', sats: 10_000_000, valueAud: 12000 }], 200000, '2025-06-05')
+    expect(s.heldSats).toBe(15_950_000)
+    expect(s.cost).toBe(18150)
+    expect(s.blendedCost).toBeCloseTo(18150 / 0.1595)
+    expect(s.valueAll).toBeCloseTo(0.1595 * 200000)
+    expect(s.invested).toBe(6150)
+  })
+
+  it('offers what the trust ledger says reached TechnoMed, once', () => {
+    const trust = [
+      { date: '2026-10-04', amount: 100000, category: 'Loan repayment to TechnoMed', party: 'TechnoMed Pty Ltd', note: 'In specie: 1.5 BTC sent, 1.49990000 BTC received net of fee' },
+      { date: '2026-10-05', amount: 800, category: 'Distribution', party: 'Beneficiary A', note: 'cash' },
+      { date: '2026-10-06', amount: 50, category: 'Loan advance from TechnoMed', party: 'TechnoMed Pty Ltd', note: 'cash advance' }
+    ]
+    expect(transferSuggestions(trust, [])).toEqual([{ date: '2026-10-04', btc: '1.49990000', valueAud: 100000, from: 'Family trust', note: 'Loan repayment to TechnoMed' }])
+    expect(transferSuggestions(trust, [{ date: '2026-10-04' }])).toEqual([])
   })
 })

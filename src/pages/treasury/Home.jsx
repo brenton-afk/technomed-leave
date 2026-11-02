@@ -89,8 +89,7 @@ export default function TreasuryHome({ user, onBack, go, onLocked }) {
 
         <SectionLabel>Sections</SectionLabel>
         <NavCard icon={IconBitcoin} label="Bitcoin" detail="Cost bases, SOPR, MVRV and key levels" onClick={() => go('bitcoin')} />
-        <NavCard icon={IconWallet} label="Holdings" detail="BTC by entity and the purchase log" onClick={() => go('holdings')} />
-        <NavCard icon={IconBitcoin} label="Purchases" detail="Every Amber buy on the price chart, and the import" onClick={() => go('purchases')} />
+        <NavCard icon={IconWallet} label="Holdings and purchases" detail="BTC by entity, the purchase chart, transfers and the Amber import" onClick={() => go('holdings')} />
         <NavCard icon={IconChart} label="Dynamic DCA" detail="This week's buy and the settings behind it" onClick={() => go('dca')} />
         <NavCard icon={IconCalendar} label="ATO and cash" detail="Payment schedule and 13 weeks ahead" onClick={() => go('cash')} />
         <NavCard icon={IconFile} label="Family trust ledger" detail="Distributions, loans, transfers · CSV" onClick={() => go('trust')} />

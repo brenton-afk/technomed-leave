@@ -28,7 +28,9 @@ const T = {
   rule: 'rgba(255,255,255,0.35)'
 }
 const ORANGE = '#f7931a'
-const TRANSFER = '#ffffff'
+// Coins that came in rather than being bought: a different colour and shape,
+// so they can never be read as a purchase.
+const TRANSFER = '#38bdf8'
 const PRICE = '#d4d4d8'
 
 function useWidth(fallback = 340) {
@@ -193,11 +195,20 @@ export default function PurchaseChart({ prices, dots, transfers = [], toCur, ave
         {trs.map((t, i) => {
           const cx = x(t.date)
           const cy = y(t.y)
-          const s = 9
-          return <path key={i} d={`M${cx},${cy - s}L${cx + s},${cy}L${cx},${cy + s}L${cx - s},${cy}Z`} fill={TRANSFER} stroke={ORANGE} strokeWidth={2} />
+          const s = 11
+          const left = cx > width * 0.6
+          return (
+            <g key={i}>
+              <path d={`M${cx},${cy - s}L${cx + s},${cy}L${cx},${cy + s}L${cx - s},${cy}Z`} fill={TRANSFER} stroke={T.bg} strokeWidth={2} />
+              <text x={left ? cx - s - 6 : cx + s + 6} y={cy + 4} textAnchor={left ? 'end' : 'start'} fill={TRANSFER}
+                stroke={T.bg} strokeWidth={3} paintOrder="stroke" style={{ ...text('caption'), fontWeight: 600 }}>
+                {t.from ? `${t.from.replace(/\s*\(.*\)$/, '')} ` : 'Transfer '}₿{(t.sats / SATS).toFixed(2)}
+              </text>
+            </g>
+          )
         })}
         {hover && hover.kind !== 'price' && (
-          <circle cx={x(hover.d.date)} cy={y(hover.d.y)} r={(hover.kind === 'buy' ? dotRadius(hover.d.aud, maxAud) : 9) + 3} fill="none" stroke={T.strong} strokeWidth={1.5} />
+          <circle cx={x(hover.d.date)} cy={y(hover.d.y)} r={(hover.kind === 'buy' ? dotRadius(hover.d.aud, maxAud) : 11) + 3} fill="none" stroke={T.strong} strokeWidth={1.5} />
         )}
         {hover?.kind === 'price' && priceMap.has(hover.d.date) && (
           <line x1={x(hover.d.date)} x2={x(hover.d.date)} y1={pad.t} y2={pad.t + plotH} stroke={T.rule} />

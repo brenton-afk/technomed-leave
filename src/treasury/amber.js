@@ -165,8 +165,52 @@ export function purchaseSummary(rows, transfers = [], priceAud, today) {
     last30Sats: buys.filter(r => r.date >= since).reduce((s, r) => s + r.sats, 0),
     sentSats: t.sentSats, atAmberSats: t.atAmberSats,
     transferSats, transferValue: priceAud > 0 ? (transferSats / SATS) * priceAud : null,
-    firstPurchase: t.firstPurchase
+    firstPurchase: t.firstPurchase,
+    ...wholeTreasury(t, transfers, priceAud)
   }
+}
+
+/**
+ * The treasury as a whole: what was bought plus what was transferred in, at
+ * what each cost when it arrived. A transfer's cost is its value on the day it
+ * came in (the trust's repayment was A$209,361 for 1.71 BTC), so the blended
+ * average is what the company's coins stand it in — the figure Strategy charts.
+ * Purchases on their own stay available as bought/invested/averageCost.
+ */
+export function wholeTreasury(t, transfers, priceAud) {
+  const transferSats = transfers.reduce((s, x) => s + (x.sats || 0), 0)
+  const transferCost = transfers.reduce((s, x) => s + (Number(x.valueAud) || (x.priceAud ? x.priceAud * (x.sats || 0) / SATS : 0)), 0)
+  const heldSats = t.boughtSats + transferSats
+  const cost = t.invested + transferCost
+  const value = priceAud > 0 ? (heldSats / SATS) * priceAud : null
+  return {
+    heldSats, cost, transferCost,
+    blendedCost: heldSats > 0 ? cost / (heldSats / SATS) : null,
+    valueAll: value,
+    gainAll: value == null ? null : value - cost,
+    gainAllPct: value == null || !cost ? null : (value / cost - 1) * 100
+  }
+}
+
+/**
+ * Coins the trust ledger says reached TechnoMed, not yet on the chart: a
+ * movement to TechnoMed whose note names the BTC received ("… 1.71283228 BTC
+ * rec…"). Offered for one tap to add, never added on its own — a note is
+ * prose, and a person confirms what was read from it.
+ */
+export function transferSuggestions(trust = [], transfers = []) {
+  const have = new Set(transfers.map(t => t.date))
+  const out = []
+  for (const e of trust) {
+    if (!/technomed/i.test(e.party || '') || have.has(e.date)) continue
+    const note = String(e.note || '')
+    const received = /(\d+\.\d+)\s*BTC\s*(?:rec|received)/i.exec(note) || [...note.matchAll(/(\d+\.\d+)\s*BTC/gi)].pop()
+    if (!received) continue
+    const btcAmount = Number(received[1])
+    if (!(btcAmount > 0)) continue
+    out.push({ date: e.date, btc: received[1], valueAud: Number(e.amount) || null, from: 'Family trust', note: e.category || '' })
+  }
+  return out
 }
 
 /** One row per month: A$ invested, BTC bought, average price paid, buys. Newest first. */
