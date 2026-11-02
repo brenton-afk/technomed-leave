@@ -40,9 +40,9 @@ describe('reading the old tracker', () => {
   })
 
   it('lists what it could not use, by shape not content', () => {
-    expect(report.unmapped.map(u => u.key).sort()).toEqual(['plan', 'todo', 'val'])
+    expect(report.unmapped.map(u => u.key).sort()).toEqual(['inv', 'plan', 'todo', 'val'])
     expect(report.unmapped.find(u => u.key === 'plan').preview).toBe('object with 1 key (foo)')
-    expect(report.superseded.map(s => s.key).sort()).toEqual(['inv', 'onchain'])
+    expect(report.superseded.map(s => s.key).sort()).toEqual(['onchain'])
   })
 
   it('ATO, with a skipped row reported by position', () => {
@@ -89,5 +89,57 @@ describe('helpers', () => {
     expect(toNumber('A$1,700')).toBe(1700)
     expect(toNumber('(250.50)')).toBe(-250.5)
     expect(toNumber('abc')).toBe(null)
+  })
+})
+
+// The old tracker's own export, in its real shapes — every figure invented.
+describe('the tracker as it actually stores things', () => {
+  const TRACKER = {
+    btc: { corp: 1.5, personal: 0.25, smsf: 2.12345678, trust: 0 },
+    val: { btcCost: 90000, stryker: 1, loans: 'no' },
+    dca: { base: 1000, log: [{ a: 500, b: 0.005, d: '2026-10-30', id: 1, note: 'Amber' }] },
+    dcaPlan: { auto: 100, base: 1200, cash: 5000, done: 0, log: [] },
+    ato: {
+      actual: { 'bas-2026-07': { amt: 12000, due: '2026-11-25', inst: 4000 }, 'ias-2026-10': { amt: 3000, due: '2026-11-23' } },
+      fy26Bal: 9000, fy26Due: '2027-05-17', fy26Plan: 'monthly', fy26Monthly: 2000, fy26From: '2026-12',
+      persTax: 1500, persDue: '2027-03-31', withholding: 100, paid: {}
+    },
+    trustLog: [{ amount: 100, cat: 'Distribution', date: '2026-10-13', id: 'x', note: 'n', party: 'Beneficiary A' }],
+    history: [{ btc: 3.5, btcValue: 400000, date: '2026-10-13', netAssets: 900000, profit: 50000 }],
+    cashBank: 12345.67, cashBankAt: 1, updatedAt: 2, tlSeed1: true,
+    spot: 1, fxUsd: 0.7, heat: {}, xero: {}, onchain: [],
+    inv: { buys: [] }, plan: {}, tax: {}, engine: {}, payroll: { emma27: {} }, todo: {}, sw: {}
+  }
+  const { data, report } = mapTracker(TRACKER)
+
+  it('reads TechnoMed\'s coins under "corp", with the cost base from the valuation block', () => {
+    expect(data.holdings.company).toEqual({ exchangeSats: 150_000_000, coldSats: 0, costAud: 90000 })
+    expect(data.holdings.smsf.exchangeSats).toBe(212_345_678)
+  })
+
+  it('reads the DCA log as a, b and d, as the company\'s buys', () => {
+    expect(data.dca).toEqual([expect.objectContaining({ date: '2026-10-30', aud: 500, sats: 500000, entity: 'company', priceAud: 100000 })])
+  })
+
+  it('takes Amber cash and the daily buy from dcaPlan', () => {
+    expect(data.settings).toMatchObject({ baseWeekly: 1200, dailyAuto: 100, amberCash: 5000, manualCash: { amount: 12345.67 } })
+  })
+
+  it('takes only the dated, known ATO amounts and lists the estimating settings', () => {
+    expect(data.ato.map(a => [a.label, a.due, a.amount])).toEqual([
+      ['BAS Jul 2026 (incl. 4000 instalment)', '2026-11-25', 12000],
+      ['IAS Oct 2026', '2026-11-23', 3000],
+      ['FY26 company tax balance (paying 2000/month from 2026-12)', '2027-05-17', 9000],
+      ['FY26 personal tax, Brenton and Emma', '2027-03-31', 1500]
+    ])
+    expect(report.skipped).toContainEqual(expect.objectContaining({ key: 'ato', reason: expect.stringContaining('withholding') }))
+  })
+
+  it('keeps the snapshot\'s BTC value', () => {
+    expect(data.snapshots[0]).toMatchObject({ month: '2026-10', totalSats: 350_000_000, btcValueAud: 400000, netWorth: 900000 })
+  })
+
+  it('names everything it did not bring across', () => {
+    expect(report.unmapped.map(u => u.key).sort()).toEqual(['engine', 'inv', 'payroll', 'plan', 'sw', 'tax', 'todo'])
   })
 })

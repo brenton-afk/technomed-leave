@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   zBand, soprAdjust, sthMvrvAdjust, dcaPlan, keyLevels, summaryLine, slice, holdingsView,
-  atoOutlook, cashForecast, payDates, fyLabel, trustTotals, trustCsv, weekStart
+  atoOutlook, cashForecast, payDates, fyLabel, trustTotals, trustCsv, weekStart,
+  parseBtc, satsToBtcText, parseMoney
 } from './logic.js'
 
 // Made-up figures throughout.
@@ -161,5 +162,32 @@ describe('family trust', () => {
     expect(csv.split('\r\n')[0]).toBe('Date,FY,Category,Party,Amount (AUD),Note')
     expect(csv).toContain('"has, a ""comma"""')
     expect(csv).toContain(`"'=HYPERLINK(""x"")"`)
+  })
+})
+
+describe('typing a BTC amount', () => {
+  it('reads a decimal point either way — the comma is what an iPhone in some regions types', () => {
+    expect(parseBtc('4.20005325').sats).toBe(420_005_325)
+    expect(parseBtc('4,20005325').sats).toBe(420_005_325)
+    expect(parseBtc(' 4.20005325 ').sats).toBe(420_005_325)
+  })
+  it('treats commas beside a full stop as thousands', () => {
+    expect(parseBtc('1,234.5').sats).toBe(123_450_000_000)
+  })
+  it('refuses more than can exist, more than 8 places, and junk', () => {
+    expect(parseBtc('420005325').error).toMatch(/21 million/)
+    expect(parseBtc('0.123456789').error).toMatch(/8 decimal/)
+    expect(parseBtc('4.2.1').error).toBeTruthy()
+  })
+  it('blank is nothing', () => {
+    expect(parseBtc('')).toEqual({ sats: 0, error: null })
+  })
+  it('writes sats back without exponent notation', () => {
+    expect(satsToBtcText(10)).toBe('0.0000001')
+    expect(satsToBtcText(420_005_325)).toBe('4.20005325')
+  })
+  it('reads dollars with a sign and commas', () => {
+    expect(parseMoney('$563,993')).toBe(563993)
+    expect(parseMoney('abc')).toBe(null)
   })
 })

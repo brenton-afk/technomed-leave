@@ -9,7 +9,7 @@ import {
 } from './_treasuryXero.js'
 import {
   DEFAULT_SETTINGS, ENTITIES, SATS, dcaPlan, latestOf, keyLevels, summaryLine, slice,
-  holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES
+  holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC
 } from '../src/treasury/logic.js'
 import { mapTracker } from '../src/treasury/importMap.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
@@ -39,7 +39,7 @@ const today = () => todayStr()
 
 const isDay = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 const money = v => {
-  const n = Number(v)
+  const n = typeof v === 'string' ? Number(v.replace(/[\s$,]/g, '')) : Number(v)
   return Number.isFinite(n) && Math.abs(n) < 1e12 ? Math.round(n * 100) / 100 : null
 }
 const str = (v, max = 200) => (v == null ? '' : String(v).slice(0, max))
@@ -182,10 +182,12 @@ const ACTIONS = {
     const h = {}
     for (const e of ENTITIES) {
       const x = input[e.id] || {}
-      h[e.id] = {
-        exchangeSats: Math.max(0, Math.round(Number(x.exchangeSats) || 0)),
-        coldSats: Math.max(0, Math.round(Number(x.coldSats) || 0)),
-        costAud: Math.max(0, money(x.costAud) || 0)
+      const sats = v => Math.max(0, Math.round(Number(v) || 0))
+      h[e.id] = { exchangeSats: sats(x.exchangeSats), coldSats: sats(x.coldSats), costAud: Math.max(0, money(x.costAud) || 0) }
+      // No entity can hold more than every bitcoin there will ever be. This is
+      // what a decimal point read as a thousands separator looks like.
+      if (h[e.id].exchangeSats + h[e.id].coldSats > MAX_BTC * SATS) {
+        throw new Invalid(`${e.label}: more than 21 million BTC — check the decimal point.`)
       }
     }
     h.updatedAt = new Date().toISOString()

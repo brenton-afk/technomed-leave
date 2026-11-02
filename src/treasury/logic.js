@@ -167,6 +167,46 @@ export function slice(series, range, today) {
   return out
 }
 
+// ─── Reading a typed BTC amount ──────────────────────────────────────────────
+// "4.20005325" and "4,20005325" are the same number to a person: an iPhone set
+// to a comma-decimal region puts a comma on the decimal key. Stripping commas
+// as thousands separators turned that into 420,005,325 BTC. A lone comma with
+// no full stop is read as the decimal point; commas alongside a full stop, or
+// more than one, are thousands separators. Nothing over the 21 million that can
+// ever exist is accepted, so a slip cannot pass as a holding.
+
+export const MAX_BTC = 21_000_000
+
+/** @returns {{sats: number|null, error: string|null}} blank is 0 sats. */
+export function parseBtc(input) {
+  let s = String(input ?? '').replace(/[\s\u00a0'₿]|BTC/gi, '')
+  if (s === '') return { sats: 0, error: null }
+  const commas = (s.match(/,/g) || []).length
+  if (commas === 1 && !s.includes('.')) s = s.replace(',', '.')
+  else s = s.replace(/,/g, '')
+  if (!/^\d*\.?\d*$/.test(s) || s === '.') return { sats: null, error: 'Not a number' }
+  const btc = Number(s)
+  if (!Number.isFinite(btc)) return { sats: null, error: 'Not a number' }
+  if (btc > MAX_BTC) return { sats: null, error: 'More than 21 million BTC — check the decimal point' }
+  const decimals = (s.split('.')[1] || '').length
+  if (decimals > 8) return { sats: null, error: 'BTC has at most 8 decimal places' }
+  return { sats: Math.round(btc * SATS), error: null }
+}
+
+/** Sats as a plain BTC string for a field — never exponent notation. */
+export function satsToBtcText(sats) {
+  if (!sats) return ''
+  return (sats / SATS).toFixed(8).replace(/\.?0+$/, '')
+}
+
+/** A typed dollar amount: "$563,993.50" → 563993.5; blank → 0; junk → null. */
+export function parseMoney(input) {
+  const s = String(input ?? '').replace(/[\s$]|AUD|A\$/gi, '').replace(/,/g, '')
+  if (s === '') return 0
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
+}
+
 // ─── Holdings ────────────────────────────────────────────────────────────────
 
 /** Each entity's BTC, value and unrealised P/L, and the total. */

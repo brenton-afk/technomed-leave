@@ -74,7 +74,7 @@ function entityOf(name) {
   if (/smsf|super/.test(s)) return 'smsf'
   if (/trust|family/.test(s)) return 'trust'
   // Company before personal: "TechnoMed" contains "me".
-  if (/company|technomed|pty|business|\btm\b/.test(s)) return 'company'
+  if (/company|technomed|pty|business|\btm\b|\bcorp/.test(s)) return 'company'
   if (/personal|^me$|\bself\b|\bbrent/.test(s)) return 'personal'
   return null
 }
@@ -95,7 +95,7 @@ function mapList(value, read) {
 }
 
 const MAPPERS = {
-  ato: v => mapList(v, o => {
+  ato: v => (v && !Array.isArray(v) && typeof v === 'object' && !Array.isArray(v.items) ? atoFromTracker(v) : mapList(v, o => {
     const amount = toNumber(pickKey(o, AMOUNT))
     const due = toDay(pickKey(o, DUE))
     if (amount == null || !due) return { reason: 'needs an amount and a due date' }
@@ -105,12 +105,15 @@ const MAPPERS = {
       label: String(pickKey(o, ['label', 'name', 'type', 'what', ...NOTE]) || 'ATO payment'),
       status: /paid|done|complete|true/.test(st) ? 'paid' : 'due'
     }
-  }),
+  })),
 
-  dca: v => mapList(v, o => {
+  // The tracker's own shape is {log: [{d, a, b, note}]} — a is A$, b is BTC —
+  // and that log was TechnoMed's DCA, so its buys are the company's.
+  dca: v => mapList(v && !Array.isArray(v) && Array.isArray(v.log) ? v.log.map(x => ({ entity: 'company', ...x })) : v, o => {
     const date = toDay(pickKey(o, DATE))
-    const amount = toNumber(pickKey(o, AMOUNT))
+    const amount = toNumber(pickKey(o, [...AMOUNT, 'a']))
     let sats = satsOf(o)
+    if (sats == null) { const b = toNumber(pickKey(o, ['b'])); if (b != null) sats = Math.round(b * SATS) }
     let price = toNumber(pickKey(o, ['price', 'priceAud', 'rate', 'btcPrice']))
     if (!date || amount == null) return { reason: 'needs a date and an amount' }
     if (sats == null && price > 0) sats = Math.round((amount / price) * SATS)
@@ -144,7 +147,8 @@ const MAPPERS = {
       overdue: n(['overdue']), profitFy: n(['profit', 'profitFy', 'pl', 'np']),
       btcAud: n(['btcAud', 'priceAud', 'btcPrice', 'price']),
       totalSats: satsOf(o), amberCash: n(['amber', 'amberCash']),
-      netWorth: n(['netWorth', 'total', 'nw'])
+      btcValueAud: n(['btcValue', 'btcValueAud', 'btcAudValue']),
+      netWorth: n(['netWorth', 'netAssets', 'total', 'nw'])
     }
   }),
 
@@ -191,6 +195,12 @@ const MAPPERS = {
     return { settings: s, records: Object.keys(s) }
   },
 
+  val: v => {
+    const cost = v && typeof v === 'object' ? toNumber(pickKey(v, ['btcCost'])) : null
+    if (cost == null) return { error: 'no BTC cost base found' }
+    return { companyCost: cost, records: [1], note: 'TechnoMed BTC cost base only; the valuation settings are not carried over' }
+  },
+
   payroll: v => {
     const amount = typeof v === 'object' && v ? toNumber(pickKey(v, ['amount', 'fortnight', 'fortnightly', 'net', 'gross', 'total'])) : toNumber(v)
     if (amount == null) return { error: 'expected a fortnightly payroll amount' }
@@ -200,8 +210,46 @@ const MAPPERS = {
 }
 
 const SUPERSEDED = {
-  inv: 'Invoices now come live from Xero',
-  onchain: 'On-chain history now comes from BGeometrics automatically'
+  onchain: 'On-chain history now comes from BGeometrics automatically',
+  heat: 'On-chain readings now come from BGeometrics automatically',
+  xero: 'Company figures now come live from Xero',
+  spot: 'BTC price now comes live from Kraken',
+  fxUsd: 'AUD and USD prices now come live from Kraken',
+  updatedAt: 'Tracker housekeeping', tlSeed1: 'Tracker housekeeping', cashBankAt: 'Tracker housekeeping'
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * The tracker's `ato` object. Its schedule was worked out on screen from
+ * assumptions, so only what it holds as known, dated amounts comes across:
+ * lodged BAS/IAS amounts (`actual`), the FY26 tax balance and the personal tax.
+ * The assumptions themselves are listed as skipped for Brent to re-enter.
+ */
+function atoFromTracker(v) {
+  const records = []
+  const skipped = []
+  const paid = v.paid || {}
+  for (const [key, a] of Object.entries(v.actual || {})) {
+    const m = /^(bas|ias)-(\d{4})-(\d{2})/.exec(key)
+    const amount = toNumber(a?.amt ?? a?.amount)
+    const due = toDay(a?.due)
+    if (amount == null || !due) { skipped.push({ index: key, reason: 'lodged amount without an amount or due date' }); continue }
+    const label = m ? `${m[1].toUpperCase()} ${MONTHS[Number(m[3]) - 1]} ${m[2]}` : key
+    records.push({ id: id(), due, amount, label: a?.inst ? `${label} (incl. ${a.inst} instalment)` : label, status: paid[key] ? 'paid' : 'due' })
+  }
+  const fy26 = toNumber(v.fy26Bal)
+  if (fy26 && toDay(v.fy26Due)) {
+    records.push({ id: id(), due: toDay(v.fy26Due), amount: fy26, status: 'due',
+      label: v.fy26Plan === 'monthly' && v.fy26Monthly ? `FY26 company tax balance (paying ${v.fy26Monthly}/month from ${v.fy26From || 'Dec'})` : 'FY26 company tax balance' })
+  }
+  const pers = toNumber(v.persTax)
+  if (pers && toDay(v.persDue)) records.push({ id: id(), due: toDay(v.persDue), amount: pers, status: 'due', label: 'FY26 personal tax, Brenton and Emma' })
+  const assumptions = ['withholding', 'gstRate', 'gstIn', 'inst', 'atoInst', 'q1Inst', 'emmaInst', 'owedAdj', 'toInv', 'amex']
+    .filter(k => v[k] !== undefined && v[k] !== '' && v[k] !== 0)
+  if (assumptions.length) skipped.push({ index: 'assumptions', reason: `estimating settings not carried over: ${assumptions.join(', ')}` })
+  if (!records.length) return { error: 'no dated ATO amounts found' }
+  return { records, skipped }
 }
 
 /**
@@ -220,9 +268,11 @@ export function mapTracker(json) {
   const TARGET = { ato: 'ato', dca: 'dca', trustLog: 'trust', history: 'snapshots' }
   const LABEL = {
     ato: 'ATO schedule', dca: 'DCA purchase log', trustLog: 'Trust ledger', history: 'Snapshots',
-    btc: 'Holdings', cashBank: 'Manual cash at bank', dcaPlan: 'DCA settings', payroll: 'Payroll'
+    btc: 'Holdings', cashBank: 'Manual cash at bank', dcaPlan: 'DCA settings', payroll: 'Payroll',
+    val: 'TechnoMed BTC cost base'
   }
 
+  let companyCost = null
   for (const [key, value] of Object.entries(json)) {
     if (SUPERSEDED[key]) { report.superseded.push({ key, reason: SUPERSEDED[key] }); continue }
     const mapper = MAPPERS[key]
@@ -235,9 +285,17 @@ export function mapTracker(json) {
     if (r.error) { report.unmapped.push({ key, reason: r.error, preview: describe(value) }); continue }
     if (TARGET[key]) data[TARGET[key]].push(...r.records)
     if (r.holdings) data.holdings = r.holdings
+    if (r.companyCost != null) companyCost = r.companyCost
     if (r.settings) data.settings = { ...data.settings, ...r.settings }
-    report.mapped.push({ key, to: LABEL[key], count: r.records.length })
+    report.mapped.push({ key, to: LABEL[key], count: r.records.length, ...(r.note ? { note: r.note } : {}) })
     for (const s of r.skipped || []) report.skipped.push({ key, ...s })
+  }
+  // The cost base arrives under a different key from the coins; join them
+  // whichever came first in the file.
+  if (companyCost != null) {
+    data.holdings = data.holdings || {}
+    const c = data.holdings.company || { exchangeSats: 0, coldSats: 0, costAud: 0 }
+    data.holdings.company = { ...c, costAud: companyCost }
   }
   return { data, report }
 }

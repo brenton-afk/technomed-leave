@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Button } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
-import { aud, btc, pct, SATS, ENTITIES } from '../../treasury/logic.js'
+import { aud, btc, pct, ENTITIES, parseBtc, parseMoney, satsToBtcText } from '../../treasury/logic.js'
 import { useTreasury, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, Grid, Figure } from './ui.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
@@ -11,8 +11,13 @@ const inputStyle = { ...fieldBox, ...text('field') }
 // no API for either — and cost base is what was paid in. Logging a DCA buy adds
 // to the entity it went to; everything else here is set by hand.
 
-const toBtc = sats => (sats ? String(sats / SATS) : '')
-const toSats = v => Math.round((Number(String(v).replace(/,/g, '')) || 0) * SATS)
+// What a BTC field says it understood, under the field, before anything is
+// saved — so a decimal point read the wrong way is caught by eye, not later.
+function ReadBack({ text: typed }) {
+  const { sats, error } = parseBtc(typed)
+  if (error) return <span style={{ color: colour.danger }}>{error}</span>
+  return String(typed || '').trim() ? <span>Saves as {btc(sats)}</span> : null
+}
 
 export default function Holdings({ user, onBack, onLocked }) {
   const { data, error, reload } = useTreasury(user, 'holdings', { onLocked, page: 'holdings' })
@@ -32,13 +37,16 @@ export default function Holdings({ user, onBack, onLocked }) {
   function startEdit() {
     setEdit(Object.fromEntries(ENTITIES.map(e => {
       const h = data.holdings?.[e.id] || {}
-      return [e.id, { exchange: toBtc(h.exchangeSats), cold: toBtc(h.coldSats), cost: h.costAud ? String(h.costAud) : '' }]
+      return [e.id, { exchange: satsToBtcText(h.exchangeSats), cold: satsToBtcText(h.coldSats), cost: h.costAud ? String(h.costAud) : '' }]
     })))
   }
 
+  const invalid = Boolean(edit) && ENTITIES.some(e => parseBtc(edit[e.id].exchange).error
+    || parseBtc(edit[e.id].cold).error || parseMoney(edit[e.id].cost) == null)
+
   async function saveEdit() {
     const holdings = Object.fromEntries(ENTITIES.map(e => [e.id, {
-      exchangeSats: toSats(edit[e.id].exchange), coldSats: toSats(edit[e.id].cold), costAud: Number(edit[e.id].cost) || 0
+      exchangeSats: parseBtc(edit[e.id].exchange).sats, coldSats: parseBtc(edit[e.id].cold).sats, costAud: parseMoney(edit[e.id].cost)
     }]))
     if (await call('holdings-save', { holdings }, 'Holdings saved.')) setEdit(null)
   }
@@ -73,18 +81,19 @@ export default function Holdings({ user, onBack, onLocked }) {
             {ENTITIES.map(e => (
               <div key={e.id} style={{ marginBottom: space.md }}>
                 <div style={{ ...text('bodyStrong'), color: colour.ink, marginBottom: space.sm }}>{e.label}</div>
-                <Field label="On exchange / Amber (BTC)">
+                <Field label="On exchange / Amber (BTC)" hint={<ReadBack text={edit[e.id].exchange} />}>
                   <input style={inputStyle} inputMode="decimal" value={edit[e.id].exchange} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], exchange: ev.target.value } })} />
                 </Field>
-                <Field label="Cold storage (BTC)">
+                <Field label="Cold storage (BTC)" hint={<ReadBack text={edit[e.id].cold} />}>
                   <input style={inputStyle} inputMode="decimal" value={edit[e.id].cold} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], cold: ev.target.value } })} />
                 </Field>
-                <Field label="Cost base (A$)">
+                <Field label="Cost base (A$)" hint={parseMoney(edit[e.id].cost) == null ? <span style={{ color: colour.danger }}>Not a dollar amount</span> : null}>
                   <input style={inputStyle} inputMode="decimal" value={edit[e.id].cost} onChange={ev => setEdit({ ...edit, [e.id]: { ...edit[e.id], cost: ev.target.value } })} />
                 </Field>
               </div>
             ))}
-            <Button onClick={saveEdit}>Save holdings</Button>
+            <Button onClick={saveEdit} disabled={invalid}>Save holdings</Button>
+            {invalid && <Note>Fix the amounts marked in red first.</Note>}
             <div style={{ height: space.sm }} />
             <Button variant="quiet" onClick={() => setEdit(null)}>Cancel</Button>
           </Card>

@@ -220,6 +220,17 @@ describe('DCA logging', () => {
   })
 })
 
+describe('holdings', () => {
+  it('refuses an amount no entity could hold — a decimal point read the wrong way', async () => {
+    const t = await unlocked()
+    const r = await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: { smsf: { exchangeSats: 420005325 * 1e8 } } } })
+    expect(r.statusCode).toBe(400)
+    expect(r.body.error).toMatch(/SMSF/)
+    const ok = await call({ action: 'holdings-save', method: 'POST', token: t, body: { holdings: { smsf: { exchangeSats: 420005325, costAud: '$1,000' } } } })
+    expect(ok.body.holdings.smsf).toEqual({ exchangeSats: 420005325, coldSats: 0, costAud: 1000 })
+  })
+})
+
 describe('import', () => {
   const FILE = {
     ato: [{ label: 'BAS Q1', amount: '1,234.00', due: '28/10/2026', status: 'due' }],
@@ -233,7 +244,7 @@ describe('import', () => {
     const t = await unlocked()
     const p = await call({ action: 'import-preview', method: 'POST', token: t, body: { json: FILE } })
     expect(p.body.counts).toMatchObject({ ato: 1, dca: 1, trust: 1 })
-    expect(p.body.report.unmapped.map(u => u.key)).toEqual(['todo'])
+    expect(p.body.report.unmapped.map(u => u.key)).toEqual(['todo', 'inv'])
     expect(await tget('ato')).toBe(null)
     await call({ action: 'import-commit', method: 'POST', token: t, body: { json: FILE } })
     const second = await call({ action: 'import-commit', method: 'POST', token: t, body: { json: FILE } })
