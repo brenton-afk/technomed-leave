@@ -221,8 +221,13 @@ export function cumulativeSteps(rows, transfers = []) {
   return out
 }
 
-/** Dot area proportional to A$: radius by square root, so small buys stay visible. */
-export function dotRadius(aud, maxAud, { min = 2.5, max = 16 } = {}) {
+/**
+ * Dot size by A$ on a square-root scale, starting from a visible floor: the
+ * smallest buy is `min` across, the largest `max`, and the area in between
+ * grows with the amount. A floor added rather than clamped, so the daily
+ * A$150 buys are easy to see without all being the same size.
+ */
+export function dotRadius(aud, maxAud, { min = 3.5, max = 17 } = {}) {
   if (!(aud > 0) || !(maxAud > 0)) return min
-  return Math.max(min, max * Math.sqrt(aud / maxAud))
+  return min + (max - min) * Math.sqrt(Math.min(1, aud / maxAud))
 }

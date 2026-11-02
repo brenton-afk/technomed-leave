@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { colour, text, space } from '../design/tokens.js'
-import { SERIES } from './LineChart.jsx'
+import { text, space } from '../design/tokens.js'
 import { dotRadius, PURCHASE_TYPES } from './amber.js'
 import { SATS } from './logic.js'
 
@@ -17,9 +16,20 @@ import { SATS } from './logic.js'
 // Touch or hover: the nearest dot within reach is read out above the chart;
 // otherwise the price on that day.
 
-const ORANGE = SERIES[1]
-const TRANSFER = SERIES[2]
-const PRICE = SERIES[0]
+// Black and Bitcoin orange, on its own dark panel. The rest of the app is light;
+// this one chart is a showpiece, and orange reads best against black. The price
+// line is pale grey so the dots, which are the point, carry the colour.
+const T = {
+  bg: '#0b0b0c',
+  grid: 'rgba(255,255,255,0.07)',
+  axis: 'rgba(255,255,255,0.45)',
+  text: 'rgba(255,255,255,0.7)',
+  strong: '#ffffff',
+  rule: 'rgba(255,255,255,0.35)'
+}
+const ORANGE = '#f7931a'
+const TRANSFER = '#ffffff'
+const PRICE = '#d4d4d8'
 
 function useWidth(fallback = 340) {
   const ref = useRef(null)
@@ -105,7 +115,7 @@ export default function PurchaseChart({ prices, dots, transfers = [], toCur, ave
     return { from, to, pts, trs, x, y, maxAud, path, priceMap, yTicks: ticks(lo, hi, log), xTicks: [from, prices[Math.floor(prices.length / 2)][0], to] }
   }, [prices, dots, transfers, toCur, averageCost, current, log, plotW, plotH, pad.l, pad.t])
 
-  if (!model) return <div ref={ref} style={{ ...text('caption'), color: colour.inkFaint, padding: space.lg, textAlign: 'center' }}>No price history stored yet.</div>
+  if (!model) return <div ref={ref} style={{ ...text('caption'), color: T.axis, background: T.bg, borderRadius: 14, padding: space.lg, textAlign: 'center' }}>No price history stored yet.</div>
   const { pts, trs, x, y, maxAud, path, priceMap, yTicks, xTicks } = model
 
   function onMove(e) {
@@ -126,24 +136,24 @@ export default function PurchaseChart({ prices, dots, transfers = [], toCur, ave
   }
 
   const readout = () => {
-    if (!hover) return <span style={{ ...text('caption'), color: colour.inkFaint }}>Tap a dot for the purchase. Orange: buys, sized by A$. Faint: daily auto-buys.</span>
+    if (!hover) return <span style={{ ...text('caption'), color: T.axis }}>Tap a dot for the purchase. Orange: buys, sized by A$. Faint: daily auto-buys.</span>
     const d = hover.d
     if (hover.kind === 'buy') {
       const kind = PURCHASE_TYPES[d.type] || (d.type === 'week' ? `${d.count} buys that week` : d.type === 'month' ? `${d.count} buys that month` : d.type)
       return (
-        <span style={{ ...text('caption'), color: colour.inkMuted }}>
-          <b style={{ color: colour.ink }}>{short(d.date)}</b> · {kind} · <b style={{ color: colour.ink }}>A${Math.round(d.aud).toLocaleString('en-AU')}</b> for ₿{(d.sats / SATS).toFixed(8)} at {money(d.y)}
+        <span style={{ ...text('caption'), color: T.text }}>
+          <b style={{ color: T.strong }}>{short(d.date)}</b> · {kind} · <b style={{ color: T.strong }}>A${Math.round(d.aud).toLocaleString('en-AU')}</b> for ₿{(d.sats / SATS).toFixed(8)} at {money(d.y)}
         </span>
       )
     }
     if (hover.kind === 'transfer') {
       return (
-        <span style={{ ...text('caption'), color: colour.inkMuted }}>
-          <b style={{ color: colour.ink }}>{short(d.date)}</b> · Transfer in{d.from ? ` from ${d.from}` : ''} · ₿{(d.sats / SATS).toFixed(8)}{d.y ? ` at ${money(d.y)}` : ''} — not a purchase
+        <span style={{ ...text('caption'), color: T.text }}>
+          <b style={{ color: T.strong }}>{short(d.date)}</b> · Transfer in{d.from ? ` from ${d.from}` : ''} · ₿{(d.sats / SATS).toFixed(8)}{d.y ? ` at ${money(d.y)}` : ''} — not a purchase
         </span>
       )
     }
-    return <span style={{ ...text('caption'), color: colour.inkMuted }}><b style={{ color: colour.ink }}>{short(d.date)}</b> · close {money(d.y)}</span>
+    return <span style={{ ...text('caption'), color: T.text }}><b style={{ color: T.strong }}>{short(d.date)}</b> · close {money(d.y)}</span>
   }
 
   // Average cost labelled at the left, the price now at the right: the two are
@@ -152,24 +162,25 @@ export default function PurchaseChart({ prices, dots, transfers = [], toCur, ave
     <g>
       <line x1={pad.l} x2={width - pad.r} y1={y(v)} y2={y(v)} stroke={colourOf} strokeDasharray={dash} strokeWidth={1.5} />
       <text x={end ? width - pad.r - 4 : pad.l + 4} y={y(v) + (end && current >= averageCost ? -5 : end ? 14 : averageCost > current ? -5 : 14)}
-        textAnchor={end ? 'end' : 'start'} fill={colour.inkMuted} stroke={colour.surface} strokeWidth={3} paintOrder="stroke" style={text('caption')}>{txt}</text>
+        textAnchor={end ? 'end' : 'start'} fill={T.strong} stroke={T.bg} strokeWidth={3} paintOrder="stroke" style={text('caption')}>{txt}</text>
     </g>
   )
 
   return (
-    <div ref={ref}>
-      <div aria-live="polite" style={{ minHeight: 38, marginBottom: space.sm }}>{readout()}</div>
+    <div style={{ background: T.bg, borderRadius: 14, padding: `${space.md}px ${space.sm}px ${space.md}px 0` }}>
+     <div ref={ref}>
+      <div aria-live="polite" style={{ minHeight: 38, marginBottom: space.sm, paddingLeft: space.md }}>{readout()}</div>
       <svg width={width} height={height} role="img" aria-label={`Bitcoin price in ${currency} with each purchase marked`}
         onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}
         style={{ display: 'block', touchAction: 'pan-y', userSelect: 'none' }}>
         {yTicks.map(v => (
           <g key={v}>
-            <line x1={pad.l} x2={width - pad.r} y1={y(v)} y2={y(v)} stroke={colour.lineSoft} />
-            <text x={pad.l - 6} y={y(v) + 4} textAnchor="end" fill={colour.inkFaint} style={text('caption')}>{money(v, true)}</text>
+            <line x1={pad.l} x2={width - pad.r} y1={y(v)} y2={y(v)} stroke={T.grid} />
+            <text x={pad.l - 6} y={y(v) + 4} textAnchor="end" fill={T.axis} style={text('caption')}>{money(v, true)}</text>
           </g>
         ))}
         {xTicks.map((d, i) => (
-          <text key={i} x={x(d)} y={height - 6} textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'} fill={colour.inkFaint} style={text('caption')}>{short(d)}</text>
+          <text key={i} x={x(d)} y={height - 6} textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'} fill={T.axis} style={text('caption')}>{short(d)}</text>
         ))}
         <path d={path} fill="none" stroke={PRICE} strokeWidth={2} strokeLinejoin="round" />
         {label(averageCost, `Average cost ${money(averageCost)}`, ORANGE, '5 4', false)}
@@ -177,27 +188,28 @@ export default function PurchaseChart({ prices, dots, transfers = [], toCur, ave
         {/* Smallest first, so a large buy is never hidden under the trail. */}
         {[...pts].sort((a, b) => a.aud - b.aud).map((d, i) => (
           <circle key={i} cx={x(d.date)} cy={y(d.y)} r={dotRadius(d.aud, maxAud)} fill={ORANGE}
-            fillOpacity={d.auto ? 0.4 : 0.85} stroke={colour.surface} strokeWidth={d.auto ? 0.5 : 1.5} />
+            fillOpacity={d.auto ? 0.6 : 0.95} stroke={T.bg} strokeWidth={d.auto ? 0.5 : 1.5} />
         ))}
         {trs.map((t, i) => {
           const cx = x(t.date)
           const cy = y(t.y)
           const s = 9
-          return <path key={i} d={`M${cx},${cy - s}L${cx + s},${cy}L${cx},${cy + s}L${cx - s},${cy}Z`} fill={TRANSFER} stroke={colour.surface} strokeWidth={2} />
+          return <path key={i} d={`M${cx},${cy - s}L${cx + s},${cy}L${cx},${cy + s}L${cx - s},${cy}Z`} fill={TRANSFER} stroke={ORANGE} strokeWidth={2} />
         })}
         {hover && hover.kind !== 'price' && (
-          <circle cx={x(hover.d.date)} cy={y(hover.d.y)} r={(hover.kind === 'buy' ? dotRadius(hover.d.aud, maxAud) : 9) + 3} fill="none" stroke={colour.ink} strokeWidth={1.5} />
+          <circle cx={x(hover.d.date)} cy={y(hover.d.y)} r={(hover.kind === 'buy' ? dotRadius(hover.d.aud, maxAud) : 9) + 3} fill="none" stroke={T.strong} strokeWidth={1.5} />
         )}
         {hover?.kind === 'price' && priceMap.has(hover.d.date) && (
-          <line x1={x(hover.d.date)} x2={x(hover.d.date)} y1={pad.t} y2={pad.t + plotH} stroke={colour.inkFainter} />
+          <line x1={x(hover.d.date)} x2={x(hover.d.date)} y1={pad.t} y2={pad.t + plotH} stroke={T.rule} />
         )}
       </svg>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: `${space.xs}px ${space.md}px`, marginTop: space.sm, ...text('caption'), color: colour.inkMuted }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: `${space.xs}px ${space.md}px`, marginTop: space.sm, paddingLeft: space.md, ...text('caption'), color: T.text }}>
         <span><span aria-hidden="true" style={{ display: 'inline-block', width: 12, height: 3, background: PRICE, verticalAlign: 'middle', marginRight: 6 }} />Price</span>
         <span><span aria-hidden="true" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: ORANGE, verticalAlign: 'middle', marginRight: 6 }} />Purchase</span>
         <span><span aria-hidden="true" style={{ display: 'inline-block', width: 9, height: 9, background: TRANSFER, transform: 'rotate(45deg)', verticalAlign: 'middle', marginRight: 6 }} />Transfer in</span>
         <span><span aria-hidden="true" style={{ display: 'inline-block', width: 14, borderTop: `2px dashed ${ORANGE}`, verticalAlign: 'middle', marginRight: 6 }} />Average cost</span>
       </div>
+     </div>
     </div>
   )
 }

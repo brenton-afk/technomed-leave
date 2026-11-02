@@ -88,8 +88,9 @@ describe('what it adds up to', () => {
   })
 
   it('a dot\'s area follows the amount, but the smallest stays visible', () => {
-    expect(dotRadius(50000, 50000)).toBe(16)
-    expect(dotRadius(12500, 50000)).toBe(8)
-    expect(dotRadius(150, 50000)).toBe(2.5)
+    expect(dotRadius(50000, 50000)).toBe(17)
+    expect(dotRadius(12500, 50000)).toBeCloseTo(10.25)
+    expect(dotRadius(150, 50000)).toBeGreaterThan(4)
+    expect(dotRadius(150, 50000)).toBeLessThan(dotRadius(300, 50000))
   })
 })

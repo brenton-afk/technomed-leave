@@ -108,7 +108,7 @@ export default function Purchases({ user, onBack, onLocked }) {
               <Segmented options={[{ id: 'lin', label: 'Linear' }, { id: 'log', label: 'Log' }]} value={log ? 'log' : 'lin'} onChange={v => setLog(v === 'log')} />
               <Segmented options={[{ id: 'none', label: 'Each buy' }, { id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }]} value={group} onChange={setGroup} />
             </div>
-            <Card>
+            <div style={{ marginBottom: space.sm }}>
               {data.history?.stale && <div style={{ marginBottom: space.sm }}><Stale problem="Kraken did not answer; prices are from the last fetch" /></div>}
               <PurchaseChart prices={prices} dots={dots} transfers={transfers} toCur={toCur}
                 averageCost={averageCost} current={current} currency={currency} log={log} />
@@ -118,7 +118,7 @@ export default function Purchases({ user, onBack, onLocked }) {
                   {' '}{summary.gain >= 0 ? 'up' : 'down'} {aud(Math.abs(summary.gain))} ({pct(summary.gainPct)}) on what was bought.
                 </Note>
               )}
-            </Card>
+            </div>
 
             <SectionLabel>BTC held over time</SectionLabel>
             <Card>
