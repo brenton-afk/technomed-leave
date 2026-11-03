@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   inventoryFor, loanNeed, kitArrivalBy, isRush, INVENTORY, dayShortfall, suggestSupply
 } from './inventory.js'
-import { systemsInKit, resolveE4Product, resolveKit, findSystems } from './systems.js'
+import { systemsInKit, resolveE4Product, resolveKit, findSystems, LOAN_SETS } from './systems.js'
 
 // The inventory is dictated knowledge — it lives in people's heads and nowhere
 // else — so these tests are really a written record of what was said, in a form
@@ -463,9 +463,17 @@ describe('working out the supply from what is where', () => {
 // repeating, and both were repeated. So it is a test now rather than a comment.
 describe('every kit the inventory knows', () => {
   it('can be found by the reader that looks for kit in a booking', () => {
+    // TechnoMed's own kits (tmKit) are read by LOAN_SETS instead — kit a rep
+    // brings, never mistaken for the implant system — so they are held to
+    // that reader, under the same rule.
     const unfindable = INVENTORY
+      .filter(item => !item.tmKit)
       .map(item => item.system)
       .filter(system => !findSystems(system).length)
+    const tmUnfindable = INVENTORY.filter(item => item.tmKit)
+      .flatMap(item => [item.system, ...(item.aka || [])])
+      .filter(label => !LOAN_SETS.some(set => set.test.test(label)))
+    expect(tmUnfindable, 'TechnoMed kits the loan-set reader cannot see').toEqual([])
     expect(unfindable, 'in the inventory but invisible to findSystems').toEqual([])
   })
 
@@ -478,10 +486,28 @@ describe('every kit the inventory knows', () => {
     //
     // Case is not part of it. The inventory shouts MOBIS and the detector says
     // Mobis; inventoryFor is case-insensitive, so that costs nothing.
-    for (const item of INVENTORY) {
+    for (const item of INVENTORY.filter(i => !i.tmKit)) {
       const found = findSystems(item.system).map(f => f.name)
       const roundTrips = found.some(name => inventoryFor(name)?.system === item.system)
       expect(roundTrips, `${item.system} → ${found.join(', ') || 'nothing'}`).toBe(true)
     }
+  })
+})
+
+// "Need to add TM REMOVAL KIT as an option in kits in PORTAL" — Toni, 3 Nov.
+describe("TechnoMed's own kits", () => {
+  it('are offered as buttons, consigned at Calvary and a TM loan at RHH', async () => {
+    const { SYSTEM_BUTTONS } = await import('./inventory.js')
+    expect(SYSTEM_BUTTONS).toEqual(expect.arrayContaining(['TM Screw Removal', 'TM Locking Distractor']))
+    expect(suggestSupply('TM Screw Removal', 'CLV')).toBe('Consignment')
+    expect(suggestSupply('TM Screw Removal', 'RHH')).toBe('TM Loan')
+    expect(loanNeed('TM Screw Removal', 'RHH').need).toBe('move')
+  })
+  it('are known by the names the team writes', () => {
+    expect(inventoryFor('TM REMOVALS')?.system).toBe('TM Screw Removal')
+    expect(inventoryFor('TM Removal Tray')?.system).toBe('TM Screw Removal')
+  })
+  it('are never read as the implant system on a booking', () => {
+    expect(systemsInKit('Diplomat (Consignment) + TM REMOVALS')).toEqual(['Diplomat'])
   })
 })

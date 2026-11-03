@@ -105,7 +105,9 @@ export const SYSTEMS = [
  */
 export const LOAN_SETS = [
   { name: 'TM Locking Distractor', test: /\b(?:tm\s*)?locking\s*distractor\b/i },
-  { name: 'TM Screw Removal', test: /\b(?:tm\s*)?screw\s*removal\b/i },
+  // As the team writes it: "TM REMOVALS", "TM REMOVAL TRAY", "screw removal".
+  // A bare "removal" is not enough — "removal of fixation" is an operation.
+  { name: 'TM Screw Removal', test: /\btm\s*(?:screw\s*)?removals?(?:\s*(?:tray|kit|set))?\b|\bscrew\s*removals?\b/i },
   { name: 'TM Long Term Loan', test: /\b(?:tm\s*)?long\s*term\s*loan\b/i }
 ]
 

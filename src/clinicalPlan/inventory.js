@@ -169,6 +169,26 @@ export const INVENTORY = [
     note: 'No local sets. Every case needs a loan kit from the mainland.'
   },
 
+  // ── TechnoMed's own ──
+  // "Need to add TM REMOVAL KIT as an option in kits in PORTAL" — Toni,
+  // 3 Nov 2026. Ours, kept at Calvary (as in the Kit room); a case at RHH
+  // takes it across as a TM loan. No distributor, so no notice or loan request
+  // is ever drafted for it.
+  {
+    system: 'TM Screw Removal', distributor: 'technomed',
+    aka: ['TM Removal', 'TM Removals', 'TM Removal Tray', 'TM Removal Kit', 'Screw Removal'],
+    consigned: { CLV: 1 },
+    tmKit: true,
+    note: 'TechnoMed\'s own removal kit, kept at Calvary.'
+  },
+  {
+    system: 'TM Locking Distractor', distributor: 'technomed',
+    aka: ['Locking Distractor'],
+    consigned: { CLV: 1 },
+    tmKit: true,
+    note: 'TechnoMed\'s own, kept at Calvary.'
+  },
+
   // ── Not ours at all ──
   {
     system: 'Cascadia', distributor: null,
@@ -285,6 +305,9 @@ export function loanNeed(system, hospital) {
   // Launceston, and "check it is free" is a reassuring thing to read about a
   // tray that is not in the same city.
   if (HOBART.has(site)) {
+    if (item.tmKit) {
+      return { need: 'move', reason: `Ours — the ${item.system} lives at Calvary; take it across.`, item }
+    }
     if (item.movesBetweenSites) {
       return { need: 'move', reason: `The ${item.system} kit moves between sites — check where it is.`, item }
     }
@@ -466,6 +489,10 @@ export function suggestSupply(system, hospital) {
     // the question the buttons ask even though it means the same work: none.
     return item.longTermLoan?.[site] ? 'Distributor Loan' : 'Consignment'
   }
+
+  // One of TechnoMed's own kits, at the other hospital: somebody takes it
+  // across. A TM loan, never a request to a distributor.
+  if (item.tmKit) return 'TM Loan'
 
   // Ours to move, and only where the kit actually travels.
   //

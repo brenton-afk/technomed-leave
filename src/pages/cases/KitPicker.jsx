@@ -1,6 +1,6 @@
 import React from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { SYSTEM_BUTTONS, variantOf } from '../../clinicalPlan/inventory.js'
+import { SYSTEM_BUTTONS, variantOf, inventoryFor } from '../../clinicalPlan/inventory.js'
 import { SUPPLY_OPTIONS, parseKitSupplies, formatKitSupplies } from '../../clinicalPlan/kitSupply.js'
 
 // ─── The kit, chosen by tapping ──────────────────────────────────────────────
@@ -15,7 +15,14 @@ import { SUPPLY_OPTIONS, parseKitSupplies, formatKitSupplies } from '../../clini
 // change to who gets told.
 
 const SYSTEMS = SYSTEM_BUTTONS
-const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase()
+// The same system however it is written: "TM REMOVALS" on a booking is the
+// TM Screw Removal button, so the button shows as on rather than offering a
+// second copy.
+const same = (a, b) => {
+  if (String(a).toLowerCase() === String(b).toLowerCase()) return true
+  const x = inventoryFor(a), y = inventoryFor(b)
+  return Boolean(x && y && x === y && x.tmKit)
+}
 
 export default function KitPicker({ kit, onChange, systemsOnly = false }) {
   const entries = parseKitSupplies(kit)

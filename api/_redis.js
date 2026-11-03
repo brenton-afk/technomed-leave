@@ -38,7 +38,7 @@ export async function redisSetBody(key, value) {
 }
 
 export async function saveApplication(id, application) {
-  await redis('set', `leave:${id}`, JSON.stringify(application))
+  await redisSetBody(`leave:${id}`, JSON.stringify(application))
   await redis('lpush', 'leave:pending', id)
 }
 
@@ -59,7 +59,7 @@ export async function updateApplicationStatus(id, status, reason = '') {
   app.status = status
   app.declineReason = reason
   app.updatedAt = new Date().toISOString()
-  await redis('set', `leave:${id}`, JSON.stringify(app))
+  await redisSetBody(`leave:${id}`, JSON.stringify(app))
   await redis('lrem', 'leave:pending', '0', id)
   await redis('lpush', `leave:${status}`, id)
   return app
@@ -80,14 +80,25 @@ export async function getAllApplications() {
 
 // ─── MEETINGS ───────────────────────────────────────────────
 
+// In the request body, not the URL. A meeting's transcript and notes run to
+// thousands of characters, and through the URL path the value was cut off —
+// which is the "Unterminated string in JSON" Erin saw on the Projects page.
 export async function saveMeeting(id, meeting) {
-  await redis('set', `meeting:${id}`, JSON.stringify(meeting))
+  await redisSetBody(`meeting:${id}`, JSON.stringify(meeting))
   await redis('lpush', 'meeting:all', id)
 }
 
 export async function getMeeting(id) {
   const data = await redis('get', `meeting:${id}`)
-  return data ? JSON.parse(data) : null
+  if (!data) return null
+  try {
+    return JSON.parse(data)
+  } catch {
+    // Saved before meetings went through the request body, and cut off on
+    // the way in. One damaged record must not take the whole Projects page
+    // down with it, so it is left out rather than thrown.
+    return null
+  }
 }
 
 export async function getAllMeetings(limit = 25) {
@@ -102,7 +113,7 @@ export async function updateMeetingStatus(id, status, actionItems) {
   meeting.status = status
   if (actionItems) meeting.actionItems = actionItems
   meeting.updatedAt = new Date().toISOString()
-  await redis('set', `meeting:${id}`, JSON.stringify(meeting))
+  await redisSetBody(`meeting:${id}`, JSON.stringify(meeting))
   return meeting
 }
 
@@ -454,7 +465,7 @@ export async function markBookingEmailFailed(messageId, message = '') {
 }
 
 export async function saveBookingCandidate(candidate) {
-  await redis('set', queueKey(candidate.id), JSON.stringify(candidate))
+  await redisSetBody(queueKey(candidate.id), JSON.stringify(candidate))
   // A set, not a list: the same id being saved twice must not queue it twice.
   await redis('sadd', 'bookingQueue:all', candidate.id)
   return candidate
@@ -483,7 +494,7 @@ export async function updateBookingCandidate(id, updates) {
   const candidate = await getBookingCandidate(id)
   if (!candidate) throw new Error('That booking is no longer in the queue')
   const updated = { ...candidate, ...updates, updatedAt: new Date().toISOString() }
-  await redis('set', queueKey(id), JSON.stringify(updated))
+  await redisSetBody(queueKey(id), JSON.stringify(updated))
   return updated
 }
 

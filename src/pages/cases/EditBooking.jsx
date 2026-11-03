@@ -15,7 +15,7 @@ import {
 import { needsPriorImplants } from '../../clinicalPlan/priorImplants.js'
 import { fetchDayCases } from '../../clinicalPlan/provider.js'
 import { dayShortfall } from '../../clinicalPlan/inventory.js'
-import { systemsInKit, findNavigation} from '../../clinicalPlan/systems.js'
+import { systemsInKit, findNavigation, findSystems, LOAN_SETS } from '../../clinicalPlan/systems.js'
 import {
   SUPPLY_OPTIONS, parseKitSupplies, setSupply, systemsToSupply, drawsOnLocalStock
 } from '../../clinicalPlan/kitSupply.js'
@@ -106,9 +106,77 @@ function Field({ label, hint, value, onChange, autoFocus, type = 'text' }) {
  */
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+// ─── The kit in the title ─────────────────────────────────────────────────────
+// "Issue with portal not changing/updating the KIT/system in the TITLE /event
+// heading in the google calendar" — Toni, 3 Nov 2026, on the Diplomat to
+// Mariner cases. The title names the system the team's way ("Smith DIPLOMAT -
+// Thani") while the field says "Diplomat (Consignment)", so the whole-value
+// match below never found the old kit in the title and nothing changed. The
+// kit is compared by *system* instead: what left the kit is found in the title
+// and what arrived takes its place, in capitals, as the team writes it.
+
+const kitParts = kit => [
+  ...systemsInKit(kit),
+  ...LOAN_SETS.filter(set => set.test.test(String(kit || ''))).map(set => set.name)
+]
+
+export function kitTitle(title, beforeKit, afterKit) {
+  const was = kitParts(beforeKit)
+  const now = kitParts(afterKit)
+  const gone = was.filter(n => !now.includes(n))
+  const added = now.filter(n => !was.includes(n))
+  if (!gone.length && !added.length) return null
+
+  const inTitle = [
+    ...findSystems(title).map(f => ({ name: f.name, matched: f.matched })),
+    ...LOAN_SETS.map(set => ({ name: set.name, matched: (set.test.exec(title) || [])[0] })).filter(f => f.matched)
+  ]
+  const leaving = inTitle.filter(f => gone.includes(f.name))
+  // Nothing of the old kit is written in the title — a placeholder or a title
+  // typed some other way — so there is nothing to swap, and it is left alone.
+  if (!leaving.length) return null
+  // As the kit line words it ("Mariner MIS", not the family name "Mariner"),
+  // without its supply in brackets.
+  const wording = name => {
+    const entry = parseKitSupplies(afterKit).find(e => kitParts(e.system).includes(name))
+    return String(entry?.system || name).trim().toUpperCase()
+  }
+  const arriving = added.filter(n => !inTitle.some(f => f.name === n)).map(wording)
+
+  const esc = v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let proposed = title
+  leaving.forEach((hit, i) => {
+    if (i === 0 && arriving.length) {
+      proposed = proposed.replace(hit.matched, arriving.join(' + '))
+      return
+    }
+    // Taken off with one separator beside it, so "DIPLOMAT + E4 BMD" becomes
+    // "E4 BMD" rather than "+ E4 BMD".
+    const m = esc(hit.matched)
+    for (const pattern of [new RegExp(`${m}\\s*[/+]\\s*`), new RegExp(`\\s*[/+]\\s*${m}`), new RegExp(m)]) {
+      if (pattern.test(proposed)) { proposed = proposed.replace(pattern, ' '); break }
+    }
+  })
+  proposed = proposed.replace(/\s{2,}/g, ' ').replace(/\s+-\s+/, ' - ').trim()
+  if (proposed === title.trim()) return null
+  return { field: 'kit', was: leaving.map(h => h.matched).join(', '), now: arriving.join(' + '), proposed }
+}
+
 export function staleTitle(summary, before, after) {
   const title = String(summary || '')
-  for (const key of ['surgeon', 'patient', 'kit']) {
+  const kitChange = String(before?.kit || '').trim() !== String(after?.kit || '').trim()
+    ? kitTitle(title, before?.kit, after?.kit) : null
+  // The surname and surgeon first, then the kit on whatever they leave.
+  const people = staleTitleOf(title, before, after, ['surgeon', 'patient'])
+  if (people && kitChange) {
+    const both = kitTitle(people.proposed, before?.kit, after?.kit)
+    return both ? { ...people, proposed: both.proposed } : people
+  }
+  return people || kitChange || staleTitleOf(title, before, after, ['kit'])
+}
+
+function staleTitleOf(title, before, after, keys) {
+  for (const key of keys) {
     const was = String(before?.[key] || '').trim()
     const now = String(after?.[key] || '').trim()
     if (!was || !now || was === now) continue
