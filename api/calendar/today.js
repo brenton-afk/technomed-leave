@@ -13,6 +13,7 @@ import {
   hospitalLoanNoticesFor, DEFAULT_HOSPITAL_LOAN_NOTICES
 } from '../_bookingNotices.js'
 import { sendBookingNotice, escapeHtml } from '../_email.js'
+import { loanTrail, attachmentFor } from '../_loanTrail.js'
 import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
 import {
   taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX
@@ -142,6 +143,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'save') return handleSave(req, res)
   // One booking, read fresh when the edit sheet opens.
   if (req.query.action === 'booking') return handleBooking(req, res)
+  if (req.query.action === 'loantrail') return handleLoanTrail(req, res)
+  if (req.query.action === 'loanattachment') return handleLoanAttachment(req, res)
   if (req.query.action === 'create') return handleCreate(req, res)
   // Kit to move, a tray to get back, something to restock. Not an operation,
   // and the part of a week that actually goes wrong.
@@ -396,6 +399,43 @@ async function handleRunsheet(req, res) {
  * been open, which is the difference between a conflict check that fires on real
  * collisions and one that fires constantly.
  */
+/**
+ * The loan sets on a booking, with the email trail behind each one.
+ * See api/_loanTrail.js for where it looks and why that is narrow.
+ */
+async function handleLoanTrail(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  try {
+    const eventId = String(req.query.id || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'id is required' })
+    const event = await getCalendarEvent(eventId)
+    const booking = describeBooking(event)
+    const sets = await loanTrail(booking, await loanLogFor(eventId).catch(() => []))
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).json({ sets })
+  } catch (err) {
+    // No email content or names in the error: only what failed.
+    return res.status(500).json({ error: 'The loan set emails could not be read just now.', detail: String(err?.status || '') })
+  }
+}
+
+/** One attachment from a loan set's trail, by the token handed out with it. */
+async function handleLoanAttachment(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  try {
+    const found = await attachmentFor(String(req.query.t || ''))
+    if (!found) return res.status(404).json({ error: 'That attachment link has expired — reopen the booking.' })
+    res.setHeader('Content-Type', found.mediaType)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('Content-Disposition', `inline; filename="${String(found.filename).replace(/[^\w.\- ]/g, '_')}"`)
+    return res.status(200).send(Buffer.from(found.data, 'base64'))
+  } catch {
+    return res.status(500).json({ error: 'The attachment could not be opened just now.' })
+  }
+}
+
 async function handleBooking(req, res) {
   const session = await requireSession(req, res)
   if (!session) return

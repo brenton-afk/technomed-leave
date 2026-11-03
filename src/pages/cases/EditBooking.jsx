@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import LoanTrail from './LoanTrail.jsx'
 import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { CaseThread } from '../Chat.jsx'
@@ -928,6 +929,11 @@ export default function EditBooking({
                     ))}
                   </div>
                 )}
+
+                {/* ── The distributor loan set, and the emails behind it ──
+                    Loads by itself; shows nothing on a booking with no
+                    distributor loan. See LoanTrail. */}
+                {loaded?.id && <LoanTrail eventId={loaded.id} user={user} />}
 
                 {/* ── How this surgeon likes the room ──
                     

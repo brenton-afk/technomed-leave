@@ -123,6 +123,7 @@ describe('no screen is left out', () => {
     'kit/TrayList.jsx', 'kit/EditableTray.jsx',
     // Part of the auto-add card and the booking sheets.
     'cases/KitPicker.jsx',
+    'cases/LoanTrail.jsx',
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',

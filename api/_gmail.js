@@ -189,3 +189,56 @@ export async function headersOf(id) {
   const header = name => (message.payload?.headers || []).find(h => h.name.toLowerCase() === name)?.value || ''
   return { from: header('from'), subject: header('subject'), snippet: message.snippet || '' }
 }
+
+// ─── Reading a loan set's email trail ─────────────────────────────────────────
+// Used by api/_loanTrail.js. Every function names the mailbox it reads: the
+// bookings inbox, or a team member's, under the same domain-wide grant. They
+// are only ever called with a narrow search (a distributor's domain *and* a
+// patient's surname *and* a window around the surgery) — never to browse.
+
+/** Message ids in one mailbox matching a Gmail search. */
+export async function searchMailboxOf(mailbox, query, { max = 15 } = {}) {
+  const data = await gmail(
+    `/messages?q=${encodeURIComponent(query)}&maxResults=${Math.min(max, 50)}`, { impersonate: mailbox })
+  return (data.messages || []).map(m => m.id)
+}
+
+/** One message's headers, text and attachment list — attachments not downloaded. */
+export async function readMessageHeadline(mailbox, id) {
+  const message = await gmail(`/messages/${encodeURIComponent(id)}?format=full`, { impersonate: mailbox })
+  const parts = walk(message.payload, { text: '', html: '', attachments: [] })
+  const sizeOf = att => {
+    const find = p => (p?.body?.attachmentId === att.attachmentId ? p : (p?.parts || []).map(find).find(Boolean))
+    return find(message.payload)?.body?.size || 0
+  }
+  return {
+    id,
+    mailbox,
+    threadId: message.threadId,
+    messageId: header(message.payload, 'Message-ID') || header(message.payload, 'Message-Id'),
+    from: header(message.payload, 'From'),
+    to: header(message.payload, 'To'),
+    cc: header(message.payload, 'Cc'),
+    subject: header(message.payload, 'Subject'),
+    receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : null,
+    text: parts.text || stripHtml(parts.html),
+    attachments: parts.attachments.map(a => ({ ...a, size: sizeOf(a) }))
+  }
+}
+
+/** One attachment's bytes, as standard base64, with its sniffed type. */
+export async function readAttachment(mailbox, messageId, attachmentId) {
+  const body = await gmail(
+    `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, { impersonate: mailbox })
+  const data = String(body.data || '').replace(/-/g, '+').replace(/_/g, '/')
+  return { data, mediaType: sniffMediaType(data, '') }
+}
+
+function stripHtml(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/tr>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim()
+}
