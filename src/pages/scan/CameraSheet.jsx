@@ -5,6 +5,9 @@ import { detectDocument, cornersAreSupported } from '../../scanner/documentDetec
 import { DocumentTracker, maxCornerShift } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
 import { sharpnessOf, boxOf } from '../../scanner/sharpness.js'
+import {
+  startDetectWorker, detectWorkerState, onDetectWorkerState, detectWorkerBusy, detectInWorker
+} from '../../scanner/detectWorker.js'
 import { readPrefs, writePrefs } from '../../clinicalPlan/provider.js'
 import {
   acquireCamera, cameraOpen, setTorch, hasTorch, torchOn as torchIsOn, turnTorchOff,
@@ -61,7 +64,35 @@ const FRAME_INTERVAL = 1
 // gap between detections. Now that there is a detection every frame there is
 // less gap to smooth, and the easing can be firmer without the outline getting
 // twitchy — 0.35 at half the frame rate felt like the outline was dragging.
-const CHASE = 0.5
+// How quickly the drawn outline catches up with the tracked one, in ms.
+const CHASE_MS = 45
+
+// ── The page, filled and meshed ──
+// "The google drive scanner … had a mesh blue field that moves across the page
+// that it's scanning and is really really slick." — Brent, 3 Nov 2026. The page
+// is washed blue with a grid laid over it in its own perspective — so the grid
+// tilts and shrinks with the paper and visibly *is* the page rather than a box
+// drawn near it — and a brighter band sweeps down it while it is being read.
+// On lock the grid quietens and the fill firms up: found, holding.
+const MESH = '#3d8bff'
+const MESH_LINE = '#cfe2ff'
+const SWEEP_MS = 1600
+
+/** A point on the quad: u across (0 left, 1 right), v down (0 top, 1 bottom). */
+function onQuad(q, u, v) {
+  const top = { x: q[0].x + (q[1].x - q[0].x) * u, y: q[0].y + (q[1].y - q[0].y) * u }
+  const bottom = { x: q[3].x + (q[2].x - q[3].x) * u, y: q[3].y + (q[2].y - q[3].y) * u }
+  return { x: top.x + (bottom.x - top.x) * v, y: top.y + (bottom.y - top.y) * v }
+}
+
+/** Grid lines across the quad: 4 columns, 6 rows. */
+export function meshPath(q, columns = 4, rows = 6) {
+  const parts = []
+  const line = (a, b) => parts.push(`M ${a.x},${a.y} L ${b.x},${b.y}`)
+  for (let i = 1; i < columns; i++) line(onQuad(q, i / columns, 0), onQuad(q, i / columns, 1))
+  for (let j = 1; j < rows; j++) line(onQuad(q, 0, j / rows), onQuad(q, 1, j / rows))
+  return parts.join(' ')
+}
 /**
  * How far the still's own reading may sit from the tracked one and still be
  * taken as a correction rather than a contradiction.
@@ -150,6 +181,8 @@ export function Outline({ view, countdown }) {
   const cornerRef = useRef(null)
   const maskRef = useRef(null)    // the hole the page shows through
   const clipRef = useRef(null)    // the sweep, kept inside the page
+  const meshRef = useRef(null)    // the grid over the page
+  const bandRef = useRef(null)    // the sweep moving down it
   const shown = useRef(null)      // where the outline is drawn right now
   const target = useRef(null)     // where the last detection says it should be
 
@@ -159,8 +192,16 @@ export function Outline({ view, countdown }) {
 
   useEffect(() => {
     let raf = 0
+    let lastAt = performance.now()
+    const still = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
     const draw = () => {
       raf = requestAnimationFrame(draw)
+      const now = performance.now()
+      // By time, not per frame: a fixed fraction per repaint glides twice as
+      // fast on a 120Hz iPhone as on a 60Hz Android.
+      const chase = 1 - Math.exp(-Math.min(100, now - lastAt) / CHASE_MS)
+      lastAt = now
       const svg = svgRef.current
       if (!svg) return
 
@@ -177,8 +218,8 @@ export function Outline({ view, countdown }) {
         shown.current = to.corners.map(c => ({ ...c }))
       } else {
         for (let i = 0; i < to.corners.length; i++) {
-          shown.current[i].x += (to.corners[i].x - shown.current[i].x) * CHASE
-          shown.current[i].y += (to.corners[i].y - shown.current[i].y) * CHASE
+          shown.current[i].x += (to.corners[i].x - shown.current[i].x) * chase
+          shown.current[i].y += (to.corners[i].y - shown.current[i].y) * chase
         }
       }
 
@@ -197,6 +238,20 @@ export function Outline({ view, countdown }) {
       cornerRef.current?.setAttribute('d', scaled
         .map((c, i) => bracket(c, scaled[(i + 3) % 4], scaled[(i + 1) % 4]))
         .join(' '))
+
+      // The mesh, in the page's own perspective, and the band sweeping down it.
+      meshRef.current?.setAttribute('d', meshPath(scaled))
+      if (bandRef.current) {
+        if (still) bandRef.current.setAttribute('points', '')
+        else {
+          const t = (now % SWEEP_MS) / SWEEP_MS
+          const top = Math.max(0, t * 1.3 - 0.3)
+          const bottom = Math.min(1, t * 1.3)
+          bandRef.current.setAttribute('points', [
+            onQuad(scaled, 0, top), onQuad(scaled, 1, top), onQuad(scaled, 1, bottom), onQuad(scaled, 0, bottom)
+          ].map(p => `${p.x},${p.y}`).join(' '))
+        }
+      }
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -210,7 +265,8 @@ export function Outline({ view, countdown }) {
     // reads as a drawing; a fine one reads as the edge of the paper, which is
     // the thing it is trying to be. It still thickens on lock, because that is
     // the only moment the outline has anything to say.
-    fillRef.current?.style.setProperty('fill-opacity', firing ? '0.16' : '0.04')
+    fillRef.current?.style.setProperty('fill-opacity', firing ? '0.34' : '0.2')
+    meshRef.current?.style.setProperty('stroke-opacity', firing ? '0.25' : '0.65')
     lineRef.current?.style.setProperty('stroke-width', firing ? '0.85' : '0.45')
     cornerRef.current?.style.setProperty('stroke-width', firing ? '1.7' : '1.1')
   }, [firing])
@@ -265,8 +321,9 @@ export function Outline({ view, countdown }) {
           is working looks like one. Purely decorative: it says "this is live",
           which a still outline on a still page cannot. */}
       <g clipPath="url(#page-only)">
-        <rect className="tm-scan-sweep" x="-100" y="0" width="100" height="100"
-          fill="url(#page-sweep)" />
+        <polygon ref={bandRef} className="tm-scan-band" fill={MESH} fillOpacity={0.28} />
+        <path ref={meshRef} data-part="mesh" fill="none" stroke={MESH_LINE} strokeWidth={0.3}
+          strokeOpacity={0.65} style={{ transition: 'stroke-opacity 200ms ease-out' }} />
       </g>
 
       {/* White, not teal. A coloured outline reads as a decoration laid over the
@@ -274,7 +331,7 @@ export function Outline({ view, countdown }) {
           every scanner worth copying does. The fill is a barely-there wash that
           lifts on lock, so the moment of recognition is visible without the
           outline changing colour and shouting about it. */}
-      <polygon ref={fillRef} fill="#fff" fillOpacity={0.04}
+      <polygon ref={fillRef} fill={MESH} fillOpacity={0.2}
         style={{ transition: 'fill-opacity 160ms ease-out' }} />
       <polygon ref={lineRef} fill="none" stroke="#fff"
         strokeWidth={0.45} strokeLinejoin="round" strokeLinecap="round"
@@ -727,6 +784,13 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
   const busyRef = useRef(false)
 
   const [engine, setEngine] = useState(openCvReady() ? 'ready' : 'loading')
+  // Detection in the background, started alongside the engine on this thread.
+  const [workerState, setWorkerState] = useState(detectWorkerState())
+  useEffect(() => {
+    const off = onDetectWorkerState(setWorkerState)
+    setWorkerState(startDetectWorker())
+    return off
+  }, [])
   // The video's own dimensions, so the preview can be shown whole rather than
   // cropped to whatever shape the screen happens to be.
   const [frame, setFrame] = useState(null)
@@ -966,7 +1030,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
 
   // ── Detection. Every third frame, at a small size. ──
   useEffect(() => {
-    if (cameraState !== 'ready' || engine !== 'ready') return
+    if (cameraState !== 'ready' || (engine !== 'ready' && workerState !== 'ready')) return
     let stop = false
     if (!trackerRef.current) trackerRef.current = new DocumentTracker()
 
@@ -1026,6 +1090,18 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         canvas.width = DETECT_WIDTH
         canvas.height = height
       }
+      // In the background where it can be, so the outline never waits for it;
+      // on this thread otherwise, as it always was.
+      if (detectWorkerState() === 'ready') {
+        if (detectWorkerBusy()) return
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+        context.drawImage(video, 0, 0, DETECT_WIDTH, height)
+        const asked = detectInWorker(context, DETECT_WIDTH, height)
+        asked?.then(result => { if (!stop) settle(result?.found || null) })
+        return
+      }
+      if (!cvRef.current) return
+
       const context = canvas.getContext('2d', { willReadFrequently: true })
       context.drawImage(video, 0, 0, DETECT_WIDTH, height)
 
@@ -1036,7 +1112,11 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
       } catch {
         found = null
       }
+      settle(found)
+    }
 
+    function settle(found) {
+      if (stop || busyRef.current) return
       const next = trackerRef.current.update(found, performance.now())
       viewRef.current = next
       setView(next)
@@ -1051,7 +1131,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
       if (handle?.on) handle.on.cancelVideoFrameCallback?.(handle.video)
       else cancelAnimationFrame(handle)
     }
-  }, [cameraState, engine, autoCapture, pending, capture])
+  }, [cameraState, engine, workerState, autoCapture, pending, capture])
 
   /** Keeps the page and returns to the camera, for a form that runs to two. */
   function keepAndContinue(saved) {
@@ -1092,7 +1172,9 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     if (!worked) setError('This camera has no light, or the browser will not switch it.')
   }
 
-  const hint = engine === 'unavailable'
+  const hint = workerState === 'ready'
+    ? (view?.hint || 'Point at the form')
+    : engine === 'unavailable'
     ? 'Edge detection unavailable — the whole photo is kept'
     : engine === 'loading'
       ? 'Ready to shoot — edge detection still loading'

@@ -333,7 +333,9 @@ describe('the outline over the camera', () => {
     // own chrome, and mixing the two made it look like a widget pasted onto a
     // video rather than the edge of the page itself.
     const { container } = render(<Outline view={VIEW} countdown={0} />)
-    const stroked = [...container.querySelectorAll('[stroke]')]
+    // The edge itself — outline and brackets. The blue mesh laid over the
+    // page is the field Brent asked for after seeing Google Drive's scanner.
+    const stroked = [...container.querySelectorAll('[stroke]:not([data-part="mesh"])')]
       .map(el => el.getAttribute('stroke'))
       .filter(v => v && v !== 'none')
     expect(stroked.length).toBeGreaterThan(0)
@@ -358,7 +360,7 @@ describe('the outline over the camera', () => {
 
   it('draws a bracket at each corner', async () => {
     const { container } = render(<Outline view={VIEW} countdown={0} />)
-    const path = container.querySelector('path[stroke]')
+    const path = container.querySelector('path[stroke="#fff"]')
     await waitFor(() => expect(path.getAttribute('d')).toBeTruthy())
     // Four corners, each an L of two segments.
     expect(path.getAttribute('d').match(/M /g)).toHaveLength(4)
@@ -478,7 +480,7 @@ describe('the viewfinder, as a scanner rather than a camera', () => {
 
   it('sweeps a band of light across the page', async () => {
     const { container } = draw()
-    const sweep = container.querySelector('.tm-scan-sweep')
+    const sweep = container.querySelector('.tm-scan-band')
     expect(sweep).toBeTruthy()
     // Clipped to the paper, or it would wash across the whole viewfinder.
     expect(sweep.closest('g').getAttribute('clip-path')).toBe('url(#page-only)')
@@ -948,5 +950,18 @@ describe('after dragging a corner', () => {
         onConfirm={() => {}} onRetake={() => {}}
         onAddAnother={() => {}} onCancel={() => {}} />)
     expect(screen.getByText('No — read it')).toBeInTheDocument()
+  })
+})
+
+describe('the mesh over the page', () => {
+  // "The google drive scanner … had a mesh blue field that moves across the
+  // page that it's scanning." The grid is laid in the page's own perspective.
+  it('draws 3 columns and 5 rows of lines inside the quad, following its tilt', async () => {
+    const { meshPath } = await import('./CameraSheet.jsx')
+    const quad = [{ x: 10, y: 10 }, { x: 90, y: 20 }, { x: 80, y: 90 }, { x: 20, y: 80 }]
+    const d = meshPath(quad)
+    expect(d.match(/M /g)).toHaveLength(3 + 5)
+    // The middle column starts halfway along the top edge and ends halfway along the bottom.
+    expect(d).toContain('M 50,15 L 50,85')
   })
 })

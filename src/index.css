@@ -339,18 +339,11 @@ html, body {
    Paused rather than removed for anybody who has asked their device to stop
    animating things: the whole point is motion, so there is nothing to
    usefully degrade to. */
-@keyframes tm-scan-sweep {
-  from { transform: translateX(0); }
-  to   { transform: translateX(200px); }
-}
-
-.tm-scan-sweep {
-  animation: tm-scan-sweep 2.1s linear infinite;
-}
-
+/* The scanner's sweep is driven from script (see Outline in CameraSheet.jsx),
+   so it follows the page's perspective; it is not drawn at all for anybody who
+   has asked their device to stop animating things. */
 @media (prefers-reduced-motion: reduce) {
-  .tm-scan-sweep {
-    animation: none;
-    opacity: 0;
+  .tm-scan-band {
+    display: none;
   }
 }

@@ -10,6 +10,9 @@ const builtAt = new Date().toISOString()
 
 export default defineConfig({
   plugins: [react()],
+  // The detection worker loads the OpenCV build with importScripts, which only
+  // a classic worker has. See src/scanner/detect.worker.js.
+  worker: { format: 'iife' },
   define: {
     __APP_COMMIT__: JSON.stringify(commit),
     __APP_BUILT_AT__: JSON.stringify(builtAt)
