@@ -51,10 +51,12 @@ export function flattenWithOpenCv(cv, source, corners, opts = {}) {
 
     const transform = track(cv.getPerspectiveTransform(from, to))
     const flat = track(new cv.Mat())
+    // Cubic, not linear: the warp is also a resample, and linear softens the
+    // fine print it is meant to be making legible.
     cv.warpPerspective(input, flat, transform, new cv.Size(size.width, size.height),
-      cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255))
+      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255))
 
-    if (enhance) stretchContrast(cv, flat, track)
+    if (enhance) enhanceDocument(cv, flat)
 
     const out = document.createElement('canvas')
     out.width = size.width
@@ -71,6 +73,81 @@ export function flattenWithOpenCv(cv, source, corners, opts = {}) {
 }
 
 /**
+ * Makes a photographed page read like a scanned one, in place.
+ *
+ * "The scan was blurry" — in the PDF the distributor and Dropbox receive
+ * (Aimee, 3 Nov 2026). Forms are photographed on a stainless steel bench under
+ * theatre lights: the paper comes out grey at one end and white at the other,
+ * with glare patches, and a global auto-levels cannot fix that — whatever it
+ * does to the dark end it does to the bright end too.
+ *
+ * So, as scanning apps do, the lighting is estimated and divided out. The
+ * paper behind the print is found by spreading the light parts over the dark
+ * (a dilation, which swallows strokes of ink) and smoothing; every pixel is
+ * then divided by the paper's brightness at that point. Paper goes evenly
+ * white wherever it was lit, and ink stays as dark relative to its paper as it
+ * was — which is the thing that makes it legible. Colour is kept: each channel
+ * is divided by the same estimate, so blue pen stays blue.
+ *
+ * Then the usual auto-levels, and a light unsharp mask.
+ *
+ * Each step is guarded on its own. A failure in one leaves the page as the
+ * previous step left it — never worse than the flattened photograph.
+ */
+export function enhanceDocument(cv, image) {
+  const open = []
+  const track = mat => { open.push(mat); return mat }
+  try {
+    try { evenLighting(cv, image, track) } catch { /* as it was */ }
+    try { stretchContrast(cv, image, track) } catch { /* as it was */ }
+    try { unsharp(cv, image, track) } catch { /* as it was */ }
+  } finally {
+    for (const mat of open) {
+      try { mat.delete() } catch { /* already released */ }
+    }
+  }
+}
+
+export function evenLighting(cv, image, track) {
+  const grey = track(new cv.Mat())
+  cv.cvtColor(image, grey, cv.COLOR_RGBA2GRAY)
+
+  // Estimated at a quarter size: the lighting changes slowly across a page, and
+  // a median over a full-resolution page would cost seconds on a phone.
+  const small = track(new cv.Mat())
+  const scale = 0.25
+  cv.resize(grey, small, new cv.Size(Math.max(8, Math.round(grey.cols * scale)), Math.max(8, Math.round(grey.rows * scale))), 0, 0, cv.INTER_AREA)
+  const kernel = track(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(7, 7)))
+  cv.dilate(small, small, kernel)
+  cv.medianBlur(small, small, 15)
+
+  // Not paper at all — a dark photograph, or the page was not found and this is
+  // the bench. Dividing by it would only blow out noise.
+  if (cv.mean(small)[0] < 90) return
+
+  const paper = track(new cv.Mat())
+  cv.resize(small, paper, new cv.Size(grey.cols, grey.rows), 0, 0, cv.INTER_LINEAR)
+  // Never divide by near-black: a deep shadow is lifted, not exploded.
+  cv.max(paper, track(new cv.Mat(paper.rows, paper.cols, paper.type(), new cv.Scalar(40))), paper)
+
+  const channels = track(new cv.MatVector())
+  cv.split(image, channels)
+  for (let c = 0; c < 3; c++) {
+    const ch = channels.get(c)
+    cv.divide(ch, paper, ch, 255)
+    channels.set(c, ch)
+    ch.delete()
+  }
+  cv.merge(channels, image)
+}
+
+export function unsharp(cv, image, track) {
+  const blurred = track(new cv.Mat())
+  cv.GaussianBlur(image, blurred, new cv.Size(0, 0), 1.1, 1.1, cv.BORDER_DEFAULT)
+  cv.addWeighted(image, 1.6, blurred, -0.6, 0, image)
+}
+
+/**
  * Pulls the tonal range back out to full span, in place.
  *
  * The black and white points are taken from a blurred copy, so a single specular
@@ -78,7 +155,7 @@ export function flattenWithOpenCv(cv, source, corners, opts = {}) {
  * the difference between an auto-levels that helps and one that makes every
  * photograph with a glare spot worse.
  */
-function stretchContrast(cv, image, track) {
+export function stretchContrast(cv, image, track) {
   const grey = track(new cv.Mat())
   cv.cvtColor(image, grey, cv.COLOR_RGBA2GRAY)
   const blurred = track(new cv.Mat())
@@ -95,7 +172,12 @@ function stretchContrast(cv, image, track) {
   const black = Math.max(0, minVal - 6)
   const white = Math.min(255, maxVal + 6)
   const alpha = 255 / (white - black)
-  cv.convertScaleAbs(image, image, alpha, -black * alpha)
+  // convertTo saturates at 0; convertScaleAbs, which this used, takes the
+  // *absolute value* — so any ink darker than the blurred black point went
+  // negative and was flipped back up into grey. The thinnest, darkest strokes,
+  // which are the ones that set the black point lowest in a sharp photograph,
+  // came out washed out on every scan.
+  image.convertTo(image, -1, alpha, -black * alpha)
 }
 
 /**
