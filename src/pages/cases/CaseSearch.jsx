@@ -34,7 +34,41 @@ export function SearchButton({ onClick }) {
   )
 }
 
+// A task — from the calendar or the Projects board — as a task: what it is,
+// whose, and whether it is done. A calendar task opens its sheet, as tapping it
+// in the week does; a board item says where it lives.
+function TaskResult({ result, onOpen }) {
+  const onBoard = result.type === 'project'
+  const body = (
+    <>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm }}>
+        <span style={{
+          ...text('micro'), textTransform: 'uppercase', color: colour.accentDeep, background: colour.accentSoft,
+          padding: '1px 6px', borderRadius: radius.pill, flexShrink: 0
+        }}>{onBoard ? 'Project task' : 'Task'}</span>
+        <span style={{
+          ...text('bodyStrong'), color: result.done ? colour.inkFaint : colour.ink, flex: 1, minWidth: 0,
+          textDecoration: result.done ? 'line-through' : 'none'
+        }}>{result.what}</span>
+        {result.date && <span style={{ ...text('caption'), color: colour.inkFaint, flexShrink: 0 }}>{prettyDate(result.date)}</span>}
+      </div>
+      <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: 2 }}>
+        {[result.who ? `For ${result.who}` : '', result.done ? 'Done' : 'Open', onBoard ? 'on the Projects board' : ''].filter(Boolean).join(' · ')}
+      </div>
+    </>
+  )
+  const box = {
+    display: 'block', width: '100%', textAlign: 'left', background: colour.surface,
+    border: `1px solid ${colour.line}`, borderRadius: radius.control,
+    padding: `${space.sm}px ${space.md}px`, marginBottom: space.sm
+  }
+  return onBoard
+    ? <div style={box}>{body}</div>
+    : <button type="button" onClick={() => onOpen(result)} style={{ ...box, cursor: 'pointer' }}>{body}</button>
+}
+
 function Result({ result, onOpen }) {
+  if (result.type === 'task' || result.type === 'project') return <TaskResult result={result} onOpen={onOpen} />
   return (
     <button type="button" onClick={() => onOpen(result)}
       style={{
@@ -109,7 +143,7 @@ export default function CaseSearch({ user, onClose, onOpen }) {
           }}>
             <span style={{ color: colour.inkFaint, display: 'flex' }}><IconSearch size={18} /></span>
             <input autoFocus type="search" value={query} onChange={e => setQuery(e.target.value)}
-              placeholder="Surname, surgeon, system…" aria-label="Search bookings"
+              placeholder="Surname, surgeon, system, task…" aria-label="Search bookings"
               style={{
                 flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
                 padding: `${space.sm}px 0`, ...text('field'), color: colour.ink
@@ -124,7 +158,7 @@ export default function CaseSearch({ user, onClose, onOpen }) {
         <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: space.md }}>
           {state.status === 'idle' && (
             <div style={{ ...text('caption'), color: colour.inkFaint, textAlign: 'center', marginTop: space.lg }}>
-              Every booking from 2020 to a year ahead.
+              Every booking and task from 2020 to a year ahead.
             </div>
           )}
           {state.status === 'searching' && (

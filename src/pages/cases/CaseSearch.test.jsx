@@ -37,3 +37,21 @@ describe('the search sheet', () => {
     await waitFor(() => expect(screen.getByText(/No bookings found/)).toBeInTheDocument())
   })
 })
+
+// "Please add a search function to the portal, to find both cases and tasks."
+describe('tasks in the results', () => {
+  it('are shown as tasks; a calendar task opens, a board task says where it lives', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, results: [
+      { type: 'task', id: 't1', what: 'Get Athlet back from RHH', who: 'Mat', done: false, date: '2026-11-05', kind: 'kit' },
+      { type: 'project', id: 'w1', what: 'Order more Athlet screws', who: 'Aimee', done: true, date: '2026-11-07' }
+    ] }) }))
+    const onOpen = vi.fn()
+    render(<CaseSearch user={{ token: 't' }} onClose={() => {}} onOpen={onOpen} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'athlet' } })
+    await waitFor(() => expect(screen.getByText('Get Athlet back from RHH')).toBeInTheDocument())
+    expect(screen.getByText(/For Mat · Open/)).toBeInTheDocument()
+    expect(screen.getByText(/For Aimee · Done · on the Projects board/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Get Athlet back from RHH'))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ type: 'task', id: 't1' }))
+  })
+})

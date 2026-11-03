@@ -17,7 +17,8 @@ vi.mock('./_googleCalendar.js', () => ({
   getCalendarEvent: vi.fn(), updateCalendarEvent: vi.fn(), createBookingEvent: vi.fn(),
   createTaskEvent: vi.fn(), deleteCalendarEvent: vi.fn()
 }))
-vi.mock('./_redis.js', () => ({}))
+let worklist = []
+vi.mock('./_redis.js', () => ({ getWorklist: vi.fn(async () => ({ items: worklist, unreadable: [] })) }))
 vi.mock('./_gmail.js', () => ({}))
 vi.mock('./_dropbox.js', () => ({ dropboxConfigured: () => false, searchUsage: vi.fn() }))
 vi.mock('./_readBookingDocument.js', () => ({ readBookingDocument: vi.fn() }))
@@ -97,5 +98,34 @@ describe('caseMatches', () => {
     const read = { patient: 'Testa', surgeon: 'Ibbett', system: 'CYLOX', hospital: 'RHH' }
     expect(caseMatches(read, 'testa rhh')).toBe(true)
     expect(caseMatches(read, 'testa clv')).toBe(false)
+  })
+})
+
+// "Please add a search function to the portal, to find both cases and tasks."
+describe('tasks', () => {
+  it('finds a calendar task and a Projects board task, marked as tasks', async () => {
+    items = [
+      booking('a', '2025-03-04', 'Testa CYLOX - Ibbett'),
+      { id: 't1', summary: 'TASK: Get Athlet back from RHH', description: 'Task: Kit\nFor: Mat', start: { date: '2026-11-05' } }
+    ]
+    worklist = [
+      { id: 'w1', task: 'Order more Athlet screws', assignee: 'Aimee', status: 'open', due_date: '2026-11-07' },
+      { id: 'w2', task: 'Unrelated', assignee: 'Ben', status: 'open' }
+    ]
+    const res = await search('athlet')
+    const kinds = res.payload.results.map(r => [r.type, r.what || r.patient])
+    expect(kinds).toEqual(expect.arrayContaining([
+      ['task', 'Get Athlet back from RHH'],
+      ['project', 'Order more Athlet screws']
+    ]))
+    expect(res.payload.results.find(r => r.type === 'task')).toMatchObject({ id: 't1', date: '2026-11-05', who: 'Mat' })
+    expect(kinds.some(([, w]) => w === 'Unrelated')).toBe(false)
+  })
+
+  it('never shows a task as a case', async () => {
+    items = [{ ...booking('t2', '2026-11-05', 'TASK: Testa trays to CSSD'), description: '' }]
+    worklist = []
+    const res = await search('testa')
+    expect(res.payload.results.map(r => r.type)).toEqual(['task'])
   })
 })

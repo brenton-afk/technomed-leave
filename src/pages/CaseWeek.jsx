@@ -2125,7 +2125,11 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
       {searching && (
         <CaseSearch user={user}
           onClose={() => setSearching(false)}
-          onOpen={result => { setSearching(false); setEditing({ id: result.id }) }} />
+          onOpen={result => {
+            setSearching(false)
+            if (result.type === 'task') openTaskSheet(result)
+            else setEditing({ id: result.id })
+          }} />
       )}
 
       {editing && (

@@ -3,6 +3,7 @@ import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { trayFilePayload, originalIfSmall } from './readTrayFile.js'
 import EditableTray from './EditableTray.jsx'
+import { printTrayList } from './printTrayList.js'
 import { useLiveRefresh } from '../../liveRefresh.js'
 
 // ─── What is in each tray ────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ function SavedPhoto({ path, user, alt }) {
 // "It would be better in a table with the instrument description and the qty
 // next to it. Nice and neat." Code, description, quantity — one row per line,
 // ruled, the quantity right-aligned so a column of numbers reads down.
-function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit }) {
+function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit, onPrint }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
   const cell = { ...text('caption'), padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairlineSoft, verticalAlign: 'top' }
   const head = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairline, textAlign: 'left', background: colour.canvas }
@@ -50,6 +51,11 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
             {tray.updatedBy ? ` · updated by ${tray.updatedBy}${tray.updatedAt ? ` ${new Date(tray.updatedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}` : ''}` : ''}
           </div>
         </button>
+        {onPrint && open && !editing && (
+          <button onClick={onPrint} aria-label={`Print ${tray.name}`}
+            style={{ ...text('caption'), fontWeight: 600, color: colour.inkMuted, background: 'none', border: border.hairline,
+              borderRadius: radius.pill, padding: '4px 12px', cursor: 'pointer' }}>Print</button>
+        )}
         {onStartEdit && !editing && (
           <button onClick={onStartEdit} aria-label={`Edit ${tray.name}`}
             style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: 'none', border: `1px solid ${colour.accent}`,
@@ -328,11 +334,18 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             {list.source?.at ? ` on ${new Date(list.source.at).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.
             {list.source?.dropboxPath ? ` Original in Dropbox: ${list.source.dropboxPath}` : ''}
           </div>
+          {/* "Ability to print tray lists from portal" — Brent, 3 Nov 2026. */}
+          <button type="button" onClick={() => printTrayList(kit, list, { printedBy: user?.firstName || user?.name || '' })}
+            style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: colour.accentSoft, border: 'none',
+              borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer', marginBottom: space.sm }}>
+            Print tray list
+          </button>
           {editError && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{editError}</div>}
           {list.trays.map(t => (
             <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
               editing={editingTray === t.name} onStartEdit={() => { setEditingTray(t.name); setOpen(t.name) }}
-              onEditDone={() => setEditingTray('')} onEdit={editList} />
+              onEditDone={() => setEditingTray('')} onEdit={editList}
+              onPrint={() => printTrayList(kit, list, { only: t.name, printedBy: user?.firstName || user?.name || '' })} />
           ))}
         </>
       )}

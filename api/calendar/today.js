@@ -16,7 +16,7 @@ import { sendBookingNotice, escapeHtml } from '../_email.js'
 import { cachedLoanTrail, attachmentFor } from '../_loanTrail.js'
 import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
 import {
-  taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX
+  taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX, readTask
 } from '../../src/clinicalPlan/tasks.js'
 
 /**
@@ -44,7 +44,7 @@ import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate,
-  getTeamLeader, setTeamLeaderFor
+  getTeamLeader, setTeamLeaderFor, getWorklist
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
@@ -2053,9 +2053,35 @@ async function handleSearch(req, res) {
     const data = await r.json()
     if (data.error) throw new Error(data.error.message)
 
+    // "Please add a search function to the portal, to find both cases and
+    // tasks." — Toni, 19 Oct 2026. Tasks on the calendar ("TASK: Get Athlet
+    // back from RHH", all-day) and on the Projects board are found as well,
+    // marked as tasks so the screen can show and open them as tasks.
+    const needle = query.toLowerCase()
+    const tasks = (data.items || [])
+      .map(e => {
+        const task = readTask(e.summary || '', e.description || '')
+        if (!task) return null
+        const words = [task.what, task.thing, task.who, task.note, task.from, task.to].filter(Boolean).join(' ').toLowerCase()
+        if (!words.includes(needle)) return null
+        return { ...task, type: 'task', id: e.id, date: String(e.start?.date || e.start?.dateTime || '').slice(0, 10) }
+      })
+      .filter(Boolean)
+    let projectItems = []
+    try {
+      const { items } = await getWorklist()
+      projectItems = items
+        .filter(it => [it.task, it.notes, it.assignee].filter(Boolean).join(' ').toLowerCase().includes(needle))
+        .map(it => ({
+          type: 'project', id: it.id, what: it.task, who: it.assignee !== 'Unassigned' ? it.assignee : null,
+          done: it.status === 'done', date: String(it.due_date || it.createdAt || '').slice(0, 10)
+        }))
+    } catch { /* the board unreadable is no reason to lose the case results */ }
+
     const results = (data.items || [])
       .filter(e => e.start?.dateTime)
       .filter(e => !isDistributorEmail(e.organizer?.email))
+      .filter(e => !isTask(e.summary || ''))
       .map(e => {
         const read = readBooking(e.summary || '', e.description || '', { knownPatient: knownPatientOf(e) })
         if (!read || (!read.patient && !read.awaitingName)) return null
@@ -2081,10 +2107,12 @@ async function handleSearch(req, res) {
       // Newest first: the case somebody is looking for is usually the latest.
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 
+    const all = [...results.map(r => ({ type: 'case', ...r })), ...tasks, ...projectItems]
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     return res.status(200).json({
       ok: true,
-      results: results.slice(0, SEARCH_MAX),
-      more: results.length > SEARCH_MAX
+      results: all.slice(0, SEARCH_MAX),
+      more: all.length > SEARCH_MAX
     })
   } catch (err) {
     console.error('calendar/search failed:', err.message)
