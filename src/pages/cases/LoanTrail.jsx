@@ -17,8 +17,13 @@ const STATUS = {
   requested: { label: 'Requested — no reply yet', bg: colour.warningSoft, ink: colour.warning },
   changed: { label: 'Changed', bg: colour.warningSoft, ink: colour.warning },
   cancelled: { label: 'Cancelled', bg: colour.lineSoft, ink: colour.inkMuted },
-  unclear: { label: 'See emails', bg: colour.lineSoft, ink: colour.inkMuted }
 }
+
+// What a phone can show in a tab. Anything else is downloaded instead: opening
+// it in a tab gave a blank page ("some of the link buttons just take you to a
+// blank page").
+const viewable = att => /^(application\/pdf|image\/)/i.test(att.mediaType || '')
+  || /\.(pdf|jpe?g|png|gif|webp|heic)$/i.test(att.filename || '')
 
 function when(iso) {
   const d = new Date(iso)
@@ -34,6 +39,9 @@ function kb(bytes) {
 export default function LoanTrail({ eventId, user }) {
   const [state, setState] = useState({ loading: true, sets: [], error: '' })
   const [openEmail, setOpenEmail] = useState(null)
+  // Folded away until asked for: "it's a little bit busy". The status, the
+  // summary and the facts are what a glance needs; the emails are the evidence.
+  const [showEmails, setShowEmails] = useState({})
 
   useEffect(() => {
     if (!eventId) return undefined
@@ -55,6 +63,7 @@ export default function LoanTrail({ eventId, user }) {
   // Opened in a new view: the window is made on the tap itself, because a
   // phone will not let a page open one after waiting for a download.
   async function openAttachment(att) {
+    if (!viewable(att)) return downloadAttachment(att)
     const view = window.open('', '_blank')
     try {
       const res = await fetch(`/api/calendar/today?action=loanattachment&t=${encodeURIComponent(att.token)}`, {
@@ -67,6 +76,25 @@ export default function LoanTrail({ eventId, user }) {
     } catch (err) {
       view?.close()
       window.alert(err.message || 'That attachment could not be opened.')
+    }
+  }
+
+  async function downloadAttachment(att) {
+    try {
+      const res = await fetch(`/api/calendar/today?action=loanattachment&t=${encodeURIComponent(att.token)}`, {
+        headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not download it')
+      const url = URL.createObjectURL(await res.blob())
+      const link = document.createElement('a')
+      link.href = url
+      link.download = att.filename || 'attachment'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch (err) {
+      window.alert(err.message || 'That attachment could not be downloaded.')
     }
   }
 
@@ -91,7 +119,10 @@ export default function LoanTrail({ eventId, user }) {
   return (
     <>
       {state.sets.map(set => {
-        const look = STATUS[set.summary?.status] || (set.emails.length ? STATUS.unclear : null)
+        // A status only when there is one to state — "See emails" looked like
+        // a button and did nothing.
+        const look = STATUS[set.summary?.status] || null
+        const emailsOpen = Boolean(showEmails[set.distributor])
         return (
           <div key={set.distributor} style={box} data-loan-set={set.distributor}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: 6 }}>
@@ -129,6 +160,19 @@ export default function LoanTrail({ eventId, user }) {
             )}
 
             {set.emails.length > 0 && (
+              <button type="button" aria-expanded={emailsOpen}
+                onClick={() => setShowEmails(v => ({ ...v, [set.distributor]: !emailsOpen }))}
+                style={{
+                  ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: 'none',
+                  border: 'none', padding: 0, marginTop: space.sm, cursor: 'pointer'
+                }}>
+                {emailsOpen ? 'Hide emails' : `Show emails (${set.emails.length})`}
+                {!emailsOpen && set.emails.some(m => m.attachments.length)
+                  ? ` · ${set.emails.reduce((n, m) => n + m.attachments.length, 0)} attached` : ''}
+              </button>
+            )}
+
+            {set.emails.length > 0 && emailsOpen && (
               <div style={{ marginTop: space.sm, borderTop: `1px solid ${colour.lineSoft}` }}>
                 {set.emails.map((m, i) => {
                   const key = `${set.distributor}-${i}`
@@ -157,7 +201,7 @@ export default function LoanTrail({ eventId, user }) {
                             ...text('caption'), fontWeight: 600, color: colour.accentDeep, marginTop: 4, marginRight: 6,
                             background: colour.accentSoft, border: 'none', borderRadius: radius.pill, padding: '4px 10px', cursor: 'pointer'
                           }}>
-                          📄 {a.filename}{a.size ? ` · ${kb(a.size)}` : ''}
+                          {viewable(a) ? '📄' : '⬇'} {a.filename}{a.size ? ` · ${kb(a.size)}` : ''}
                         </button>
                       ))}
                     </div>

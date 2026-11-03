@@ -104,3 +104,25 @@ describe('freshText', () => {
     expect(freshText('Thanks\n-----Original Message-----\nFrom: x')).toBe('Thanks')
   })
 })
+
+describe('calendar invitations from the supplier', () => {
+  it('are read into facts, settle the set as confirmed, and are not offered as a link', async () => {
+    const { askClaude } = await import('./_anthropic.js')
+    askClaude.mockRejectedValueOnce(new Error('unavailable'))
+    const gmail = await import('./_gmail.js')
+    const ics = 'BEGIN:VEVENT\r\nSUMMARY:BKG TESTA\\, MIS POSTERIOR PEDICLE SCREWS\r\nDTSTART:20261112T200000Z\r\nEND:VEVENT'
+    gmail.readAttachment.mockResolvedValueOnce({ data: Buffer.from(ics).toString('base64'), mediaType: '' })
+    mailboxes['bookings@technomed.com.au'] = {
+      a: REQUEST,
+      b: { ...REPLY, messageId: '<inv@device.com.au>', from: 'Hybris Communications <noreply@device.com.au>',
+        attachments: [{ filename: 'invite.ics', mediaType: 'text/calendar', attachmentId: 'ics-1', size: 8000 }] }
+    }
+    const [set] = await loanTrail({ loans: { device: ['Mariner MIS'] }, patient: 'Testa', date: '2026-11-13' })
+    expect(set.summary.status).toBe('confirmed')
+    expect(set.summary.facts).toEqual(expect.arrayContaining([
+      { label: 'Supplier booking', value: 'BKG TESTA, MIS POSTERIOR PEDICLE SCREWS' },
+      { label: 'Booked for', value: 'Fri, 13 Nov, 7:00 am' }
+    ]))
+    expect(set.emails[1].attachments).toEqual([])
+  })
+})

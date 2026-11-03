@@ -13,7 +13,7 @@ import {
   hospitalLoanNoticesFor, DEFAULT_HOSPITAL_LOAN_NOTICES
 } from '../_bookingNotices.js'
 import { sendBookingNotice, escapeHtml } from '../_email.js'
-import { loanTrail, attachmentFor } from '../_loanTrail.js'
+import { cachedLoanTrail, attachmentFor } from '../_loanTrail.js'
 import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
 import {
   taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX
@@ -411,9 +411,10 @@ async function handleLoanTrail(req, res) {
     if (!eventId) return res.status(400).json({ error: 'id is required' })
     const event = await getCalendarEvent(eventId)
     const booking = describeBooking(event)
-    const sets = await loanTrail(booking, await loanLogFor(eventId).catch(() => []))
+    const result = await cachedLoanTrail(eventId, booking, await loanLogFor(eventId).catch(() => []),
+      { fresh: req.query.fresh === '1' })
     res.setHeader('Cache-Control', 'no-store')
-    return res.status(200).json({ sets })
+    return res.status(200).json(result)
   } catch (err) {
     // No email content or names in the error: only what failed.
     return res.status(500).json({ error: 'The loan set emails could not be read just now.', detail: String(err?.status || '') })

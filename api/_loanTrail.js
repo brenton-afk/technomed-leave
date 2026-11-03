@@ -23,8 +23,8 @@
 // screen can open a tray list without the server ever accepting a mailbox or
 // message id from the browser.
 
-import { randomUUID } from 'node:crypto'
-import { redis } from './_redis.js'
+import { randomUUID, createHash } from 'node:crypto'
+import { redis, redisSetBody } from './_redis.js'
 import { searchMailboxOf, readMessageHeadline, readAttachment, addressOf } from './_gmail.js'
 import { askClaude, AiUnavailable } from './_anthropic.js'
 import { STAFF } from '../src/staffConfig.js'
@@ -127,6 +127,87 @@ export async function attachmentFor(token) {
   return { data, mediaType: mediaType || held.mediaType || 'application/octet-stream', filename: held.filename }
 }
 
+// ─── Calendar invitations ─────────────────────────────────────────────────────
+// Device's booking system answers a loan request with a calendar invitation
+// ("BKG ANKUSH GUPTA, MIS POSTERIOR PEDICLE SCREWS", invite.ics). A phone
+// cannot show that file — the link opened a blank page — and it is the most
+// useful thing in the trail: the supplier's own booking. So it is read here
+// and shown as facts, and it settles the set as confirmed on its own.
+
+const isInvite = a => /\.ics$/i.test(a.filename || '') || /text\/calendar/i.test(a.mediaType || '')
+
+/** SUMMARY, DTSTART, DTEND and LOCATION out of an iCalendar file's first event. */
+export function parseInvite(ics) {
+  const unfolded = String(ics || '').replace(/\r?\n[ \t]/g, '')
+  const event = (/BEGIN:VEVENT([\s\S]*?)END:VEVENT/.exec(unfolded) || [])[1] || unfolded
+  const field = name => {
+    const m = new RegExp(`^${name}(?:;[^:\\n]*)?:(.*)$`, 'mi').exec(event)
+    return m ? m[1].replace(/\\n/g, ' ').replace(/\\([,;\\])/g, '$1').trim() : ''
+  }
+  const when = raw => {
+    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?/.exec(raw || '')
+    if (!m) return null
+    if (!m[4]) return { date: `${m[1]}-${m[2]}-${m[3]}`, allDay: true }
+    const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${m[7] ? 'Z' : ''}`
+    return { iso, allDay: false, utc: Boolean(m[7]) }
+  }
+  const summary = field('SUMMARY')
+  if (!summary && !field('DTSTART')) return null
+  return { summary, start: when(field('DTSTART')), end: when(field('DTEND')), location: field('LOCATION') }
+}
+
+/** "Thu 12 Nov, 7:00 am" in Hobart, or the date alone for an all-day entry. */
+export function inviteWhen(start) {
+  if (!start) return ''
+  if (start.allDay) {
+    const d = new Date(`${start.date}T12:00:00Z`)
+    return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+  }
+  // A time without Z is the sender's local time; for a Melbourne or Hobart
+  // supplier that is our time, which is the best reading available.
+  const d = new Date(start.utc ? start.iso : `${start.iso}+11:00`)
+  return d.toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Hobart' })
+}
+
+async function readInvites(email) {
+  const invites = []
+  for (const a of email.attachments.filter(isInvite)) {
+    if (a.size && a.size > 300000) continue
+    try {
+      const { data } = await readAttachment(email.mailbox, email.id, a.attachmentId)
+      const parsed = parseInvite(Buffer.from(data, 'base64').toString('utf8'))
+      if (parsed) invites.push(parsed)
+    } catch { /* an unreadable invitation is just not shown */ }
+  }
+  return invites
+}
+
+// ─── Kept for a quarter of an hour ────────────────────────────────────────────
+// "It does take a little while to load." Ten mailboxes searched and a summary
+// written each time a booking opens; reopening the same booking within fifteen
+// minutes now shows the same answer at once. Keyed on what the trail depends
+// on, so changing the kit or the patient looks again.
+const CACHE_S = 900
+const cacheKey = (eventId, booking) => `loantrail:${eventId}:${createHash('sha256')
+  .update(JSON.stringify([booking?.loans || {}, booking?.patient || '', booking?.date || ''])).digest('hex').slice(0, 16)}`
+
+export async function cachedLoanTrail(eventId, booking, loanLog, { fresh = false } = {}) {
+  const key = cacheKey(eventId, booking)
+  if (!fresh) {
+    try {
+      const held = await redis('get', key)
+      if (held) return { ...JSON.parse(held), cached: true }
+    } catch { /* look again */ }
+  }
+  const sets = await loanTrail(booking, loanLog)
+  const result = { sets, at: new Date().toISOString() }
+  try {
+    await redisSetBody(key, JSON.stringify(result))
+    await redis('expire', key, String(CACHE_S))
+  } catch { /* shown anyway, just not kept */ }
+  return result
+}
+
 const PROMPT = `These are the emails between TechnoMed (a surgical device distributor's agent in Hobart) and a supplier about a loan set for one surgical case. Summarise where the loan set stands, for a rep reading it on a phone.
 
 Reply with JSON only:
@@ -200,14 +281,35 @@ export async function loanTrail(booking, loanLog = []) {
   const surname = String(booking?.patient || '').trim()
   return Promise.all(loans.map(async ([distributor, systems]) => {
     const emails = surname ? await emailsFor({ distributor, surname, date: booking.date }) : []
-    const summary = await summarise(emails, { distributor })
+    const invitesBy = await Promise.all(emails.map(readInvites))
+    const invites = invitesBy.flat()
+    let summary = await summarise(emails, { distributor })
+    const fromSupplier = emails.some((m, i) => invitesBy[i].length && !/@technomed\.com\.au>?$/i.test(addressOf(m.from)))
+    const inviteFacts = invites.slice(0, 2).flatMap(inv => [
+      { label: 'Supplier booking', value: inv.summary },
+      ...(inv.start ? [{ label: 'Booked for', value: inviteWhen(inv.start) }] : []),
+      ...(inv.location ? [{ label: 'Location', value: inv.location }] : [])
+    ]).filter(f => f.value)
+    if (!summary && emails.length) {
+      summary = fromSupplier
+        ? { status: 'confirmed', summary: `${DISTRIBUTOR_LABELS[distributor] || 'The supplier'}'s booking system has booked it.`, facts: [] }
+        : { status: 'unclear', summary: '', facts: [] }
+    } else if (summary && fromSupplier && summary.status === 'unclear') {
+      summary = { ...summary, status: 'confirmed' }
+    }
+    if (summary) {
+      const seen = new Set(summary.facts.map(f => f.value.toLowerCase()))
+      summary = { ...summary, facts: [...inviteFacts.filter(f => !seen.has(f.value.toLowerCase())), ...summary.facts].slice(0, 8) }
+    }
     const shown = await Promise.all(emails.map(async m => ({
       from: whoIs(m.from),
       outgoing: /@technomed\.com\.au>?$/i.test(addressOf(m.from)),
       subject: m.subject,
       at: m.receivedAt,
       text: freshText(m.text).slice(0, 1500),
-      attachments: await Promise.all(m.attachments.map(async a => ({
+      // Invitations are read above and shown as facts; as a link they opened
+      // a blank page, since a phone cannot display one.
+      attachments: await Promise.all(m.attachments.filter(a => !isInvite(a)).map(async a => ({
         filename: a.filename,
         mediaType: a.mediaType,
         size: a.size,

@@ -12,7 +12,7 @@ const SET = {
   emails: [
     { from: 'Brent', outgoing: true, subject: 'Loan set request — Mariner MIS', at: '2026-11-02T03:00:00Z', text: 'Please send…', attachments: [] },
     { from: 'DL VIC Loans', outgoing: false, subject: 'RE: Loan set request', at: '2026-11-03T01:00:00Z', text: 'Confirmed.',
-      attachments: [{ filename: 'tray list.pdf', size: 52000, token: '11111111-2222-3333-4444-555555555555' }] }
+      attachments: [{ filename: 'tray list.pdf', mediaType: 'application/pdf', size: 52000, token: '11111111-2222-3333-4444-555555555555' }] }
   ]
 }
 
@@ -31,6 +31,9 @@ describe('LoanTrail', () => {
     expect(screen.getByText('Mariner MIS')).toBeInTheDocument()
     expect(screen.getByText(/Device confirmed the next day/)).toBeInTheDocument()
     expect(screen.getByText('CLV Wed 11 Nov, 9am')).toBeInTheDocument()
+    // The emails are folded away until asked for.
+    expect(screen.queryByText('RE: Loan set request')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Show emails \(2\) · 1 attached/ }))
     expect(screen.getByText('RE: Loan set request')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /tray list\.pdf · 51 KB/ })).toBeInTheDocument()
   })
@@ -38,7 +41,8 @@ describe('LoanTrail', () => {
   it('opens an email to read it', async () => {
     serve([SET])
     render(<LoanTrail eventId="evt1" user={{ token: 't' }} />)
-    await waitFor(() => expect(screen.getByText('RE: Loan set request')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Show emails/ })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Show emails/ }))
     fireEvent.click(screen.getByText('RE: Loan set request'))
     expect(screen.getByText('Confirmed.')).toBeInTheDocument()
   })
