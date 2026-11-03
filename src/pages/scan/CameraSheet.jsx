@@ -4,10 +4,11 @@ import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument, cornersAreSupported } from '../../scanner/documentDetect.js'
 import { DocumentTracker, maxCornerShift } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
+import { sharpnessOf, boxOf } from '../../scanner/sharpness.js'
 import { readPrefs, writePrefs } from '../../clinicalPlan/provider.js'
 import {
   acquireCamera, cameraOpen, setTorch, hasTorch, torchOn as torchIsOn, turnTorchOff,
-  zoomRange, currentZoom, setZoom
+  zoomRange, currentZoom, setZoom, takeStill
 } from '../../scanner/cameraStream.js'
 
 // ─── The scanner ──────────────────────────────────────────────────────────────
@@ -73,6 +74,10 @@ const CHASE = 0.5
 const CAPTURE_AGREEMENT = 0.08
 
 const MAX_IMAGE_DIM = 1568
+// What is filed in Dropbox and attached for the distributor: about 200 dpi on
+// an A4 form, where 1568 (the reading size) was about 130 and soft on a lot
+// number. Only the reading copy goes to the model.
+const FILE_IMAGE_DIM = 2400
 
 /**
  * The way out, and it is never conditional on anything.
@@ -390,14 +395,24 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
    */
   const asItWillBeSaved = useCallback(() => {
     try {
-      const { canvas } = flattenCapture(cv, capture.source, corners, { maxDimension: MAX_IMAGE_DIM })
-      return canvas.toDataURL('image/jpeg', 0.85)
+      // One warp at filing resolution; the copy that is read is shrunk from it.
+      const { canvas } = flattenCapture(cv, capture.source, corners, { maxDimension: FILE_IMAGE_DIM })
+      const full = canvas.toDataURL('image/jpeg', 0.85)
+      const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(canvas.width, canvas.height))
+      if (scale >= 1) return { preview: full, full }
+      const small = document.createElement('canvas')
+      small.width = Math.round(canvas.width * scale)
+      small.height = Math.round(canvas.height * scale)
+      const ctx = small.getContext('2d')
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(canvas, 0, 0, small.width, small.height)
+      return { preview: small.toDataURL('image/jpeg', 0.85), full }
     } catch {
       // Never nothing. A tap that goes forward must go forward — if the warp
       // fails, the page already flattened at capture is sent instead of the
       // adjustment, which is a worse crop and not a dead end. Silently doing
       // nothing is the failure this whole screen keeps being reported for.
-      return preview
+      return { preview, full: null }
     }
   }, [cv, capture.source, corners, preview])
 
@@ -419,7 +434,7 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
       setDragging(null)
       // So the preview above matches, on a screen tall enough to show it.
       // Correctness does not rest on this: going forward flattens again.
-      try { setPreview(asItWillBeSaved()) } catch { /* keep the old one */ }
+      try { setPreview(asItWillBeSaved().preview) } catch { /* keep the old one */ }
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', stop)
@@ -468,6 +483,12 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
 
       <div style={{ padding: '10px 16px', color: 'rgba(255,255,255,0.7)', fontSize: 12.5, textAlign: 'center' }}>
         Drag a corner if the edges are wrong
+        {/* The facts behind a blurry scan, small, so it can be reported. */}
+        {capture.detail && (
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>
+            {capture.detail.width}×{capture.detail.height} · {capture.detail.method} · sharpness {capture.detail.sharpness}
+          </div>
+        )}
       </div>
 
       {/* The original, with the handles on it.
@@ -633,6 +654,67 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
   )
 }
 
+
+// ─── The sharpest picture the phone will give ─────────────────────────────────
+// "The scan was blurry." A capture used to be whichever video frame was on
+// screen when the shutter fired — and the tap that fires it moves the phone.
+//
+// Android's Chrome can take a real photograph from the stream (full sensor,
+// the phone's own focus); where it gives meaningfully more pixels and the same
+// view, that is used. Otherwise, and on every iPhone, the next BURST frames
+// are taken over about a fifth of a second and the sharpest is kept — the
+// standard focus measure, on the page itself where its outline is known.
+
+const BURST = 5
+
+function nextFrame(video) {
+  return new Promise(resolve => {
+    const done = () => resolve()
+    const timer = setTimeout(done, 120)
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      video.requestVideoFrameCallback(() => { clearTimeout(timer); done() })
+    }
+  })
+}
+
+const shapeOf = (w, h) => (w >= h ? 'wide' : 'tall') + Math.round((Math.max(w, h) / Math.min(w, h)) * 20)
+
+async function sharpestPicture(video, corners) {
+  const box = boxOf(corners)
+  const scratch = document.createElement('canvas')
+
+  const still = await takeStill().catch(() => null)
+  if (still && shapeOf(still.width, still.height) === shapeOf(video.videoWidth, video.videoHeight)) {
+    const canvas = document.createElement('canvas')
+    canvas.width = still.width
+    canvas.height = still.height
+    canvas.getContext('2d', { willReadFrequently: true }).drawImage(still, 0, 0)
+    still.close?.()
+    return { source: canvas, method: 'photo', sharpness: sharpnessOf(canvas, canvas.width, canvas.height, scratch, box) }
+  }
+  still?.close?.()
+
+  let best = null
+  let bestScore = -1
+  let spare = null
+  for (let i = 0; i < BURST; i++) {
+    if (i) await nextFrame(video)
+    const frame = spare || document.createElement('canvas')
+    frame.width = video.videoWidth
+    frame.height = video.videoHeight
+    frame.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0)
+    const score = sharpnessOf(frame, frame.width, frame.height, scratch, box)
+    if (score > bestScore) {
+      spare = best
+      best = frame
+      bestScore = score
+    } else {
+      spare = frame
+    }
+  }
+  return { source: best, method: `best of ${BURST}`, sharpness: bestScore }
+}
+
 export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCancel, onFallback }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -765,15 +847,16 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     return () => { cancelled = true }
   }, [])
 
-  const capture = useCallback((corners) => {
+  const capture = useCallback(async (corners) => {
     const video = videoRef.current
     if (!video?.videoWidth || busyRef.current) return
     busyRef.current = true
+    // At the press, not after the burst: the shutter has to feel instant even
+    // though the picture is chosen over the next fifth of a second.
+    setFlash(true)
+    setTimeout(() => setFlash(false), 130)
 
-    const source = document.createElement('canvas')
-    source.width = video.videoWidth
-    source.height = video.videoHeight
-    source.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0)
+    const { source, method, sharpness } = await sharpestPicture(video, corners)
 
     // The corners handed in came from a detection up to a tenth of a second
     // ago, and this photograph was taken now. In between, a hand-held phone
@@ -847,10 +930,11 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     shrunk.height = Math.round(source.height * scale)
     shrunk.getContext('2d').drawImage(source, 0, 0, shrunk.width, shrunk.height)
 
-    setFlash(true)
-    setTimeout(() => setFlash(false), 130)
     setPending({
       source,
+      // Shown small under the page, so a blurry scan can be reported with the
+      // facts that explain it: how many pixels, and how it was taken.
+      detail: { width: source.width, height: source.height, method, sharpness: Math.round(sharpness) },
       corners: corners || null,
       flattened,
       preview: canvas.toDataURL('image/jpeg', 0.85),
@@ -886,11 +970,26 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     let stop = false
     if (!trackerRef.current) trackerRef.current = new DocumentTracker()
 
+    // ── Once per camera frame, where the browser can say when one arrives ──
+    //
+    // Scheduling off the screen's refresh ran detection on every second
+    // repaint: on a 120Hz iPhone that is sixty a second against a camera
+    // delivering thirty, so half the work re-read a frame already seen and
+    // the tracker was fed duplicates at an uneven rhythm. requestVideoFrame-
+    // Callback fires once for each new frame from the camera — every frame
+    // looked at, none twice. Where it is missing, the old schedule stands.
+    const viaFrames = typeof videoRef.current?.requestVideoFrameCallback === 'function'
+    const schedule = () => {
+      const video = videoRef.current
+      if (viaFrames && video) rafRef.current = { video: video.requestVideoFrameCallback(tick), on: video }
+      else rafRef.current = requestAnimationFrame(tick)
+    }
+
     function tick() {
       if (stop) return
-      rafRef.current = requestAnimationFrame(tick)
+      schedule()
       if (pending) return
-      if (++frameCountRef.current % FRAME_INTERVAL) return
+      if (!viaFrames && ++frameCountRef.current % FRAME_INTERVAL) return
 
       const video = videoRef.current
       if (!video?.videoWidth) return
@@ -945,13 +1044,20 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
       if (autoCapture && next.readyToCapture && !busyRef.current) capture(next.corners)
     }
 
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { stop = true; cancelAnimationFrame(rafRef.current) }
+    schedule()
+    return () => {
+      stop = true
+      const handle = rafRef.current
+      if (handle?.on) handle.on.cancelVideoFrameCallback?.(handle.video)
+      else cancelAnimationFrame(handle)
+    }
   }, [cameraState, engine, autoCapture, pending, capture])
 
   /** Keeps the page and returns to the camera, for a form that runs to two. */
-  function keepAndContinue(preview) {
-    const page = { preview, flattened: pending.flattened }
+  function keepAndContinue(saved) {
+    // A plain string still works, for anything that hands one over.
+    const { preview, full = null } = typeof saved === 'string' ? { preview: saved } : saved
+    const page = { preview, full, flattened: pending.flattened }
     setPending(null)
     busyRef.current = false
     trackerRef.current?.reset()
@@ -967,8 +1073,10 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
    * form, read it — that was four taps after the page was already framed and
    * recognised.
    */
-  function accept(preview) {
-    const page = { preview, flattened: pending.flattened }
+  function accept(saved) {
+    // A plain string still works, for anything that hands one over.
+    const { preview, full = null } = typeof saved === 'string' ? { preview: saved } : saved
+    const page = { preview, full, flattened: pending.flattened }
     setPending(null)
     busyRef.current = false
     trackerRef.current?.reset()

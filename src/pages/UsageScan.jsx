@@ -114,6 +114,24 @@ function payloadBytes(pages) {
   return pages.reduce((sum, p) => sum + Math.ceil(p.data.length * 0.75), 0)
 }
 
+// ─── The sharper copy, where it fits ──────────────────────────────────────────
+// Filing and the distributor's PDF get the 2400-pixel page the scanner keeps
+// (see CameraSheet, FILE_IMAGE_DIM); reading gets the 1568 one. Vercel refuses
+// a request over 4.5MB, so the sharper copies are used page by page only while
+// the whole request stays comfortably under it — a long form falls back to the
+// reading copy for its later pages rather than failing to file at all.
+const FILING_BUDGET = 3_400_000
+
+export function filingPages(pages) {
+  let used = 0
+  return pages.map(p => {
+    const sharp = p.full && used + p.full.length <= FILING_BUDGET
+    const data = sharp ? p.full : p.data
+    used += data.length
+    return { mediaType: p.mediaType, data }
+  })
+}
+
 function newPageId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -125,6 +143,8 @@ function pageFromPreview(page, index) {
     id: newPageId(),
     mediaType: 'image/jpeg',
     data: page.preview.split(',')[1],
+    // The sharper copy for filing and the distributor; see filingPages.
+    full: page.full ? page.full.split(',')[1] : null,
     preview: page.preview,
     name: `page-${index}.jpg`,
     flattened: page.flattened
@@ -584,7 +604,7 @@ export default function UsageScan({ user }) {
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           case: caseRecord,
-          pages: pages.map(p => ({ mediaType: p.mediaType, data: p.data }))
+          pages: filingPages(pages)
         })
       })
       const saved = await saveRes.json()
@@ -600,7 +620,7 @@ export default function UsageScan({ user }) {
           // them server-side — the record holds the transcription, not the
           // photographs — and this is what lets the distributor get the signed
           // form whether or not Dropbox is connected.
-          pages: pages.map(p => ({ mediaType: p.mediaType, data: p.data }))
+          pages: filingPages(pages)
         })
       })
       const emailed = await emailRes.json()
@@ -640,7 +660,7 @@ export default function UsageScan({ user }) {
           only: failedKeys,
           // Still in memory unless the app has been reloaded, in which case the
           // retry sends the sheet without the scan and says so.
-          pages: pages.map(p => ({ mediaType: p.mediaType, data: p.data }))
+          pages: filingPages(pages)
         })
       })
       const data = await res.json()

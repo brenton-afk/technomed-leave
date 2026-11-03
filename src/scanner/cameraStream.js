@@ -63,9 +63,12 @@ export function acquireCamera() {
   }
 
   opening = tryEach(CONSTRAINT_LADDER)
-    .then(granted => {
+    .then(async granted => {
       stream = granted
       opening = null
+      // Before the first frame is shown, so a resolution change happens now
+      // rather than as a visible jump once somebody is lining up a page.
+      await tuneCamera(granted.getVideoTracks()[0]).catch(() => {})
       return granted
     })
     .catch(err => {
@@ -223,4 +226,101 @@ export function resetCameraForTests() {
   stream = null
   opening = null
   torchIsOn = false
+}
+
+// ─── Sharper pictures ─────────────────────────────────────────────────────────
+// "The scan was blurry." — Aimee, via Brent, 3 Nov 2026. Three things a web page
+// can do about that, each only where the phone says it can.
+
+/** Focus, exposure and white balance left to run continuously, where offered. */
+async function continuousModes(track) {
+  const caps = track.getCapabilities?.() || {}
+  const wanted = {}
+  for (const key of ['focusMode', 'exposureMode', 'whiteBalanceMode']) {
+    if (Array.isArray(caps[key]) && caps[key].includes('continuous')) wanted[key] = 'continuous'
+  }
+  if (!Object.keys(wanted).length) return
+  try { await track.applyConstraints({ advanced: [wanted] }) } catch { /* keep what we had */ }
+}
+
+/**
+ * The most pixels the camera will give *without changing what it sees*.
+ *
+ * The stream is opened at about 1920 wide, which is a safe mode on every phone.
+ * Many will go higher. Only the width is raised — never a width and a height,
+ * which is what once made an iPhone crop its sensor and magnify the view — and
+ * the result is checked: if the picture's shape changed, the camera achieved
+ * the width by cropping, so it is put back the way it was.
+ */
+export async function raiseResolution(track, { limit = 4032 } = {}) {
+  const caps = track?.getCapabilities?.() || {}
+  const before = track?.getSettings?.() || {}
+  const max = caps.width?.max
+  if (!before.width || !before.height || !max || max <= before.width * 1.15) return false
+  const shape = s => (s.width && s.height ? Math.max(s.width, s.height) / Math.min(s.width, s.height) : 0)
+  const was = shape(before)
+  try {
+    await track.applyConstraints({ ...stripSize(track.getConstraints?.() || {}), width: { ideal: Math.min(max, limit) } })
+  } catch {
+    return false
+  }
+  const after = track.getSettings?.() || {}
+  if (Math.abs(shape(after) - was) > 0.04) {
+    // Cropped to get there. Back to the view somebody can actually frame a page in.
+    try { await track.applyConstraints({ ...stripSize(track.getConstraints?.() || {}), width: { ideal: before.width } }) } catch { /* as it is */ }
+    return false
+  }
+  return (after.width || 0) > before.width
+}
+
+function stripSize(constraints) {
+  const { width, height, aspectRatio, ...rest } = constraints
+  return rest
+}
+
+export async function tuneCamera(track) {
+  if (!track) return
+  await continuousModes(track)
+  await raiseResolution(track)
+}
+
+// Android's Chrome can take a real photograph from the stream: full sensor
+// resolution, with the phone's own focus and processing, rather than a frame
+// grabbed out of video. Safari has no such thing. Used only where it gives a
+// meaningfully bigger picture, and abandoned for the session the first time
+// it fails or stalls — a shutter that hangs is worse than a slightly smaller
+// photograph.
+let stillsWork = true
+
+export function canTakeStill() {
+  return stillsWork && typeof window !== 'undefined' && 'ImageCapture' in window
+    && Boolean(stream?.getVideoTracks?.()[0])
+}
+
+/** A full-resolution still as an ImageBitmap, or null to fall back to the video. */
+export async function takeStill({ timeoutMs = 2500 } = {}) {
+  if (!canTakeStill()) return null
+  const track = stream.getVideoTracks()[0]
+  try {
+    const capture = new window.ImageCapture(track)
+    const caps = await withTimeout(capture.getPhotoCapabilities(), timeoutMs)
+    const streamWidth = Math.max(track.getSettings?.().width || 0, track.getSettings?.().height || 0)
+    const photoMax = Math.max(caps?.imageWidth?.max || 0, caps?.imageHeight?.max || 0)
+    if (!photoMax || photoMax < streamWidth * 1.3) return null
+    const blob = await withTimeout(capture.takePhoto(), timeoutMs)
+    return await createImageBitmap(blob, { imageOrientation: 'from-image' })
+  } catch {
+    stillsWork = false
+    return null
+  }
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), ms))])
+}
+
+/** What the camera is delivering now, for the line under a captured page. */
+export function cameraDetail() {
+  const s = stream?.getVideoTracks?.()[0]?.getSettings?.() || {}
+  return { width: s.width || 0, height: s.height || 0, focusMode: s.focusMode || '' }
 }

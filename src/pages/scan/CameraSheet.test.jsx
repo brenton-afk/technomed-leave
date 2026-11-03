@@ -939,7 +939,7 @@ describe('after dragging a corner', () => {
     const onConfirm = vi.fn()
     drag({ onConfirm })
     fireEvent.click(screen.getByText('No — read it'))
-    expect(onConfirm).toHaveBeenCalledWith(expect.stringContaining('data:image'))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ preview: expect.stringContaining('data:image') }))
   })
 
   it('offers the way forward before anything is touched, too', () => {

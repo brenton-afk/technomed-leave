@@ -263,6 +263,37 @@ export function edgesTouched(corners, width, height, slack = 2) {
   ].filter(Boolean).length
 }
 
+/**
+ * Whether the outline is a page that genuinely runs off the picture.
+ *
+ * "The scanner kept advising her to step back as the full page wasn't in view
+ * when it was." — Aimee, via Brent, 3 Nov 2026.
+ *
+ * It used to say so whenever any one corner came within two pixels of the
+ * edge of the 240-pixel detection frame — under one percent. That is exactly
+ * where a corner sits when somebody fills the screen with the form to get a
+ * sharp scan, which is what they should be doing.
+ *
+ * What a page cut off by the frame actually looks like is different: its
+ * outline runs *along* the frame's edge, so one side has both ends on the same
+ * border; or a corner is missing altogether, which leaves two corners pressed
+ * against the borders. One corner near an edge is neither.
+ */
+export function clippedByFrame(corners, width, height, slack = 2) {
+  const on = p => ({
+    left: p.x <= slack, top: p.y <= slack,
+    right: p.x >= width - 1 - slack, bottom: p.y >= height - 1 - slack
+  })
+  const flags = corners.map(on)
+  for (let i = 0; i < 4; i++) {
+    const a = flags[i]
+    const b = flags[(i + 1) % 4]
+    if ((a.left && b.left) || (a.top && b.top) || (a.right && b.right) || (a.bottom && b.bottom)) return true
+  }
+  const pressed = flags.filter(f => f.left || f.top || f.right || f.bottom).length
+  return pressed >= 2
+}
+
 function touchesBorder(corners, width, height, slack = 2) {
   return corners.some(p =>
     p.x <= slack || p.y <= slack || p.x >= width - slack || p.y >= height - slack)
@@ -593,7 +624,12 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       // right — it beats locking onto the box printed inside it — but
       // *photographing* one is not: the missing edge is missing from the sensor,
       // so no amount of dragging a corner afterwards can bring it back.
-      offEdge: edgesTouched(chosen.corners, width, height) > 0,
+      offEdge: edgesTouched(chosen.corners, width, height) < 3
+        && clippedByFrame(chosen.corners, width, height),
+      // Three or four borders touched is the surface the page is on, not the
+      // page — the page's own edges were not found. "Move back" is the wrong
+      // advice for that; the background is the problem.
+      surfaceOnly: edgesTouched(chosen.corners, width, height) >= 3,
 
       // What "close enough to capture" is actually judged on.
       fill: fillFraction(normalised, chosen.areaFraction, width / height),

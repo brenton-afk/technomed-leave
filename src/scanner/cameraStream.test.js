@@ -249,3 +249,39 @@ describe('the torch', () => {
     expect(torchOn()).toBe(false)
   })
 })
+
+describe('raising the resolution without changing the view', async () => {
+  const { raiseResolution } = await import('./cameraStream.js')
+  const track = (modes) => {
+    let current = { width: 1920, height: 1440 }
+    const applied = []
+    return {
+      applied,
+      getCapabilities: () => ({ width: { max: 4032 } }),
+      getSettings: () => current,
+      getConstraints: () => ({ facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }),
+      applyConstraints: async c => { applied.push(c); current = modes(c.width.ideal) }
+    }
+  }
+
+  it('takes the bigger picture when it is the same shape', async () => {
+    const t = track(w => ({ width: w, height: w * 0.75 }))
+    expect(await raiseResolution(t)).toBe(true)
+    expect(t.getSettings().width).toBe(4032)
+    expect(t.applied[0].height).toBeUndefined()
+    expect(t.applied[0].facingMode).toEqual({ ideal: 'environment' })
+  })
+
+  it('puts it back when the camera got there by cropping', async () => {
+    const t = track(w => (w > 1920 ? { width: 3840, height: 2160 } : { width: 1920, height: 1440 }))
+    expect(await raiseResolution(t)).toBe(false)
+    expect(t.getSettings()).toEqual({ width: 1920, height: 1440 })
+  })
+
+  it('leaves a camera that cannot go higher alone', async () => {
+    const t = track(w => ({ width: w, height: w * 0.75 }))
+    t.getCapabilities = () => ({ width: { max: 1920 } })
+    expect(await raiseResolution(t)).toBe(false)
+    expect(t.applied).toEqual([])
+  })
+})

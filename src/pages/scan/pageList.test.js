@@ -57,3 +57,21 @@ describe('reorder', () => {
     expect(() => reorder([null, { id: 'a' }], 'a', -1)).not.toThrow()
   })
 })
+
+// The sharper 2400-pixel copy goes to Dropbox and the distributor, while the
+// request stays under Vercel's 4.5MB limit.
+describe('filingPages', async () => {
+  const { filingPages } = await import('../UsageScan.jsx')
+  const page = (data, full) => ({ mediaType: 'image/jpeg', data, full })
+  it('sends the sharper copy where there is one', () => {
+    expect(filingPages([page('small', 'sharp')])).toEqual([{ mediaType: 'image/jpeg', data: 'sharp' }])
+  })
+  it('falls back to the reading copy once the request would grow too large', () => {
+    const big = 'x'.repeat(1_500_000)
+    const out = filingPages([page('a', big), page('b', big), page('c', big)])
+    expect(out.map(p => p.data.length)).toEqual([1_500_000, 1_500_000, 1])
+  })
+  it('uses the reading copy for a page that has no sharper one', () => {
+    expect(filingPages([page('only', null)])[0].data).toBe('only')
+  })
+})

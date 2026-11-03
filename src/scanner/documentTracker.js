@@ -61,7 +61,8 @@ function lerpCorners(from, to, alpha) {
 export const HOLD_REASONS = {
   searching: 'Point at the form',
   small: 'Move closer',
-  offEdge: 'Move back — the whole page must be in frame',
+  offEdge: 'Move back a little — part of the page is off the edge',
+  surfaceOnly: 'Can\'t see the page\'s edges — try a darker surface or more light',
   dark: 'More light needed',
   moving: 'Hold still',
   ready: 'Hold still'
@@ -168,6 +169,10 @@ export class DocumentTracker {
     this.lastSeenAt = null
     this.stillSince = null
     this.latest = null
+    // The last few frames' "off the edge" verdicts. The advice follows most
+    // of them rather than any one: a single frame clipping a corner flashed
+    // "Move back" at somebody whose page was plainly in view.
+    this.edgeVotes = []
   }
 
   /**
@@ -254,6 +259,7 @@ export class DocumentTracker {
     }
 
     this.latest = detection
+    this.edgeVotes = [...this.edgeVotes, detection.surfaceOnly ? 'surface' : detection.offEdge ? 'edge' : 'in'].slice(-5)
     this.lastSeenAt = now
     const corners = detection.corners
 
@@ -333,7 +339,10 @@ export class DocumentTracker {
       // nothing about afterwards. A page photographed with its bottom off the
       // sensor has no bottom, and dragging a corner cannot invent one — which
       // is exactly how a capture came back with the form cut in half.
-      if (this.latest?.offEdge) reason = 'offEdge'
+      const votes = this.edgeVotes || []
+      const most = kind => votes.filter(v => v === kind).length * 5 >= votes.length * 3
+      if (votes.length && most('surface')) reason = 'surfaceOnly'
+      else if (votes.length && most('edge')) reason = 'offEdge'
       else if (fill < this.minFill) reason = 'small'
       else if (contrast < this.minContrast) reason = 'dark'
       else reason = settled && stillFor > 0 ? 'ready' : 'moving'

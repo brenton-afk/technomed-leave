@@ -135,3 +135,21 @@ describe('a quadrilateral running off the picture', () => {
     expect(choose([smaller, bigger])).toBe(bigger)
   })
 })
+
+// "The scanner kept advising her to step back as the full page wasn't in view
+// when it was." A page filling the screen has corners close to the edge; one
+// that is cut off has a side along it.
+describe('clippedByFrame', async () => {
+  const { clippedByFrame } = await import('./documentDetect.js')
+  const W = 240, H = 320
+  it('is not set off by a page filling the screen with one corner near the edge', () => {
+    expect(clippedByFrame([{ x: 1, y: 4 }, { x: 230, y: 6 }, { x: 228, y: 310 }, { x: 6, y: 312 }], W, H)).toBe(false)
+    expect(clippedByFrame([{ x: 5, y: 5 }, { x: 234, y: 5 }, { x: 234, y: 314 }, { x: 5, y: 314 }], W, H)).toBe(false)
+  })
+  it('is set off by a page whose bottom runs along the frame edge', () => {
+    expect(clippedByFrame([{ x: 20, y: 20 }, { x: 220, y: 20 }, { x: 220, y: 319 }, { x: 20, y: 319 }], W, H)).toBe(true)
+  })
+  it('is set off by a page with a corner missing off the side', () => {
+    expect(clippedByFrame([{ x: 20, y: 20 }, { x: 239, y: 60 }, { x: 200, y: 319 }, { x: 20, y: 300 }], W, H)).toBe(true)
+  })
+})

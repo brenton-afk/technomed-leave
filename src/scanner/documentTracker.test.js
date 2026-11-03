@@ -495,3 +495,25 @@ describe('a page that runs off the picture', () => {
     expect(view.readyToCapture).toBe(true)
   })
 })
+
+describe('off the edge, judged over several frames', () => {
+  const corners = [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.95 }, { x: 0.1, y: 0.95 }]
+  const det = extra => ({ corners, areaFraction: 0.7, fill: 0.8, contrast: 1, ...extra })
+
+  it('does not tell somebody to move back over one clipped frame among good ones', () => {
+    const tracker = new DocumentTracker()
+    let view
+    const flags = [false, false, true, false, false, false, true, false]
+    flags.forEach((offEdge, i) => { view = tracker.update(det({ offEdge }), i * 60) })
+    expect(view.reason).not.toBe('offEdge')
+  })
+
+  it('says the background is the problem when only the surface is found', () => {
+    const tracker = new DocumentTracker()
+    let view
+    for (let t = 0; t < 600; t += 60) view = tracker.update(det({ surfaceOnly: true }), t)
+    expect(view.reason).toBe('surfaceOnly')
+    expect(view.hint).toMatch(/darker surface/i)
+    expect(view.readyToCapture).toBe(false)
+  })
+})
