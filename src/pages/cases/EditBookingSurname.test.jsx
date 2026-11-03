@@ -81,15 +81,8 @@ afterEach(() => vi.restoreAllMocks())
 const show = (props = {}) =>
   render(<EditBooking eventId="evt-9" user={USER} onClose={() => {}} {...props} />)
 
-const loaded = () => waitFor(() =>
+const ready = () => waitFor(() =>
   expect(screen.getByDisplayValue('Testa Rossa Bianca')).toBeInTheDocument())
-// The kit, notes and people fold to one line each; open them as a person would.
-const ready = async () => {
-  await loaded()
-  for (const button of screen.queryAllByRole('button', { expanded: false })) {
-    if (/^(Kit|Notes|People|Requested):/.test(button.getAttribute('aria-label') || '')) fireEvent.click(button)
-  }
-}
 
 describe('a booking with a three-word surname', () => {
   it('opens with the whole surname', async () => {

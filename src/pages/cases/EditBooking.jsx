@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import LoanTrail from './LoanTrail.jsx'
-import Fold from './Fold.jsx'
 import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { CaseThread } from '../Chat.jsx'
@@ -927,13 +926,9 @@ export default function EditBooking({
 
             {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && (
               <>
-                {FIELDS.map((f, i) => (f.key === 'kit' ? (
-                  // The kit folds to one line ("Mariner MIS (Distributor
-                  // Loan)") — its system and supply buttons were most of what
-                  // made this screen busy. Open when there is no kit yet.
-                  <Fold key={f.key} label="Kit" summary={(fields.kit || '').trim()} empty="No kit yet"
-                    defaultOpen={!(fields.kit || '').trim()}>
-                    <Field label={f.label}
+                {FIELDS.map((f, i) => (
+                  <React.Fragment key={f.key}>
+                    <Field label={f.label} autoFocus={i === 0}
                       hint={f.hint || (!(fields[f.key] || '').trim() ? f.emptyHint : undefined)}
                       value={fields[f.key] || ''}
                       onChange={v => setFields(c => ({ ...c, [f.key]: v }))} />
@@ -941,19 +936,18 @@ export default function EditBooking({
                         a button and typing the same thing have to produce one
                         field, or the two disagree the first time somebody
                         uses both. */}
-                    <KitPicker systemsOnly kit={fields.kit || ''}
-                      onChange={next => setFields(c => ({ ...c, kit: next }))} />
-                    <KitSupply
-                      kit={fields.kit || ''}
-                      system={fields.system || ''}
-                      onChange={next => setFields(c => ({ ...c, kit: next }))} />
-                  </Fold>
-                ) : (
-                  <Field key={f.key} label={f.label} autoFocus={i === 0}
-                    hint={f.hint || (!(fields[f.key] || '').trim() ? f.emptyHint : undefined)}
-                    value={fields[f.key] || ''}
-                    onChange={v => setFields(c => ({ ...c, [f.key]: v }))} />
-                )))}
+                    {f.key === 'kit' && (
+                      <KitPicker systemsOnly kit={fields.kit || ''}
+                        onChange={next => setFields(c => ({ ...c, kit: next }))} />
+                    )}
+                    {f.key === 'kit' && (
+                      <KitSupply
+                        kit={fields.kit || ''}
+                        system={fields.system || ''}
+                        onChange={next => setFields(c => ({ ...c, kit: next }))} />
+                    )}
+                  </React.Fragment>
+                ))}
 
                 {/* ── What the room has to have set up ──
                     
@@ -987,8 +981,13 @@ export default function EditBooking({
                     every request, change and call-off, and the hospital's
                     loans team being told. */}
                 {(loaded?.loanLog || []).length > 0 && (
-                  <Fold label="Requested"
-                    summary={`${LOAN_LOG_WORD[loaded.loanLog[0].hospital ? 'hospital' : loaded.loanLog[0].status] || 'Emailed'} ${loaded.loanLog[0].to} · ${loaded.loanLog[0].by || 'someone'}`}>
+                  <div style={{
+                    marginBottom: space.md, padding: `${space.sm}px ${space.md}px`,
+                    borderRadius: radius.control, background: colour.surface, border: `1px solid ${colour.line}`
+                  }}>
+                    <span style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, display: 'block', marginBottom: 4 }}>
+                      Loan sets
+                    </span>
                     {loaded.loanLog.map((l, i) => (
                       <div key={i} style={{ ...text('caption'), color: i === 0 ? colour.ink : colour.inkMuted, marginBottom: 2 }}>
                         <strong>{LOAN_LOG_WORD[l.hospital ? 'hospital' : l.status] || 'Emailed'}</strong>
@@ -996,7 +995,7 @@ export default function EditBooking({
                         {' · '}{l.by || 'someone'}, {loanLogWhen(l.at)}
                       </div>
                     ))}
-                  </Fold>
+                  </div>
                 )}
 
                 {/* ── The distributor loan set, and the emails behind it ──
@@ -1039,9 +1038,12 @@ export default function EditBooking({
                   </button>
                 )}
 
-                <Fold label="Notes" summary={notes.split('\n').find(l => l.trim())?.trim() || ''} defaultOpen={false}>
-                <label style={{ display: 'block', marginBottom: space.sm }}>
-                  <textarea aria-label="Notes"
+                <label style={{ display: 'block', marginBottom: space.md }}>
+                  <span style={{
+                    ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
+                    display: 'block', marginBottom: 4
+                  }}>Notes</span>
+                  <textarea
                     value={notes}
                     rows={4}
                     onChange={e => setNotes(e.target.value)}
@@ -1055,11 +1057,6 @@ export default function EditBooking({
                     Why it moved, who called it in, what still has to be ordered
                   </span>
                 </label>
-                </Fold>
-
-                <Fold label="People"
-                  summary={[planned.length ? `Planned ${planned.join(' + ')}` : '', reps.length ? `Attended ${reps.join(' + ')}` : ''].filter(Boolean).join(' · ')}
-                  empty="Nobody allocated yet">
 
                 <div style={{ marginBottom: space.md }}>
                   <span style={{
@@ -1140,7 +1137,6 @@ export default function EditBooking({
                     Goes into the booking title, as the team already writes it
                   </span>
                 </div>
-                </Fold>
 
                 {/* Only once the case has happened or is happening. */}
                 {when.date && when.date <= todayStr() && (

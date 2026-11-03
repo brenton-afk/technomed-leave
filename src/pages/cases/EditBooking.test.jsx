@@ -62,16 +62,6 @@ const show = (props = {}) =>
 
 async function ready() {
   await waitFor(() => expect(screen.getByDisplayValue('L5/S1 PLIF')).toBeInTheDocument())
-  unfold()
-}
-
-// The kit, notes and people fold to one line each ("it's getting a bit
-// busy"); these tests are about what is inside them, so open them as a
-// person would.
-function unfold() {
-  for (const button of screen.queryAllByRole('button', { expanded: false })) {
-    if (/^(Kit|Notes|People|Requested):/.test(button.getAttribute('aria-label') || '')) fireEvent.click(button)
-  }
 }
 
 describe('opening a booking', () => {
