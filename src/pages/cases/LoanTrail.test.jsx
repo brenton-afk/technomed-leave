@@ -18,6 +18,12 @@ const SET = {
 
 afterEach(() => vi.restoreAllMocks())
 
+// Each set is one line until tapped open.
+async function openSet() {
+  const header = await screen.findByRole('button', { expanded: false, name: /Loan set/ })
+  fireEvent.click(header)
+}
+
 const serve = sets => {
   global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ sets }) }))
 }
@@ -27,8 +33,10 @@ describe('LoanTrail', () => {
     serve([SET])
     render(<LoanTrail eventId="evt1" user={{ token: 't' }} />)
     await waitFor(() => expect(screen.getByText('Confirmed')).toBeInTheDocument())
-    expect(screen.getByText(/Loan set · Device Technologies/)).toBeInTheDocument()
-    expect(screen.getByText('Mariner MIS')).toBeInTheDocument()
+    // Folded: the set, the supplier and the status on one line.
+    expect(screen.getByText('Mariner MIS · Device')).toBeInTheDocument()
+    expect(screen.queryByText(/Device confirmed the next day/)).not.toBeInTheDocument()
+    await openSet()
     expect(screen.getByText(/Device confirmed the next day/)).toBeInTheDocument()
     expect(screen.getByText('CLV Wed 11 Nov, 9am')).toBeInTheDocument()
     // The emails are folded away until asked for.
@@ -41,7 +49,7 @@ describe('LoanTrail', () => {
   it('opens an email to read it', async () => {
     serve([SET])
     render(<LoanTrail eventId="evt1" user={{ token: 't' }} />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /Show emails/ })).toBeInTheDocument())
+    await openSet()
     fireEvent.click(screen.getByRole('button', { name: /Show emails/ }))
     fireEvent.click(screen.getByText('RE: Loan set request'))
     expect(screen.getByText('Confirmed.')).toBeInTheDocument()
@@ -50,6 +58,7 @@ describe('LoanTrail', () => {
   it('says plainly when nothing was found', async () => {
     serve([{ ...SET, summary: null, emails: [] }])
     render(<LoanTrail eventId="evt1" user={{ token: 't' }} />)
+    await openSet()
     await waitFor(() => expect(screen.getByText(/No emails with Device Technologies about this patient/)).toBeInTheDocument())
   })
 

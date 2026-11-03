@@ -101,7 +101,10 @@ describe('the question a booking raises', () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
     fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Distributor Loan' })).toHaveAttribute('aria-pressed', 'true'))
+    // Answered from the stock, so shown as a word with Change, not five buttons.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change where it comes from (Distributor Loan)' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Change where it comes from/ }))
+    expect(screen.getByRole('button', { name: 'Distributor Loan' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
 
@@ -387,10 +390,16 @@ describe('a dictated booking that would leave a case without a kit', () => {
   })
 })
 
+// Navigation folds to one line until tapped ("a bit busy").
+function openNavigation() {
+  fireEvent.click(screen.getByRole('button', { name: /^Navigation:/ }))
+}
+
 describe('Brainlab', () => {
   it('needs an answer about attendance before it can be added', async () => {
     show()
     fill()
+    openNavigation()
     fireEvent.click(screen.getByRole('button', { name: 'AIRO + Curve' }))
     expect(screen.getByRole('button', { name: /Add to calendar/ })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
@@ -400,6 +409,7 @@ describe('Brainlab', () => {
   it('a No F2F booking says so in the kit, the notes and to the server', async () => {
     show()
     fill()
+    openNavigation()
     fireEvent.click(screen.getByRole('button', { name: 'AIRO + Curve' }))
     fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
     fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
@@ -412,6 +422,7 @@ describe('Brainlab', () => {
   it('an attended case does not', async () => {
     show()
     fill()
+    openNavigation()
     fireEvent.click(screen.getByRole('button', { name: 'Curve only' }))
     fireEvent.click(screen.getByRole('button', { name: 'Attendance required' }))
     fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
@@ -425,6 +436,7 @@ describe('Brainlab', () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
     fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Change where it comes from/ }))
     expect(await screen.findByRole('button', { name: 'Calvary Loan' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'RHH Loan' })).toBeInTheDocument()
   })

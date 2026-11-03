@@ -42,6 +42,7 @@ export default function LoanTrail({ eventId, user }) {
   // Folded away until asked for: "it's a little bit busy". The status, the
   // summary and the facts are what a glance needs; the emails are the evidence.
   const [showEmails, setShowEmails] = useState({})
+  const [openSets, setOpenSets] = useState({})
 
   useEffect(() => {
     if (!eventId) return undefined
@@ -101,8 +102,10 @@ export default function LoanTrail({ eventId, user }) {
   if (state.loading) {
     return (
       <div style={box}>
-        <div style={heading}>Loan set</div>
-        <div style={{ ...text('caption'), color: colour.inkFaint }}>Reading the loan set emails…</div>
+        <div style={{ ...text('caption'), color: colour.inkFaint }}>
+          <span style={{ ...heading, display: 'inline', marginRight: space.sm }}>Loan set</span>
+          Reading the emails…
+        </div>
       </div>
     )
   }
@@ -123,19 +126,28 @@ export default function LoanTrail({ eventId, user }) {
         // a button and did nothing.
         const look = STATUS[set.summary?.status] || null
         const emailsOpen = Boolean(showEmails[set.distributor])
+        const isOpen = Boolean(openSets[set.distributor])
         return (
           <div key={set.distributor} style={box} data-loan-set={set.distributor}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: 6 }}>
-              <div style={{ ...heading, marginBottom: 0, flex: 1 }}>
-                Loan set · {set.name}
-              </div>
+            {/* One line until tapped, like the rest of the booking: the set,
+                the supplier and where it stands. */}
+            <button type="button" aria-expanded={isOpen}
+              onClick={() => setOpenSets(v => ({ ...v, [set.distributor]: !isOpen }))}
+              style={{ display: 'flex', alignItems: 'center', gap: space.sm, width: '100%', minHeight: 32, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+              <span style={{ ...heading, marginBottom: 0, flexShrink: 0, minWidth: 74 }}>Loan set</span>
+              <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {set.systems.join(' + ')} · {set.name.split(/[\s/]/)[0]}
+              </span>
               {look && (
-                <span style={{ ...text('caption'), fontWeight: 700, color: look.ink, background: look.bg, padding: '2px 8px', borderRadius: radius.pill }}>
+                <span style={{ ...text('caption'), fontWeight: 700, color: look.ink, background: look.bg, padding: '2px 8px', borderRadius: radius.pill, flexShrink: 0 }}>
                   {look.label}
                 </span>
               )}
-            </div>
-            <div style={{ ...text('bodyStrong'), color: colour.ink }}>{set.systems.join(' + ')}</div>
+              <span aria-hidden="true" style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, flexShrink: 0 }}>
+                {isOpen ? 'Done' : 'Details'}
+              </span>
+            </button>
+            {isOpen && (<>
 
             {set.summary?.summary && (
               <div style={{ ...text('body'), color: colour.ink, marginTop: 6 }}>{set.summary.summary}</div>
@@ -209,6 +221,7 @@ export default function LoanTrail({ eventId, user }) {
                 })}
               </div>
             )}
+            </>)}
           </div>
         )
       })}
@@ -217,7 +230,7 @@ export default function LoanTrail({ eventId, user }) {
 }
 
 const box = {
-  marginBottom: space.md, padding: `${space.sm}px ${space.md}px`,
+  marginBottom: space.sm, padding: `${space.sm}px ${space.md}px`,
   borderRadius: radius.control, background: colour.surface, border: `1px solid ${colour.line}`
 }
 const heading = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, display: 'block', marginBottom: 4 }
