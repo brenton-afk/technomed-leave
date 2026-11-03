@@ -430,6 +430,57 @@ function assertAllowedPath(path) {
   if (lower.includes('..')) throw badRequest('Invalid path')
 }
 
+// ─── Filed usage, from the portal's own record ───────────────────────────────
+// "In the filed usage page, we need to be able to tap those filed usages and
+// see them from the portal view via the dropbox link. The file layout in the
+// portal should mimic how it looks in dropbox." — Brent, 4 Nov 2026, who chose
+// to show only what the portal files itself: the older usage folders are still
+// unredacted, and stay unread until he says otherwise.
+//
+// So the tree is not read from Dropbox at all. It is built from the usage
+// records the portal kept when it filed each case — the case's Dropbox folder
+// and the files it saved there — laid out exactly as the folders are:
+// Surgeon / Month Year / Case / files. A file opens only if it is one of those.
+
+const lowerPath = p => String(p || '').replace(/\/+$/, '').toLowerCase()
+
+async function portalFiled() {
+  const records = await getUsageHistory(500)
+  return records
+    .filter(r => r.dropboxPath && (r.filesSaved || []).length)
+    .map(r => ({ path: r.dropboxPath.replace(/\/+$/, ''), files: r.filesSaved, at: r.createdAt }))
+}
+
+/** The entries directly under `path`, from what the portal filed. */
+export function filedEntries(filed, path) {
+  const here = lowerPath(path)
+  const folders = new Map()
+  const files = []
+  for (const c of filed) {
+    const casePath = lowerPath(c.path)
+    if (casePath === here) {
+      for (const name of c.files) files.push({ kind: 'file', name, path: `${c.path}/${name}`, modified: c.at })
+      continue
+    }
+    if (!casePath.startsWith(here + '/')) continue
+    const next = c.path.slice(here.length + 1).split('/')[0]
+    const key = next.toLowerCase()
+    const entry = folders.get(key) || { kind: 'folder', name: next, path: `${c.path.slice(0, here.length)}/${next}`, modified: c.at }
+    if (String(c.at) > String(entry.modified)) entry.modified = c.at
+    folders.set(key, entry)
+  }
+  return [
+    ...[...folders.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    ...files.sort((a, b) => a.name.localeCompare(b.name))
+  ]
+}
+
+/** Whether a file path is one the portal itself filed. */
+export function isPortalFiled(filed, path) {
+  const target = lowerPath(path)
+  return filed.some(c => c.files.some(name => lowerPath(`${c.path}/${name}`) === target))
+}
+
 async function handleFiles(req, res) {
   if (!dropboxConfigured()) {
     return res.status(200).json({ configured: false, entries: [] })
@@ -437,6 +488,11 @@ async function handleFiles(req, res) {
   const root = req.query.root === 'resources' ? resourcesRoot() : usageRoot()
   const path = req.query.path || root
   assertAllowedPath(path)
+
+  if (root === usageRoot()) {
+    const entries = filedEntries(await portalFiled(), path)
+    return res.status(200).json({ configured: true, path, root, missing: false, portalFiledOnly: true, entries })
+  }
 
   const { entries, missing } = await listFolder(path)
   return res.status(200).json({
@@ -493,7 +549,11 @@ async function handleOpen(req, res) {
   if (!path) throw badRequest('path is required')
   assertAllowedPath(path)
 
-  const link = await temporaryLink(path)
+  const usage = lowerPath(path).startsWith(lowerPath(usageRoot()) + '/')
+  if (usage && !isPortalFiled(await portalFiled(), path)) {
+    throw badRequest('Only usage filed by the portal can be opened here for now')
+  }
+  const link = await temporaryLink(path, { portalFiled: usage })
   // Short-lived by design: the link is fetched per tap and never persisted.
   return res.status(200).json({ url: link.url, name: link.name, expiresInHours: 4 })
 }

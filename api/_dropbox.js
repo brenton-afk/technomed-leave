@@ -314,8 +314,16 @@ export async function listFolder(path) {
  * so they are fetched on demand and never stored — a persisted link would be a
  * public URL to patient data long after anyone remembered it existed.
  */
-export async function temporaryLink(path) {
-  assertUsageReadable(path)
+/**
+ * A short-lived link to one file.
+ *
+ * `portalFiled` lets a file the portal filed itself through the usage lock —
+ * the caller has already checked it against the portal's own record of what
+ * it filed (see filedTree in api/usage/agent.js). Nothing else under the
+ * usage tree is opened until the redaction is finished.
+ */
+export async function temporaryLink(path, { portalFiled = false } = {}) {
+  if (!portalFiled) assertUsageReadable(path)
   const { ok, data, status, text } = await rpc('files/get_temporary_link', { path })
   if (!ok) {
     throw dropboxFault('open that file', status, data?.error_summary)

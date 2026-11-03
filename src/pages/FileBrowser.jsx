@@ -93,12 +93,17 @@ export default function FileBrowser({ user, root = 'usage', title, eyebrow, onBa
       />
       <Body>
         {error && <Banner tone="danger">{error}</Banner>}
+        {root === 'usage' && state === 'ready' && trail.length === 0 && (
+          <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
+            Usage filed through the portal, in the same folders as Dropbox. Older usage is hidden until the redaction is finished.
+          </div>
+        )}
 
         {state === 'unconfigured' && (
           <EmptyState
             icon={IconFolder}
             title="Dropbox isn't connected"
-            detail="Once DROPBOX_ACCESS_TOKEN is set in Vercel, filed usage sheets and the shared resources folder appear here."
+            detail="An admin can connect it in Admin → System → Connect Dropbox. Filed usage and the shared resources folder appear here once it is."
           />
         )}
 
@@ -127,7 +132,7 @@ export default function FileBrowser({ user, root = 'usage', title, eyebrow, onBa
             title="Nothing here yet"
             detail={root === 'resources'
               ? 'Drop surgical templates, techniques or implant code lists into the Dropbox resources folder and they will show up here.'
-              : 'Usage sheets appear here once a scan has been filed to Dropbox.'}
+              : 'Usage filed through the portal appears here, laid out as it is in Dropbox. Older usage folders are not shown while they are being redacted.'}
           />
         )}
 

@@ -130,7 +130,7 @@ export default function PreferenceCards({ user, focus, onClose }) {
         }
         return data
       })
-      setSurgeonId(id => id || data.data.surgeons[0]?.id)
+      setSurgeonId(id => id || data.data?.surgeons?.[0]?.id)
     } catch (err) { setError(err.message) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token, editing])
