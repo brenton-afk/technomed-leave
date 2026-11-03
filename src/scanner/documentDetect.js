@@ -128,6 +128,11 @@ function squareness(corners) {
  * Cheap: 4 sides, 14 samples, 2 reads each.
  */
 export function edgeSupport(grey, corners, spread = 64) {
+  return edgeSupportDetail(grey, corners, spread).support
+}
+
+/** The same, with the weakest measurable side alongside the average. */
+export function edgeSupportDetail(grey, corners, spread = 64) {
   const data = grey.data
   const w = grey.cols, h = grey.rows
   const PER_SIDE = 14
@@ -167,6 +172,18 @@ export function edgeSupport(grey, corners, spread = 64) {
   }
 
   let supported = 0, counted = 0
+  // The weakest side, as well as the average. "You still need to be better"
+  // (Brent, 3 Nov 2026): an outline whose top and right lay on the page and
+  // whose left ran across bare wood to the corner of the picture passed on
+  // the average — three strong sides carried one that sat on nothing. A page
+  // has four real edges; every one that can be measured has to be there.
+  let weakest = 1
+  // And the side with the least of *anything* under it. A side can score
+  // weakly for two opposite reasons: print running up to the border flips the
+  // step's direction (busy — it is the page), or there is no step at all
+  // (empty — it runs across bare wood or shadow). Only the second says the
+  // quad is wrong, so only it counts against a quad in the ranking.
+  let emptiest = 1
 
   for (let side = 0; side < 4; side++) {
     const a = corners[side]
@@ -180,6 +197,8 @@ export function edgeSupport(grey, corners, spread = 64) {
     const nx = dy / len, ny = -dx / len
 
     let sign = 0
+    let sideSupported = 0
+    let sideActive = 0
     for (let i = 0; i < PER_SIDE; i++) {
       // Skirt the corners: the rounding of a real sheet and the overshoot of
       // approxPolyDP both live there, and neither says anything about the side.
@@ -190,17 +209,24 @@ export function edgeSupport(grey, corners, spread = 64) {
       const step = inside - outside
       counted++
       if (Math.abs(step) < STEP) continue
+      sideActive++
       // Consistent in sign along the side, or it is print rather than a border.
       const s = Math.sign(step)
       if (sign === 0) sign = s
       else if (s !== sign) continue
       supported++
+      sideSupported++
     }
+    weakest = Math.min(weakest, sideSupported / PER_SIDE)
+    emptiest = Math.min(emptiest, sideActive / PER_SIDE)
   }
 
   // No measurable side — a page framed right to all four edges — is not a
   // reason to reject it. Nothing was measured, so nothing is alleged.
-  return counted ? supported / counted : 1
+  if (!counted) return { support: 1, weakest: 1, emptiest: 1 }
+  // A side with almost nothing under it sinks the quad, whatever the others do.
+  const average = supported / counted
+  return { support: weakest < WEAKEST_SIDE ? Math.min(weakest, average) : average, weakest, emptiest }
 }
 
 function interiorTones(grey, corners) {
@@ -352,8 +378,18 @@ export function chooseCandidate(candidates, width, height) {
   let pool = candidates.filter(c => !surfaces.has(c))
   if (!pool.length) pool = candidates
 
+  // Biggest, but a side with little under it counts against it. The page and
+  // a wedge of table or shadow beside it make a bigger quad than the page
+  // alone — and it was winning on size, with one side lying across bare wood
+  // (Brent's photograph, 3 Nov 2026). A candidate whose weakest side is thin
+  // ranks at a little over half its size, so the true page beats it.
+  // On a sliding scale rather than a step: a side scoring around the line
+  // would otherwise flip a quad's rank from frame to frame with the sensor
+  // noise, and the outline with it ("print to the edge" on the bench jumped
+  // 18% of the frame between the page and the box printed inside it).
+  const weight = c => c.areaFraction * (0.4 + 0.6 * Math.min(1, (c.filledSide ?? 1) / FILLED_SIDE) ** 2)
   const biggest = list =>
-    list.reduce((best, c) => (!best || c.areaFraction > best.areaFraction) ? c : best, null)
+    list.reduce((best, c) => (!best || weight(c) > weight(best)) ? c : best, null)
 
   // Preferring a candidate that sits wholly inside the picture is right when the
   // alternative is the bench or the desk running off the edges. It is wrong when
@@ -372,10 +408,14 @@ export function chooseCandidate(candidates, width, height) {
   const bestVisible = biggest(whollyVisible)
 
   if (bestVisible) {
+    // Genuinely overhanging — touching exactly one edge of the picture — and
+    // bigger by the same weighting as everything else. It took any quad
+    // touching *at most* one edge, so a wholly visible one with a bare side
+    // (page plus a wedge of shadow) came back in through here on raw size.
     const overhanging = pool.filter(c =>
       c !== bestVisible
-      && edgesTouched(c.corners, width, height) <= 1
-      && c.areaFraction > bestVisible.areaFraction)
+      && edgesTouched(c.corners, width, height) === 1
+      && weight(c) > weight(bestVisible))
     const page = biggest(overhanging)
     if (page) return page
     pool = whollyVisible
@@ -496,6 +536,15 @@ function cornersOf(cv, contour, minHullArea) {
  * on white.
  */
 const MIN_EDGE_SUPPORT = 0.55
+// The least any one measurable side may have. Lower than the average bar, so
+// a real side broken by a shadow or a staple still stands.
+const WEAKEST_SIDE = 0.1
+// How much of its length a side needs *something* under it — any step at
+// all — before it counts as fully on the page. Below this a quad still
+// stands, but ranks lower (see chooseCandidate). Measured: a true page with
+// print to its border is ~1.0; a page-plus-shadow wedge on Brent's table was
+// 0.43; the box printed inside a form, 0.36.
+const FILLED_SIDE = 0.6
 
 export function detectDocument(cv, rgba, width, height, opts = {}) {
   const {
@@ -543,6 +592,82 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
     // the page is a fact about it *and another candidate*, which may come from a
     // different threshold.
     const candidates = []
+
+    // One contour, judged: the same tests whichever way it was found.
+    const consider = (contour, { wholeOnly = false } = {}) => {
+      // Cheap rejection before the hull: a contour shorter than one side of
+      // the smallest acceptable page cannot bound one.
+      if (cv.arcLength(contour, false) < Math.min(width, height) * Math.sqrt(minAreaFraction)) return
+
+      const found = cornersOf(cv, contour, frameArea * minAreaFraction)
+      if (!found) return
+      const corners = orderCorners(found)
+      if (!isConvex(corners)) return
+      // A region is only a page if it is wholly in view: the background is a
+      // region too, and it runs to the edges of the picture, where no side
+      // can be checked against anything. Pages cut off by the frame are left
+      // to the traced edges, which handle them.
+      if (wholeOnly && touchesBorder(corners, width, height, 3)) return
+
+      const areaFraction = polygonArea(corners) / frameArea
+      if (areaFraction < minAreaFraction || areaFraction > 1.02) return
+      const shape = squareness(corners)
+      if (shape < minSquareness) return
+
+      // The pixels have the final say. A quad can satisfy every
+      // geometric test and still be a line drawn across a photograph.
+      const { support, weakest, emptiest } = edgeSupportDetail(grey, corners, spread)
+      if (support < minEdgeSupport) return
+
+      candidates.push({
+        corners,
+        areaFraction,
+        squareness: shape,
+        edgeSupport: support,
+        weakestSide: weakest,
+        filledSide: emptiest,
+        ...interiorTones(grey, corners)
+      })
+    }
+
+    const eachContour = (contours, fn) => {
+      try {
+        for (let i = 0; i < contours.size(); i++) {
+          const contour = contours.get(i)
+          try { fn(contour) } finally { contour.delete() }
+        }
+      } finally {
+        contours.delete()
+      }
+    }
+
+    // ── The paper as a shape, not only as a line ──
+    //
+    // "You still need to be better" — Brent, 3 Nov 2026: white paper on a
+    // wooden table, his own shadow across the bottom of the frame, and the
+    // outline ran from the page's top-right to the corner of the picture.
+    // Tracing edges, the page's bottom edge and the shadow's edge met and were
+    // traced as one line, so the page never came out as a four-sided shape on
+    // any rung — and something else did.
+    //
+    // So the page is also looked for as what it is: a region brighter (or, for
+    // a dark form on a pale bench, darker) than what it lies on. The Otsu
+    // split already computed above is that region. Opening it cuts the thin
+    // bridges where a shadow or a cable touches the page; each separate region
+    // then goes through exactly the same tests as a traced contour, and the
+    // ranking below picks between them all.
+    for (const invert of [false, true]) {
+      const region = track(new cv.Mat())
+      if (invert) cv.bitwise_not(otsuMask, region)
+      else otsuMask.copyTo(region)
+      const open = track(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5)))
+      cv.morphologyEx(region, region, cv.MORPH_OPEN, open)
+      const regionContours = new cv.MatVector()
+      const regionHierarchy = track(new cv.Mat())
+      cv.findContours(region, regionContours, regionHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+      eachContour(regionContours, contour => consider(contour, { wholeOnly: true }))
+    }
+
     for (const [low, high] of ladder) {
       const edges = track(new cv.Mat())
       cv.Canny(smoothed, edges, low, high, 3, false)
@@ -555,44 +680,7 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       const contours = new cv.MatVector()
       const hierarchy = track(new cv.Mat())
       cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
-
-      try {
-        for (let i = 0; i < contours.size(); i++) {
-          const contour = contours.get(i)
-          try {
-            // Cheap rejection before the hull: a contour shorter than one side of
-            // the smallest acceptable page cannot bound one.
-            if (cv.arcLength(contour, false) < Math.min(width, height) * Math.sqrt(minAreaFraction)) continue
-
-            const found = cornersOf(cv, contour, frameArea * minAreaFraction)
-            if (!found) continue
-            const corners = orderCorners(found)
-            if (!isConvex(corners)) continue
-
-            const areaFraction = polygonArea(corners) / frameArea
-            if (areaFraction < minAreaFraction || areaFraction > 1.02) continue
-            const shape = squareness(corners)
-            if (shape < minSquareness) continue
-
-            // The pixels have the final say. A quad can satisfy every
-            // geometric test and still be a line drawn across a photograph.
-            const support = edgeSupport(grey, corners, spread)
-            if (support < minEdgeSupport) continue
-
-            candidates.push({
-              corners,
-              areaFraction,
-              squareness: shape,
-              edgeSupport: support,
-              ...interiorTones(grey, corners)
-            })
-          } finally {
-            contour.delete()
-          }
-        }
-      } finally {
-        contours.delete()
-      }
+      eachContour(contours, consider)
       // Every rung is tried, and the best answer across all of them wins.
       //
       // This used to stop at the first rung that found anything, on the reasoning
@@ -614,6 +702,9 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       // bench guards it.
     }
 
+    // For measuring the detector offline (scripts/, the bench): every
+    // candidate considered, not only the one chosen.
+    if (Array.isArray(opts.inspect)) opts.inspect.push(...candidates)
     const chosen = chooseCandidate(candidates, width, height)
     if (!chosen) return null
     const normalised = chosen.corners.map(c => ({ x: c.x / width, y: c.y / height }))
