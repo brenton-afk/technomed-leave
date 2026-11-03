@@ -238,6 +238,22 @@ offered as **Mariner MIS** and **Mariner Open** (`SYSTEM_BUTTONS`, `variantOf`
 in `inventory.js`) — one Mariner said precisely; tapping either replaces a plain
 "Mariner" and keeps its supply.
 
+### System suggestions and Brainlab billing (Brent, 3 Nov 2026)
+
+`src/clinicalPlan/systemSuggestions.js` holds Brent's operation → system rules
+(`SYSTEM_GROUPS`) and surgeon defaults (`SURGEON_SYSTEMS`): a thoracolumbar
+fixation offers pedicle screw systems only, ACDF offers cervical cages, ALIF is
+Catenary only, and so on. It narrows the buttons, never forbids — everything
+stays behind "All systems". Not yet wired to a screen: the Add booking layout
+waits on Brent approving a mock-up.
+
+Brainlab / AIRO is navigation, not an implant system. At **RHH** TechnoMed runs
+the navigation and AIRO and **bills Brainlab per case: $300 with AIRO, $250 for
+navigation without AIRO** (mostly stereotactic needle biopsies and complex
+cranial). At **Calvary** we do not support navigation and do not bill. Bookings
+are meant to become the single source of truth on the front end (e.g. to
+populate the Brainlab invoice) and usages on the back end (resupply).
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the
