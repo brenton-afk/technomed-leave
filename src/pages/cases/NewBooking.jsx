@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { BRAINLAB, BRAINLAB_KIT } from '../../clinicalPlan/brainlab.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
-import Fold from './Fold.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { offerNotices } from '../../notices.js'
 import DictateBooking from './DictateBooking.jsx'
@@ -169,33 +168,6 @@ function siteOf(text) {
   if (/\bCLV\b|CALVARY|LENAH/.test(t)) return 'CLV'
   if (/\bRHH\b|ROYAL\s*HOBART/.test(t)) return 'RHH'
   return null
-}
-
-
-/**
- * Where one system is coming from: a word and "Change" once answered — the
- * supply worked out from the hospital's stock usually is the answer — and the
- * five buttons only while it is not. Five buttons per system, always showing,
- * was most of "the add booking page is getting a bit busy".
- */
-function SystemSupply({ supply, onChange }) {
-  const [open, setOpen] = useState(false)
-  if (supply && !open) {
-    return (
-      <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: space.sm }}>
-        <span style={{ ...text('caption'), color: colour.inkMuted }}>{supply}</span>
-        <button type="button" onClick={() => setOpen(true)} aria-label={`Change where it comes from (${supply})`}
-          style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-          Change
-        </button>
-      </div>
-    )
-  }
-  return (
-    <div style={{ flexBasis: '100%' }}>
-      <Choice options={SUPPLY} value={supply} onChange={value => { onChange(value); if (value) setOpen(false) }} />
-    </div>
-  )
 }
 
 export default function NewBooking({ user, date: openOn, alreadyBooked = [], spoken, onClose, onCreated }) {
@@ -499,9 +471,11 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                       {/* Supply per system: one may be consigned here while the
                           other has to be ordered. Its own line, because five
                           buttons do not fit beside a system name on a phone. */}
-                      <SystemSupply supply={chosen.supply}
-                        onChange={value => setSystems(list => list.map(
-                          s => s.name === chosen.name ? { ...s, supply: value } : s))} />
+                      <div style={{ flexBasis: '100%' }}>
+                        <Choice options={SUPPLY} value={chosen.supply}
+                          onChange={value => setSystems(list => list.map(
+                            s => s.name === chosen.name ? { ...s, supply: value } : s))} />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -520,8 +494,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
               </select>
             </div>
 
-            <Fold label="Navigation" summary={[brainlab, brainlab ? attendance : ''].filter(Boolean).join(' · ')}
-              mustOpen={Boolean(brainlab) && !attendance}>
+            <div style={{ marginBottom: space.md }}>
               <Label>Brainlab navigation</Label>
               <Choice options={BRAINLAB} value={brainlab}
                 onChange={v => { setBrainlab(v); if (!v) setAttendance('') }} />
@@ -533,7 +506,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                   <Choice options={ATTENDANCE} value={attendance} onChange={setAttendance} />
                 </div>
               )}
-            </Fold>
+            </div>
 
             {/* One verdict per system, because they can differ: Diplomat may be
                 consigned at Calvary while the E4 cages have to come from a loan
@@ -569,10 +542,10 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                 placeholder="L5/S1 PLIF" style={inputStyle} />
             </Row>
 
-            <Fold label="Notes" summary={notes.split('\n').find(l => l.trim())?.trim() || ''}>
-              <textarea value={notes} rows={2} onChange={e => setNotes(e.target.value)} aria-label="Notes"
+            <Row label="Notes">
+              <textarea value={notes} rows={2} onChange={e => setNotes(e.target.value)}
                 style={{ fontSize: 16, ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
-            </Fold>
+            </Row>
           </div>
 
           <div style={{
