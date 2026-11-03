@@ -40,6 +40,7 @@ const booking = (id, summary, extra = '', date = today) => ({
 
 async function run(job) {
   process.env.CRON_SECRET = 's'
+  process.env.USAGE_REMINDERS = 'on'
   const res = { statusCode: 0, payload: null, status(c) { this.statusCode = c; return this }, json(d) { this.payload = d; return this } }
   await cron({ query: { job }, headers: { authorization: 'Bearer s' } }, res)
   return res
@@ -103,5 +104,21 @@ describe('the cron', () => {
     const res = { statusCode: 0, status(c) { this.statusCode = c; return this }, json() { return this } }
     await cron({ query: { job: 'evening' }, headers: {} }, res)
     expect(res.statusCode).toBe(401)
+  })
+})
+
+// "Please pause the usage reminder emails as they are not accurate, since we
+// are not yet sending usage from the portal yet." — Brent, 3 Nov 2026.
+describe('paused', () => {
+  it('sends nothing at 6pm or 9am until switched on', async () => {
+    usage = []
+    process.env.CRON_SECRET = 's'
+    delete process.env.USAGE_REMINDERS
+    const res = { statusCode: 0, payload: null, status(c) { this.statusCode = c; return this }, json(d) { this.payload = d; return this } }
+    await cron({ query: { job: 'evening' }, headers: { authorization: 'Bearer s' } }, res)
+    expect(res.payload).toMatchObject({ ran: 'evening', usage: 'paused' })
+    await cron({ query: { job: 'morning' }, headers: { authorization: 'Bearer s' } }, res)
+    expect(res.payload.usage).toBe('paused')
+    expect(sent).toEqual([])
   })
 })

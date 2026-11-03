@@ -28,6 +28,18 @@ function hobartWeekday() {
   return new Intl.DateTimeFormat('en-AU', { timeZone: TZ, weekday: 'short' }).format(new Date())
 }
 
+// ─── Paused ───────────────────────────────────────────────────────────────────
+// "Please pause the usage reminder emails as they are not accurate, since we
+// are not yet sending usage from the portal yet." — Brent, 3 Nov 2026.
+//
+// The reminders count a case as unsent unless the portal sent its usage, so
+// while usage still goes out by hand every case reads as owing. Both the 6pm
+// email to each rep and the 9am escalation to the team leader are off until
+// USAGE_REMINDERS=on is set in Vercel. The timesheet reminders are unaffected.
+export function usageRemindersOn() {
+  return String(process.env.USAGE_REMINDERS || '').trim().toLowerCase() === 'on'
+}
+
 async function usageEvening() {
   const day = hobartToday()
   const { byEmail } = await owingFor(day)
@@ -77,6 +89,7 @@ export default async function handler(req, res) {
   // Each part in its own try, so a calendar that will not answer does not stop
   // the timesheet reminders, and the other way round.
   if (job === 'evening') {
+    if (!usageRemindersOn()) return res.status(200).json({ ran: 'evening', usage: 'paused' })
     try {
       return res.status(200).json({ ran: 'evening', usage: await usageEvening() })
     } catch (err) {
@@ -88,7 +101,7 @@ export default async function handler(req, res) {
   let usage = null
   if (job === 'morning') {
     try {
-      usage = await usageMorning()
+      usage = usageRemindersOn() ? await usageMorning() : 'paused'
     } catch (err) {
       console.error('usage reminder (morning) failed:', err.message)
       usage = { error: err.message }
