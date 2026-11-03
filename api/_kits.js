@@ -91,6 +91,9 @@ const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 export function seedKits() {
   const kits = []
   for (const item of INVENTORY) {
+    // TechnoMed's own kits are added below as ours, once each — one TM removal
+    // kit, at Calvary (Brent, 4 Nov 2026) — not as a consignment.
+    if (item.tmKit) continue
     for (const [site, count] of Object.entries(item.consigned || {})) {
       for (let n = 1; n <= count; n += 1) {
         kits.push({

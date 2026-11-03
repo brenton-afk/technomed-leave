@@ -167,3 +167,11 @@ describe('moving and returning', () => {
     expect(now.checkedBy).toBe('Ben')
   })
 })
+
+describe("TechnoMed's own kits in the first kit list", () => {
+  it('has one TM removal kit, at Calvary, as ours', async () => {
+    const { seedKits } = await import('./_kits.js')
+    const removal = seedKits().filter(k => /removal/i.test(k.system))
+    expect(removal).toEqual([expect.objectContaining({ system: 'TM Screw Removal', home: 'CLV', kind: 'technomed' })])
+  })
+})
