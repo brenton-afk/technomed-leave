@@ -251,6 +251,11 @@ booking pre-ticks the surgeon's usual (`picks`), as Brent approved on 4 Nov.
 A booking read from an email follows what the email asks for: systems it names
 are applied first, so nothing is ticked over them. Northstar (Device) and
 REline (Nuvasive/Globus) are in the inventory as loan-only (`mainlandOnly`).
+Two filters on top (Brent, 4 Nov 2026): **Firebird and Forza XP are offered only
+for JPW, and Atallah at RHH** (`ONLY_FOR`); **TM Screw Removal only when the
+procedure says extension, revision or removal, and the Mariner Outrigger only
+for an extension** (`ONLY_WHEN`). A revision is an add-on to its fusion, never
+pre-ticked; only a booking that is nothing but a removal leads with the kit.
 
 Brainlab / AIRO is navigation, not an implant system. At **RHH** TechnoMed runs
 the navigation and AIRO and **bills Brainlab per case: $300 with AIRO, $250 for

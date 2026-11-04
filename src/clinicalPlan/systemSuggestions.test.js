@@ -6,7 +6,7 @@ import { SYSTEM_BUTTONS } from './inventory.js'
 describe('system suggestions', () => {
   it('offers pedicle screws, not ACDF systems, for a thoracolumbar fixation', () => {
     const { systems } = suggestSystems({ operation: 'T10-L2 posterior fixation', surgeon: 'Thani', hospital: 'RHH' })
-    expect(systems).toEqual(['Diplomat', 'Mariner MIS', 'Mariner Open', 'Orthofix Firebird'])
+    expect(systems).toEqual(['Diplomat', 'Mariner MIS', 'Mariner Open'])
     expect(systems).not.toContain('Lonestar')
   })
 
@@ -67,5 +67,26 @@ describe('system suggestions', () => {
   it('corpectomy offers Athlet and Ascot', () => {
     expect(suggestSystems({ operation: 'C5 ACCF' }).systems.slice(0, 2)).toEqual(['Athlet', 'Ascot'])
     expect(suggestSystems({ operation: 'C5/6 ACDF' }).systems).not.toContain('Ascot')
+  })
+
+  it('offers Firebird and Forza XP only to JPW, and Atallah at RHH (Brent, 4 Nov 2026)', () => {
+    expect(suggestSystems({ operation: 'L5/S1 posterior fixation', surgeon: 'Gupta' }).systems).not.toContain('Orthofix Firebird')
+    expect(suggestSystems({ operation: 'L4/5 PLIF', surgeon: 'Fowler' }).systems).not.toContain('Forza XP')
+    expect(suggestSystems({ operation: 'L4/5 PLIF', surgeon: 'JPW' }).systems).toContain('Orthofix Firebird')
+    expect(suggestSystems({ operation: 'L4/5 PLIF', surgeon: 'Atallah', hospital: 'RHH' }).systems).toContain('Forza XP')
+    expect(suggestSystems({ operation: 'L4/5 PLIF', surgeon: 'Atallah', hospital: 'CLV' }).systems).not.toContain('Forza XP')
+  })
+
+  it('offers TM Screw Removal only for an extension, revision or removal', () => {
+    expect(suggestSystems({ operation: 'L5/S1 posterior fixation', surgeon: 'Gupta' }).extras).not.toContain('TM Screw Removal')
+    expect(suggestSystems({ operation: 'L4/5 PLIF' }).extras).not.toContain('TM Screw Removal')
+    expect(suggestSystems({ operation: 'L3/4 extension of fixation', surgeon: 'Gupta' }).extras).toContain('TM Screw Removal')
+    expect(suggestSystems({ operation: 'Revision L4/5 PLIF' }).extras).toContain('TM Screw Removal')
+    expect(suggestSystems({ operation: 'Removal of pedicle screws' }).systems).toContain('TM Screw Removal')
+  })
+
+  it('offers the Mariner Outrigger only for an extension', () => {
+    expect(suggestSystems({ operation: 'T10-L2 fixation' }).extras).not.toContain('Mariner Outrigger')
+    expect(suggestSystems({ operation: 'Extension of fixation to T10' }).extras).toContain('Mariner Outrigger')
   })
 })

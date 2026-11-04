@@ -84,7 +84,9 @@ export const SYSTEM_GROUPS = {
 
 /** What the booking's wording says the operation is. Most specific first. */
 const GROUP_TESTS = [
-  { group: 'removal', test: /\b(?:removal|remove|revision|rem\s*o\s*s)\b/i },
+  // Removal is the operation only when it says so. A revision or an extension
+  // is still a fusion — the removal kit comes with it as an add-on (ONLY_WHEN).
+  { group: 'removal', test: /\b(?:removal|remove|rem\s*o\s*s)\b/i },
   { group: 'deformity', test: /\b(?:deformity|scoliosis|kyphosis|reline)\b/i },
   { group: 'posteriorCervical', test: /\b(?:posterior\s+cervical|pcf|lateral\s+mass|c1\s*[-–/]\s*c?2|c\d\s*[-–/]\s*t\d)\b/i }
 ]
@@ -107,8 +109,12 @@ export function groupsFor(operation) {
   const add = g => { if (g && !out.includes(g)) out.push(g) }
   for (const { group, test } of GROUP_TESTS) if (test.test(text)) add(group)
   for (const p of findImplantProcedures(text)) add(ACRONYM_GROUP[p.acronym])
-  if (!out.some(g => g === 'plif' || g === 'posteriorCervical' || g === 'deformity') && FIXATION.test(text)) add('pedicleScrews')
+  if (!out.some(g => g === 'plif' || g === 'posteriorCervical' || g === 'deformity' || g === 'removal') && FIXATION.test(text)) add('pedicleScrews')
   if (!out.length && LEVEL_RANGE.test(text)) add('pedicleScrews')
+  // "Revision L4/5 PLIF" is a PLIF that also needs the removal kit — offered
+  // as an add-on, not ticked as though removal were the operation. Only a
+  // booking that is nothing but a removal is a removal case.
+  if (out.length > 1 && out.includes('removal')) out.splice(out.indexOf('removal'), 1)
   return out
 }
 
@@ -152,7 +158,40 @@ function surgeonRow(surgeon, group, hospital) {
  * add-ons. Empty when the operation is not recognised — the screen then shows
  * every system, as it does today.
  */
-export function suggestSystems({ operation, surgeon, hospital } = {}) {
+// ── Narrower still (Brent, 4 Nov 2026) ──
+// A pedicle-screw booking for another surgeon was offered Firebird and TM
+// Screw Removal, which "is not accurate based on the info I gave you":
+//
+//   · Firebird (and Forza XP, which goes with it) is almost exclusively JPW's,
+//     occasionally Atallah's at RHH on a JPW list. Offered for nobody else —
+//     still under All systems.
+//   · "TM removal should only be flagged for cases that have the words
+//     extension or revision in them" (or that say removal outright). The
+//     Mariner Outrigger, an extension piece, likewise only for an extension.
+const ONLY_FOR = {
+  'Orthofix Firebird': [{ surgeon: 'JPW' }, { surgeon: 'Atallah', hospital: 'RHH' }],
+  'Forza XP': [{ surgeon: 'JPW' }, { surgeon: 'Atallah', hospital: 'RHH' }]
+}
+const ONLY_WHEN = {
+  'TM Screw Removal': /\b(?:extension|extend(?:ed|ing)?|revision|revise|removal|remove)\b/i,
+  'Mariner Outrigger': /\b(?:extension|extend(?:ed|ing)?)\b/i
+}
+
+function fits(system, { operation, surgeon, hospital }) {
+  const who = ONLY_FOR[system]
+  if (who && !who.some(w => w.surgeon.toLowerCase() === String(surgeon || '').trim().toLowerCase()
+    && (!w.hospital || w.hospital === String(hospital || '').trim().toUpperCase()))) return false
+  const when = ONLY_WHEN[system]
+  return !when || when.test(String(operation || ''))
+}
+
+export function suggestSystems(input = {}) {
+  const { systems, extras, picks, groups } = suggestAll(input)
+  const ok = name => fits(name, input)
+  return { groups, systems: systems.filter(ok), extras: extras.filter(ok), picks: picks.filter(ok) }
+}
+
+function suggestAll({ operation, surgeon, hospital } = {}) {
   const systems = []
   const extras = []
   const picks = []
