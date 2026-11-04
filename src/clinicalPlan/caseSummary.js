@@ -59,15 +59,16 @@ export function caseSummaryLines(c = {}) {
 
 const NAVIGATION_ONLY = /\b(?:brainlab|airo|curve)\b/i
 
-// What stays on the phone: "Don't share notes when bookings info is copied",
-// and the navigation is recorded, not exported (Brent, 4 Nov 2026).
-const NOT_COPIED = new Set(['Notes', 'Brainlab'])
+// Exactly what is copied, in this order (Brent, 4 Nov 2026): "Patient, Date,
+// hospital, Surgery/procedure, Surgeon, Kit — don't need planned reps
+// exported, or notes or anything else."
+const COPIED = ['Patient', 'Date', 'Hospital', 'Procedure', 'Surgeon', 'Kit']
 
-/** The copied text: plain, one fact per line, without notes or navigation. */
+/** The copied text: plain, one fact per line, those six and nothing else. */
 export function caseSummaryText(c) {
-  return caseSummaryLines(c)
-    .filter(([label]) => !NOT_COPIED.has(label))
-    .map(([label, value]) => `${label}: ${value}`).join('\n')
+  const lines = new Map(caseSummaryLines(c))
+  return COPIED.filter(label => lines.has(label))
+    .map(label => `${label}: ${lines.get(label)}`).join('\n')
 }
 
 /** A subject line for Share: "Sample L4/5 PLIF – Gupta – Calvary Fri 13 Nov". */

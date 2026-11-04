@@ -16,10 +16,9 @@ describe('case summary', () => {
       'Patient: Sample',
       'Date: Fri 13 Nov 2026',
       'Hospital: Calvary',
-      'Surgeon: Gupta',
       'Procedure: L4/5 PLIF',
-      'Kit: Diplomat (Consignment) (open screws) / Global BMD PLIF (Consignment)',
-      'Planned reps: Aimee, Mat'
+      'Surgeon: Gupta',
+      'Kit: Diplomat (Consignment) (open screws) / Global BMD PLIF (Consignment)'
     ].join('\n'))
   })
 
@@ -30,7 +29,7 @@ describe('case summary', () => {
   })
 
   it('leaves out what is empty rather than printing a bare label', () => {
-    expect(caseSummaryText({ surgeon: 'Thani', operation: 'C5/6 ACDF' })).toBe('Surgeon: Thani\nProcedure: C5/6 ACDF')
+    expect(caseSummaryText({ surgeon: 'Thani', operation: 'C5/6 ACDF' })).toBe('Procedure: C5/6 ACDF\nSurgeon: Thani')
   })
 
   it('builds the kit from the week card\'s supplies when there is no kit line', () => {
@@ -38,8 +37,9 @@ describe('case summary', () => {
     expect(text).toBe('Kit: Dakota (Consignment)')
   })
 
-  it('says when a case is cancelled', () => {
-    expect(caseSummaryText({ surgeon: 'Fowler', cancelled: true })).toMatch(/Status: Cancelled/)
+  it('copies only patient, date, hospital, procedure, surgeon and kit', () => {
+    const text = caseSummaryText({ ...sample, reps: ['Mat'], listPlace: { position: 2 }, cancelled: true })
+    expect(text).not.toMatch(/Planned|Attended|List|Status|Notes|Brainlab/)
   })
 
   it('writes the day out, in Hobart terms', () => {

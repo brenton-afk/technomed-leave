@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import LoanTrail from './LoanTrail.jsx'
 import KitPicker from './KitPicker.jsx'
-import CaseSummary from './CaseSummary.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { CaseThread } from '../Chat.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
@@ -53,6 +52,8 @@ const FIELDS = [
   { key: 'kit', label: 'Kit', emptyHint: 'System, then supply in brackets — for example "Diplomat (Consignment)"' },
   { key: 'hospital', label: 'Hospital' }
 ]
+// Drawn as a compact pair of rows at the top instead of in the list.
+const TOP_FIELDS = new Set(['patient', 'surgeon', 'hospital'])
 
 /**
  * The Hobart date and clock time of an instant, for the form.
@@ -69,9 +70,9 @@ function civilParts(iso) {
   return { date: toDateStr(c), time: `${pad(c.hour)}:${pad(c.minute)}` }
 }
 
-function Field({ label, hint, value, onChange, autoFocus, type = 'text' }) {
+function Field({ label, hint, value, onChange, autoFocus, type = 'text', compact = false }) {
   return (
-    <label style={{ display: 'block', marginBottom: space.md }}>
+    <label style={{ display: 'block', marginBottom: compact ? space.sm : space.md, minWidth: 0 }}>
       <span style={{
         ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
         display: 'block', marginBottom: 4
@@ -82,7 +83,8 @@ function Field({ label, hint, value, onChange, autoFocus, type = 'text' }) {
         autoFocus={autoFocus}
         onChange={e => onChange(e.target.value)}
         style={{ fontSize: 16,
-          width: '100%', padding: `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
+          width: '100%', padding: compact ? `6px ${space.sm}px` : `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
+          minHeight: compact ? 40 : undefined,
           border: `1px solid ${colour.line}`, borderRadius: radius.control,
           ...text('body'), color: colour.ink, background: colour.surface, outline: 'none'
         }} />
@@ -796,7 +798,11 @@ export default function EditBooking({
             borderBottom: `1px solid ${colour.line}`, flexShrink: 0
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
-              <span style={{ ...text('heading'), color: colour.ink, flex: 1 }}>Edit booking</span>
+              {/* The case itself as the title — who, and with whom — rather than
+                  the words "Edit booking" over a form that says it again. */}
+              <span style={{ ...text('heading'), color: colour.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {[fields.patient, fields.surgeon].filter(Boolean).join(' · ') || 'Edit booking'}
+              </span>
               <button onClick={onClose} aria-label="Close"
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -908,20 +914,27 @@ export default function EditBooking({
               </div>
             )}
 
-            {/* Read first, edit below. Built from the fields as they stand,
-                so it is current the moment anything underneath changes. */}
+            {/* ── The top, slimmed (Brent, 4 Nov 2026) ──
+                Date and hospital share a row, then patient and surgeon: four
+                short answers in two rows instead of four full-width boxes,
+                so procedure and kit are on the first screen of a phone. */}
             {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && (
-              <CaseSummary booking={{
-                patient: fields.patient, date: when.date, hospital: fields.hospital,
-                surgeon: fields.surgeon, procedure: fields.procedure, kit: fields.kit || fields.system,
-                navigation: navigation || undefined, planned, reps, notes, cancelled: loaded.cancelled
-              }} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: space.sm }}>
+                {!loaded.allDay
+                  ? <Field compact label="Date" type="date" value={when.date}
+                      onChange={v => setWhen(c => ({ ...c, date: v }))} />
+                  : <span />}
+                <Field compact label="Hospital" value={fields.hospital || ''}
+                  onChange={v => setFields(c => ({ ...c, hospital: v }))} />
+                <Field compact label="Patient surname" autoFocus value={fields.patient || ''}
+                  onChange={v => setFields(c => ({ ...c, patient: v }))} />
+                <Field compact label="Surgeon" value={fields.surgeon || ''}
+                  onChange={v => setFields(c => ({ ...c, surgeon: v }))} />
+              </div>
             )}
 
             {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && !loaded.allDay && (
               <>
-                <Field label="Date" type="date" value={when.date}
-                  onChange={v => setWhen(c => ({ ...c, date: v }))} />
                 {/* No start or finish. Case timings are not settled until the
                     list order lands the evening before and then move several
                     times a day, so a time here is wrong almost immediately and
@@ -937,9 +950,9 @@ export default function EditBooking({
 
             {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && (
               <>
-                {FIELDS.map((f, i) => (
+                {FIELDS.filter(f => !TOP_FIELDS.has(f.key)).map(f => (
                   <React.Fragment key={f.key}>
-                    <Field label={f.label} autoFocus={i === 0}
+                    <Field label={f.label}
                       hint={f.hint || (!(fields[f.key] || '').trim() ? f.emptyHint : undefined)}
                       value={fields[f.key] || ''}
                       onChange={v => setFields(c => ({ ...c, [f.key]: v }))} />

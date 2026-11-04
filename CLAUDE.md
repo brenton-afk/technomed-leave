@@ -286,14 +286,16 @@ returned as `days` by `?action=leader`, set by POSTing with `&day=`.
 `src/clinicalPlan/caseSummary.js` turns a case into the labelled lines of a
 booking description (Patient, Date, Hospital, Surgeon, Procedure, Kit, List,
 Brainlab, Planned reps, Attended, Notes), for pasting into an email or chat.
-It is shown at the top of Edit booking (`cases/CaseSummary.jsx`, built from the
-fields as they stand, with Copy and Share) and behind a **Copy details**
-button on every week and day card, which adds the hospital and day the card
-leaves out. One function for both, so the two never word a case differently.
+It sits behind the **Copy** icon on every week and day card, which adds the
+hospital and day the card leaves out. The summary card that was on Edit booking
+was removed (Brent, 4 Nov 2026). **What is copied is exactly Patient, Date,
+Hospital, Procedure, Surgeon, Kit** (`COPIED`) — no reps, notes, list order,
+status or Brainlab/AIRO, which is enabling technology and never under Kit.
 It includes the patient surname — that is what it is for.
-**The copied text leaves out the notes and Brainlab/AIRO** (Brent, 4 Nov
-2026): navigation is enabling technology, recorded on the booking and shown on
-screen as its own line, never under Kit and never exported.
+
+Edit booking's top is two compact rows — Date | Hospital, Patient | Surgeon
+(`TOP_FIELDS`) — under a title of "Patient · Surgeon", so procedure and kit are
+on a phone's first screen.
 
 ### Tasks are done once, everywhere
 
