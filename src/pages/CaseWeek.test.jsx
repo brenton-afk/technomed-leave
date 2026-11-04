@@ -198,8 +198,8 @@ describe('a navigation case', () => {
 describe('the day and the week', () => {
   it('opens on today', async () => {
     show()
-    expect(await screen.findByText('Today')).toBeInTheDocument()
-    expect(screen.getByText(/21 September 2026/)).toBeInTheDocument()
+    // One line now: the strip above picked the day (Brent, 4 Nov 2026).
+    expect(await screen.findByText(/^Today 21 Sep$/)).toBeInTheDocument()
   })
 
   it('shows only that day in day view', async () => {
@@ -303,8 +303,7 @@ describe('opening the app', () => {
     // scrolled to yesterday means the first thing it shows is wrong, quietly.
     localStorage.setItem('tm_clinical_prefs', JSON.stringify({ weekStart: '2026-08-24' }))
     show()
-    expect(await screen.findByText('Today')).toBeInTheDocument()
-    expect(screen.getByText(/21 September 2026/)).toBeInTheDocument()
+    expect(await screen.findByText(/^Today 21 Sep$/)).toBeInTheDocument()
   })
 })
 
@@ -772,7 +771,9 @@ describe('saving a list order and seeing it', () => {
     fireEvent.click(screen.getByRole('button', { name: '2nd' }))
     fireEvent.click(screen.getByRole('button', { name: /Save list order/ }))
 
-    await waitFor(() => expect(screen.getByText('Change list order')).toBeInTheDocument())
+    // The card says where it is; the control stays the same icon.
+    await waitFor(() => expect(screen.getByText(/^2nd on the list/)).toBeInTheDocument())
+    expect(screen.getByLabelText('Set where Pennant is on the list')).toBeInTheDocument()
   })
 })
 
@@ -970,10 +971,10 @@ describe('who is team leader this week', () => {
     })
   })
 
-  it('names them on the week', async () => {
+  it('names them under the day\'s date, where they can be changed', async () => {
+    // Brent, 4 Nov 2026: "a daily editable tab in the days (underneath the date)".
     show()
-    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
-    expect(screen.getByText('Team leader')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText(/Team leader: Ben\. Change\./)).toBeInTheDocument())
   })
 
   it('opens a picker on a tap', async () => {
@@ -982,7 +983,23 @@ describe('who is team leader this week', () => {
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
+    // This day by default; the whole week is one tap away.
+    expect(screen.getByText(/2026-09-21 · 7am to 5pm/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'The whole week' }))
     expect(screen.getByText(/Monday 7am to Friday 5pm/)).toBeInTheDocument()
+  })
+
+  it('changes just the one day by default', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/^Aimee/))
+    await waitFor(() => {
+      const post = global.fetch.mock.calls.find(
+        ([u, o]) => String(u).includes('action=leader') && o?.method === 'POST')
+      expect(String(post[0])).toContain('day=2026-09-21')
+    })
   })
 
   it('saves the person tapped, against that week', async () => {
@@ -1008,6 +1025,7 @@ describe('who is team leader this week', () => {
     await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('tab', { name: 'The whole week' }))
     fireEvent.click(screen.getByText('Nobody this week'))
 
     await waitFor(() => {
@@ -1102,7 +1120,9 @@ describe('the rota and covering for somebody', () => {
       rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
     })
     show()
-    await waitFor(() => expect(screen.getByText(/covering for Mat/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Brent')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
+    await waitFor(() => expect(screen.getByText(/Brent covering for Mat this week/)).toBeInTheDocument())
   })
 
   it('does not say covering when the person set is the rostered one', async () => {
@@ -1125,8 +1145,9 @@ describe('the rota and covering for somebody', () => {
       rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
     })
     show()
-    await waitFor(() => expect(screen.getByText(/covering for Mat/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Brent')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'The whole week' }))
     await waitFor(() =>
       expect(screen.getByText('Back to the roster — Mat')).toBeInTheDocument())
   })

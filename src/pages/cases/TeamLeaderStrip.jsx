@@ -23,10 +23,16 @@ function shortDate(day) {
   return m ? `${Number(m[3])} ${months[Number(m[2]) - 1]}` : ''
 }
 
-export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour }) {
+// `day` (Brent, 4 Nov 2026): the same control as a small chip under one day's
+// date — "a daily editable tab in the days (underneath the date)". The week's
+// rota stays the default; the sheet changes this day only unless "Whole week"
+// is chosen. `leader` is then that day's leader, `weekLeader` the week's.
+export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour, day, weekLeader, onChangeWeek }) {
   const monday = weekOf(week) || weekOf(today)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [scope, setScope] = useState('day')
+  const forDay = Boolean(day) && scope === 'day'
 
   // Set as leader and on leave the same week. Two facts the app held at once
   // and never compared, which is how Mat was Spine Team Leader through a week
@@ -40,7 +46,8 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
   async function choose(email) {
     setBusy(true)
     setOpen(false)
-    await Promise.resolve(onChange(email)).catch(() => {})
+    const change = day && scope === 'week' && onChangeWeek ? onChangeWeek : onChange
+    await Promise.resolve(change(email)).catch(() => {})
     setBusy(false)
   }
 
@@ -71,9 +78,26 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
       ? { line: colour.accent, fill: colour.accentSoft }
       : { line: colour.line, fill: 'transparent' }
 
+  const chip = day && (
+    <button type="button" onClick={() => { setScope('day'); setOpen(true) }} disabled={busy}
+      aria-label={`Team leader: ${leader?.firstName || leader?.name || 'nobody set'}. Change.`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer',
+        minHeight: 32, padding: '0 10px', borderRadius: radius.pill,
+        border: `1px solid ${leaderAway ? colour.warningLine : colour.line}`,
+        background: leaderAway ? colour.warningSoft : colour.surface,
+        ...text('caption'), color: colour.ink, opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap'
+      }}>
+      <span style={{ color: colour.inkFaint }}>Lead</span>
+      <strong>{leader?.firstName || leader?.name || '—'}</strong>
+      {leaderAway && <span style={{ color: colour.warning, fontWeight: 700 }}>On leave</span>}
+      <span aria-hidden="true" style={{ color: colour.inkFaint }}>✎</span>
+    </button>
+  )
+
   return (
     <>
-      <button onClick={() => setOpen(true)} disabled={busy}
+      {chip || <button onClick={() => setOpen(true)} disabled={busy}
         // The word "Change" used to sit at the end of the row and carry this.
         // It became a chevron to match the other cards, so the button has to
         // say what it does somewhere a screen reader can reach.
@@ -120,7 +144,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
           }}>On now</span>
         )}
         <span style={{ ...text('body'), color: colour.inkFaint }}>›</span>
-      </button>
+      </button>}
 
       {open && (
         <Overlay>
@@ -140,8 +164,26 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                 borderBottom: `1px solid ${colour.line}`
               }}>
                 <div style={{ ...text('heading'), color: colour.ink }}>Team leader</div>
+                {day && (
+                  <div role="tablist" aria-label="Change it for" style={{ display: 'flex', gap: 4, margin: '6px 0' }}>
+                    {[['day', 'This day only'], ['week', 'The whole week']].map(([id, label]) => (
+                      <button key={id} type="button" role="tab" aria-selected={scope === id} onClick={() => setScope(id)}
+                        style={{
+                          flex: 1, minHeight: 36, cursor: 'pointer', borderRadius: radius.pill,
+                          border: `1px solid ${scope === id ? colour.accent : colour.line}`,
+                          background: scope === id ? colour.accentSoft : colour.surface,
+                          ...text('caption'), fontWeight: 700, color: scope === id ? colour.accentDeep : colour.inkMuted
+                        }}>{label}</button>
+                    ))}
+                  </div>
+                )}
                 <div style={{ ...text('caption'), color: colour.inkFaint }}>
-                  Monday 7am to Friday 5pm · week of {monday}
+                  {forDay ? `${day} · 7am to 5pm` : `Monday 7am to Friday 5pm · week of ${monday}`}
+                  {day && (() => {
+                    const wk = weekLeader
+                    const cover = wk?.source === 'set' && wk?.rostered && wk.rostered.email !== wk.email
+                    return cover ? <> · {wk.firstName} covering for {wk.rostered.firstName} this week</> : null
+                  })()}
                   {leader?.rostered && (
                     <> · rostered: <strong>{leader.rostered.firstName}</strong></>
                   )}
@@ -160,7 +202,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                 )}
 
                 {STAFF.filter(s => s.isClinicalTeam || s.division === 'Spine').map(person => {
-                  const on = leader?.email === person.email
+                  const on = (forDay || !day ? leader : weekLeader)?.email === person.email
                   const unavailable = isAway(person.email)
                   return (
                     <button key={person.email} onClick={() => choose(person.email)}
@@ -196,9 +238,11 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                     borderRadius: radius.control, border: `1px solid ${colour.line}`,
                     background: 'transparent', ...text('caption'), color: colour.inkMuted
                   }}>
-                  {leader?.rostered
-                    ? `Back to the roster — ${leader.rostered.firstName}`
-                    : 'Nobody this week'}
+                  {forDay
+                    ? `Back to the week's leader${weekLeader?.firstName ? ` — ${weekLeader.firstName}` : ''}`
+                    : (day ? weekLeader : leader)?.rostered
+                      ? `Back to the roster — ${(day ? weekLeader : leader).rostered.firstName}`
+                      : 'Nobody this week'}
                 </button>
               </div>
             </div>

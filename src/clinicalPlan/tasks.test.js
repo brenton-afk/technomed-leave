@@ -194,7 +194,8 @@ describe('both views show them', () => {
   })
 
   it('offers the button beside Add a booking', () => {
-    const row = source.slice(source.indexOf('function AddBookingRow'))
+    // One row of + Booking, + Task, Inbox now (Brent, 4 Nov 2026).
+    const row = source.slice(source.indexOf('function ActionRow'))
     expect(row).toMatch(/onAddTask\(day\)/)
   })
 

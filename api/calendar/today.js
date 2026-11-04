@@ -44,7 +44,7 @@ import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate,
-  getTeamLeader, setTeamLeaderFor, getWorklist
+  getTeamLeader, setTeamLeaderFor, getDayLeaders, setDayLeader, getWorklist
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
@@ -78,12 +78,21 @@ import { withAttribution, creatorTag } from '../../src/clinicalPlan/attribution.
  */
 async function canAllocate(session, day) {
   if (STAFF_BY_EMAIL(session.email)?.isAdmin) return true
-  const monday = weekOf(String(day || '').slice(0, 10))
+  const date = String(day || '').slice(0, 10)
+  const monday = weekOf(date)
   if (!monday) return false
   let set = null
-  try { set = await getTeamLeader(monday) } catch { set = null }
+  try {
+    // That day's leader if somebody changed the day, else the week's.
+    set = (await getDayLeaders([date]))[date] || await getTeamLeader(monday)
+  } catch { set = null }
   const leader = set || rosteredLeader(monday)
   return Boolean(leader?.email) && leader.email.toLowerCase() === String(session.email).toLowerCase()
+}
+
+/** A YYYY-MM-DD date `n` days on, by the calendar rather than the clock. */
+function addDaysTo(date, n) {
+  return toDateStr(addCivilDays(parseDateStr(date), n))
 }
 
 /** Today in Hobart, YYYY-MM-DD — on the real zone, so daylight saving holds. */
@@ -1836,8 +1845,21 @@ async function handleTeamLeader(req, res) {
     const monday = weekOf(asked) || weekOf(todayInHobart())
     if (!monday) return res.status(400).json({ error: 'A week is needed' })
 
+    // Monday to Friday of that week: the days a leader holds.
+    const weekdays = [0, 1, 2, 3, 4].map(n => addDaysTo(monday, n))
+
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+      // One day only: an entry for that day, or cleared back to the week.
+      const day = String(req.query.day || body.day || '').slice(0, 10)
+      if (day) {
+        if (!weekdays.includes(day)) return res.status(400).json({ error: 'That day is not a weekday in this week' })
+        if (!body.email) { await setDayLeader(day, null); return res.status(200).json({ ok: true, day, leader: null }) }
+        const entry = cleanLeader({ email: body.email, setBy: session.email })
+        if (!entry) return res.status(400).json({ error: 'That is not somebody on the team' })
+        await setDayLeader(day, entry)
+        return res.status(200).json({ ok: true, day, leader: entry })
+      }
       // Clearing it is a real answer — a week nobody is covering should say so
       // rather than keep naming whoever held it last.
       if (!body.email) {
@@ -1862,9 +1884,12 @@ async function handleTeamLeader(req, res) {
     // screen can say which it is looking at.
     const set = await getTeamLeader(monday)
     const rostered = rosteredLeader(monday)
+    const days = await getDayLeaders(weekdays)
     return res.status(200).json({
       ok: true,
       week: monday,
+      // Days somebody changed, by date. Any day not here is the week's leader.
+      days,
       leader: set || (rostered && {
         email: rostered.email, name: rostered.name, firstName: rostered.firstName
       }) || null,

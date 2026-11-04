@@ -125,17 +125,13 @@ describe('the week on a desktop', () => {
     expect(container.querySelectorAll('[data-week-column]').length).toBe(7)
   })
 
-  it('does not pretend the day heading is a button', async () => {
-    // It used to open the day view. A control that goes nowhere is worse
-    // than no control, so it is a label now.
+  it('picks the day from the column\'s own date, now the strip has gone', async () => {
+    // Brent, 4 Nov 2026: the blue strip repeated the seven column dates. The
+    // date at the top of a column is now what chooses the day + Booking adds to.
     const { container } = await toWeek()
     const column = container.querySelector('[data-week-column="2026-09-23"]')
-    // The cases inside it are buttons, and should be — this is about the date
-    // at the top of the column, which used to open a view that is now gone.
-    const heading = [...column.querySelectorAll('span')]
-      .find(el => el.textContent === 'Wednesday')
-    expect(heading).toBeTruthy()
-    expect(heading.closest('button')).toBe(null)
+    fireEvent.click(column.querySelector('button[aria-label="Wednesday 23 September"]'))
+    expect(screen.getByRole('button', { name: 'Add a booking to Wednesday 23 September' })).toBeInTheDocument()
   })
 })
 
@@ -185,7 +181,7 @@ describe('a week column is readable, not a stretched phone card', () => {
     // reason: the number they moved counted only our cases, so it disagreed
     // with the hospital's list the moment anybody else had one on.
     await toWeek()
-    expect(screen.getAllByText(/List order|Change list order/).length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText(/is on the list/).length).toBeGreaterThan(0)
     expect(screen.queryByLabelText(/earlier on the list/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/later on the list/)).not.toBeInTheDocument()
   })
@@ -222,7 +218,7 @@ describe('the list place, which says what a number could not', () => {
   // wanted, and it was already being recorded.
   it('opens the list place from a column', async () => {
     await toWeek()
-    fireEvent.click(screen.getAllByText(/List order/)[0])
+    fireEvent.click(screen.getAllByLabelText(/is on the list/)[0])
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: /list/i })).toBeInTheDocument())
   })

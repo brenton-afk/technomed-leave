@@ -645,6 +645,27 @@ export async function setTeamLeaderFor(monday, entry) {
   return entry
 }
 
+// One day's leader, over the week's (Brent, 4 Nov 2026: "a daily editable
+// tab in the days, underneath the date"). The week's rota stays the default;
+// a day only has an entry when somebody changed that day.
+const dayLeaderKey = date => `teamLeader:day:${date}`
+
+export async function getDayLeaders(dates) {
+  const out = {}
+  await Promise.all((dates || []).map(async date => {
+    const raw = await redis('get', dayLeaderKey(date))
+    if (!raw) return
+    try { out[date] = JSON.parse(raw) } catch { /* a corrupt entry is no entry */ }
+  }))
+  return out
+}
+
+export async function setDayLeader(date, entry) {
+  if (!entry) { await redis('del', dayLeaderKey(date)); return null }
+  await redis('set', dayLeaderKey(date), JSON.stringify(entry))
+  return entry
+}
+
 
 // ─── TOIL opening balances ──────────────────────────────────
 // Hours carried in from before the app kept the balance — set by an admin,

@@ -264,6 +264,23 @@ cranial). At **Calvary** we do not support navigation and do not bill. Bookings
 are meant to become the single source of truth on the front end (e.g. to
 populate the Brainlab invoice) and usages on the back end (resupply).
 
+### Cases layout (Brent, 4 Nov 2026)
+
+Calmer page, as approved from a mock-up: the header is pinned (`Header sticky`)
+so the week arrows never scroll away — one set of arrows, not a second
+floating set; no summary line under the title; on a desktop week the blue date
+strip is gone because the column headings are the dates (clicking one picks
+the day + Booking adds to); **+ Booking / + Task / Inbox** are one row
+(`ActionRow`); card actions are one row of icons (★ preferences, ⇅ list order,
+⧉ copy).
+
+**The team leader is per day, under each weekday's date** (`TeamLeaderStrip`
+with `day`). The weekly rota (and a week's cover) stays the default; the chip's
+sheet changes **this day only** unless "The whole week" is chosen. Day
+overrides are `teamLeader:day:{date}` (`getDayLeaders` / `setDayLeader`),
+returned as `days` by `?action=leader`, set by POSTing with `&day=`.
+`canAllocate` honours them. The morning escalation cron still uses the week's.
+
 ### Case summary (Toni, 4 Nov 2026)
 
 `src/clinicalPlan/caseSummary.js` turns a case into the labelled lines of a

@@ -330,6 +330,28 @@ function suppliesFor(surgicalCase) {
 // the screen moved — a sheet opening, a notice appearing — and each redraw
 // re-parsed the kit line. The callbacks below are all useCallback or
 // setState, so this actually holds.
+/** Up and down arrows: where a case is on the list. */
+function ListOrderIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4" />
+    </svg>
+  )
+}
+
+const iconButton = ink => ({
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+  minWidth: 44, minHeight: 40, padding: '0 8px', cursor: 'pointer',
+  border: 'none', borderRadius: radius.pill, background: 'none', color: ink.ink
+})
+
+const weekAction = ink => ({
+  flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+  minHeight: 28, padding: '2px 4px', cursor: 'pointer', border: 'none', background: 'none',
+  ...text('micro'), textTransform: 'none', color: ink.faint
+})
+
 /**
  * Copies the whole case — hospital and day included, which the card itself
  * leaves out — as the same text the booking's summary gives. "The smaller view
@@ -337,7 +359,7 @@ function suppliesFor(surgicalCase) {
  * hospital/date of procedure) so text cannot be copied from there either."
  * — Toni, 4 Nov 2026.
  */
-function CopyCase({ surgicalCase, date, ink, style }) {
+function CopyCase({ surgicalCase, date, ink, style, label = 'Copy details', iconOnly = false }) {
   const [done, setDone] = useState('')
   useEffect(() => {
     if (!done) return undefined
@@ -348,7 +370,7 @@ function CopyCase({ surgicalCase, date, ink, style }) {
     <button type="button" aria-label={`Copy the details of ${surgicalCase.patient || surgicalCase.surgeon || 'this case'}`}
       onClick={async () => setDone((await copyText(caseSummaryText({ ...surgicalCase, date }))) ? 'Copied' : 'Could not copy')}
       style={style}>
-      <IconCopy size={14} colour={ink.ink} /> {done || 'Copy details'}
+      <IconCopy size={iconOnly ? 18 : 14} colour={ink.ink} />{iconOnly ? (done ? ` ${done}` : '') : ` ${done || label}`}
     </button>
   )
 }
@@ -642,38 +664,20 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
         )}
       </button>
 
-        {/* Always offered, whether or not anything is recorded — including on a
-            day where this is our only case at that hospital, which is exactly
-            where the arrows can say nothing and the list order still matters. */}
-        {onSetPlace && !off && (
-          <button
-            type="button"
-            aria-label={`Set where ${label} is on the list`}
-            onClick={() => onSetPlace(surgicalCase)}
-            style={{
-              // A bordered chip rather than a text link. The first version was
-              // caption-sized and the same colour as the rest of the card, and
-              // was reported as the option not being there at all.
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              marginTop: space.sm, cursor: 'pointer', minHeight: 32,
-              padding: `0 ${space.md}px`, borderRadius: radius.pill,
-              border: `1px solid ${ink.line}`,
-              background: ink.line,
-              ...text('caption'), fontWeight: 700,
-              color: ink.ink
-            }}>
-            {place ? 'Change list order' : '＋ Set list order'}
-          </button>
-        )}
-
-        <CopyCase surgicalCase={surgicalCase} date={date} ink={ink} style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          marginTop: space.sm, marginLeft: onSetPlace && !off ? space.sm : 0, cursor: 'pointer', minHeight: 32,
-          padding: `0 ${space.md}px`, borderRadius: radius.pill,
-          border: `1px solid ${ink.line}`, background: 'none',
-          ...text('caption'), fontWeight: 700, color: ink.ink
-        }} />
-
+        {/* The card shows the case; its two actions are a row of icons at the
+            foot (Brent, 4 Nov 2026: "It's pretty busy"). The list order, once
+            set, still reads as words beside its icon. */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2, marginTop: 2 }}>
+          {onSetPlace && !off && (
+            <button type="button"
+              aria-label={`Set where ${label} is on the list`}
+              onClick={() => onSetPlace(surgicalCase)}
+              style={iconButton(ink)}>
+              <ListOrderIcon />
+            </button>
+          )}
+          <CopyCase surgicalCase={surgicalCase} date={date} ink={ink} iconOnly style={iconButton(ink)} />
+        </div>
       </span>
 
     </div>
@@ -727,44 +731,33 @@ function ItemRow({ item }) {
  * under, so the sheet opens already set to that date — one fewer thing to choose
  * for the booking somebody is most likely making.
  */
-function AddBookingRow({ day, onAdd, onAddTask }) {
-  const when = day ? ` to ${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}` : ''
-  const base = {
-    display: 'flex', alignItems: 'center', gap: space.sm,
-    padding: `${space.sm}px ${space.md}px`,
-    borderRadius: radius.card, cursor: 'pointer',
-    ...text('bodyStrong')
-  }
+/**
+ * A booking, a task, the inbox — one row (Brent, 4 Nov 2026: "It's pretty
+ * busy"). The booking button still names the day it adds to, for a screen
+ * reader and for the test that holds it to that.
+ */
+function ActionRow({ day, onAdd, onAddTask, onInbox, queueCount }) {
+  const when = day ? `${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}` : ''
+  const button = { minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text('bodyStrong'), padding: `0 ${space.sm}px` }
   return (
-    <div style={{ display: 'flex', gap: space.sm, marginBottom: space.sm }}>
-      <button type="button" onClick={() => onAdd(day)}
-        style={{
-          ...base, flexGrow: 1, flexShrink: 1, flexBasis: 0,
-          background: colour.accentSoft,
-          border: '1px dashed rgba(24,154,133,0.45)',
-          color: colour.accentDeep
-        }}>
-        <span aria-hidden="true" style={{ ...text('heading'), lineHeight: 1 }}>+</span>
-        <span>Add a booking{when}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.sm, marginBottom: space.md, maxWidth: 560 }}>
+      <button type="button" onClick={() => onAdd(day)} aria-label={when ? `Add a booking to ${when}` : 'Add a booking'}
+        style={{ ...button, border: `1px solid ${colour.accent}`, background: colour.accentSoft, color: colour.accentDeep }}>
+        + Booking
       </button>
-
-      {/* "We need to add an extra button to the portal for add task... add it
-          somewhere useful, like under the add a booking button or similar."
-          Beside it rather than under it: the two are the same decision — what
-          is happening on this day — and a second full-width row pushes the
-          cases further down every screen for the sake of a button.
-
-          Narrower, because a booking is the commoner thing, and in the task
-          colour so it is obvious which one does which. */}
-      <button type="button" onClick={() => onAddTask(day)}
+      <button type="button" onClick={() => onAddTask(day)} aria-label={when ? `Add a task to ${when}` : 'Add a task'}
+        style={{ ...button, border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink }}>
+        + Task
+      </button>
+      {/* Never "nothing waiting": the count is only what has already been
+          read, and the mailbox may hold more — opening it checks. */}
+      <button type="button" onClick={onInbox} aria-label="Check the bookings inbox"
         style={{
-          ...base, flexGrow: 0, flexShrink: 0, whiteSpace: 'nowrap',
-          background: 'rgba(213,0,0,0.08)',
-          border: '1px dashed rgba(213,0,0,0.38)',
-          color: colour.ink
+          ...button,
+          border: `1px solid ${queueCount > 0 ? colour.warningLine : colour.line}`,
+          background: queueCount > 0 ? colour.warningSoft : colour.surface, color: colour.ink
         }}>
-        <span aria-hidden="true" style={{ ...text('heading'), lineHeight: 1 }}>+</span>
-        <span>Task</span>
+        Inbox{queueCount > 0 ? ` · ${queueCount}` : ''}
       </button>
     </div>
   )
@@ -993,47 +986,24 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
           fifth of a week column, and this one is driven with a mouse. */}
     </div>
 
-      {/* Offered whether or not anything is recorded — including where this is
-          our only case at that hospital, which is exactly where the arrows can
-          say nothing and the list order still matters. */}
-      {onPreferences && !off && hasPreferences?.(surgicalCase) && (
-        <button type="button"
-          aria-label={`Preferences for ${surgicalCase.surgeon || 'this case'}`}
-          onClick={() => onPreferences(surgicalCase)}
-          style={{
-            display: 'block', width: '100%', cursor: 'pointer', textAlign: 'left',
-            padding: '3px 7px 4px', border: 'none',
-            borderTop: `1px solid ${ink.line}`,
-            background: 'none', ...text('micro'), textTransform: 'none',
-            color: ink.faint
-          }}>
-          ★ Preferences
-        </button>
-      )}
-
-      {onSetPlace && !off && (
-        <button type="button"
-          aria-label={`Set where ${label} is on the list`}
-          onClick={() => onSetPlace(surgicalCase)}
-          style={{
-            display: 'block', width: '100%', cursor: 'pointer', textAlign: 'left',
-            padding: '3px 7px 4px', border: 'none',
-            borderTop: `1px solid ${ink.line}`,
-            background: 'none', ...text('micro'), textTransform: 'none',
-            color: place ? ink.ink : ink.faint,
-            fontWeight: place ? 700 : 400
-          }}>
-          {place ? 'Change list order' : '＋ List order'}
-        </button>
-      )}
-
-      <CopyCase surgicalCase={surgicalCase} date={date} ink={ink} style={{
-        display: 'flex', alignItems: 'center', gap: 4, width: '100%', cursor: 'pointer', textAlign: 'left',
-        padding: '3px 7px 4px', border: 'none',
-        borderTop: `1px solid ${ink.line}`,
-        background: 'none', ...text('micro'), textTransform: 'none',
-        color: ink.faint
-      }} />
+      {/* One row of three, not three rows (Brent, 4 Nov 2026). */}
+      <div style={{ display: 'flex', alignItems: 'center', borderTop: `1px solid ${ink.line}` }}>
+        {onPreferences && !off && hasPreferences?.(surgicalCase) && (
+          <button type="button"
+            aria-label={`Preferences for ${surgicalCase.surgeon || 'this case'}`}
+            onClick={() => onPreferences(surgicalCase)}
+            style={weekAction(ink)}>★</button>
+        )}
+        {onSetPlace && !off && (
+          <button type="button"
+            aria-label={`Set where ${label} is on the list`}
+            onClick={() => onSetPlace(surgicalCase)}
+            style={{ ...weekAction(ink), color: place ? ink.ink : ink.faint, fontWeight: place ? 700 : 400 }}>
+            <ListOrderIcon size={14} />{place?.headline ? ` ${place.headline}` : ''}
+          </button>
+        )}
+        <CopyCase surgicalCase={surgicalCase} date={date} ink={ink} iconOnly style={weekAction(ink)} />
+      </div>
     </div>
   )
 })
@@ -1055,7 +1025,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
  * the single noisiest thing on the screen; and the reorder arrows themselves,
  * which belong in the day view where there is room to use them.
  */
-function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, dueFor, onDueDone }) {
+function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, dueFor, onDueDone, leaderChip, onPickDay }) {
   return (
     <div style={{
       display: 'grid',
@@ -1067,7 +1037,7 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
     }}>
       {(plan.days || []).map(day => (
         <WeekColumn key={day.date} day={day} today={today} onOpen={onOpen}
-          onSetPlace={onSetPlace} onPreferences={onPreferences}
+          onSetPlace={onSetPlace} onPreferences={onPreferences} leaderChip={leaderChip} onPickDay={onPickDay}
           hasPreferences={hasPreferences} onTaskDone={onTaskDone}
           due={dueFor(day.date)} onDueDone={onDueDone} />
       ))}
@@ -1081,7 +1051,7 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
  * Its own component because each column keeps its own running order while the
  * calendar catches up, and a hook cannot be called inside a map.
  */
-function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, due, onDueDone }) {
+function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, due, onDueDone, leaderChip, onPickDay }) {
   const isToday = day.date === today
         const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
         const groups = day.casesByHospital || []
@@ -1103,14 +1073,21 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
               borderBottom: `1px solid ${colour.line}`,
               background: isToday ? colour.accentSoft : 'transparent'
             }}>
-              <span style={{
-                ...text('micro'), display: 'block',
-                color: isToday ? colour.accentDeep : colour.inkFaint
-              }}>{weekdayName(day.date)}</span>
-              <span style={{
-                ...text('bodyStrong'), display: 'block',
-                color: isToday ? colour.accentDeep : colour.ink
-              }}>{dayNum(day.date)} {monthOf(day.date).slice(0, 3)}</span>
+              {/* The column's date is the day picker on a desktop: the strip
+                  that repeated these seven dates above has gone. */}
+              <button type="button" onClick={() => onPickDay?.(day.date)}
+                aria-label={`${weekdayName(day.date)} ${dayNum(day.date)} ${monthOf(day.date)}`}
+                style={{ display: 'block', background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                <span style={{
+                  ...text('micro'), display: 'block',
+                  color: isToday ? colour.accentDeep : colour.inkFaint
+                }}>{weekdayName(day.date)}</span>
+                <span style={{
+                  ...text('bodyStrong'), display: 'block',
+                  color: isToday ? colour.accentDeep : colour.ink
+                }}>{dayNum(day.date)} {monthOf(day.date).slice(0, 3)}</span>
+              </button>
+              {leaderChip && <div style={{ marginTop: 4 }}>{leaderChip(day.date)}</div>}
             </div>
 
             <div style={{ padding: 7 }}>
@@ -1319,7 +1296,7 @@ export function onlyMine(plan, name) {
   }
 }
 
-export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpokenDone }) {
+export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
   // A week in columns on a desktop, a list on a phone — different shapes of
   // screen, different right answer.
   const desktop = useIsDesktop()
@@ -1517,7 +1494,9 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
       if (!res.ok) return
       const data = await res.json()
       // Both halves: who is on, and whether that is the rota or a cover.
-      setLeader(data.leader ? { ...data.leader, source: data.source, rostered: data.rostered } : null)
+      setLeader(data.leader || data.days
+        ? { ...(data.leader || {}), source: data.source, rostered: data.rostered, days: data.days || {} }
+        : null)
     } catch {
       // A rota that will not load is not worth an error on the week view. The
       // cases underneath are what somebody came for.
@@ -1534,6 +1513,35 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
     })
     await loadLeader()
   }, [leaderWeek, token, loadLeader])
+
+  // One day changed, over the week's leader (Brent, 4 Nov 2026).
+  const setDayLeader = useCallback(async (day, email) => {
+    await fetch(`/api/calendar/today?action=leader&week=${leaderWeek}&day=${day}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ email })
+    })
+    await loadLeader()
+  }, [leaderWeek, token, loadLeader])
+
+  /** The chip under a weekday's date: that day's leader, the week's otherwise. */
+  const leaderChip = day => {
+    const weekday = civilWeekday(parseDateStr(day)) <= 5
+    if (!weekday) return null
+    const own = leader?.days?.[day]
+    const weekLeader = leader?.email ? leader : null
+    return (
+      <TeamLeaderStrip day={day}
+        leader={own ? { ...own, source: 'day' } : weekLeader}
+        weekLeader={weekLeader}
+        away={plan?.away || []}
+        onChange={email => setDayLeader(day, email)}
+        onChangeWeek={setTeamLeader}
+        week={window_.startDate}
+        today={today}
+        hour={new Date().getHours()} />
+    )
+  }
 
   const remember = next => writePrefs({ ...readPrefs(), ...next })
 
@@ -1799,12 +1807,10 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
       {/* No "This week" eyebrow any more: it said the same thing as the week
           range two rows below it, and the top of the screen had four things
           competing before the week itself appeared. */}
-      <Header title="Cases" compact
-        // The standing line goes on a desktop. "Every booking, as the calendar
-        // has it" is true on the first open and furniture on every one after,
-        // and it was costing a row of the screen the week could have had. A
-        // real summary — how many cases, how many days — still earns its line.
-        subtitle={plan?.summaryLine || (desktop ? undefined : 'Every booking, as the calendar has it')}
+      {/* No summary line under the title any more ("It's pretty busy") — each
+          day says its own count — and the header stays pinned, so the week
+          arrows are always in reach however far down the week is scrolled. */}
+      <Header title="Cases" compact sticky
         right={(
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
             <SearchButton onClick={() => setSearching(true)} />
@@ -1822,7 +1828,6 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
               onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />
           </div>
         )}>
-        {switcher}
 
         {/* Moving between weeks is the most-used control here and was the
             smallest thing on the screen. Three items now, not four — the
@@ -1861,6 +1866,10 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
             "Cases each day" label that had to explain them — the week below
             says how busy a day is by being long, and a number in a circle was
             a second, smaller way of saying the same thing. */}
+        {/* Not on the desktop week: the seven columns below are headed by
+            their dates, and the strip was saying the same seven dates again
+            (Brent, 4 Nov 2026). On a phone it is how a day is picked. */}
+        {!(desktop && span === 'week') && (
         <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
             {days.map(day => {
@@ -1895,6 +1904,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
             })}
           </div>
         </div>
+        )}
       </Header>
 
       {/* tm-measure keeps the week in one column on a wide screen while the
@@ -1950,54 +1960,25 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
           </Banner>
         ))}
 
-        {/* Who is on this week. It was up in the navy header with the week
-            arrows, which made it look like part of the navigation rather than
-            a thing you can change. Down here it sits with the other entry
-            points — the inbox, adding a booking — which is what it is. */}
-        <TeamLeaderStrip
-          leader={leader}
-          away={plan?.away || []}
-          onChange={setTeamLeader}
-          week={window_.startDate}
-          today={today}
-          hour={new Date().getHours()} />
-
-        {/* The bookings inbox. Always in the same place, whether or not anything
-            is waiting — an entry point that only appears when there is something
-            behind it cannot be checked, and "did that booking come through?" is
-            a question asked most often when the answer is no. */}
-        <button onClick={() => setShowQueue(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: space.sm, width: '100%',
-            textAlign: 'left', cursor: 'pointer', marginBottom: space.md,
-            background: queueCount > 0 ? colour.warningSoft : 'transparent',
-            border: `1px solid ${queueCount > 0 ? colour.warningLine : colour.line}`,
-            borderRadius: radius.card, padding: queueCount > 0 ? space.md : space.sm
-          }}>
-          <span style={{
-            ...text(queueCount > 0 ? 'bodyStrong' : 'caption'),
-            color: queueCount > 0 ? colour.ink : colour.inkFaint, flex: 1
-          }}>
-            {/* Never "nothing waiting": this count is only what has already been
-                read, and the mailbox may hold more — opening it checks. */}
-            Check the bookings inbox
-            {queueCount > 0 ? ` · ${queueCount} to confirm` : ''}
-          </span>
-          <span style={{ ...text('body'), color: colour.inkFaint }}>›</span>
-        </button>
+        {/* One row for the three ways in — a booking, a task, the inbox —
+            instead of three full-width bars above the cases. The team leader
+            is no longer a bar here: it sits under each day's date. */}
+        <ActionRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask}
+          onInbox={() => setShowQueue(true)} queueCount={queueCount} />
 
         {plan && span === 'day' && (
           <>
-            <div style={{ marginBottom: space.md }}>
-              <div style={{ ...text('title'), color: colour.ink }}>
-                {activeDay === today ? 'Today' : weekdayName(activeDay)}
-              </div>
-              <div style={{ ...text('caption'), color: colour.inkFaint }}>
-                {dayNum(activeDay)} {monthOf(activeDay)} {parseDateStr(activeDay).year}
-                {dayPlan?.caseCountLine ? ` · ${dayPlan.caseCountLine}` : ''}
-              </div>
+            {/* One line: the strip above already picked the day, so this
+                only says which, how busy, and who is leading it. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md }}>
+              <span style={{ ...text('heading'), color: colour.ink }}>
+                {activeDay === today ? 'Today' : weekdayName(activeDay)} {dayNum(activeDay)} {monthOf(activeDay).slice(0, 3)}
+              </span>
+              {dayPlan?.caseCountLine && (
+                <span style={{ ...text('caption'), color: colour.inkFaint }}>· {dayPlan.caseCountLine}</span>
+              )}
+              <span style={{ marginLeft: 'auto' }}>{leaderChip(activeDay)}</span>
             </div>
-            <AddBookingRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask} />
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing}
                   due={dueFor(activeDay)} today={today} onDueDone={openDueSheet}
@@ -2009,7 +1990,6 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
           </>
         )}
 
-        {plan && span === 'week' && <AddBookingRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask} />}
 
         {/* Seven columns on a desktop, the familiar list on a phone. A week
             read side by side shows which day is heavy without scrolling, which
@@ -2019,6 +1999,8 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
             dueFor={dueFor} onDueDone={openDueSheet}
             plan={plan}
             today={today}
+            leaderChip={leaderChip}
+            onPickDay={pickDay}
             onOpen={setEditing}
             onSetPlace={setPlacing}
             onPreferences={openPreferences}
@@ -2045,6 +2027,7 @@ export default function CaseWeek({ user, switcher, promptBanner, spoken, onSpoke
                 </span>
               )}
             </button>
+            <div style={{ marginBottom: space.sm }}>{leaderChip(day.date)}</div>
             {/* Orderable here too. The running order is always set for a day
                 that is not today — the hospital rings about four o'clock about
                 tomorrow — and the week is where anybody looks ahead. Having to

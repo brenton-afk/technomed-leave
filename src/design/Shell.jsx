@@ -40,7 +40,7 @@ export function Overlay({ children }) {
  * laptop that was most of the screen before the first booking appeared. The
  * header is scaffolding; the bookings are the work.
  */
-export function Header({ eyebrow, title, subtitle, onBack, right, children, compact }) {
+export function Header({ eyebrow, title, subtitle, onBack, right, children, compact, sticky }) {
   return (
     // `tm-bleed` on the navy, `tm-measure` on what is written on it. On a wide
     // screen the bar reaches both edges of the window while the title lines up
@@ -49,6 +49,11 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children, comp
     // reads as two pages.
     <div className="tm-bleed" style={{
       background: colour.navy,
+      // Pinned to the top of the scrolling page where asked (the Cases week:
+      // "if you scroll down on the desktop version, you don't lose the ability
+      // to scroll the weeks"). One set of arrows that never leaves the screen,
+      // rather than a second floating set.
+      ...(sticky ? { position: 'sticky', top: 0, zIndex: 30 } : {}),
       // The inset first, then the normal spacing on top of it, so the eyebrow
       // always sits a clear 20px below the clock rather than at the very top of
       // the screen. The fallback is 0, not a guess at a notch: where env() is
