@@ -415,6 +415,28 @@ describe('SelfWealth cash reports', () => {
   })
 })
 
+describe('return of capital', () => {
+  it('is worked out on the investments, with its share saved per year', async () => {
+    const t = await unlocked()
+    const piece = (y, x, s) => ({ p: 1, x, y, s })
+    const report = [
+      piece(720, 164, 'Opening Balance'), piece(720, 514, '$100.00'),
+      piece(690, 60, '2 July 2025 23:30:01'), piece(690, 164, 'Order 1: Buy 10 MSTY @ US$5.00'), piece(690, 455, '$50.00'), piece(690, 513, '$50.00'),
+      piece(660, 60, '8 Aug 2025 00:00:00'), piece(660, 164, '10 MSTY CASHDIV @ USD 1.00'), piece(660, 384, '$10.00'), piece(660, 513, '$60.00'),
+      piece(630, 164, 'Closing Balance at end of day 30 June 2026'), piece(630, 513, '$60.00')
+    ]
+    await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: report } })
+    const bad = await call({ action: 'roc-save', method: 'POST', token: t, body: { roc: { years: { 2025: 140 } } } })
+    expect(bad.statusCode).toBe(400)
+    await call({ action: 'roc-save', method: 'POST', token: t, body: { roc: { years: { 2025: '50' }, final: ['2025'], overrides: { '2025-08-08': '80' } } } })
+    const inv = await call({ action: 'investments', token: t })
+    const [r] = inv.body.roc
+    expect(inv.body.rocCfg).toMatchObject({ years: { 2025: 50 }, final: ['2025'], overrides: { '2025-08-08': 80 } })
+    expect(r.payments[0]).toMatchObject({ pct: 80, basis: 'payment' })
+    expect(r.totals.parcels).toBe(1)
+  })
+})
+
 describe('buys brought in from the old tracker', () => {
   it('are history: removing one does not touch holdings or Amber cash', async () => {
     const t = await unlocked()

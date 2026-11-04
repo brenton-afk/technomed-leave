@@ -25,7 +25,7 @@ const MIGRATED = [
   'Chat.jsx', 'PatientHistory.jsx', 'Notifications.jsx',
   'treasury/Treasury.jsx', 'treasury/ui.jsx', 'treasury/Home.jsx', 'treasury/Bitcoin.jsx',
   'treasury/Holdings.jsx', 'treasury/Dca.jsx', 'treasury/Cash.jsx', 'treasury/Trust.jsx',
-  'treasury/Snapshots.jsx', 'treasury/Settings.jsx', 'treasury/Purchases.jsx', 'treasury/Scenario.jsx', 'treasury/Investments.jsx'
+  'treasury/Snapshots.jsx', 'treasury/Settings.jsx', 'treasury/Purchases.jsx', 'treasury/Scenario.jsx', 'treasury/Investments.jsx', 'treasury/RocSection.jsx'
 ]
 
 // The clinical plan components deliberately replicate the emailed Word

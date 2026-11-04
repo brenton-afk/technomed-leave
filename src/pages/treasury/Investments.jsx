@@ -4,6 +4,7 @@ import { colour, text, space } from '../../design/tokens.js'
 import { aud, pct } from '../../treasury/logic.js'
 import { useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, when } from './ui.jsx'
 import { readCashReport } from './readCashReport.js'
+import RocSection from './RocSection.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
 
@@ -164,6 +165,11 @@ export default function Investments({ user, onBack, onLocked }) {
             <Button variant="quiet" onClick={() => setAction(null)}>Cancel</Button>
           </Card>
         )}
+
+        {(data?.roc || []).map(r => (
+          <RocSection key={r.ticker} roc={r} cfg={data.rocCfg} today={data.today}
+            onSave={roc => post('roc-save', { roc }, 'Return-of-capital share saved.')} />
+        ))}
 
         <SectionLabel>Income by financial year (US$)</SectionLabel>
         <Table head={['Year', 'Gross', 'Withheld', 'Refunds', 'Net']} align={['left', 'right', 'right', 'right', 'right']}

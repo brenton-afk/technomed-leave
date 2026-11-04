@@ -15,6 +15,7 @@ import { mapTracker } from '../src/treasury/importMap.js'
 import {
   parseCashReport, mergeReport, holdingsFrom, incomeByYear, conversionsByYear, suggestOpenings, suggestConsolidations
 } from '../src/treasury/selfwealth.js'
+import { trackRoc, makeFx, DEFAULT_ROC } from '../src/treasury/roc.js'
 import { parseAmberCsv, mergeAmber, amberTotals, isPurchase, transferSuggestions } from '../src/treasury/amber.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
 
@@ -553,14 +554,20 @@ const ACTIONS = {
   // ─── Trust investments (SelfWealth cash reports) ──────────────────────────
 
   async investments(req, res) {
-    const [sw, openings, actions, s, price] = await Promise.all([
-      tget('selfwealth', { rows: [], reports: [] }), tget('invopenings', []), tget('invactions', []), settings(), getPriceWithChange()
+    const [sw, openings, actions, s, price, history] = await Promise.all([
+      tget('selfwealth', { rows: [], reports: [] }), tget('invopenings', []), tget('invactions', []), settings(), getPriceWithChange(), getPriceHistory()
     ])
     const rows = sw.rows || []
     const fx = price?.aud > 0 && price?.usd > 0 ? price.usd / price.aud : null
+    // Return of capital, in A$ at each day's rate (from stored BTC closes in
+    // both currencies; today's rate where the history has no such day).
+    const rocCfg = { ...DEFAULT_ROC, ...(s.roc || {}) }
+    const fxOn = makeFx(history.aud, history.usd, fx)
+    const roc = rocCfg.tickers.filter(t => rows.some(r => r.ticker === t && r.kind === 'distribution'))
+      .map(ticker => trackRoc({ rows, openings, actions, fx: fxOn, ticker, cfg: rocCfg, today: today() }))
     const last = rows[rows.length - 1]
     return res.json({
-      today: today(), fx, prices: s.invPrices || {},
+      today: today(), fx, prices: s.invPrices || {}, roc, rocCfg,
       holdings: holdingsFrom(rows, openings, actions),
       income: incomeByYear(rows), conversions: conversionsByYear(rows),
       openings, actions,
@@ -630,6 +637,32 @@ const ACTIONS = {
     return res.json({ list: await upsert('invactions', item) })
   },
   async 'inv-action-delete'(req, res) { return res.json({ list: await remove('invactions', req.body?.id) }) },
+
+  /**
+   * The share of each payment that is return of capital: a % per calendar
+   * year (final once the fund publishes it), and any payment's own estimate.
+   */
+  async 'roc-save'(req, res) {
+    const b = req.body?.roc || {}
+    const pctOk = v => Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 100
+    const years = {}
+    for (const [y, v] of Object.entries(b.years || {})) {
+      if (!/^\d{4}$/.test(y) || v === '' || v == null) continue
+      if (!pctOk(v)) throw new Invalid(`${y}: a percentage from 0 to 100.`)
+      years[y] = Number(v)
+    }
+    const overrides = {}
+    for (const [d, v] of Object.entries(b.overrides || {})) {
+      if (!isDay(d) || v === '' || v == null) continue
+      if (!pctOk(v)) throw new Invalid(`${d}: a percentage from 0 to 100.`)
+      overrides[d] = Number(v)
+    }
+    const final = Array.isArray(b.final) ? b.final.filter(y => /^\d{4}$/.test(y)) : []
+    const s = await settings()
+    const next = { ...s, roc: { ...DEFAULT_ROC, ...(s.roc || {}), years, overrides, final } }
+    await tset('settings', next)
+    return res.json({ roc: next.roc })
+  },
 
   /** A US$ price per ticker, typed in until a quote service is connected. */
   async 'inv-price-save'(req, res) {
