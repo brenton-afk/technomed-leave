@@ -70,6 +70,34 @@ function civilParts(iso) {
   return { date: toDateStr(c), time: `${pad(c.hour)}:${pad(c.minute)}` }
 }
 
+/**
+ * The date, drawn as an ordinary box reading "Wed 4 Nov", with the phone's own
+ * date picker laid invisibly over it — so a tap still opens the picker.
+ *
+ * Not a visible <input type="date">: iOS gives that a fixed minimum width that
+ * ignores the column it is in, and beside Hospital it spilled across into the
+ * other box ("the date and hospital white boxes are overlapping").
+ */
+function DateField({ label, value, onChange }) {
+  const shown = value ? `${weekdayName(value).slice(0, 3)} ${Number(value.slice(8, 10))} ${MONTHS[Number(value.slice(5, 7)) - 1]}` : 'Choose…'
+  return (
+    <label style={{ display: 'block', marginBottom: space.sm, minWidth: 0 }}>
+      <span style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, display: 'block', marginBottom: 4 }}>{label}</span>
+      <span style={{
+        position: 'relative', display: 'flex', alignItems: 'center', minHeight: 40, boxSizing: 'border-box',
+        padding: `6px ${space.sm}px`, border: `1px solid ${colour.line}`, borderRadius: radius.control,
+        background: colour.surface, ...text('body'), color: colour.ink, overflow: 'hidden'
+      }}>
+        {shown}
+        <input type="date" value={value} aria-label={label}
+          onChange={e => onChange(e.target.value)}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, fontSize: 16, border: 'none', cursor: 'pointer' }} />
+      </span>
+    </label>
+  )
+}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 function Field({ label, hint, value, onChange, autoFocus, type = 'text', compact = false }) {
   return (
     <label style={{ display: 'block', marginBottom: compact ? space.sm : space.md, minWidth: 0 }}>
@@ -921,7 +949,7 @@ export default function EditBooking({
             {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: space.sm }}>
                 {!loaded.allDay
-                  ? <Field compact label="Date" type="date" value={when.date}
+                  ? <DateField label="Date" value={when.date}
                       onChange={v => setWhen(c => ({ ...c, date: v }))} />
                   : <span />}
                 <Field compact label="Hospital" value={fields.hospital || ''}
