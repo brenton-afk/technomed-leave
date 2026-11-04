@@ -280,3 +280,20 @@ describe('whether a case competes for the hospital\'s own kit', () => {
     expect(drawsOnLocalStock(loane, 'Diplomat')).toBe(true)
   })
 })
+
+describe('a note with no system of its own (Toni, 4 Nov 2026)', () => {
+  const kit = 'Diplomat (Consignment) / (open screws) / E4 Global BMD PLIF cage (Consignment) / Spinal (Brainlab)'
+  it('belongs to the system before it, not a system called "(open screws)"', () => {
+    const entries = parseKitSupplies(kit)
+    expect(entries[0]).toMatchObject({ system: 'Diplomat', supply: 'Consignment', note: 'open screws' })
+    expect(entries.map(e => e.system)).not.toContain('(open screws)')
+  })
+  it('marks Brainlab wording as navigation, with no supply to ask about', () => {
+    expect(parseKitSupplies(kit).at(-1)).toMatchObject({ system: 'Spinal (Brainlab)', navigation: true })
+  })
+  it('writes the note back and reads it the same again', () => {
+    const once = formatKitSupplies(parseKitSupplies(kit))
+    expect(once).toMatch(/^Diplomat \(Consignment\) \(open screws\)/)
+    expect(formatKitSupplies(parseKitSupplies(once))).toBe(once)
+  })
+})

@@ -66,6 +66,13 @@ export function parseKitSupplies(kit) {
     if (supply) {
       pushSystem(out, name)
       if (out.length) out[out.length - 1].supply = supply
+    } else if (!name.replace(/[\s,/+&-]+/g, '') && out.length) {
+      // "Diplomat (Consignment) / (open screws)": a note with no system of its
+      // own is about the system before it. It used to become a system called
+      // "(open screws)", shown on the week card as needing a supply and in Edit
+      // booking as something unrecognised (Toni, 4 Nov 2026).
+      const prev = out[out.length - 1]
+      prev.note = [prev.note, inside.trim()].filter(Boolean).join(', ')
     } else {
       // "(2 levels)", "(PM list)" — not a supply, so it belongs to the system
       // it is written against. The team put it there on purpose.
@@ -77,8 +84,13 @@ export function parseKitSupplies(kit) {
   // Anything after the final bracket, or the whole string when there were no
   // brackets at all: systems with no supply recorded yet.
   for (const name of text.slice(last).split(SPLIT)) pushSystem(out, name)
+  // Brainlab written into the kit ("Spinal (Brainlab)", "BRAINLAB AIRO &
+  // CURVE") is navigation, not an implant set: there is no supply to ask about.
+  for (const e of out) if (NAVIGATION.test(e.system)) e.navigation = true
   return out
 }
+
+const NAVIGATION = /\b(?:brainlab|airo|curve|navigation|stealth)\b/i
 
 /** Adds a system, trimming the separators it may be wearing. */
 function pushSystem(list, raw) {
@@ -94,7 +106,7 @@ function pushSystem(list, raw) {
 export function formatKitSupplies(entries) {
   return (entries || [])
     .filter(e => e && e.system)
-    .map(e => (e.supply ? `${e.system} (${e.supply})` : e.system))
+    .map(e => `${e.system}${e.supply ? ` (${e.supply})` : ''}${e.note ? ` (${e.note})` : ''}`)
     .join(' / ')
 }
 

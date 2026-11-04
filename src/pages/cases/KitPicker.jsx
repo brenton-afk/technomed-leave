@@ -18,16 +18,23 @@ const SYSTEMS = SYSTEM_BUTTONS
 // The same system however it is written: "TM REMOVALS" on a booking is the
 // TM Screw Removal button, so the button shows as on rather than offering a
 // second copy.
+//
+// The same goes for any system written in the booking's own words: "E4 Global
+// BMD PLIF cage" is the Global BMD PLIF button, not something unrecognised
+// (Toni, 4 Nov 2026). Mariner MIS and Mariner Open are the exception — one
+// item, two buttons — and are left to `toggle` below.
 const same = (a, b) => {
   if (String(a).toLowerCase() === String(b).toLowerCase()) return true
   const x = inventoryFor(a), y = inventoryFor(b)
-  return Boolean(x && y && x === y && x.tmKit)
+  if (!x || !y || x !== y) return false
+  return x.tmKit || (!variantOf(a) && !variantOf(b) && !BUTTON_VARIANT_BASES.has(x.system))
 }
+const BUTTON_VARIANT_BASES = new Set(SYSTEM_BUTTONS.map(variantOf).filter(Boolean))
 
 export default function KitPicker({ kit, onChange, systemsOnly = false }) {
   const entries = parseKitSupplies(kit)
   const has = name => entries.some(e => same(e.system, name))
-  const others = entries.filter(e => !SYSTEMS.some(s => same(s, e.system)))
+  const others = entries.filter(e => !e.navigation && !SYSTEMS.some(s => same(s, e.system)))
 
   // Mariner MIS and Mariner Open are the one Mariner, said precisely. Tapping
   // either takes over a plain "Mariner" already on the booking — keeping where
@@ -66,7 +73,7 @@ export default function KitPicker({ kit, onChange, systemsOnly = false }) {
         <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
           Also written: {others.map(e => e.system).join(', ')}
           {others.some(e => same(e.system, 'Mariner')) ? ' — tap Mariner MIS or Mariner Open above to say which' : ''}{' '}
-          <button type="button" onClick={() => onChange(formatKitSupplies(entries.filter(e => SYSTEMS.some(s => same(s, e.system)))))}
+          <button type="button" onClick={() => onChange(formatKitSupplies(entries.filter(e => e.navigation || SYSTEMS.some(s => same(s, e.system)))))}
             style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             take off
           </button>

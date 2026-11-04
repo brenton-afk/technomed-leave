@@ -489,7 +489,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, onOpen, busy, onSe
                     is looking for when they scan a card — where it comes from
                     is the next question, not the first. */}
                 <span style={{ fontWeight: 700, color: ink.ink }}>{entry.system}</span>
-                {entry.supply ? (
+                {entry.navigation ? null : entry.supply ? (
                   <span style={{
                     fontWeight: 400,
                     color: entry.inferred ? ink.faint : ink.muted
@@ -499,6 +499,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, onOpen, busy, onSe
                 ) : (
                   <span style={{ color: ink.ink, fontWeight: 700 }}> (supply?)</span>
                 )}
+                {entry.note && <span style={{ color: ink.muted }}> ({entry.note})</span>}
               </React.Fragment>
             ))}
           </span>
@@ -884,7 +885,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, onOpen, onSetPlace
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
           }}>
             <strong style={{ fontWeight: 700 }}>{entry.system}</strong>
-            {entry.supply ? (
+            {entry.navigation ? null : entry.supply ? (
               <span style={{
                 fontWeight: 400, color: entry.inferred ? ink.faint : ink.muted
               }}>
@@ -893,6 +894,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, onOpen, onSetPlace
             ) : (
               <span style={{ color: ink.ink, fontWeight: 700 }}> supply?</span>
             )}
+            {entry.note && <span style={{ color: ink.muted }}> · {entry.note}</span>}
           </span>
         ))}
 

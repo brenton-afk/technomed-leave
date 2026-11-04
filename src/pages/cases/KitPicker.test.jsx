@@ -20,3 +20,16 @@ describe('choosing the Mariner set', () => {
     expect(onChange).toHaveBeenLastCalledWith('')
   })
 })
+
+describe('a system written in the booking\'s own words (Toni, 4 Nov 2026)', () => {
+  it('lights the Global BMD PLIF button for "E4 Global BMD PLIF cage"', () => {
+    render(<KitPicker kit="Diplomat (Consignment) / (open screws) / E4 Global BMD PLIF cage (Consignment) / Spinal (Brainlab)" onChange={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Global BMD PLIF' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByText(/Also written/)).toBeNull()
+  })
+  it('keeps Mariner MIS and Mariner Open as two buttons', () => {
+    render(<KitPicker kit="Mariner MIS (Distributor Loan)" onChange={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Mariner MIS' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Mariner Open' })).toHaveAttribute('aria-pressed', 'false')
+  })
+})
