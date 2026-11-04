@@ -418,7 +418,7 @@ export async function getCalendarEvent(eventId) {
  * wants to be. It also keeps tidyDay away from it: that only moves entries with
  * a start time, and a task being shuffled into a theatre slot would be absurd.
  */
-export async function createTaskEvent({ summary, description, date, colorId }) {
+export async function createTaskEvent({ summary, description, date, colorId, extendedProperties }) {
   const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
   const calendarId = getCalendarId()
 
@@ -435,6 +435,7 @@ export async function createTaskEvent({ summary, description, date, colorId }) {
     transparency: 'transparent'
   }
   if (colorId) body.colorId = String(colorId)
+  if (extendedProperties) body.extendedProperties = extendedProperties
 
   const res = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,

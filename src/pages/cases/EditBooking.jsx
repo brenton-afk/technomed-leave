@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import LoanTrail from './LoanTrail.jsx'
 import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
+import { useIsDesktop } from '../../design/viewport.js'
 import { CaseThread } from '../Chat.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import {
@@ -783,6 +784,34 @@ export default function EditBooking({
   const navigation = findNavigation(
     [fields.procedure, fields.kit, fields.system].filter(Boolean).join(' ')).join(' + ')
 
+  // ── On a laptop, a panel you can move (Toni, 4 Nov 2026) ──
+  // "So you can see the other cases that day while deciding consignment or TM
+  // Loan." On a desktop the sheet is a floating panel over an undimmed week:
+  // the page behind stays readable and scrollable, and the panel is dragged
+  // aside by its title bar. A phone keeps the bottom sheet.
+  const wide = useIsDesktop()
+  const [panelAt, setPanelAt] = useState(null)
+  const startDrag = e => {
+    if (!wide || e.button > 0 || e.target.closest('button, a, input, select, textarea')) return
+    const panel = e.currentTarget.closest('[role="dialog"]')
+    if (!panel) return
+    const box = panel.getBoundingClientRect()
+    const dx = e.clientX - box.left
+    const dy = e.clientY - box.top
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+    const move = ev => setPanelAt({
+      x: clamp(ev.clientX - dx, 0, window.innerWidth - box.width),
+      y: clamp(ev.clientY - dy, 0, window.innerHeight - 64)
+    })
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    e.preventDefault()
+  }
+
   const asCase = {
     // Normalised, because the field holds whatever the calendar says — "Dr
     // Ibbett", "PETERS-WILLKE" — and the preference lookup is keyed on the
@@ -805,25 +834,39 @@ export default function EditBooking({
     )}
     <Overlay>
       <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.45)', zIndex: 3000,
-          display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
-        }}>
+        onClick={wide ? undefined : onClose}
+        data-floating={wide ? 'true' : undefined}
+        style={wide
+          ? { position: 'fixed', inset: 0, zIndex: 3000, pointerEvents: 'none' }
+          : {
+              position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.45)', zIndex: 3000,
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+            }}>
         <div
           onClick={e => e.stopPropagation()}
           role="dialog"
           aria-label="Edit booking"
-          className="tm-sheet"
-          style={{
-            background: colour.canvas, width: '100%', maxWidth: 460,
-            borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
-            display: 'flex', flexDirection: 'column'
-          }}>
+          className={wide ? undefined : 'tm-sheet'}
+          style={wide
+            ? {
+                position: 'fixed', pointerEvents: 'auto',
+                left: panelAt ? panelAt.x : undefined, right: panelAt ? undefined : space.lg,
+                top: panelAt ? panelAt.y : 72,
+                width: 460, maxHeight: `calc(100dvh - ${(panelAt ? panelAt.y : 72) + 16}px)`,
+                background: colour.canvas, borderRadius: radius.sheet,
+                border: `1px solid ${colour.line}`, boxShadow: '0 12px 40px rgba(4,39,70,0.28)',
+                display: 'flex', flexDirection: 'column'
+              }
+            : {
+                background: colour.canvas, width: '100%', maxWidth: 460,
+                borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
+                display: 'flex', flexDirection: 'column'
+              }}>
 
-          <div style={{
+          <div onPointerDown={startDrag} title={wide ? 'Drag to move' : undefined} style={{
             padding: `${space.md}px ${space.md}px ${space.sm}px`,
-            borderBottom: `1px solid ${colour.line}`, flexShrink: 0
+            borderBottom: `1px solid ${colour.line}`, flexShrink: 0,
+            ...(wide ? { cursor: 'grab', userSelect: 'none', touchAction: 'none' } : {})
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
               {/* The case itself as the title — who, and with whom — rather than

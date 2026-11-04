@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { noticesFor, describeBooking, DEFAULT_CONTACTS, DEFAULT_RULES, DEFAULT_LOAN_REQUESTS, loanRequestsFor, hospitalLoanNoticesFor } from './_bookingNotices.js'
+import { noticesFor, describeBooking, DEFAULT_CONTACTS, DEFAULT_RULES, DEFAULT_LOAN_REQUESTS, loanRequestsFor, hospitalLoanNoticesFor, isPosteriorSpine, applyCorrections } from './_bookingNotices.js'
 
 // ─── Task 9: booking notices to Signus and KT Medical (RHH) ─────────────────
 // Fake patients. Nothing here sends anything.
@@ -181,5 +181,46 @@ describe('loan set emails only for a set new to the booking (Brent, 4 Nov 2026)'
   })
   it('still asks when the booking is first placed', () => {
     expect(loanRequestsFor({ kind: 'new', after: booked, eventId: 'e1', settings })).toHaveLength(1)
+  })
+})
+
+describe('Neurophys for Dubey posterior cases at Calvary (Toni, 4 Nov 2026)', () => {
+  const booking = over => ({ date: '2026-11-20', hospital: 'CLV', surgeon: 'Dubey', patient: 'Testa',
+    procedure: 'L4/5 PLIF', kit: 'Diplomat', distributors: ['signus'], loans: {}, ...over })
+  const neuro = list => list.filter(n => n.contactId === 'neurophys')
+
+  it('offers a drafted request, shown first, on a new Dubey posterior case at Calvary', () => {
+    const [n] = neuro(noticesFor({ kind: 'new', after: booking(), eventId: 'e1', settings }))
+    expect(n).toBeTruthy()
+    expect(n.autoSend).toBe(false)
+    expect(n.to).toEqual(['info@neurophys.com.au'])
+    expect(n.text).toMatch(/book neurophysiology monitoring/)
+  })
+
+  it('stays quiet for another surgeon, RHH, or anterior work', () => {
+    expect(neuro(noticesFor({ kind: 'new', after: booking({ surgeon: 'Gupta' }), settings }))).toEqual([])
+    expect(neuro(noticesFor({ kind: 'new', after: booking({ hospital: 'RHH' }), settings }))).toEqual([])
+    expect(neuro(noticesFor({ kind: 'new', after: booking({ procedure: 'C5/6 ACDF' }), settings }))).toEqual([])
+  })
+
+  it('tells them when the case moves or is cancelled', () => {
+    const moved = neuro(noticesFor({ kind: 'moved', before: booking(), after: booking({ date: '2026-11-21' }), settings }))
+    expect(moved).toHaveLength(1)
+    expect(neuro(noticesFor({ kind: 'cancelled', before: booking(), settings }))).toHaveLength(1)
+  })
+
+  it('reads posterior spine from the operation', () => {
+    for (const p of ['L4/5 PLIF', 'T10-L2 posterior fusion', 'L3-5 laminectomy', 'posterior cervical fusion C3-6', 'T12-L2 fixation', 'ALIF + posterior fixation'])
+      expect(isPosteriorSpine(p)).toBe(true)
+    for (const p of ['C5/6 ACDF', 'L5/S1 ALIF', 'C4/5 TDR', 'C5 corpectomy'])
+      expect(isPosteriorSpine(p)).toBe(false)
+  })
+
+  it('is added to settings saved before the rule existed', () => {
+    const saved = { contacts: DEFAULT_CONTACTS.filter(c => c.id !== 'neurophys'), rules: DEFAULT_RULES.slice(0, 2),
+      applied: ['device-2026-11-01', 'kit-hospitals-2026-11-01', 'device-loans-on-2026-11-02'] }
+    const next = applyCorrections(saved)
+    expect(next.rules.map(r => r.id)).toContain('neurophys-dubey-clv')
+    expect(next.contacts.map(c => c.id)).toContain('neurophys')
   })
 })

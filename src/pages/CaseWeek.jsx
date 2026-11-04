@@ -2137,6 +2137,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
         <NewTask
           user={user}
           date={addingTask}
+          days={fullPlan?.days || []}
           onClose={() => setAddingTask(null)}
           onCreated={() => load(window_, { quiet: true })} />
       )}

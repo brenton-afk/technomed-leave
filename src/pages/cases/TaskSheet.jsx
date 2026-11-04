@@ -57,6 +57,7 @@ export default function TaskSheet({ task, onClose, onDone, kind = 'Task' }) {
             {row('Item', task.thing && task.thing !== task.what ? task.thing : null)}
             {row('From', task.from)}
             {row('To', task.to)}
+            {row('Case', task.forCase)}
             {row('Note', task.note)}
             {row('Added by', task.addedBy)}
             {done && !result && row('Done', `${task.doneBy || 'Somebody'}${task.doneOn ? ` on ${task.doneOn}` : ''}`

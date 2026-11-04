@@ -901,8 +901,12 @@ async function handleTask(req, res) {
       to: stripIdentifiers(String(body.to || '')).trim().slice(0, 40),
       who: stripIdentifiers(String(body.who || '')).trim().slice(0, 40),
       note: stripIdentifiers(String(body.note || '')).trim().slice(0, 200),
+      // The case a kit move is for: surgeon, hospital and day, never the
+      // patient (see casesUsingKit in tasks.js), and the booking's id.
+      forCase: stripIdentifiers(String(body.forCase || '')).trim().slice(0, 80),
       addedBy: firstNameFor(session.email)
     }
+    const caseId = /^[A-Za-z0-9_]{1,200}$/.test(String(body.caseId || '')) ? String(body.caseId) : ''
     const summary = taskSummary(task)
     if (!summary || summary === TASK_PREFIX) {
       return res.status(400).json({ error: 'Say what the task is' })
@@ -912,7 +916,8 @@ async function handleTask(req, res) {
       summary,
       description: taskDescription(task),
       date,
-      colorId: TASK_COLOR_ID
+      colorId: TASK_COLOR_ID,
+      ...(caseId && task.forCase ? { extendedProperties: { private: { tmCaseId: caseId } } } : {})
     })
 
     return res.status(200).json({

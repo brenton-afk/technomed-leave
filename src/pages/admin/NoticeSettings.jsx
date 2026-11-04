@@ -109,11 +109,14 @@ export default function NoticeSettings({ user }) {
         return (
           <div key={r.id} style={card}>
             <strong style={{ color: '#042746' }}>{contact?.name || r.contactId}</strong>
-            <label style={label}>When a booking has
-              <select value={r.distributor} onChange={e => setRule(i, { distributor: e.target.value })} style={input}>
-                {DISTRIBUTORS.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
-            </label>
+            {r.surgeon
+              ? <div style={label}>When the surgeon is <strong style={{ color: '#042746' }}>{r.surgeon}</strong>
+                  {r.posterior ? ' and the operation is posterior spine' : ''}</div>
+              : <label style={label}>When a booking has
+                  <select value={r.distributor} onChange={e => setRule(i, { distributor: e.target.value })} style={input}>
+                    {DISTRIBUTORS.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                  </select>
+                </label>}
             <label style={label}>At
               <select value={r.hospital} onChange={e => setRule(i, { hospital: e.target.value })} style={input}>
                 <option value="">Any hospital</option><option value="RHH">RHH only</option><option value="CLV">Calvary only</option>

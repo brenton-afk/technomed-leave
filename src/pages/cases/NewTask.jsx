@@ -3,7 +3,8 @@ import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
 import {
-  TASK_KINDS, TASK_PLACES, taskThings, kindFor, taskSummary
+  TASK_KINDS, TASK_PLACES, taskThings, kindFor, taskSummary,
+  casesUsingKit, caseLabel, placeOfCase
 } from '../../clinicalPlan/tasks.js'
 import {
   weekdayName, addCivilDays, parseDateStr, toDateStr, todayStr
@@ -73,7 +74,7 @@ function dayChoices(from) {
   return Array.from({ length: 7 }, (_, i) => shiftDay(start, i))
 }
 
-export default function NewTask({ user, date: openOn, onClose, onCreated }) {
+export default function NewTask({ user, date: openOn, days = [], onClose, onCreated }) {
   const [date, setDate] = useState(() => openOn || todayStr())
   const [kind, setKind] = useState('')
   const [thing, setThing] = useState('')
@@ -81,6 +82,10 @@ export default function NewTask({ user, date: openOn, onClose, onCreated }) {
   const [to, setTo] = useState('')
   const [who, setWho] = useState('')
   const [note, setNote] = useState('')
+  // The case a kit move is for (Toni, 4 Nov 2026): the cases on the week that
+  // use the kit chosen, from the day the task is for. One tap links it and
+  // sends the kit to that case's hospital.
+  const [forCase, setForCase] = useState(null)
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
 
@@ -98,7 +103,10 @@ export default function NewTask({ user, date: openOn, onClose, onCreated }) {
       const res = await fetch('/api/calendar/today?action=task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user?.token}` },
-        body: JSON.stringify({ date, kind, thing, from, to, who, note })
+        body: JSON.stringify({
+          date, kind, thing, from, to, who, note,
+          ...(forCase && kind === 'move' ? { caseId: forCase.id, forCase: caseLabel(forCase) } : {})
+        })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Could not add the task')
@@ -140,13 +148,13 @@ export default function NewTask({ user, date: openOn, onClose, onCreated }) {
               that had the edit window sliding under a thumb. */}
           <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden' }}>
             <Chips label="What needs doing" options={TASK_KINDS}
-              value={kind} onChange={setKind} />
+              value={kind} onChange={k => { setKind(k); setForCase(null) }} />
 
             {entry && (
               <>
                 {entry.needsThing ? (
                   <Chips label="Which kit" options={taskThings()}
-                    value={thing} onChange={setThing} allowEmpty />
+                    value={thing} onChange={t => { setThing(t); setForCase(null) }} allowEmpty />
                 ) : null}
 
                 {/* The one place typing is expected — and for the three kinds
@@ -174,6 +182,28 @@ export default function NewTask({ user, date: openOn, onClose, onCreated }) {
                   <Chips label="To" options={TASK_PLACES}
                     value={to} onChange={setTo} allowEmpty />
                 )}
+
+                {kind === 'move' && thing && (() => {
+                  const cases = casesUsingKit(days, thing, openOn || todayStr())
+                  if (!cases.length) return null
+                  return (
+                    <Chips label="For which case (optional)"
+                      options={cases.map(c => ({
+                        key: c.id,
+                        label: [c.patient, caseLabel(c)].filter(Boolean).join(' · ')
+                      }))}
+                      value={forCase?.id || ''}
+                      allowEmpty
+                      onChange={id => {
+                        const c = cases.find(x => x.id === id) || null
+                        setForCase(c)
+                        if (!c) return
+                        if (placeOfCase(c)) setTo(placeOfCase(c))
+                        // The kit has to be there by the day of the case.
+                        if (date > c.date) setDate(c.date)
+                      }} />
+                  )
+                })()}
               </>
             )}
 

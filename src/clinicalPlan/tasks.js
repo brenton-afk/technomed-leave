@@ -30,7 +30,9 @@
 // no surgeon and no patient, which is already the test — and so that a person
 // reading the calendar entry understands it without the app.
 
-import { INVENTORY } from './inventory.js'
+import { INVENTORY, inventoryFor } from './inventory.js'
+import { systemsInKit } from './systems.js'
+import { weekdayName, parseDateStr } from './week.js'
 
 /** The marker that makes a calendar entry a task. First thing in the title. */
 export const TASK_PREFIX = 'TASK:'
@@ -115,7 +117,7 @@ export function taskSummary({ kind, thing, from, to } = {}) {
  * Labelled so it can be read back, and so a person editing it by hand in Google
  * has something obvious to edit.
  */
-export function taskDescription({ kind, thing, from, to, who, note, addedBy } = {}) {
+export function taskDescription({ kind, thing, from, to, who, note, addedBy, forCase } = {}) {
   const entry = kindFor(kind)
   const lines = [
     `Task: ${entry ? entry.label : 'Task'}`,
@@ -125,6 +127,7 @@ export function taskDescription({ kind, thing, from, to, who, note, addedBy } = 
     // No name means the whole team, which is said out loud rather than left as
     // a blank somebody has to interpret.
     `For: ${who || 'Anyone'}`,
+    forCase ? `Case: ${forCase}` : null,
     note ? `Note: ${note}` : null,
     '',
     addedBy ? `Added by ${addedBy}` : null
@@ -207,9 +210,61 @@ export function readTask(summary, description) {
     // no name rather than as a person called Anyone.
     who: who && !/^anyone$/i.test(who) ? who : null,
     note: field('Note'),
+    forCase: field('Case'),
     addedBy: field('Added by') || (/^\s*Added by (.+)$/im.exec(text)?.[1]?.trim() ?? null),
     done: Boolean(done),
     doneBy: done ? (done[1] || '').trim() || null : null,
     doneOn: done ? (done[2] || '').trim() || null : null
   }
+}
+
+// ─── A kit move, for the case it is for (Toni, 4 Nov 2026) ───────────────────
+// "When you add the task, offer the upcoming cases that use that kit and
+// attach the task to one." The task names the case by surgeon, hospital and
+// day — what the team says — and carries the booking's id so the portal can
+// find it again. The patient's name is not written into the task: it is on
+// the booking already, and a second copy is one more place it can be.
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const HOSPITAL_PLACE = { CLV: 'Calvary', RHH: 'RHH' }
+
+/** "Wed 11 Nov" */
+function shortDay(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return ''
+  const d = parseDateStr(date)
+  return `${weekdayName(date).slice(0, 3)} ${d.day} ${MONTHS[d.month - 1]}`
+}
+
+/** How a case is named on a task: "Gupta · Calvary · Wed 11 Nov". */
+export function caseLabel(c = {}) {
+  return [c.surgeon, HOSPITAL_PLACE[c.hospital] || c.hospital, shortDay(c.date)].filter(Boolean).join(' · ')
+}
+
+/** The task place a case's hospital is, for the "To" of a move. */
+export function placeOfCase(c = {}) {
+  return HOSPITAL_PLACE[c.hospital] || ''
+}
+
+/**
+ * Cases from `from` on whose kit uses `thing`, soonest first. `days` is a
+ * week plan's days (each with casesByHospital), so the list is what the week
+ * on screen holds. Cancelled cases are left out.
+ */
+export function casesUsingKit(days = [], thing, from = '', limit = 8) {
+  const system = inventoryFor(thing)?.system
+  if (!system) return []
+  const out = []
+  for (const day of days || []) {
+    if (from && day.date < from) continue
+    for (const group of day.casesByHospital || []) {
+      for (const c of group.cases || []) {
+        if (c.cancelled || !c.id) continue
+        const named = systemsInKit([c.system, c.kit].filter(Boolean).join(' '))
+        if (!named.some(s => inventoryFor(s)?.system === system)) continue
+        out.push({ id: c.id, date: day.date, hospital: c.hospital || group.hospital, surgeon: c.surgeon || '',
+          patient: c.patient || '', start: c.start || '' })
+      }
+    }
+  }
+  return out.sort((a, b) => String(a.date + a.start).localeCompare(String(b.date + b.start))).slice(0, limit)
 }

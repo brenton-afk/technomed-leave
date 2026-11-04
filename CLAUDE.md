@@ -335,6 +335,21 @@ sheet attached. Known items keep what the scan read; new items go through
 `normaliseItem` like a scanned one, unless the rep picks the distributor.
 `testOnly` sends to the signed-in person only and saves nothing.
 
+### Neurophys, a draggable Edit booking, and kit moves for a case (Toni, 4 Nov 2026)
+
+- **Neurophys** is offered (shown first, never auto-sent) on any **Dubey posterior
+  spine case at Calvary**: rule `neurophys-dubey-clv` in `api/_bookingNotices.js`.
+  A rule may now match by `surgeon` (+ `posterior`, via `isPosteriorSpine`)
+  instead of `distributor`, and carry an `ask` line for a new booking. Added to
+  saved settings by the `neurophys-dubey-2026-11-04` correction (`addRules`).
+- **Edit booking on a desktop** (`useIsDesktop`) is a floating panel over an
+  undimmed, still-usable week, dragged by its title bar. A phone keeps the sheet.
+- **Move a kit** offers the week's upcoming cases using that kit
+  (`casesUsingKit` in `tasks.js`); picking one sets To to its hospital, pulls
+  the day back to the case's day if later, writes `Case: Gupta · Calvary · Wed
+  11 Nov` (never the patient) and stores the booking id as
+  `extendedProperties.private.tmCaseId`.
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the

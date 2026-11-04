@@ -62,7 +62,9 @@ export const CONTACT_CORRECTIONS = [
   // existed.
   { id: 'kit-hospitals-2026-11-01', addContacts: ['calvary_loans', 'rhh_loans'] },
   // Device loan requests on, in a copy saved while they were offered but off.
-  { id: 'device-loans-on-2026-11-02', enableLoans: 'device' }
+  { id: 'device-loans-on-2026-11-02', enableLoans: 'device' },
+  // The Dubey neurophys rule, added to a copy saved before it existed.
+  { id: 'neurophys-dubey-2026-11-04', addContacts: ['neurophys'], addRules: ['neurophys-dubey-clv'] }
 ]
 
 /** Applies any correction not yet applied. Returns null when nothing changed. */
@@ -73,6 +75,7 @@ export function applyCorrections(saved) {
   const lower = v => String(v).trim().toLowerCase()
   let contacts = saved.contacts
   let loanRequests = saved.loanRequests
+  let rules = saved.rules
   for (const fix of due) {
     if (fix.enableLoans) {
       if (Array.isArray(loanRequests)) {
@@ -85,6 +88,10 @@ export function applyCorrections(saved) {
       for (const id of fix.addContacts) {
         const seed = DEFAULT_CONTACTS.find(c => c.id === id)
         if (seed && !contacts.some(c => c.id === id)) contacts = [...contacts, seed]
+      }
+      for (const id of fix.addRules || []) {
+        const seed = DEFAULT_RULES.find(r => r.id === id)
+        if (seed && !(rules || []).some(r => r.id === id)) rules = [...(rules || []), seed]
       }
       applied.add(fix.id)
       continue
@@ -100,7 +107,7 @@ export function applyCorrections(saved) {
     })
     applied.add(fix.id)
   }
-  return { ...saved, contacts, ...(loanRequests ? { loanRequests } : {}), applied: [...applied] }
+  return { ...saved, contacts, ...(rules ? { rules } : {}), ...(loanRequests ? { loanRequests } : {}), applied: [...applied] }
 }
 
 
@@ -129,8 +136,37 @@ function withNewLoanRequests(saved, contacts) {
 
 export const DEFAULT_RULES = [
   { id: 'signus-all', contactId: 'signus', distributor: 'signus', hospital: '', events: EVENTS, autoSend: false },
-  { id: 'kt-rhh', contactId: 'kt', distributor: 'kt', hospital: 'RHH', events: EVENTS, autoSend: false }
+  { id: 'kt-rhh', contactId: 'kt', distributor: 'kt', hospital: 'RHH', events: EVENTS, autoSend: false },
+  // Toni, 4 Nov 2026: any Dubey posterior spine case at Calvary should prompt
+  // a neurophys booking. A rule by surgeon and operation rather than by
+  // system: Neurophys monitor the case, they supply no kit.
+  { id: 'neurophys-dubey-clv', contactId: 'neurophys', distributor: '', surgeon: 'Dubey', posterior: true,
+    hospital: 'CLV', events: EVENTS, autoSend: false,
+    ask: 'Could you please book neurophysiology monitoring for this case.' }
 ]
+
+// Posterior spine work, from the operation as booked. Anterior-only work (an
+// ACDF, an ALIF) is not; a combined anterior and posterior case is.
+const POSTERIOR = /\b(?:posterior|plif|tlif|psf|pcf|pslf|laminectom\w*|laminoplast\w*|laminotom\w*|pedicle|fixation|osteotom\w*|scoliosis|deformity|decompression|discectomy|microdiscectomy|foraminotom\w*|fusion|instrumentation)\b/i
+const ANTERIOR_ONLY = /\b(?:acdf|alif|anterior|xlif|olif|llif|tdr|arthroplasty|corpectomy)\b/i
+export function isPosteriorSpine(procedure) {
+  const text = String(procedure || '')
+  if (/\b(?:posterior|360|combined|plif|tlif)\b/i.test(text)) return true
+  if (ANTERIOR_ONLY.test(text)) return false
+  return POSTERIOR.test(text)
+}
+
+const sameSurgeon = (rule, booking) =>
+  Boolean(booking?.surgeon) && String(booking.surgeon).toLowerCase().includes(String(rule).toLowerCase())
+
+/** Whether a rule applies to the booking as it now stands. */
+function ruleMatches(rule, now) {
+  if (!now) return false
+  if (rule.surgeon) {
+    return sameSurgeon(rule.surgeon, now) && (!rule.posterior || isPosteriorSpine(now.procedure))
+  }
+  return Boolean(now.distributors?.includes(rule.distributor))
+}
 
 export async function getNoticeSettings() {
   try {
@@ -169,7 +205,9 @@ export async function saveNoticeSettings({ contacts, rules, loanRequests = DEFAU
       id: String(r.id), contactId: String(r.contactId), distributor: String(r.distributor || ''),
       hospital: ['RHH', 'CLV', ''].includes(r.hospital) ? r.hospital : '',
       events: (r.events || []).filter(e => EVENTS.includes(e)),
-      autoSend: Boolean(r.autoSend)
+      autoSend: Boolean(r.autoSend),
+      ...(r.surgeon ? { surgeon: String(r.surgeon).slice(0, 40), posterior: Boolean(r.posterior) } : {}),
+      ...(r.ask ? { ask: String(r.ask).slice(0, 200) } : {})
     }
   })
   const cleanLoans = (loanRequests || []).map(l => {
@@ -267,7 +305,7 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
     // Where the case is, though, counts before or after: a KT case moved off
     // RHH is still news to KT.
     const now = kind === 'cancelled' ? (before || after) : after
-    const has = Boolean(now?.distributors.includes(rule.distributor))
+    const has = ruleMatches(rule, now)
     const atHospital = !rule.hospital || [before, after].filter(Boolean).some(b => b.hospital === rule.hospital)
     if (!has || !atHospital) continue
     const contact = contacts.get(rule.contactId)
@@ -281,12 +319,14 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
       `Hi ${contact.name.split(/[\s(/]/)[0]} team,`, '',
       kind === 'cancelled' ? 'This booking has been cancelled.'
         : kind === 'new' ? 'A new case has been booked.' : 'This booking has changed.',
+      ...(rule.ask && kind === 'new' ? ['', rule.ask] : []),
       ...(changeLines.length ? ['', ...changeLines] : []),
       '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`)
     ].join('\n')
     const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>Hi ${escapeHtml(contact.name.split(/[\s(/]/)[0])} team,</p>
 <p>${kind === 'cancelled' ? 'This booking has been <strong>cancelled</strong>.' : kind === 'new' ? 'A new case has been booked.' : 'This booking has changed.'}</p>
+${rule.ask && kind === 'new' ? `<p>${escapeHtml(rule.ask)}</p>` : ''}
 ${changeLines.length ? `<ul>${changeLines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
 <table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
