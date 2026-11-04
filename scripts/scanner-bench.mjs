@@ -44,7 +44,7 @@ const height = Math.round(width * 0.75)
 
 const cases = benchmark(width, height)
 const scale = 320 / width
-let passed = 0, found = 0, totalError = 0, totalMs = 0
+let passed = 0, found = 0, totalError = 0, totalMs = 0, wrongAuto = 0
 
 console.log(`\n  ${width}x${height}, ${cases.length} scenes\n`)
 
@@ -62,16 +62,20 @@ for (const scene of cases) {
   if (ok) { passed++; totalError += error }
 
   const shown = result ? `${error.toFixed(1)}px`.padStart(8) : '   —    '
+  // What the shutter would do by itself: big enough, and sure of every edge.
+  const auto = result && result.fill >= AUTO_FILL && result.confident !== false
+  if (auto && !ok) wrongAuto++
   console.log(`  ${ok ? '✓' : '✗'} ${scene.name.padEnd(26)}${shown}` +
     (result
       ? `  area ${result.areaFraction.toFixed(2)}  fill ${result.fill.toFixed(2)}` +
-        `  contrast ${result.contrast.toFixed(2)}${result.fill >= AUTO_FILL ? '  auto' : ''}`
+        `  contrast ${result.contrast.toFixed(2)}${auto ? '  auto' : result.confident === false ? '  unsure' : ''}`
       : '  not found'))
 }
 
 console.log(`\n  ${passed}/${cases.length} within ${TOLERANCE}px · ${found} found · ` +
   `mean error ${passed ? (totalError / passed).toFixed(1) : '—'}px · ` +
-  `${(totalMs / cases.length).toFixed(2)} ms/frame\n`)
+  `${(totalMs / cases.length).toFixed(2)} ms/frame`)
+console.log(`  ${wrongAuto} wrong outline${wrongAuto === 1 ? '' : 's'} the shutter would take by itself\n`)
 
 // ─── Steadiness ───────────────────────────────────────────────────────────────
 // The complaint was never only accuracy: "the green dynamic frame is still a bit
@@ -137,6 +141,37 @@ for (const scene of steady) {
 }
 
 console.log(`\n  worst single-frame jump ${(worst * 100).toFixed(2)}% of frame width\n`)
+
+// ─── The shutter, over time ──────────────────────────────────────────────────
+// The same noisy frames through the real tracker, at camera pace, asking what
+// the app would actually do: does a good scene get photographed by itself,
+// and does a bad one ever get photographed wrong?
+let firedRight = 0, firedWrong = 0
+const goodScenes = new Set(steady.map(s => s.name))
+console.log('  Auto-capture over 40 noisy frames (66ms apart)\n')
+for (const scene of cases) {
+  const tracker = new DocumentTracker()
+  let fired = null
+  for (let n = 0; n < 40 && !fired; n++) {
+    const found = detectDocument(cv, toRgba(withNoise(scene.image, 6, 100 + n)), width, height)
+    const view = tracker.update(found, n * 66)
+    if (view.readyToCapture) fired = view.corners
+  }
+  const right = fired && cornerError({ corners: fired }, scene.quad, width, height) * scale <= TOLERANCE
+  if (fired && right) firedRight++
+  if (fired && !right) firedWrong++
+  const verdict = !fired ? 'waits for a tap' : right ? 'takes it' : 'TAKES THE WRONG OUTLINE'
+  if (!goodScenes.has(scene.name) || !right) console.log(`  ${scene.name.padEnd(34)}${verdict}`)
+}
+console.log(`\n  takes ${firedRight} of ${goodScenes.size} good scenes by itself · ${firedWrong} wrong\n`)
+if (firedWrong) wrongAuto += firedWrong
+
+// The one failure that costs a rescan without anybody noticing: a wrong
+// outline photographed automatically. Wrong but unsure is drawn, and waits.
+if (wrongAuto) {
+  console.error(`  ${wrongAuto} wrong outline(s) would be captured automatically.\n`)
+  process.exit(1)
+}
 
 // Detection runs on every second frame, so it has two frames' budget. This is a
 // backstop against an order-of-magnitude regression, not a tight bound.

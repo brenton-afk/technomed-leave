@@ -723,6 +723,21 @@ the app. What the code guarantees is one `getUserMedia` per session — the prom
 is per page load, so on iOS a standalone PWA launch will ask again unless the site
 is set to Allow in Safari's settings.
 
+**The shutter only fires by itself on an outline it is sure of** (Aimee's
+stainless bench at RHH, 4 Nov 2026). `detectDocument` returns `confident`:
+every measurable side has a clear step under it (`weakestSide >= 0.65`), or
+the weak side is busy with print rather than empty (`filledSide >= 0.9`, a
+page printed to its border). Wrong answers on the steel scenes all had an
+empty side (0.14–0.64); right ones 0.71 and up. The tracker needs the last
+three detections confident (`sureFrames`); otherwise the reason is `unsure`,
+the outline is drawn dashed, and the person taps. The bench now has six steel
+scenes (`paintMetal` in `scenes.js`: brushing, gradients, seams, reflections,
+glare), counts wrong outlines the shutter would take, and runs 40 noisy frames
+per scene through the real tracker — it fails on any wrong auto-capture.
+A Hough line-pairing approach was tried for glare-broken edges and removed: it
+more than doubled detection time and found no page the contours missed.
+`scripts/scanner-diag.mjs "<scene>"` lists every candidate considered.
+
 **Detection runs at 240×180 on every second frame**, and low is deliberate: a page
 border survives downscaling and a form's printed table rules do not, so the small
 frame is *more* accurate as well as four times faster. Every third frame was a

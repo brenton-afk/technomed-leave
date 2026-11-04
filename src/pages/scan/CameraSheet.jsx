@@ -333,7 +333,11 @@ export function Outline({ view, countdown }) {
           outline changing colour and shouting about it. */}
       <polygon ref={fillRef} fill={MESH} fillOpacity={0.2}
         style={{ transition: 'fill-opacity 160ms ease-out' }} />
-      <polygon ref={lineRef} fill="none" stroke="#fff"
+      {/* Dashed while the detector cannot see every edge clearly (a shiny
+          bench): drawn so the person can see what it found, but plainly not
+          a lock — the shutter waits for a tap. */}
+      <polygon ref={lineRef} fill="none" stroke="#fff" data-unsure={view?.reason === 'unsure' ? 'true' : undefined}
+        strokeDasharray={view?.reason === 'unsure' ? '1.6 1.2' : undefined}
         strokeWidth={0.45} strokeLinejoin="round" strokeLinecap="round"
         filter="url(#outline-glow)"
         style={{ transition: 'stroke-width 160ms ease-out' }} />

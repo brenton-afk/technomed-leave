@@ -517,3 +517,33 @@ describe('off the edge, judged over several frames', () => {
     expect(view.readyToCapture).toBe(false)
   })
 })
+
+// ─── A shiny bench (Aimee, RHH, 4 Nov 2026) ──────────────────────────────────
+// On stainless steel the detector's best answer can be a quad with one side
+// across bare metal. It is drawn, but the shutter must not take it by itself.
+describe('an outline the detector is not sure of', () => {
+  const still = (n, extra) => Array.from({ length: n }, () => detection(quad(), extra))
+
+  it('is drawn, but never captured automatically', () => {
+    const tracker = new DocumentTracker()
+    const view = feed(tracker, still(30, { confident: false }))
+    expect(view.corners).not.toBeNull()
+    expect(view.readyToCapture).toBe(false)
+    expect(view.reason).toBe('unsure')
+    expect(view.hint).toMatch(/tap to take it/)
+  })
+
+  it('needs the last three detections sure, not just the latest', () => {
+    const tracker = new DocumentTracker()
+    feed(tracker, still(20, { confident: false }))
+    const view = feed(tracker, still(2, { confident: true }), 3000)
+    expect(view.readyToCapture).toBe(false)
+    const after = feed(tracker, still(12, { confident: true }), 3200)
+    expect(after.readyToCapture).toBe(true)
+  })
+
+  it('a detector that does not say is trusted, as before', () => {
+    const view = feed(new DocumentTracker(), still(30))
+    expect(view.readyToCapture).toBe(true)
+  })
+})

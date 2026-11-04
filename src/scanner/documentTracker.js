@@ -64,6 +64,9 @@ export const HOLD_REASONS = {
   offEdge: 'Move back a little — part of the page is off the edge',
   surfaceOnly: 'Can\'t see the page\'s edges — try a darker surface or more light',
   dark: 'More light needed',
+  // Shiny or pale bench: an outline is drawn but one edge is not clearly
+  // there, so the shutter waits for a person (Aimee, RHH, 4 Nov 2026).
+  unsure: 'Can\'t see every edge clearly — tilt away from the glare, or tap to take it',
   moving: 'Hold still',
   ready: 'Hold still'
 }
@@ -139,7 +142,11 @@ export class DocumentTracker {
       // still lands about a thousand pixels across on a 1920-wide capture, which
       // is enough to read a lot number from.
       minFill = 0.25,
-      minContrast = 0.22
+      minContrast = 0.22,
+      // How many of the latest detections must be confident before the
+      // shutter fires by itself. Three is the jump filter's own number: one
+      // wrong answer can come and go, three in a row is what it sees.
+      sureFrames = 3
     } = options
 
     this.calmGain = calmGain
@@ -154,6 +161,7 @@ export class DocumentTracker {
     this.settleFrames = settleFrames
     this.minFill = minFill
     this.minContrast = minContrast
+    this.sureFrames = sureFrames
     this.reset()
   }
 
@@ -173,6 +181,8 @@ export class DocumentTracker {
     // of them rather than any one: a single frame clipping a corner flashed
     // "Move back" at somebody whose page was plainly in view.
     this.edgeVotes = []
+    // The last few detections' confidence. Auto-capture needs all of them.
+    this.sureVotes = []
   }
 
   /**
@@ -260,6 +270,9 @@ export class DocumentTracker {
 
     this.latest = detection
     this.edgeVotes = [...this.edgeVotes, detection.surfaceOnly ? 'surface' : detection.offEdge ? 'edge' : 'in'].slice(-5)
+    // A detector that does not say counts as sure, which is how it behaved
+    // before it could say.
+    this.sureVotes = [...(this.sureVotes || []), detection.confident !== false].slice(-this.sureFrames)
     this.lastSeenAt = now
     const corners = detection.corners
 
@@ -345,6 +358,7 @@ export class DocumentTracker {
       else if (votes.length && most('edge')) reason = 'offEdge'
       else if (fill < this.minFill) reason = 'small'
       else if (contrast < this.minContrast) reason = 'dark'
+      else if ((this.sureVotes || []).includes(false)) reason = 'unsure'
       else reason = settled && stillFor > 0 ? 'ready' : 'moving'
     }
 

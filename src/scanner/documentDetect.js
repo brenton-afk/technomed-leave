@@ -536,6 +536,10 @@ function cornersOf(cv, contour, minHullArea) {
  * on white.
  */
 const MIN_EDGE_SUPPORT = 0.55
+
+// See `confident` in detectDocument. Measured on the bench, with noise.
+const CONFIDENT_SIDE = 0.65
+const BUSY_SIDE = 0.9
 // The least any one measurable side may have. Lower than the average bar, so
 // a real side broken by a shadow or a staple still stands.
 const WEAKEST_SIDE = 0.1
@@ -721,6 +725,22 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       // page — the page's own edges were not found. "Move back" is the wrong
       // advice for that; the background is the problem.
       surfaceOnly: edgesTouched(chosen.corners, width, height) >= 3,
+
+      // Whether the outline can be trusted enough to photograph by itself.
+      //
+      // Aimee's stainless bench at RHH (4 Nov 2026): glare, a seam or steel
+      // close to the paper's tone, and the detector's best answer was a quad
+      // with one side across bare steel — a shape that passes every test on
+      // average and is still not the page. Every such wrong answer on the
+      // bench has a side with little step under it, and almost every right
+      // answer has none: measured, wrong answers' weakest sides ran 0.14 to
+      // 0.64 and right ones 0.71 and up. The exception is a page whose print
+      // runs to its border, which flips the step's sign — but that side is
+      // *busy*, not empty, and an empty side is what a wrong answer has.
+      // Unconfident answers are still drawn and can still be taken by hand;
+      // they just never fire the shutter on their own.
+      confident: chosen.weakestSide >= CONFIDENT_SIDE || chosen.filledSide >= BUSY_SIDE,
+      weakestSide: chosen.weakestSide,
 
       // What "close enough to capture" is actually judged on.
       fill: fillFraction(normalised, chosen.areaFraction, width / height),

@@ -108,6 +108,53 @@ function fillQuad(g, W, H, quad, shade) {
   }
 }
 
+// Deterministic noise, so a scene is the same every run.
+function hash(x, y, salt = 0) {
+  let h = (x * 374761393 + y * 668265263 + salt * 2246822519) >>> 0
+  h = (h ^ (h >>> 13)) * 1274126177 >>> 0
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295
+}
+
+function paintMetal(g, W, H, m) {
+  const k = W / 320
+  // Brushed grain: streaks that run the length of the bench, each row a little
+  // lighter or darker than the next, and within a row slowly varying.
+  const rowShift = new Float32Array(H)
+  for (let y = 0; y < H; y++) rowShift[y] = (hash(0, y, 7) - 0.5) * 2 * (m.streak || 0)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      // Uneven light: brighter towards one corner.
+      const lit = (m.gradient || 0) * ((x / W) * 0.6 + (y / H) * 0.4 - 0.5)
+      const grain = rowShift[y] + (hash(Math.floor(x / (6 * k)), y, 3) - 0.5) * (m.streak || 0) * 0.6
+      g[y * W + x] = clamp(m.base + lit + grain)
+    }
+  }
+  // Seams and welds: a hard line across the bench.
+  for (const s of m.seams || []) {
+    const yy = Math.round(s.y * k)
+    for (let y = yy; y < yy + Math.max(1, Math.round((s.width || 2) * k)); y++) {
+      if (y < 0 || y >= H) continue
+      for (let x = 0; x < W; x++) g[y * W + x] = s.grey
+    }
+  }
+  // Reflections of light panels: sharp-edged bright rectangles in the steel.
+  for (const r of m.reflections || []) fillQuad(g, W, H, r.quad.map(p => ({ x: p.x * k, y: p.y * k })), r.grey)
+  // Glare: a soft blown-out patch, brighter than the paper at its centre.
+  for (const gl of m.glare || []) {
+    const cx = gl.x * k, cy = gl.y * k, rad = gl.r * k
+    for (let y = Math.max(0, Math.floor(cy - rad)); y < Math.min(H, Math.ceil(cy + rad)); y++) {
+      for (let x = Math.max(0, Math.floor(cx - rad)); x < Math.min(W, Math.ceil(cx + rad)); x++) {
+        const d = Math.hypot(x - cx, y - cy) / rad
+        if (d >= 1) continue
+        const w = (1 - d * d) ** 1.5
+        g[y * W + x] = clamp(g[y * W + x] * (1 - w) + 255 * w)
+      }
+    }
+  }
+}
+
+const clamp = v => Math.max(0, Math.min(255, Math.round(v)))
+
 export function scene(o) {
   const { width: W, height: H, quad, paper, bench } = o
   const content = o.content !== false
@@ -116,6 +163,14 @@ export function scene(o) {
 
   // The surface the page is on, under everything else.
   if (o.surface) fillQuad(g, W, H, o.surface.quad, o.surface.grey)
+
+  // A stainless steel bench (Aimee, RHH, 4 Nov 2026: "not finding the page
+  // shape … the metal of the RHH bench"). Steel is what every other scene is
+  // not: light, close to the paper's own tone, streaked in one direction, lit
+  // unevenly, carrying glare that is brighter than the page, and reflecting the
+  // ceiling's light panels as sharp bright rectangles — which are exactly the
+  // shape the detector is looking for.
+  if (o.metal) paintMetal(g, W, H, o.metal)
 
   for (const c of o.clutter || []) {
     for (let y = Math.max(0, c.y0); y < Math.min(H, c.y1); y++) {
@@ -139,6 +194,22 @@ export function scene(o) {
       const uu = o.tight ? 0.02 + u * 0.96 : u
       const vv = o.tight ? 0.005 + v * 0.99 : v
       g[y * W + x] = formContent(uu, o.tight ? Math.max(0.02, vv * 0.55) : vv, paper)
+    }
+  }
+
+  // Glare carries onto the page too, weaker on matte paper than on steel: where
+  // the page edge runs through a glare patch, page and steel are both near
+  // white and the edge all but disappears.
+  for (const gl of o.metal?.glare || []) {
+    const k = W / 320
+    const cx = gl.x * k, cy = gl.y * k, rad = gl.r * k
+    for (let y = Math.max(0, Math.floor(cy - rad)); y < Math.min(H, Math.ceil(cy + rad)); y++) {
+      for (let x = Math.max(0, Math.floor(cx - rad)); x < Math.min(W, Math.ceil(cx + rad)); x++) {
+        const d = Math.hypot(x - cx, y - cy) / rad
+        if (d >= 1) continue
+        const w = 0.5 * (1 - d * d) ** 1.5
+        g[y * W + x] = clamp(g[y * W + x] * (1 - w) + 255 * w)
+      }
     }
   }
 
@@ -265,6 +336,42 @@ export function benchmark(W = 320, H = 240) {
         { x: -10 * k, y: -10 * k }, { x: 330 * k, y: -10 * k },
         { x: 330 * k, y: 205 * k }, { x: -10 * k, y: 205 * k }
       ] }
+    },
+    // ── Stainless steel (RHH theatre benches) ──
+    {
+      name: 'steel bench, brushed',
+      quad: rect(60, 32, 260, 208), paper: 234, bench: 170, noise: 3,
+      metal: { base: 172, streak: 14, gradient: 40 }
+    },
+    {
+      name: 'steel bench, light, near paper',
+      quad: rect(60, 32, 260, 208), paper: 236, bench: 205, noise: 3,
+      metal: { base: 206, streak: 12, gradient: 34 }
+    },
+    {
+      name: 'steel, glare over the page edge',
+      quad: rect(60, 32, 260, 208), paper: 234, bench: 180, noise: 3,
+      metal: { base: 182, streak: 12, gradient: 30, glare: [{ x: 262, y: 70, r: 70 }] }
+    },
+    {
+      name: 'steel, light panel reflected',
+      quad: rect(104, 36, 286, 206), paper: 234, bench: 160, noise: 3,
+      metal: { base: 162, streak: 12, gradient: 30, reflections: [{ grey: 252, quad: [
+        { x: 6, y: 18 }, { x: 92, y: 18 }, { x: 92, y: 150 }, { x: 6, y: 150 }] }] }
+    },
+    {
+      name: 'steel, seam under the page',
+      quad: tilted, paper: 235, bench: 176, noise: 3,
+      metal: { base: 178, streak: 14, gradient: 36, seams: [{ y: 120, grey: 96, width: 2 }] }
+    },
+    {
+      name: 'steel, glare + reflection + tilt',
+      quad: tilted, paper: 234, bench: 178, noise: 4,
+      metal: {
+        base: 180, streak: 16, gradient: 44,
+        glare: [{ x: 40, y: 190, r: 60 }],
+        reflections: [{ grey: 250, quad: [{ x: 230, y: 4 }, { x: 318, y: 4 }, { x: 318, y: 26 }, { x: 230, y: 26 }] }]
+      }
     }
   ].map(c => ({ ...c, width: W, height: H, image: scene({ ...c, width: W, height: H }) }))
 }
