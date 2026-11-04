@@ -3,7 +3,7 @@ import { getAllTimesheets } from '../_redis.js'
 import { currentPeriod, todayAest } from '../_fortnight.js'
 import { sendSms, toE164, twilioConfigured } from '../_twilio.js'
 import { owingFor, caseLine, leaderEmailFor } from '../_usageReminders.js'
-import { sendUsageReminderEmail } from '../_email.js'
+import { sendUsageReminderEmail, PORTAL_URL } from '../_email.js'
 import { notify } from '../_push.js'
 import { TZ, zonedCivil, toDateStr, addCivilDays } from '../../src/clinicalPlan/week.js'
 
@@ -141,7 +141,7 @@ export default async function handler(req, res) {
       const body = `Hi ${staff.name.split(' ')[0]}, your TechnoMed timesheet for `
         + `${period.start} to ${period.end} hasn't been submitted yet. `
         + `It's due by end of Sunday ${deadline}. `
-        + `Submit it here: https://technomed-leave.vercel.app`
+        + `Submit it here: ${PORTAL_URL}`
       try {
         const result = await sendSms(staff.mobileNumber, body)
         sent.push({ name: staff.name, to: result.to })

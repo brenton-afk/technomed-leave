@@ -268,8 +268,18 @@ function summaryText(application, prefix, extra = '') {
   return `${prefix}\nEmployee: ${application.name}\nLeave type: ${leaveLabel}\nDivision: ${application.division}\nFrom: ${application.startDate}\nTo: ${application.endDate}\nReturn: ${application.returnDate}\nReason: ${application.reason}${extra}`
 }
 
+/**
+ * Where the portal is, for every link an email carries.
+ *
+ * leave.technomed.com.au was never pointed at the app — Erin's Approve button
+ * landed on "can't reach this page" (DNS_PROBE_FINISHED_NXDOMAIN, 4 Nov 2026).
+ * The address that works is the Vercel one. Once the custom domain is set up in
+ * Vercel and DNS, set PORTAL_URL and every email follows.
+ */
+export const PORTAL_URL = String(process.env.PORTAL_URL || 'https://technomed-leave.vercel.app').replace(/\/+$/, '')
+
 /** Where the approver lands from the email: Admin → Leave. */
-export const APPROVE_URL = 'https://leave.technomed.com.au/?go=approvals'
+export const APPROVE_URL = `${PORTAL_URL}/?go=approvals`
 
 // Sent to the approver (Erin) when a new application is lodged. Only her:
 // "Erin is the only approver so email can go to her when a leave application
@@ -690,11 +700,11 @@ export async function sendUsageReminderEmail({ to, firstName, lines, escalation 
     : `Hi ${firstName}, these cases of yours today have no usage sent yet:`
   const text = [intro, '', ...lines.map(l => `• ${l}`), '',
     'Send it from Scan in the portal, or open the booking and tap "No usage" if there was none.',
-    'https://leave.technomed.com.au'].join('\n')
+    PORTAL_URL].join('\n')
   const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
 <p>${escapeHtml(intro)}</p><ul>${lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
 <p>Send it from <strong>Scan</strong> in the portal, or open the booking and tap <strong>No usage</strong> if there was none.</p>
-<p><a href="https://leave.technomed.com.au">Open the portal</a></p></div>`
+<p><a href="${PORTAL_URL}">Open the portal</a></p></div>`
   return send({
     kind: 'notification', to: [to],
     subject: escalation ? 'Usage still not sent from yesterday' : 'Usage not sent yet today',

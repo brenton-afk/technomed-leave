@@ -11,7 +11,7 @@ npm run build    # Production build to dist/
 npm run preview  # Serve the built dist/
 ```
 
-There is no test runner, linter, or formatter configured. Deployment is Vercel (production: `leave.technomed.com.au`); pushing to `main` deploys.
+There is no test runner, linter, or formatter configured. Deployment is Vercel (production: **`technomed-leave.vercel.app`** — `leave.technomed.com.au` has never resolved; set it up in Vercel + DNS and then set `PORTAL_URL`, which every email link uses); pushing to `main` deploys.
 
 **Brent's standing instruction (1 Nov 2026): deploy without asking.** Once a change
 passes `npx vitest run`, `npm run build` and the `api/` import check below, commit it

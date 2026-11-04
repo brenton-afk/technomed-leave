@@ -272,9 +272,9 @@ describe('a leave application being lodged (Task 13)', () => {
 
   it('carries a working link straight to the approvals screen', async () => {
     await email.sendNotificationEmail(APP)
-    expect(posted[0].html).toContain('href="https://leave.technomed.com.au/?go=approvals"')
+    expect(posted[0].html).toContain('href="https://technomed-leave.vercel.app/?go=approvals"')
     expect(posted[0].html).toMatch(/Approve or decline/)
-    expect(posted[0].text).toContain('https://leave.technomed.com.au/?go=approvals')
+    expect(posted[0].text).toContain('https://technomed-leave.vercel.app/?go=approvals')
   })
 
   it('names the dates and the type in what she reads', async () => {
@@ -321,5 +321,12 @@ describe('a correction to a usage already sent (Aimee, 4 Nov 2026)', () => {
     expect(sent.subject).toBe('CORRECTION – A case folder name')
     expect(sent.text).toMatch(/^Correction — this replaces the usage sent on 4 Nov 2026\. Added: 1 × SIGNUS DIPLOMAT Cross Link 60mm\. The corrected usage sheet is attached\./)
     expect(sent.attachments).toHaveLength(1)
+  })
+})
+
+describe('links in emails (Erin, 4 Nov 2026)', () => {
+  it('point at the address the portal actually answers on', () => {
+    // leave.technomed.com.au does not resolve, so an Approve button there went nowhere.
+    expect(email.APPROVE_URL).toBe('https://technomed-leave.vercel.app/?go=approvals')
   })
 })
