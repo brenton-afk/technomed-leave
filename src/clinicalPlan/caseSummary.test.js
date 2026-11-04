@@ -19,10 +19,14 @@ describe('case summary', () => {
       'Surgeon: Gupta',
       'Procedure: L4/5 PLIF',
       'Kit: Diplomat (Consignment) (open screws) / Global BMD PLIF (Consignment)',
-      'Brainlab: AIRO + Curve',
-      'Planned reps: Aimee, Mat',
-      'Notes: Second on the list'
+      'Planned reps: Aimee, Mat'
     ].join('\n'))
+  })
+
+  it('never copies the notes or the navigation, and keeps Brainlab out of the kit', () => {
+    const text = caseSummaryText({ ...sample, kit: 'Mariner MIS (Distributor Loan) + BRAINLAB AIRO & CURVE' })
+    expect(text).toMatch(/^Kit: Mariner MIS \(Distributor Loan\)$/m)
+    expect(text).not.toMatch(/Notes|Brainlab|AIRO|BRAINLAB|Second on the list/)
   })
 
   it('leaves out what is empty rather than printing a bare label', () => {

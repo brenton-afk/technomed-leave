@@ -11,7 +11,7 @@
 // labels and order as the booking's own description (labelledFields.js), with
 // the day written out, because the text goes to people outside the app.
 
-import { formatKitSupplies } from './kitSupply.js'
+import { formatKitSupplies, parseKitSupplies } from './kitSupply.js'
 import { formatListPlace } from './listPlace.js'
 import { weekdayName } from './week.js'
 
@@ -32,8 +32,13 @@ const list = v => [].concat(v || []).map(x => String(x).trim()).filter(Boolean)
  * out rather than printed empty — "Kit:" with nothing after it reads as a
  * kit nobody has thought about.
  */
+//
+// Brainlab / AIRO is enabling technology, not kit (Brent, 4 Nov 2026): it is
+// taken out of the Kit line, shown on screen as its own record, and — like the
+// notes — never put into the copied text.
 export function caseSummaryLines(c = {}) {
-  const kit = c.kit || (c.supplies?.length ? formatKitSupplies(c.supplies) : '')
+  const entries = c.kit ? parseKitSupplies(c.kit) : (c.supplies || [])
+  const kit = formatKitSupplies(entries.filter(e => !e.navigation && !NAVIGATION_ONLY.test(e.system)))
   const place = c.listPlace ? formatListPlace(c.listPlace) : ''
   const lines = [
     ['Patient', c.patient || (c.awaitingName ? 'Name to come' : '')],
@@ -52,9 +57,17 @@ export function caseSummaryLines(c = {}) {
   return lines.filter(([, value]) => String(value).trim())
 }
 
-/** The same, as one block of plain text, one fact per line. */
+const NAVIGATION_ONLY = /\b(?:brainlab|airo|curve)\b/i
+
+// What stays on the phone: "Don't share notes when bookings info is copied",
+// and the navigation is recorded, not exported (Brent, 4 Nov 2026).
+const NOT_COPIED = new Set(['Notes', 'Brainlab'])
+
+/** The copied text: plain, one fact per line, without notes or navigation. */
 export function caseSummaryText(c) {
-  return caseSummaryLines(c).map(([label, value]) => `${label}: ${value}`).join('\n')
+  return caseSummaryLines(c)
+    .filter(([label]) => !NOT_COPIED.has(label))
+    .map(([label, value]) => `${label}: ${value}`).join('\n')
 }
 
 /** A subject line for Share: "Sample L4/5 PLIF – Gupta – Calvary Fri 13 Nov". */

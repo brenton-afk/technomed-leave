@@ -268,6 +268,9 @@ fields as they stand, with Copy and Share) and behind a **Copy details**
 button on every week and day card, which adds the hospital and day the card
 leaves out. One function for both, so the two never word a case differently.
 It includes the patient surname — that is what it is for.
+**The copied text leaves out the notes and Brainlab/AIRO** (Brent, 4 Nov
+2026): navigation is enabling technology, recorded on the booking and shown on
+screen as its own line, never under Kit and never exported.
 
 ### Tasks are done once, everywhere
 

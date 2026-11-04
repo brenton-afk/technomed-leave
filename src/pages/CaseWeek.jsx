@@ -307,7 +307,7 @@ function suppliesFor(surgicalCase) {
   // underneath reading "AIRO (Distributor Loan?)" says a tray is being chased
   // that nobody has ever ordered.
   const entries = (surgicalCase.supplies || [])
-    .filter(e => e?.system && !isNavigationOnly(e.system))
+    .filter(e => e?.system && !e.navigation && !isNavigationOnly(e.system))
   if (!entries.length) return null
 
   return entries.map(entry => {
