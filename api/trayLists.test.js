@@ -79,6 +79,25 @@ describe('saving a tray list onto a kit', () => {
     expect((await listKits()).find(k => k.id === kit.id).trays).toEqual(['Tray 1 – Instruments', 'Tray 2 – Plates'])
   })
 
+  it('adds a second document\'s trays rather than replacing the first (Aimee, 4 Nov 2026)', async () => {
+    const { listKits, saveTrayList, getTrayList } = await import('./_kits.js')
+    const kit = (await listKits()).find(k => k.system === 'Shoreline' && k.home === 'RHH')
+    const tray = (name, code) => ({ name, lines: [{ code, description: 'ITEM', qty: 1, kind: 'instrument' }] })
+    await saveTrayList(kit.id, { trays: [tray('Torque', 'A-1')], source: { file: 'torque.pdf' }, mode: 'add' }, 'Aimee')
+    await saveTrayList(kit.id, { trays: [tray('Navigated', 'B-1')], source: { file: 'navigated.pdf' }, mode: 'add' }, 'Aimee')
+    let list = await getTrayList(kit.id)
+    expect(list.trays.map(t => t.name)).toEqual(['Torque', 'Navigated'])
+    expect(list.source.file).toBe('torque.pdf, navigated.pdf')
+    // The same tray again replaces only that tray.
+    await saveTrayList(kit.id, { trays: [tray('torque', 'A-2')], source: { file: 'torque v2.pdf' }, mode: 'add' }, 'Aimee')
+    list = await getTrayList(kit.id)
+    expect(list.trays.map(t => [t.name, t.lines[0].code])).toEqual([['Navigated', 'B-1'], ['torque', 'A-2']])
+    expect((await listKits()).find(k => k.id === kit.id).trays).toEqual(['Navigated', 'torque'])
+    // Replace still starts again.
+    await saveTrayList(kit.id, { trays: [tray('Only', 'C-1')], source: { file: 'c.pdf' } }, 'Aimee')
+    expect((await getTrayList(kit.id)).trays.map(t => t.name)).toEqual(['Only'])
+  })
+
   it('keeps a tray photo only from the photos folder', async () => {
     const { listKits, saveTrayList, getTrayList, isTrayPhotoPath } = await import('./_kits.js')
     const kit = (await listKits())[0]

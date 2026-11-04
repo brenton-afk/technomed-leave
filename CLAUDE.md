@@ -315,6 +315,13 @@ photo shows each tray, and on save each photo goes to Dropbox at
 paths under that folder are accepted) and the screen shows it by a temporary
 link fetched per view.
 
+**Several documents make one list** (Aimee, 4 Nov 2026). The upload takes
+several files at once (and "Add another file" during the check); each is read
+in turn into one review, each tray remembers its `file`. Saving **adds** by
+default (`mode: 'add'` on `savelist`): a tray of the same name is replaced,
+every other tray is kept — because a kit like Diplomat comes as one document
+per tray. A tickbox starts the list again (`mode: 'replace'`).
+
 **A saved tray list is live, not read-only.** Anyone signed in can edit a tray
 (`kit/EditableTray.jsx`): quantity steppers, code, description, implant or
 instrument, add and remove lines, rename. Each change is one call to

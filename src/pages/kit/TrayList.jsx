@@ -163,6 +163,10 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   }
   const attempt = useRef(0)
+  // "(2 of 3)" while several files are read in turn.
+  const [progress, setProgress] = useState('')
+  // Saving adds to the kit's trays unless this is ticked.
+  const [replaceAll, setReplaceAll] = useState(false)
 
   async function call(action, body, ms) {
     const ctrl = new AbortController()
@@ -187,8 +191,10 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
   // The original, into Dropbox, without anybody waiting on it. Sent whole when
   // it is small; a big one goes through the upload service, and if that does
   // not come back the list is still read and saved — only the copy is missed.
-  function keepOriginal(file, mine) {
-    const done = kept => setReview(r => (r && r.attempt === mine ? { ...r, ...kept, keeping: false } : r))
+  function keepOriginal(file) {
+    // Per file, now that one review can hold several documents.
+    const done = kept => setReview(r => (r?.originals?.[file.name]
+      ? { ...r, originals: { ...r.originals, [file.name]: { ...kept, keeping: false } } } : r))
     ;(async () => {
       const data = await originalIfSmall(file)
       if (data) return call('tray-keep', { data, filename: file.name }, 60000)
@@ -209,38 +215,67 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
   // The phone now unpacks the file and only what needs reading is sent, in an
   // ordinary request — see readTrayFile.js. Nothing waits on the upload
   // service, and nothing can spin for ever: there is a time limit and Cancel.
-  async function read(file) {
-    if (!file) return
+  //
+  // Several files at once (Aimee, 4 Nov 2026 — a kit like Diplomat comes as
+  // one document per tray). Read one after another, into one review; a file
+  // that cannot be read is named and the rest still come through.
+  async function read(fileList, { more = false } = {}) {
+    const files = [...(fileList || [])].filter(Boolean)
+    if (!files.length) return
     const mine = attempt.current + 1
     attempt.current = mine
-    setError(''); setStage('preparing')
-    try {
-      const { photos = [], note = '', ...payload } = await trayFilePayload(file)
+    setError('')
+    const collected = []
+    const failed = []
+    for (const [i, file] of files.entries()) {
+      setProgress(files.length > 1 ? ` (${i + 1} of ${files.length})` : '')
+      try {
+        collected.push(await readOne(file, mine))
+      } catch (err) {
+        if (attempt.current !== mine) return
+        failed.push(`${file.name}: ${err.message || 'could not be read'}`)
+      }
       if (attempt.current !== mine) return
-      setStage('reading')
-      const data = await call('tray-read', { ...payload, filename: file.name }, 115000)
-      if (attempt.current !== mine) return
-      // Each tray's photo, matched by the number the reading gave it. Kept on
-      // the phone until the list is saved.
-      const byN = new Map(photos.map(p => [p.n, p.data]))
-      // A one-tray list whose reading named no photo still has one if the file
-      // does: the first picture in it is the tray (a check sheet puts the tray
-      // photo first and the item pictures after).
-      const named = data.trays.map(t => (t.photo && byN.has(t.photo) ? t.photo : null))
-      if (data.trays.length === 1 && !named[0] && photos.length) named[0] = photos[0].n
-      const trays = data.trays.map((t, i) => ({ ...t, photoData: named[i] ? byN.get(named[i]) : null, photo: null }))
-      setReview({ ...data, trays, file: file.name, attempt: mine, keeping: true, note, photoCount: photos.length })
-      setOpen('')
-      keepOriginal(file, mine)
-    } catch (err) {
-      if (attempt.current === mine) setError(err.message || 'The tray list could not be read')
     }
-    if (attempt.current === mine) setStage('')
+    setStage(''); setProgress('')
+    if (collected.length) {
+      setReview(r => {
+        const base = more && r ? r : { trays: [], files: [], originals: {}, attempt: mine }
+        return {
+          ...base,
+          trays: [...base.trays, ...collected.flatMap(c => c.trays)],
+          files: [...base.files, ...collected.map(({ file, note, photoCount }) => ({ file, note, photoCount }))],
+          originals: { ...base.originals, ...Object.fromEntries(collected.map(c => [c.file, { keeping: true }])) }
+        }
+      })
+      setOpen('')
+      for (const c of collected) keepOriginal(c.original)
+    }
+    if (failed.length) setError(`Not read — ${failed.join('; ')}`)
+  }
+
+  async function readOne(file, mine) {
+    setStage('preparing')
+    const { photos = [], note = '', ...payload } = await trayFilePayload(file)
+    if (attempt.current !== mine) throw new Error('cancelled')
+    setStage('reading')
+    const data = await call('tray-read', { ...payload, filename: file.name }, 115000)
+    if (attempt.current !== mine) throw new Error('cancelled')
+    // Each tray's photo, matched by the number the reading gave it. Kept on
+    // the phone until the list is saved.
+    const byN = new Map(photos.map(p => [p.n, p.data]))
+    // A one-tray list whose reading named no photo still has one if the file
+    // does: the first picture in it is the tray (a check sheet puts the tray
+    // photo first and the item pictures after).
+    const named = data.trays.map(t => (t.photo && byN.has(t.photo) ? t.photo : null))
+    if (data.trays.length === 1 && !named[0] && photos.length) named[0] = photos[0].n
+    const trays = data.trays.map((t, i) => ({ ...t, file: file.name, photoData: named[i] ? byN.get(named[i]) : null, photo: null }))
+    return { file: file.name, original: file, trays, note, photoCount: photos.length }
   }
 
   function cancel() {
     attempt.current += 1
-    setStage('')
+    setStage(''); setProgress('')
   }
 
   async function save() {
@@ -263,12 +298,14 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           }
         }
         const { photoData, ...rest } = t
-        trays.push({ ...rest, photo })
+        trays.push({ ...rest, photo, dropboxPath: review.originals?.[t.file]?.dropboxPath || '' })
       }
+      const first = review.files[0]?.file
       const { list: saved } = await post('savelist', {
-        kitId: kit.id, trays,
-        source: { file: review.file, hospital, dropboxPath: review.dropboxPath }
+        kitId: kit.id, trays, mode: replaceAll ? 'replace' : 'add',
+        source: { file: review.files.map(f => f.file).join(', '), hospital, dropboxPath: review.originals?.[first]?.dropboxPath || '' }
       })
+      setReplaceAll(false)
       setList(saved); setReview(null)
       if (photoMissed.length) {
         setError(`Saved — but the photo for ${photoMissed.join(', ')} could not be kept, as Dropbox is not connected yet. Upload the list again once it is.`)
@@ -282,24 +319,37 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
 
   if (review) {
     const lines = review.trays.reduce((n, t) => n + t.lines.length, 0)
+    const originals = Object.values(review.originals || {})
+    const photos = review.trays.filter(t => t.photoData).length
     return (
       <div>
         <div style={label}>Check the tray list before saving</div>
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
-          Read from {review.file}: {review.trays.length} trays, {lines} lines.{review.note ? ` ${review.note}` : ''} Open each tray and check the codes and quantities
+          Read from {review.files.length === 1 ? review.files[0].file : `${review.files.length} files`}: {review.trays.length} trays, {lines} lines.
+          {review.files.map(f => f.note).filter(Boolean).map(n => ` ${n}`).join('')} Open each tray and check the codes and quantities
           against the paper. Leave out anything that is not part of this kit.
-          {review.photoCount ? ` ${review.trays.filter(t => t.photoData).length} of ${review.trays.length} trays have a photo.` : ' No photos were found in this file.'}
-          {review.keeping ? ' Saving the original to Dropbox…' : review.dropboxPath ? ` Original saved in Dropbox: ${review.dropboxPath}` : ''}
-          {review.dropboxError ? ` (Not saved to Dropbox: ${review.dropboxError})` : ''}
+          {photos ? ` ${photos} of ${review.trays.length} trays have a photo.` : ' No photos were found.'}
+          {originals.some(o => o.keeping) ? ' Saving the originals to Dropbox…'
+            : originals.some(o => o.dropboxPath) ? ' Originals saved in Dropbox under Tray Lists.' : ''}
+          {originals.some(o => o.dropboxError) ? ' (Some originals were not saved to Dropbox — add them there by hand.)' : ''}
         </div>
         {review.trays.map((t, ti) => (
-          <TrayBlock key={t.name} tray={t} photoData={t.photoData} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
+          <TrayBlock key={`${t.file}-${t.name}-${ti}`} tray={t} photoData={t.photoData} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
             onRemove={() => setReview(r => ({ ...r, trays: r.trays.filter((_, j) => j !== ti) }))}
             onRemoveLine={li => setReview(r => ({ ...r, trays: r.trays.map((x, j) => (j === ti ? { ...x, lines: x.lines.filter((_, k) => k !== li) } : x)) }))} />
         ))}
+        <label style={{
+          display: 'block', textAlign: 'center', ...text('caption'), fontWeight: 700, padding: space.sm,
+          borderRadius: radius.control, border: `1px dashed ${colour.accent}`, color: colour.accentDeep,
+          background: colour.surface, cursor: stage ? 'default' : 'pointer', opacity: stage ? 0.6 : 1, marginBottom: space.sm
+        }}>
+          {stage === 'preparing' || stage === 'reading' ? `Reading${progress}…` : '＋ Add another file'}
+          <input type="file" multiple accept={ACCEPT} disabled={Boolean(stage)} style={{ display: 'none', fontSize: 16 }}
+            onChange={e => { read(e.target.files, { more: true }); e.target.value = '' }} />
+        </label>
         {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{error}</div>}
         <div style={{ display: 'flex', gap: space.sm }}>
-          <button disabled={stage === 'saving' || !review.trays.length} onClick={save} style={{
+          <button disabled={Boolean(stage) || !review.trays.length} onClick={save} style={{
             flex: 2, ...text('bodyStrong'), padding: space.md, borderRadius: radius.control, border: 'none',
             background: colour.accent, color: 'white', cursor: 'pointer', opacity: stage === 'saving' ? 0.6 : 1
           }}>{stage === 'saving' ? 'Saving the list and photos…' : `Save to ${kit.name}`}</button>
@@ -309,9 +359,13 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           }}>Cancel</button>
         </div>
         {list && (
-          <div style={{ ...text('caption'), color: colour.warning, marginTop: space.sm }}>
-            Saving replaces the tray list this kit has now.
-          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: space.sm, ...text('caption'), marginTop: space.sm,
+            color: replaceAll ? colour.warning : colour.inkFaint, minHeight: 44 }}>
+            <input type="checkbox" checked={replaceAll} onChange={e => setReplaceAll(e.target.checked)} style={{ fontSize: 16, width: 20, height: 20 }} />
+            {replaceAll
+              ? `Replace all ${list.trays.length} trays this kit has now`
+              : `Adds to the ${list.trays.length} tray${list.trays.length === 1 ? '' : 's'} this kit has — a tray with the same name is updated. Tick to start the list again instead.`}
+          </label>
         )}
       </div>
     )
@@ -366,10 +420,10 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             border: `1px dashed ${colour.accent}`, color: colour.accentDeep, background: colour.surface,
             cursor: stage ? 'default' : 'pointer', opacity: stage ? 0.6 : 1
           }}>
-            {stage === 'preparing' ? 'Opening the file…' : stage === 'reading' ? 'Reading the tray list…'
-              : list ? 'Upload a new tray list' : 'Upload tray list (PDF, Word, Excel or photo)'}
-            <input type="file" accept={ACCEPT} disabled={Boolean(stage)} style={{ display: 'none', fontSize: 16 }}
-              onChange={e => { read(e.target.files?.[0]); e.target.value = '' }} />
+            {stage === 'preparing' ? `Opening the file${progress}…` : stage === 'reading' ? `Reading the tray list${progress}…`
+              : list ? 'Add tray lists — choose one or several files' : 'Upload tray lists (PDF, Word, Excel or photo) — one or several'}
+            <input type="file" multiple accept={ACCEPT} disabled={Boolean(stage)} style={{ display: 'none', fontSize: 16 }}
+              onChange={e => { read(e.target.files); e.target.value = '' }} />
           </label>
           {stage && (
             <button onClick={cancel} style={{ ...text('caption'), marginTop: space.sm, background: 'none', border: 'none', color: colour.inkFaint, cursor: 'pointer', textDecoration: 'underline' }}>

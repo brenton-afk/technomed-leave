@@ -442,12 +442,21 @@ export async function getTrayList(kitId) {
  * Saves a checked tray list onto a kit. The kit's tray names become the
  * list's, so a move ticks the same trays the list counts.
  */
-export async function saveTrayList(kitId, { trays, source }, by) {
+// `mode: 'add'` (Aimee, 4 Nov 2026: "Can only save one tray list document,
+// trying to add another one replaces over the previous document"): a kit like
+// Diplomat comes as one document per tray, so a save adds its trays to the
+// list the kit has — a tray of the same name is replaced, every other tray is
+// kept. `'replace'` (the default, as before) starts the list again.
+export async function saveTrayList(kitId, { trays, source, mode = 'replace' }, by) {
   const defs = await getDefs()
   const kit = defs.find(k => k.id === kitId)
   if (!kit) throw new Error('No such kit')
-  const clean = (trays || []).slice(0, 30).map(t => ({
+  const incoming = (trays || []).slice(0, 40).map(t => ({
     name: String(t?.name || '').trim().slice(0, 80),
+    // Which document each tray came from, now that a list can be built from
+    // several.
+    file: String(t?.file || source?.file || '').slice(0, 160),
+    dropboxPath: String(t?.dropboxPath || '').slice(0, 300),
     // The tray's photograph, kept in Dropbox; only a path under the photos
     // folder is accepted, so this cannot point the portal at any other file.
     photo: /^\/Tray Lists\/Tray Photos\//.test(String(t?.photo || '')) ? String(t.photo).slice(0, 300) : null,
@@ -458,12 +467,19 @@ export async function saveTrayList(kitId, { trays, source }, by) {
       kind: l?.kind === 'implant' ? 'implant' : 'instrument'
     })).filter(l => l.code || l.description)
   })).filter(t => t.name && t.lines.length)
-  if (!clean.length) throw new Error('There is nothing in that tray list to save')
+  if (!incoming.length) throw new Error('There is nothing in that tray list to save')
+
+  const before = mode === 'add' ? await getTrayList(kitId) : null
+  const key = name => name.toLowerCase()
+  const fresh = new Map(incoming.map(t => [key(t.name), t]))
+  const kept = (before?.trays || []).filter(t => !fresh.has(key(t.name)))
+  const clean = [...kept, ...fresh.values()].slice(0, 60)
+  const files = [...new Set(clean.map(t => t.file).filter(Boolean))]
 
   const list = {
     trays: clean,
     source: {
-      file: String(source?.file || '').slice(0, 160),
+      file: (files.join(', ') || String(source?.file || '')).slice(0, 400),
       hospital: ['CLV', 'RHH', 'office'].includes(source?.hospital) ? source.hospital : '',
       dropboxPath: String(source?.dropboxPath || '').slice(0, 300),
       by, at: new Date().toISOString()
@@ -473,7 +489,9 @@ export async function saveTrayList(kitId, { trays, source }, by) {
   await redisSetBody(DEFS, JSON.stringify(defs.map(k => (k.id === kitId ? { ...k, trays: clean.map(t => t.name) } : k))))
   await addHistory({
     kind: 'edit', kitId, kitName: kit.name, by,
-    text: `Tray list saved — ${clean.length} trays, ${clean.reduce((n, t) => n + t.lines.length, 0)} lines${list.source.file ? ` (${list.source.file})` : ''}`
+    text: before?.trays?.length
+      ? `Tray list: ${incoming.length} tray${incoming.length === 1 ? '' : 's'} added or updated — now ${clean.length} trays`
+      : `Tray list saved — ${clean.length} trays, ${clean.reduce((n, t) => n + t.lines.length, 0)} lines${list.source.file ? ` (${list.source.file})` : ''}`
   })
   return list
 }
