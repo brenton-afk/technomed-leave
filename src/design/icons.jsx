@@ -230,3 +230,20 @@ export const IconWallet = p => (
     <circle cx="16.5" cy="14.5" r="1.1" fill="currentColor" stroke="none" />
   </Svg>
 )
+
+// Two sheets, the front one offset: "copy" in every app the team uses.
+export const IconCopy = p => (
+  <Svg {...p}>
+    <rect x="9" y="9" width="11" height="11" rx="2" />
+    <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+  </Svg>
+)
+
+// Out of the box: the share sheet.
+export const IconShare = p => (
+  <Svg {...p}>
+    <path d="M12 3v12" />
+    <path d="M7 8l5-5 5 5" />
+    <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+  </Svg>
+)

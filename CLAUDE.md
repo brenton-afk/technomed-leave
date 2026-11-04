@@ -258,6 +258,17 @@ cranial). At **Calvary** we do not support navigation and do not bill. Bookings
 are meant to become the single source of truth on the front end (e.g. to
 populate the Brainlab invoice) and usages on the back end (resupply).
 
+### Case summary (Toni, 4 Nov 2026)
+
+`src/clinicalPlan/caseSummary.js` turns a case into the labelled lines of a
+booking description (Patient, Date, Hospital, Surgeon, Procedure, Kit, List,
+Brainlab, Planned reps, Attended, Notes), for pasting into an email or chat.
+It is shown at the top of Edit booking (`cases/CaseSummary.jsx`, built from the
+fields as they stand, with Copy and Share) and behind a **Copy details**
+button on every week and day card, which adds the hospital and day the card
+leaves out. One function for both, so the two never word a case differently.
+It includes the patient surname — that is what it is for.
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the

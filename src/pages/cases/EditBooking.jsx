@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import LoanTrail from './LoanTrail.jsx'
 import KitPicker from './KitPicker.jsx'
+import CaseSummary from './CaseSummary.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { CaseThread } from '../Chat.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
@@ -905,6 +906,16 @@ export default function EditBooking({
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Read first, edit below. Built from the fields as they stand,
+                so it is current the moment anything underneath changes. */}
+            {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && (
+              <CaseSummary booking={{
+                patient: fields.patient, date: when.date, hospital: fields.hospital,
+                surgeon: fields.surgeon, procedure: fields.procedure, kit: fields.kit || fields.system,
+                navigation: navigation || undefined, planned, reps, notes, cancelled: loaded.cancelled
+              }} />
             )}
 
             {loaded && status !== 'loading' && !['moved', 'queued'].includes(status) && !loaded.allDay && (

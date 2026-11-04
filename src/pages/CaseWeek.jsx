@@ -19,6 +19,8 @@ import {
 import { isNavigationOnly } from '../clinicalPlan/systems.js'
 import { implantQuestion } from '../clinicalPlan/deduceKit.js'
 import { useIsDesktop } from '../design/viewport.js'
+import { IconCopy } from '../design/icons.jsx'
+import { caseSummaryText, copyText } from '../clinicalPlan/caseSummary.js'
 import EditBooking from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
@@ -328,7 +330,30 @@ function suppliesFor(surgicalCase) {
 // the screen moved — a sheet opening, a notice appearing — and each redraw
 // re-parsed the kit line. The callbacks below are all useCallback or
 // setState, so this actually holds.
-const CaseCard = React.memo(function CaseCard({ surgicalCase, onOpen, busy, onSetPlace }) {
+/**
+ * Copies the whole case — hospital and day included, which the card itself
+ * leaves out — as the same text the booking's summary gives. "The smaller view
+ * in the weekly/daily overview section does not contain all the details (ie
+ * hospital/date of procedure) so text cannot be copied from there either."
+ * — Toni, 4 Nov 2026.
+ */
+function CopyCase({ surgicalCase, date, ink, style }) {
+  const [done, setDone] = useState('')
+  useEffect(() => {
+    if (!done) return undefined
+    const t = setTimeout(() => setDone(''), 2000)
+    return () => clearTimeout(t)
+  }, [done])
+  return (
+    <button type="button" aria-label={`Copy the details of ${surgicalCase.patient || surgicalCase.surgeon || 'this case'}`}
+      onClick={async () => setDone((await copyText(caseSummaryText({ ...surgicalCase, date }))) ? 'Copied' : 'Could not copy')}
+      style={style}>
+      <IconCopy size={14} colour={ink.ink} /> {done || 'Copy details'}
+    </button>
+  )
+}
+
+const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy, onSetPlace }) {
   const off = Boolean(surgicalCase.cancelled)
   // Told about, not attending. Drawn back like a cancelled case rather than
   // struck through — it is still going ahead, just without us.
@@ -641,6 +666,14 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, onOpen, busy, onSe
           </button>
         )}
 
+        <CopyCase surgicalCase={surgicalCase} date={date} ink={ink} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          marginTop: space.sm, marginLeft: onSetPlace && !off ? space.sm : 0, cursor: 'pointer', minHeight: 32,
+          padding: `0 ${space.md}px`, borderRadius: radius.pill,
+          border: `1px solid ${ink.line}`, background: 'none',
+          ...text('caption'), fontWeight: 700, color: ink.ink
+        }} />
+
       </span>
 
     </div>
@@ -786,7 +819,7 @@ function shortSupply(supply) {
 // the screen moved — a sheet opening, a notice appearing — and each redraw
 // re-parsed the kit line. The callbacks below are all useCallback or
 // setState, so this actually holds.
-const WeekCase = React.memo(function WeekCase({ surgicalCase, onOpen, onSetPlace, onPreferences, hasPreferences }) {
+const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSetPlace, onPreferences, hasPreferences }) {
   const off = Boolean(surgicalCase.cancelled)
   const spare = Boolean(surgicalCase.notRequired) && !off
   const place = describeListPlace(surgicalCase.listPlace)
@@ -993,6 +1026,14 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, onOpen, onSetPlace
           {place ? 'Change list order' : '＋ List order'}
         </button>
       )}
+
+      <CopyCase surgicalCase={surgicalCase} date={date} ink={ink} style={{
+        display: 'flex', alignItems: 'center', gap: 4, width: '100%', cursor: 'pointer', textAlign: 'left',
+        padding: '3px 7px 4px', border: 'none',
+        borderTop: `1px solid ${ink.line}`,
+        background: 'none', ...text('micro'), textTransform: 'none',
+        color: ink.faint
+      }} />
     </div>
   )
 })
@@ -1118,7 +1159,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
                     {' · '}{group.cases.length}
                   </div>
                   {group.cases.map(c => (
-                    <WeekCase key={c.id} surgicalCase={c} onOpen={onOpen}
+                    <WeekCase key={c.id} surgicalCase={c} date={day.date} onOpen={onOpen}
                       onSetPlace={onSetPlace}
                       onPreferences={onPreferences}
                       hasPreferences={hasPreferences} />
@@ -1226,7 +1267,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           <div key={group.hospital}>
             <Heading>{group.hospital} · {cases.length} case{cases.length === 1 ? '' : 's'}</Heading>
             {cases.map(c => (
-              <CaseCard key={c.id} surgicalCase={c} onOpen={onOpen}
+              <CaseCard key={c.id} surgicalCase={c} date={day.date} onOpen={onOpen}
                 onSetPlace={onSetPlace} />
             ))}
           </div>
