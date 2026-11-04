@@ -734,6 +734,35 @@ the outline is drawn dashed, and the person taps. The bench now has six steel
 scenes (`paintMetal` in `scenes.js`: brushing, gradients, seams, reflections,
 glare), counts wrong outlines the shutter would take, and runs 40 noisy frames
 per scene through the real tracker — it fails on any wrong auto-capture.
+Two more rules make an outline unsure: a corner in near-white glare
+(`cornerInGlare`), and another good candidate for the same page (three corners
+agreeing) putting the fourth somewhere else (`disputed`) — on a clean frame
+every method agrees to a pixel; where glare erased an edge they disagree about
+the corner it hid.
+
+Finding the page on steel (same day):
+- **The bright-region fallback closes before it opens** (`REGION_CLOSE`).
+  Without it a form's printed rules cut the paper into strips and the region
+  search never saw a page — which is why it never rescued a shiny bench.
+- **`refineQuad` re-fits a nearly right outline**, run (twice) on any
+  candidate with a weak side, at most `MAX_REFINES` distinct seeds a frame.
+  Each side is searched along its normal for the nearest point where the
+  inside matches the paper's tone and the outside is darker *and stays darker*
+  — medians of six pixels, so a printed rule drops out and glare (brighter
+  than paper) never qualifies — then a robust line (`robustLine`) through
+  those points, so a seam crossing the side is one outlier. Re-fitted quads go
+  through the same tests and ranking as everything else.
+- **Samples under near-white glare are not counted** in `edgeSupportDetail`
+  (`GLARE`), like a side along the frame's edge. Its softer halo was tried and
+  rejected: it excused real sides on pale steel and cost steadiness.
+
+`scripts/scanner-stress.mjs [count] [seed] [detector]` makes random stainless
+benches (position, size, angle, streaks, seams, reflections, glare) and runs
+each through the real detector and tracker. On 200 scenes (seed 42): 142
+outlined correctly and 115 captured by themselves, against 104 and 87 before
+this work, **with 0 wrong auto-captures** — the number that must stay at zero.
+Pass another detector file as the third argument to compare.
+
 A Hough line-pairing approach was tried for glare-broken edges and removed: it
 more than doubled detection time and found no page the contours missed.
 `scripts/scanner-diag.mjs "<scene>"` lists every candidate considered.

@@ -19,6 +19,6 @@ for (const s of benchmark(width, height).filter(s => s.name.includes(filter))) {
   const seen = new Set()
   for (const c of inspect) {
     const key = fmt(c.corners); if (seen.has(key)) continue; seen.add(key)
-    console.log(`   cand ${key}  area ${c.areaFraction.toFixed(2)} sq ${c.squareness.toFixed(2)} sup ${c.edgeSupport.toFixed(2)} weak ${c.weakestSide.toFixed(2)} fill ${(c.filledSide ?? 0).toFixed(2)} mean ${Math.round(c.mean)} ring ${Math.round(c.ring)}`)
+    console.log(`   cand[${c.source||'c'}] ${key}  area ${c.areaFraction.toFixed(2)} sq ${c.squareness.toFixed(2)} sup ${c.edgeSupport.toFixed(2)} weak ${c.weakestSide.toFixed(2)} fill ${(c.filledSide ?? 0).toFixed(2)} mean ${Math.round(c.mean)} ring ${Math.round(c.ring)}`)
   }
 }

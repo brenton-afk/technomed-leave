@@ -199,6 +199,7 @@ export function edgeSupportDetail(grey, corners, spread = 64) {
     let sign = 0
     let sideSupported = 0
     let sideActive = 0
+    let sideCounted = 0
     for (let i = 0; i < PER_SIDE; i++) {
       // Skirt the corners: the rounding of a real sheet and the overshoot of
       // approxPolyDP both live there, and neither says anything about the side.
@@ -206,8 +207,18 @@ export function edgeSupportDetail(grey, corners, spread = 64) {
       const x = a.x + dx * t, y = a.y + dy * t
       const outside = at(x + nx * REACH, y + ny * REACH)
       const inside = at(x - nx * REACH, y - ny * REACH)
+      // Under glare there is nothing to measure: the light has flattened
+      // paper and bench alike to white. Like a side along the frame's edge,
+      // that is no evidence either way, so it is not counted — or the right
+      // outline of a page with glare across one corner scores as though that
+      // side ran across bare steel (Aimee, RHH, 4 Nov 2026).
+      // Near white outside a bright inside is the glare's core. (Its softer
+      // halo was tried too: it excused real sides on pale steel and made the
+      // outline less steady, so it is not.)
+      if (outside >= GLARE && inside >= 200) continue
       const step = inside - outside
       counted++
+      sideCounted++
       if (Math.abs(step) < STEP) continue
       sideActive++
       // Consistent in sign along the side, or it is print rather than a border.
@@ -217,8 +228,11 @@ export function edgeSupportDetail(grey, corners, spread = 64) {
       supported++
       sideSupported++
     }
-    weakest = Math.min(weakest, sideSupported / PER_SIDE)
-    emptiest = Math.min(emptiest, sideActive / PER_SIDE)
+    // A side mostly lost to glare is judged on what can be seen of it, and
+    // only if enough can be.
+    if (sideCounted < PER_SIDE * 0.35) continue
+    weakest = Math.min(weakest, sideSupported / sideCounted)
+    emptiest = Math.min(emptiest, sideActive / sideCounted)
   }
 
   // No measurable side — a page framed right to all four edges — is not a
@@ -536,6 +550,193 @@ function cornersOf(cv, contour, minHullArea) {
  * on white.
  */
 const MIN_EDGE_SUPPORT = 0.55
+// Brighter than any paper: glare, where nothing can be measured.
+const GLARE = 248
+// Brighter round a corner than paper ever is, on average: glare.
+const CORNER_GLARE = 243
+
+// ─── Re-fitting a nearly right quad ───────────────────────────────────────────
+// On a stainless bench the traced outline is often right on three sides and
+// wrong on one: glare has washed out a stretch of edge, so the contour cut
+// across to the wrong corner, or a seam in the steel ran into the border and
+// was followed. The page's real edges are still there for most of their
+// length. So each side is searched for, along its own normal, as the
+// strongest step with paper on the inside, sample by sample; the samples that
+// find nothing (glare) are dropped, a robust line is fitted through the rest
+// (so a seam crossing it is one outlier, not a bend), and the four lines are
+// intersected into new corners.
+
+const MAX_REFINES = 8
+const LINE_TOL = 2.5
+
+/**
+ * Whether another good candidate for the same page puts a corner somewhere
+ * else. On a clean frame every way of finding the page agrees to a pixel or
+ * two; where glare has erased part of an edge they disagree about the corner
+ * it hid, and that disagreement is the honest measure of how well the corner
+ * is known (a random steel scene: three readings of one corner, 18px apart,
+ * and the one chosen fired the shutter 10px out).
+ *
+ * The same page means three corners agree — not the box printed inside the
+ * form, which differs at all four.
+ */
+function disputed(chosen, candidates, width) {
+  const near = width * 0.025, far = width * 0.04
+  return candidates.some(c => {
+    if (c === chosen || c.edgeSupport < chosen.edgeSupport - 0.15) return false
+    const gaps = c.corners.map((p, i) => Math.hypot(p.x - chosen.corners[i].x, p.y - chosen.corners[i].y))
+    return gaps.filter(g => g <= near).length === 3 && gaps.some(g => g > far)
+  })
+}
+
+/** Whether the pixels around a corner are blown out to near white. */
+function cornerInGlare(grey, corner) {
+  const data = grey.data
+  const w = grey.cols, h = grey.rows
+  const r = Math.max(2, Math.round(Math.min(w, h) * 0.02))
+  let total = 0, count = 0
+  for (let y = Math.round(corner.y) - r; y <= Math.round(corner.y) + r; y++) {
+    for (let x = Math.round(corner.x) - r; x <= Math.round(corner.x) + r; x++) {
+      if (x < 0 || y < 0 || x >= w || y >= h) continue
+      total += data[y * w + x]
+      count++
+    }
+  }
+  return count > 0 && total / count >= CORNER_GLARE
+}
+
+/** A line through points, robust to a minority that are wrong. */
+function robustLine(points, tolerance) {
+  if (points.length < 4) return null
+  let best = null
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      const a = points[i], b = points[j]
+      const dx = b.x - a.x, dy = b.y - a.y
+      const len = Math.hypot(dx, dy)
+      if (len < 4) continue
+      const nx = -dy / len, ny = dx / len
+      const c = nx * a.x + ny * a.y
+      let count = 0
+      for (const p of points) if (Math.abs(nx * p.x + ny * p.y - c) <= tolerance) count++
+      if (!best || count > best.count) best = { nx, ny, c, count }
+    }
+  }
+  if (!best) return null
+  // Least squares over the agreeing points: the direction of most spread.
+  const inliers = points.filter(p => Math.abs(best.nx * p.x + best.ny * p.y - best.c) <= tolerance)
+  const mx = inliers.reduce((t, p) => t + p.x, 0) / inliers.length
+  const my = inliers.reduce((t, p) => t + p.y, 0) / inliers.length
+  let sxx = 0, syy = 0, sxy = 0
+  for (const p of inliers) { sxx += (p.x - mx) ** 2; syy += (p.y - my) ** 2; sxy += (p.x - mx) * (p.y - my) }
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy)
+  const nx = -Math.sin(angle), ny = Math.cos(angle)
+  return { nx, ny, c: nx * mx + ny * my, inliers: inliers.length }
+}
+
+/**
+ * The quad with each side moved onto the page edge nearest it, or null when
+ * the edges are not there to be found.
+ *
+ * @param grey  a single-channel cv.Mat
+ */
+export function refineQuad(grey, corners, spread = 64) {
+  const data = grey.data
+  const w = grey.cols, h = grey.rows
+  const short = Math.min(w, h)
+  const REACH = Math.max(6, Math.round(short * 0.14))
+  const STEP = Math.max(6, Math.min(14, spread * 0.15))
+  const SAMPLES = 24
+  const at = (x, y) => {
+    const px = Math.min(w - 1, Math.max(0, Math.round(x)))
+    const py = Math.min(h - 1, Math.max(0, Math.round(y)))
+    return data[py * w + px]
+  }
+  // The middle value of six pixels of a profile. A median, not a mean: a
+  // printed rule two pixels thick is a minority of the strip and drops out,
+  // where in a mean it reads as a darker region — that is, as a border.
+  const six = new Float64Array(6)
+  const median6 = (profile, from, dir) => {
+    for (let k = 0; k < 6; k++) six[k] = profile[from + dir * k]
+    six.sort()
+    return (six[2] + six[3]) / 2
+  }
+  // Each sample's pixels along the normal, read once.
+  const PAD = 8
+  const profile = new Float64Array(2 * (REACH + PAD) + 1)
+  const ZERO = REACH + PAD
+
+  // The paper's own tone: the middle of what the quad encloses, which is
+  // mostly paper whatever is printed on it.
+  const cx = corners.reduce((t, c) => t + c.x, 0) / 4
+  const cy = corners.reduce((t, c) => t + c.y, 0) / 4
+  const tones = []
+  for (const c of corners) {
+    for (let f = 0.15; f <= 0.75; f += 0.15) tones.push(at(cx + (c.x - cx) * f, cy + (c.y - cy) * f))
+  }
+  tones.sort((p, q) => p - q)
+  const paper = tones[Math.floor(tones.length * 0.6)]
+  const PAPER_TOL = Math.max(10, spread * 0.2)
+
+  const lines = []
+  for (let side = 0; side < 4; side++) {
+    const a = corners[side], b = corners[(side + 1) % 4]
+    const dx = b.x - a.x, dy = b.y - a.y
+    const len = Math.hypot(dx, dy)
+    if (len < 8) return null
+    const nx = dy / len, ny = -dx / len // outward
+    const found = []
+    for (let i = 0; i < SAMPLES; i++) {
+      const t = 0.06 + (0.88 * i) / (SAMPLES - 1)
+      const x = a.x + dx * t, y = a.y + dy * t
+      // The nearest place to the side as drawn where paper meets something
+      // darker that stays darker. Glare is brighter than paper, so its rim
+      // never qualifies; a stretch washed out by it finds nothing, and is
+      // left to the rest of the side.
+      for (let k = -ZERO; k <= ZERO; k++) profile[k + ZERO] = at(x + nx * k, y + ny * k)
+      let pick = null
+      for (let d = 0; d <= REACH && !pick; d++) {
+        for (const off of d ? [d, -d] : [0]) {
+          const qx = x + nx * off, qy = y + ny * off
+          if (qx < 1 || qy < 1 || qx > w - 2 || qy > h - 2) continue
+          const inside = median6(profile, ZERO + off - 1, -1)
+          if (Math.abs(inside - paper) > PAPER_TOL) continue
+          const outside = median6(profile, ZERO + off + 2, 1)
+          if (paper - outside < STEP) continue
+          pick = { x: qx, y: qy, off }
+          break
+        }
+      }
+      if (!pick) continue
+      // Settle on the steepest point of that step, within a pixel or two.
+      let bestStep = -Infinity, bx = pick.x, by = pick.y
+      for (let k = -2; k <= 2; k++) {
+        const qx = pick.x + nx * k, qy = pick.y + ny * k
+        const g = at(qx - nx, qy - ny) - at(qx + nx, qy + ny)
+        if (g > bestStep) { bestStep = g; bx = qx; by = qy }
+      }
+      found.push({ x: bx, y: by })
+    }
+    const line = robustLine(found, LINE_TOL)
+    // Most of a side has to agree on where the edge is, or there is no edge.
+    if (!line || line.inliers < SAMPLES * 0.4) return null
+    lines.push(line)
+  }
+
+  const meet = (p, q) => {
+    const det = p.nx * q.ny - p.ny * q.nx
+    if (Math.abs(det) < 1e-6) return null
+    return { x: (p.c * q.ny - p.ny * q.c) / det, y: (p.nx * q.c - p.c * q.nx) / det }
+  }
+  const out = []
+  for (let i = 0; i < 4; i++) {
+    const c = meet(lines[(i + 3) % 4], lines[i])
+    if (!c || c.x < -2 || c.y < -2 || c.x > w + 1 || c.y > h + 1) return null
+    out.push({ x: Math.min(w - 1, Math.max(0, c.x)), y: Math.min(h - 1, Math.max(0, c.y)) })
+  }
+  return orderCorners(out)
+}
+const REGION_CLOSE = 7
 
 // See `confident` in detectDocument. Measured on the bench, with noise.
 const CONFIDENT_SIDE = 0.65
@@ -621,8 +822,25 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       // The pixels have the final say. A quad can satisfy every
       // geometric test and still be a line drawn across a photograph.
       const { support, weakest, emptiest } = edgeSupportDetail(grey, corners, spread)
-      if (support < minEdgeSupport) return
 
+      // Nearly right, with one side wrong: glare ate a corner, or a seam in a
+      // steel bench pulled one out. Each side is re-fitted to the page edge
+      // near it and the result judged afresh, beside the original.
+      // The same rough outline turns up on several thresholds; re-fitting it
+      // once is enough.
+      const seen = weakest < CONFIDENT_SIDE && refinedSeeds.some(q => q.every((c, i) =>
+        Math.abs(c.x - corners[i].x) <= 3 && Math.abs(c.y - corners[i].y) <= 3))
+      if (weakest < CONFIDENT_SIDE && !seen && refinedSeeds.length < MAX_REFINES) {
+        refinedSeeds.push(corners)
+        // Twice: the first pass moves a side most of the way; the second,
+        // starting from there, finds the stretch of edge the first could not
+        // reach.
+        const once = refineQuad(grey, corners, spread)
+        const better = once && (refineQuad(grey, once, spread) || once)
+        if (better) admit(better, 'refined')
+      }
+
+      if (support < minEdgeSupport) return
       candidates.push({
         corners,
         areaFraction,
@@ -630,6 +848,23 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
         edgeSupport: support,
         weakestSide: weakest,
         filledSide: emptiest,
+        ...interiorTones(grey, corners)
+      })
+    }
+
+    // A re-fitted quad, through the same tests as any other.
+    const refinedSeeds = []
+    const admit = (corners, source) => {
+      if (!isConvex(corners)) return
+      const areaFraction = polygonArea(corners) / frameArea
+      if (areaFraction < minAreaFraction || areaFraction > 1.02) return
+      const shape = squareness(corners)
+      if (shape < minSquareness) return
+      const { support, weakest, emptiest } = edgeSupportDetail(grey, corners, spread)
+      if (support < minEdgeSupport) return
+      candidates.push({
+        source, corners, areaFraction, squareness: shape,
+        edgeSupport: support, weakestSide: weakest, filledSide: emptiest,
         ...interiorTones(grey, corners)
       })
     }
@@ -664,6 +899,13 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       const region = track(new cv.Mat())
       if (invert) cv.bitwise_not(otsuMask, region)
       else otsuMask.copyTo(region)
+      // Close first: a form's printed rules run most of the page's width, and
+      // without this they cut the paper into strips, none of them a page —
+      // so on a shiny bench, where tracing fails, this fallback found
+      // nothing either (Aimee, RHH, 4 Nov 2026). Then open, which cuts the
+      // thin bridges to a shadow, a cable or a bright streak in the steel.
+      const fill = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(REGION_CLOSE, REGION_CLOSE)))
+      cv.morphologyEx(region, region, cv.MORPH_CLOSE, fill)
       const open = track(cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5)))
       cv.morphologyEx(region, region, cv.MORPH_OPEN, open)
       const regionContours = new cv.MatVector()
@@ -739,7 +981,14 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       // *busy*, not empty, and an empty side is what a wrong answer has.
       // Unconfident answers are still drawn and can still be taken by hand;
       // they just never fire the shutter on their own.
-      confident: chosen.weakestSide >= CONFIDENT_SIDE || chosen.filledSide >= BUSY_SIDE,
+      //
+      // And a corner sitting in glare is a guess, however good the sides
+      // look: the light has erased exactly the two edges that would have
+      // placed it. Found on random steel scenes, where the one wrong outline
+      // that still fired had its corner 10px out, inside a glare patch.
+      confident: (chosen.weakestSide >= CONFIDENT_SIDE || chosen.filledSide >= BUSY_SIDE)
+        && !chosen.corners.some(c => cornerInGlare(grey, c))
+        && !disputed(chosen, candidates, width),
       weakestSide: chosen.weakestSide,
 
       // What "close enough to capture" is actually judged on.
