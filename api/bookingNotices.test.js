@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { noticesFor, describeBooking, DEFAULT_CONTACTS, DEFAULT_RULES } from './_bookingNotices.js'
+import { noticesFor, describeBooking, DEFAULT_CONTACTS, DEFAULT_RULES, DEFAULT_LOAN_REQUESTS, loanRequestsFor, hospitalLoanNoticesFor } from './_bookingNotices.js'
 
 // ─── Task 9: booking notices to Signus and KT Medical (RHH) ─────────────────
 // Fake patients. Nothing here sends anything.
@@ -163,5 +163,23 @@ describe('a Calvary case read from an email as "Mariner MIS", no supply written'
     const { describeBooking } = await import('./_bookingNotices.js')
     expect(describeBooking(event('Mariner MIS', 'RHH')).loans).toEqual({})
     expect(describeBooking(event('Diplomat')).loans).toEqual({})
+  })
+})
+
+describe('loan set emails only for a set new to the booking (Brent, 4 Nov 2026)', () => {
+  // Invented case. Its E4 loan was requested by hand before the portal, so the
+  // portal holds no record of a request — and changing its list order must
+  // not offer a fresh one.
+  const settings = { contacts: DEFAULT_CONTACTS, loanRequests: DEFAULT_LOAN_REQUESTS }
+  const booked = {
+    date: '2026-11-05', hospital: 'CLV', surgeon: 'Ibbett', patient: 'Sample', procedure: 'C1/2 posterior fixation',
+    kit: 'Reform Cervical (Distributor Loan)', loans: { e4: ['Reform Cervical'] }
+  }
+  it('offers nothing when an edit does not add the set', () => {
+    expect(loanRequestsFor({ kind: 'changed', before: booked, after: { ...booked }, eventId: 'e1', settings })).toEqual([])
+    expect(hospitalLoanNoticesFor({ kind: 'changed', before: booked, after: { ...booked }, eventId: 'e1', settings })).toEqual([])
+  })
+  it('still asks when the booking is first placed', () => {
+    expect(loanRequestsFor({ kind: 'new', after: booked, eventId: 'e1', settings })).toHaveLength(1)
   })
 })

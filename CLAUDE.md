@@ -230,6 +230,11 @@ notices. Notices for an edit made offline and sent later are not offered.
 or after): a case switched from Diplomat to Mariner offers Signus nothing — Brent
 does not want them told about a case that is no longer theirs — and Device gets
 the loan request. A cancellation is judged on the booking as it was.
+**Loan-set emails are offered only for a set new to the booking** (Brent,
+4 Nov 2026): on first placement, or when an edit adds that set (Diplomat →
+Mariner). A list-order change, date tweak or note on a booking whose loan was
+requested by hand offers nothing (`newToBooking`). Updates and cancellations
+still follow requests the portal itself sent.
 **The hospital's loans team is told about loan sets** (`hospitalLoanNoticesFor`,
 `DEFAULT_HOSPITAL_LOAN_NOTICES`: Calvary on, RHH off): ordered, changed (set or
 date), no longer coming — tracked per booking as `loanreq:{event}:hosp-CLV` so

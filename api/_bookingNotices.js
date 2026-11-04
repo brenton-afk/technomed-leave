@@ -401,6 +401,20 @@ function loanSets(b) {
     systems.map(s => `${s} (${DISTRIBUTOR_NAMES[d] || d})`))
 }
 
+// Only a loan set that is new to the booking is asked for (Brent, 4 Nov 2026:
+// "The emails re: loan sets should only be offered when the booking is first
+// placed, not when amendments are made"). Changing the list order on Ware —
+// whose E4 set Ben had requested by hand in October — offered E4 and the
+// Calvary loans team a fresh request, because the portal had no record of one.
+// A new booking asks; an edit asks only for a set the edit itself added (a
+// switch from Diplomat to Mariner is still Device's loan request). Updates and
+// cancellations still follow requests the portal has sent.
+function newToBooking(kind, wasSystems = [], nowSystems = []) {
+  if (kind === 'new') return true
+  const was = new Set(wasSystems.map(s => String(s).toLowerCase()))
+  return nowSystems.some(s => !was.has(String(s).toLowerCase()))
+}
+
 export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings, sent = {} }) {
   const out = []
   const contacts = new Map(settings.contacts.map(c => [c.id, c]))
@@ -413,15 +427,15 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
     const sets = kind !== 'cancelled' && after?.hospital === rule.hospital ? loanSets(after) : []
     const needs = sets.length > 0
 
+    const was = before ? loanSets(before) : []
     let status = null
-    if (needs && !had) status = 'request'
+    if (needs && !had) status = newToBooking(kind, before?.hospital === rule.hospital ? was : [], sets) ? 'request' : null
     else if (had && !needs) status = 'cancel'
     else if (had && needs && (had.date !== after.date || (had.systems || []).join('|') !== sets.join('|'))) status = 'update'
     if (!status) continue
 
     const b = status === 'cancel' ? (after || before) : after
     const systems = status === 'cancel' ? (had?.systems || []) : sets
-    const was = before ? loanSets(before) : []
     const lines = status === 'request'
       ? [`A loan set has been ordered for this case: ${systems.join(' + ')}.`,
         ...(kind === 'changed' && before?.kit && before.kit !== after.kit ? [`The booking has changed: ${before.kit} → ${after.kit}.`] : [])]
@@ -469,7 +483,7 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
     const needs = kind !== 'cancelled' && after?.loans?.[d]?.length
 
     let status = null
-    if (needs && !had) status = 'request'
+    if (needs && !had) status = newToBooking(kind, before?.loans?.[d] || [], after.loans[d]) ? 'request' : null
     else if (had && !needs) status = 'cancel'
     else if (had && needs && (had.date !== after.date || had.hospital !== after.hospital)) status = 'update'
     if (!status) continue
