@@ -1110,7 +1110,7 @@ export default function EditBooking({
                   <span style={{
                     ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint,
                     display: 'block', marginBottom: 4
-                  }}>Rep attending</span>
+                  }}>Rep attended</span>
                   {/* Actual defaults to planned: one tap when it went as allocated. */}
                   {planned.length > 0 && reps.join('/') !== planned.join('/') && (
                     <button type="button" onClick={() => setReps(planned)} style={{
