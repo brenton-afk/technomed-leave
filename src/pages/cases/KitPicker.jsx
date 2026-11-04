@@ -1,7 +1,9 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SYSTEM_BUTTONS, variantOf, inventoryFor } from '../../clinicalPlan/inventory.js'
 import { SUPPLY_OPTIONS, parseKitSupplies, formatKitSupplies } from '../../clinicalPlan/kitSupply.js'
+import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggestions.js'
+import { hospitalCode } from '../../clinicalPlan/labelledFields.js'
 
 // ─── The kit, chosen by tapping ──────────────────────────────────────────────
 // "I need to be able to tap the system with a button as opposed to writing it
@@ -31,9 +33,28 @@ const same = (a, b) => {
 }
 const BUTTON_VARIANT_BASES = new Set(SYSTEM_BUTTONS.map(variantOf).filter(Boolean))
 
-export default function KitPicker({ kit, onChange, systemsOnly = false }) {
+export default function KitPicker({ kit, onChange, systemsOnly = false, operation = '', surgeon = '', hospital = '' }) {
   const entries = parseKitSupplies(kit)
   const has = name => entries.some(e => same(e.system, name))
+
+  // "There's still too many and it's too busy" — Brent, 4 Nov 2026. The
+  // operation narrows the buttons to the systems that fit it (Brent's rules,
+  // systemSuggestions.js), plus whatever the booking already has; everything
+  // else is one tap away under "All systems". With no operation to go on, a
+  // booking that already has its system shows just that, and the full set
+  // only when nothing is chosen yet.
+  const [showAll, setShowAll] = useState(false)
+  const suggestion = useMemo(
+    () => suggestSystems({ operation, surgeon, hospital: hospitalCode(hospital) || hospital }),
+    [operation, surgeon, hospital])
+  // A chosen Mariner keeps its other half in view, so MIS ↔ Open is one tap.
+  const chosen = SYSTEMS.filter(name => has(name)
+    || (variantOf(name) && SYSTEMS.some(o => o !== name && variantOf(o) === variantOf(name) && has(o))))
+  const narrowed = suggestion.systems.length
+    ? [...new Set([...suggestion.systems, ...suggestion.extras, ...chosen])]
+    : chosen
+  const shown = showAll || !narrowed.length ? SYSTEMS : SYSTEMS.filter(s => narrowed.includes(s))
+  const hidden = SYSTEMS.length - shown.length
   const others = entries.filter(e => !e.navigation && !SYSTEMS.some(s => same(s, e.system)))
 
   // Mariner MIS and Mariner Open are the one Mariner, said precisely. Tapping
@@ -60,13 +81,23 @@ export default function KitPicker({ kit, onChange, systemsOnly = false }) {
 
   return (
     <div style={{ marginBottom: space.sm }}>
-      <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: 4 }}>System — tap to add or take off</div>
+      <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: 4 }}>
+        {suggestion.systems.length && !showAll
+          ? `System — suggested for ${suggestion.groups.map(g => SYSTEM_GROUPS[g].label).join(' and ')}; tap to add or take off`
+          : 'System — tap to add or take off'}
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: space.sm }}>
-        {SYSTEMS.map(name => (
+        {shown.map(name => (
           <button key={name} type="button" aria-pressed={has(name)} onClick={() => toggle(name)} style={chip(has(name))}>
             {name}
           </button>
         ))}
+        {(hidden > 0 || showAll) && narrowed.length > 0 && (
+          <button type="button" aria-expanded={showAll} onClick={() => setShowAll(v => !v)}
+            style={{ ...chip(false), border: `1px dashed ${colour.line}`, color: colour.accentDeep, fontWeight: 700 }}>
+            {showAll ? 'Fewer systems' : chosen.length && !suggestion.systems.length ? 'Change or add a system' : `All systems (${hidden} more)`}
+          </button>
+        )}
       </div>
 
       {others.length > 0 && (

@@ -273,7 +273,8 @@ function Candidate({ candidate, user, onDone }) {
         <summary style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600, cursor: 'pointer', marginBottom: space.xs }}>
           Change the system
         </summary>
-        <KitPicker kit={fields.kit} onChange={v => set('kit', v)} />
+        <KitPicker kit={fields.kit} onChange={v => set('kit', v)}
+          operation={fields.procedure} surgeon={fields.surgeon} hospital={fields.hospital} />
       </details>
       <div style={{ marginBottom: space.xs }}>
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: 4 }}>Brainlab navigation</div>

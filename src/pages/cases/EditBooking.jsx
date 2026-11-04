@@ -949,6 +949,9 @@ export default function EditBooking({
                         uses both. */}
                     {f.key === 'kit' && (
                       <KitPicker systemsOnly kit={fields.kit || ''}
+                        operation={fields.procedure || ''}
+                        surgeon={normaliseSurgeon(fields.surgeon) || fields.surgeon || ''}
+                        hospital={fields.hospital || ''}
                         onChange={next => setFields(c => ({ ...c, kit: next }))} />
                     )}
                     {f.key === 'kit' && (
