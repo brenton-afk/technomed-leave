@@ -869,3 +869,18 @@ describe('a second case needing the same kit that day (Toni, 4 Nov 2026)', () =>
     expect(cases.map(c => c.supplies[0].suggested)).toEqual(['Consignment', 'TM Loan'])
   })
 })
+
+describe('two surgeons running lists at once (Brent, 4 Nov 2026)', () => {
+  it('keeps each surgeon\'s cases together instead of interleaving by time', () => {
+    const at = (id, title, from, to) => ev(id, title, '25', from, to, { location: 'Calvary' })
+    const plan = build([
+      at('j1', 'Alpha LONESTAR - JPW', '08:00', '10:00'),
+      at('i1', 'Bravo DAKOTA - Ibbett', '08:30', '10:30'),
+      at('j2', 'Charlie LONESTAR - JPW', '10:15', '12:00'),
+      at('i2', 'Delta DAKOTA - Ibbett', '11:00', '13:00')
+    ])
+    const day = plan.days.find(d => d.date === '2026-08-25')
+    const cases = day.casesByHospital.flatMap(g => g.cases)
+    expect(cases.map(c => c.patient)).toEqual(['Alpha', 'Charlie', 'Bravo', 'Delta'])
+  })
+})

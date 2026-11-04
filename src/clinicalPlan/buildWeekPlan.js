@@ -320,9 +320,30 @@ function groupByHospital(cases) {
     // By the clock first, which is the order the calendar was laid out in, and
     // then by the running order the hospital gave us where anybody has recorded
     // one. A recorded place beats an assumed one.
-    cases: withDaySupplies(bySession(
-      map.get(hospital).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)))), hospital)
+    cases: withDaySupplies(bySurgeon(bySession(
+      map.get(hospital).slice().sort((a, b) => String(a.start).localeCompare(String(b.start))))), hospital)
   }))
+}
+
+/**
+ * Each surgeon's cases together, in the order their lists start.
+ *
+ * "The JPW cases are split in the portal with the Imogen Ibbett case probably
+ * due to timing … the JPW and Ibbett lists are two separate lists running
+ * concurrently" — Brent, 4 Nov 2026. Sorting a hospital by the clock
+ * interleaves two theatres' lists; grouping by surgeon keeps each list whole.
+ * Within a surgeon the order is unchanged — the clock, then any running order
+ * the hospital gave — and the surgeon whose first case is earliest comes first.
+ */
+export function bySurgeon(cases) {
+  const order = []
+  const groups = new Map()
+  for (const c of cases) {
+    const key = String(c.surgeon || '').trim().toLowerCase() || `\u0000${order.length}`
+    if (!groups.has(key)) { groups.set(key, []); order.push(key) }
+    groups.get(key).push(c)
+  }
+  return order.flatMap(key => groups.get(key))
 }
 
 /**

@@ -274,6 +274,11 @@ the day + Booking adds to); **+ Booking / + Task / Inbox** are one row
 (`ActionRow`); card actions are one row of icons (★ preferences, ⇅ list order,
 ⧉ copy).
 
+**Within a hospital, each surgeon's cases are kept together** (`bySurgeon` in
+`buildWeekPlan.js`), surgeons in the order their first case starts, each list
+in its own clock/running order — two theatres running at once (JPW and Ibbett
+at Calvary) are two lists, not one interleaved by time.
+
 **The team leader is per day, under each weekday's date** (`TeamLeaderStrip`
 with `day`). The weekly rota (and a week's cover) stays the default; the chip's
 sheet changes **this day only** unless "The whole week" is chosen. Day
