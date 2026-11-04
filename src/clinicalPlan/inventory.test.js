@@ -511,3 +511,12 @@ describe("TechnoMed's own kits", () => {
     expect(systemsInKit('Diplomat (Consignment) + TM REMOVALS')).toEqual(['Diplomat'])
   })
 })
+
+import { suggestSupplyOnDay } from './inventory.js'
+describe('a second case on the day (Toni, 4 Nov 2026)', () => {
+  it('takes the office loan kit once the shelf set is used', () => {
+    expect(suggestSupplyOnDay('Dakota', 'CLV', 1)).toBe('Consignment')
+    expect(suggestSupplyOnDay('Dakota', 'CLV', 2)).toBe('TM Loan')
+    expect(suggestSupplyOnDay('Dakota', 'CLV', 3)).toBe('RHH Loan')
+  })
+})

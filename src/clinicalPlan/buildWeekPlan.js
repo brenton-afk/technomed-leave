@@ -15,6 +15,7 @@ import {
   zonedCivil, parseDateStr, TZ
 } from './week.js'
 import { bySession } from './listPlace.js'
+import { inventoryFor, suggestSupplyOnDay } from './inventory.js'
 import { STAFF } from '../staffConfig.js'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -319,9 +320,31 @@ function groupByHospital(cases) {
     // By the clock first, which is the order the calendar was laid out in, and
     // then by the running order the hospital gave us where anybody has recorded
     // one. A recorded place beats an assumed one.
-    cases: bySession(
-      map.get(hospital).slice().sort((a, b) => String(a.start).localeCompare(String(b.start))))
+    cases: withDaySupplies(bySession(
+      map.get(hospital).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)))), hospital)
   }))
+}
+
+/**
+ * Each unstated supply suggested with the day in view: the first cases at a
+ * hospital take its consigned sets, and the next one is told where its kit
+ * comes from instead (suggestSupplyOnDay). A case that has said loan does not
+ * use up a shelf set; one that has said consignment does.
+ */
+function withDaySupplies(cases, hospital) {
+  const taken = new Map()
+  return cases.map(c => {
+    if (c.cancelled || !c.supplies?.length) return c
+    const supplies = c.supplies.map(entry => {
+      const item = inventoryFor(entry.system)
+      if (!item || entry.navigation) return entry
+      if (entry.supply && entry.supply !== 'Consignment') return entry
+      const nth = (taken.get(item) || 0) + 1
+      taken.set(item, nth)
+      return entry.supply ? entry : { ...entry, suggested: suggestSupplyOnDay(entry.system, c.hospital || hospital, nth) }
+    })
+    return { ...c, supplies }
+  })
 }
 
 // ─── Derived prose (§6.1, §6.3) ─────────────────────────────

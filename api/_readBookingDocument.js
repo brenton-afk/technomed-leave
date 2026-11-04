@@ -49,7 +49,8 @@ For each case return:
   theatre     theatre number if stated, else ""
   note        anything else that matters: a second surgeon, urgency, a request
 
-Ignore the pre-operative workup entirely. ECG, blood tests, fasting, consent,
+Ignore the pre-operative workup entirely, and the hospital's own arrangements:
+admission ("admission day of surgery"), positioning, microscope, MBS item codes. ECG, blood tests, fasting, consent,
 anaesthetic review and clinic letters say nothing about the implants and are not
 wanted in any field — least of all the note, where they crowd out the one line
 somebody needed to read.
@@ -110,7 +111,7 @@ function cleanCase(raw) {
     // Asking the model not to return it is not the same as not showing it, and
     // the note is exactly where it ends up when the model is being helpful.
     note: [withoutPreOpNoise(
-      stripIdentifiers(String(raw?.note || '')).split(/\n|(?<=\.)\s+(?=[A-Z])/)
+      stripIdentifiers(String(raw?.note || '')).split(/\n|;\s*|(?<=\.)\s+(?=[A-Z])/)
     ).join(' ').trim(), brainlab.attendance ? 'No F2F required' : ''].filter(Boolean).join('\n'),
     ...(brainlab.attendance ? { attendance: brainlab.attendance } : {})
   }

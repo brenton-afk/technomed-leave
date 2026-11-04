@@ -535,6 +535,30 @@ export function suggestSupply(system, hospital) {
 }
 
 /**
+ * The supply for the `nth` case at this hospital that day needing this system.
+ *
+ * "I manually selected TM LOAN for Chisholm, the second Dakota case at CLV
+ * that day … it says only 1 consignment set of Dakota at CLV. Shouldn't it
+ * therefore know that this second case would need to be the TM loan set?"
+ * — Toni, 4 Nov 2026. The first cases take what is on the shelf; the next one
+ * takes the office's loan kit if there is one, then a kit borrowed from the
+ * other Hobart hospital, then a distributor's.
+ */
+export function suggestSupplyOnDay(system, hospital, nth = 1) {
+  const first = suggestSupply(system, hospital)
+  const item = inventoryFor(system)
+  const site = siteCode(hospital)
+  if (!item || !site || first !== 'Consignment') return first
+  const held = item.consigned?.[site] || 0
+  if (nth <= held) return first
+  const over = nth - held
+  if (item.floating && item.floatingAt === 'office' && over <= item.floating) return 'TM Loan'
+  const other = site === 'RHH' ? 'CLV' : site === 'CLV' ? 'RHH' : null
+  if (other && (item.consigned?.[other] || 0) > 0) return other === 'RHH' ? 'RHH Loan' : 'Calvary Loan'
+  return 'Distributor Loan'
+}
+
+/**
  * The systems as the booking buttons offer them.
  *
  * Mariner is two sets — MIS and Open — and the request to Device has to say

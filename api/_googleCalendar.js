@@ -290,7 +290,9 @@ export async function markAttendance({ date, patientSurname, firstName }) {
   const booking = bookingFacts(event)
   // Idempotent: scanning a second page, or re-saving, must not produce
   // "(Brent) (Brent)".
-  if (summary.includes(tag)) return { updated: false, reason: 'already recorded', title: summary, booking }
+  if (summary.includes(tag) || namedInBrackets(summary, firstName)) {
+    return { updated: false, reason: 'already recorded', title: summary, booking }
+  }
 
   const title = `${summary} ${tag}`.replace(/\s+/g, ' ').trim()
   const patched = await fetch(`${base}/${encodeURIComponent(event.id)}`, {
@@ -303,6 +305,18 @@ export async function markAttendance({ date, patientSurname, firstName }) {
     return { updated: false, reason: `could not update the booking (${patched.status}): ${detail.slice(0, 160)}`, booking }
   }
   return { updated: true, title, booking }
+}
+
+/**
+ * Whether the title already names this person inside a bracket of reps —
+ * "(Mat/Aimee)" names Aimee, so filing her usage must not add "(Aimee)" again
+ * (Rowley, 4 Nov 2026: "Rowley DIPLOMAT - Fowler (Mat/Aimee) (Aimee)").
+ */
+export function namedInBrackets(summary, firstName) {
+  const who = String(firstName || '').trim().toLowerCase()
+  if (!who) return false
+  return [...String(summary || '').matchAll(/\(([^)]*)\)/g)]
+    .some(m => m[1].split(/[\/,&+]|\band\b/i).map(x => x.trim().toLowerCase()).includes(who))
 }
 
 /** The procedure and kit a booking names, read the way the week reads it. */

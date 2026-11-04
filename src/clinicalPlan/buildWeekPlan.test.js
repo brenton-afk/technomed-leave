@@ -856,3 +856,16 @@ describe('leave on both calendars', () => {
     expect(leaveOn(plan, '2026-11-02')).toHaveLength(2)
   })
 })
+
+describe('a second case needing the same kit that day (Toni, 4 Nov 2026)', () => {
+  it('suggests the office loan kit for the second Dakota at Calvary', () => {
+    const desc = s => `Surgeon: Ibbett\nPatient: ${s}\nProcedure: C5/6 ACDF\nKit: Dakota\nHospital: CLV`
+    const plan = build([
+      ev('a', 'Firstcase DAKOTA - Ibbett', '25', '08:00', '10:00', { description: desc('Firstcase'), location: 'Calvary' }),
+      ev('b', 'Secondcase DAKOTA - Ibbett', '25', '11:00', '13:00', { description: desc('Secondcase'), location: 'Calvary' })
+    ])
+    const day = plan.days.find(d => d.date === '2026-08-25')
+    const cases = day.casesByHospital.flatMap(g => g.cases)
+    expect(cases.map(c => c.supplies[0].suggested)).toEqual(['Consignment', 'TM Loan'])
+  })
+})

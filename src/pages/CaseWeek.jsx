@@ -312,7 +312,9 @@ function suppliesFor(surgicalCase) {
 
   return entries.map(entry => {
     if (entry.supply) return { ...entry, inferred: false }
-    const guess = suggestSupply(entry.system, surgicalCase.hospital)
+    // The day-aware guess when the week worked one out: the second Dakota at
+    // Calvary is the office's loan kit, not a second consignment set.
+    const guess = entry.suggested || suggestSupply(entry.system, surgicalCase.hospital)
     return { ...entry, supply: guess, inferred: Boolean(guess) }
   })
 }

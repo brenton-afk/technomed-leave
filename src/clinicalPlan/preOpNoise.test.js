@@ -77,3 +77,13 @@ describe('filtering a booking’s notes', () => {
     expect(withoutPreOpNoise()).toEqual([])
   })
 })
+
+describe('the hospital\'s own arrangements (Toni, 4 Nov 2026)', () => {
+  it('drops admission, positioning, microscope and MBS codes', () => {
+    expect(withoutPreOpNoise(['Admission day of surgery.', 'Microscope required', 'supine positioning.', 'MBS codes , , .']))
+      .toEqual([])
+  })
+  it('keeps a line that is about our kit', () => {
+    expect(withoutPreOpNoise(['Prone positioning, Diplomat loan set from RHH'])).toEqual(['Prone positioning, Diplomat loan set from RHH'])
+  })
+})

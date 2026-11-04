@@ -27,7 +27,13 @@ const WORKUP = [
   'consent(?:ed|ing)?\\s*(?:form)?', 'pre-?\\s*admission', 'pre-?\\s*op\\s*clinic',
   'anaesthetic\\s*(?:review|assessment|clinic)', 'anaesthetist\\s*review',
   // Screening
-  'covid\\s*(?:swab|test|screen)', 'mrsa\\s*screen', 'swabs?\\s*taken'
+  'covid\\s*(?:swab|test|screen)', 'mrsa\\s*screen', 'swabs?\\s*taken',
+  // The hospital's own arrangements, which arrive in CNS's PDFs and say
+  // nothing about our kit (Toni, 4 Nov 2026: "Admission day of surgery.
+  // Microscope required; supine positioning. MBS codes").
+  'admission', 'admit(?:ted)?\\s*(?:day|on)', 'dosa', 'day\\s*of\\s*surgery',
+  'microscope', '(?:supine|prone|lateral|sitting|park\\s*bench)\\s*position(?:ing|ed)?', 'positioning',
+  'mbs(?:\\s*(?:codes?|items?|item\\s*numbers?))?', 'item\\s*numbers?', 'length\\s*of\\s*stay', 'icu\\s*bed', 'hdu\\s*bed'
 ]
 
 const IS_WORKUP = new RegExp(`\\b(?:${WORKUP.join('|')})\\b`, 'i')
