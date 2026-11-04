@@ -389,7 +389,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             {list.source?.dropboxPath ? ` Original in Dropbox: ${list.source.dropboxPath}` : ''}
           </div>
           {/* "Ability to print tray lists from portal" — Brent, 3 Nov 2026. */}
-          <button type="button" onClick={() => printTrayList(kit, list, { printedBy: user?.firstName || user?.name || '' })}
+          <button type="button" onClick={() => printTrayList(kit, list, { printedBy: user?.firstName || user?.name || '', token: user?.token })}
             style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: colour.accentSoft, border: 'none',
               borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer', marginBottom: space.sm }}>
             Print tray list
@@ -399,7 +399,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
               editing={editingTray === t.name} onStartEdit={() => { setEditingTray(t.name); setOpen(t.name) }}
               onEditDone={() => setEditingTray('')} onEdit={editList}
-              onPrint={() => printTrayList(kit, list, { only: t.name, printedBy: user?.firstName || user?.name || '' })} />
+              onPrint={() => printTrayList(kit, list, { only: t.name, printedBy: user?.firstName || user?.name || '', token: user?.token })} />
           ))}
         </>
       )}

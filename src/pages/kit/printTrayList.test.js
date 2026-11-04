@@ -39,3 +39,26 @@ describe('the printed tray list', () => {
     expect(html).not.toContain('<hex>')
   })
 })
+
+describe('photos and page breaks on the printout (Brent, 4 Nov 2026)', async () => {
+  const { photoLinks } = await import('./printTrayList.js')
+  it('puts each tray’s photo under its name', () => {
+    const html = trayListHtml(KIT, LIST, { photos: { 'Rods and tulips': 'https://dl.example/p.jpg?a=1&b=2' } })
+    expect(html).toContain('<img class="photo" src="https://dl.example/p.jpg?a=1&amp;b=2" alt="Rods and tulips">')
+    expect(html.match(/class="photo"/g)).toHaveLength(1)
+  })
+
+  it('lets a long tray run onto the next page instead of leaving page 1 blank', () => {
+    const html = trayListHtml(KIT, LIST)
+    expect(html).not.toMatch(/\.tray \{[^}]*break-inside: avoid/)
+    expect(html).toMatch(/tr \{ break-inside: avoid/)
+  })
+
+  it('fetches a link per photo, and prints without one that fails', async () => {
+    const trays = [{ name: 'A', photo: '/Tray Lists/Tray Photos/K/A.jpg' }, { name: 'B', photo: '/x/B.jpg' }, { name: 'C' }]
+    const fetcher = async url => url.includes('A.jpg')
+      ? { json: async () => ({ url: 'https://dl.example/a' }) }
+      : { json: async () => { throw new Error('no') } }
+    expect(await photoLinks(trays, 'tok', fetcher)).toEqual({ A: 'https://dl.example/a' })
+  })
+})

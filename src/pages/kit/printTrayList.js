@@ -16,7 +16,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => (
 const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 
 /** The printable document, as HTML. `only` prints one tray by name. */
-export function trayListHtml(kit, list, { only = '', printedBy = '', at = new Date() } = {}) {
+export function trayListHtml(kit, list, { only = '', printedBy = '', at = new Date(), photos = {} } = {}) {
   const trays = (list?.trays || []).filter(t => !only || t.name === only)
   const when = at.toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Hobart' })
   const source = [
@@ -28,6 +28,7 @@ export function trayListHtml(kit, list, { only = '', printedBy = '', at = new Da
     const implants = tray.lines.filter(l => l.kind === 'implant').length
     return `<section class="tray">
   <h2>${escape(tray.name)}</h2>
+  ${photos[tray.name] ? `<img class="photo" src="${escape(photos[tray.name])}" alt="${escape(tray.name)}">` : ''}
   <p class="meta">${tray.lines.length} lines · ${implants} implant${implants === 1 ? '' : 's'} counted · instruments ticked</p>
   <table>
     <colgroup><col class="code"><col><col class="kind"><col class="qty"><col class="check"></colgroup>
@@ -55,9 +56,17 @@ export function trayListHtml(kit, list, { only = '', printedBy = '', at = new Da
   header { border-bottom: 2px solid #042746; padding-bottom: 6px; margin-bottom: 10px; }
   h1 { font-size: 16pt; margin: 0; color: #042746; }
   .sub { color: #4b5b68; margin-top: 2px; }
-  .tray { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
-  h2 { font-size: 12pt; margin: 0 0 2px; }
-  .meta { color: #6b7a88; margin: 0 0 4px; font-size: 9pt; }
+  /* A tray is allowed to run onto the next page. Keeping a whole tray together
+     pushed any tray longer than the space under the title onto page 2 and left
+     page 1 blank (Brent, 4 Nov 2026). Only its heading, photo and first rows are
+     kept together, rows never split, and the column heads repeat. */
+  .tray { margin-bottom: 14px; }
+  h2 { font-size: 12pt; margin: 0 0 2px; break-after: avoid; page-break-after: avoid; }
+  .photo { display: block; max-width: 100%; max-height: 85mm; margin: 4px 0 6px; object-fit: contain;
+    border: 1px solid #e4e9ee; break-inside: avoid; break-after: avoid; page-break-after: avoid; }
+  .meta { color: #6b7a88; margin: 0 0 4px; font-size: 9pt; break-after: avoid; page-break-after: avoid; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   col.code { width: 22%; } col.kind { width: 13%; } col.qty { width: 8%; } col.check { width: 14%; }
   th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; color: #4b5b68; border-bottom: 1px solid #93a1ad; padding: 3px 4px; }
@@ -78,39 +87,69 @@ export function trayListHtml(kit, list, { only = '', printedBy = '', at = new Da
 }
 
 /**
- * Prints it. A hidden frame where the browser allows one; a new window
- * otherwise (some phones will not print a frame).
+ * Temporary links to each tray's saved photo, fetched now because they are
+ * not stored (a stored one would be a public URL). A photo that cannot be
+ * fetched is left out rather than holding the print up.
  */
-export function printTrayList(kit, list, opts = {}) {
-  const html = trayListHtml(kit, list, opts)
+export async function photoLinks(trays = [], token = '', fetcher = globalThis.fetch) {
+  const out = {}
+  await Promise.all(trays.filter(t => t.photo).map(async t => {
+    try {
+      const res = await fetcher(`/api/guides?kits=photo&path=${encodeURIComponent(t.photo)}`,
+        { headers: { Authorization: `Bearer ${token || ''}` } })
+      const data = await res.json()
+      if (data?.url) out[t.name] = data.url
+    } catch { /* printed without it */ }
+  }))
+  return out
+}
+
+/** Resolves once every picture in the document has loaded or failed, or after `ms`. */
+function picturesReady(doc, ms = 10000) {
+  const pending = [...doc.images].filter(img => !img.complete)
+  if (!pending.length) return Promise.resolve()
+  return Promise.race([
+    Promise.all(pending.map(img => new Promise(done => { img.onload = done; img.onerror = done }))),
+    new Promise(done => setTimeout(done, ms))
+  ])
+}
+
+/**
+ * Prints it, photos included (Brent, 4 Nov 2026: "the photo doesn't preview
+ * in the print preview" — the sheet had never carried them). The links are
+ * fetched first and the print waits for the pictures to load: printing the
+ * moment the document is written prints empty boxes.
+ *
+ * A hidden frame where the browser allows one; a new window otherwise (some
+ * phones will not print a frame). The window is opened before anything is
+ * awaited, so a phone does not block it as a pop-up.
+ */
+export async function printTrayList(kit, list, opts = {}) {
   if (typeof document === 'undefined') return false
+  const trays = (list?.trays || []).filter(t => !opts.only || t.name === opts.only)
   const frame = document.createElement('iframe')
   frame.setAttribute('aria-hidden', 'true')
   frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
   document.body.appendChild(frame)
-  const doc = frame.contentWindow?.document
-  if (!doc) {
+  let target = frame.contentWindow
+  if (!target?.document) {
     frame.remove()
-    const view = window.open('', '_blank')
-    if (!view) return false
-    view.document.write(html)
-    view.document.close()
-    view.focus()
-    view.print()
-    return true
+    target = window.open('', '_blank')
+    if (!target) return false
   }
+
+  const photos = opts.token ? await photoLinks(trays, opts.token) : {}
+  const html = trayListHtml(kit, list, { ...opts, photos })
+  const doc = target.document
   doc.open()
   doc.write(html)
   doc.close()
-  const go = () => {
-    try {
-      frame.contentWindow.focus()
-      frame.contentWindow.print()
-    } finally {
-      setTimeout(() => frame.remove(), 60000)
-    }
+  await picturesReady(doc)
+  try {
+    target.focus()
+    target.print()
+  } finally {
+    if (target === frame.contentWindow) setTimeout(() => frame.remove(), 60000)
   }
-  if (doc.readyState === 'complete') setTimeout(go, 50)
-  else frame.onload = go
   return true
 }
