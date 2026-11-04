@@ -7,6 +7,31 @@ const AMBER = '#f59e0b'
 const MUTED = '#6b7a8d'
 const BORDER = 'rgba(26,43,74,0.12)'
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// ─── Dates people read ───────────────────────────────────────────────────────
+// "It's not clear enough for me to tell which week and what dates Erin is
+// submitting … the date format needs to be adjusted" — Brent, 4 Nov 2026.
+// 2026-11-02 → "Mon 2 Nov". Read off the string, never through a Date in the
+// device's zone, so no timezone can move a day.
+const parts = iso => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''))
+  return m ? { y: Number(m[1]), mo: Number(m[2]), d: Number(m[3]) } : null
+}
+const weekdayOf = iso => {
+  const p = parts(iso)
+  if (!p) return ''
+  return DAY_NAMES[(new Date(Date.UTC(p.y, p.mo - 1, p.d)).getUTCDay() + 6) % 7]
+}
+export const dayLabel = iso => {
+  const p = parts(iso)
+  return p ? `${weekdayOf(iso)} ${p.d} ${MONTHS[p.mo - 1]}` : String(iso || '')
+}
+/** "Mon 2 Nov – Sun 15 Nov 2026" */
+export const rangeLabel = (start, end) => {
+  const e = parts(end)
+  return start && end ? `${dayLabel(start)} – ${dayLabel(end)}${e ? ` ${e.y}` : ''}` : ''
+}
 
 export default function TimesheetApprovals({ user }) {
   const [data, setData] = useState({ submitted: [], approved: [], rejected: [], outstanding: [] })
@@ -64,7 +89,7 @@ export default function TimesheetApprovals({ user }) {
       {data.outstanding?.length > 0 && (
         <div style={{ background: '#fff8e6', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#8a5a00', marginBottom: 3 }}>
-            Not yet submitted for {data.currentPeriod?.start} → {data.currentPeriod?.end}
+            Not yet submitted for this fortnight, {rangeLabel(data.currentPeriod?.start, data.currentPeriod?.end)}
           </div>
           <div style={{ fontSize: 12, color: '#8a5a00' }}>{data.outstanding.map(s => s.name).join(', ')}</div>
         </div>
@@ -95,11 +120,18 @@ export default function TimesheetApprovals({ user }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>{record.staffName}</div>
-                  <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{record.periodStart} → {record.periodEnd}</div>
+                  <div style={{ fontSize: 13, color: NAVY, marginTop: 3, fontWeight: 600 }}>
+                    Fortnight {rangeLabel(record.periodStart, record.periodEnd)}
+                    {record.periodStart === data.currentPeriod?.start && (
+                      <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: TEAL, background: '#e3f4f1', borderRadius: 10, padding: '1px 7px' }}>This fortnight</span>
+                    )}
+                  </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 16, fontWeight: 700, color: record.totals?.totalHours > 76 ? AMBER : NAVY }}>{record.totals?.totalHours ?? 0}h</div>
-                  <div style={{ fontSize: 10.5, color: MUTED }}>{record.totals?.weekHours?.join('h / ')}h</div>
+                  <div style={{ fontSize: 11, color: MUTED }}>
+                    {(record.totals?.weekHours || []).map((h, i) => `Week ${i + 1}: ${h}h`).join(' · ')}
+                  </div>
                 </div>
               </div>
               {record.editedByAdmin && <div style={{ fontSize: 11, color: AMBER, marginTop: 5 }}>Edited before approval</div>}
@@ -117,20 +149,38 @@ export default function TimesheetApprovals({ user }) {
                       <strong style={{ color: NAVY }}>{c.label}</strong>
                       <span style={{ color: TEAL, fontWeight: 700 }}>{record.totals.byCategory[c.key]}{c.unit === 'count' ? '' : 'h'}</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-                      {(record.days || []).slice(0, 7).map((d, i) => {
-                        const w2 = record.days[i + 7]
-                        const v1 = record.entries?.[c.key]?.[d]
-                        const v2 = record.entries?.[c.key]?.[w2]
-                        return (
-                          <div key={d} style={{ textAlign: 'center', fontSize: 10 }}>
-                            <div style={{ color: MUTED, fontSize: 9 }}>{DAY_NAMES[i]}</div>
-                            <div style={{ color: v1 ? NAVY : 'rgba(26,43,74,0.2)', fontWeight: v1 ? 700 : 400 }}>{v1 ?? '·'}</div>
-                            <div style={{ color: v2 ? NAVY : 'rgba(26,43,74,0.2)', fontWeight: v2 ? 700 : 400 }}>{v2 ?? '·'}</div>
+                    {/* One labelled row per week, each day with its own date. It was
+                        one row of Mon–Sun with two numbers stacked under each day
+                        and nothing to say which week either belonged to. */}
+                    {[0, 1].map(week => {
+                      const days = (record.days || []).slice(week * 7, week * 7 + 7)
+                      if (!days.length) return null
+                      return (
+                        <div key={week} style={{ marginBottom: 6 }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 700, color: NAVY, margin: '2px 0 4px' }}>
+                            Week {week + 1} · {dayLabel(days[0])} – {dayLabel(days[days.length - 1])}
                           </div>
-                        )
-                      })}
-                    </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 3 }}>
+                            {days.map((d, i) => {
+                              const v = record.entries?.[c.key]?.[d]
+                              const weekend = i >= 5
+                              return (
+                                <div key={d} style={{
+                                  textAlign: 'center', borderRadius: 6, padding: '4px 0',
+                                  background: weekend ? 'rgba(4,39,70,0.04)' : 'white', border: `1px solid ${BORDER}`
+                                }}>
+                                  <div style={{ color: MUTED, fontSize: 10.5 }}>{DAY_NAMES[i]}</div>
+                                  <div style={{ color: MUTED, fontSize: 10.5 }}>{dayLabel(d).split(' ').slice(1).join(' ')}</div>
+                                  <div style={{ color: v ? NAVY : 'rgba(26,43,74,0.25)', fontWeight: v ? 700 : 400, fontSize: 13, marginTop: 2 }}>
+                                    {v ? `${v}${c.unit === 'count' ? '' : 'h'}` : '–'}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 ))}
 
