@@ -125,7 +125,7 @@ describe('no screen is left out', () => {
     'cases/KitPicker.jsx',
     'cases/LoanTrail.jsx',
     // A section of the usage screen after filing.
-    'scan/RegistrarText.jsx',
+    'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx',
    
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',

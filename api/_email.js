@@ -429,7 +429,7 @@ export async function sendTimesheetDecisionEmail(record, decision, reason = '') 
  */
 export async function sendUsageEmail({
   to, cc, subject, distributorLabel, xlsx, xlsxFilename,
-  scanPdf, scanPdfFilename, test, sender, caseId
+  scanPdf, scanPdfFilename, test, sender, caseId, correction
 }) {
   // A test send goes to the person testing and nowhere else, and has to be
   // impossible to mistake for the real thing — in the inbox list, in the subject,
@@ -442,7 +442,16 @@ export async function sendUsageEmail({
       ? 'Please find the usage sheet and a scan of the signed form attached.'
       : 'Please find usage attached.')
   const signoff = 'Warm regards,<br>TechnoMed'
-  const heading = test ? `[TEST] ${subject}` : subject
+  // A correction to a usage already sent (api/_usageAmend.js): said in the
+  // subject and first in the body, with exactly what changed — item lines only,
+  // never patient detail.
+  const sentOn = correction?.sentOn ? new Date(`${correction.sentOn}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  const fix = correction
+    ? `Correction — this replaces the usage sent${sentOn ? ` on ${sentOn}` : ''}. ${correction.lines.join('. ')}.`
+      + (xlsx ? ' The corrected usage sheet is attached.' : ' Nothing of yours remains on this usage.')
+    : ''
+  const named = correction ? `CORRECTION – ${subject}` : subject
+  const heading = test ? `[TEST] ${named}` : named
   const wouldHaveGone = test && to.length
     ? `Would have gone to: ${test.wouldSendTo.join(', ')}`
     : ''
@@ -459,7 +468,7 @@ export async function sendUsageEmail({
   TEST — not sent to the distributor${wouldHaveGone ? `<div style="font-weight:400;margin-top:4px;">${escapeHtml(wouldHaveGone)}</div>` : ''}
   </td></tr>` : ''}
   <tr><td style="padding:24px 28px;font-size:14px;color:#042746;line-height:1.6;">
-  ${escapeHtml(body)}<div style="margin-top:16px;color:#6b7a8d;font-size:13px;">${signoff}</div>
+  ${fix ? `<div style="font-weight:700;margin-bottom:10px;">${escapeHtml(fix)}</div>` : escapeHtml(body)}<div style="margin-top:16px;color:#6b7a8d;font-size:13px;">${signoff}</div>
   </td></tr>
   <tr><td style="padding:0 28px 22px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed · technomed.com.au</td></tr>
   </table></td></tr></table>
@@ -472,9 +481,9 @@ export async function sendUsageEmail({
     caseId,
     subject: heading,
     html,
-    text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${body}\n\nWarm regards,\nTechnoMed`,
+    text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${fix || body}\n\nWarm regards,\nTechnoMed`,
     attachments: [
-      { filename: xlsxFilename, content: xlsx.toString('base64') },
+      ...(xlsx ? [{ filename: xlsxFilename, content: xlsx.toString('base64') }] : []),
       // The scanned form, where the pages were supplied. Most distributors need
       // the signed original for traceability, not only the transcription of it.
       ...(scanPdf ? [{ filename: scanPdfFilename || 'Scan.pdf', content: scanPdf.toString('base64') }] : [])

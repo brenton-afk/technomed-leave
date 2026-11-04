@@ -312,3 +312,14 @@ describe('a booking notice to a supplier or hospital', () => {
     expect(posted[0].attachments[0].content.length).toBeGreaterThan(1000)
   })
 })
+
+describe('a correction to a usage already sent (Aimee, 4 Nov 2026)', () => {
+  it('says CORRECTION in the subject and exactly what changed in the body', async () => {
+    posted.length = 0
+    await usage({ correction: { sentOn: '2026-11-04', lines: ['Added: 1 × SIGNUS DIPLOMAT Cross Link 60mm'] } })
+    const sent = posted.at(-1)
+    expect(sent.subject).toBe('CORRECTION – A case folder name')
+    expect(sent.text).toMatch(/^Correction — this replaces the usage sent on 4 Nov 2026\. Added: 1 × SIGNUS DIPLOMAT Cross Link 60mm\. The corrected usage sheet is attached\./)
+    expect(sent.attachments).toHaveLength(1)
+  })
+})

@@ -6,14 +6,15 @@ import {
   saveUsageRecord, getUsageRecord, getUsageHistory,
   setUsageReviewed, getUsageReviews
 } from '../_redis.js'
-import { normaliseCase, recomputeCase } from '../_usageCase.js'
+import { normaliseCase, recomputeCase, normaliseItem } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
-  listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory
+  listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile
 } from '../_dropbox.js'
+import { amendItems, changesByDistributor } from '../_usageAmend.js'
 import { sendUsageEmail } from '../_email.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
@@ -77,6 +78,8 @@ export default async function handler(req, res) {
     if (action === 'open') return await handleOpen(req, res)
     if (action === 'history') return await handleHistory(req, res)
     if (action === 'reviewed') return await handleReviewed(req, res, session)
+    if (action === 'record') return await handleRecord(req, res)
+    if (action === 'amend') return await handleAmend(req, res, session)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     // err.message here is ours or the provider's; extracted content is never
@@ -415,6 +418,93 @@ async function handleEmail(req, res, session) {
   })
 }
 
+// ─── record / amend: correcting a usage after it has gone ────
+// See api/_usageAmend.js. `record` returns one saved usage for the amend screen
+// (and the distributors a new item can be routed to). `amend` with
+// `preview: true` only says what would change; without it, it saves the
+// corrected record, files the corrected sheet beside the original in Dropbox,
+// and sends a correction to each distributor whose items changed — no one
+// else. A test send goes to the signed-in person only and saves nothing.
+
+async function handleRecord(req, res) {
+  const record = await getUsageRecord(String(req.query.id || ''))
+  if (!record) return res.status(404).json({ error: 'Usage record not found' })
+  return res.status(200).json({
+    record,
+    distributors: Object.entries(DISTRIBUTORS).map(([key, d]) => ({ key, name: d.name }))
+  })
+}
+
+async function handleAmend(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { usageId, items, preview, testOnly } = req.body || {}
+  const record = await getUsageRecord(String(usageId || ''))
+  if (!record) return res.status(404).json({ error: 'Usage record not found' })
+  if (!Array.isArray(items)) throw badRequest('No items supplied')
+
+  const amended = recomputeCase({ ...record, items: amendItems(record.items || [], items, normaliseItem) })
+  const changes = changesByDistributor(record.items || [], amended.items)
+  if (preview) return res.status(200).json({ changes })
+  if (!changes.length) throw badRequest('Nothing has changed for any distributor')
+
+  const test = Boolean(testOnly)
+  const now = new Date().toISOString()
+  const n = (record.amendments || []).length + 1
+  const groups = groupByDistributor(amended.items)
+
+  // The corrected internal sheet, beside the original — never over it.
+  let filed = ''
+  if (!test && dropboxConfigured() && record.dropboxPath) {
+    try {
+      const name = `${amended.folderName}_Usage_Sheet_amended_${n}.xlsx`
+      const sheet = await buildUsageWorkbook(amended, amended.items.filter(i => !i.excluded), { internal: true })
+      await uploadFile(`${record.dropboxPath.replace(/\/+$/, '')}/${name}`, sheet)
+      filed = name
+    } catch (err) {
+      filed = ''
+      console.error('Amended sheet not filed:', err.message)
+    }
+  }
+
+  const sentOn = String(record.createdAt || record.submittedAt || '').slice(0, 10)
+  const results = []
+  for (const change of changes) {
+    const distributor = DISTRIBUTORS[change.key]
+    if (!distributor) continue
+    const theirs = groups.get(change.key) || []
+    const to = test ? [session.email] : distributor.to
+    try {
+      const xlsx = theirs.length ? await buildUsageWorkbook(amended, theirs) : null
+      await sendUsageEmail({
+        to, cc: test ? [] : ccFor(session.email),
+        subject: amended.folderName, caseId: record.id,
+        distributorLabel: distributor.name,
+        xlsx, xlsxFilename: `${amended.folderName}_Usage_Sheet_corrected.xlsx`,
+        test: test ? { wouldSendTo: distributor.to } : undefined,
+        correction: { sentOn, lines: change.lines },
+        sender: { name: session.name, email: session.email }
+      })
+      results.push({ key: change.key, name: distributor.name, ok: true, test, lines: change.lines, sentAt: now })
+    } catch (err) {
+      results.push({ key: change.key, name: distributor.name, ok: false, test, error: err.message })
+    }
+  }
+
+  let saved = record
+  if (!test) {
+    saved = {
+      ...amended,
+      filesSaved: filed ? [...(record.filesSaved || []), filed] : record.filesSaved,
+      amendments: [...(record.amendments || []), { at: now, by: session.name, changes, results }],
+      updatedAt: now
+    }
+    await saveUsageRecord(saved)
+  }
+  const failed = results.filter(r => !r.ok)
+  return res.status(failed.length && failed.length === results.length ? 502 : 200)
+    .json({ changes, results, test, filed, record: saved })
+}
+
 // ─── files / open: browsing what was filed ─────────────────
 // Read-only browsing of the Dropbox tree, so a saved usage sheet and the shared
 // resources folder are both reachable from the phone. Paths are constrained to
@@ -577,6 +667,7 @@ async function handleList(req, res) {
       dropboxPath: r.dropboxPath,
       filesSaved: r.filesSaved || [],
       emailsSent: r.emailsSent || [],
+      amendments: (r.amendments || []).length,
       createdAt: r.createdAt
     }))
   })

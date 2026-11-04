@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { reorder } from './scan/pageList.js'
 import RegistrarText from './scan/RegistrarText.jsx'
+import AmendUsage from './scan/AmendUsage.jsx'
 import CameraSheet from './scan/CameraSheet.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { partitionItems } from '../usageReview.js'
@@ -395,6 +396,8 @@ export default function UsageScan({ user }) {
   // away, without reading state that has not been committed yet.
   const pagesRef = useRef([])
   const [caseRecord, setCaseRecord] = useState(null)
+  // Which past usage is open for a correction (scan/AmendUsage.jsx).
+  const [amending, setAmending] = useState(null)
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [error, setError] = useState('')
@@ -717,6 +720,10 @@ export default function UsageScan({ user }) {
           {history.map(h => {
             const failed = (h.emailsSent || []).filter(e => !e.ok).length
             const sent = (h.emailsSent || []).filter(e => e.ok).length
+            if (amending === h.id) {
+              return <AmendUsage key={h.id} usageId={h.id} user={user}
+                onClose={() => setAmending(null)} onDone={loadHistory} />
+            }
             return (
               <div key={h.id} style={{ background: 'white', borderRadius: 12, padding: '13px 15px', marginBottom: 10, border: `1px solid ${BORDER}` }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, wordBreak: 'break-all' }}>{h.folderName}</div>
@@ -729,6 +736,12 @@ export default function UsageScan({ user }) {
                   </span>
                   {sent > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#eaf4fc', color: BLUE }}>{sent} emailed</span>}
                   {failed > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#fdecea', color: '#c0392b' }}>{failed} failed</span>}
+                  {h.amendments > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#fff3cd', color: '#856404' }}>Amended{h.amendments > 1 ? ` ×${h.amendments}` : ''}</span>}
+                  {/* Something missed after it had gone — Aimee's cross link. */}
+                  <button type="button" onClick={() => setAmending(h.id)}
+                    style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, padding: '4px 12px', minHeight: 32, borderRadius: 20, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: NAVY }}>
+                    Amend
+                  </button>
                 </div>
               </div>
             )

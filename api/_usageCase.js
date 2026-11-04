@@ -168,7 +168,7 @@ function normaliseDate(raw) {
 }
 
 // One extracted row → one normalised line item.
-function normaliseItem(raw, index) {
+export function normaliseItem(raw, index) {
   const productName = str(raw.productName || raw.product || raw.systemName)
   const referenceCode = str(raw.referenceCode || raw.ref || raw.catalogueCode)
   const lotNumber = str(raw.lotNumber || raw.lot)

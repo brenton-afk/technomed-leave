@@ -311,6 +311,20 @@ pre-filled from the scanned items, sizes only. Consultant titles are guessed
 only where known (`SURGEON_TITLES`). Still a draft for the phone's messaging
 app, never a send.
 
+### Amending a sent usage (Aimee and Brent, 4 Nov 2026)
+
+**Amend** on each past usage (`scan/AmendUsage.jsx`) edits the items — change a
+quantity, remove one, add one that was missed — then `action=amend`:
+`preview: true` returns per-distributor change lines (`changesByDistributor`
+in `api/_usageAmend.js`); without it the corrected record is saved with an
+`amendments` entry, the corrected internal sheet is filed in Dropbox **beside**
+the original (`…_amended_{n}.xlsx`, never over it), and a correction goes **only
+to the distributors whose items changed** — subject "CORRECTION – {case}", body
+"Correction — this replaces the usage sent on {date}. Added: …", corrected
+sheet attached. Known items keep what the scan read; new items go through
+`normaliseItem` like a scanned one, unless the rep picks the distributor.
+`testOnly` sends to the signed-in person only and saves nothing.
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the
