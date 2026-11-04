@@ -32,3 +32,11 @@ describe('case summary card', () => {
     expect(writeText.mock.calls[0][0]).toMatch(/^Patient: Sample\nDate: Fri 13 Nov 2026\nHospital: Calvary/)
   })
 })
+
+describe('on the booking (Brent, 4 Nov 2026)', () => {
+  it('leaves the notes out — they are in their own field below', () => {
+    render(<CaseSummary booking={{ ...booking, notes: 'Second on the list' }} />)
+    expect(screen.queryByText('Second on the list')).not.toBeInTheDocument()
+    expect(screen.queryByText('Notes')).not.toBeInTheDocument()
+  })
+})

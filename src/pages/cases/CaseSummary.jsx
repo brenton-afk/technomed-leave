@@ -11,7 +11,9 @@ import { caseSummaryLines, caseSummaryText, caseSummaryTitle, copyText, shareTex
 // button on the week gives, from caseSummary.js.
 
 export default function CaseSummary({ booking }) {
-  const lines = useMemo(() => caseSummaryLines(booking), [booking])
+  // No notes here (Brent, 4 Nov 2026): the notes field is right below, and on
+  // a phone the summary was taking most of the first screen.
+  const lines = useMemo(() => caseSummaryLines(booking).filter(([label]) => label !== 'Notes'), [booking])
   const [said, setSaid] = useState('')
   useEffect(() => {
     if (!said) return undefined
@@ -30,44 +32,46 @@ export default function CaseSummary({ booking }) {
     if (result === 'failed') setSaid('Could not share on this phone')
   }
 
+  // Compact: a title row carrying Copy and Share, then the facts in caption
+  // size — it was most of a phone screen at body size with full-width buttons.
   return (
     <section aria-label="Case summary" style={{
       background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.control,
-      padding: space.md, marginBottom: space.md
+      padding: `${space.sm}px ${space.md}px`, marginBottom: space.md
     }}>
-      <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, marginBottom: space.sm }}>
-        Case summary
+      <div style={{ display: 'flex', alignItems: 'center', gap: space.xs, marginBottom: 4 }}>
+        <span style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, flex: 1 }}>
+          Case summary
+        </span>
+        <button type="button" onClick={copy} style={action(true)}>
+          <IconCopy size={14} /> Copy
+        </button>
+        <button type="button" onClick={share} style={action(false)}>
+          <IconShare size={14} /> Share
+        </button>
       </div>
       <dl style={{
-        display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: space.md, rowGap: 4,
+        display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: space.sm, rowGap: 1,
         margin: 0, userSelect: 'text', WebkitUserSelect: 'text'
       }}>
         {lines.map(([label, value]) => (
           <React.Fragment key={label}>
             <dt style={{ ...text('caption'), color: colour.inkFaint }}>{label}</dt>
-            <dd style={{ ...text('bodyStrong'), color: colour.ink, margin: 0, overflowWrap: 'anywhere' }}>{value}</dd>
+            <dd style={{ ...text('caption'), fontWeight: 600, color: colour.ink, margin: 0, overflowWrap: 'anywhere' }}>{value}</dd>
           </React.Fragment>
         ))}
       </dl>
-      <div style={{ display: 'flex', gap: space.sm, marginTop: space.md }}>
-        <button type="button" onClick={copy} style={action(true)}>
-          <IconCopy size={18} /> Copy
-        </button>
-        <button type="button" onClick={share} style={action(false)}>
-          <IconShare size={18} /> Share
-        </button>
-      </div>
       {said && (
-        <div role="status" style={{ ...text('caption'), color: colour.accentDeep, marginTop: space.sm }}>{said}</div>
+        <div role="status" style={{ ...text('caption'), color: colour.accentDeep, marginTop: 4 }}>{said}</div>
       )}
     </section>
   )
 }
 
 const action = primary => ({
-  flex: 1, minHeight: 44, cursor: 'pointer', borderRadius: radius.control,
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-  ...text('bodyStrong'),
+  minHeight: 32, padding: `0 ${space.sm}px`, cursor: 'pointer', borderRadius: radius.pill,
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+  ...text('caption'), fontWeight: 700,
   border: `1px solid ${colour.accent}`,
   background: primary ? colour.accent : colour.surface,
   color: primary ? 'white' : colour.accentDeep
