@@ -7,23 +7,32 @@ import { Grid, Figure, Field, fieldBox, Table, Note, SmallButton } from './ui.js
 const inputStyle = { ...fieldBox, ...text('field') }
 
 // ─── Return of capital, on the Trust investments screen ──────────────────────
-// What src/treasury/roc.js works out: each parcel's cost base after the return
-// of capital paid on it, which parcels are at nil (from which point return of
-// capital is a capital gain), and when the rest get there. Estimates for Sam.
+// What src/treasury/roc.js works out, said as carefully as it is known: the
+// parcels and what each payment was paid on are checked facts; the US share of
+// return of capital is known only where the record shows it; and whether
+// Australian tax follows the US classification at all is Sam's call. Both
+// readings are shown and neither is asserted.
 
 const day = d => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—')
 const month = d => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—')
 const units = n => n.toLocaleString('en-AU', { maximumFractionDigits: 1 })
+const usd = n => 'US' + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n || 0)
+const BASIS = { refunded: 'withholding refunded', payment: 'typed for the payment', final: 'final, typed', year: 'assumed, typed' }
 
 export default function RocSection({ roc, cfg, today, onSave }) {
   const [showAll, setShowAll] = useState(false)
   const [edit, setEdit] = useState(null)
   if (!roc) return null
   const t = roc.totals
-  const parcels = [...roc.parcels].sort((a, b) => String(a.projectedNil).localeCompare(String(b.projectedNil)))
-  const nextNil = parcels.find(p => p.base > 1e-6)?.projectedNil
-  const fyNow = roc.byFy[0]
+  const parcels = [...roc.parcels].sort((a, b) => String(a.nilOn || a.projectedNil || '9').localeCompare(String(b.nilOn || b.projectedNil || '9')) || a.date.localeCompare(b.date))
+  const nextNil = parcels.find(p => p.base > 1e-6 && p.projectedNil)?.projectedNil
   const years = [...new Set([...roc.payments.map(p => p.date.slice(0, 4)), today.slice(0, 4), ...Object.keys(cfg.years || {})])].sort()
+  const checks = roc.checks || { payments: 0, mismatches: [] }
+  const unknown = roc.payments.filter(p => p.pct == null)
+  const unknownUsd = unknown.reduce((s, p) => s + p.grossUsd, 0)
+  const refunded = roc.payments.filter(p => p.basis === 'refunded')
+  const typed = roc.payments.filter(p => p.basis && p.basis !== 'refunded')
+  const range = list => (list.length ? `${day(list[0].date)} – ${day(list[list.length - 1].date)}` : '')
 
   function startEdit() {
     setEdit({
@@ -37,30 +46,43 @@ export default function RocSection({ roc, cfg, today, onSave }) {
   return (
     <>
       <SectionLabel>{roc.ticker} return of capital</SectionLabel>
+      <Banner tone={checks.mismatches.length ? 'warning' : 'info'}>
+        {checks.mismatches.length
+          ? <>Not every payment matches the parcels: {checks.mismatches.map(p => `${day(p.date)} paid on ${units(p.units)}, parcels ${units(p.eligibleUnits)}`).join('; ')}. A trade is missing or misread.</>
+          : <>Checked: each of the {checks.payments} payments was paid on exactly the units the parcels add up to at its record date
+            {(roc.consolidations || []).map(c => ` · 1-for-${c.ratio} consolidation on ${day(c.date)}${c.before ? ` (${units(c.before)} → ${units(c.after)})` : ''}`).join('')}.</>}
+      </Banner>
       <Note>
-        Return of capital reduces each parcel's cost base. Once a parcel reaches nil, every further return of capital on it is a
-        capital gain in the year it is paid. In A$ at each day's rate — estimates for Sam to confirm.
+        <b>Working figures for Sam, not a tax position.</b> Two things are not settled. First, how much of each payment the US treats as return of
+        capital: known for {refunded.length + typed.length} of {roc.payments.length} payments
+        {refunded.length ? ` (${refunded.length} had their US withholding refunded in full, ${range(refunded)})` : ''}
+        {unknown.length ? `; the other ${unknown.length} (${usd(unknownUsd)}) are not known until the fund reports the year, and reduce nothing here` : ''}.
+        Second, whether Australian tax follows the US classification at all — if it does not, every payment is assessable income and no cost base reduces.
       </Note>
       <Grid>
-        <Figure label="Cost base now" value={aud(t.baseAud)} sub={`of ${aud(t.costAud)} paid`} />
-        <Figure label="Returned so far" value={aud(t.rocAud)} sub="cost base reduced" />
+        <Figure label="Cost base, if US treatment" value={aud(t.baseAud)} sub={`of ${aud(t.costAud)} paid`} />
+        <Figure label="Reduced so far" value={aud(t.rocAud)} sub="on payments with a known share" />
+        <Figure label="Not yet classified" value={usd(unknownUsd)} sub={unknown.length ? `${unknown.length} payments` : 'none'} />
         <Figure label="Parcels at nil" value={`${t.atNil} of ${t.parcels}`} tone={t.atNil ? 'warning' : undefined}
-          sub={t.atNil ? 'their return of capital is now a gain' : 'none yet'} />
-        <Figure label="Next to reach nil" value={nextNil ? month(nextNil) : '—'} sub="at the recent rate" />
-        {fyNow && <Figure label={`Gain ${fyNow.fy} so far`} value={aud(fyNow.gainAud)} sub={fyNow.gainAud ? `${aud(fyNow.gainDiscount)} held over 12 months` : 'from return of capital'} />}
+          sub={t.atNil ? 'further return of capital on them is a gain' : 'no capital gain from this yet'} />
+        {nextNil && <Figure label="Next to reach nil" value={month(nextNil)} sub={`at your ${roc.assumption.pct}% for ${today.slice(0, 4)}`} />}
       </Grid>
 
-      <Table head={['Year', 'Cost base reduced', 'Capital gain', 'Of it, held 12m+']} align={['left', 'right', 'right', 'right']}
+      <Table head={['Year', 'Paid (A$)', 'Base reduced', 'Gain', 'Unclassified']} align={['left', 'right', 'right', 'right', 'right']}
         rows={[
           ...roc.projected.filter(p => !roc.byFy.some(x => x.fy === p.fy) || p.fy > roc.byFy[0].fy).slice().reverse().map(p => [
-            <span key="y">{p.fy}<span style={{ display: 'block', color: colour.inkFaint }}>projected</span></span>, '—',
-            <span key="g" style={{ color: colour.inkMuted }}>{aud(p.gainAud)}</span>, <span key="d" style={{ color: colour.inkMuted }}>{aud(p.gainDiscount)}</span>]),
-          ...roc.byFy.map(x => [x.fy, aud(x.rocAud), <b key="g">{aud(x.gainAud)}</b>, aud(x.gainDiscount)])
+            <span key="y">{p.fy}<span style={{ display: 'block', color: colour.inkFaint }}>projected</span></span>, '—', '—',
+            <span key="g" style={{ color: colour.inkMuted }}>{aud(p.gainAud)}</span>, '—']),
+          ...roc.byFy.map(x => [x.fy, aud(x.grossAud), aud(x.rocAud),
+            <span key="g">{aud(x.gainAud)}{x.gainDiscount > 0 && <span style={{ display: 'block', color: colour.inkFaint }}>{aud(x.gainDiscount)} held 12m+</span>}</span>,
+            x.unknownUsd ? usd(x.unknownUsd) : '—'])
         ]} />
       <Note>
-        Projection: US${roc.assumption.avgPerUnitUsd.toFixed(4)} a unit a week (average of the last {Math.min(13, roc.payments.length)} payments)
-        × {roc.assumption.pct}% return of capital at {roc.assumption.rateNow.toFixed(3)} US$ per A$, on the units held now.
-        Parcels bought later start their own count.
+        Paid is the gross of every payment in A$ at each day's rate, before US withholding — the income if Sam treats it all as assessable.
+        Base reduced and Gain apply only if Australian tax follows the US return-of-capital share.
+        {roc.assumption.pct != null
+          ? ` Projection: US$${roc.assumption.avgPerUnitUsd.toFixed(4)} a unit a week (last ${Math.min(13, roc.payments.length)} payments) × your ${roc.assumption.pct}% at ${roc.assumption.rateNow.toFixed(3)} US$ per A$.`
+          : ` No projection: there is no share for ${today.slice(0, 4)} to project with. Type one in below once YieldMax's notices give it.`}
       </Note>
 
       <SectionLabel>Parcels, in the order they reach nil</SectionLabel>
@@ -68,18 +90,26 @@ export default function RocSection({ roc, cfg, today, onSave }) {
         rows={(showAll ? parcels : parcels.slice(0, 8)).map(p => [
           day(p.date), units(p.units), aud(p.costAud),
           <span key="l" style={{ color: p.base <= 1e-6 ? colour.warning : colour.ink }}>{aud(p.base)}</span>,
-          <span key="n" style={{ color: p.nilOn ? colour.warning : colour.inkMuted }}>{p.nilOn ? day(p.nilOn) : `~${month(p.projectedNil)}`}</span>
+          <span key="n" style={{ color: p.nilOn ? colour.warning : colour.inkMuted }}>{p.nilOn ? day(p.nilOn) : p.projectedNil ? `~${month(p.projectedNil)}` : '—'}</span>
         ])} />
       {parcels.length > 8 && <SmallButton onClick={() => setShowAll(!showAll)}>{showAll ? 'Show fewer' : `Show all ${parcels.length} parcels`}</SmallButton>}
 
       <SectionLabel>Return-of-capital share</SectionLabel>
       <Card>
-        <Table head={['Year', 'Share', '']} align={['left', 'right', 'left']}
-          rows={years.filter(y => cfg.years?.[y] != null).map(y => [y, `${cfg.years[y]}%`, (cfg.final || []).includes(y) ? 'final' : 'assumed'])} />
+        <Table head={['Year', 'Payments', 'Share known from']} align={['left', 'right', 'left']}
+          rows={years.filter(y => roc.payments.some(p => p.date.startsWith(y)) || cfg.years?.[y] != null).map(y => {
+            const mine = roc.payments.filter(p => p.date.startsWith(y))
+            const kinds = [...new Set(mine.map(p => (p.basis ? `${BASIS[p.basis]}${p.basis !== 'refunded' ? ` ${p.pct}%` : ''}` : 'not known yet')))]
+            return [y, mine.length, kinds.join(' · ') || (cfg.years?.[y] != null ? `${cfg.years[y]}% ${(cfg.final || []).includes(y) ? 'final' : 'assumed'}` : '—')]
+          })} />
         {Object.keys(cfg.overrides || {}).length > 0 && (
           <Note>Payment estimates: {Object.entries(cfg.overrides).sort().map(([d, v]) => `${day(d)} ${v}%`).join(' · ')}</Note>
         )}
-        <Note>The fund publishes each year's final split early the next year (YieldMax's 19a notices give estimates per payment). Update it here when it does.</Note>
+        <Note>
+          A refund of the US withholding on a payment shows the US did not treat it as an ordinary dividend. That is consistent with return of
+          capital, but SelfWealth's Form 1042-S for the year is what confirms it. Otherwise the share comes from YieldMax's 19a-1 notice for the
+          payment (an estimate) or the year's 1099-DIV (final). Type it in here; a payment with no share reduces nothing.
+        </Note>
         {!edit && <SmallButton onClick={startEdit}>Change</SmallButton>}
         {edit && (
           <>
@@ -124,7 +154,7 @@ export default function RocSection({ roc, cfg, today, onSave }) {
           </>
         )}
       </Card>
-      {t.atNil > 0 && <Banner tone="warning">Some parcels are at nil: their return of capital is now taxed as a capital gain each year. Worth raising with Sam before the next return.</Banner>}
+      {t.atNil > 0 && <Banner tone="warning">Some parcels are at nil on these figures: if Australian tax follows the US classification, further return of capital on them is a capital gain. Worth raising with Sam.</Banner>}
     </>
   )
 }

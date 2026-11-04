@@ -471,6 +471,16 @@ describe('return of capital', () => {
     expect(r.payments[0]).toMatchObject({ pct: 80, basis: 'payment' })
     expect(r.totals.parcels).toBe(1)
   })
+
+  it('drops the shares the first version saved as defaults, and keeps what was typed', async () => {
+    const t = await unlocked()
+    const { tset } = await import('./_treasuryStore.js')
+    await tset('settings', { roc: { tickers: ['MSTY'], years: { 2025: 100, 2026: 97, 2027: 60 }, overrides: {}, final: [] } })
+    const inv = await call({ action: 'investments', token: t })
+    expect(inv.body.rocCfg.years).toEqual({ 2027: 60 })
+    await tset('settings', { roc: { tickers: ['MSTY'], years: { 2026: 97 }, overrides: {}, final: ['2026'] } })
+    expect((await call({ action: 'investments', token: t })).body.rocCfg.years).toEqual({ 2026: 97 })
+  })
 })
 
 describe('buys brought in from the old tracker', () => {

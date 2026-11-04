@@ -72,3 +72,26 @@ describe('trust investments', () => {
     expect(screen.getByText('$2,608')).toBeInTheDocument()
   })
 })
+
+describe('return of capital section', () => {
+  it('says what is checked and what is not known, and projects nothing without a share', async () => {
+    const { default: RocSection } = await import('./RocSection.jsx')
+    const { trackRoc, DEFAULT_ROC } = await import('../../treasury/roc.js')
+    const row = (date, kind, extra) => ({ key: `${date}|${kind}`, at: `${date}T00:00:00`, date, kind, ticker: 'MSTY', ...extra })
+    const rows = [
+      row('2025-01-02', 'buy', { units: 100, amount: -1000, order: '1', settle: '2025-01-03' }),
+      row('2025-06-09', 'distribution', { units: 100, perUnit: 1, amount: 100, recordDate: '2025-06-05' }),
+      row('2025-06-09', 'withholding', { units: 100, amount: -15 }),
+      row('2026-02-09', 'distribution', { units: 100, perUnit: 1, amount: 100, recordDate: '2026-02-05' }),
+      row('2026-09-15', 'refund', { units: 100, amount: 15 })
+    ]
+    const roc = trackRoc({ rows, fx: () => 0.5, cfg: DEFAULT_ROC, today: '2026-10-01' })
+    render(<RocSection roc={roc} cfg={DEFAULT_ROC} today="2026-10-01" onSave={async () => true} />)
+    const text = document.body.textContent
+    expect(text).toMatch(/Checked: each of the 2 payments was paid on exactly the units/)
+    expect(text).toMatch(/not a tax position/)
+    expect(text).toMatch(/1 had their US withholding refunded in full/)
+    expect(text).toMatch(/No projection/)
+    expect(text).not.toMatch(/Next to reach nil/)
+  })
+})

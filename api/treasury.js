@@ -182,6 +182,22 @@ function investmentLedger(sw, manualOpenings = [], manualActions = []) {
   return { ...L, openings: usedOpenings, actions, ignored }
 }
 
+/**
+ * Return-of-capital settings. The first version shipped with 2025 at 100% and
+ * 2026 at 97% as defaults, and the edit form saved whatever it showed — so a
+ * stored 2026 of exactly 97 (not marked final) is that default, not a figure
+ * anyone entered, and is dropped. 2025 is now known from the withholding
+ * refunds, which take precedence over a year's figure anyway.
+ */
+function rocSettings(s) {
+  const saved = s.roc || {}
+  const years = { ...(saved.years || {}) }
+  const final = saved.final || []
+  if (Number(years['2026']) === 97 && !final.includes('2026')) delete years['2026']
+  if (Number(years['2025']) === 100 && !final.includes('2025')) delete years['2025']
+  return { ...DEFAULT_ROC, ...saved, years, final }
+}
+
 // ─── A DCA buy ───────────────────────────────────────────────────────────────
 
 /** A buy from what was typed, with defaults; derives sats or price from the other. */
@@ -595,7 +611,7 @@ const ACTIONS = {
     const fx = price?.aud > 0 && price?.usd > 0 ? price.usd / price.aud : null
     // Return of capital, in A$ at each day's rate (from stored BTC closes in
     // both currencies; today's rate where the history has no such day).
-    const rocCfg = { ...DEFAULT_ROC, ...(s.roc || {}) }
+    const rocCfg = rocSettings(s)
     const fxOn = makeFx(history.aud, history.usd, fx)
     const roc = rocCfg.tickers.filter(t => rows.some(r => r.ticker === t && r.kind === 'distribution'))
       .map(ticker => trackRoc({ rows, openings: L.openings, actions: L.actions, fx: fxOn, ticker, cfg: rocCfg, today: today() }))
@@ -728,7 +744,7 @@ const ACTIONS = {
     }
     const final = Array.isArray(b.final) ? b.final.filter(y => /^\d{4}$/.test(y)) : []
     const s = await settings()
-    const next = { ...s, roc: { ...DEFAULT_ROC, ...(s.roc || {}), years, overrides, final } }
+    const next = { ...s, roc: { ...rocSettings(s), years, overrides, final } }
     await tset('settings', next)
     return res.json({ roc: next.roc })
   },

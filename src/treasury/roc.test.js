@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { trackRoc, rocShare, makeFx, fyOf } from './roc.js'
+import { trackRoc, rocShare, makeFx, fyOf, refundShares, discountable, DEFAULT_ROC } from './roc.js'
 
 // Invented trades and distributions. US$ per A$1 is 0.5 throughout, so every
 // A$ figure is twice the US$ one and easy to check by eye.
@@ -71,7 +71,9 @@ describe('settings and helpers', () => {
     const cfg = { years: { 2026: 97 }, overrides: { '2026-01-12': 91.9 } }
     expect(rocShare('2026-01-12', cfg)).toEqual({ pct: 91.9, basis: 'payment' })
     expect(rocShare('2026-01-19', cfg)).toEqual({ pct: 97, basis: 'year' })
-    expect(rocShare('2027-01-05', cfg)).toEqual({ pct: 97, basis: 'assumed' })
+    expect(rocShare('2027-01-05', cfg)).toEqual({ pct: null, basis: null })
+    expect(rocShare('2026-01-19', { ...cfg, final: ['2026'] })).toEqual({ pct: 97, basis: 'final' })
+    expect(rocShare('2026-01-19', cfg, 100)).toEqual({ pct: 100, basis: 'refunded' })
   })
 
   it('reads the exchange rate for a day from closes in both currencies', () => {
@@ -85,5 +87,53 @@ describe('settings and helpers', () => {
   it('financial years run July to June', () => {
     expect(fyOf('2026-06-30')).toBe('FY26')
     expect(fyOf('2026-07-01')).toBe('FY27')
+  })
+})
+
+describe('what is known, and what is not', () => {
+  const buy = row('2025-01-02', 'buy', { units: 100, amount: -1000, order: '1', settle: '2025-01-03' })
+  const pay = (date, units, perUnit, record) => row(date, 'distribution', { units, perUnit, amount: units * perUnit, recordDate: record })
+  const wht = (date, units, amount) => ({ key: `${date}|wht`, at: `${date}T00:00:00`, date, kind: 'withholding', ticker: 'MSTY', units, amount: -amount })
+  const refund = (units, amount) => ({ key: `r|${units}|${amount}`, at: '2026-09-15T00:00:00', date: '2026-09-15', kind: 'refund', ticker: 'MSTY', units, amount })
+  const rows = [buy, pay('2025-06-09', 100, 1, '2025-06-05'), wht('2025-06-09', 100, 15), pay('2026-02-09', 100, 1, '2026-02-05'), wht('2026-02-09', 100, 15), refund(100, 15)]
+
+  it('a payment whose US withholding was refunded in full counts as return of capital; one with no evidence reduces nothing', () => {
+    const r = trackRoc({ rows, fx, cfg: DEFAULT_ROC, today: '2026-10-01' })
+    expect(r.payments.map(p => [p.date, p.pct, p.basis])).toEqual([['2025-06-09', 100, 'refunded'], ['2026-02-09', null, null]])
+    expect(r.payments[1].rocAud).toBe(0)
+    expect(r.byFy.find(x => x.fy === 'FY26')).toMatchObject({ unknownUsd: 100, unknown: 1, grossAud: 200, rocAud: 0 })
+    // Nothing is projected without a share typed in for the year.
+    expect(r.assumption.pct).toBeNull()
+    expect(r.parcels[0].projectedNil).toBeNull()
+  })
+
+  it('a refund is matched to its own payment, by units and amount', () => {
+    expect([...refundShares(rows).keys()]).toEqual(['2025-06-09|100'])
+    expect(refundShares([wht('2025-06-09', 100, 15), refund(100, 14)]).size).toBe(0)
+  })
+
+  it('checks each payment was paid on the units the parcels add up to at its record date', () => {
+    const r = trackRoc({ rows, fx, cfg: DEFAULT_ROC, today: '2026-10-01' })
+    expect(r.checks).toMatchObject({ payments: 2, mismatches: [] })
+    const off = trackRoc({ rows: [buy, pay('2025-06-09', 120, 1, '2025-06-05')], fx, cfg: DEFAULT_ROC, today: '2026-10-01' })
+    expect(off.checks.mismatches.map(p => [p.eligibleUnits, p.units])).toEqual([[100, 120]])
+    // A buy settling after the record date is not paid on.
+    const late = trackRoc({ rows: [buy, row('2025-06-04', 'buy', { units: 10, amount: -100, order: '2', settle: '2025-06-06' }), pay('2025-06-09', 100, 1, '2025-06-05')], fx, cfg: DEFAULT_ROC, today: '2026-10-01' })
+    expect(late.checks.mismatches).toEqual([])
+  })
+
+  it('a consolidation leaves the units SelfWealth says came back, the fraction taken off in proportion', () => {
+    const two = [buy, row('2025-02-03', 'buy', { units: 3, amount: -30, order: '2', settle: '2025-02-04' })]
+    const r = trackRoc({ rows: two, actions: [{ ticker: 'MSTY', date: '2025-12-08', ratio: 5, before: 103, after: 20 }], fx, cfg: DEFAULT_ROC, today: '2026-10-01' })
+    expect(r.parcels.reduce((t, p) => t + p.units, 0)).toBeCloseTo(20)
+    expect(r.parcels.map(p => p.costAud)).toEqual([2000, 60])
+    expect(r.consolidations[0]).toMatchObject({ ratio: 5, before: 103, after: 20, fraction: expect.closeTo(0.6, 6) })
+  })
+
+  it('the CGT discount needs 12 months, not counting the day bought or the day of the event', () => {
+    expect(discountable('2025-05-08', '2026-05-08')).toBe(false)
+    expect(discountable('2025-05-08', '2026-05-09')).toBe(true)
+    expect(discountable('2024-02-29', '2025-03-01')).toBe(false)
+    expect(discountable('2024-02-29', '2025-03-02')).toBe(true)
   })
 })
