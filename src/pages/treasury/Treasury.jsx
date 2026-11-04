@@ -13,6 +13,7 @@ import Trust from './Trust.jsx'
 import Snapshots from './Snapshots.jsx'
 import Settings from './Settings.jsx'
 import Scenario from './Scenario.jsx'
+import Investments from './Investments.jsx'
 
 const inputStyle = { ...fieldBox, ...text('field') }
 
@@ -26,7 +27,7 @@ const inputStyle = { ...fieldBox, ...text('field') }
 // minutes of use (see api/_treasuryAccess.js). When that runs out, any screen
 // that is refused comes back here to ask again.
 
-const SCREENS = { home: Home, bitcoin: Bitcoin, holdings: Holdings, dca: Dca, cash: Cash, trust: Trust, snapshots: Snapshots, settings: Settings, scenario: Scenario,
+const SCREENS = { home: Home, bitcoin: Bitcoin, holdings: Holdings, dca: Dca, cash: Cash, trust: Trust, snapshots: Snapshots, settings: Settings, scenario: Scenario, investments: Investments,
   // Purchases now live on Holdings; the old key still lands somewhere sensible.
   purchases: Holdings }
 

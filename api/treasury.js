@@ -12,6 +12,9 @@ import {
   holdingsView, atoOutlook, cashForecast, weekStart, TRUST_CATEGORIES, MAX_BTC, dcaEntityOf, parseBtc
 } from '../src/treasury/logic.js'
 import { mapTracker } from '../src/treasury/importMap.js'
+import {
+  parseCashReport, mergeReport, holdingsFrom, incomeByYear, conversionsByYear, suggestOpenings, suggestConsolidations
+} from '../src/treasury/selfwealth.js'
 import { parseAmberCsv, mergeAmber, amberTotals, isPurchase, transferSuggestions } from '../src/treasury/amber.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
 
@@ -547,6 +550,98 @@ const ACTIONS = {
   },
   async 'transfer-delete'(req, res) { return res.json({ list: await remove('transfers', req.body?.id) }) },
 
+  // ─── Trust investments (SelfWealth cash reports) ──────────────────────────
+
+  async investments(req, res) {
+    const [sw, openings, actions, s, price] = await Promise.all([
+      tget('selfwealth', { rows: [], reports: [] }), tget('invopenings', []), tget('invactions', []), settings(), getPriceWithChange()
+    ])
+    const rows = sw.rows || []
+    const fx = price?.aud > 0 && price?.usd > 0 ? price.usd / price.aud : null
+    const last = rows[rows.length - 1]
+    return res.json({
+      today: today(), fx, prices: s.invPrices || {},
+      holdings: holdingsFrom(rows, openings, actions),
+      income: incomeByYear(rows), conversions: conversionsByYear(rows),
+      openings, actions,
+      suggestedOpenings: suggestOpenings(rows, openings),
+      suggestedConsolidations: suggestConsolidations(rows, openings, actions),
+      cash: last ? { usd: last.balance, at: last.date } : null,
+      reports: sw.reports || [],
+      recent: rows.slice(-40).reverse()
+    })
+  },
+
+  /** Reads a cash report the phone has unpacked, and says what it would add. Saves nothing. */
+  async 'sw-preview'(req, res) {
+    const r = parseCashReport(req.body?.items || [])
+    if (r.error) throw new Invalid(r.error)
+    const sw = await tget('selfwealth', { rows: [], reports: [] })
+    const kinds = {}
+    for (const x of r.rows) kinds[x.kind] = (kinds[x.kind] || 0) + 1
+    return res.json({
+      account: r.account, currency: r.currency, from: r.from, to: r.to, opening: r.opening, closing: r.closing,
+      reconciles: r.reconciles, breaks: r.breaks, rows: r.rows.length, kinds,
+      others: r.others.slice(0, 20), added: mergeReport(sw.rows, r.rows).added
+    })
+  },
+
+  /**
+   * Adds the report's new rows. A report whose balances do not add up is
+   * refused: it means a line was misread, and a misread trade would put the
+   * holdings wrong without anyone noticing.
+   */
+  async 'sw-commit'(req, res) {
+    const r = parseCashReport(req.body?.items || [])
+    if (r.error) throw new Invalid(r.error)
+    if (r.reconciles === false) throw new Invalid('This report did not add up when read, so it was not imported. Send it to Claude to look at.')
+    const sw = await tget('selfwealth', { rows: [], reports: [] })
+    const merged = mergeReport(sw.rows, r.rows)
+    const reports = [...(sw.reports || []).filter(x => !(x.from === r.from && x.to === r.to)),
+      { from: r.from, to: r.to, opening: r.opening, closing: r.closing, reconciles: r.reconciles, importedAt: new Date().toISOString() }]
+      .sort((a, b) => a.from.localeCompare(b.from))
+    await tset('selfwealth', { rows: merged.rows, reports })
+    return res.json({ added: merged.added })
+  },
+
+  async 'sw-clear'(req, res) {
+    await tset('selfwealth', { rows: [], reports: [] })
+    return res.json({ ok: true })
+  },
+
+  /** Units held before the first report, with what they cost (US$). One per ticker. */
+  async 'inv-opening-save'(req, res) {
+    const b = req.body?.opening || {}
+    const ticker = str(b.ticker, 12).toUpperCase().trim()
+    const units = Number(String(b.units ?? '').replace(/,/g, ''))
+    if (!ticker || !(units > 0)) throw new Invalid('A ticker and a number of units are needed.')
+    const item = { id: ticker, ticker, units, costUsd: Math.max(0, money(b.costUsd) || 0), date: isDay(b.date) ? b.date : null, note: str(b.note, 200) }
+    return res.json({ list: await upsert('invopenings', item) })
+  },
+  async 'inv-opening-delete'(req, res) { return res.json({ list: await remove('invopenings', req.body?.id) }) },
+
+  /** A consolidation (reverse split): on `date`, every `ratio` units became one. */
+  async 'inv-action-save'(req, res) {
+    const b = req.body?.action || {}
+    const ticker = str(b.ticker, 12).toUpperCase().trim()
+    const ratio = Number(b.ratio)
+    if (!ticker || !isDay(b.date) || !(ratio >= 2 && ratio <= 1000)) throw new Invalid('A ticker, a date and a ratio (e.g. 5 for 1-for-5) are needed.')
+    const item = { id: `${ticker}-${b.date}`, ticker, date: b.date, ratio }
+    return res.json({ list: await upsert('invactions', item) })
+  },
+  async 'inv-action-delete'(req, res) { return res.json({ list: await remove('invactions', req.body?.id) }) },
+
+  /** A US$ price per ticker, typed in until a quote service is connected. */
+  async 'inv-price-save'(req, res) {
+    const ticker = str(req.body?.ticker, 12).toUpperCase().trim()
+    const price = money(req.body?.price)
+    if (!ticker || !(price > 0)) throw new Invalid('A ticker and a price are needed.')
+    const s = await settings()
+    const next = { ...s, invPrices: { ...(s.invPrices || {}), [ticker]: { price, at: new Date().toISOString() } } }
+    await tset('settings', next)
+    return res.json({ prices: next.invPrices })
+  },
+
   async audit(req, res) { return res.json({ entries: await readAudit(300) }) },
 
   async status(req, res) {
@@ -608,7 +703,7 @@ export default async function handler(req, res) {
     if (!session) return
     if (!fn) return notFound(res)
     // Writes are POSTs. A GET that changed something could be fired by a link.
-    const reads = new Set(['access', 'home', 'price', 'bitcoin', 'xero', 'holdings', 'dca', 'cash', 'trust', 'snapshots', 'audit', 'status', 'purchases'])
+    const reads = new Set(['access', 'home', 'price', 'bitcoin', 'xero', 'holdings', 'dca', 'cash', 'trust', 'snapshots', 'audit', 'status', 'purchases', 'investments'])
     if (!reads.has(action) && req.method !== 'POST') return notFound(res)
     return await fn(req, res, session)
   } catch (err) {

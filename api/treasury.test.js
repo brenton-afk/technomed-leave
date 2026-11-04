@@ -372,6 +372,49 @@ describe('the transfer form, as the phone sends it', () => {
   })
 })
 
+describe('SelfWealth cash reports', () => {
+  // Invented report pieces, positioned as the phone sends them.
+  const piece = (y, x, s) => ({ p: 1, x, y, s })
+  const report = [
+    piece(720, 164, 'Opening Balance'), piece(720, 514, '$100.00'),
+    piece(690, 60, '2 July 2025 23:30:01'), piece(690, 164, 'Order 1: Buy 10 MSTY @ US$5.00'), piece(690, 455, '$50.00'), piece(690, 513, '$50.00'),
+    piece(660, 60, '8 July 2025 00:00:00'), piece(660, 164, '10 MSTY CASHDIV @ USD 1.00'), piece(660, 384, '$10.00'), piece(660, 513, '$60.00'),
+    piece(630, 164, 'Closing Balance at end of day 30 June 2026'), piece(630, 513, '$60.00')
+  ]
+
+  it('previews, imports once, and builds holdings and income', async () => {
+    const t = await unlocked()
+    const p = await call({ action: 'sw-preview', method: 'POST', token: t, body: { items: report } })
+    expect(p.body).toMatchObject({ reconciles: true, rows: 2, added: 2, currency: 'USD' })
+    await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: report } })
+    expect((await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: report } })).body.added).toBe(0)
+    await call({ action: 'inv-price-save', method: 'POST', token: t, body: { ticker: 'msty', price: '6' } })
+    const inv = await call({ action: 'investments', token: t })
+    expect(inv.body.holdings[0]).toMatchObject({ ticker: 'MSTY', units: 10, costUsd: 50 })
+    expect(inv.body.income[0]).toMatchObject({ fy: 'FY26', gross: 10, net: 10 })
+    expect(inv.body.prices.MSTY.price).toBe(6)
+    expect(inv.body.cash).toEqual({ usd: 60, at: '2025-07-08' })
+  })
+
+  it('refuses a report that does not add up', async () => {
+    const t = await unlocked()
+    const broken = report.map(i => (i.s === '$60.00' && i.y === 630 ? { ...i, s: '$61.00' } : i))
+    const r = await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: broken } })
+    expect(r.statusCode).toBe(400)
+    expect(await tget('selfwealth')).toBe(null)
+  })
+
+  it('keeps opening positions and consolidations, one of each per ticker and date', async () => {
+    const t = await unlocked()
+    await call({ action: 'inv-opening-save', method: 'POST', token: t, body: { opening: { ticker: 'msty', units: '3,999', costUsd: '$1,000' } } })
+    await call({ action: 'inv-action-save', method: 'POST', token: t, body: { action: { ticker: 'MSTY', date: '2025-12-15', ratio: 5 } } })
+    const bad = await call({ action: 'inv-action-save', method: 'POST', token: t, body: { action: { ticker: 'MSTY', date: '2025-12-15', ratio: 1 } } })
+    expect(bad.statusCode).toBe(400)
+    expect(await tget('invopenings')).toEqual([expect.objectContaining({ ticker: 'MSTY', units: 3999, costUsd: 1000 })])
+    expect(await tget('invactions')).toEqual([expect.objectContaining({ ticker: 'MSTY', ratio: 5 })])
+  })
+})
+
 describe('buys brought in from the old tracker', () => {
   it('are history: removing one does not touch holdings or Amber cash', async () => {
     const t = await unlocked()

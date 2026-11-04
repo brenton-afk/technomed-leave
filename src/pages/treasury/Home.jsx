@@ -93,6 +93,7 @@ export default function TreasuryHome({ user, onBack, go, onLocked }) {
         <NavCard icon={IconChart} label="What if" detail="Your BTC at a price and date, with weekly buying" onClick={() => go('scenario')} />
         <NavCard icon={IconChart} label="Dynamic DCA" detail="This week's buy and the settings behind it" onClick={() => go('dca')} />
         <NavCard icon={IconCalendar} label="ATO and cash" detail="Payment schedule and 13 weeks ahead" onClick={() => go('cash')} />
+        <NavCard icon={IconWallet} label="Trust investments" detail="SelfWealth holdings, distributions and tax withheld" onClick={() => go('investments')} />
         <NavCard icon={IconFile} label="Family trust ledger" detail="Distributions, loans, transfers · CSV" onClick={() => go('trust')} />
         <NavCard icon={IconClock} label="Snapshots" detail="Month-end headline numbers" onClick={() => go('snapshots')} />
         <NavCard icon={IconLock} label="Settings, import and audit" detail="Xero, Amber cash, the old tracker, access log" onClick={() => go('settings')} />
