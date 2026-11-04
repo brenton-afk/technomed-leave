@@ -154,6 +154,35 @@ export default function RocSection({ roc, cfg, today, onSave }) {
           </>
         )}
       </Card>
+      <SectionLabel>For Sam</SectionLabel>
+      <Card>
+        <ol style={{ ...text('body'), color: colour.ink, margin: 0, paddingLeft: space.lg }}>
+          <li style={{ marginBottom: space.sm }}>
+            <b>Does Australian tax follow the US return-of-capital classification?</b> If it does, the cost base figures above apply (CGT event G1 if
+            {' '}{roc.ticker} is treated as a company, E4 if as a trust). If not, every payment is assessable foreign income — the Paid column by year.
+          </li>
+          {roc.refunds?.count > 0 && (
+            <li style={{ marginBottom: space.sm }}>
+              <b>US withholding of {usd(roc.refunds.usd)} was refunded</b> ({roc.refunds.count} payment{roc.refunds.count === 1 ? "" : "s"}, {roc.refunds.dates.map(day).join(', ')}),
+              on payments in {roc.refunds.paymentFys.join(' and ')}. If a foreign income tax offset was claimed for that withholding, it may need reversing.
+            </li>
+          )}
+          {(roc.consolidations || []).map(c => (
+            <li key={c.date} style={{ marginBottom: space.sm }}>
+              <b>1-for-{c.ratio} consolidation on {day(c.date)}</b>{c.before ? ` (${units(c.before)} → ${units(c.after)} units)` : ''}: confirm no CGT event,
+              the cost base carries over, and the units keep their original purchase dates for the 12-month discount.
+              {c.fraction > 0.001 ? ` ${units(c.fraction)} of a unit was lost to rounding; no cash for it appears in the statements.` : ''}
+            </li>
+          ))}
+          <li style={{ marginBottom: space.sm }}>
+            <b>The US classification itself:</b> SelfWealth's Form 1042-S for each year, and the fund's 1099-DIV, confirm it.
+            {unknown.length ? ` ${unknown.length} payments (${usd(unknownUsd)}) are still unclassified.` : ''}
+          </li>
+          <li>
+            Exchange rates here are daily market rates; the return may need RBA rates, which differ slightly.
+          </li>
+        </ol>
+      </Card>
       {t.atNil > 0 && <Banner tone="warning">Some parcels are at nil on these figures: if Australian tax follows the US classification, further return of capital on them is a capital gain. Worth raising with Sam.</Banner>}
     </>
   )

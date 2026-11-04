@@ -206,11 +206,21 @@ export function trackRoc({ rows = [], openings = [], actions = [], fx, ticker = 
   }
 
   const sum = k => out.reduce((s, p) => s + p[k], 0)
+  // US withholding refunded later: how much, when, and which financial years' payments it was on.
+  const refundRows = rows.filter(r => r.kind === 'refund' && r.ticker === ticker)
+  const refundedPayments = payments.filter(p => p.basis === 'refunded')
+  const refunds = {
+    usd: Math.round(refundRows.reduce((t, r) => t + r.amount, 0) * 100) / 100,
+    count: refundRows.length,
+    dates: [...new Set(refundRows.map(r => r.date))].sort(),
+    paymentFys: [...new Set(refundedPayments.map(p => p.fy))].sort()
+  }
   return {
     ticker,
     parcels: out.sort((a, b) => a.date.localeCompare(b.date)),
     payments,
     consolidations,
+    refunds,
     checks: { payments: payments.filter(p => p.unitsMatch != null).length, mismatches: payments.filter(p => p.unitsMatch === false) },
     byFy: [...byFy.values()].sort((a, b) => b.fy.localeCompare(a.fy)),
     projected: [...projected.values()].sort((a, b) => a.fy.localeCompare(b.fy)),

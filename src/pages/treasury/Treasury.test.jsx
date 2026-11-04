@@ -93,5 +93,7 @@ describe('return of capital section', () => {
     expect(text).toMatch(/1 had their US withholding refunded in full/)
     expect(text).toMatch(/No projection/)
     expect(text).not.toMatch(/Next to reach nil/)
+    expect(text).toMatch(/US withholding of US\$15 was refunded \(1 payment, /)
+    expect(roc.refunds).toMatchObject({ usd: 15, count: 1, paymentFys: ['FY25'] })
   })
 })
