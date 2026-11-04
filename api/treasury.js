@@ -13,8 +13,11 @@ import {
 } from '../src/treasury/logic.js'
 import { mapTracker } from '../src/treasury/importMap.js'
 import {
-  parseCashReport, mergeReport, holdingsFrom, incomeByYear, conversionsByYear, suggestOpenings, suggestConsolidations
+  parseCashReport, mergeReport, holdingsFrom, incomeByYear, conversionsByYear, suggestOpenings, suggestConsolidations,
+  buildLedger, checkAgainstStatements, statementPrices
 } from '../src/treasury/selfwealth.js'
+import { isAnnualStatement, parseAnnualStatement } from '../src/treasury/selfwealthAnnual.js'
+import { getQuotes } from './_treasuryQuotes.js'
 import { trackRoc, makeFx, DEFAULT_ROC } from '../src/treasury/roc.js'
 import { parseAmberCsv, mergeAmber, amberTotals, isPurchase, transferSuggestions } from '../src/treasury/amber.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
@@ -147,6 +150,36 @@ async function takeSnapshot() {
   list.sort((a, b) => a.month.localeCompare(b.month))
   await tset('snapshots', list)
   return snap
+}
+
+// ─── The trust's SelfWealth ledger ───────────────────────────────────────────
+
+/**
+ * Annual statements first, the current year's cash report after them, plus
+ * anything entered by hand that the statements do not already cover. Units
+ * held before the earliest statement (its opening holdings, when the year
+ * before was not imported) count as an opening position with an unknown cost.
+ */
+function investmentLedger(sw, manualOpenings = [], manualActions = []) {
+  const annuals = sw.annuals || []
+  const L = buildLedger(sw.rows || [], annuals)
+  const covered = new Set([...L.rows.filter(r => r.source === 'annual').map(r => r.ticker), ...L.snapshots.map(x => x.ticker)].filter(Boolean))
+  const openings = []
+  for (const cur of ['USD', 'AUD']) {
+    const mine = annuals.filter(a => a.currency === cur).sort((a, b) => a.from.localeCompare(b.from))
+    if (!mine.length) continue
+    const first = mine[0]
+    for (const sn of (first.snapshots || []).filter(x => x.date <= first.from || x.date === first.from)) {
+      if (sn.units > 0) openings.push({ ticker: sn.ticker, units: sn.units, costUsd: 0, date: first.from, source: 'statement', costUnknown: true })
+    }
+  }
+  const usedOpenings = [...openings, ...manualOpenings.filter(o => !covered.has(o.ticker))]
+  const actions = [...L.actions, ...manualActions.filter(a => !L.actions.some(x => x.ticker === a.ticker))]
+  const ignored = {
+    openings: manualOpenings.filter(o => covered.has(o.ticker)),
+    actions: manualActions.filter(a => L.actions.some(x => x.ticker === a.ticker))
+  }
+  return { ...L, openings: usedOpenings, actions, ignored }
 }
 
 // ─── A DCA buy ───────────────────────────────────────────────────────────────
@@ -557,22 +590,34 @@ const ACTIONS = {
     const [sw, openings, actions, s, price, history] = await Promise.all([
       tget('selfwealth', { rows: [], reports: [] }), tget('invopenings', []), tget('invactions', []), settings(), getPriceWithChange(), getPriceHistory()
     ])
-    const rows = sw.rows || []
+    const L = investmentLedger(sw, openings, actions)
+    const rows = L.rows
     const fx = price?.aud > 0 && price?.usd > 0 ? price.usd / price.aud : null
     // Return of capital, in A$ at each day's rate (from stored BTC closes in
     // both currencies; today's rate where the history has no such day).
     const rocCfg = { ...DEFAULT_ROC, ...(s.roc || {}) }
     const fxOn = makeFx(history.aud, history.usd, fx)
     const roc = rocCfg.tickers.filter(t => rows.some(r => r.ticker === t && r.kind === 'distribution'))
-      .map(ticker => trackRoc({ rows, openings, actions, fx: fxOn, ticker, cfg: rocCfg, today: today() }))
-    const last = rows[rows.length - 1]
+      .map(ticker => trackRoc({ rows, openings: L.openings, actions: L.actions, fx: fxOn, ticker, cfg: rocCfg, today: today() }))
+    const holdings = holdingsFrom(rows, L.openings, L.actions)
+    // Prices: live where the quote service answers, else typed, else the last statement's.
+    const live = await getQuotes(holdings.filter(h => h.units > 0)).catch(() => ({}))
+    const typed = Object.fromEntries(Object.entries(s.invPrices || {}).map(([k, v]) => [k, { ...v, source: 'typed' }]))
+    const prices = { ...statementPrices(L.snapshots), ...typed }
+    for (const [k, v] of Object.entries(live)) if (!v.stale || !prices[k]) prices[k] = v
+    // Cash: the latest running balance on the US$ side (statements carry none).
+    const last = [...rows].reverse().find(r => r.balance != null && (r.currency || 'USD') === 'USD')
     return res.json({
-      today: today(), fx, prices: s.invPrices || {}, roc, rocCfg,
-      holdings: holdingsFrom(rows, openings, actions),
+      today: today(), fx, prices, roc, rocCfg,
+      holdings,
+      checks: checkAgainstStatements(rows, L.actions, L.snapshots, L.openings),
+      statements: (sw.annuals || []).map(a => ({ market: a.market, from: a.from, to: a.to, importedAt: a.importedAt })),
+      autoOpenings: L.openings.filter(o => o.source === 'statement'),
+      ignored: L.ignored,
       income: incomeByYear(rows), conversions: conversionsByYear(rows),
       openings, actions,
-      suggestedOpenings: suggestOpenings(rows, openings),
-      suggestedConsolidations: suggestConsolidations(rows, openings, actions),
+      suggestedOpenings: suggestOpenings(rows, L.openings),
+      suggestedConsolidations: suggestConsolidations(rows, L.openings, L.actions),
       cash: last ? { usd: last.balance, at: last.date } : null,
       reports: sw.reports || [],
       recent: rows.slice(-40).reverse()
@@ -581,7 +626,20 @@ const ACTIONS = {
 
   /** Reads a cash report the phone has unpacked, and says what it would add. Saves nothing. */
   async 'sw-preview'(req, res) {
-    const r = parseCashReport(req.body?.items || [])
+    const items = req.body?.items || []
+    if (isAnnualStatement(items)) {
+      const a = parseAnnualStatement(items)
+      if (a.error) throw new Invalid(a.error)
+      const sw = await tget('selfwealth', { rows: [], reports: [], annuals: [] })
+      const others = (sw.annuals || []).filter(x => !(x.market === a.market && x.from === a.from && x.to === a.to))
+      const L = investmentLedger({ ...sw, annuals: [...others, a] }, await tget('invopenings', []), await tget('invactions', []))
+      const checks = checkAgainstStatements(L.rows, L.actions, a.snapshots, L.openings)
+      return res.json({
+        type: 'annual', market: a.market, currency: a.currency, from: a.from, to: a.to, counts: a.counts,
+        consolidations: a.actions, checks, replaces: others.length < (sw.annuals || []).length
+      })
+    }
+    const r = parseCashReport(items)
     if (r.error) throw new Invalid(r.error)
     const sw = await tget('selfwealth', { rows: [], reports: [] })
     const kinds = {}
@@ -599,7 +657,18 @@ const ACTIONS = {
    * holdings wrong without anyone noticing.
    */
   async 'sw-commit'(req, res) {
-    const r = parseCashReport(req.body?.items || [])
+    const items = req.body?.items || []
+    if (isAnnualStatement(items)) {
+      const a = parseAnnualStatement(items)
+      if (a.error) throw new Invalid(a.error)
+      const sw = await tget('selfwealth', { rows: [], reports: [], annuals: [] })
+      const annuals = [...(sw.annuals || []).filter(x => !(x.market === a.market && x.from === a.from && x.to === a.to)),
+        { market: a.market, currency: a.currency, from: a.from, to: a.to, rows: a.rows, actions: a.actions, snapshots: a.snapshots, importedAt: new Date().toISOString() }]
+        .sort((x, y) => x.from.localeCompare(y.from))
+      await tset('selfwealth', { ...sw, annuals })
+      return res.json({ added: a.rows.length, type: 'annual' })
+    }
+    const r = parseCashReport(items)
     if (r.error) throw new Invalid(r.error)
     if (r.reconciles === false) throw new Invalid('This report did not add up when read, so it was not imported. Send it to Claude to look at.')
     const sw = await tget('selfwealth', { rows: [], reports: [] })
@@ -607,12 +676,12 @@ const ACTIONS = {
     const reports = [...(sw.reports || []).filter(x => !(x.from === r.from && x.to === r.to)),
       { from: r.from, to: r.to, opening: r.opening, closing: r.closing, reconciles: r.reconciles, importedAt: new Date().toISOString() }]
       .sort((a, b) => a.from.localeCompare(b.from))
-    await tset('selfwealth', { rows: merged.rows, reports })
+    await tset('selfwealth', { ...sw, rows: merged.rows.map(x => ({ ...x, currency: x.currency || r.currency })), reports })
     return res.json({ added: merged.added })
   },
 
   async 'sw-clear'(req, res) {
-    await tset('selfwealth', { rows: [], reports: [] })
+    await tset('selfwealth', { rows: [], reports: [], annuals: [] })
     return res.json({ ok: true })
   },
 

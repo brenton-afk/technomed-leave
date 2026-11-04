@@ -45,3 +45,30 @@ describe('the code', () => {
     expect(lazy).not.toMatch(/treasury/i)
   })
 })
+
+describe('trust investments', () => {
+  it('shows each holding in its own currency, the statement check, and an annual preview shape', async () => {
+    const { default: Investments } = await import('./Investments.jsx')
+    const body = {
+      today: '2026-11-04', fx: 0.65, roc: [], rocCfg: {},
+      prices: { XYZ: { price: 50, at: '2026-11-04T00:00:00Z', source: 'live' }, GLD: { price: 30, at: '2025-06-30T00:00:00.000Z', source: 'statement' } },
+      holdings: [
+        { ticker: 'XYZ', currency: 'USD', units: 30, costUsd: 600, averageUsd: 20 },
+        { ticker: 'GLD', currency: 'AUD', units: 10, costUsd: 200, averageUsd: 20 }
+      ],
+      checks: [{ date: '2025-06-30', ticker: 'XYZ', statement: 30, ledger: 30, matches: true }],
+      statements: [{ market: 'USA', from: '2024-07-01', to: '2025-06-30' }],
+      autoOpenings: [], ignored: { openings: [], actions: [] },
+      income: [{ fy: 'FY26', ticker: 'XYZ', currency: 'USD', gross: 60, withholding: 9, fees: 1, refunds: 0, net: 50, payments: 1 }],
+      conversions: [], openings: [], actions: [], suggestedOpenings: [], suggestedConsolidations: [], cash: null, reports: [], recent: []
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => body })))
+    render(<Investments user={ERIN} onBack={() => {}} onLocked={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/Checked against SelfWealth/)).toBeInTheDocument())
+    expect(screen.getByText('A$30.00')).toBeInTheDocument() // GLD's price, in A$
+    expect(screen.getByText('US$50.00')).toBeInTheDocument()
+    expect(document.body.textContent).toMatch(/A\$30\.00statement · 30 June? 2025/)
+    // Value in A$: 1,500 US$ at 0.65 plus A$300.
+    expect(screen.getByText('$2,608')).toBeInTheDocument()
+  })
+})

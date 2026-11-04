@@ -180,7 +180,10 @@ export function fyOf(date) {
  */
 export function holdingsFrom(rows = [], openings = [], actions = []) {
   const t = {}
-  const get = k => (t[k] = t[k] || { ticker: k, units: 0, costUsd: 0, bought: 0, sold: 0, proceedsUsd: 0, lastDistUnits: null, lastDistDate: null })
+  // costUsd is the cost in the holding's own currency: US$ for the USA
+  // market, A$ for an ASX holding (currency says which).
+  const currencyOf = new Map(rows.filter(r => r.ticker && r.currency).map(r => [r.ticker, r.currency]))
+  const get = k => (t[k] = t[k] || { ticker: k, currency: currencyOf.get(k) || 'USD', units: 0, costUsd: 0, bought: 0, sold: 0, proceedsUsd: 0, lastDistUnits: null, lastDistDate: null })
   for (const o of openings) { const h = get(o.ticker); h.units += Number(o.units) || 0; h.costUsd += Number(o.costUsd) || 0 }
   const brokerage = new Map(rows.filter(r => r.kind === 'brokerage').map(r => [`${r.order}|${r.side}`, -r.amount]))
   // A consolidation is an event in the timeline like a trade: on its date the
@@ -208,13 +211,13 @@ export function holdingsFrom(rows = [], openings = [], actions = []) {
   })).sort((a, b) => a.ticker.localeCompare(b.ticker))
 }
 
-/** Income by financial year and ticker: gross, withholding, fees, refunds, net (US$). */
+/** Income by financial year and ticker: gross, withholding, fees, refunds, net (in the holding's currency). */
 export function incomeByYear(rows = []) {
   const m = new Map()
   for (const r of rows) {
     if (!['distribution', 'withholding', 'divfee', 'refund'].includes(r.kind)) continue
     const k = `${fyOf(r.date)}|${r.ticker}`
-    const x = m.get(k) || { fy: fyOf(r.date), ticker: r.ticker, gross: 0, withholding: 0, fees: 0, refunds: 0, payments: 0 }
+    const x = m.get(k) || { fy: fyOf(r.date), ticker: r.ticker, currency: r.currency || 'USD', gross: 0, withholding: 0, fees: 0, refunds: 0, payments: 0 }
     if (r.kind === 'distribution') { x.gross += r.amount; x.payments += 1 }
     if (r.kind === 'withholding') x.withholding += -r.amount
     if (r.kind === 'divfee') x.fees += -r.amount
@@ -292,6 +295,50 @@ export function suggestOpenings(rows = [], openings = []) {
     }
     const [units, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] || []
     if (units > 0 && n >= 2) out.push({ ticker, units, date: rows[0]?.date || null })
+  }
+  return out
+}
+
+// ─── One ledger from statements and cash reports ─────────────────────────────
+
+/**
+ * The annual statements are the record. A cash report's lines count only after
+ * the last statement in its currency ends — the current financial year — so a
+ * trade or distribution is never counted from both.
+ *
+ * @param {Array} cashRows   stored cash-report rows (currency 'USD' unless set)
+ * @param {Array} annuals    [{currency, from, to, rows, actions, snapshots}]
+ */
+export function buildLedger(cashRows = [], annuals = []) {
+  const lastTo = {}
+  for (const a of annuals) if (!lastTo[a.currency] || a.to > lastTo[a.currency]) lastTo[a.currency] = a.to
+  const after = cashRows.filter(r => !lastTo[r.currency || 'USD'] || r.date > lastTo[r.currency || 'USD'])
+    .map(r => ({ ...r, currency: r.currency || 'USD', source: 'cash' }))
+  const merged = mergeReport(annuals.flatMap(a => a.rows), after).rows
+  const actions = []
+  for (const a of annuals) for (const x of a.actions || []) if (!actions.some(y => y.ticker === x.ticker && y.date === x.date)) actions.push(x)
+  const snapshots = annuals.flatMap(a => (a.snapshots || []).map(sn => ({ ...sn, currency: a.currency })))
+  return { rows: merged, actions, snapshots, lastTo }
+}
+
+/**
+ * Units held on a day, by the ledger, against what SelfWealth's statement says
+ * was held that day. A mismatch means a line was missed or misread.
+ */
+export function checkAgainstStatements(rows, actions, snapshots, openings = []) {
+  return snapshots.map(sn => {
+    const held = holdingsFrom(rows.filter(r => r.date <= sn.date), openings, actions.filter(a => a.date <= sn.date))
+      .find(h => h.ticker === sn.ticker)
+    const units = held ? held.units : 0
+    return { date: sn.date, ticker: sn.ticker, statement: sn.units, ledger: units, matches: Math.abs(units - sn.units) < 1e-6 }
+  })
+}
+
+/** The latest statement price per ticker, as a fallback until a live one is set. */
+export function statementPrices(snapshots = []) {
+  const out = {}
+  for (const sn of [...snapshots].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (sn.price > 0) out[sn.ticker] = { price: sn.price, at: `${sn.date}T00:00:00.000Z`, source: 'statement' }
   }
   return out
 }

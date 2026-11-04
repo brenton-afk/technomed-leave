@@ -9,15 +9,19 @@ import RocSection from './RocSection.jsx'
 const inputStyle = { ...fieldBox, ...text('field') }
 
 // ─── Trust investments ───────────────────────────────────────────────────────
-// The family trust's SelfWealth account, from its cash reports: holdings with
-// cost and value, distributions by financial year with withholding, fees and
-// refunds, and money moved between the dollars. Amounts are US$ as the account
-// holds them, with A$ at today's rate where a total is shown.
+// The family trust's SelfWealth account. SelfWealth's annual statements are
+// the record (trades, consolidations, distributions with record dates, the
+// holdings at each year's start and end); the current year's cash report fills
+// in after the last statement. Each holding is in its own currency — US$ for
+// the USA market, A$ for the ASX — and totals are in A$ at today's rate.
 //
-// A cash report cannot show units held before it starts, or a consolidation
-// (no cash moves). The distributions reveal both, so the screen offers them.
+// Without statements, a cash report cannot show units held before it starts,
+// or a consolidation (no cash moves); the screen offers both from the
+// distributions, and hand entries for them.
 
 const usd = (n, cents) => (n == null || !Number.isFinite(n) ? '—' : 'US' + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: cents ? 2 : 0, minimumFractionDigits: cents ? 2 : 0 }).format(n))
+const money = (n, cur, cents) => (cur === 'AUD' ? (n == null || !Number.isFinite(n) ? '—' : 'A' + new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: cents ? 2 : 0, minimumFractionDigits: cents ? 2 : 0 }).format(n)) : usd(n, cents))
+const SOURCE = { live: 'live', stale: 'last quote', typed: 'typed in', statement: 'statement' }
 const day = d => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—')
 const KIND = {
   distribution: 'Distribution', withholding: 'Withholding tax', divfee: 'Distribution fee', refund: 'Tax refund',
@@ -73,23 +77,54 @@ export default function Investments({ user, onBack, onLocked }) {
 
   const fx = data?.fx
   const prices = data?.prices || {}
+  // In A$: a US$ amount at today's rate, an A$ one as it is.
+  const inAud = (n, cur) => (n == null ? null : cur === 'AUD' ? n : fx ? n / fx : null)
+  const unknownCost = new Set((data?.autoOpenings || []).map(o => o.ticker))
   const rows = (data?.holdings || []).filter(h => h.units > 0).map(h => {
-    const p = prices[h.ticker]?.price
+    const q = prices[h.ticker]
+    const p = q?.price
     const value = p ? p * h.units : null
-    return { ...h, price: p, priceAt: prices[h.ticker]?.at, value, gain: value == null ? null : value - h.costUsd }
+    const costKnown = !unknownCost.has(h.ticker)
+    return { ...h, price: p, priceAt: q?.at, priceSource: q?.stale ? 'stale' : q?.source, value, costKnown, gain: value == null || !costKnown ? null : value - h.costUsd }
   })
-  const totalValue = rows.every(r => r.value != null) ? rows.reduce((s, r) => s + r.value, 0) : null
-  const totalCost = rows.reduce((s, r) => s + r.costUsd, 0)
+  const totalValue = rows.every(r => r.value != null) ? rows.reduce((s, r) => s + (inAud(r.value, r.currency) ?? 0), 0) : null
+  const known = rows.filter(r => r.costKnown)
+  const totalCost = known.reduce((s, r) => s + (inAud(r.costUsd, r.currency) ?? 0), 0)
+  const knownValue = known.every(r => r.value != null) ? known.reduce((s, r) => s + (inAud(r.value, r.currency) ?? 0), 0) : null
   const thisFy = data?.income?.filter(x => x.fy === data.income[0]?.fy) || []
-  const fyNet = thisFy.reduce((s, x) => s + x.net, 0)
+  const fyNet = thisFy.reduce((s, x) => s + (inAud(x.net, x.currency) ?? 0), 0)
+  const checks = data?.checks || []
+  const mismatches = checks.filter(c => !c.matches)
+  const statements = data?.statements || []
+  const ignored = [...(data?.ignored?.openings || []), ...(data?.ignored?.actions || [])]
 
   return (
     <Page>
       <Header eyebrow="Treasury" title="Trust investments" onBack={onBack}
-        subtitle={data?.reports?.length ? `SelfWealth · ${day(data.reports[0].from)} to ${day(data.reports[data.reports.length - 1].to)}` : 'SelfWealth'} />
+        subtitle={statements.length ? `SelfWealth · ${statements.length} annual statement${statements.length === 1 ? '' : 's'}${data?.reports?.length ? ' + cash report' : ''}`
+          : data?.reports?.length ? `SelfWealth · ${day(data.reports[0].from)} to ${day(data.reports[data.reports.length - 1].to)}` : 'SelfWealth'} />
       <Body>
         <Problem>{error && 'Could not load the investments just now.'}</Problem>
         {msg && <Note>{msg}</Note>}
+
+        {checks.length > 0 && (mismatches.length
+          ? <Banner tone="warning">
+              {mismatches.map(c => `${c.ticker} on ${day(c.date)}: SelfWealth says ${c.statement.toLocaleString('en-AU')}, the ledger ${c.ledger.toLocaleString('en-AU')}`).join(' · ')}.
+              A line is missing or misread — import the statement or cash report that covers it.
+            </Banner>
+          : <Banner>Checked against SelfWealth: every holding matches its statement at each year's start and end ({checks.length} check{checks.length === 1 ? '' : 's'}).</Banner>)}
+        {ignored.length > 0 && (
+          <Banner tone="warning">
+            The statements now cover {[...new Set(ignored.map(x => x.ticker))].join(', ')}, so the opening position or consolidation typed in by hand for {ignored.length === 1 ? 'it is' : 'them is'} no
+            longer used. Remove {ignored.length === 1 ? 'it' : 'them'} below to tidy up.
+          </Banner>
+        )}
+        {(data?.autoOpenings || []).length > 0 && (
+          <Note>
+            Held when the earliest statement starts, with the cost not in any imported document: {data.autoOpenings.map(o => `${o.units.toLocaleString('en-AU')} ${o.ticker}`).join(', ')}.
+            Import the year before to bring in what they cost.
+          </Note>
+        )}
 
         {(data?.suggestedOpenings || []).map(o => (
           <Banner key={`o${o.ticker}`} action={<SmallButton onClick={() => setOpening({ ticker: o.ticker, units: String(o.units), costUsd: '', date: o.date || '' })}>Add opening position</SmallButton>}>
@@ -104,10 +139,10 @@ export default function Investments({ user, onBack, onLocked }) {
 
         {data && rows.length > 0 && (
           <Grid>
-            <Figure label="Value" value={totalValue == null ? 'Add prices' : usd(totalValue)} sub={totalValue != null && fx ? `${aud(totalValue / fx)} at today's rate` : 'Tap a price below'} />
-            <Figure label="Cost" value={usd(totalCost)} sub={fx ? aud(totalCost / fx) + ' at today\'s rate' : ''} />
-            {totalValue != null && <Figure label="Unrealised" value={usd(totalValue - totalCost)} sub={pct(totalCost ? (totalValue / totalCost - 1) * 100 : null)} tone={totalValue < totalCost ? 'danger' : undefined} />}
-            <Figure label={`Income ${data.income[0]?.fy || ''}`} value={usd(fyNet)} sub="net of withholding and fees, with refunds" />
+            <Figure label="Value" value={totalValue == null ? 'Add prices' : aud(totalValue)} sub={totalValue != null ? 'A$, US$ holdings at today\'s rate' : 'Tap a price below'} />
+            <Figure label="Cost" value={aud(totalCost)} sub={known.length < rows.length ? `of the ${known.length} with a known cost` : 'incl. brokerage'} />
+            {knownValue != null && <Figure label="Unrealised" value={aud(knownValue - totalCost)} sub={pct(totalCost ? (knownValue / totalCost - 1) * 100 : null)} tone={knownValue < totalCost ? 'danger' : undefined} />}
+            <Figure label={`Income ${data.income[0]?.fy || ''}`} value={aud(fyNet)} sub="net of withholding and fees, in A$ at today's rate" />
             {data.cash && <Figure label="Cash in account" value={usd(data.cash.usd, true)} sub={`at ${day(data.cash.at)}`} />}
           </Grid>
         )}
@@ -116,13 +151,14 @@ export default function Investments({ user, onBack, onLocked }) {
         <Table head={['Ticker', 'Units', 'Avg cost', 'Price', 'Value']} align={['left', 'right', 'right', 'right', 'right']}
           rows={rows.map(h => [
             <span key="t"><b>{h.ticker}</b>{h.unitsGap ? <span style={{ display: 'block', ...text('caption'), color: colour.warning }}>SelfWealth paid on {h.lastDistUnits.toLocaleString('en-AU')}</span> : null}</span>,
-            h.units.toLocaleString('en-AU'), usd(h.averageUsd, true),
-            <SmallButton key="p" onClick={() => setPriceEdit({ ticker: h.ticker, price: h.price ? String(h.price) : '' })}>{h.price ? usd(h.price, true) : 'Set'}</SmallButton>,
-            <span key="v">{usd(h.value)}<span style={{ display: 'block', color: h.gain < 0 ? colour.danger : colour.inkFaint }}>{h.gain == null ? '' : `${h.gain >= 0 ? '+' : ''}${usd(h.gain)}`}</span></span>
+            h.units.toLocaleString('en-AU'), h.costKnown ? money(h.averageUsd, h.currency, true) : 'not known',
+            <span key="p"><SmallButton onClick={() => setPriceEdit({ ticker: h.ticker, currency: h.currency, price: h.price ? String(h.price) : '' })}>{h.price ? money(h.price, h.currency, true) : 'Set'}</SmallButton>
+              {h.priceSource && <span style={{ display: 'block', ...text('caption'), color: colour.inkFaint }}>{SOURCE[h.priceSource] || h.priceSource}{h.priceAt && h.priceSource !== 'live' ? ` · ${day(h.priceAt.slice(0, 10))}` : ''}</span>}</span>,
+            <span key="v">{money(h.value, h.currency)}<span style={{ display: 'block', color: h.gain < 0 ? colour.danger : colour.inkFaint }}>{h.gain == null ? '' : `${h.gain >= 0 ? '+' : ''}${money(h.gain, h.currency)}`}</span></span>
           ])} />
         {priceEdit && (
           <Card>
-            <Field label={`${priceEdit.ticker} price (US$)`} hint="Typed in for now. A quote service can fill this in automatically once connected.">
+            <Field label={`${priceEdit.ticker} price (${priceEdit.currency === 'AUD' ? 'A$' : 'US$'})`} hint="Prices fill in from a quote service where it answers; a price typed here is used when it does not.">
               <input style={inputStyle} inputMode="decimal" value={priceEdit.price} onChange={e => setPriceEdit({ ...priceEdit, price: e.target.value })} />
             </Field>
             <Button onClick={async () => { if (await post('inv-price-save', priceEdit, 'Price saved.')) setPriceEdit(null) }}>Save price</Button>
@@ -130,10 +166,15 @@ export default function Investments({ user, onBack, onLocked }) {
             <Button variant="quiet" onClick={() => setPriceEdit(null)}>Cancel</Button>
           </Card>
         )}
-        {rows.some(r => r.priceAt) && <Note>Prices as entered; oldest {when(rows.filter(r => r.priceAt).map(r => r.priceAt).sort()[0])}.</Note>}
+        {rows.some(r => r.priceSource && r.priceSource !== 'live') && <Note>Not every price is live; oldest {when(rows.filter(r => r.priceAt && r.priceSource !== 'live').map(r => r.priceAt).sort()[0])}.</Note>}
 
-        <SectionLabel>Before the first report</SectionLabel>
-        <Note>Units held before the first imported report, and consolidations. A cash report shows neither, because no cash moves.</Note>
+        {(data?.actions || []).filter(a => a.source === 'annual').length > 0 && (
+          <Note>Consolidations from the statements: {data.actions.filter(a => a.source === 'annual').map(a => `${a.ticker} 1-for-${a.ratio} on ${day(a.date)}`).join(' · ')}.</Note>
+        )}
+
+        {(!statements.length || data?.openings?.length > 0 || data?.actions?.length > 0) && <>
+        <SectionLabel>Entered by hand</SectionLabel>
+        <Note>Units held before the first imported document, and consolidations. A cash report shows neither, because no cash moves; the annual statements show both, and replace these for any holding they cover.</Note>
         <Table head={['', 'Ticker', 'Detail', '']} align={['left', 'left', 'left', 'right']}
           rows={[
             ...(data?.openings || []).map(o => ['Opening', o.ticker, `${o.units.toLocaleString('en-AU')} units · cost ${usd(o.costUsd)}`,
@@ -165,18 +206,19 @@ export default function Investments({ user, onBack, onLocked }) {
             <Button variant="quiet" onClick={() => setAction(null)}>Cancel</Button>
           </Card>
         )}
+        </>}
 
         {(data?.roc || []).map(r => (
           <RocSection key={r.ticker} roc={r} cfg={data.rocCfg} today={data.today}
             onSave={roc => post('roc-save', { roc }, 'Return-of-capital share saved.')} />
         ))}
 
-        <SectionLabel>Income by financial year (US$)</SectionLabel>
+        <SectionLabel>Income by financial year</SectionLabel>
         <Table head={['Year', 'Gross', 'Withheld', 'Refunds', 'Net']} align={['left', 'right', 'right', 'right', 'right']}
           rows={(data?.income || []).map(x => [
             <span key="y">{x.fy}<span style={{ display: 'block', color: colour.inkFaint }}>{x.ticker} · {x.payments} paid</span></span>,
-            usd(x.gross), usd(x.withholding), usd(x.refunds), <b key="n">{usd(x.net)}</b>])} />
-        <Note>Net is gross less US withholding and SelfWealth's distribution fees ({usd((data?.income || []).reduce((t, x) => t + x.fees, 0), true)} in all), plus refunds of withholding, counted in the year they arrived.</Note>
+            money(x.gross, x.currency), money(x.withholding, x.currency), money(x.refunds, x.currency), <b key="n">{money(x.net, x.currency)}</b>])} />
+        <Note>Net is gross less US withholding and SelfWealth's distribution fees ({usd((data?.income || []).filter(x => x.currency !== 'AUD').reduce((t, x) => t + x.fees, 0), true)} in all), plus refunds of withholding, counted in the year they arrived.</Note>
 
         <SectionLabel>Money between the dollars</SectionLabel>
         <Table head={['Year', 'To A$', 'To US$']} align={['left', 'right', 'right']}
@@ -185,21 +227,36 @@ export default function Investments({ user, onBack, onLocked }) {
             <span key="u">{usd(c.fromAudUsd)}<span style={{ display: 'block', color: colour.inkFaint }}>from {aud(c.fromAudAud)}</span></span>])} />
 
         <SectionLabel>Latest activity</SectionLabel>
-        <Table head={['Date', 'What', 'US$']} align={['left', 'left', 'right']}
+        <Table head={['Date', 'What', 'Amount']} align={['left', 'left', 'right']}
           rows={(data?.recent || []).slice(0, 25).map(r => [day(r.date), <span key="w">{KIND[r.kind] || r.kind}{r.ticker ? ` · ${r.ticker}` : ''}{r.units && (r.kind === 'buy' || r.kind === 'sell') ? ` · ${r.units}` : ''}</span>,
-            <span key="a" style={{ color: r.amount < 0 ? colour.inkMuted : colour.ink }}>{r.amount >= 0 ? '+' : '−'}{usd(Math.abs(r.amount), true).replace('US', '')}</span>])} />
+            <span key="a" style={{ color: r.amount < 0 ? colour.inkMuted : colour.ink }}>{r.amount >= 0 ? '+' : '−'}{money(Math.abs(r.amount), r.currency, true)}</span>])} />
 
-        <SectionLabel>Import SelfWealth cash reports</SectionLabel>
+        <SectionLabel>Import from SelfWealth</SectionLabel>
         <Card>
           <Note>
-            In SelfWealth, download the Cash Report for each financial year as a PDF and choose them here (several at once is fine).
-            The PDF is read on this phone; only its lines are sent, and a report already imported adds nothing twice.
-            Each report is checked: its opening balance plus every line must come to its closing balance.
+            Choose SelfWealth's <b>annual statements</b> (one per financial year and market — USA and Australia) for every finished year,
+            and the <b>Cash Report</b> for the year under way. Several PDFs at once is fine. Each is read on this phone; only its lines are sent.
+            A statement replaces the same one imported before; a cash report adds nothing twice, and must add up to its closing balance.
           </Note>
+          {statements.length > 0 && <Note>Imported: {statements.map(a => `${a.market} ${a.from.slice(0, 4)}–${a.to.slice(2, 4)}`).join(' · ')}{data?.reports?.length ? ` · cash report to ${day(data.reports[data.reports.length - 1].to)}` : ''}.</Note>}
           {importMsg && <Problem>{importMsg}</Problem>}
           <input type="file" accept="application/pdf,.pdf" multiple onChange={choose} disabled={busy} style={{ ...text('field'), maxWidth: '100%', marginBottom: space.md }} />
           {busy && <Note>Reading…</Note>}
-          {previews.map(({ name, preview: p }) => (
+          {previews.map(({ name, preview: p }) => p.type === 'annual' ? (
+            <div key={name} style={{ marginBottom: space.md }}>
+              <Table head={[name.length > 32 ? `${name.slice(0, 30)}…` : name, '']} align={['left', 'right']} rows={[
+                ['Annual statement', `${p.market} · ${p.currency === 'AUD' ? 'A$' : 'US$'}`],
+                ['Period', `${day(p.from)} – ${day(p.to)}`],
+                ['Trades', p.counts.trades],
+                ['Distributions', p.counts.distributions],
+                ['Conversions', p.counts.conversions],
+                ['Consolidations', p.consolidations.length ? p.consolidations.map(c => `${c.ticker} 1-for-${c.ratio}`).join(', ') : 'None'],
+                ['Holdings at year end', p.counts.holdings],
+                ['Matches its own holdings', p.checks.every(c => c.matches) ? 'Yes' : `No — ${p.checks.filter(c => !c.matches).map(c => c.ticker).join(', ')}`],
+                ...(p.replaces ? [['Already imported', 'Will be replaced']] : [])
+              ]} />
+            </div>
+          ) : (
             <div key={name} style={{ marginBottom: space.md }}>
               <Table head={[name.length > 32 ? `${name.slice(0, 30)}…` : name, '']} align={['left', 'right']} rows={[
                 ['Period', `${day(p.from)} – ${day(p.to)}`],
@@ -212,13 +269,13 @@ export default function Investments({ user, onBack, onLocked }) {
             </div>
           ))}
           {previews.length > 0 && (
-            <Button disabled={busy || previews.some(p => p.preview.reconciles === false) || !previews.some(p => p.preview.added)} onClick={importAll}>
-              {previews.some(p => p.preview.added) ? 'Import' : 'Nothing new to import'}
+            <Button disabled={busy || previews.some(p => p.preview.reconciles === false) || !previews.some(p => p.preview.added || p.preview.type === 'annual')} onClick={importAll}>
+              {previews.some(p => p.preview.added || p.preview.type === 'annual') ? 'Import' : 'Nothing new to import'}
             </Button>
           )}
-          {data?.reports?.length > 0 && !previews.length && (
+          {(data?.reports?.length > 0 || statements.length > 0) && !previews.length && (
             <div style={{ marginTop: space.sm }}>
-              <SmallButton tone="danger" onClick={() => window.confirm('Remove every imported SelfWealth line? Import the reports again afterwards.') && post('sw-clear', {}, 'Removed.')}>Remove the import</SmallButton>
+              <SmallButton tone="danger" onClick={() => window.confirm('Remove every imported SelfWealth statement and report? Import them again afterwards.') && post('sw-clear', {}, 'Removed.')}>Remove the import</SmallButton>
             </div>
           )}
         </Card>

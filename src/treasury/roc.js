@@ -65,12 +65,14 @@ export function trackRoc({ rows = [], openings = [], actions = [], fx, ticker = 
   for (const o of openings.filter(x => x.ticker === ticker)) {
     const date = o.date || addDays(firstDate, -1)
     const costAud = (Number(o.costUsd) || 0) / (fx(date) || 1)
-    parcels.push({ id: `open-${date}`, date, units: Number(o.units) || 0, costUsd: Number(o.costUsd) || 0, costAud, base: costAud, roc: 0, nilOn: null, gains: [] })
+    parcels.push({ id: `open-${date}`, date, settle: date, units: Number(o.units) || 0, costUsd: Number(o.costUsd) || 0, costAud, base: costAud, roc: 0, nilOn: null, gains: [] })
   }
   const brokerage = new Map(rows.filter(r => r.kind === 'brokerage').map(r => [`${r.order}|${r.side}`, -r.amount]))
   const events = [
     ...rows.filter(r => r.ticker === ticker && ['buy', 'distribution'].includes(r.kind)).map(r => ({ at: r.at, date: r.date, r })),
-    ...actions.filter(a => a.ticker === ticker).map(a => ({ at: `${a.date}T00:00:00`, date: a.date, a }))
+    // A consolidation takes effect at the end of its day: a payment that day
+    // was declared on the units held before it.
+    ...actions.filter(a => a.ticker === ticker).map(a => ({ at: `${a.date}T23:59:59`, date: a.date, a }))
   ].sort((x, y) => x.at.localeCompare(y.at))
 
   const payments = []
@@ -80,18 +82,20 @@ export function trackRoc({ rows = [], openings = [], actions = [], fx, ticker = 
     if (r.kind === 'buy') {
       const costUsd = -r.amount + (brokerage.get(`${r.order}|buy`) || 0)
       const costAud = costUsd / (fx(r.date) || 1)
-      parcels.push({ id: r.key, date: r.date, units: r.units, costUsd, costAud, base: costAud, roc: 0, nilOn: null, gains: [] })
+      parcels.push({ id: r.key, date: r.date, settle: r.settle || null, units: r.units, costUsd, costAud, base: costAud, roc: 0, nilOn: null, gains: [] })
       continue
     }
-    // A distribution: paid on parcels settled before its record date (a buy
-    // settles a day or two after it is made).
+    // A distribution: paid on parcels settled by its record date. The annual
+    // statement gives both dates; a cash report gives neither, so there a buy
+    // more than two days before the payment counts (it settles in one or two).
     const { pct, basis } = rocShare(r.date, cfg)
     const rate = fx(r.date) || 1
     const perUnitAud = (r.perUnit * pct / 100) / rate
     let rocAud = 0
     let gainAud = 0
     for (const p of parcels) {
-      if (daysBetween(p.date, r.date) <= 2 || p.units <= 0) continue
+      const settled = r.recordDate && p.settle ? p.settle <= r.recordDate : daysBetween(p.date, r.date) > 2
+      if (!settled || p.units <= 0) continue
       const amount = perUnitAud * p.units
       const reduce = Math.min(p.base, amount)
       p.base -= reduce

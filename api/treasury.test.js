@@ -396,6 +396,42 @@ describe('SelfWealth cash reports', () => {
     expect(inv.body.cash).toEqual({ usd: 60, at: '2025-07-08' })
   })
 
+  // An invented annual statement: 100 XYZ held at the start, 50 bought, then 1-for-5.
+  const at = (y, cells) => cells.map((s, i) => ({ p: 1, x: 20 + i * 36, y, s }))
+  const annual = [
+    ...at(760, ['USA Detailed Holdings Summary - Period 1 July 2024 - 30 June 2025']),
+    ...at(740, ['Holdings Valuation as at 1 July 2024']),
+    ...at(720, ['XYZ', 'Xyz Income Fund', '100', '10.00', '1,000.00']),
+    ...at(700, ['Contracts between 1 July 2024 and 30 June 2025']),
+    ...at(680, ['3 Jul 2024', '5 Jul 2024', 'C100', 'BUY', 'XYZ', 'Xyz Income Fund', '50', '12.00', 'USD', '1', '600.00', '9.50', '0.00', '0.00', '609.50']),
+    ...at(660, ['Scrip Movement']),
+    ...at(640, ['1 Dec 2024', 'XYZ', 'Consolidation', 'Out', '-150']),
+    ...at(620, ['1 Dec 2024', 'XYZ', 'Consolidation', 'In', '30']),
+    ...at(600, ['Holdings Valuation as at 30 June 2025']),
+    ...at(580, ['XYZ', 'Xyz Income Fund', '30', '50.00', '1,500.00'])
+  ]
+
+  it('imports an annual statement, checks it, and replaces it on a second import', async () => {
+    const t = await unlocked()
+    const p = await call({ action: 'sw-preview', method: 'POST', token: t, body: { items: annual } })
+    expect(p.body).toMatchObject({ type: 'annual', market: 'USA', from: '2024-07-01', to: '2025-06-30', replaces: false })
+    expect(p.body.consolidations[0]).toMatchObject({ ticker: 'XYZ', ratio: 5 })
+    expect(p.body.checks.every(c => c.matches)).toBe(true)
+    await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: annual } })
+    expect((await call({ action: 'sw-preview', method: 'POST', token: t, body: { items: annual } })).body.replaces).toBe(true)
+    await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: annual } })
+    // A hand-typed consolidation for a holding the statements cover is set aside.
+    await call({ action: 'inv-action-save', method: 'POST', token: t, body: { action: { ticker: 'XYZ', date: '2024-12-02', ratio: 4 } } })
+    const inv = await call({ action: 'investments', token: t })
+    expect((await tget('selfwealth')).annuals).toHaveLength(1)
+    expect(inv.body.holdings.find(h => h.ticker === 'XYZ')).toMatchObject({ units: 30, currency: 'USD' })
+    expect(inv.body.checks.every(c => c.matches)).toBe(true)
+    expect(inv.body.autoOpenings[0]).toMatchObject({ ticker: 'XYZ', units: 100, costUnknown: true })
+    expect(inv.body.ignored.actions).toHaveLength(1)
+    expect(inv.body.prices.XYZ).toMatchObject({ price: 50, source: 'statement' })
+    expect(inv.body.statements).toEqual([expect.objectContaining({ market: 'USA', from: '2024-07-01' })])
+  })
+
   it('refuses a report that does not add up', async () => {
     const t = await unlocked()
     const broken = report.map(i => (i.s === '$60.00' && i.y === 630 ? { ...i, s: '$61.00' } : i))
