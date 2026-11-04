@@ -429,3 +429,31 @@ describe('Brainlab', () => {
     expect(screen.getByRole('button', { name: 'RHH Loan' })).toBeInTheDocument()
   })
 })
+
+describe('suggested systems (Brent, 4 Nov 2026)', () => {
+  // A thoracolumbar fixation offers pedicle screw systems only, and a surgeon's
+  // usual system is ticked for a hand-entered booking.
+  it('narrows the buttons to the operation and ticks the surgeon\'s usual', async () => {
+    render(<NewBooking user={{ token: 't', name: 'Test' }} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
+    fireEvent.change(screen.getByLabelText(/Surgeon/), { target: { value: 'Gupta' } })
+    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'T10-L2 posterior fixation' } })
+    const box = document.querySelector('[data-suggested-systems]')
+    const names = [...box.querySelectorAll('button')].map(b => b.textContent)
+    expect(names.join('|')).toMatch(/Mariner MIS/)
+    expect(names.join('|')).not.toMatch(/Lonestar|CYLOX|Dakota/)
+    expect(screen.getByRole('button', { name: /Mariner MIS ✓/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/Assumed: Mariner MIS — Gupta's usual for Pedicle screw fixation/)).toBeInTheDocument()
+  })
+
+  it('a tap takes a suggested system off again', () => {
+    render(<NewBooking user={{ token: 't', name: 'Test' }} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
+    fireEvent.change(screen.getByLabelText(/Surgeon/), { target: { value: 'Ibbett' } })
+    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'C5/6 ACDF' } })
+    expect(screen.getByRole('button', { name: /Dakota ✓/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /✓ TM Locking Distractor/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /✓ TM Locking Distractor/ }))
+    expect(screen.getByRole('button', { name: /\+ TM Locking Distractor/ })).toHaveAttribute('aria-pressed', 'false')
+  })
+})

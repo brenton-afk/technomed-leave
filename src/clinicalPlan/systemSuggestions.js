@@ -11,8 +11,12 @@
 // exactly the one that must still be bookable.
 //
 // Names are as the inventory spells them, so a suggestion writes the same kit
-// line as tapping the button by hand. Northstar and REline are distributor
-// loan sets that are not in the inventory; they are offered by name.
+// line as tapping the button by hand. Northstar (Device) and REline
+// (Nuvasive / Globus) are always distributor loan sets.
+//
+// Pre-ticking (Brent, 4 Nov 2026): on a booking entered by hand, the surgeon's
+// usual systems are ticked for them (`pick`). A booking read from an email
+// follows what the email asks for — this module does not touch those.
 
 import { findImplantProcedures } from './procedureImplants.js'
 
@@ -22,14 +26,16 @@ export const SYSTEM_GROUPS = {
     label: 'ACDF',
     // Dakota is an integrated ACDF cage: RHH for Fowler and Atallah, and
     // Imogen Ibbett's at Calvary.
-    systems: ['Lonestar', 'CYLOX', 'Shoreline', 'Dakota', 'Ascot'],
+    systems: ['Lonestar', 'CYLOX', 'Shoreline', 'Dakota'],
     extras: ['TM Locking Distractor']
   },
   corpectomy: {
     label: 'Corpectomy',
-    // Expandable corpectomy: X-Core (Nuvasive) or Fortify (Globus), each with
-    // that company's ACP plate. Locking Distractor occasionally, with Thani.
-    systems: ['Nuvasive', 'Globus'],
+    // Ascot and Athlet are almost exclusively cervical corpectomy, mostly at
+    // RHH. Expandable corpectomy is X-Core (Nuvasive) or Fortify (Globus),
+    // each with that company's ACP plate. Locking Distractor occasionally,
+    // with Thani.
+    systems: ['Athlet', 'Ascot', 'Nuvasive', 'Globus'],
     extras: ['TM Locking Distractor']
   },
   posteriorCervical: {
@@ -41,7 +47,8 @@ export const SYSTEM_GROUPS = {
   },
   pedicleScrews: {
     label: 'Pedicle screw fixation',
-    // Thoracolumbar fixation. Firebird is almost only JPW's, so it is listed
+    // Thoracolumbar fixation ("PSF"), mostly trauma and degenerative cases
+    // without cages. Firebird is almost only JPW's, so it is listed
     // last unless the surgeon row moves it up.
     systems: ['Diplomat', 'Mariner MIS', 'Mariner Open', 'Orthofix Firebird'],
     extras: ['Mariner Outrigger', 'TM Screw Removal']
@@ -63,7 +70,8 @@ export const SYSTEM_GROUPS = {
   },
   deformity: {
     label: 'Deformity',
-    // Richard Hannan's REline, from Nuvasive / Globus.
+    // Richard Hannan's REline, from Nuvasive / Globus — not expected to
+    // restart until about August 2027.
     systems: ['REline'],
     extras: []
   },
@@ -78,7 +86,7 @@ export const SYSTEM_GROUPS = {
 const GROUP_TESTS = [
   { group: 'removal', test: /\b(?:removal|remove|revision|rem\s*o\s*s)\b/i },
   { group: 'deformity', test: /\b(?:deformity|scoliosis|kyphosis|reline)\b/i },
-  { group: 'posteriorCervical', test: /\b(?:posterior\s+cervical|pcf|lateral\s+mass|c\d\s*[-–/]\s*t\d)\b/i }
+  { group: 'posteriorCervical', test: /\b(?:posterior\s+cervical|pcf|lateral\s+mass|c1\s*[-–/]\s*c?2|c\d\s*[-–/]\s*t\d)\b/i }
 ]
 
 const ACRONYM_GROUP = {
@@ -106,19 +114,30 @@ export function groupsFor(operation) {
 
 /**
  * Surgeon defaults. `first` goes to the front of the group's list; `with` is
- * offered alongside it. Hospital-specific rows beat general ones.
+ * offered alongside as an add-on; `pick` is what a hand-entered booking has
+ * ticked for it (default: the first of `first`). Hospital-specific rows beat
+ * general ones.
  */
 export const SURGEON_SYSTEMS = [
   { surgeon: 'JPW', group: 'acdf', first: ['Lonestar'] },
-  { surgeon: 'JPW', group: 'plif', first: ['Forza XP', 'Orthofix Firebird'] },
+  { surgeon: 'JPW', group: 'plif', first: ['Forza XP', 'Orthofix Firebird'], pick: ['Forza XP', 'Orthofix Firebird'] },
   { surgeon: 'JPW', group: 'pedicleScrews', first: ['Orthofix Firebird'] },
+  // Shoreline is Thani's back-up, so it is offered second, not ticked.
   { surgeon: 'Thani', group: 'acdf', first: ['CYLOX', 'Shoreline'] },
   { surgeon: 'Thani', group: 'corpectomy', first: [], with: ['TM Locking Distractor'] },
   { surgeon: 'Fowler', group: 'acdf', hospital: 'RHH', first: ['Dakota'] },
   { surgeon: 'Atallah', group: 'acdf', hospital: 'RHH', first: ['Dakota'] },
-  { surgeon: 'Ibbett', group: 'acdf', hospital: 'CLV', first: ['Dakota'], with: ['TM Locking Distractor'] },
+  { surgeon: 'Ibbett', group: 'acdf', hospital: 'CLV', first: ['Dakota'], with: ['TM Locking Distractor'], pick: ['Dakota', 'TM Locking Distractor'] },
   { surgeon: 'Dubey', group: 'posteriorCervical', first: ['Northstar'] },
-  { surgeon: 'Hannan', group: 'deformity', first: ['REline'] }
+  { surgeon: 'Hannan', group: 'deformity', first: ['REline'] },
+  // Gupta (Brent, 4 Nov 2026): Shoreline for ACDF; Mariner MIS for most PLIF
+  // and fixation, with Global BMD PLIF cages; Reform for lateral mass and C1/2.
+  // Diplomat occasionally for open cases and where it is already in situ
+  // (extensions), so it is offered second rather than ticked.
+  { surgeon: 'Gupta', group: 'acdf', first: ['Shoreline'] },
+  { surgeon: 'Gupta', group: 'plif', first: ['Mariner MIS', 'Global BMD PLIF', 'Diplomat'], pick: ['Mariner MIS', 'Global BMD PLIF'] },
+  { surgeon: 'Gupta', group: 'pedicleScrews', first: ['Mariner MIS', 'Diplomat'] },
+  { surgeon: 'Gupta', group: 'posteriorCervical', first: ['Reform Cervical'] }
 ]
 
 function surgeonRow(surgeon, group, hospital) {
@@ -136,14 +155,19 @@ function surgeonRow(surgeon, group, hospital) {
 export function suggestSystems({ operation, surgeon, hospital } = {}) {
   const systems = []
   const extras = []
+  const picks = []
   const push = (list, s) => { if (s && !list.includes(s)) list.push(s) }
   const groups = groupsFor(operation)
   for (const g of groups) {
     const row = surgeonRow(surgeon, g, hospital)
     for (const s of row?.first || []) push(systems, s)
     for (const s of row?.with || []) push(extras, s)
+    // The surgeon's usual system, or the only one the operation ever takes
+    // (ALIF is Catenary, deformity is REline).
+    const pick = row?.pick || (row?.first?.length ? [row.first[0]] : [])
+    for (const s of pick.length ? pick : SYSTEM_GROUPS[g].systems.length === 1 ? SYSTEM_GROUPS[g].systems : []) push(picks, s)
   }
   for (const g of groups) for (const s of SYSTEM_GROUPS[g].systems) push(systems, s)
   for (const g of groups) for (const s of SYSTEM_GROUPS[g].extras) push(extras, s)
-  return { groups, systems, extras: extras.filter(s => !systems.includes(s)) }
+  return { groups, systems, extras: extras.filter(s => !systems.includes(s)), picks }
 }

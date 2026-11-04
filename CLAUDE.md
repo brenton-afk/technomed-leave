@@ -244,8 +244,12 @@ in `inventory.js`) — one Mariner said precisely; tapping either replaces a pla
 (`SYSTEM_GROUPS`) and surgeon defaults (`SURGEON_SYSTEMS`): a thoracolumbar
 fixation offers pedicle screw systems only, ACDF offers cervical cages, ALIF is
 Catenary only, and so on. It narrows the buttons, never forbids — everything
-stays behind "All systems". Not yet wired to a screen: the Add booking layout
-waits on Brent approving a mock-up.
+stays behind "All systems". **Add booking** (`NewBooking.jsx`) shows the
+suggested systems as buttons once a procedure is typed, and on a hand-entered
+booking pre-ticks the surgeon's usual (`picks`), as Brent approved on 4 Nov.
+A booking read from an email follows what the email asks for: systems it names
+are applied first, so nothing is ticked over them. Northstar (Device) and
+REline (Nuvasive/Globus) are in the inventory as loan-only (`mainlandOnly`).
 
 Brainlab / AIRO is navigation, not an implant system. At **RHH** TechnoMed runs
 the navigation and AIRO and **bills Brainlab per case: $300 with AIRO, $250 for

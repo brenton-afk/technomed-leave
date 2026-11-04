@@ -44,11 +44,28 @@ describe('system suggestions', () => {
   })
 
   it('names systems the way the buttons do', () => {
-    const offRoster = new Set(['Northstar', 'REline'])
     for (const g of Object.values(SYSTEM_GROUPS)) {
-      for (const s of [...g.systems, ...g.extras]) {
-        if (!offRoster.has(s)) expect(SYSTEM_BUTTONS).toContain(s)
-      }
+      for (const s of [...g.systems, ...g.extras]) expect(SYSTEM_BUTTONS).toContain(s)
     }
+  })
+
+  it('pre-ticks the surgeon\'s usual systems', () => {
+    expect(suggestSystems({ operation: 'C5/6 ACDF', surgeon: 'Thani' }).picks).toEqual(['CYLOX'])
+    expect(suggestSystems({ operation: 'C6/7 ACDF', surgeon: 'Ibbett', hospital: 'CLV' }).picks).toEqual(['Dakota', 'TM Locking Distractor'])
+    expect(suggestSystems({ operation: 'L4/5 PLIF', surgeon: 'Gupta' }).picks).toEqual(['Mariner MIS', 'Global BMD PLIF'])
+    expect(suggestSystems({ operation: 'L5/S1 ALIF', surgeon: 'Fowler' }).picks).toEqual(['Global BMD ALIF'])
+    // No usual system recorded: nothing ticked, the buttons are just narrowed.
+    expect(suggestSystems({ operation: 'T10-L2 fixation', surgeon: 'Fowler' }).picks).toEqual([])
+  })
+
+  it('Gupta: Shoreline ACDF, Reform for C1/2, Diplomat offered for extensions', () => {
+    expect(suggestSystems({ operation: 'ACDF C5/6', surgeon: 'Gupta' }).picks).toEqual(['Shoreline'])
+    expect(suggestSystems({ operation: 'C1/2 fusion', surgeon: 'Gupta' }).picks).toEqual(['Reform Cervical'])
+    expect(suggestSystems({ operation: 'L2-L5 fixation extension', surgeon: 'Gupta' }).systems.slice(0, 2)).toEqual(['Mariner MIS', 'Diplomat'])
+  })
+
+  it('corpectomy offers Athlet and Ascot', () => {
+    expect(suggestSystems({ operation: 'C5 ACCF' }).systems.slice(0, 2)).toEqual(['Athlet', 'Ascot'])
+    expect(suggestSystems({ operation: 'C5/6 ACDF' }).systems).not.toContain('Ascot')
   })
 })

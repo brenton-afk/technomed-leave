@@ -94,6 +94,8 @@ export const SYSTEMS = [
   { name: 'Cascadia', test: /\bcascadia\b/i },
   // The distributors, who are also written on a kit line as though they were
   // the system — "Nuvasive loan" is a real booking shape.
+  { name: 'Northstar', test: /\bnorth\s?star\b/i },
+  { name: 'REline', test: /\bre-?line\b/i },
   { name: 'Nuvasive', test: /\bnuvasive\b/i },
   { name: 'Globus', test: /\bglobus\b(?!\s*(?:bmd\s*)?(?:plif|alif))/i }
 ]

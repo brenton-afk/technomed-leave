@@ -169,6 +169,25 @@ export const INVENTORY = [
     note: 'No local sets. Every case needs a loan kit from the mainland.'
   },
 
+  // ── Loan-only systems (Brent, 4 Nov 2026) ──
+  // "Northstar is Device Technologies, always requires a distributor loan
+  // request." Mostly Dr Dubey, for posterior cervical fusion.
+  {
+    system: 'Northstar', distributor: 'device',
+    aka: ['SeaSpine Northstar', 'North Star'],
+    consigned: {},
+    mainlandOnly: true,
+    note: 'SeaSpine, through Device Technologies. Always a distributor loan set.'
+  },
+  // "Reline is Nuvasive/Globus and requires a loan set always." Richard
+  // Hannan's deformity system.
+  {
+    system: 'REline', distributor: 'globus',
+    consigned: {},
+    mainlandOnly: true,
+    note: 'Nuvasive / Globus deformity system. Always a loan set from the mainland.'
+  },
+
   // ── TechnoMed's own ──
   // "Need to add TM REMOVAL KIT as an option in kits in PORTAL" — Toni,
   // 3 Nov 2026. Ours, kept at Calvary (as in the Kit room); a case at RHH

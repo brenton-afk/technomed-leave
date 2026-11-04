@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { BRAINLAB, BRAINLAB_KIT } from '../../clinicalPlan/brainlab.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
+import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggestions.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { offerNotices } from '../../notices.js'
 import DictateBooking from './DictateBooking.jsx'
@@ -86,6 +87,14 @@ const inputStyle = {
   // iOS zoom the whole app on focus.
   ...text('field'), color: colour.ink, background: colour.surface, outline: 'none'
 }
+
+/** A suggested system: big enough to hit in a corridor, ticked when on. */
+const suggestButton = on => ({
+  minHeight: 44, cursor: 'pointer', borderRadius: radius.control,
+  border: `${on ? 2 : 1}px solid ${on ? colour.accent : colour.line}`,
+  background: on ? colour.accentSoft : colour.surface,
+  ...text('bodyStrong'), fontWeight: on ? 700 : 600, color: on ? colour.accentDeep : colour.ink
+})
 
 /** A row of choices. Cheaper than a dropdown when there are only a few. */
 function Choice({ options, value, onChange, idOf = o => o, labelOf = o => o }) {
@@ -276,17 +285,39 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   // JPW + ACDF is Lonestar: where a surgeon's kit for the operation has been
   // dictated, it is put in as soon as surgeon and operation are both known —
   // once per combination, so taking it off again is respected.
+  // What the operation and surgeon point to: the few systems that fit, the
+  // add-ons that go with them, and the ones to tick. Everything else stays in
+  // the "All systems" list — this narrows, it never forbids.
+  const suggestion = useMemo(
+    () => suggestSystems({ operation: procedure, surgeon, hospital: siteOf(hospital) }),
+    [procedure, surgeon, hospital])
   const assumedFor = useRef('')
   const [assumedWhy, setAssumedWhy] = useState('')
   useEffect(() => {
     const key = `${surgeon}|${procedure}|${hospital}`
     if (systems.length || assumedFor.current === key) return
     const guess = assumedKit({ surgeon, procedure, hospital, kit: '' })
-    if (!guess) return
+    if (guess) {
+      assumedFor.current = key
+      setSystems([{ name: guess.system, supply: guess.supply || supplyFor(guess.system) }])
+      setAssumedWhy(guess.why)
+      return
+    }
+    // Brent's rules (systemSuggestions.js): the surgeon's usual systems for
+    // this operation, ticked for them — "for manually entered bookings the
+    // preferred systems as per the guideline should be chosen."
+    const { picks, groups } = suggestion
+    if (!picks.length) return
     assumedFor.current = key
-    setSystems([{ name: guess.system, supply: guess.supply || supplyFor(guess.system) }])
-    setAssumedWhy(guess.why)
+    setSystems(picks.map(name => ({ name, supply: supplyFor(name) })))
+    const what = groups.map(g => SYSTEM_GROUPS[g].label).join(' and ')
+    setAssumedWhy(`${picks.join(' + ')} — ${surgeon ? `${surgeon}'s usual for` : 'the system for'} ${what}.`)
   }, [surgeon, procedure, hospital]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleSystem(name) {
+    if (systems.some(s => s.name === name)) setSystems(list => list.filter(s => s.name !== name))
+    else addSystem(name)
+  }
 
   function addSystem(name) {
     if (!name || systems.some(s => s.name === name)) return
@@ -448,6 +479,11 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
               </select>
             </Row>
 
+            <Row label="Procedure">
+              <input value={procedure} onChange={e => setProcedure(e.target.value)}
+                placeholder="L5/S1 PLIF" style={inputStyle} />
+            </Row>
+
             <div style={{ marginBottom: space.md }}>
               <Label>Systems</Label>
 
@@ -481,14 +517,48 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                 </div>
               )}
 
-              {assumedWhy && systems.length === 1 && assumedWhy.startsWith(systems[0].name) && (
+              {assumedWhy && systems.length > 0 && assumedWhy.startsWith(systems.map(s => s.name).join(' + ')) && (
                 <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>
                   Assumed: {assumedWhy}
                 </div>
               )}
+
+              {suggestion.systems.length > 0 && (
+                <div style={{ marginBottom: space.sm }} data-suggested-systems>
+                  <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: 6 }}>
+                    Suggested for {suggestion.groups.map(g => SYSTEM_GROUPS[g].label).join(' and ')} — tap to add or take off
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+                    {suggestion.systems.map(name => {
+                      const on = systems.some(s => s.name === name)
+                      return (
+                        <button key={name} type="button" aria-pressed={on} onClick={() => toggleSystem(name)}
+                          style={suggestButton(on)}>
+                          {name}{on ? ' ✓' : ''}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {suggestion.extras.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                      {suggestion.extras.map(name => {
+                        const on = systems.some(s => s.name === name)
+                        return (
+                          <button key={name} type="button" aria-pressed={on} onClick={() => toggleSystem(name)}
+                            style={{ ...suggestButton(on), borderRadius: radius.pill, padding: '0 12px',
+                              borderStyle: on ? 'solid' : 'dashed' }}>
+                            {on ? '✓' : '+'} {name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <select value="" onChange={e => addSystem(e.target.value)} style={inputStyle}
                 aria-label="Add a system">
-                <option value="">{systems.length ? 'Add another system…' : 'Choose a system…'}</option>
+                <option value="">{suggestion.systems.length ? 'All systems…' : systems.length ? 'Add another system…' : 'Choose a system…'}</option>
                 {SYSTEMS.filter(s => !systems.some(c => c.name === s))
                   .map(s => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -535,11 +605,6 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
 
             <Row label="Patient surname" hint="Surname only — never a first name or a date of birth">
               <input value={patient} onChange={e => setPatient(e.target.value)} style={inputStyle} />
-            </Row>
-
-            <Row label="Procedure">
-              <input value={procedure} onChange={e => setProcedure(e.target.value)}
-                placeholder="L5/S1 PLIF" style={inputStyle} />
             </Row>
 
             <Row label="Notes">
