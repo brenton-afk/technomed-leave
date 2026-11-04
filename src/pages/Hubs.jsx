@@ -34,6 +34,9 @@ export function KitHub({ user, onNavigate }) {
           onClick={() => onNavigate({ tab: 'kit', sub: 'resources' })} />
 
         <SectionLabel>Team</SectionLabel>
+        <NavCard icon={IconTasks} label="Team leader"
+          detail="The duty leader's daily playbook and run-sheet"
+          onClick={() => onNavigate({ tab: 'kit', sub: 'teamlead' })} />
         {/* Messages used to be here. It has its own tab now — a conversation is
             not something anybody goes looking for in a kit menu. */}
         <NavCard icon={IconTasks} label="Projects & actions"

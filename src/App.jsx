@@ -8,7 +8,7 @@ import Cases from './pages/Cases.jsx'
 import { Screens, LazyScreen, prefetchScreens } from './lazyScreens.jsx'
 // Loaded when opened rather than with the app — see lazyScreens.jsx.
 const {
-  LeaveForm, KitRoom, Projects, UsageScan, TheatreGuides, Chat, Timesheets,
+  LeaveForm, KitRoom, Projects, TeamLeader, UsageScan, TheatreGuides, Chat, Timesheets,
   AdminPortal, FileBrowser, PatientHistory, Notifications
 } = Screens
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
@@ -70,7 +70,7 @@ const SELF_BACK = new Set([
   'resources', 'guides', 'messages', 'stock', 'usagefiles', 'patient', 'security',
   'notifications', 'payslips',
   // Migrated to design/Shell.jsx's Header, so they draw their own.
-  'kitroom', 'projects', 'timesheets', 'leave', 'treasury'
+  'kitroom', 'projects', 'teamlead', 'timesheets', 'leave', 'treasury'
 ])
 
 // Matches the server-side session TTL in api/_auth.js.
@@ -439,6 +439,9 @@ export default function App() {
       switch (sub) {
         case 'kitroom': return <KitRoom user={user} onBack={back} />
         case 'projects': return <Projects user={user} onBack={back} />
+        // Out of the Cases header (Brent, 4 Nov 2026: "remove the team leader tab
+        // and incorporate that information into kits for now").
+        case 'teamlead': return <TeamLeader user={user} onBack={back} />
         case 'resources':
           return <FileBrowser user={user} root="resources" eyebrow="Kit and reference" title="Resources" onBack={back} />
         case 'guides':

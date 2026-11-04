@@ -278,7 +278,7 @@ function Block({ block, tick, ticks, shared }) {
   }
 }
 
-export default function TeamLeader({ user, switcher }) {
+export default function TeamLeader({ user, onBack }) {
   const [tabId, setTabId] = useState(GUIDE[0].id)
   const [ticks, setTicks] = useState({})
   // The New Booking tab has a checklist too, but it is a definition of done for
@@ -365,8 +365,7 @@ export default function TeamLeader({ user, switcher }) {
 
   return (
     <Page style={{ display: 'flex', flexDirection: 'column' }}>
-      <Header eyebrow="This week" title="Team leader" subtitle="The duty leader's daily playbook">
-        {switcher}
+      <Header eyebrow="Kit and reference" title="Team leader" subtitle="The duty leader's daily playbook" onBack={onBack}>
         {/* Eight tabs will not fit across a phone, so the strip scrolls rather
             than wrapping into two rows that shift as the selection moves. */}
         <div role="tablist" aria-label="Guide section" style={{

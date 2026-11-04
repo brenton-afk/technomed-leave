@@ -90,7 +90,8 @@ read the week, the control inside chooses *which part*. Collapsing them into one
 three-way toggle would put "Week" and "Plan" side by side as though they were
 alternatives of the same kind.
 
-The third mode, **Team lead** (`TeamLeader.jsx`), is the Clinical Team Leader
+The **Team leader** screen (`TeamLeader.jsx`, Kit → Team leader — moved out of
+the Cases header on 4 Nov 2026, so Cases has no mode switch) is the Clinical Team Leader
 field guide, ported from the co-written "TM Team Leader" artifact
 (`claude.ai/code/artifact/799bedc0-…`). Three rules there:
 

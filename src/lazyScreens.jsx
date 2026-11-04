@@ -19,6 +19,7 @@ const loaders = {
   LeaveForm: () => import('./pages/LeaveForm.jsx'),
   KitRoom: () => import('./pages/KitRoom.jsx'),
   Projects: () => import('./pages/Projects.jsx'),
+  TeamLeader: () => import('./pages/TeamLeader.jsx'),
   UsageScan: () => import('./pages/UsageScan.jsx'),
   TheatreGuides: () => import('./pages/TheatreGuides.jsx'),
   Chat: () => import('./pages/Chat.jsx'),

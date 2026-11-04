@@ -101,39 +101,27 @@ describe('bottom navigation', () => {
   it('opens straight onto the week, with no Today screen and no hub of cards', async () => {
     signIn(REP)
     render(<App />)
-    // The bookings calendar is the front door. Both readings of it live here —
-    // the calendar view used to be two tabs away, in Kit.
-    await waitFor(() => expect(screen.getByRole('tablist', { name: 'How to view the week' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Cases' })).toBeInTheDocument())
     expect(screen.queryByText(/Scan a usage form/)).not.toBeInTheDocument()
   })
 
-  it('offers the week and the team-leader guide, and not two views of one week', async () => {
-    // Calendar and Case plan merged: by the end most of each was the other one,
-    // and keeping both meant every improvement had to be made twice.
+  it('has no Team lead switch above the cases any more', async () => {
+    // Brent, 4 Nov 2026: "Remove the team leader tab and incorporate that
+    // information into kits for now."
     signIn(REP)
     render(<App />)
-    const tabs = await waitFor(() => screen.getByRole('tablist', { name: 'How to view the week' }))
-    expect(tabs).toHaveTextContent('Cases')
-    expect(tabs).toHaveTextContent('Team lead')
-    expect(tabs).not.toHaveTextContent('Case plan')
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Cases' })).toBeInTheDocument())
+    expect(screen.queryByRole('tab', { name: 'Team lead' })).not.toBeInTheDocument()
   })
 
-  it('opens the team leader guide on the day\'s run-sheet', async () => {
+  it('opens the team leader guide from Kit, on the day\'s run-sheet, and back', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Team lead' })))
+    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
+    fireEvent.click(await screen.findByText('Team leader'))
     expect(await screen.findByText(/Work down this list through the day/)).toBeInTheDocument()
-  })
-
-  it('switches to the team leader guide and back', async () => {
-    signIn(REP)
-    render(<App />)
-    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Team lead' })))
-    expect(await screen.findByText(/Work down this list through the day/)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Cases' }))
-    await waitFor(() =>
-      expect(screen.queryByText(/Work down this list through the day/)).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }))
+    await waitFor(() => expect(screen.getByText('Kit Room')).toBeInTheDocument())
   })
 })
 
