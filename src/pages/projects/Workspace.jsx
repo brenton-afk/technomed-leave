@@ -1,0 +1,556 @@
+import React, { useMemo, useState } from 'react'
+import { colour, text, space, radius } from '../../design/tokens.js'
+import { STAFF, isSameStaff } from '../../staffConfig.js'
+import {
+  GENERAL, DIVISIONS, divisionOf, projectIdOf, columnOf, progressOf, tasksOf, orderedProjects
+} from '../../projects/model.js'
+import { tintOf, dueState, DUE_TONES, formatShort, PROJECT_TINTS } from './shared.js'
+import { NewProject } from './ProjectList.jsx'
+
+// ─── Projects, as one workspace (Brent, 4 Nov 2026) ──────────────────────────
+// "Make the projects page better, more interactive, more appealing to look
+// at, a better layout that you can see more on, easier to differentiate your
+// tasks vs other people's tasks, maybe have different divisions of the
+// business listed." Built from the mock-up Brent approved ("go with your
+// suggestions"): projects belong to a division, and it opens on List.
+//
+// One screen instead of Projects / Mine tabs:
+//   - four numbers that are also filters (mine, overdue, this week, unassigned)
+//   - division chips, and "only my tasks"
+//   - a project rail with progress (left on a laptop, a strip on a phone)
+//   - three readings of the same tasks: List (by project), Board (by state),
+//     People (each person's load)
+// Your own rows carry a teal edge and "You"; everybody else's carry their
+// initials in their division's colour.
+//
+// Every tap still lands where it did: a task opens the task sheet, a project
+// opens its own board with its own columns.
+
+/** A division's colour, from the project palette — never a new hue. */
+export const DIVISION_TINT = {
+  Operations: PROJECT_TINTS.navy,
+  Spine: PROJECT_TINTS.teal,
+  Orthopaedics: PROJECT_TINTS.plum,
+  CMF: PROJECT_TINTS.clay
+}
+const tintOfDivision = d => DIVISION_TINT[d] || PROJECT_TINTS.slate
+
+const PREFS_KEY = 'tm_projects_view'
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {} } catch { return {} }
+}
+function savePrefs(p) {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)) } catch { /* private mode */ }
+}
+
+const staffFor = name => STAFF.find(s => s.name === name)
+const firstOf = name => staffFor(name)?.firstName || String(name || '').split(' ')[0]
+
+function daysBetween(from, to) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000)
+}
+
+/** Initials in the person's division colour; "You" filled in teal. */
+export function Avatar({ name, mine, size = 26 }) {
+  const unassigned = !name || name === 'Unassigned'
+  const tint = tintOfDivision(staffFor(name)?.division)
+  const label = mine ? 'You' : unassigned ? '?' : firstOf(name).slice(0, 2)
+  return (
+    <span aria-hidden="true" style={{
+      width: size, height: size, flexShrink: 0, borderRadius: radius.pill,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      ...text('micro'), letterSpacing: 0, textTransform: 'none',
+      border: `2px solid ${mine ? colour.accent : unassigned ? colour.line : tint.solid}`,
+      background: mine ? colour.accent : colour.surface,
+      color: mine ? 'white' : unassigned ? colour.inkFainter : tint.ink
+    }}>{label}</span>
+  )
+}
+
+/** A progress ring for the rail. */
+function Ring({ fraction, tint, size = 30 }) {
+  const r = (size - 8) / 2
+  const c = 2 * Math.PI * r
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" style={{ flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={colour.lineSoft} strokeWidth="4" />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={tint} strokeWidth="4" strokeLinecap="round"
+        strokeDasharray={`${c * fraction} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+    </svg>
+  )
+}
+
+const STATE_STYLE = {
+  open: { background: colour.lineSoft, color: colour.inkMuted },
+  in_progress: { background: PROJECT_TINTS.navy.wash, color: PROJECT_TINTS.navy.ink },
+  done: { background: colour.accentSoft, color: colour.accentDeep }
+}
+
+export default function Workspace({
+  projects = [], items = [], user, today, wide,
+  onOpenProject, onOpenTask, onMove, onCreateProject, busyProject, onAdd, adding
+}) {
+  const me = STAFF.find(p => p.email === user?.email)
+  const isMine = task => (me ? isSameStaff(task.assignee, me) : task.assignee === user?.name)
+
+  const saved = useMemo(loadPrefs, [])
+  const [view, setViewRaw] = useState(saved.view || 'list')
+  const [division, setDivisionRaw] = useState(saved.division || 'All')
+  const [onlyMine, setOnlyMineRaw] = useState(Boolean(saved.onlyMine))
+  const [showDone, setShowDone] = useState(false)
+  const [stat, setStat] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [making, setMaking] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [draftWho, setDraftWho] = useState('')
+  const [draftDue, setDraftDue] = useState('')
+
+  const remember = patch => savePrefs({ view, division, onlyMine, ...patch })
+  const setView = v => { setViewRaw(v); remember({ view: v }) }
+  const setDivision = d => { setDivisionRaw(d); setProjectId(''); remember({ division: d }) }
+  const setOnlyMine = v => { setOnlyMineRaw(v); remember({ onlyMine: v }) }
+
+  const all = useMemo(() => [...projects, GENERAL], [projects])
+  const projectFor = task => all.find(p => p.id === projectIdOf(task)) || GENERAL
+  const live = items.filter(t => t && !t.archived)
+  const divisionFor = task => divisionOf(task, projectFor(task), STAFF)
+
+  const isOverdue = t => t.status !== 'done' && t.due_date && t.due_date < today
+  const isThisWeek = t => t.status !== 'done' && t.due_date && t.due_date >= today && daysBetween(today, t.due_date) <= 7
+  const isUnassigned = t => t.status !== 'done' && (!t.assignee || t.assignee === 'Unassigned')
+
+  const inDivision = t => division === 'All' || divisionFor(t) === division
+  const open = live.filter(t => t.status !== 'done' && inDivision(t))
+  const stats = [
+    ['mine', open.filter(isMine).length, 'My open tasks', colour.accentDeep],
+    ['overdue', open.filter(isOverdue).length, 'Overdue', colour.danger],
+    ['week', open.filter(isThisWeek).length, 'Due in the next 7 days', colour.warning],
+    ['unassigned', open.filter(isUnassigned).length, 'Nobody has it yet', colour.inkMuted]
+  ]
+
+  const shown = live.filter(t => {
+    if (!inDivision(t)) return false
+    if (onlyMine && !isMine(t)) return false
+    if (projectId && projectIdOf(t) !== projectId) return false
+    if (stat === 'mine' && !isMine(t)) return false
+    if (stat === 'overdue' && !isOverdue(t)) return false
+    if (stat === 'week' && !isThisWeek(t)) return false
+    if (stat === 'unassigned' && !isUnassigned(t)) return false
+    if (stat && t.status === 'done') return false
+    return true
+  })
+  const shownOpen = showDone ? shown : shown.filter(t => t.status !== 'done')
+
+  // Mine first, then the soonest due, then the rest.
+  const order = (a, b) =>
+    (isMine(b) - isMine(a))
+    || ((a.status === 'done') - (b.status === 'done'))
+    || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'))
+
+  const railProjects = orderedProjects(all, items)
+    .filter(p => showArchived || !p.archived)
+    .filter(p => division === 'All' || p.division === division || p.fixed
+      || tasksOf(p.id, live).some(t => divisionFor(t) === division))
+  const archivedCount = all.filter(p => p.archived).length
+
+  const tick = task => {
+    const project = projectFor(task)
+    const finished = task.status === 'done'
+    onMove(task, finished ? project.columns[0].key
+      : (project.columns.find(c => c.done) || project.columns[0]).key)
+  }
+
+  /** Tap the state chip: on to the next column of its own board. */
+  const advance = task => {
+    const project = projectFor(task)
+    const cols = project.columns
+    const at = cols.findIndex(c => c.key === columnOf(task, project))
+    onMove(task, cols[(at + 1) % cols.length].key)
+  }
+
+  const stateOf = task => {
+    const project = projectFor(task)
+    const key = columnOf(task, project)
+    const label = project.columns.find(c => c.key === key)?.label || 'Open'
+    return { label, tone: task.status === 'done' ? 'done' : task.status === 'in_progress' ? 'in_progress' : 'open' }
+  }
+
+  const add = () => {
+    let words = draft.trim()
+    if (!words || adding) return
+    // "@Erin" in the sentence gives it to Erin; otherwise the picker, else you.
+    let who = draftWho
+    const at = /(^|\s)@([A-Za-z]+)\b/.exec(words)
+    if (at) {
+      const hit = STAFF.find(s => s.firstName.toLowerCase() === at[2].toLowerCase()
+        || (s.aka || []).some(a => a.toLowerCase() === at[2].toLowerCase()))
+      if (hit) { who = hit.name; words = words.replace(at[0], ' ').replace(/\s{2,}/g, ' ').trim() }
+    }
+    onAdd({
+      task: words,
+      assignee: who || me?.name || 'Unassigned',
+      due_date: draftDue,
+      projectId: projectId && projectId !== GENERAL.id ? projectId : ''
+    }, () => { setDraft(''); setDraftDue('') })
+  }
+
+  // ── Pieces ──
+
+  const chip = (on, extra = {}) => ({
+    ...text('caption'), fontWeight: on ? 700 : 400, minHeight: 34, padding: `0 ${space.md}px`,
+    borderRadius: radius.pill, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+    border: `1px solid ${on ? colour.navy : colour.line}`,
+    background: on ? colour.navy : colour.surface, color: on ? 'white' : colour.inkMuted, ...extra
+  })
+
+  const statTiles = (
+    <div style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(4, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))', gap: space.sm, marginBottom: space.md }}>
+      {stats.map(([key, n, label, tone]) => (
+        <button key={key} type="button" aria-pressed={stat === key}
+          onClick={() => setStat(stat === key ? '' : key)}
+          style={{
+            textAlign: 'left', cursor: 'pointer', padding: `${space.sm}px ${space.md}px`,
+            background: colour.surface, borderRadius: radius.card,
+            border: `1px solid ${stat === key ? colour.accent : colour.line}`,
+            boxShadow: stat === key ? `inset 0 0 0 1px ${colour.accent}` : 'none'
+          }}>
+          <span style={{ ...text('display'), color: n ? tone : colour.inkFainter, display: 'block', fontVariantNumeric: 'tabular-nums' }}>{n}</span>
+          <span style={{ ...text('caption'), color: colour.inkFaint }}>{label}</span>
+        </button>
+      ))}
+    </div>
+  )
+
+  const quickAdd = (
+    <div style={{
+      display: 'flex', gap: space.xs, flexWrap: wide ? 'nowrap' : 'wrap', alignItems: 'center',
+      background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card,
+      padding: space.xs, marginBottom: space.md
+    }}>
+      <input value={draft} onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') add() }}
+        aria-label="New task"
+        placeholder={projectId && projectId !== GENERAL.id
+          ? `Add a task to ${all.find(p => p.id === projectId)?.name || 'this project'}…`
+          : 'Add a task — “@Erin” gives it to Erin'}
+        style={{
+          ...text('field'), flex: '1 1 220px', minWidth: 0, border: 'none', outline: 'none',
+          padding: `${space.sm}px ${space.sm}px`, background: 'transparent', color: colour.ink
+        }} />
+      <select value={draftWho} onChange={e => setDraftWho(e.target.value)} aria-label="Who has it"
+        style={{ ...text('field'), flex: '0 1 150px', minWidth: 0, padding: '6px 8px', border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface }}>
+        <option value="">Me</option>
+        <option value="Unassigned">Nobody yet</option>
+        {STAFF.filter(s => s.email !== me?.email).map(s => <option key={s.email} value={s.name}>{s.firstName}</option>)}
+      </select>
+      <input type="date" value={draftDue} onChange={e => setDraftDue(e.target.value)} aria-label="Due"
+        style={{ ...text('field'), flex: '0 0 auto', padding: '6px 8px', border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface }} />
+      <button type="button" onClick={add} disabled={!draft.trim() || adding}
+        style={{
+          ...text('bodyStrong'), flex: '0 0 auto', minHeight: 40, padding: `0 ${space.lg}px`, border: 'none',
+          borderRadius: radius.control, cursor: draft.trim() ? 'pointer' : 'default',
+          background: draft.trim() ? colour.accent : colour.line, color: draft.trim() ? 'white' : colour.inkFainter
+        }}>{adding ? 'Adding…' : 'Add'}</button>
+    </div>
+  )
+
+  const filters = (
+    <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center', marginBottom: space.md }}>
+      {['All', ...DIVISIONS].map(d => (
+        <button key={d} type="button" aria-pressed={division === d} onClick={() => setDivision(d)} style={chip(division === d)}>
+          {d !== 'All' && <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: radius.pill, background: tintOfDivision(d).solid }} />}
+          {d === 'All' ? 'All divisions' : d}
+        </button>
+      ))}
+      <span style={{ flex: '1 0 8px' }} />
+      <label style={{ ...text('caption'), color: colour.inkMuted, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 34 }}>
+        <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} style={{ width: 18, height: 18, fontSize: 16 }} />
+        Only my tasks
+      </label>
+      {view !== 'board' && (
+        <label style={{ ...text('caption'), color: colour.inkMuted, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 34 }}>
+          <input type="checkbox" checked={showDone} onChange={e => setShowDone(e.target.checked)} style={{ width: 18, height: 18, fontSize: 16 }} />
+          Show done
+        </label>
+      )}
+      <div role="tablist" aria-label="View" style={{ display: 'inline-flex', background: colour.lineSoft, borderRadius: radius.control, padding: 3 }}>
+        {[['list', 'List'], ['board', 'Board'], ['people', 'People']].map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
+            style={{
+              ...text('caption'), fontWeight: view === key ? 700 : 400, minHeight: 30, padding: `0 ${space.md}px`,
+              border: 'none', borderRadius: radius.control - 2, cursor: 'pointer',
+              background: view === key ? colour.surface : 'transparent', color: view === key ? colour.ink : colour.inkFaint
+            }}>{label}</button>
+        ))}
+      </div>
+    </div>
+  )
+
+  const railRow = p => {
+    const progress = progressOf(p, items)
+    const openHere = tasksOf(p.id, live).filter(t => t.status !== 'done')
+    const mineHere = openHere.filter(isMine).length
+    const on = projectId === p.id
+    const tint = p.division ? tintOfDivision(p.division).solid : tintOf(p.colour).solid
+    return (
+      <div key={p.id} style={{
+        display: 'flex', alignItems: 'center', gap: space.sm, borderRadius: radius.control,
+        background: on ? colour.lineSoft : 'transparent', padding: `6px ${space.sm}px`,
+        minWidth: wide ? 0 : 220, flexShrink: 0
+      }}>
+        <button type="button" aria-pressed={on} onClick={() => setProjectId(on ? '' : p.id)}
+          title="Show only this project's tasks"
+          style={{ display: 'flex', alignItems: 'center', gap: space.sm, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+          <Ring fraction={progress.fraction} tint={tint} />
+          <span style={{ minWidth: 0, flex: 1 }}>
+            <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: p.archived ? 0.6 : 1 }}>{p.name}</span>
+            <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {p.fixed ? 'Anything without a project' : (p.division || 'Whole business')}
+              {!p.fixed && p.owner && p.owner !== 'Unassigned' ? ` · ${me && p.owner === me.name ? 'you lead' : firstOf(p.owner)}` : ''}
+              {mineHere ? <span style={{ color: colour.accentDeep, fontWeight: 600 }}>{` · ${mineHere} yours`}</span> : null}
+            </span>
+          </span>
+          <span style={{ ...text('caption'), color: colour.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{progress.done}/{progress.total}</span>
+        </button>
+        <button type="button" onClick={() => onOpenProject(p)} aria-label={`Open the ${p.name} board`}
+          style={{ ...text('caption'), color: colour.inkFaint, background: 'none', border: `1px solid ${colour.line}`, borderRadius: radius.control, minHeight: 30, padding: `0 ${space.sm}px`, cursor: 'pointer', flexShrink: 0 }}>
+          Board
+        </button>
+      </div>
+    )
+  }
+
+  const rail = (
+    <nav aria-label="Projects" style={wide
+      ? { background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, padding: space.xs, position: 'sticky', top: 72, alignSelf: 'start' }
+      : { marginBottom: space.md }}>
+      {wide && <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFainter, padding: `${space.sm}px ${space.sm}px ${space.xs}px` }}>Projects</div>}
+      <div style={wide ? {} : { display: 'flex', gap: space.xs, overflowX: 'auto', overflowY: 'hidden', paddingBottom: 4 }}>
+        <button type="button" aria-pressed={!projectId} onClick={() => setProjectId('')}
+          style={{
+            ...text('bodyStrong'), display: 'flex', alignItems: 'center', gap: space.sm, width: wide ? '100%' : 'auto', flexShrink: 0,
+            padding: `8px ${space.sm}px`, borderRadius: radius.control, border: 'none', cursor: 'pointer', textAlign: 'left',
+            background: !projectId ? colour.lineSoft : 'transparent', color: colour.ink
+          }}>
+          Everything
+          <span style={{ ...text('caption'), color: colour.inkFaint, marginLeft: 'auto' }}>{open.length}</span>
+        </button>
+        {railProjects.map(railRow)}
+      </div>
+      {making
+        ? <div style={{ padding: space.xs }}>
+            <NewProject busy={busyProject} division={division === 'All' ? '' : division}
+              onCancel={() => setMaking(false)}
+              onCreate={fields => { onCreateProject(fields); setMaking(false) }} />
+          </div>
+        : <button type="button" onClick={() => setMaking(true)}
+            style={{
+              ...text('bodyStrong'), width: '100%', minHeight: 40, marginTop: space.xs, cursor: 'pointer',
+              border: `1px dashed ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.inkMuted
+            }}>+ New project</button>}
+      {archivedCount > 0 && (
+        <button type="button" onClick={() => setShowArchived(v => !v)}
+          style={{ ...text('caption'), width: '100%', padding: space.sm, cursor: 'pointer', background: 'none', border: 'none', color: colour.inkFaint }}>
+          {showArchived ? 'Hide archived' : `Show ${archivedCount} archived`}
+        </button>
+      )}
+    </nav>
+  )
+
+  const row = task => {
+    const mine = isMine(task)
+    const finished = task.status === 'done'
+    const due = dueState(task.due_date, today)
+    const state = stateOf(task)
+    return (
+      <div key={task.id} data-mine={mine ? 'true' : undefined} style={{
+        display: 'grid', alignItems: 'center', columnGap: space.sm, rowGap: 2,
+        gridTemplateColumns: wide ? '24px minmax(0, 1fr) 150px 120px 96px' : '24px minmax(0, 1fr) auto',
+        padding: `${space.sm}px ${space.md}px ${space.sm}px ${space.sm}px`,
+        borderBottom: `1px solid ${colour.lineSoft}`,
+        borderLeft: `4px solid ${mine ? colour.accent : 'transparent'}`,
+        background: mine ? colour.accentSoft : 'transparent'
+      }}>
+        <button type="button" aria-label={finished ? `Reopen ${task.task}` : `Tick off ${task.task}`} onClick={() => tick(task)}
+          style={{
+            width: 22, height: 22, borderRadius: radius.pill, cursor: 'pointer', padding: 0,
+            border: `2px solid ${finished ? colour.accent : colour.line}`, background: finished ? colour.accent : colour.surface,
+            color: 'white', ...text('micro'), letterSpacing: 0, gridRow: wide ? 'auto' : 'span 2'
+          }}>{finished ? '✓' : ''}</button>
+        <button type="button" onClick={() => onOpenTask(task)}
+          style={{ textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', minWidth: 0 }}>
+          <span style={{
+            ...text('bodyStrong'), color: finished ? colour.inkFainter : colour.ink, display: 'block',
+            textDecoration: finished ? 'line-through' : 'none', overflowWrap: 'anywhere'
+          }}>{task.task}</span>
+          {task.priority === 'urgent' && !finished && <span style={{ ...text('caption'), color: colour.danger, fontWeight: 700 }}>Urgent</span>}
+        </button>
+        {wide
+          ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <Avatar name={task.assignee} mine={mine} />
+              <span style={{ ...text('caption'), color: colour.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {mine ? 'You' : task.assignee && task.assignee !== 'Unassigned' ? firstOf(task.assignee) : 'Nobody yet'}
+              </span>
+            </span>
+          : <Avatar name={task.assignee} mine={mine} />}
+        <button type="button" onClick={() => advance(task)} title="Move it on to the next column"
+          style={{
+            ...text('caption'), fontWeight: 600, border: 'none', borderRadius: radius.control, cursor: 'pointer',
+            padding: '4px 8px', minHeight: 28, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            ...STATE_STYLE[state.tone], ...(wide ? {} : { gridColumn: '2', justifySelf: 'start' })
+          }}>{state.label}</button>
+        <span style={{
+          ...text('caption'), textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+          color: due && !finished ? DUE_TONES[due.tone].colour : colour.inkFaint,
+          fontWeight: due && due.tone !== 'calm' && !finished ? 700 : 400
+        }}>{finished && task.due_date ? formatShort(task.due_date) : due ? due.label : ''}</span>
+      </div>
+    )
+  }
+
+  const listView = () => {
+    const groups = orderedProjects(all, items)
+      .map(p => [p, shownOpen.filter(t => projectIdOf(t) === p.id).sort(order)])
+      .filter(([, rows]) => rows.length)
+    if (!groups.length) return empty()
+    return groups.map(([p, rows]) => {
+      const tint = p.division ? tintOfDivision(p.division) : tintOf(p.colour)
+      return (
+        <section key={p.id} style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden', marginBottom: space.md }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px`, borderBottom: `1px solid ${colour.line}`, boxShadow: `inset 4px 0 0 ${tint.solid}` }}>
+            <button type="button" onClick={() => onOpenProject(p)}
+              style={{ ...text('heading'), color: colour.ink, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', minWidth: 0 }}>{p.name}</button>
+            <span style={{ ...text('caption'), color: colour.inkFaint, flex: 1, minWidth: 0 }}>
+              {!p.fixed && p.owner && p.owner !== 'Unassigned' ? `Led by ${me && p.owner === me.name ? 'you' : firstOf(p.owner)}` : ''}
+              {p.due ? ` · due ${formatShort(p.due)}` : ''}
+            </span>
+            {p.division && (
+              <span style={{ ...text('caption'), fontWeight: 600, padding: '2px 8px', borderRadius: radius.pill, background: tint.wash, color: tint.ink }}>{p.division}</span>
+            )}
+          </div>
+          {rows.map(row)}
+        </section>
+      )
+    })
+  }
+
+  const boardView = () => {
+    const columns = [['open', 'To do'], ['in_progress', 'In progress'], ['done', 'Done']]
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(3, minmax(0, 1fr))' : 'repeat(3, minmax(240px, 1fr))', gap: space.sm, overflowX: 'auto', paddingBottom: 4 }}>
+        {columns.map(([key, label]) => {
+          const cards = shown.filter(t => (t.status || 'open') === key).sort(order)
+          const showing = key === 'done' ? cards.slice(0, 12) : cards
+          return (
+            <div key={key} style={{ background: colour.lineSoft, borderRadius: radius.card, padding: space.xs, alignSelf: 'start' }}>
+              <div style={{ ...text('bodyStrong'), color: colour.ink, display: 'flex', padding: `${space.xs}px ${space.sm}px` }}>
+                <span style={{ flex: 1 }}>{label}</span>
+                <span style={{ color: colour.inkFaint }}>{cards.length}</span>
+              </div>
+              {showing.map(task => {
+                const mine = isMine(task)
+                const p = projectFor(task)
+                const due = dueState(task.due_date, today)
+                return (
+                  <button key={task.id} type="button" onClick={() => onOpenTask(task)}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: space.xs,
+                      background: colour.surface, borderRadius: radius.control, padding: space.sm,
+                      border: `1px solid ${mine ? colour.accent : colour.line}`,
+                      boxShadow: mine ? `inset 3px 0 0 ${colour.accent}` : 'none'
+                    }}>
+                    <span style={{ ...text('caption'), color: (p.division ? tintOfDivision(p.division) : tintOf(p.colour)).ink, display: 'block' }}>{p.name}</span>
+                    <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block', margin: '2px 0 6px', textDecoration: key === 'done' ? 'line-through' : 'none' }}>{task.task}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Avatar name={task.assignee} mine={mine} size={22} />
+                      <span style={{ ...text('caption'), color: colour.inkMuted, flex: 1 }}>{mine ? 'You' : task.assignee && task.assignee !== 'Unassigned' ? firstOf(task.assignee) : 'Nobody yet'}</span>
+                      {due && key !== 'done' && <span style={{ ...text('caption'), color: DUE_TONES[due.tone].colour, fontWeight: due.tone !== 'calm' ? 700 : 400 }}>{due.label}</span>}
+                    </span>
+                  </button>
+                )
+              })}
+              {key === 'done' && cards.length > showing.length && (
+                <div style={{ ...text('caption'), color: colour.inkFaint, padding: space.sm }}>and {cards.length - showing.length} more done</div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const peopleView = () => {
+    const people = STAFF.filter(s => division === 'All' || s.division === division)
+      .filter(s => !onlyMine || (me && s.email === me.email))
+      .sort((a, b) => (me && b.email === me.email) - (me && a.email === me.email))
+    const most = Math.max(4, ...people.map(s => shown.filter(t => t.status !== 'done' && isSameStaff(t.assignee, s)).length))
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(auto-fill, minmax(260px, 1fr))' : 'minmax(0, 1fr)', gap: space.sm }}>
+        {people.map(s => {
+          const you = me && s.email === me.email
+          const theirs = shown.filter(t => t.status !== 'done' && isSameStaff(t.assignee, s)).sort(order)
+          const late = theirs.filter(isOverdue).length
+          const tint = tintOfDivision(s.division)
+          return (
+            <div key={s.email} style={{
+              background: colour.surface, borderRadius: radius.card, padding: space.md,
+              border: `1px solid ${you ? colour.accent : colour.line}`, boxShadow: you ? `inset 0 0 0 1px ${colour.accent}` : 'none'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
+                <Avatar name={s.name} mine={you} size={32} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block' }}>{you ? 'You' : s.firstName}</span>
+                  <span style={{ ...text('caption'), color: colour.inkFaint }}>{s.role} · {s.division}</span>
+                </span>
+                <span style={{ ...text('title'), color: colour.ink, fontVariantNumeric: 'tabular-nums' }}>{theirs.length}</span>
+              </div>
+              <div aria-hidden="true" style={{ display: 'flex', height: 6, borderRadius: radius.pill, background: colour.lineSoft, overflow: 'hidden', marginBottom: space.sm }}>
+                <span style={{ width: `${((theirs.length - late) / most) * 100}%`, background: tint.solid }} />
+                <span style={{ width: `${(late / most) * 100}%`, background: colour.danger }} />
+              </div>
+              {theirs.length === 0 && <div style={{ ...text('caption'), color: colour.inkFainter }}>Nothing open</div>}
+              {theirs.slice(0, 4).map(t => {
+                const due = dueState(t.due_date, today)
+                return (
+                  <button key={t.id} type="button" onClick={() => onOpenTask(t)}
+                    style={{ display: 'flex', gap: space.sm, width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: `1px solid ${colour.lineSoft}`, padding: '6px 0', cursor: 'pointer' }}>
+                    <span style={{ ...text('caption'), color: colour.ink, flex: 1, minWidth: 0 }}>{t.task}</span>
+                    {due && <span style={{ ...text('caption'), color: DUE_TONES[due.tone].colour, fontWeight: due.tone !== 'calm' ? 700 : 400, flexShrink: 0 }}>{due.label}</span>}
+                  </button>
+                )
+              })}
+              {theirs.length > 4 && <div style={{ ...text('caption'), color: colour.inkFaint, paddingTop: 4 }}>and {theirs.length - 4} more</div>}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  function empty() {
+    return (
+      <div style={{ ...text('body'), color: colour.inkFaint, textAlign: 'center', padding: space.xxl, background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card }}>
+        {stat || onlyMine || projectId || division !== 'All'
+          ? 'Nothing matches. Try another division, or turn the filters off.'
+          : 'Nothing on the list yet. Add the first task above.'}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {statTiles}
+      {quickAdd}
+      {filters}
+      <div style={wide ? { display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: space.md, alignItems: 'start' } : {}}>
+        {rail}
+        <div style={{ minWidth: 0 }}>
+          {view === 'list' && listView()}
+          {view === 'board' && boardView()}
+          {view === 'people' && peopleView()}
+        </div>
+      </div>
+    </div>
+  )
+}

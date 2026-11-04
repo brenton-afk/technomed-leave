@@ -77,6 +77,7 @@ const widthOf = px => {
 
 beforeEach(() => {
   sent = []
+  try { localStorage.clear() } catch { /* none */ }
   widthOf(390)
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.setSystemTime(new Date('2026-10-13T02:00:00.000Z'))
@@ -86,12 +87,12 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 const show = async () => {
   render(<Projects user={USER} onBack={() => {}} />)
-  await waitFor(() => expect(screen.getByText('Globus onboarding')).toBeInTheDocument())
+  await waitFor(() => expect(screen.getAllByText('Globus onboarding').length).toBeGreaterThan(0))
 }
 
 const openBoard = async () => {
   await show()
-  fireEvent.click(screen.getByText('Globus onboarding'))
+  fireEvent.click(screen.getByLabelText('Open the Globus onboarding board'))
   await waitFor(() => expect(screen.getByPlaceholderText('Add a task…')).toBeInTheDocument())
 }
 
@@ -100,8 +101,14 @@ describe('what the page opens on', () => {
     // It used to open on a Start recording button, every time anybody looked
     // at their to-do list.
     await show()
-    expect(screen.getByText('Globus onboarding')).toBeInTheDocument()
     expect(screen.queryByText('New meeting')).not.toBeInTheDocument()
+  })
+
+  it('opens on the List view, grouped by project (Brent, 4 Nov 2026)', async () => {
+    await show()
+    expect(screen.getByRole('tab', { name: 'List' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Book the first case')).toBeInTheDocument()
+    expect(screen.getByText('Get the Athlet tray back from RHH')).toBeInTheDocument()
   })
 
   it('asks for the whole board in one request', async () => {
@@ -114,23 +121,19 @@ describe('what the page opens on', () => {
 
   it('says how far through each project is', async () => {
     await show()
-    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    expect(screen.getByText('1/2')).toBeInTheDocument()
   })
 
   it('always shows General, where everything else lives', async () => {
     // Every task written before projects existed is one of these. A board
     // without it would look empty to anybody who had been using the old list.
     await show()
-    expect(screen.getByText('General')).toBeInTheDocument()
+    expect(screen.getAllByText('General').length).toBeGreaterThan(0)
   })
 
-  it('names the owner and what is left', async () => {
-    // Scoped to the one row: General has one to do as well, and an unscoped
-    // match would pass whichever row it happened to find.
+  it('names who leads each project', async () => {
     await show()
-    const row = screen.getByText('Globus onboarding').closest('button')
-    expect(within(row).getByText('Toni Hoppitt')).toBeInTheDocument()
-    expect(within(row).getByText('1 to do')).toBeInTheDocument()
+    expect(screen.getByText(/Led by Toni/)).toBeInTheDocument()
   })
 })
 
@@ -248,40 +251,90 @@ describe('a task, opened', () => {
   })
 })
 
-describe('my own list, across everything', () => {
-  const openMine = async () => {
+describe('yours against everybody else’s (Brent, 4 Nov 2026)', () => {
+  it('marks my rows and counts what is mine', async () => {
     await show()
-    fireEvent.click(screen.getByRole('tab', { name: /Mine/ }))
-    await waitFor(() =>
-      expect(screen.getByText('Book the first case')).toBeInTheDocument())
-  }
-
-  it('gathers my tasks under the work they belong to', async () => {
-    // "Four things" is a to-do list; "four things from four different pieces
-    // of work" is one you can act on.
-    await openMine()
-    expect(screen.getByText('Book the first case')).toBeInTheDocument()
-    expect(screen.getByText('Get the Athlet tray back from RHH')).toBeInTheDocument()
+    const row = screen.getByText('Book the first case').closest('[data-mine]')
+    expect(row).toHaveAttribute('data-mine', 'true')
+    expect(screen.getByRole('tab', { name: /2 yours/ })).toBeInTheDocument()
   })
 
-  it('leaves out what belongs to somebody else', async () => {
-    await openMine()
+  it('narrows to my tasks when asked, and remembers it', async () => {
+    await show()
+    fireEvent.click(screen.getByLabelText('Show done'))
+    expect(screen.getByText('Get Mat credentialled')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Only my tasks'))
+    expect(screen.queryByText('Get Mat credentialled')).not.toBeInTheDocument()
+    expect(screen.getByText('Book the first case')).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('tm_projects_view')).onlyMine).toBe(true)
+  })
+
+  it('hides finished work until asked, so the list is what is left', async () => {
+    await show()
     expect(screen.queryByText('Get Mat credentialled')).not.toBeInTheDocument()
   })
 
   it('ticks a task off into whatever its board calls finished', async () => {
-    await openMine()
+    await show()
     fireEvent.click(screen.getByLabelText('Tick off Book the first case'))
     await waitFor(() => expect(
       sent.some(c => c.url.includes('action=task') && c.body?.column === 'done')).toBe(true))
   })
 
-  it('still offers Erin the whole board', async () => {
-    // Keeping track of what is being completed is half the point, and she
-    // cannot do it from four things that happen to be hers.
-    await openMine()
-    fireEvent.click(screen.getByText('Everyone · 3'))
-    expect(screen.getByText('Get Mat credentialled')).toBeInTheDocument()
+  it('moves a task on from its state chip', async () => {
+    await show()
+    const row = screen.getByText('Book the first case').closest('[data-mine]')
+    fireEvent.click(within(row).getByTitle('Move it on to the next column'))
+    await waitFor(() => expect(
+      sent.some(c => c.url.includes('action=task') && c.body?.column === 'in_progress')).toBe(true))
+  })
+
+  it('the numbers are filters: overdue shows only what is late', async () => {
+    await show()
+    fireEvent.click(screen.getByText('Overdue').closest('button'))
+    expect(screen.getByText('Book the first case')).toBeInTheDocument()
+    expect(screen.queryByText('Get the Athlet tray back from RHH')).not.toBeInTheDocument()
+  })
+
+  it('filters by division, from the project or the person', async () => {
+    await show()
+    // Both of Erin's are Operations by person; Globus has no division set.
+    fireEvent.click(screen.getByRole('button', { name: /^Spine$/ }))
+    expect(screen.queryByText('Book the first case')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Operations$/ }))
+    expect(screen.getByText('Book the first case')).toBeInTheDocument()
+  })
+
+  it('shows each person’s load in the People view', async () => {
+    await show()
+    fireEvent.click(screen.getByRole('tab', { name: 'People' }))
+    expect(screen.getAllByText('You').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Toni').length).toBeGreaterThan(0)
+    expect(screen.getByText(/General Manager · Operations/)).toBeInTheDocument()
+  })
+
+  it('adds a task in one line, “@Toni” giving it to Toni', async () => {
+    await show()
+    fireEvent.change(screen.getByLabelText('New task'), { target: { value: 'Chase the price list @Toni' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => {
+      const call = sent.find(c => c.url.includes('action=add-task'))
+      expect(call?.body?.task).toBe('Chase the price list')
+      expect(call?.body?.assignee).toBe('Toni Hoppitt')
+    })
+  })
+
+  it('adds to the project chosen on the rail', async () => {
+    await show()
+    const globus = screen.getAllByTitle("Show only this project's tasks")
+      .find(b => within(b).queryByText('Globus onboarding'))
+    fireEvent.click(globus)
+    fireEvent.change(screen.getByLabelText('New task'), { target: { value: 'Book the in-service' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => {
+      const call = sent.find(c => c.url.includes('action=add-task'))
+      expect(call?.body?.projectId).toBe('prj-1')
+    })
   })
 })
 
@@ -300,8 +353,8 @@ describe('what it refuses to lose', () => {
       return { ok: true, json: async () => ({}) }
     })
     render(<Projects user={USER} onBack={() => {}} />)
-    await waitFor(() => expect(screen.getByText('Globus onboarding')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Globus onboarding'))
+    await waitFor(() => expect(screen.getByLabelText('Open the Globus onboarding board')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Open the Globus onboarding board'))
     await waitFor(() =>
       expect(screen.getByPlaceholderText('Add a task…')).toBeInTheDocument())
     expect(screen.queryByText('Book the first case')).not.toBeInTheDocument()

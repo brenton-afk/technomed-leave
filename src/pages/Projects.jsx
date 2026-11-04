@@ -4,14 +4,16 @@ import { colour, text, space, radius } from '../design/tokens.js'
 import { upload } from '@vercel/blob/client'
 import { STAFF, isSameStaff } from '../staffConfig.js'
 import {
-  GENERAL, normaliseProject, projectIdOf, columnOf, tasksOf
+  GENERAL, normaliseProject, projectIdOf
 } from '../projects/model.js'
-import ProjectList from './projects/ProjectList.jsx'
+import Workspace from './projects/Workspace.jsx'
 import ProjectBoard from './projects/ProjectBoard.jsx'
 import TaskSheet from './projects/TaskSheet.jsx'
+import { DIVISIONS } from '../projects/model.js'
+import { useIsDesktop } from '../design/viewport.js'
 import {
   PRIORITY_COLOURS as PRIORITY_COLORS, PRIORITY_LABELS,
-  formatDate, todayISO, tintOf, dueState, DUE_TONES
+  formatDate, todayISO, tintOf
 } from './projects/shared.js'
 
 function formatElapsed(seconds) {
@@ -54,22 +56,6 @@ export default function Projects({ user, onBack }) {
   const [typed, setTyped] = useState({ task: '', assignee: 'Unassigned', priority: 'normal', due_date: '' })
   const [addingTask, setAddingTask] = useState(false)
 
-  // ── Mine, or everyone's ──
-  //
-  // "The portal becomes a single source of truth for projects and actions —
-  // this will enable Erin to keep track of items being completed and also give
-  // staff a centralised location for their to do lists."
-  //
-  // Those are two different screens of the same data. Erin needs the whole
-  // board, to see what is moving. Everybody else needs the four things that
-  // are theirs, and a board of forty items belonging to nine people is not a
-  // to-do list — it is a reason to keep using a notebook.
-  //
-  // Defaults to mine, because that is what somebody opening this on a phone
-  // between cases came for. Erin's first tap is "Everyone" and it stays where
-  // she puts it for the session.
-  const [showing, setShowing] = useState('mine')
-
   const [worklist, setWorklist] = useState([])
   const [loadingBoard, setLoadingBoard] = useState(true)
   // Rows that could not be read back. Named rather than dropped: one of them
@@ -89,10 +75,9 @@ export default function Projects({ user, onBack }) {
   const [view, setView] = useState('projects')
   const [openId, setOpenId] = useState(null)
   const [openTaskId, setOpenTaskId] = useState(null)
-  const [showArchived, setShowArchived] = useState(false)
   const [savingProject, setSavingProject] = useState(false)
   const today = todayISO()
-  const wide = typeof window !== 'undefined' && window.innerWidth >= 1024
+  const wide = useIsDesktop()
 
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
@@ -460,11 +445,32 @@ export default function Projects({ user, onBack }) {
       const res = await fetch('/api/meetings/agent?action=add-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...auth },
-        body: JSON.stringify({ ...typed, addedByEmail: user?.email || null })
+        body: JSON.stringify({ ...typed, projectId: openId || '', addedByEmail: user?.email || null })
       })
       const body = await res.json()
       if (body.error) throw new Error(body.error)
       setTyped({ task: '', assignee: 'Unassigned', priority: 'normal', due_date: '' })
+      await loadWorklist()
+    } catch (err) {
+      setError(err.message || 'Could not add that task.')
+    }
+    setAddingTask(false)
+  }
+
+  /** A task from the workspace's one-line add. */
+  async function addFromWorkspace(fields, cleared) {
+    if (addingTask) return
+    setAddingTask(true)
+    setError('')
+    try {
+      const res = await fetch('/api/meetings/agent?action=add-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ priority: 'normal', ...fields, addedByEmail: user?.email || null })
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      cleared?.()
       await loadWorklist()
     } catch (err) {
       setError(err.message || 'Could not add that task.')
@@ -499,34 +505,6 @@ export default function Projects({ user, onBack }) {
   // means by any reading.
   const capturing = phase !== 'idle'
   const at = capturing ? 'capture' : view
-
-  const liveProjects = allProjects
-    .filter(p => !p.archived)
-    .filter(p => tasksOf(p.id, worklist).some(t => t.status !== 'done')).length
-
-  const columnLabel = (task, project) => {
-    const key = columnOf(task, project)
-    return project.columns.find(c => c.key === key)?.label || ''
-  }
-
-  /**
-   * My list, gathered under the project each item belongs to.
-   *
-   * Grouped rather than flat because "four things" is a to-do list and "four
-   * things from four different pieces of work" is a to-do list you can act on.
-   * Finished ones stay — Erin keeping track of what has been completed is half
-   * the point, and an item that vanishes when ticked answers nothing.
-   */
-  // Mine by default; Erin's first tap is Everyone and it stays where she puts
-  // it for the session. Both are the same screen — a to-do list grouped by the
-  // work it belongs to — because a board of forty items belonging to nine
-  // people is not a to-do list, it is a reason to keep using a notebook.
-  const everyone = worklist.filter(it => !it.archived)
-  const listed = showing === 'mine' ? mine : everyone
-
-  const byProject = allProjects
-    .map(p => [p, listed.filter(it => projectIdOf(it) === p.id)])
-    .filter(([, rows]) => rows.length)
 
   return (
     <Page>
@@ -782,9 +760,8 @@ export default function Projects({ user, onBack }) {
         {!board && (
           <div style={{ display: 'flex', gap: 6, marginBottom: space.md }} role="tablist">
             {[
-              ['projects', `Projects · ${liveProjects}`],
-              ['mine', `Mine${mineCount ? ` · ${mineCount}` : ''}`],
-              ['capture', 'Capture']
+              ['projects', `Projects and tasks${mineCount ? ` · ${mineCount} yours` : ''}`],
+              ['capture', 'Capture a meeting']
             ].map(([key, label]) => (
               <button key={key} role="tab" aria-selected={at === key}
                 onClick={() => setView(key)}
@@ -819,6 +796,17 @@ export default function Projects({ user, onBack }) {
               <span style={{ ...text('title'), color: colour.ink, flex: 1, minWidth: 0 }}>
                 {board.name}
               </span>
+              {!board.fixed && (
+                <select value={board.division || ''} aria-label="Division"
+                  onChange={e => patchProject(board.id, { division: e.target.value })}
+                  style={{
+                    ...text('field'), border: `1px solid ${colour.line}`, borderRadius: radius.control,
+                    padding: '4px 8px', background: colour.surface, color: colour.inkMuted, maxWidth: 170
+                  }}>
+                  <option value="">Whole business</option>
+                  {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              )}
               {!board.fixed && (
                 <button type="button"
                   onClick={async () => {
@@ -892,103 +880,17 @@ export default function Projects({ user, onBack }) {
           </div>
         )}
 
-        {/* ── All of them ── */}
+        {/* ── Everything, as one workspace ── */}
         {!board && at === 'projects' && !loadingBoard && (
-          <ProjectList
-            projects={projects} items={worklist} today={today}
-            busy={savingProject}
-            showArchived={showArchived}
-            onToggleArchived={() => setShowArchived(v => !v)}
-            onCreate={createProject}
-            onOpen={p => setOpenId(p.id)} />
-        )}
-
-        {/* ── Mine, across everything ── */}
-        {!board && at === 'mine' && !loadingBoard && (
-          <div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: space.md }}>
-              {[['mine', `Mine${mineCount ? ` · ${mineCount}` : ''}`],
-                ['all', `Everyone · ${everyone.length}`]].map(([key, label]) => (
-                <button key={key} onClick={() => setShowing(key)}
-                  aria-pressed={showing === key}
-                  style={{
-                    ...text('caption'), fontWeight: 700,
-                    flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 34,
-                    borderRadius: radius.control, cursor: 'pointer',
-                    border: showing === key ? 'none' : `1px solid ${colour.line}`,
-                    background: showing === key ? colour.accentSoft : colour.surface,
-                    color: showing === key ? colour.accentDeep : colour.inkFaint
-                  }}>{label}</button>
-              ))}
-            </div>
-            {listed.length === 0 && (
-              <div style={{
-                ...text('body'), color: colour.inkFaint, textAlign: 'center',
-                padding: space.xxl
-              }}>
-                {showing === 'mine'
-                  ? 'Nothing on your list. Either you are on top of it, or nobody has told you yet.'
-                  : 'Nothing on anybody’s list yet.'}
-              </div>
-            )}
-            {byProject.map(([project, rows]) => (
-              <div key={project.id} style={{ marginBottom: space.lg }}>
-                <button type="button" onClick={() => setOpenId(project.id === GENERAL.id ? GENERAL.id : project.id)}
-                  style={{
-                    ...text('micro'), color: tintOf(project.colour).ink,
-                    background: 'none', border: 'none', padding: `0 0 ${space.sm}px`,
-                    cursor: 'pointer'
-                  }}>{project.name}</button>
-                {rows.map(it => {
-                  const due = dueState(it.due_date, today)
-                  const finished = it.status === 'done'
-                  return (
-                    <div key={it.id} style={{
-                      display: 'flex', alignItems: 'flex-start', gap: space.md,
-                      background: colour.surface, borderRadius: radius.control,
-                      border: `1px solid ${colour.line}`,
-                      borderLeft: `3px solid ${PRIORITY_COLORS[it.priority] || colour.inkFainter}`,
-                      padding: `${space.sm}px ${space.md}px`, marginBottom: 6
-                    }}>
-                      {/* Ticking it off goes straight to the finishing column,
-                          whatever that column is called on its own board. */}
-                      <button type="button"
-                        aria-label={finished ? `Reopen ${it.task}` : `Tick off ${it.task}`}
-                        onClick={() => moveTask(it, finished
-                          ? project.columns[0].key
-                          : (project.columns.find(c => c.done) || project.columns[0]).key)}
-                        style={{
-                          flexShrink: 0, width: 22, height: 22, marginTop: 1,
-                          borderRadius: radius.pill, cursor: 'pointer',
-                          border: `2px solid ${finished ? colour.accent : colour.line}`,
-                          background: finished ? colour.accent : 'transparent',
-                          color: 'white', ...text('micro'), letterSpacing: 0, padding: 0
-                        }}>{finished ? '✓' : ''}</button>
-                      <button type="button" onClick={() => setOpenTaskId(it.id)}
-                        style={{
-                          flex: 1, minWidth: 0, textAlign: 'left', background: 'none',
-                          border: 'none', padding: 0, cursor: 'pointer'
-                        }}>
-                        <span style={{
-                          ...text('bodyStrong'), color: colour.ink, display: 'block',
-                          ...(finished ? { textDecoration: 'line-through', color: colour.inkFainter } : {})
-                        }}>{it.task}</span>
-                        <span style={{
-                          ...text('caption'), color: colour.inkFaint, display: 'block'
-                        }}>
-                          {columnLabel(it, project)}
-                          {due ? ' · ' : ''}
-                          {due && (
-                            <span style={{ color: DUE_TONES[due.tone].colour }}>{due.label}</span>
-                          )}
-                        </span>
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
+          <Workspace
+            projects={projects} items={worklist} user={user} today={today} wide={wide}
+            onOpenProject={p => setOpenId(p.id)}
+            onOpenTask={t => setOpenTaskId(t.id)}
+            onMove={moveTask}
+            onCreateProject={createProject}
+            busyProject={savingProject}
+            onAdd={addFromWorkspace}
+            adding={addingTask} />
         )}
       </div>
 

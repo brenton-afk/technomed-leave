@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import React from 'react'
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -137,8 +137,8 @@ describe('a task nobody held a meeting about', () => {
   // for everything that names no project — the thing agreed in the car.
   const openGeneral = async () => {
     render(<Projects user={USER} onBack={() => {}} />)
-    await waitFor(() => expect(screen.getByText('General')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('General'))
+    await waitFor(() => expect(screen.getByLabelText('Open the General board')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('Open the General board'))
     await waitFor(() =>
       expect(screen.getByPlaceholderText('Add a task…')).toBeInTheDocument())
   }
@@ -219,15 +219,15 @@ describe('whose list it is', () => {
       }
       return { ok: true, json: async () => ({}) }
     })
+    try { localStorage.clear() } catch { /* none */ }
     render(<Projects user={USER} onBack={() => {}} />)
-    await waitFor(() => expect(screen.getByRole('tab', { name: /Mine/ })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('tab', { name: /Mine/ }))
     await waitFor(() =>
       expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument())
   }
 
-  it('opens on mine, which is what somebody between cases came for', async () => {
+  it('narrows to mine in one tap, which is what somebody between cases came for', async () => {
     await openBoard()
+    fireEvent.click(screen.getByLabelText('Only my tasks'))
     expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument()
     expect(screen.queryByText('Get the Athlet tray back')).not.toBeInTheDocument()
   })
@@ -235,21 +235,20 @@ describe('whose list it is', () => {
   it('counts only what is still to do', async () => {
     // Three items, two mine, one of those already done.
     await openBoard()
-    expect(screen.getByRole('button', { name: 'Mine · 1' })).toBeInTheDocument()
-    expect(screen.getByText('Everyone · 3')).toBeInTheDocument()
+    const tile = screen.getByText('My open tasks').closest('button')
+    expect(within(tile).getByText('1')).toBeInTheDocument()
   })
 
-  it('shows the whole board when asked, which is Erin’s view', async () => {
+  it('shows the whole board, which is Erin’s view', async () => {
     await openBoard()
-    fireEvent.click(screen.getByText('Everyone · 3'))
     expect(screen.getByText('Get the Athlet tray back')).toBeInTheDocument()
     expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument()
   })
 
-  it('still shows what is finished, so progress is visible', async () => {
-    // Erin keeping track of items being completed is half the point; a done
-    // item that disappears answers nothing.
+  it('still shows what is finished when asked, so progress is visible', async () => {
+    // Erin keeping track of items being completed is half the point.
     await openBoard()
+    fireEvent.click(screen.getByLabelText('Show done'))
     expect(screen.getByText('Book the in-service')).toBeInTheDocument()
   })
 

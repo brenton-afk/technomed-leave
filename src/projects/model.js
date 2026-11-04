@@ -64,6 +64,21 @@ export const GENERAL = {
   fixed: true
 }
 
+/**
+ * The divisions of the business, as the staff list writes them (Brent,
+ * 4 Nov 2026: "maybe have different divisions of the business listed").
+ * A project belongs to one; a task takes its project's, or failing that the
+ * division of whoever has it.
+ */
+export const DIVISIONS = ['Operations', 'Spine', 'Orthopaedics', 'CMF']
+
+/** A task's division: its project's, else its assignee's, else none. */
+export function divisionOf(task, project, staff = []) {
+  if (project?.division) return project.division
+  const who = staff.find(s => s.name === task?.assignee)
+  return who?.division && DIVISIONS.includes(who.division) ? who.division : ''
+}
+
 /** The colours a project can be given, as names the design tokens resolve. */
 export const PROJECT_COLOURS = [
   'teal', 'navy', 'plum', 'clay', 'moss', 'slate'
@@ -106,6 +121,7 @@ export function normaliseProject(raw) {
     owner: raw.owner || 'Unassigned',
     due: raw.due || '',
     colour: PROJECT_COLOURS.includes(raw.colour) ? raw.colour : PROJECT_COLOURS[0],
+    division: DIVISIONS.includes(raw.division) ? raw.division : '',
     notes: raw.notes || '',
     // A project with no column that means finished can never be finished, so
     // the last one is treated as the finishing post rather than leaving the
@@ -121,10 +137,11 @@ export function normaliseProject(raw) {
 }
 
 /** A new project, from whatever a person typed into the form. */
-export function newProject({ name, owner, due, colour, notes, by, at }) {
+export function newProject({ name, owner, due, colour, division, notes, by, at }) {
   return normaliseProject({
     id: `prj-${at ? Date.parse(at) : 0}-${slug()}`,
     name,
+    division,
     owner: owner || 'Unassigned',
     due: due || '',
     colour: colour || PROJECT_COLOURS[0],

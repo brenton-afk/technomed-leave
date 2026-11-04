@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { progressOf, tasksOf, orderedProjects, GENERAL } from '../../projects/model.js'
+import { progressOf, tasksOf, orderedProjects, GENERAL, DIVISIONS } from '../../projects/model.js'
 import { STAFF } from '../../staffConfig.js'
 import { tintOf, PROJECT_TINTS, formatShort, dueState, DUE_TONES } from './shared.js'
 
@@ -80,11 +80,12 @@ function Row({ project, items, today, onOpen }) {
 }
 
 /** The form for a new project, which is four questions and no more. */
-function NewProject({ onCreate, onCancel, busy }) {
+export function NewProject({ onCreate, onCancel, busy, division: startDivision = '' }) {
   const [name, setName] = useState('')
   const [owner, setOwner] = useState('Unassigned')
   const [due, setDue] = useState('')
   const [tone, setTone] = useState('teal')
+  const [division, setDivision] = useState(startDivision)
 
   const control = {
     width: '100%', boxSizing: 'border-box', padding: `${space.sm}px ${space.md}px`,
@@ -103,7 +104,7 @@ function NewProject({ onCreate, onCancel, busy }) {
       <input autoFocus value={name} onChange={e => setName(e.target.value)}
         placeholder="e.g. Globus onboarding"
         onKeyDown={e => {
-          if (e.key === 'Enter' && name.trim()) onCreate({ name, owner, due, colour: tone })
+          if (e.key === 'Enter' && name.trim()) onCreate({ name, owner, due, colour: tone, division })
         }}
         style={{ ...text('field'), ...control, marginBottom: space.sm }} />
 
@@ -118,6 +119,13 @@ function NewProject({ onCreate, onCancel, busy }) {
           aria-label="Due by"
           style={{ ...text('field'), ...control, flexShrink: 0, width: 'auto' }} />
       </div>
+
+      <select value={division} onChange={e => setDivision(e.target.value)}
+        aria-label="Division"
+        style={{ ...text('field'), ...control, marginBottom: space.md }}>
+        <option value="">No division (whole business)</option>
+        {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+      </select>
 
       {/* Six colours, not a picker. "The teal one" has to mean something to
           everybody, and a free picker produces nine shades of blue. */}
@@ -142,7 +150,7 @@ function NewProject({ onCreate, onCancel, busy }) {
             background: colour.surface, color: colour.inkMuted, cursor: 'pointer'
           }}>Cancel</button>
         <button type="button" disabled={!name.trim() || busy}
-          onClick={() => onCreate({ name, owner, due, colour: tone })}
+          onClick={() => onCreate({ name, owner, due, colour: tone, division })}
           style={{
             ...text('bodyStrong'), flex: 1, minHeight: 42, border: 'none',
             borderRadius: radius.control,

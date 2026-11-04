@@ -17,7 +17,7 @@ import { askClaude } from '../_anthropic.js'
 import {
   GENERAL, newProject, normaliseProject, movedTo, withComment,
   archived, restored, blockedFromArchiving,
-  renamedColumn, addedColumn, removedColumn
+  renamedColumn, addedColumn, removedColumn, DIVISIONS
 } from '../../src/projects/model.js'
 
 // Everything for the meeting note taker lives in this one function, routed
@@ -404,7 +404,7 @@ async function handleReadFile(req, res) {
 
 async function handleAddTask(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const { task, assignee, priority, due_date: dueDate, notes, addedByEmail } = req.body || {}
+  const { task, assignee, priority, due_date: dueDate, notes, addedByEmail, projectId } = req.body || {}
   if (!String(task || '').trim()) return res.status(400).json({ error: 'Say what the task is' })
 
   const validNames = new Set(STAFF.map(s => s.name))
@@ -416,6 +416,10 @@ async function handleAddTask(req, res) {
     due_date: dueDate || '',
     notes: String(notes || '').trim().slice(0, 500),
     status: 'open',
+    // Straight onto a project's board, where it was typed there. A project
+    // that does not exist leaves it in General rather than nowhere.
+    ...(projectId && projectId !== GENERAL.id && await getProject(String(projectId))
+      ? { projectId: String(projectId) } : {}),
     // No meeting behind it. Said rather than left blank, so the board can show
     // where a task came from without having to guess from a missing field.
     source: 'typed',
@@ -541,7 +545,7 @@ async function handleProject(req, res, session) {
   const by = session?.name || session?.email || ''
 
   if (req.method === 'POST') {
-    const { name, owner, due, colour, notes } = req.body || {}
+    const { name, owner, due, colour, division, notes } = req.body || {}
     if (!String(name || '').trim()) return res.status(400).json({ error: 'Give the project a name' })
     const validNames = new Set(STAFF.map(s => s.name))
     const project = newProject({
@@ -549,6 +553,7 @@ async function handleProject(req, res, session) {
       owner: validNames.has(owner) ? owner : 'Unassigned',
       due: due || '',
       colour,
+      division,
       notes: String(notes || '').trim().slice(0, 1000),
       by,
       at: nowStamp()
@@ -558,7 +563,7 @@ async function handleProject(req, res, session) {
   }
 
   if (req.method === 'PATCH') {
-    const { id, name, owner, due, colour, notes, archive } = req.body || {}
+    const { id, name, owner, due, colour, division, notes, archive } = req.body || {}
     if (!id) return res.status(400).json({ error: 'id is required' })
     if (id === GENERAL.id) return res.status(400).json({ error: 'The General list cannot be changed' })
 
@@ -584,6 +589,7 @@ async function handleProject(req, res, session) {
     }
     if (due !== undefined) project.due = due || ''
     if (colour !== undefined) project.colour = colour
+    if (division !== undefined) project.division = DIVISIONS.includes(division) ? division : ''
     if (notes !== undefined) project.notes = String(notes).trim().slice(0, 1000)
     project.updatedAt = nowStamp()
 

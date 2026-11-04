@@ -350,6 +350,22 @@ sheet attached. Known items keep what the scan read; new items go through
   11 Nov` (never the patient) and stores the booking id as
   `extendedProperties.private.tmCaseId`.
 
+### Projects workspace (Brent, 4 Nov 2026)
+
+`pages/projects/Workspace.jsx` replaced the Projects / Mine tabs (tabs are now
+**Projects and tasks** and **Capture a meeting**). From the approved mock-up:
+four numbers that are filters (my open, overdue, next 7 days, unassigned),
+division chips, Only my tasks, Show done, a project rail with progress rings
+(sticky left on desktop, a strip on a phone, "Board" opens a project's own
+board), and three views — **List** (default, by project), Board (by state),
+People (each person's load). Your rows have a teal edge and "You"; others show
+initials in their division's colour (`DIVISION_TINT`). Projects carry a
+`division` (`DIVISIONS` in `projects/model.js`, set on New project and in the
+board header); a task's division is its project's, else its assignee's
+(`divisionOf`). The one-line add takes `@Name`, and `add-task` now honours
+`projectId` (it was dropped, so tasks typed on a board landed in General).
+View, division and Only-mine are remembered per browser (`tm_projects_view`).
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the
