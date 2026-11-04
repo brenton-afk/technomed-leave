@@ -297,6 +297,20 @@ Edit booking's top is two compact rows — Date | Hospital, Patient | Surgeon
 (`TOP_FIELDS`) — under a title of "Patient · Surgeon", so procedure and kit are
 on a phone's first screen.
 
+### Registrar text (Brent, 4 Nov 2026)
+
+After filing a usage, **Send to the registrar** is a small form
+(`scan/RegistrarText.jsx`) that writes a plain text — Patient, Consultant,
+System, one line per screw (`T12 Left: 6.5 x 45mm`), Rods, Cross connector,
+Bone graft, Cages — and **never** reference codes or lot numbers
+(`registrarDraft` / `registrarMessage` in `src/usageText.js`). The levels come
+from the booking: `markAttendance` now also returns the matched booking's
+procedure and kit (`booking`), and `levelsFrom` expands "T12-L2" to T12, L1,
+L2. A blank side is left out. Rods, graft, cages and a cross connector are
+pre-filled from the scanned items, sizes only. Consultant titles are guessed
+only where known (`SURGEON_TITLES`). Still a draft for the phone's messaging
+app, never a send.
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the

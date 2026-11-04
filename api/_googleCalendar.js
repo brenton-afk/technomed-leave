@@ -3,6 +3,8 @@
 // calendar. Service-account JWTs are signed inline with node:crypto so the
 // googleapis dependency is not needed.
 
+import { readBooking } from '../src/clinicalPlan/parse.js'
+
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
 
 export const CALENDAR_SCOPE_WRITE = 'https://www.googleapis.com/auth/calendar'
@@ -282,9 +284,13 @@ export async function markAttendance({ date, patientSurname, firstName }) {
 
   const event = matches[0]
   const summary = String(event.summary || '')
+  // What the booking says was being done, for the registrar text (Brent,
+  // 4 Nov 2026: "the portal should automatically give the rep a list of the
+  // levels based on the booking"). Procedure and kit only — no identifiers.
+  const booking = bookingFacts(event)
   // Idempotent: scanning a second page, or re-saving, must not produce
   // "(Brent) (Brent)".
-  if (summary.includes(tag)) return { updated: false, reason: 'already recorded', title: summary }
+  if (summary.includes(tag)) return { updated: false, reason: 'already recorded', title: summary, booking }
 
   const title = `${summary} ${tag}`.replace(/\s+/g, ' ').trim()
   const patched = await fetch(`${base}/${encodeURIComponent(event.id)}`, {
@@ -294,9 +300,22 @@ export async function markAttendance({ date, patientSurname, firstName }) {
   })
   if (!patched.ok) {
     const detail = await patched.text()
-    return { updated: false, reason: `could not update the booking (${patched.status}): ${detail.slice(0, 160)}` }
+    return { updated: false, reason: `could not update the booking (${patched.status}): ${detail.slice(0, 160)}`, booking }
   }
-  return { updated: true, title }
+  return { updated: true, title, booking }
+}
+
+/** The procedure and kit a booking names, read the way the week reads it. */
+function bookingFacts(event) {
+  try {
+    const read = readBooking(String(event.summary || ''), String(event.description || ''))
+    return {
+      procedure: String(read?.operation || '').slice(0, 200),
+      kit: String(read?.kit || read?.system || '').slice(0, 200)
+    }
+  } catch {
+    return null
+  }
 }
 
 
