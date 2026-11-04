@@ -182,7 +182,10 @@ export function holdingsFrom(rows = [], openings = [], actions = []) {
   const t = {}
   // costUsd is the cost in the holding's own currency: US$ for the USA
   // market, A$ for an ASX holding (currency says which).
-  const currencyOf = new Map(rows.filter(r => r.ticker && r.currency).map(r => [r.ticker, r.currency]))
+  const currencyOf = new Map([
+    ...openings.filter(o => o.ticker && o.currency).map(o => [o.ticker, o.currency]),
+    ...rows.filter(r => r.ticker && r.currency).map(r => [r.ticker, r.currency])
+  ])
   const get = k => (t[k] = t[k] || { ticker: k, currency: currencyOf.get(k) || 'USD', units: 0, costUsd: 0, bought: 0, sold: 0, proceedsUsd: 0, lastDistUnits: null, lastDistDate: null })
   for (const o of openings) { const h = get(o.ticker); h.units += Number(o.units) || 0; h.costUsd += Number(o.costUsd) || 0 }
   const brokerage = new Map(rows.filter(r => r.kind === 'brokerage').map(r => [`${r.order}|${r.side}`, -r.amount]))

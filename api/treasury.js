@@ -689,8 +689,9 @@ const ACTIONS = {
     if (r.reconciles === false) throw new Invalid('This report did not add up when read, so it was not imported. Send it to Claude to look at.')
     const sw = await tget('selfwealth', { rows: [], reports: [] })
     const merged = mergeReport(sw.rows, r.rows)
-    const reports = [...(sw.reports || []).filter(x => !(x.from === r.from && x.to === r.to)),
-      { from: r.from, to: r.to, opening: r.opening, closing: r.closing, reconciles: r.reconciles, importedAt: new Date().toISOString() }]
+    // The US$ and A$ accounts each have a report for the same year; one does not replace the other.
+    const reports = [...(sw.reports || []).filter(x => !(x.from === r.from && x.to === r.to && (x.currency || 'USD') === r.currency)),
+      { from: r.from, to: r.to, currency: r.currency, opening: r.opening, closing: r.closing, reconciles: r.reconciles, importedAt: new Date().toISOString() }]
       .sort((a, b) => a.from.localeCompare(b.from))
     await tset('selfwealth', { ...sw, rows: merged.rows.map(x => ({ ...x, currency: x.currency || r.currency })), reports })
     return res.json({ added: merged.added })
@@ -707,7 +708,9 @@ const ACTIONS = {
     const ticker = str(b.ticker, 12).toUpperCase().trim()
     const units = Number(String(b.units ?? '').replace(/,/g, ''))
     if (!ticker || !(units > 0)) throw new Invalid('A ticker and a number of units are needed.')
-    const item = { id: ticker, ticker, units, costUsd: Math.max(0, money(b.costUsd) || 0), date: isDay(b.date) ? b.date : null, note: str(b.note, 200) }
+    // A holding SelfWealth does not report (bullion, another broker) is entered the same way, in its own currency.
+    const currency = b.currency === 'AUD' ? 'AUD' : 'USD'
+    const item = { id: ticker, ticker, units, costUsd: Math.max(0, money(b.costUsd) || 0), currency, date: isDay(b.date) ? b.date : null, note: str(b.note, 200) }
     return res.json({ list: await upsert('invopenings', item) })
   },
   async 'inv-opening-delete'(req, res) { return res.json({ list: await remove('invopenings', req.body?.id) }) },

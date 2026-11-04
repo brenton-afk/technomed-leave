@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Page, Header, Body, Card, SectionLabel, Button, Banner } from '../../design/Shell.jsx'
 import { colour, text, space } from '../../design/tokens.js'
 import { aud, pct } from '../../treasury/logic.js'
-import { useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, SmallButton, treasuryCall, Locked, when } from './ui.jsx'
+import { useTreasury, Grid, Figure, Field, fieldBox, Table, Note, Problem, SmallButton, Segmented, treasuryCall, Locked, when } from './ui.jsx'
 import { readCashReport } from './readCashReport.js'
 import RocSection from './RocSection.jsx'
 
@@ -172,26 +172,32 @@ export default function Investments({ user, onBack, onLocked }) {
           <Note>Consolidations from the statements: {data.actions.filter(a => a.source === 'annual').map(a => `${a.ticker} 1-for-${a.ratio} on ${day(a.date)}`).join(' · ')}.</Note>
         )}
 
-        {(!statements.length || data?.openings?.length > 0 || data?.actions?.length > 0) && <>
         <SectionLabel>Entered by hand</SectionLabel>
-        <Note>Units held before the first imported document, and consolidations. A cash report shows neither, because no cash moves; the annual statements show both, and replace these for any holding they cover.</Note>
+        <Note>
+          A holding SelfWealth's documents do not show — bought since the last one imported, held elsewhere, or bullion — and, before any
+          statement is imported, units held before the first report and consolidations. The annual statements replace these for any holding they cover.
+        </Note>
         <Table head={['', 'Ticker', 'Detail', '']} align={['left', 'left', 'left', 'right']}
           rows={[
-            ...(data?.openings || []).map(o => ['Opening', o.ticker, `${o.units.toLocaleString('en-AU')} units · cost ${usd(o.costUsd)}`,
-              <SmallButton key="d" tone="danger" onClick={() => window.confirm(`Remove the ${o.ticker} opening position?`) && post('inv-opening-delete', { id: o.id }, 'Removed.')}>Remove</SmallButton>]),
+            ...(data?.openings || []).map(o => ['Holding', o.ticker, `${o.units.toLocaleString('en-AU')} units · cost ${money(o.costUsd, o.currency)}${o.date ? ` · ${day(o.date)}` : ''}`,
+              <SmallButton key="d" tone="danger" onClick={() => window.confirm(`Remove the ${o.ticker} holding?`) && post('inv-opening-delete', { id: o.id }, 'Removed.')}>Remove</SmallButton>]),
             ...(data?.actions || []).map(a => ['Consolidation', a.ticker, `1-for-${a.ratio} on ${day(a.date)}`,
               <SmallButton key="d" tone="danger" onClick={() => window.confirm(`Remove the ${a.ticker} consolidation?`) && post('inv-action-delete', { id: a.id }, 'Removed.')}>Remove</SmallButton>])
           ]} />
         <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap' }}>
-          {!opening && <SmallButton onClick={() => setOpening({ ticker: '', units: '', costUsd: '', date: '' })}>Add opening position</SmallButton>}
+          {!opening && <SmallButton onClick={() => setOpening({ ticker: '', units: '', costUsd: '', date: '', currency: 'AUD' })}>Add a holding</SmallButton>}
           {!action && <SmallButton onClick={() => setAction({ ticker: '', date: '', ratio: '' })}>Add consolidation</SmallButton>}
         </div>
         {opening && (
           <Card style={{ marginTop: space.sm }}>
-            <Field label="Ticker"><input style={inputStyle} value={opening.ticker} onChange={e => setOpening({ ...opening, ticker: e.target.value })} /></Field>
-            <Field label="Units held" hint="As they were then, before any later consolidation."><input style={inputStyle} inputMode="decimal" value={opening.units} onChange={e => setOpening({ ...opening, units: e.target.value })} /></Field>
-            <Field label="What they cost (US$, incl. brokerage)"><input style={inputStyle} inputMode="decimal" value={opening.costUsd} onChange={e => setOpening({ ...opening, costUsd: e.target.value })} /></Field>
-            <Button onClick={async () => { if (await post('inv-opening-save', { opening }, 'Opening position saved.')) setOpening(null) }}>Save</Button>
+            <Field label="Ticker or name" hint="The ASX or US code (ETPMAG, SLV) gets a live price; anything else, e.g. SILVER-OZ, takes a price you type."><input style={inputStyle} value={opening.ticker} onChange={e => setOpening({ ...opening, ticker: e.target.value })} /></Field>
+            <Field label="Currency">
+              <Segmented options={[{ id: 'AUD', label: 'A$' }, { id: 'USD', label: 'US$' }]} value={opening.currency || 'USD'} onChange={v => setOpening({ ...opening, currency: v })} />
+            </Field>
+            <Field label="Units held" hint="Shares, or ounces for bullion. As held then, before any later consolidation."><input style={inputStyle} inputMode="decimal" value={opening.units} onChange={e => setOpening({ ...opening, units: e.target.value })} /></Field>
+            <Field label={`What they cost (${opening.currency === 'AUD' ? 'A$' : 'US$'}, incl. brokerage)`}><input style={inputStyle} inputMode="decimal" value={opening.costUsd} onChange={e => setOpening({ ...opening, costUsd: e.target.value })} /></Field>
+            <Field label="Bought on"><input style={inputStyle} type="date" value={opening.date} onChange={e => setOpening({ ...opening, date: e.target.value })} /></Field>
+            <Button onClick={async () => { if (await post('inv-opening-save', { opening }, 'Holding saved.')) setOpening(null) }}>Save</Button>
             <div style={{ height: space.sm }} />
             <Button variant="quiet" onClick={() => setOpening(null)}>Cancel</Button>
           </Card>
@@ -206,7 +212,6 @@ export default function Investments({ user, onBack, onLocked }) {
             <Button variant="quiet" onClick={() => setAction(null)}>Cancel</Button>
           </Card>
         )}
-        </>}
 
         {(data?.roc || []).map(r => (
           <RocSection key={r.ticker} roc={r} cfg={data.rocCfg} today={data.today}

@@ -440,6 +440,27 @@ describe('SelfWealth cash reports', () => {
     expect(await tget('selfwealth')).toBe(null)
   })
 
+  it('takes a holding SelfWealth does not report, in A$, alongside the statements', async () => {
+    const t = await unlocked()
+    await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: annual } })
+    await call({ action: 'inv-opening-save', method: 'POST', token: t, body: { opening: { ticker: 'silver-oz', units: '50', costUsd: '$2,500', currency: 'AUD', date: '2026-08-01' } } })
+    await call({ action: 'inv-price-save', method: 'POST', token: t, body: { ticker: 'SILVER-OZ', price: '60' } })
+    const inv = await call({ action: 'investments', token: t })
+    expect(inv.body.holdings.find(h => h.ticker === 'SILVER-OZ')).toMatchObject({ units: 50, costUsd: 2500, currency: 'AUD' })
+    expect(inv.body.prices['SILVER-OZ']).toMatchObject({ price: 60, source: 'typed' })
+    expect(inv.body.ignored.openings).toEqual([])
+  })
+
+  it('keeps a US$ and an A$ cash report for the same year apart', async () => {
+    const t = await unlocked()
+    const aud = report.map(i => (i.s === 'Order 1: Buy 10 MSTY @ US$5.00' ? { ...i, s: 'Order 9: Buy 10 GLD @ $5.00' } : i.s === '10 MSTY CASHDIV @ USD 1.00' ? { ...i, s: 'Order 9: Brokerage BUY GLD' } : i))
+    await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: report } })
+    await call({ action: 'sw-commit', method: 'POST', token: t, body: { items: aud } })
+    const inv = await call({ action: 'investments', token: t })
+    expect(inv.body.reports.map(r => r.currency).sort()).toEqual(['AUD', 'USD'])
+    expect(inv.body.holdings.find(h => h.ticker === 'GLD')).toMatchObject({ units: 10, currency: 'AUD' })
+  })
+
   it('keeps opening positions and consolidations, one of each per ticker and date', async () => {
     const t = await unlocked()
     await call({ action: 'inv-opening-save', method: 'POST', token: t, body: { opening: { ticker: 'msty', units: '3,999', costUsd: '$1,000' } } })
