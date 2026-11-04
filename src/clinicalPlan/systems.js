@@ -412,6 +412,8 @@ const IMPLIES_PLIF = /\b(?:diplomat|mariner|plif)\b/i
  * use. But "E4 cages" against "L4/5 PLIF" is not ambiguous at all, and that is
  * how most of these bookings are written.
  */
+const PERC = 'mis|minimally\\s+invasive|percutaneous|percutaenous|percutanous|perc\\.?|percs?'
+
 /**
  * Systems written under another name.
  *
@@ -420,7 +422,15 @@ const IMPLIES_PLIF = /\b(?:diplomat|mariner|plif)\b/i
  * naming it is a booking naming a product nobody can bring.
  */
 const SYSTEM_ALIASES = [
-  { written: /\bimplanet\b/gi, means: 'Diplomat' }
+  { written: /\bimplanet\b/gi, means: 'Diplomat' },
+  // Brent, 4 Nov 2026: "MIS and percutaneous screw system are the same thing —
+  // if the portal sees percutaneous screw system, or MIS, or perc screws or
+  // anything similar, it can assume Mariner MIS." A booking for Ankush read
+  // as "Mariner percutaneous screw system" AND "Mariner MIS": two sets for one.
+  { written: new RegExp(`\\bmariners?\\s*[-–(]?\\s*(?:${PERC})(?:\\s+(?:pedicle\\s+)?screws?)?(?:\\s+(?:system|set|kit))?(?:\\s*\\))?`, 'gi'), means: 'Mariner MIS' },
+  { written: new RegExp(`(?<!mariners?\\s*)\\b(?:${PERC})\\s+(?:pedicle\\s+)?screws?(?:\\s+(?:system|set|kit))?\\b`, 'gi'), means: 'Mariner MIS' },
+  // "MIS" as a kit entry of its own: the only MIS screw set we bring.
+  { written: /(^|[/+,&;]\s*|\band\s+)MIS(?=\s*(?:$|[/+,&;(]|\band\b))/g, means: '$1Mariner MIS' }
 ]
 
 /**
@@ -445,7 +455,26 @@ export function resolveKit(kit, context = '') {
   const e4 = resolveE4Product(text, context)
   if (e4) text = text.replace(/\bE4(?:\s+(?:global\s+)?cages?)?\b/i, e4)
 
-  return text.replace(/\s{2,}/g, ' ').trim()
+  return onceEach(text.replace(/\s{2,}/g, ' ').trim(), 'Mariner MIS')
+}
+
+/** "Mariner MIS and Mariner MIS" → "Mariner MIS": one set, however often it was named. */
+function onceEach(text, name) {
+  const all = new RegExp(`\\b${name}\\b`, 'gi')
+  if ((text.match(all) || []).length < 2) return text
+  // The first mention stays where it was; a supply written on a later one
+  // ("… and Mariner MIS (Distributor Loan)") is carried onto it, not lost.
+  const pattern = new RegExp(`(\\s*(?:[/+,&;]|\\band\\b)\\s*)?\\b${name}\\b((?:\\s*\\([^)]*\\))*)`, 'gi')
+  const supplies = [...text.matchAll(pattern)].map(m => m[2] || '')
+  const supply = supplies.find(Boolean) || ''
+  let seen = false
+  return text
+    .replace(pattern, (m, sep = '') => {
+      if (seen) return ''
+      seen = true
+      return `${sep}${name}${supply}`
+    })
+    .replace(/^\s*(?:[/+,&;]|and\b)\s*/i, '').replace(/\s{2,}/g, ' ').trim()
 }
 
 export function resolveE4Product(kit, context = '') {
