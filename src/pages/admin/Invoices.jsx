@@ -46,6 +46,7 @@ export default function Invoices({ user }) {
   const [reading, setReading] = useState(null)
   const [open, setOpen] = useState('') // which folded group is showing
   const [auto, setAuto] = useState(null) // the last automatic pass: { running } | result
+  const [templates, setTemplates] = useState(null) // { running } | { templates } | { error }
   const [audit, setAudit] = useState(null) // the accounts@ check: { running } | result | { error }
 
   const headers = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
@@ -84,6 +85,14 @@ export default function Invoices({ user }) {
   }, [api, load])
 
   useEffect(() => { load().then(() => runAuto()) }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function showTemplates() {
+    setTemplates({ running: true })
+    try { setTemplates(await api('quote-templates')) } catch (err) {
+      if (err.code === 'permission') setXero('permission')
+      setTemplates({ error: err.message })
+    }
+  }
 
   async function checkAccounts() {
     setAudit({ running: true })
@@ -140,6 +149,7 @@ export default function Invoices({ user }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Invoices &amp; quotes</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button style={btn(false)} onClick={showTemplates} disabled={templates?.running}>{templates?.running ? 'Reading templates…' : 'Quote templates'}</button>
           <button style={btn(false)} onClick={checkAccounts} disabled={audit?.running}>{audit?.running ? 'Checking accounts@…' : 'Check accounts@'}</button>
           <button style={btn(false)} onClick={load}>Refresh</button>
           <button style={btn(true)} onClick={() => setDraft({ kind: 'quote' })}>New quote</button>
@@ -151,6 +161,7 @@ export default function Invoices({ user }) {
         Only a PO that could not be done the usual way is left here, with the reason.
       </div>
 
+      {templates && !templates.running && <QuoteTemplates data={templates} onClose={() => setTemplates(null)} />}
       {audit && !audit.running && <AccountsAudit audit={audit} onClose={() => setAudit(null)} />}
       {xero === 'permission' && <AllowInvoices />}
       {xero === 'error' && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Xero could not be checked just now, so no purchase order is offered — one may already be invoiced. Try Refresh.</div>}
@@ -190,6 +201,32 @@ export default function Invoices({ user }) {
         </span>
       }))}
       {fold('unchecked', 'Not checked against Xero', list.unchecked, o => orderCard(o))}
+    </div>
+  )
+}
+
+// Read-only: the quotes kept in Xero as templates, line by line.
+function QuoteTemplates({ data, onClose }) {
+  if (data.error) return <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Could not read the templates: {data.error}</div>
+  const list = data.templates || []
+  return (
+    <div style={{ ...card, border: '1px solid rgba(24,154,133,0.35)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Quote templates in Xero ({list.length})</div>
+        <button style={{ ...btn(false), marginLeft: 'auto', padding: '4px 10px' }} onClick={onClose}>Close</button>
+      </div>
+      {!list.length && <div style={{ fontSize: 13, color: '#5a6478' }}>No quotes found for a contact named "DRAFT QUOTE TEMPLATE".</div>}
+      {list.map(q => (
+        <div key={q.id} style={{ borderTop: '1px solid rgba(26,43,74,0.08)', paddingTop: 8, marginTop: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>{q.title || q.reference || q.number} <span style={{ fontWeight: 400, color: '#5a6478', fontSize: 12 }}>{q.number} · {String(q.status).toLowerCase()} · {money(q.total)}</span></div>
+          {q.summary && <div style={{ fontSize: 12, color: '#5a6478', whiteSpace: 'pre-wrap' }}>{q.summary}</div>}
+          {q.lines.map((l, i) => (
+            <div key={i} style={{ fontSize: 13, color: '#1f2a3d' }}>
+              {l.quantity} × {l.code ? `${l.code} ` : ''}{l.description} · {money(l.unitPrice)}{l.discount ? ` · ${l.discount}% off` : ''}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

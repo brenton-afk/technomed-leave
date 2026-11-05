@@ -4,7 +4,7 @@ import {
   listEmployees, listLeaveTypes
 } from '../_xeroClient.js'
 import { readXero } from '../_xeroResponse.js'
-import { findContacts, listItems, salesInvoicesSince, createDraftInvoice, createDraftQuote } from '../_xeroAccounting.js'
+import { quoteTemplates, findContacts, listItems, salesInvoicesSince, createDraftInvoice, createDraftQuote } from '../_xeroAccounting.js'
 import { listPurchaseOrders, readPurchaseOrder, invoicedByPo, splitOrders } from '../_purchaseOrders.js'
 import { autoInvoice, autoRecords, retryPo } from '../_poAuto.js'
 import { accountsAudit } from '../_remittances.js'
@@ -258,11 +258,12 @@ export default async function handler(req, res) {
   }
 }
 
-const INVOICE_ACTIONS = new Set(['accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
+const INVOICE_ACTIONS = new Set(['quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
 
 async function handleInvoices(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   try {
+    if (action === 'quote-templates') return res.status(200).json({ templates: await quoteTemplates() })
     if (action === 'accounts-audit') return res.status(200).json(await accountsAudit())
     if (action === 'po-list') {
       const orders = await listPurchaseOrders()

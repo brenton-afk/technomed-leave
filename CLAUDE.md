@@ -591,6 +591,11 @@ admin-only; no new function).
   payment would be split by. **Filing by the portal is not built**: the Gmail
   grant is read-only (`gmail.readonly`); labelling needs `gmail.modify` added in
   Google Admin, and the format comes from this report first.
+- **Quote templates** (`quote-templates`, `quoteTemplates`) — read-only: every
+  quote in Xero for the contact "DRAFT QUOTE TEMPLATE" (`QUOTE_TEMPLATE_CONTACT`),
+  with its lines. Brent's self-funding procedure (Dropbox, Admin/Policies and
+  Procedures, May 2024) builds each quote from these; they are meant to become
+  the rules for drafting Shelley's (CNS) uninsured quotes automatically.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

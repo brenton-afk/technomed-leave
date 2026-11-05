@@ -151,6 +151,34 @@ export async function createDraftInvoice({ contactId, reference, date, dueDate, 
   return { id: made.InvoiceID, number: made.InvoiceNumber, total: made.Total, status: made.Status }
 }
 
+/**
+ * The quotes kept as templates (Brent's self-funding procedure, May 2024:
+ * "Use draft templates in Xero to create a new draft") — every quote for the
+ * contact named like "DRAFT QUOTE TEMPLATE", with its lines. Read-only.
+ */
+export async function quoteTemplates(contactName = process.env.QUOTE_TEMPLATE_CONTACT || 'DRAFT QUOTE TEMPLATE') {
+  const contacts = (await findContacts(contactName)).filter(c => c.name.toLowerCase().includes(contactName.toLowerCase()))
+  const out = []
+  for (const c of contacts) {
+    for (let page = 1; page <= 10; page++) {
+      const data = await call('GET', `/Quotes?ContactID=${encodeURIComponent(c.id)}&page=${page}`)
+      const got = data.Quotes || []
+      for (const q of got) {
+        out.push({
+          id: q.QuoteID, number: q.QuoteNumber, status: q.Status, title: q.Title || '', summary: q.Summary || '',
+          reference: q.Reference || '', total: q.Total,
+          lines: (q.LineItems || []).map(l => ({
+            code: l.ItemCode || '', description: l.Description || '', quantity: l.Quantity,
+            unitPrice: l.UnitAmount, discount: l.DiscountRate || 0
+          }))
+        })
+      }
+      if (got.length < 100) break
+    }
+  }
+  return out
+}
+
 /** A draft quote. */
 export async function createDraftQuote({ contactId, reference, title, summary, date, expiryDate, lines }) {
   if (!contactId) throw new Error('Choose who the quote is for')
