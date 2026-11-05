@@ -1065,6 +1065,9 @@ async function bookingsOnCalendar(from, to) {
         summary: e.summary || '',
         patient: read.patient,
         surgeon: read.surgeon || '',
+        // The operation, so an email for a different operation on the same
+        // surname is not mistaken for this one having moved.
+        procedure: read.operation || '',
         date: start.slice(0, 10),
         // The hour it occupies, for laying out a new case beside it. All-day
         // entries have no hour and are not part of the column.

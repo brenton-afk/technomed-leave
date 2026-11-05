@@ -244,6 +244,14 @@ offered as **Mariner MIS** and **Mariner Open** (`SYSTEM_BUTTONS`, `variantOf`
 in `inventory.js`) — one Mariner said precisely; tapping either replaces a plain
 "Mariner" and keeps its supply.
 
+**A booking email is offered as a move** (`movedOnCalendar` in
+`bookingSources.js`) only for the same surname and surgeon on another day
+within four weeks, one such entry — and never (Toni, 5 Nov 2026, two Oakleys):
+when the email is a redo / revision / return to theatre / washout (a new
+operation, `NEW_OPERATION`); when the entry's day has already passed and the
+email is later; or when both name spinal levels (`levelsIn`) and none are
+shared. `bookingsOnCalendar` carries `procedure` for this.
+
 ### System suggestions and Brainlab billing (Brent, 3 Nov 2026)
 
 `src/clinicalPlan/systemSuggestions.js` holds Brent's operation → system rules

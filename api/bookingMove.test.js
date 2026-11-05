@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { movedOnCalendar } from '../src/clinicalPlan/bookingSources.js'
+import { movedOnCalendar, levelsIn } from '../src/clinicalPlan/bookingSources.js'
 
 // ─── Task 5: a moved booking moves, and is never copied ──────────────────────
 // "The portal did not recognise that a booking that moved needed to move
@@ -85,30 +85,57 @@ beforeEach(() => {
 })
 
 describe('recognising a moved booking', () => {
+  // Before the old day, so the entry has not happened yet.
+  const AT = { today: '2026-11-01' }
   const onCalendar = [
     { id: 'evt-1', patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-04' },
     { id: 'evt-2', patient: 'Other', surgeon: 'Ibbett', date: '2026-11-04' }
   ]
 
   it('finds the entry on its old day', () => {
-    expect(movedOnCalendar({ patient: 'testa', surgeon: 'Ibbett', date: '2026-11-06' }, onCalendar).id)
+    expect(movedOnCalendar({ patient: 'testa', surgeon: 'Ibbett', date: '2026-11-06' }, onCalendar, AT).id)
       .toBe('evt-1')
   })
 
   it('needs the surgeon to agree, not merely be absent', () => {
-    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Fowler', date: '2026-11-06' }, onCalendar)).toBeNull()
-    expect(movedOnCalendar({ patient: 'Testa', surgeon: '', date: '2026-11-06' }, onCalendar)).toBeNull()
+    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Fowler', date: '2026-11-06' }, onCalendar, AT)).toBeNull()
+    expect(movedOnCalendar({ patient: 'Testa', surgeon: '', date: '2026-11-06' }, onCalendar, AT)).toBeNull()
   })
 
   it('will not guess between two', () => {
     const two = [...onCalendar, { id: 'evt-3', patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-10' }]
-    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-06' }, two)).toBeNull()
+    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-06' }, two, AT)).toBeNull()
   })
 
   it('ignores a cancelled entry and anything months away', () => {
     expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-06' },
-      [{ ...onCalendar[0], cancelled: true }])).toBeNull()
-    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2027-03-06' }, onCalendar)).toBeNull()
+      [{ ...onCalendar[0], cancelled: true }], AT)).toBeNull()
+    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2027-03-06' }, onCalendar, AT)).toBeNull()
+  })
+
+  // Toni, 5 Nov 2026: a Thursday email for "Redo left L5/S1 foraminotomy" was
+  // offered as Monday's case — a different Oakley, same surgeon — having moved.
+  it('never takes a redo or revision for a moved case', () => {
+    for (const procedure of ['Redo left L5/S1 foraminotomy + decompression', 'Revision L4/5 fixation', 'Return to theatre, washout']) {
+      expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-06', procedure }, onCalendar, AT), procedure).toBeNull()
+    }
+  })
+
+  it('never moves a case whose day has already gone to a later day', () => {
+    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-06' }, onCalendar, { today: '2026-11-05' })).toBeNull()
+  })
+
+  it('takes different spinal levels for a different operation', () => {
+    const withLevels = [{ ...onCalendar[0], procedure: 'C5/6 ACDF' }]
+    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-06', procedure: 'L4/5 PLIF' }, withLevels, AT)).toBeNull()
+    expect(movedOnCalendar({ patient: 'Testa', surgeon: 'Ibbett', date: '2026-11-06', procedure: 'C5-6 ACDF' }, withLevels, AT)?.id).toBe('evt-1')
+  })
+
+  it('reads spinal levels the ways they are written', () => {
+    expect([...levelsIn('L4/5 PLIF')]).toEqual(['L4', 'L5'])
+    expect([...levelsIn('C5-C7 ACDF')]).toEqual(['C5', 'C6', 'C7'])
+    expect([...levelsIn('L5/S1 foraminotomy')]).toEqual(['L5', 'S1'])
+    expect(levelsIn('Lumbar decompression').size).toBe(0)
   })
 })
 

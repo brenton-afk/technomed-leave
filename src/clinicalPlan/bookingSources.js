@@ -297,8 +297,42 @@ export function mergeBookings(existing, incoming) {
  *
  * Only called when nothing matched on the email's own day.
  */
-export function movedOnCalendar(candidate, events = [], { withinDays = 28 } = {}) {
+//
+// Not a move, whatever the surname and surgeon say (Toni, 5 Nov 2026: an email
+// for "Redo left L5/S1 foraminotomy" on Thursday was offered as the Monday
+// case — a different Oakley — having moved):
+//   - the email is a redo, revision, return to theatre or washout. That is a
+//     new operation, often on the very patient whose first case is on the
+//     calendar, and the most likely of all to share a surname and a surgeon;
+//   - the entry's day has already gone and the email is for a later day. A
+//     case that has happened cannot be moved forward; a later email about the
+//     same surname is a new case;
+//   - both name spinal levels and none are shared. A different operation.
+const NEW_OPERATION = /\b(?:re-?do|revision|revise|re-?operation|re-?exploration|return(?:ed)? to theatre|rtt|wash-?out|removal of (?:metalwork|hardware|screws))\b/i
+
+/** The spinal levels a procedure names: "L4/5 PLIF" → L4, L5; "C5-C7" → C5, C6, C7. */
+export function levelsIn(text) {
+  const out = new Set()
+  const re = /\b([CTLS])(\d{1,2})(?:\s*[-/–]\s*([CTLS])?(\d{1,2}))?\b/gi
+  for (const m of String(text || '').matchAll(re)) {
+    const from = m[1].toUpperCase(), a = Number(m[2])
+    out.add(`${from}${a}`)
+    if (m[4] == null) continue
+    const to = (m[3] || m[1]).toUpperCase(), b = Number(m[4])
+    if (to === from) for (let n = Math.min(a, b); n <= Math.max(a, b); n++) out.add(`${from}${n}`)
+    else out.add(`${to}${b}`)
+  }
+  return out
+}
+
+function hobartToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+}
+
+export function movedOnCalendar(candidate, events = [], { withinDays = 28, today = hobartToday() } = {}) {
   if (!candidate?.date || !candidate?.patient || !candidate?.surgeon) return null
+  if (NEW_OPERATION.test(String(candidate.procedure || candidate.operation || ''))) return null
+  const theirs = levelsIn(candidate.procedure || candidate.operation)
   const same = (x, y) => String(x || '').trim().toLowerCase() === String(y || '').trim().toLowerCase()
   const dayNumber = date => {
     const [y, m, d] = String(date || '').split('-').map(Number)
@@ -311,7 +345,13 @@ export function movedOnCalendar(candidate, events = [], { withinDays = 28 } = {}
     if (!event.date || event.date === candidate.date) return false
     if (Math.abs(dayNumber(event.date) - target) > withinDays) return false
     if (!same(event.patient, candidate.patient)) return false
-    return Boolean(event.surgeon) && same(event.surgeon, candidate.surgeon)
+    if (!(Boolean(event.surgeon) && same(event.surgeon, candidate.surgeon))) return false
+    // Already happened, and the email is for later: a new case, not this one.
+    if (today && event.date < today && candidate.date > event.date) return false
+    // Different levels, different operation.
+    const ours = levelsIn(event.procedure)
+    if (ours.size && theirs.size && ![...ours].some(l => theirs.has(l))) return false
+    return true
   })
   return matches.length === 1 ? matches[0] : null
 }
