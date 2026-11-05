@@ -333,6 +333,9 @@ export async function tuneCamera(track) {
 // photograph.
 let stillsWork = true
 
+/** How long a single-shot focus is given before the photo is taken. */
+export const FOCUS_SETTLE_MS = 350
+
 export function canTakeStill() {
   return stillsWork && typeof window !== 'undefined' && 'ImageCapture' in window
     && Boolean(stream?.getVideoTracks?.()[0])
@@ -355,7 +358,23 @@ export async function takeStill({ timeoutMs = 2500 } = {}) {
     if (Array.isArray(caps?.fillLightMode) && caps.fillLightMode.includes('off') && !torchIsOn) {
       settings.fillLightMode = 'off'
     }
+    // Focus on the page now, then shoot. Continuous focus hunts, and a photo
+    // taken mid-hunt is soft all over — the likeliest reason Aimee's Samsung
+    // photo scored a quarter of the sharpness of an iPhone frame of the same
+    // form (5 Nov 2026). Where the camera can focus once on demand, it does,
+    // settles, and goes back to continuous afterwards.
+    const modes = track.getCapabilities?.().focusMode || []
+    const refocused = Array.isArray(modes) && modes.includes('single-shot')
+    if (refocused) {
+      try {
+        await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] })
+        await new Promise(done => setTimeout(done, FOCUS_SETTLE_MS))
+      } catch { /* shoot as it is */ }
+    }
     const blob = await withTimeout(capture.takePhoto(settings), timeoutMs)
+    if (refocused && modes.includes('continuous')) {
+      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+    }
     return await createImageBitmap(blob, { imageOrientation: 'from-image' })
   } catch {
     stillsWork = false

@@ -13,8 +13,9 @@ import {
 import { readPrefs, writePrefs } from '../../clinicalPlan/provider.js'
 import {
   acquireCamera, cameraOpen, setTorch, hasTorch, torchOn as torchIsOn, turnTorchOff,
-  zoomRange, currentZoom, setZoom, takeStill
+  zoomRange, currentZoom, setZoom, takeStill, releaseCamera
 } from '../../scanner/cameraStream.js'
+import { photoToCanvas } from '../../scanner/photoFile.js'
 
 // ─── The scanner ──────────────────────────────────────────────────────────────
 // Live outline, auto-capture, then a chance to correct the corners before the
@@ -391,6 +392,7 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
     capture.corners || [{ x: 0.06, y: 0.06 }, { x: 0.94, y: 0.06 }, { x: 0.94, y: 0.94 }, { x: 0.06, y: 0.94 }])
   const [preview, setPreview] = useState(capture.preview)
   const [dragging, setDragging] = useState(null)
+  const [inspecting, setInspecting] = useState(null)
   const dpi = pageDpi(corners,
     capture.detail?.width || capture.source?.width || 0, capture.detail?.height || capture.source?.height || 0)
   const lowDetail = dpi > 0 && dpi < MIN_READABLE_DPI
@@ -575,7 +577,31 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
         </div>
       )}
 
+      {/* The page exactly as it will be filed, at its own size, to pan across
+          and read the stickers before anything goes (Brent, 5 Nov 2026).
+          If the lot numbers read here, the distributor can read them. */}
+      {inspecting && (
+        <div role="dialog" aria-label="The page as it will be filed" style={{
+          position: 'fixed', inset: 0, zIndex: 4000, background: '#111', display: 'flex', flexDirection: 'column'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px', color: 'white' }}>
+            <span style={{ flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>As it will be filed — scroll to check the stickers</span>
+            <button type="button" onClick={() => setInspecting(null)}
+              style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'white', color: '#042746', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <img src={inspecting} alt="The page at full size" style={{ display: 'block', maxWidth: 'none' }} />
+          </div>
+        </div>
+      )}
+
       <div style={{ padding: '10px 16px', color: 'rgba(255,255,255,0.7)', fontSize: 12.5, textAlign: 'center' }}>
+        <button type="button" onClick={() => {
+          try { const page = asItWillBeSaved(); setInspecting(page.full || page.preview) } catch { /* nothing to show */ }
+        }} style={{
+          display: 'block', margin: '0 auto 6px', padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+          background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.4)', fontSize: 12.5, fontWeight: 700
+        }}>Check the detail</button>
         Drag a corner if the edges are wrong
         {/* The facts behind a blurry scan, small, so it can be reported. */}
         {capture.detail && (
@@ -973,7 +999,15 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
 
     const { source, method, sharpness, corners: onSource } = await sharpestPicture(video, corners)
     // A photograph of another shape than the video carries its own outline.
-    if (onSource) corners = onSource
+    await review(source, method, sharpness, onSource || corners)
+  }, [])
+
+  /**
+   * A captured picture, to the review: re-detected, flattened, and shown with
+   * its corners. Shared by the live shutter and the phone's own camera, so an
+   * HD photo is found, straightened and checked exactly as a live one is.
+   */
+  const review = useCallback(async (source, method, sharpness, corners) => {
 
     // The corners handed in came from a detection up to a tenth of a second
     // ago, and this photograph was taken now. In between, a hand-held phone
@@ -1073,6 +1107,43 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
       originalHeight: shrunk.height
     })
   }, [])
+
+  // ── HD: the phone's own camera (Brent, 5 Nov 2026) ──
+  //
+  // "Pull out all the stops." The web camera is a video stream; the phone's
+  // camera app takes a real photograph — full sensor, its own autofocus,
+  // stabilisation and HDR — which is what Dropbox's scanner uses. The portal's
+  // stream is released first (an Android camera app will not open while a page
+  // holds the camera), the photo comes back through the same review, and
+  // "Yes — scan it" goes straight back to the phone's camera for the next page.
+  const photoInputRef = useRef(null)
+  const [hd, setHd] = useState(false)
+  const openPhoneCamera = () => {
+    if (busyRef.current) return
+    turnTorchOff()
+    releaseCamera()
+    setHd(true)
+    setCameraState('paused')
+    setView(null)
+    photoInputRef.current?.click()
+  }
+  const backToLive = () => {
+    setHd(false)
+    setCameraState('opening')
+    setAttempt(n => n + 1)
+  }
+  const fromPhoto = async file => {
+    if (!file || busyRef.current) return
+    busyRef.current = true
+    try {
+      const canvas = await photoToCanvas(file)
+      const sharpness = sharpnessOf(canvas, canvas.width, canvas.height, document.createElement('canvas'))
+      await review(canvas, 'phone camera', sharpness, null)
+    } catch {
+      busyRef.current = false
+      setError('That photo could not be read — take it again.')
+    }
+  }
 
   // ── The light goes out with the camera view. ──
   //
@@ -1205,6 +1276,9 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     trackerRef.current?.reset()
     setView(null)
     onCapture(page)
+    // In HD, the next page is the phone's camera again — opened inside this
+    // tap, which is the only moment a browser will allow it.
+    if (hd) photoInputRef.current?.click()
   }
 
   /**
@@ -1244,6 +1318,11 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
 
   return (
     <Overlay>
+    {/* The phone's own camera. `capture` opens it directly rather than offering
+        the library; the photo comes back here for the same review. */}
+    <input ref={photoInputRef} type="file" accept="image/*" capture="environment"
+      data-hd-input="true" style={{ fontSize: 16, display: 'none' }}
+      onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; fromPhoto(file) }} />
     {/* The review sits on top rather than replacing this view, so the camera is
         never torn down and rebuilt between pages: no black flash, no second
         play(), nothing to re-attach. */}
@@ -1254,7 +1333,10 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         onAddAnother={keepAndContinue}
         onCancel={onCancel}
         onPhoneCamera={onFallback}
-        onRetake={() => { setPending(null); busyRef.current = false; trackerRef.current?.reset() }} />
+        onRetake={() => {
+          setPending(null); busyRef.current = false; trackerRef.current?.reset()
+          if (hd) photoInputRef.current?.click()
+        }} />
     )}
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column', visibility: pending ? 'hidden' : 'visible' }}>
       {/* First, and outside every condition on this screen. */}
@@ -1285,6 +1367,26 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
           {frame && <Outline view={view} countdown={view?.countdown || 0} />}
         </div>
 
+        {/* The phone's camera is in charge: say so, and offer both ways on. */}
+        {hd && !pending && (
+          <div data-hd-panel="true" style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 14, padding: 24, background: '#000', color: 'white', textAlign: 'center', zIndex: 2
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>HD photo</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', maxWidth: 300, lineHeight: 1.5 }}>
+              The phone's own camera takes the page. Fill the screen with the form, hold steady, and the portal straightens it after.
+            </div>
+            <button type="button" onClick={() => photoInputRef.current?.click()}
+              style={{ padding: '12px 20px', borderRadius: 10, border: 'none', background: TEAL, color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              Take the photo
+            </button>
+            <button type="button" onClick={backToLive}
+              style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer' }}>
+              Back to the live scanner
+            </button>
+          </div>
+        )}
         {cameraState === 'opening' && !error && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'rgba(255,255,255,0.75)', fontSize: 13.5 }}>
             <div style={{ width: 26, height: 26, borderRadius: 13, border: '2px solid rgba(255,255,255,0.25)', borderTopColor: TEAL, animation: 'tm-spin 700ms linear infinite' }} />
@@ -1397,8 +1499,17 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ flex: 1, fontSize: 11.5, color: 'rgba(255,255,255,0.45)', lineHeight: 1.45 }}>
-              {pageCount > 0 ? `${pageCount} page${pageCount === 1 ? '' : 's'} captured` : 'Any surface, any angle'}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+              {/* The phone's own camera, for the sharpest page it can take. */}
+              <button type="button" onClick={hd ? () => photoInputRef.current?.click() : openPhoneCamera}
+                aria-label="HD photo with the phone's camera"
+                style={{
+                  padding: '8px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                  background: 'transparent', color: 'white', border: '1.5px solid rgba(255,255,255,0.55)'
+                }}>HD photo</button>
+              <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', lineHeight: 1.45 }}>
+                {pageCount > 0 ? `${pageCount} page${pageCount === 1 ? '' : 's'} captured` : 'Any surface, any angle'}
+              </span>
             </div>
 
             {/* Always present, whatever auto-capture is doing. */}

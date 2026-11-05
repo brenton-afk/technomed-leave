@@ -763,7 +763,9 @@ describe('getting out', () => {
 // shutter had gone.
 describe('re-detecting at the shutter', () => {
   const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
-  const capture = source.slice(source.indexOf('const capture = useCallback'))
+  // The shutter and the HD photo share one review step, which is where the
+  // re-detection lives (Brent, 5 Nov 2026: the HD photo goes through it too).
+  const capture = source.slice(source.indexOf('const review = useCallback'))
   const body = capture.slice(0, capture.indexOf('\n  }, [])'))
 
   it('only accepts a reading that agrees with the one on screen', () => {
@@ -1017,5 +1019,44 @@ describe('the photograph on the review screen', () => {
     expect(dim).toBeGreaterThanOrEqual(2000)
     expect(src).toMatch(/original: shrunk\.toDataURL\('image\/jpeg', 0\.88\)/)
     expect(src).not.toMatch(/900 \/ Math\.max\(source\.width/)
+  })
+})
+
+
+// ─── HD: the phone's own camera (Brent, 5 Nov 2026) ─────────────────────────
+// "Pull out all the stops." The phone's camera app takes a real photograph;
+// the portal releases its own camera, opens the phone's, and sends the photo
+// through the same detection and review as a live capture.
+describe('HD photo with the phone’s camera', () => {
+  const source = readFileSync(join(__dirname, 'CameraSheet.jsx'), 'utf8')
+  it('opens the phone’s camera directly, not the photo library', () => {
+    expect(source).toMatch(/type="file" accept="image\/\*" capture="environment"/)
+  })
+  it('releases the portal’s camera first, so an Android camera app can open', () => {
+    const open = source.slice(source.indexOf('const openPhoneCamera'), source.indexOf('const backToLive'))
+    expect(open.indexOf('releaseCamera()')).toBeGreaterThan(-1)
+    expect(open.indexOf('releaseCamera()')).toBeLessThan(open.indexOf('.click()'))
+  })
+  it('sends the photo through the same review as a live capture', () => {
+    const from = source.slice(source.indexOf('const fromPhoto'))
+    expect(from.slice(0, 600)).toMatch(/await review\(canvas, 'phone camera'/)
+  })
+})
+
+describe('checking the detail before filing', () => {
+  it('opens the page at its own size, and closes again', () => {
+    render(
+      <CropReview capture={{
+        preview: 'data:image/jpeg;base64,x', original: 'data:image/jpeg;base64,y',
+        originalWidth: 900, originalHeight: 1200,
+        corners: [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.9 }, { x: 0.1, y: 0.9 }],
+        detail: { width: 3000, height: 4000, method: 'photo', sharpness: 900 }
+      }} cv={null} pageCount={0}
+        onConfirm={() => {}} onRetake={() => {}} onAddAnother={() => {}} onCancel={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Check the detail' }))
+    expect(screen.getByRole('dialog', { name: 'The page as it will be filed' })).toBeInTheDocument()
+    expect(screen.getByAltText('The page at full size').style.maxWidth).toBe('none')
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.queryByRole('dialog', { name: 'The page as it will be filed' })).toBeNull()
   })
 })

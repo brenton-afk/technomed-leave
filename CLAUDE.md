@@ -763,6 +763,22 @@ screen it made a crisp 3024x4032 capture look as though resolution was lost
 on the shutter. The filed copy never came from it — `asItWillBeSaved` warps
 the full photo at `FILE_IMAGE_DIM` when the page is accepted.
 
+**HD photo — the phone's own camera** (Brent, 5 Nov 2026: "pull out all the
+stops"). A button on the scanner releases the portal's stream (an Android
+camera app will not open while a page holds the camera — `releaseCamera`
+*before* the click) and opens `<input type="file" capture="environment">`: the
+phone's camera app, full sensor, its own autofocus, stabilisation and HDR — what
+Dropbox's scanner uses. The photo is drawn the right way up at up to 4096 px
+(`photoToCanvas` in `scanner/photoFile.js`) and goes through the **same**
+`review()` step as a live capture (re-detection, flattening, the review), with
+method `phone camera`. In HD, "Yes — scan it" and Retake reopen the phone's
+camera inside the tap; "Back to the live scanner" re-acquires the stream.
+`takeStill` now focuses once (`focusMode: 'single-shot'`, `FOCUS_SETTLE_MS`)
+before `takePhoto` where the camera offers it, then goes back to continuous.
+**Check the detail** on the review opens the page as it will be filed
+(`asItWillBeSaved().full`) at its own pixel size, to pan across the stickers
+before anything is filed or sent.
+
 Two constraints here were learned the hard way and must not be undone:
 
 - **Never request a width *and* a height.** An iPhone has several rear lenses at
