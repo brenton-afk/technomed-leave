@@ -179,7 +179,7 @@ describe('hub contents (the agreed structure)', () => {
     signIn(REP)
     render(<App />)
     // The tab is not rendered, but the state is still reachable in principle.
-    expect(screen.queryByText('Leave Applications')).not.toBeInTheDocument()
+    expect(screen.queryByText('Leave applications')).not.toBeInTheDocument()
   })
 })
 

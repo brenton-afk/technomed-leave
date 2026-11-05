@@ -16,13 +16,13 @@ describe('/?go=approvals', () => {
   it('opens the leave approvals screen rather than Cases, and tidies the address', async () => {
     window.history.replaceState(null, '', '/?go=approvals')
     render(<App />)
-    expect(await screen.findByText('Leave Applications')).toBeInTheDocument()
+    expect(await screen.findByText('Leave applications')).toBeInTheDocument()
     expect(window.location.search).toBe('')
   })
 
   it('opens Cases as usual without it', async () => {
     window.history.replaceState(null, '', '/')
     render(<App />)
-    expect(screen.queryByText('Leave Applications')).not.toBeInTheDocument()
+    expect(screen.queryByText('Leave applications')).not.toBeInTheDocument()
   })
 })

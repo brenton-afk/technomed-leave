@@ -94,6 +94,13 @@ function LeaveBalances({ who, balances }) {
   )
 }
 
+// The admin sections: id, chip label, page title.
+const SECTIONS = [
+  ['leave', 'Leave', 'Leave applications'], ['timesheets', 'Timesheets', 'Timesheets'], ['toil', 'TOIL', 'TOIL'],
+  ['invoices', 'Invoices', 'Invoices & quotes'], ['notices', 'Notices', 'Supplier notices'], ['email', 'Email', 'Sent email'],
+  ['pins', 'Staff PINs', 'Staff PINs'], ['system', 'System', 'System']
+]
+
 export default function AdminPortal({ user }) {
   const [applications, setApplications] = useState({ pending: [], approved: [], declined: [] })
   const [loading, setLoading] = useState(true)
@@ -210,19 +217,24 @@ export default function AdminPortal({ user }) {
     <div style={{ minHeight:'100%', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
       {/* Safe-area inset plus normal spacing. It was a fixed 56px, which is one
           iPhone's status bar and wrong everywhere else. */}
-      <div style={{ background:'#042746', paddingTop:'calc(env(safe-area-inset-top, 0px) + 20px)', paddingLeft:20, paddingRight:20, paddingBottom:20 }}>
-        <img src="/logo.png" alt="TechnoMed" style={{ height:40, width:'auto', marginBottom:4 }} />
-        <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:8 }}>Admin Portal</div>
-        <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:4 }}>Leave Applications</div>
-        <div style={{ fontSize:13, color:'rgba(255,255,255,0.5)', marginBottom:16 }}>Welcome, {user?.name?.split(' ')[0]}</div>
-        <div style={{ display:'flex', gap:7, marginBottom:12, flexWrap:'wrap' }}>
-          {[['leave','Leave'],['timesheets','Timesheets'],['toil','TOIL'],['invoices','Invoices'],['notices','Notices'],['email','Email'],['pins','Staff PINs'],['system','System']].map(([id,label]) => (
-            <button key={id} onClick={() => setDomain(id)} style={{ padding:'7px 15px', borderRadius:20, border:'none', background: domain===id ? '#189a85' : 'rgba(255,255,255,0.12)', color:'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+      <div style={{ background:'#042746', paddingTop:'calc(env(safe-area-inset-top, 0px) + 20px)', paddingLeft:20, paddingRight:20, paddingBottom:14, overflow:'hidden' }}>
+        {/* One compact header (Brent, 5 Nov 2026: "sloppy at the top with the
+            menu"): the section's own name, not "Leave Applications" on every
+            tab, and the menu as one row that scrolls sideways instead of
+            wrapping into three. */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+          <img src="/logo.png" alt="TechnoMed" style={{ height:28, width:'auto' }} />
+          <div style={{ fontSize:10, color:'rgba(255,255,255,0.45)', letterSpacing:'1.5px', textTransform:'uppercase' }}>Admin</div>
+        </div>
+        <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:12 }}>{SECTIONS.find(([id]) => id === domain)?.[2] || 'Admin'}</div>
+        <div className="tm-chip-row" style={{ display:'flex', gap:7, overflowX:'auto', flexWrap:'nowrap', margin:'0 -20px', padding:'0 20px 2px', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+          {SECTIONS.map(([id,label]) => (
+            <button key={id} ref={el => { if (el && domain === id) el.scrollIntoView?.({ block:'nearest', inline:'nearest' }) }} onClick={() => setDomain(id)} style={{ flex:'0 0 auto', whiteSpace:'nowrap', padding:'7px 14px', borderRadius:20, border:'none', background: domain===id ? '#189a85' : 'rgba(255,255,255,0.12)', color:'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
               {label}
             </button>
           ))}
         </div>
-        <div style={{ display: domain === 'leave' ? 'flex' : 'none', gap:8 }}>
+        <div style={{ display: domain === 'leave' ? 'flex' : 'none', gap:8, marginTop:10, overflowX:'auto', flexWrap:'nowrap' }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:'7px 14px', borderRadius:20, border:'none', background: tab===t.id ? 'white' : 'rgba(255,255,255,0.12)', color: tab===t.id ? '#042746' : 'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
               {t.label} {t.count > 0 && `(${t.count})`}

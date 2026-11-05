@@ -152,16 +152,15 @@ export default function Invoices({ user }) {
   )
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Invoices &amp; quotes</div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+    <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+      {/* The page title is in the admin header; the actions wrap into a grid,
+          so they never push the page wider than a phone. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6, marginBottom: 12 }}>
           <button style={btn(false)} onClick={showRequests} disabled={requests?.running}>{requests?.running ? 'Looking…' : 'Quote requests'}</button>
           <button style={btn(false)} onClick={showTemplates} disabled={templates?.running}>{templates?.running ? 'Reading templates…' : 'Quote templates'}</button>
           <button style={btn(false)} onClick={checkAccounts} disabled={audit?.running}>{audit?.running ? 'Checking accounts@…' : 'Check accounts@'}</button>
           <button style={btn(false)} onClick={load}>Refresh</button>
           <button style={btn(true)} onClick={() => setDraft({ kind: 'quote' })}>New quote</button>
-        </div>
       </div>
       <div style={{ ...muted, marginBottom: 12 }}>
         Calvary purchase orders in accounts@ are turned into <b>draft</b> invoices in Xero by themselves —
