@@ -16,8 +16,8 @@ describe('a Signus booking', () => {
   it('a new one is a notice to Signus, to jhanson cc apolites', () => {
     const [notice, ...rest] = noticesFor({ kind: 'new', after: read(event()), eventId: 'evt-abc123', settings })
     expect(rest).toEqual([])
-    expect(notice.to).toEqual(['jhanson@signus.com.au'])
-    expect(notice.cc).toEqual(['apolites@signus.com.au'])
+    expect(notice.to).toEqual(['J.Hanson@signus.com.au'])
+    expect(notice.cc).toEqual(['A.Polites@signus.com.au'])
     expect(notice.subject).toBe('New booking — Testa 6/11/2026 CLV')
   })
 
@@ -222,5 +222,15 @@ describe('Neurophys for Dubey posterior cases at Calvary (Toni, 4 Nov 2026)', ()
     const next = applyCorrections(saved)
     expect(next.rules.map(r => r.id)).toContain('neurophys-dubey-clv')
     expect(next.contacts.map(c => c.id)).toContain('neurophys')
+  })
+})
+
+import { changesBetween } from './_bookingNotices.js'
+
+describe('a change only in capitals or spacing is not a change', () => {
+  it('DIPLOMAT ON STANDBY → Diplomat on standby says nothing', () => {
+    const before = { date: '2026-11-05', hospital: 'CLV', surgeon: 'Thani', procedure: 'Redo L5/S1', kit: 'DIPLOMAT ON STANDBY' }
+    expect(changesBetween(before, { ...before, kit: 'Diplomat  on standby' })).toEqual([])
+    expect(changesBetween(before, { ...before, kit: 'Mariner' }).map(c => c.key)).toEqual(['kit'])
   })
 })

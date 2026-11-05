@@ -387,11 +387,11 @@ Required behaviour:
    distributor, the neurophysiology provider, etc. Seed it with these confirmed contacts
    (editable in settings; never hard-code them):
    - Neurophysiology (Neurophys): to info@neurophys.com.au, cc territorymgrs@neurophys.com.au
-   - Signus: to jhanson@signus.com.au, cc apolites@signus.com.au
+   - Signus: to J.Hanson@signus.com.au, cc A.Polites@signus.com.au (corrected 5 Nov 2026 — the dots were missing here)
    - KT Medical (Firebird, Lonestar, Reform, connectors): to kt@ktmedical.com.au,
      cc ben@ktmedical.com.au
    - KT allograft usage (DTBV / CBM / DBM): to allograft@ktmedical.com.au,
-     cc dtbvutilization@vifm.org (spelled with a z; confirmed from VIFM's own replies)
+     cc dtbv.utilization@vifm.org (with a z and a dot; corrected 5 Nov 2026 from VIFM's own replies)
    Other loan-kit suppliers (Device Technologies, E4, Globus): ask Brenton before
    adding them. Do not guess addresses.
 2. On create/change/move/cancel of a booking that has a loan kit (supply = Distributor

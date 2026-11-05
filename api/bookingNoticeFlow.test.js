@@ -51,7 +51,7 @@ describe('creating a Signus booking', () => {
     const res = await call('create', { date: '2026-11-06',
       fields: { patient: 'Testa', surgeon: 'Ibbett', kit: 'Ascot (Consignment)', hospital: 'CLV' } })
     expect(res.payload.notices).toHaveLength(1)
-    expect(res.payload.notices[0]).toMatchObject({ name: 'Signus', to: ['jhanson@signus.com.au'] })
+    expect(res.payload.notices[0]).toMatchObject({ name: 'Signus', to: ['J.Hanson@signus.com.au'] })
     expect(sentMail).toEqual([])
   })
 

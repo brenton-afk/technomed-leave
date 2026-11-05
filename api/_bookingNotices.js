@@ -27,18 +27,18 @@ const KEY = 'notices:settings'
 // Confirmed by Brent (PORTAL_FIXES.md, 1 Nov 2026) and, for the rest, the
 // addresses the team already writes to, read from the bookings mailbox.
 export const DEFAULT_CONTACTS = [
-  { id: 'signus', name: 'Signus', note: 'Jasper Hanson, prosthesis and stock control', to: ['jhanson@signus.com.au'], cc: ['apolites@signus.com.au'] },
+  { id: 'signus', name: 'Signus', note: 'Jasper Hanson, prosthesis and stock control', to: ['J.Hanson@signus.com.au'], cc: ['A.Polites@signus.com.au'] },
   { id: 'kt', name: 'KT Medical', note: 'Firebird, Lonestar, Forza, connectors',
     to: ['kt@ktmedical.com.au'], cc: ['ben@ktmedical.com.au'] },
   { id: 'kt_allograft', name: 'KT allograft usage (DTBV / CBM / DBM)',
-    to: ['allograft@ktmedical.com.au'], cc: ['dtbvutilization@vifm.org'] },
+    to: ['allograft@ktmedical.com.au'], cc: ['dtbv.utilization@vifm.org'] },
   { id: 'neurophys', name: 'Neurophysiology (Neurophys)',
     to: ['info@neurophys.com.au'], cc: ['territorymgrs@neurophys.com.au'] },
   { id: 'e4', name: 'E4 Surgical', to: ['bookings@e4surgical.com'], cc: ['e4@e4surgical.com', 'eland@e4surgical.com'] },
   { id: 'globus', name: 'Globus / NuVasive',
-    to: ['vicdistribution@globusmedical.com', 'jlagoon@globusmedical.com'], cc: ['cmckenzie@globusmedical.com', 'mlyfordpike@globusmedical.com'] },
+    to: ['victoriadistribution@globusmedical.com', 'jlagoon@globusmedical.com'], cc: ['cmckenzie@globusmedical.com', 'mlyfordpike@globusmedical.com'] },
   { id: 'device', name: 'Device Technologies (loan requests only — no booking notices)',
-    to: ['DL_VICLoans@device.com.au'], cc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] },
+    to: ['DL_VICLoans@device.com.au'], cc: ['asher.hammond@device.com.au', 'dl_spine_marketing@device.com.au'] },
   // Kit room moves (see api/_kits.js). From the team's own transfer emails:
   // Calvary is Sharon plus the loan-sets mailbox, RHH is Katelin's
   // coordinator mailbox. `greeting` is how the email opens.
@@ -57,14 +57,25 @@ export const CONTACT_CORRECTIONS = [
   // and the other DL-Spine marketing email included."
   { id: 'device-2026-11-01', contactId: 'device',
     remove: ['kwatson@device.com.au'],
-    addCc: ['asherhammond@device.com.au', 'dl_spine_marketing@device.com.au'] },
+    addCc: ['asher.hammond@device.com.au', 'dl_spine_marketing@device.com.au'] },
   // The kit room's two hospital contacts, added to a copy saved before they
   // existed.
   { id: 'kit-hospitals-2026-11-01', addContacts: ['calvary_loans', 'rhh_loans'] },
   // Device loan requests on, in a copy saved while they were offered but off.
   { id: 'device-loans-on-2026-11-02', enableLoans: 'device' },
   // The Dubey neurophys rule, added to a copy saved before it existed.
-  { id: 'neurophys-dubey-2026-11-04', addContacts: ['neurophys'], addRules: ['neurophys-dubey-clv'] }
+  { id: 'neurophys-dubey-2026-11-04', addContacts: ['neurophys'], addRules: ['neurophys-dubey-clv'] },
+  // Brent, 5 Nov 2026: "double check the email addresses for Jasper and
+  // Amanda". The seed list had dropped the dots — every real email to and from
+  // these people uses the dotted address (Jasper writes from J.Hanson@).
+  { id: 'addresses-2026-11-05', replace: {
+    'jhanson@signus.com.au': 'J.Hanson@signus.com.au',
+    'apolites@signus.com.au': 'A.Polites@signus.com.au',
+    'asherhammond@device.com.au': 'asher.hammond@device.com.au',
+    'dtbvutilization@vifm.org': 'dtbv.utilization@vifm.org',
+    'vicdistribution@globusmedical.com': 'victoriadistribution@globusmedical.com',
+    'cmkenzie@globusmedical.com': 'cmckenzie@globusmedical.com'
+  } }
 ]
 
 /** Applies any correction not yet applied. Returns null when nothing changed. */
@@ -77,6 +88,13 @@ export function applyCorrections(saved) {
   let loanRequests = saved.loanRequests
   let rules = saved.rules
   for (const fix of due) {
+    if (fix.replace) {
+      const swap = new Map(Object.entries(fix.replace).map(([a, b]) => [lower(a), b]))
+      const fixList = list => (list || []).map(a => swap.get(lower(a)) || a)
+      contacts = contacts.map(c => ({ ...c, to: fixList(c.to), cc: fixList(c.cc) }))
+      applied.add(fix.id)
+      continue
+    }
     if (fix.enableLoans) {
       if (Array.isArray(loanRequests)) {
         loanRequests = loanRequests.map(l => (l.distributor === fix.enableLoans ? { ...l, enabled: true } : l))
@@ -262,11 +280,17 @@ export function describeBooking(event) {
 
 const FIELDS = [['date', 'Date'], ['hospital', 'Hospital'], ['surgeon', 'Surgeon'], ['procedure', 'Procedure'], ['kit', 'Kit']]
 
+// Compared as a supplier reads it: "DIPLOMAT ON STANDBY" and "Diplomat on
+// standby" are the same booking, and an email saying one became the other is
+// noise (Signus were sent exactly that, 5 Nov 2026).
+const sameText = (a, b) =>
+  String(a || '').replace(/\s+/g, ' ').trim().toLowerCase() === String(b || '').replace(/\s+/g, ' ').trim().toLowerCase()
+
 /** What changed between two readings, field by field. */
 export function changesBetween(before, after) {
   if (!before || !after) return []
   return FIELDS
-    .filter(([key]) => String(before[key] || '') !== String(after[key] || ''))
+    .filter(([key]) => !sameText(before[key], after[key]))
     .map(([key, label]) => ({ key, label, was: before[key] || '—', now: after[key] || '—' }))
 }
 
@@ -478,7 +502,7 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
     const systems = status === 'cancel' ? (had?.systems || []) : sets
     const lines = status === 'request'
       ? [`A loan set has been ordered for this case: ${systems.join(' + ')}.`,
-        ...(kind === 'changed' && before?.kit && before.kit !== after.kit ? [`The booking has changed: ${before.kit} → ${after.kit}.`] : [])]
+        ...(kind === 'changed' && before?.kit && !sameText(before.kit, after.kit) ? [`The booking has changed: ${before.kit} → ${after.kit}.`] : [])]
       : status === 'update'
         ? [`This case has changed — the loan set for it is now: ${systems.join(' + ')}.`,
           ...(had.date !== b.date ? [`Date: ${shortDate(had.date)} → ${shortDate(b.date)}.`] : []),

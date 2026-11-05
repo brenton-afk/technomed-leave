@@ -8,7 +8,7 @@ import { STAFF } from '../src/staffConfig.js'
 export const DISTRIBUTORS = {
   signus: {
     name: 'Signus',
-    to: ['j.hanson@signus.com.au', 'a.polites@signus.com.au']
+    to: ['J.Hanson@signus.com.au', 'A.Polites@signus.com.au']
   },
   device: {
     name: 'Device Technologies',
@@ -28,11 +28,11 @@ export const DISTRIBUTORS = {
   },
   globus: {
     name: 'Nuvasive/Globus',
-    to: ['customeraccounts@globusmedical.com', 'jlagoon@globusmedical.com', 'cmkenzie@globusmedical.com']
+    to: ['customeraccounts@globusmedical.com', 'jlagoon@globusmedical.com', 'cmckenzie@globusmedical.com']
   },
   dtbv: {
     name: 'Donor Tissue Bank of Victoria',
-    to: ['dtbv.utilisation@vifm.org', 'kt@ktmedical.com.au', 'ben@ktmedical.com.au']
+    to: ['dtbv.utilization@vifm.org', 'kt@ktmedical.com.au', 'ben@ktmedical.com.au']
   }
 }
 
@@ -55,7 +55,7 @@ export const BOOKING_NOTIFY = {
   signus: {
     name: 'Signus',
     notifyOnBooking: true,
-    to: ['j.hanson@signus.com.au', 'a.polites@signus.com.au']
+    to: ['J.Hanson@signus.com.au', 'A.Polites@signus.com.au']
   },
   e4: {
     name: 'E4 Surgical',

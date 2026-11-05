@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import NoticeSheet from './NoticeSheet.jsx'
 import { offerNotices, clearNotices } from '../../notices.js'
 
-const PREVIEW = { id: 'n_1_a', name: 'Signus', to: ['jhanson@signus.com.au'], cc: ['apolites@signus.com.au'],
+const PREVIEW = { id: 'n_1_a', name: 'Signus', to: ['J.Hanson@signus.com.au'], cc: ['A.Polites@signus.com.au'],
   subject: 'New booking — Testa 6/11/2026 CLV', text: 'Hi Signus team,\n\nA new case has been booked.' }
 
 beforeEach(() => { global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, results: [{ id: 'n_1_a', ok: true, name: 'Signus' }] }) })) })
@@ -14,7 +14,7 @@ describe('the notice sheet', () => {
     render(<NoticeSheet user={{ token: 't' }} />)
     act(() => offerNotices({ notices: [PREVIEW] }))
     expect(screen.getByText('Emails ready to send — check them first')).toBeInTheDocument()
-    expect(screen.getByText(/To jhanson@signus.com.au · cc apolites@signus.com.au/)).toBeInTheDocument()
+    expect(screen.getByText(/To J.Hanson@signus.com.au · cc A.Polites@signus.com.au/)).toBeInTheDocument()
     expect(global.fetch).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Send it' }))
     await waitFor(() => expect(screen.getByText('Sent to Signus')).toBeInTheDocument())
