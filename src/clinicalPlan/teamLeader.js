@@ -21,41 +21,80 @@ import { STAFF } from '../staffConfig.js'
 // is on call instead.
 
 // ─── The standing rota ───────────────────────────────────────────────────────
-// Ben and Mat alternate, a week each. Ben has the week commencing 12 October
-// 2026 and every second week after it; Mat has the ones between.
+// Ben and Mat alternate, a turn each.
+//
+// **A turn runs Friday to Thursday** (Brent, 5 Nov 2026): "The handover happens
+// on Friday to the new team leader so that the team leader can get their head
+// around cases for the following week." So the leader who will run Monday's
+// lists takes over the Friday before, and holds it through the next Thursday.
+// It used to be Monday to Friday, which handed a week over on the morning its
+// lists started.
+//
+// Ben's turn starts Friday 13 November 2026, and every second Friday after it;
+// Mat has the ones between.
 //
 // Brent is deliberately not in the rotation. He covers when somebody is away
-// or stretched — this coming week, with Mat on TOIL — and a person who only
-// ever covers should not be in the cycle, or the cycle stops describing what
-// normally happens.
+// or stretched, and a person who only ever covers should not be in the cycle,
+// or the cycle stops describing what normally happens. His covers are entries
+// (saved, or in COVERS below), so the screen can say "Brent, covering for Mat".
 //
 // Computed rather than stored, so the roster is right for any week anybody
 // looks at, including ones months out that nobody has thought about yet. An
-// entry saved against a week overrides it — see the handler — because the
+// entry saved against a turn overrides it — see the handler — because the
 // whole point of a standing rota is that it says what happens unless somebody
 // says otherwise.
 export const ROTATION = ['ben@technomed.com.au', 'mat@technomed.com.au']
 
-/** The Monday Ben's turn starts from. Everything else counts out from here. */
-export const ROTATION_ANCHOR = '2026-10-12'
+/** The Friday Ben's turn starts from. Everything else counts out from here. */
+export const ROTATION_ANCHOR = '2026-11-13'
 
 /**
- * Whose turn it is in the standing rota, for the week beginning `monday`.
- *
- * Works backwards as well as forwards: the week before the anchor is Mat's,
- * which is what makes "ordinarily Mat, but Brent is covering" expressible as
- * a rota plus an override rather than as two unrelated facts.
+ * Covers set when the handover moved to Fridays, by the Friday the turn
+ * starts. "Tomorrow team leader is Brent until the following Thursday and then
+ * it changes to Ben" — Brent, Thursday 5 Nov 2026. A saved entry for the same
+ * turn still wins, so this can be changed from the portal like any other.
  */
-export function rosteredLeader(monday) {
-  const week = weekOf(monday)
-  if (!week) return null
+export const COVERS = {
+  '2026-11-06': 'brenton@technomed.com.au'
+}
+
+/**
+ * The Friday a date's turn started on: the date itself on a Friday, else the
+ * Friday before. Which is also the key a turn's leader is stored under.
+ */
+export function turnOf(date) {
+  const day = String(date || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  return shift(day, -((isoWeekday(day) - 5 + 7) % 7))
+}
+
+/** The Thursday a turn ends on. */
+export function turnEnds(friday) {
+  return friday ? shift(friday, 6) : null
+}
+
+/**
+ * Whose turn it is in the standing rota, on `date` (any day of the turn).
+ *
+ * Works backwards as well as forwards, so a past turn has an answer too.
+ */
+export function rosteredLeader(date) {
+  const friday = turnOf(date)
+  if (!friday) return null
   const days = Math.round(
-    (Date.parse(`${week}T00:00:00Z`) - Date.parse(`${ROTATION_ANCHOR}T00:00:00Z`)) / 86400000)
-  const weeks = Math.round(days / 7)
-  // Modulo that behaves for weeks before the anchor, where % alone gives -1.
-  const turn = ((weeks % ROTATION.length) + ROTATION.length) % ROTATION.length
+    (Date.parse(`${friday}T00:00:00Z`) - Date.parse(`${ROTATION_ANCHOR}T00:00:00Z`)) / 86400000)
+  const turns = Math.round(days / 7)
+  // Modulo that behaves for turns before the anchor, where % alone gives -1.
+  const turn = ((turns % ROTATION.length) + ROTATION.length) % ROTATION.length
   const email = ROTATION[turn]
   return STAFF.find(p => p.email === email) || null
+}
+
+/** A cover written into COVERS, as a stored entry would read, or null. */
+export function standingCover(date) {
+  const email = COVERS[turnOf(date)]
+  const person = email && STAFF.find(p => p.email === email)
+  return person ? { email: person.email, name: person.name, firstName: person.firstName, setBy: 'rota change, 5 Nov 2026' } : null
 }
 
 /** 07:00 Monday. */

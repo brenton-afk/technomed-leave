@@ -285,11 +285,22 @@ in its own clock/running order — two theatres running at once (JPW and Ibbett
 at Calvary) are two lists, not one interleaved by time.
 
 **The team leader is per day, under each weekday's date** (`TeamLeaderStrip`
-with `day`). The weekly rota (and a week's cover) stays the default; the chip's
-sheet changes **this day only** unless "The whole week" is chosen. Day
-overrides are `teamLeader:day:{date}` (`getDayLeaders` / `setDayLeader`),
-returned as `days` by `?action=leader`, set by POSTing with `&day=`.
-`canAllocate` honours them. The morning escalation cron still uses the week's.
+with `day`). The chip's sheet changes **this day only** unless "Their whole
+turn" is chosen. Day overrides are `teamLeader:day:{date}` (`getDayLeaders` /
+`setDayLeader`), set by POSTing with `&day=`.
+
+**A turn runs Friday to Thursday** (Brent, 5 Nov 2026: the handover is on the
+Friday so the new leader can get their head around the following week's
+cases). `turnOf(date)` is the Friday a turn starts; turns are stored under it
+(`teamLeader:{friday}`) — the old Monday keys are no longer read. Ben's turn
+starts Fri 13 Nov 2026 (`ROTATION_ANCHOR`), alternating with Mat; Brent's cover
+for Fri 6–Thu 12 Nov is written into `COVERS` (a saved entry still wins).
+`api/_leaders.js` is the one answer to "who leads on this day" — day change,
+then the turn's saved entry, then `COVERS`, then the rota — used by
+`?action=leader` (returns `byDay` for Mon–Fri, each with its `turnLeader`,
+because a Monday-to-Friday week spans two turns), by `canAllocate`, and by the
+morning unsent-usage escalation (`leaderEmailFor`). A whole-turn POST carries
+`from` (the day whose chip was tapped) to say which turn.
 
 ### Case summary (Toni, 4 Nov 2026)
 

@@ -15,6 +15,14 @@ import { weekOf, withinWeek } from '../../clinicalPlan/teamLeader.js'
 // It sits on the week, because that is the screen the duty leader lives on and
 // the question "who is it this week" is asked while looking at the week.
 
+/** 2026-11-06 → Fri 6 Nov. */
+function longDay(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''))
+  if (!m) return ''
+  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return `${names[new Date(`${day}T00:00:00Z`).getUTCDay()]} ${shortDate(day)}`
+}
+
 /** 2026-10-19 → 19 Oct. The week, said the way somebody would say it. */
 function shortDate(day) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -166,7 +174,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                 <div style={{ ...text('heading'), color: colour.ink }}>Team leader</div>
                 {day && (
                   <div role="tablist" aria-label="Change it for" style={{ display: 'flex', gap: 4, margin: '6px 0' }}>
-                    {[['day', 'This day only'], ['week', 'The whole week']].map(([id, label]) => (
+                    {[['day', 'This day only'], ['week', 'Their whole turn']].map(([id, label]) => (
                       <button key={id} type="button" role="tab" aria-selected={scope === id} onClick={() => setScope(id)}
                         style={{
                           flex: 1, minHeight: 36, cursor: 'pointer', borderRadius: radius.pill,
@@ -178,11 +186,16 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                   </div>
                 )}
                 <div style={{ ...text('caption'), color: colour.inkFaint }}>
-                  {forDay ? `${day} · 7am to 5pm` : `Monday 7am to Friday 5pm · week of ${monday}`}
+                  {/* A turn runs Friday to Thursday: the handover is on the
+                      Friday, so the new leader has the cases for the week
+                      ahead in hand (Brent, 5 Nov 2026). */}
+                  {forDay ? `${longDay(day)} · 7am to 5pm`
+                    : weekLeader?.turn ? `${longDay(weekLeader.turn)} to ${longDay(weekLeader.ends)}`
+                      : `Friday to Thursday`}
                   {day && (() => {
                     const wk = weekLeader
                     const cover = wk?.source === 'set' && wk?.rostered && wk.rostered.email !== wk.email
-                    return cover ? <> · {wk.firstName} covering for {wk.rostered.firstName} this week</> : null
+                    return cover ? <> · {wk.firstName} covering for {wk.rostered.firstName} this turn</> : null
                   })()}
                   {leader?.rostered && (
                     <> · rostered: <strong>{leader.rostered.firstName}</strong></>
@@ -239,10 +252,10 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                     background: 'transparent', ...text('caption'), color: colour.inkMuted
                   }}>
                   {forDay
-                    ? `Back to the week's leader${weekLeader?.firstName ? ` — ${weekLeader.firstName}` : ''}`
+                    ? `Back to the turn's leader${weekLeader?.firstName ? ` — ${weekLeader.firstName}` : ''}`
                     : (day ? weekLeader : leader)?.rostered
                       ? `Back to the roster — ${(day ? weekLeader : leader).rostered.firstName}`
-                      : 'Nobody this week'}
+                      : 'Nobody this turn'}
                 </button>
               </div>
             </div>

@@ -1,9 +1,9 @@
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from './_googleCalendar.js'
 import { readBooking, isCancelled, detectHospital } from '../src/clinicalPlan/parse.js'
 import { isDistributorEmail } from '../src/clinicalPlan/bookingSources.js'
-import { redis, getUsageHistory, getTeamLeader } from './_redis.js'
+import { redis, getUsageHistory } from './_redis.js'
 import { STAFF } from '../src/staffConfig.js'
-import { weekOf, rosteredLeader } from '../src/clinicalPlan/teamLeader.js'
+import { leaderEmailOn } from './_leaders.js'
 
 // ─── "Usage not sent" (Task 11) ──────────────────────────────────────────────
 // "Once a team member is allocated to a case and has not sent the usage by end
@@ -105,9 +105,7 @@ export async function owingFor(day) {
   return { owing, byEmail }
 }
 
+// The leader on that day — turns run Friday to Thursday; see _leaders.js.
 export async function leaderEmailFor(day) {
-  const monday = weekOf(day)
-  let set = null
-  try { set = await getTeamLeader(monday) } catch { set = null }
-  return (set || rosteredLeader(monday))?.email || null
+  return leaderEmailOn(day)
 }

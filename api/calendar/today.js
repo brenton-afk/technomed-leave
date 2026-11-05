@@ -44,7 +44,7 @@ import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate,
-  getTeamLeader, setTeamLeaderFor, getDayLeaders, setDayLeader, getWorklist
+  setTeamLeaderFor, setDayLeader, getWorklist
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
@@ -60,7 +60,8 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { cleanListPlace, withListPlace, bySession } from '../../src/clinicalPlan/listPlace.js'
-import { weekOf, cleanLeader, rosteredLeader } from '../../src/clinicalPlan/teamLeader.js'
+import { weekOf, cleanLeader, turnOf } from '../../src/clinicalPlan/teamLeader.js'
+import { leadersOn, turnLeader, leaderEmailOn } from '../_leaders.js'
 import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
   readFiledCase, priorImplantsFor, describePrior
@@ -79,15 +80,11 @@ import { withAttribution, creatorTag } from '../../src/clinicalPlan/attribution.
 async function canAllocate(session, day) {
   if (STAFF_BY_EMAIL(session.email)?.isAdmin) return true
   const date = String(day || '').slice(0, 10)
-  const monday = weekOf(date)
-  if (!monday) return false
-  let set = null
-  try {
-    // That day's leader if somebody changed the day, else the week's.
-    set = (await getDayLeaders([date]))[date] || await getTeamLeader(monday)
-  } catch { set = null }
-  const leader = set || rosteredLeader(monday)
-  return Boolean(leader?.email) && leader.email.toLowerCase() === String(session.email).toLowerCase()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+  // That day's leader: a one-day change, else the turn's (Friday to Thursday).
+  let email = null
+  try { email = await leaderEmailOn(date) } catch { email = null }
+  return Boolean(email) && email.toLowerCase() === String(session.email).toLowerCase()
 }
 
 /** A YYYY-MM-DD date `n` days on, by the calendar rather than the clock. */
@@ -1846,16 +1843,17 @@ async function handleTeamLeader(req, res) {
   if (!session) return
 
   try {
+    // Any day in the calendar week being looked at.
     const asked = String(req.query.week || '').slice(0, 10)
     const monday = weekOf(asked) || weekOf(todayInHobart())
     if (!monday) return res.status(400).json({ error: 'A week is needed' })
 
-    // Monday to Friday of that week: the days a leader holds.
+    // Monday to Friday of that week: the days a leader is on.
     const weekdays = [0, 1, 2, 3, 4].map(n => addDaysTo(monday, n))
 
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
-      // One day only: an entry for that day, or cleared back to the week.
+      // One day only: an entry for that day, or cleared back to the turn's.
       const day = String(req.query.day || body.day || '').slice(0, 10)
       if (day) {
         if (!weekdays.includes(day)) return res.status(400).json({ error: 'That day is not a weekday in this week' })
@@ -1865,43 +1863,36 @@ async function handleTeamLeader(req, res) {
         await setDayLeader(day, entry)
         return res.status(200).json({ ok: true, day, leader: entry })
       }
-      // Clearing it is a real answer — a week nobody is covering should say so
-      // rather than keep naming whoever held it last.
+      // A whole turn — Friday to Thursday — the one `from` falls in (the day
+      // whose chip was tapped), else the one Monday of this week falls in.
+      const turn = turnOf(String(body.from || '').slice(0, 10)) || turnOf(monday)
       if (!body.email) {
-        // Back to whosever turn it is. "Nobody" is not a useful answer when
-        // there is a standing rota — clearing a cover means the rota resumes.
-        await setTeamLeaderFor(monday, null)
-        const back = rosteredLeader(monday)
-        return res.status(200).json({
-          ok: true, week: monday, source: back ? 'roster' : 'none',
-          leader: back && { email: back.email, name: back.name, firstName: back.firstName }
-        })
+        // Back to whosever turn it is. Clearing a cover means the rota resumes.
+        await setTeamLeaderFor(turn, null)
+        const back = await turnLeader(turn)
+        return res.status(200).json({ ok: true, turn, leader: back })
       }
       const entry = cleanLeader({ email: body.email, setBy: session.email })
       if (!entry) return res.status(400).json({ error: 'That is not somebody on the team' })
-      await setTeamLeaderFor(monday, entry)
-      return res.status(200).json({ ok: true, week: monday, leader: entry })
+      await setTeamLeaderFor(turn, entry)
+      return res.status(200).json({ ok: true, turn, leader: entry })
     }
 
-    // The standing rota says what normally happens; a saved entry says what
-    // is happening this time. Brent covering for Mat is the second kind, and
-    // it must not quietly become the first — so both are returned and the
-    // screen can say which it is looking at.
-    const set = await getTeamLeader(monday)
-    const rostered = rosteredLeader(monday)
-    const days = await getDayLeaders(weekdays)
+    // Every weekday's leader, worked out on its own: a Monday-to-Friday week
+    // spans two turns, the Friday starting the next one (Brent, 5 Nov 2026).
+    const byDay = await leadersOn(weekdays)
+    const days = Object.fromEntries(Object.entries(byDay).filter(([, l]) => l?.source === 'day'))
+    const first = byDay[monday]?.turnLeader || null
     return res.status(200).json({
       ok: true,
       week: monday,
-      // Days somebody changed, by date. Any day not here is the week's leader.
+      byDay,
+      // Days somebody changed, by date.
       days,
-      leader: set || (rostered && {
-        email: rostered.email, name: rostered.name, firstName: rostered.firstName
-      }) || null,
-      source: set ? 'set' : rostered ? 'roster' : 'none',
-      // Who it would ordinarily be, so a cover can be undone by clearing it
-      // rather than by remembering whose turn it was.
-      rostered: rostered && { email: rostered.email, firstName: rostered.firstName }
+      // Monday's turn, for anything that asks about "the week".
+      leader: first,
+      source: first?.source || 'none',
+      rostered: first?.rostered || null
     })
   } catch (err) {
     return res.status(500).json({ error: err.message })

@@ -984,9 +984,10 @@ describe('who is team leader this week', () => {
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
     // This day by default; the whole week is one tap away.
-    expect(screen.getByText(/2026-09-21 · 7am to 5pm/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: 'The whole week' }))
-    expect(screen.getByText(/Monday 7am to Friday 5pm/)).toBeInTheDocument()
+    expect(screen.getByText(/Mon 21 Sep · 7am to 5pm/)).toBeInTheDocument()
+    // A turn runs Friday to Thursday (Brent, 5 Nov 2026).
+    fireEvent.click(screen.getByRole('tab', { name: 'Their whole turn' }))
+    expect(screen.getByText(/Friday to Thursday/)).toBeInTheDocument()
   })
 
   it('changes just the one day by default', async () => {
@@ -1025,8 +1026,8 @@ describe('who is team leader this week', () => {
     await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('tab', { name: 'The whole week' }))
-    fireEvent.click(screen.getByText('Nobody this week'))
+    fireEvent.click(screen.getByRole('tab', { name: 'Their whole turn' }))
+    fireEvent.click(screen.getByText('Nobody this turn'))
 
     await waitFor(() => {
       const post = global.fetch.mock.calls.find(
@@ -1122,7 +1123,7 @@ describe('the rota and covering for somebody', () => {
     show()
     await waitFor(() => expect(screen.getByText('Brent')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
-    await waitFor(() => expect(screen.getByText(/Brent covering for Mat this week/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Brent covering for Mat this turn/)).toBeInTheDocument())
   })
 
   it('does not say covering when the person set is the rostered one', async () => {
@@ -1147,7 +1148,7 @@ describe('the rota and covering for somebody', () => {
     show()
     await waitFor(() => expect(screen.getByText('Brent')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
-    fireEvent.click(await screen.findByRole('tab', { name: 'The whole week' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Their whole turn' }))
     await waitFor(() =>
       expect(screen.getByText('Back to the roster — Mat')).toBeInTheDocument())
   })
@@ -1597,5 +1598,44 @@ describe('project tasks that fall due', () => {
     })
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+  })
+})
+
+
+// ─── Turns run Friday to Thursday (Brent, 5 Nov 2026) ────────────────────────
+// "The handover happens on Friday to the new team leader so that the team
+// leader can get their head around cases for the following week." A Monday to
+// Friday week on screen spans two turns, so each day's chip asks its own.
+describe('the Friday handover', () => {
+  const brent = { email: 'brenton@technomed.com.au', name: 'Brenton Lovering', firstName: 'Brent', source: 'set',
+    rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }, turn: '2026-09-18', ends: '2026-09-24' }
+  const ben = { email: 'ben@technomed.com.au', name: 'Ben Cassidy', firstName: 'Ben', source: 'roster',
+    rostered: { email: 'ben@technomed.com.au', firstName: 'Ben' }, turn: '2026-09-25', ends: '2026-10-01' }
+  const byDay = {
+    '2026-09-21': { ...brent, turnLeader: brent }, '2026-09-22': { ...brent, turnLeader: brent },
+    '2026-09-23': { ...brent, turnLeader: brent }, '2026-09-24': { ...brent, turnLeader: brent },
+    '2026-09-25': { ...ben, turnLeader: ben }
+  }
+  beforeEach(() => {
+    global.fetch = vi.fn(async (url, opts) => {
+      if (String(url).includes('action=leader')) {
+        if (opts?.method === 'POST') return { ok: true, json: async () => ({ ok: true }) }
+        return { ok: true, json: async () => ({ ok: true, week: '2026-09-21', byDay, days: {}, leader: brent, source: 'set', rostered: brent.rostered }) }
+      }
+      return { ok: true, json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }) }
+    })
+  })
+
+  it('says the turn runs Friday to Thursday, and saves a whole turn from the day tapped', async () => {
+    show()
+    await waitFor(() => expect(screen.getByLabelText(/Team leader: Brent\. Change\./)).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText(/Team leader: Brent\. Change\./))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Their whole turn' }))
+    expect(screen.getByText(/Fri 18 Sep to Thu 24 Sep/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText(/^Aimee/))
+    await waitFor(() => {
+      const post = global.fetch.mock.calls.find(([u, o]) => String(u).includes('action=leader') && o?.method === 'POST')
+      expect(JSON.parse(post[1].body)).toEqual({ email: 'aimee@technomed.com.au', from: '2026-09-21' })
+    })
   })
 })

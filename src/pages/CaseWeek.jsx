@@ -1496,8 +1496,10 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
       if (!res.ok) return
       const data = await res.json()
       // Both halves: who is on, and whether that is the rota or a cover.
-      setLeader(data.leader || data.days
-        ? { ...(data.leader || {}), source: data.source, rostered: data.rostered, days: data.days || {} }
+      // Each weekday's leader on its own (byDay): turns run Friday to Thursday,
+      // so the Friday on screen already belongs to the next one.
+      setLeader(data.leader || data.days || data.byDay
+        ? { ...(data.leader || {}), source: data.source, rostered: data.rostered, days: data.days || {}, byDay: data.byDay || {} }
         : null)
     } catch {
       // A rota that will not load is not worth an error on the week view. The
@@ -1507,11 +1509,12 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
 
   useEffect(() => { loadLeader() }, [loadLeader])
 
-  const setTeamLeader = useCallback(async email => {
+  // A whole turn (Friday to Thursday): the one `from` falls in.
+  const setTeamLeader = useCallback(async (email, from) => {
     await fetch(`/api/calendar/today?action=leader&week=${leaderWeek}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email, from })
     })
     await loadLeader()
   }, [leaderWeek, token, loadLeader])
@@ -1530,15 +1533,18 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
   const leaderChip = day => {
     const weekday = civilWeekday(parseDateStr(day)) <= 5
     if (!weekday) return null
-    const own = leader?.days?.[day]
-    const weekLeader = leader?.email ? leader : null
+    // That day's leader, and the turn it sits in — worked out per day by the
+    // server, because Monday to Thursday and Friday are different turns.
+    const mine = leader?.byDay?.[day]
+    const own = mine ? (mine.source === 'day' ? mine : null) : leader?.days?.[day]
+    const turn = mine?.turnLeader || (leader?.email ? leader : null)
     return (
       <TeamLeaderStrip day={day}
-        leader={own ? { ...own, source: 'day' } : weekLeader}
-        weekLeader={weekLeader}
+        leader={own ? { ...own, source: 'day' } : turn}
+        weekLeader={turn}
         away={plan?.away || []}
         onChange={email => setDayLeader(day, email)}
-        onChangeWeek={setTeamLeader}
+        onChangeWeek={email => setTeamLeader(email, day)}
         week={window_.startDate}
         today={today}
         hour={new Date().getHours()} />
