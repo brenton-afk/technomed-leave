@@ -6,6 +6,7 @@ import {
 import { readXero } from '../_xeroResponse.js'
 import { findContacts, listItems, salesInvoicesSince, createDraftInvoice, createDraftQuote } from '../_xeroAccounting.js'
 import { listPurchaseOrders, readPurchaseOrder, invoicedByPo, splitOrders } from '../_purchaseOrders.js'
+import { autoInvoice, autoRecords, retryPo } from '../_poAuto.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getTimesheetDraft, registeredDeviceCount } from '../_redis.js'
 import { pushConfigured, pushFault } from '../_push.js'
@@ -25,8 +26,9 @@ export default async function handler(req, res) {
     // ── Invoices and quotes (Admin → Invoices) ──
     // Admin only, every one. Reading accounts@ and writing drafts into Xero.
     if (INVOICE_ACTIONS.has(action)) {
-      if (!(await requireAdmin(req, res))) return
-      return await handleInvoices(action, req, res)
+      const session = await requireAdmin(req, res)
+      if (!session) return
+      return await handleInvoices(action, req, res, session)
     }
 
     if (action === 'status') {
@@ -255,9 +257,9 @@ export default async function handler(req, res) {
   }
 }
 
-const INVOICE_ACTIONS = new Set(['po-list', 'po-read', 'sales-lookup', 'invoice-create', 'quote-create'])
+const INVOICE_ACTIONS = new Set(['po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
 
-async function handleInvoices(action, req, res) {
+async function handleInvoices(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   try {
     if (action === 'po-list') {
@@ -274,7 +276,11 @@ async function handleInvoices(action, req, res) {
         xero = err.code === 'permission' ? 'permission' : 'error'
         console.error('po-list: Xero check failed', err.message)
       }
-      return res.status(200).json({ ...splitOrders(orders, invoiced), xero, since })
+      const split = splitOrders(orders, invoiced)
+      // What the automation did with each: drafted, or held and why.
+      const auto = await autoRecords([...split.outstanding, ...split.invoiced].map(o => o.poNumber)).catch(() => ({}))
+      for (const o of [...split.outstanding, ...split.invoiced]) if (auto[o.poNumber]) o.auto = auto[o.poNumber]
+      return res.status(200).json({ ...split, xero, since })
     }
     if (action === 'po-read') {
       const id = String(req.query.id || '')
@@ -286,6 +292,13 @@ async function handleInvoices(action, req, res) {
       return res.status(200).json({ contacts: contacts.slice(0, 50), items })
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    if (action === 'po-auto') return res.status(200).json(await autoInvoice({ by: session.email }))
+    if (action === 'po-retry') {
+      const po = String(body.po || '').toUpperCase()
+      if (!/^[A-Z0-9]{5,20}$/.test(po)) return res.status(400).json({ error: 'Which PO?' })
+      await retryPo(po)
+      return res.status(200).json({ ok: true })
+    }
     if (action === 'invoice-create') return res.status(200).json({ invoice: await createDraftInvoice(body) })
     if (action === 'quote-create') return res.status(200).json({ quote: await createDraftQuote(body) })
   } catch (err) {

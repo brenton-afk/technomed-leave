@@ -95,15 +95,26 @@ export function splitOrders(orders = [], invoiced = null) {
 const PROMPT = `This is a purchase order from a hospital to TechnoMed, a medical device distributor.
 Read it and reply with JSON only, in this shape:
 {"poNumber": "", "date": "YYYY-MM-DD", "deliverTo": "", "requestedBy": "", "reference": "",
- "lines": [{"code": "", "description": "", "quantity": 0, "unitPrice": 0}],
+ "lines": [{"code": "", "description": "", "quantity": 0, "unitPrice": 0, "xeroCode": ""}],
  "totalExGst": 0, "notes": ""}
 - code: the product or catalogue code as written for TechnoMed's product (not the hospital's internal stock number, if both are shown).
 - unitPrice: excluding GST, as a number; 0 if the order shows none.
+- xeroCode: the code of the TechnoMed product below that this line is — matched on what the product is
+  (type, size, pack), not on wording alone. "" if none of them is clearly the same product. Never guess.
 - reference: any case, patient record or cost-centre reference the order asks to be quoted on the invoice — copied exactly.
 - Leave out anything not on the order. Do not invent a line, a code or a price.`
 
-/** One purchase order read into lines, for a person to check before invoicing. */
-export async function readPurchaseOrder(id) {
+/** The catalogue the reader matches lines against: "code — name" per line. */
+export function catalogueText(items = []) {
+  return items.filter(i => i.code).map(i => `${i.code} — ${i.name}`).join('\n').slice(0, 30000)
+}
+
+/**
+ * One purchase order read into lines. With `items` (Xero's products), each
+ * line also carries the Xero code the reader matched it to — checked against
+ * the catalogue by the caller, never trusted on its own.
+ */
+export async function readPurchaseOrder(id, { items = [] } = {}) {
   const m = await readMessageHeadline(PO_MAILBOX, id)
   const content = []
   for (const a of m.attachments) {
@@ -117,11 +128,14 @@ export async function readPurchaseOrder(id) {
   }
   if (m.text) content.push({ type: 'text', text: `The email itself:\n\n${m.text.slice(0, 6000)}` })
   if (!content.length) throw new Error('That email has no order attached to read')
-  content.push({ type: 'text', text: PROMPT })
+  content.push({ type: 'text', text: PROMPT + (items.length
+    ? `\n\nTechnoMed's products (code — name):\n${catalogueText(items)}`
+    : '\n\nNo product list is available: leave xeroCode "".') })
 
   const reply = await askClaude({
     feature: 'purchase-order',
     whenUnavailable: 'The purchase order could not be read automatically — open it and enter the lines by hand.',
+    timeoutMs: 40000,
     request: { model: MODEL, max_tokens: 4000, thinking: { type: 'adaptive' }, messages: [{ role: 'user', content }] }
   })
   const text = reply.content.filter(b => b.type === 'text').map(b => b.text).join('')
@@ -138,7 +152,8 @@ export function cleanOrder(parsed = {}, message = {}) {
     code: String(l?.code || '').trim().slice(0, 60),
     description: String(l?.description || '').trim().slice(0, 300),
     quantity: num(l?.quantity) || 1,
-    unitPrice: num(l?.unitPrice)
+    unitPrice: num(l?.unitPrice),
+    xeroCode: String(l?.xeroCode || '').trim().slice(0, 60)
   })).filter(l => l.code || l.description)
   return {
     messageId: message.id || null,

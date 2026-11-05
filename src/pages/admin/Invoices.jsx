@@ -45,6 +45,7 @@ export default function Invoices({ user }) {
   const [draft, setDraft] = useState(null) // { kind, order?, ... }
   const [reading, setReading] = useState(null)
   const [open, setOpen] = useState('') // which folded group is showing
+  const [auto, setAuto] = useState(null) // the last automatic pass: { running } | result
 
   const headers = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
   const api = useCallback(async (action, { query = '', body } = {}) => {
@@ -68,7 +69,24 @@ export default function Invoices({ user }) {
     setLoading(false)
   }, [api])
 
-  useEffect(() => { load() }, [load])
+  // Opening the tab also runs the automatic pass, so a PO that arrived since
+  // the 9am or 6pm run is drafted now rather than waiting for the next one.
+  const runAuto = useCallback(async () => {
+    setAuto({ running: true })
+    try {
+      const result = await api('po-auto', { body: {} })
+      setAuto(result)
+      if (result.drafted?.length || result.held?.length || result.failed?.length) await load()
+    } catch (err) {
+      setAuto({ error: err.code === 'permission' ? null : err.message })
+    }
+  }, [api, load])
+
+  useEffect(() => { load().then(() => runAuto()) }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function retry(o) {
+    try { await api('po-retry', { body: { po: o.poNumber } }); await runAuto() } catch (err) { setError(err.message) }
+  }
 
   async function readOrder(o) {
     setReading(o.id); setError('')
@@ -121,26 +139,46 @@ export default function Invoices({ user }) {
         </div>
       </div>
       <div style={{ ...muted, marginBottom: 12 }}>
-        Calvary purchase orders in accounts@ that have <b>no invoice in Xero yet</b>. Read one, check its lines,
-        and a <b>draft</b> invoice is made in Xero — nothing is approved or sent from here.
+        Calvary purchase orders in accounts@ are turned into <b>draft</b> invoices in Xero by themselves —
+        at 9am and 6pm, and whenever this page is opened. Approve and send them in Xero as usual.
+        Only a PO that could not be done the usual way is left here, with the reason.
       </div>
 
       {xero === 'permission' && <AllowInvoices />}
       {xero === 'error' && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Xero could not be checked just now, so no purchase order is offered — one may already be invoiced. Try Refresh.</div>}
       {error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>{error}</div>}
       {loading && <div style={muted}>Looking in accounts@ and checking Xero…</div>}
+      {auto?.running && <div style={{ ...muted, margin: '4px 0 8px' }}>Making draft invoices for any new purchase orders…</div>}
+      {auto?.drafted?.length > 0 && (
+        <div style={{ ...card, background: '#e6f4f1', border: '1px solid #bfe3db', fontSize: 13, color: NAVY }}>
+          Drafted in Xero just now: {auto.drafted.map(d => `${d.invoice} for ${d.po}`).join(', ')}. Approve them in Xero.
+        </div>
+      )}
+      {auto?.error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>The automatic pass did not finish: {auto.error}</div>}
 
       {!loading && xero === 'ok' && (
         <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: '6px 0 8px' }}>
-          {list.outstanding.length ? `Waiting to be invoiced (${list.outstanding.length})` : 'Every purchase order with a PO number is already invoiced.'}
+          {list.outstanding.length ? `Needs you (${list.outstanding.length})` : 'Nothing waiting — every purchase order with a PO number is invoiced in Xero.'}
         </div>
       )}
-      {list.outstanding.map(o => orderCard(o, { action: readButton(o) }))}
+      {list.outstanding.map(o => orderCard(o, {
+        badge: o.auto?.status === 'held' || o.auto?.status === 'failed'
+          ? <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#fff4e5', color: '#b54708' }}>{o.auto.status === 'held' ? 'Held' : 'Could not be read'}</span>
+          : <span style={{ fontSize: 11, color: '#5a6478' }}>not drafted yet</span>,
+        action: <>
+          {o.auto?.reason && <div style={{ fontSize: 13, color: '#b54708', marginBottom: 6 }}>{o.auto.reason}</div>}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {o.auto && <button style={btn(true)} disabled={auto?.running} onClick={() => retry(o)}>Try again</button>}
+            {readButton(o, !o.auto)}
+          </div>
+        </>
+      }))}
 
       {fold('none', 'No PO number found — check by hand', list.noNumber, o => orderCard(o, { action: readButton(o, false) }))}
       {fold('done', 'Already invoiced in Xero', list.invoiced, o => orderCard(o, {
         badge: <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#e6f4f1', color: ACCENT }}>
           {o.invoices.map(i => `${i.number || 'draft'} (${String(i.status).toLowerCase()})`).join(', ')}
+          {o.auto?.status === 'drafted' && !o.auto.note ? ' · drafted automatically' : ''}
         </span>
       }))}
       {fold('unchecked', 'Not checked against Xero', list.unchecked, o => orderCard(o))}

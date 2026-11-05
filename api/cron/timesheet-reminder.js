@@ -6,6 +6,7 @@ import { owingFor, caseLine, leaderEmailFor } from '../_usageReminders.js'
 import { sendUsageReminderEmail, PORTAL_URL } from '../_email.js'
 import { notify } from '../_push.js'
 import { TZ, zonedCivil, toDateStr, addCivilDays } from '../../src/clinicalPlan/week.js'
+import { autoInvoice } from '../_poAuto.js'
 
 // ─── The two daily runs ──────────────────────────────────────────────────────
 // Vercel's Hobby plan allows two scheduled jobs, so both share this function
@@ -86,12 +87,23 @@ export default async function handler(req, res) {
 
   const job = String(req.query?.job || '')
 
+  // Calvary purchase orders into draft Xero invoices, at both runs (Brent,
+  // 5 Nov 2026). First and in its own try: nothing else here waits on it, and
+  // a Xero or Gmail failure must not cost the reminders.
+  let invoices = null
+  if (job === 'evening' || job === 'morning') {
+    try { invoices = await autoInvoice({ by: `cron-${job}` }) } catch (err) {
+      console.error('po auto-invoice failed:', err.message)
+      invoices = { error: err.message }
+    }
+  }
+
   // Each part in its own try, so a calendar that will not answer does not stop
   // the timesheet reminders, and the other way round.
   if (job === 'evening') {
-    if (!usageRemindersOn()) return res.status(200).json({ ran: 'evening', usage: 'paused' })
+    if (!usageRemindersOn()) return res.status(200).json({ ran: 'evening', usage: 'paused', invoices })
     try {
-      return res.status(200).json({ ran: 'evening', usage: await usageEvening() })
+      return res.status(200).json({ ran: 'evening', usage: await usageEvening(), invoices })
     } catch (err) {
       console.error('usage reminder (evening) failed:', err.message)
       return res.status(500).json({ error: err.message })
@@ -108,7 +120,7 @@ export default async function handler(req, res) {
     }
     // Timesheet reminders only at the weekend, as when this ran Sat/Sun only.
     if (!['Sat', 'Sun'].includes(hobartWeekday())) {
-      return res.status(200).json({ ran: 'morning', usage, timesheets: 'not a weekend' })
+      return res.status(200).json({ ran: 'morning', usage, invoices, timesheets: 'not a weekend' })
     }
   }
 

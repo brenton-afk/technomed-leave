@@ -563,6 +563,20 @@ admin-only; no new function).
   counted once. If Xero cannot be asked, nothing is outstanding — it is all
   `unchecked`. Calvary's numbers are mostly **LVH0012240**-style (two letters,
   H or P, seven digits); the reader once knew only LVP/ACP and missed them.
+- **POs are invoiced by themselves** (Brent, 5 Nov 2026: "the whole point is
+  to automate them from email"). `autoInvoice` in `api/_poAuto.js` runs in both
+  daily cron jobs and whenever Admin → Invoices opens (`po-auto`): each
+  outstanding PO is read with Xero's item list in the prompt (`xeroCode` per
+  line) and `planInvoice` drafts it the way every Calvary invoice in Xero
+  already looks — contact by PO prefix (`SITES`: LV → Lenah Valley, SJ → St
+  Johns), reference = PO number, each line a Xero item **at the Xero price**,
+  `F/H Local` freight added (`PO_FREIGHT_CODE`), due in 30 days
+  (`PO_DUE_DAYS`). Still **DRAFT** — approving and sending stay in Xero.
+  Anything else is **held** with the reason (unmatched line, PO price ≠ Xero
+  price, total does not add up, PO number in the PDF ≠ the email's, unknown
+  site) and stays on the screen with Try again / Read PO. Results are in Redis
+  `po:auto:{po}`; held POs are not re-read each run, failures up to 3 times. A
+  90s lock (`po:auto:lock`) stops two passes drafting the same PO.
 - **A PO is invoiced once**: before creating, Xero is asked for an ACCREC
   invoice (not voided/deleted) whose Reference contains the PO number; if one
   exists nothing is created (409).

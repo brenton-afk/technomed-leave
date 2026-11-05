@@ -113,7 +113,7 @@ export function lineItems(lines = [], items = []) {
       const discount = Number(l.discount) || 0
       if (discount < 0 || discount > 100) throw new Error(`Line ${n + 1}: the discount must be 0 to 100%`)
       if (!Number.isFinite(unit) || unit < 0) throw new Error(`Line ${n + 1} needs a price`)
-      const item = l.code && known.get(String(l.code).toUpperCase())
+      const item = (l.xeroCode && known.get(String(l.xeroCode).toUpperCase())) || (l.code && known.get(String(l.code).toUpperCase()))
       return {
         ...(item ? { ItemCode: item.code } : {}),
         Description: item
