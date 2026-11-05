@@ -4,6 +4,8 @@ import {
   listEmployees, listLeaveTypes
 } from '../_xeroClient.js'
 import { readXero } from '../_xeroResponse.js'
+import { findContacts, listItems, invoicesWithReference, createDraftInvoice, createDraftQuote } from '../_xeroAccounting.js'
+import { listPurchaseOrders, readPurchaseOrder } from '../_purchaseOrders.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getTimesheetDraft, registeredDeviceCount } from '../_redis.js'
 import { pushConfigured, pushFault } from '../_push.js'
@@ -20,6 +22,13 @@ export default async function handler(req, res) {
   const action = req.query.action || 'status'
 
   try {
+    // ── Invoices and quotes (Admin → Invoices) ──
+    // Admin only, every one. Reading accounts@ and writing drafts into Xero.
+    if (INVOICE_ACTIONS.has(action)) {
+      if (!(await requireAdmin(req, res))) return
+      return await handleInvoices(action, req, res)
+    }
+
     if (action === 'status') {
       return res.status(200).json(await getXeroConnectionStatus())
     }
@@ -243,5 +252,40 @@ export default async function handler(req, res) {
   } catch (err) {
     if (action === 'status') return res.status(200).json({ connected: false, error: err.message })
     return res.status(500).json({ error: err.message })
+  }
+}
+
+const INVOICE_ACTIONS = new Set(['po-list', 'po-read', 'sales-lookup', 'invoice-create', 'quote-create'])
+
+async function handleInvoices(action, req, res) {
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  try {
+    if (action === 'po-list') {
+      const orders = await listPurchaseOrders()
+      // Which are already invoiced, by PO number — asked of Xero, so the list
+      // says "invoiced" only when Xero does. Unknown, not "no", if Xero cannot
+      // be asked (no invoicing permission yet).
+      let xero = 'ok'
+      for (const o of orders) {
+        if (!o.poNumber || xero !== 'ok') continue
+        try { o.invoices = await invoicesWithReference(o.poNumber) } catch (err) { xero = err.code === 'permission' ? 'permission' : 'error' }
+      }
+      return res.status(200).json({ orders, xero })
+    }
+    if (action === 'po-read') {
+      const id = String(req.query.id || '')
+      if (!/^[A-Za-z0-9_-]{6,}$/.test(id)) return res.status(400).json({ error: 'Which email?' })
+      return res.status(200).json({ order: await readPurchaseOrder(id) })
+    }
+    if (action === 'sales-lookup') {
+      const [contacts, items] = await Promise.all([findContacts(String(req.query.q || '')), listItems()])
+      return res.status(200).json({ contacts: contacts.slice(0, 50), items })
+    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    if (action === 'invoice-create') return res.status(200).json({ invoice: await createDraftInvoice(body) })
+    if (action === 'quote-create') return res.status(200).json({ quote: await createDraftQuote(body) })
+  } catch (err) {
+    const code = err.code === 'permission' ? 403 : err.code === 'duplicate' ? 409 : 400
+    return res.status(code).json({ error: err.message, code: err.code || null, existing: err.existing || null })
   }
 }

@@ -540,6 +540,29 @@ One mechanism, in two parts:
 - Dates are sent in Xero's legacy `/Date(ms+0000)/` format, and the API base is the *old* `payroll.xro/1.0` (not the newer AU Payroll API), which is why endpoint paths were repeatedly wrong in the commit history.
 - OAuth flow: `/api/xero/connect` (redirect to Xero) → `/api/xero/callback` (token exchange, then `res.redirect('/?xero=...')`). Scopes in `connect.js` must match those configured on the Xero app or consent fails silently.
 
+### Invoices and quotes (Brent, 5 Nov 2026)
+
+Admin → Invoices (`src/pages/admin/Invoices.jsx`), served by `api/xero/info.js`
+(`po-list`, `po-read`, `sales-lookup`, `invoice-create`, `quote-create`, all
+admin-only; no new function).
+
+- **Purchase orders are read from accounts@**, read-only, through the same
+  domain-wide Gmail grant as bookings@ (`api/_purchaseOrders.js`; `PO_MAILBOX`,
+  `PO_QUERY` default `from:calvarycare.org.au has:attachment newer_than:120d`).
+  Nothing labels, moves or marks a message read. Claude reads the attached PDF
+  into lines (`PO_VISION_MODEL`); `cleanOrder` types it and never invents.
+- **Drafts only, on a person's tap** (`api/_xeroAccounting.js`). Nothing is
+  approved, sent or emailed from Xero. A line with no quantity or a blank price
+  is refused, not drafted at $0. A known Xero item code is sent as `ItemCode`;
+  an unknown code is kept in the description.
+- **A PO is invoiced once**: before creating, Xero is asked for an ACCREC
+  invoice (not voided/deleted) whose Reference is the PO number; if one exists
+  nothing is created (409). The PO list shows that state from Xero.
+- **Permission is a separate connection**: "Allow invoices" is
+  `/api/xero/connect?invoices=1`, adding `XERO_INVOICE_SCOPES` to payroll's.
+  A plain "Reconnect Xero" asks for payroll only and drops invoicing, so after
+  one, tap Allow invoices again. The scopes must also be enabled on the Xero app.
+
 ### Google Calendar
 
 Service-account JWT signed inline with `node:crypto` `createSign` — no `googleapis` dependency. `getGoogleToken(scope)` in `api/_googleCalendar.js` is the single signer; `api/calendar/today.js` imports it with `CALENDAR_SCOPE_READONLY` and the write path uses `CALENDAR_SCOPE_WRITE`. Approved leave becomes an all-day event on `bookings@technomed.com.au` in Grape (`colorId` 3), with `end` shifted +1 day per Google's exclusive-end convention. `TodayView.jsx` reads that same calendar back and distinguishes leave from bookings by `colorId`.
