@@ -1,4 +1,4 @@
-import { getApplication, updateApplicationStatus } from '../_redis.js'
+import { getApplication, updateApplicationStatus, redisSetBody } from '../_redis.js'
 import { requireAdmin } from '../_auth.js'
 import { submitToXero } from '../_xeroClient.js'
 import { addCalendarEvent } from '../_googleCalendar.js'
@@ -18,6 +18,28 @@ export default async function handler(req, res) {
   if (!application) {
     return res.status(404).json({ error: 'Application not found' })
   }
+
+  // ── Send an approved application to Xero again ──
+  // An approval goes through even when Xero refuses it (the calendar and the
+  // email still happen), and until now the only way on was to key it into
+  // Xero by hand. Once the cause is fixed in Xero, this sends it again. The
+  // duplicate check in submitToXero still runs first, so it cannot be lodged
+  // twice — leave already in Xero for those dates is reported, not added.
+  if (action === 'xero-retry') {
+    if (application.status !== 'approved') {
+      return res.status(409).json({ error: 'Only approved leave goes to Xero' })
+    }
+    let xeroResult = null, xeroError = null
+    try {
+      xeroResult = await submitToXero(application)
+    } catch (err) {
+      xeroError = err.message
+      console.error('Xero retry:', err.message)
+    }
+    await recordXero(application, xeroResult, xeroError, session)
+    return res.status(200).json({ success: !xeroError, xeroResult, xeroError })
+  }
+
   if (application.status !== 'pending') {
     return res.status(409).json({ error: `Application has already been ${application.status}` })
   }
@@ -56,6 +78,9 @@ export default async function handler(req, res) {
     xeroError = err.message
     console.error('Xero:', err.message)
   }
+  // Kept on the record, so the Approved list can say which went to Xero and
+  // offer to send the rest again.
+  await recordXero(approved, xeroResult, xeroError, session).catch(() => {})
 
   try {
     calendarResult = await addCalendarEvent(approved)
@@ -91,4 +116,13 @@ export default async function handler(req, res) {
     calendarError,
     emailError
   })
+}
+
+/** What Xero said about this application, stored on it. */
+async function recordXero(application, result, error, session) {
+  const xero = error
+    ? { ok: false, error: String(error).slice(0, 500), at: new Date().toISOString(), by: session?.email || null }
+    : { ok: true, id: result?.leaveApplicationID || null, at: new Date().toISOString(), by: session?.email || null }
+  const fresh = (await getApplication(application.id)) || application
+  await redisSetBody(`leave:${application.id}`, JSON.stringify({ ...fresh, xero }))
 }

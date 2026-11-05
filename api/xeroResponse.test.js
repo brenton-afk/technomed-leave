@@ -109,3 +109,16 @@ describe('when Xero answers with neither', () => {
     expect(data).toEqual({})
   })
 })
+
+describe('validation messages wherever Xero puts them (5 Nov 2026)', async () => {
+  const { readXero } = await import('./_xeroResponse.js')
+  it('finds a reason on a later element or a leave period, not only Elements[0]', async () => {
+    const body = JSON.stringify({
+      ErrorNumber: 10, Type: 'ValidationException', Message: 'A validation exception occurred',
+      Elements: [{ EmployeeID: 'x' }, { LeavePeriods: [{ ValidationErrors: [{ Message: 'The employee does not have this leave type' }] }] }]
+    })
+    const res = { ok: false, status: 400, text: async () => body }
+    const { error } = await readXero(res, 'Xero leave application')
+    expect(error).toBe('Xero leave application: The employee does not have this leave type (400)')
+  })
+})

@@ -147,6 +147,24 @@ export default function AdminPortal({ user }) {
     setLoading(false)
   }
 
+  async function retryXero(id) {
+    setActionLoading(id + 'xero-retry')
+    try {
+      const res = await fetch('/api/admin/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ id, action: 'xero-retry' })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      await fetchApplications()
+      if (data.xeroError) setError(`Still not in Xero — ${data.xeroError}`)
+    } catch (err) {
+      setError('Could not send to Xero: ' + err.message)
+    }
+    setActionLoading(null)
+  }
+
   async function handleAction(id, action, reason = '') {
     setActionLoading(id + action)
     try {
@@ -255,6 +273,22 @@ export default function AdminPortal({ user }) {
               <LeaveBalances who={app} balances={balances} />
               {app.reason && <div style={{ background:'#f8f9fc', borderRadius:8, padding:'10px 12px', fontSize:13, color:'#042746' }}><span style={{ color:'#6b7a8d', fontSize:11 }}>Reason: </span>{app.reason}</div>}
             </div>
+            {/* Approved, but Xero did not take it (or it was approved before
+                the portal kept a record). Says why, and sends it again once
+                the cause is fixed in Xero — never twice: leave already in Xero
+                for those dates is reported, not added. */}
+            {app.status === 'approved' && !app.xero?.ok
+              && (app.xero?.error || String(app.endDate || '') >= new Date().toISOString().slice(0, 10)) && (
+              <div style={{ padding:'10px 16px', borderTop:'1px solid rgba(26,43,74,0.06)', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                <div style={{ flex:'1 1 220px', fontSize:12.5, color: app.xero?.error ? '#c0392b' : '#6b7a8d', lineHeight:1.45 }}>
+                  {app.xero?.error ? `Not in Xero: ${app.xero.error}` : 'No record of this reaching Xero.'}
+                </div>
+                <button onClick={() => retryXero(app.id)} disabled={actionLoading === app.id + 'xero-retry'}
+                  style={{ padding:'8px 14px', background:'white', color:'#042746', border:'1px solid rgba(26,43,74,0.25)', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                  {actionLoading === app.id + 'xero-retry' ? 'Sending…' : 'Send to Xero again'}
+                </button>
+              </div>
+            )}
             {app.status === 'pending' && (
               <div style={{ padding:'12px 16px', borderTop:'1px solid rgba(26,43,74,0.06)', display:'flex', gap:10 }}>
                 <button onClick={() => handleAction(app.id, 'approve')} disabled={actionLoading === app.id+'approve'}

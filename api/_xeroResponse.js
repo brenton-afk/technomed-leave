@@ -17,6 +17,26 @@
 // status code, because "Xero said 502" is a fact somebody can use and a parse
 // error is not.
 
+/** Every ValidationErrors[].Message anywhere in a JSON body, once each. */
+export function validationMessages(value, out = [], depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 8) return out
+  if (Array.isArray(value)) {
+    for (const v of value) validationMessages(v, out, depth + 1)
+    return out
+  }
+  for (const [key, v] of Object.entries(value)) {
+    if (key === 'ValidationErrors' && Array.isArray(v)) {
+      for (const e of v) {
+        const m = typeof e?.Message === 'string' ? e.Message.trim() : ''
+        if (m && !out.includes(m)) out.push(m)
+      }
+    } else if (v && typeof v === 'object') {
+      validationMessages(v, out, depth + 1)
+    }
+  }
+  return out
+}
+
 /** The human-readable message out of a Xero XML error body. */
 function messageFromXml(text) {
   const parts = []
@@ -66,7 +86,11 @@ export async function readXero(res, what = 'Xero') {
 
   const fromJson = parsed
     ? [
-      data.Elements?.[0]?.ValidationErrors?.map(v => v.Message).filter(Boolean).join('; '),
+      // Wherever Xero put them. It is not always Elements[0]: a leave
+      // application's reasons can sit on a later element or on one of its
+      // LeavePeriods, and missing them left Erin with only "A validation
+      // exception occurred" (approving Brent's leave, 5 Nov 2026).
+      validationMessages(data).join('; '),
       data.Message,
       data.detail,
       data.error_description,
