@@ -615,7 +615,10 @@ admin-only; no new function).
   (`quoteFolder`, the team's existing paths; `{Patient} Self Funding Quote
   QU0492.pdf`) and each distributor on it (`distributorsOnQuote`) emailed a
   heads-up with the PDF, from Brent, bookings@ copied — surname only in the
-  body. A patient already on a CNS quote in Xero (`alreadyQuoted`, by surname)
+  body. Surgeon / Patient / Procedure for the filing and the heads-up are read
+  from the **sent quote's Summary** (`fromSummary`), not the request email —
+  the Lewis heads-up said "Surgeon: TBC" because Shelley's email never named
+  one. A patient already on a CNS quote in Xero (`alreadyQuoted`, by surname)
   is not drafted again. Runs in both crons and when Invoices opens; records `quote:req:{id}`,
   each step once; held requests have Try again.
 - **Quote prices come from Toni's price list** (Brent, 5 Nov 2026, "option 2"):

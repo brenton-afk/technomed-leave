@@ -312,3 +312,15 @@ describe('distributor price list (invented prices)', () => {
     expect(out.flags[0]).toMatchObject({ code: 'ZZ9', price: 77 })
   })
 })
+
+import { fromSummary } from './_quoteAuto.js'
+describe('the sent quote is the truth for the heads-up', () => {
+  it('reads surgeon, patient and procedure from the quote summary', () => {
+    expect(fromSummary('Surgeon: Dr Test Surgeon\nPatient: Ann Example\nDate: TBC\nProcedure: Fixation (T8-9)'))
+      .toEqual({ surgeon: 'Dr Test Surgeon', patient: 'Ann Example', procedure: 'Fixation (T8-9)' })
+  })
+  it('ignores TBC and missing lines', () => {
+    expect(fromSummary('Surgeon: TBC\nPatient: Ann Example')).toEqual({ patient: 'Ann Example' })
+    expect(fromSummary('')).toEqual({})
+  })
+})

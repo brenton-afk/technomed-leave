@@ -113,7 +113,7 @@ You may change a quantity only where the levels differ from the template (e.g. t
 Reply with JSON only:
 {"templateId":"", "surgeon":"", "patient":"", "procedure":"", "levels":"", "system":"", "lines":[{"code":"","description":"","quantity":0}], "why":"", "hold":""}
 - patient: the patient's name exactly as written in the request ("" if none).
-- surgeon: as written or as the template implies ("" if neither says).
+- surgeon: as written in the request; if it does not say, the surgeon the chosen template is for (its title or summary names them, e.g. "Thani Diplomat" → Thani); "" only if neither says.
 - hold: a short reason if no template fits well enough to quote safely; otherwise "".`
 
 async function plan(request, templates) {
@@ -164,17 +164,33 @@ export function alreadyQuoted(patient, quotes = []) {
   return quotes.find(q => q.status !== 'DELETED' && re.test(`${q.title} ${q.summary} ${q.reference}`)) || null
 }
 
+/**
+ * Surgeon / Patient / Procedure as written on the quote itself. The quote a
+ * person checked and sent from Xero is the truth; what the portal read from
+ * the request email is only its first guess (Lewis, 5 Nov 2026: the email did
+ * not name the surgeon, the quote did, and Signus were told "TBC").
+ */
+export function fromSummary(summary = '') {
+  const out = {}
+  for (const [key, label] of [['surgeon', 'surgeon'], ['patient', 'patient'], ['procedure', 'procedure']]) {
+    const m = new RegExp(`^\\s*${label}\\s*:\\s*(.+)$`, 'im').exec(String(summary))
+    const v = m?.[1].trim()
+    if (v && !/^(tbc|tba|to be confirmed|unknown)$/i.test(v)) out[key] = v
+  }
+  return out
+}
+
 /** Step 2 for one drafted quote: once sent, file it and tell the distributors. */
 async function followUp(id, rec) {
   const q = await getQuote(rec.quoteId)
   if (!q) return { ...rec, status: 'gone', reason: 'The quote is no longer in Xero' }
   if (!SENT.has(q.status)) return rec
-  let next = { ...rec, quoteNumber: q.number, sentSeen: rec.sentSeen || new Date().toISOString() }
+  let next = { ...rec, ...fromSummary(q.summary), quoteNumber: q.number, sentSeen: rec.sentSeen || new Date().toISOString() }
   const pdf = await quotePdf(q.id)
   if (!next.filed && dropboxConfigured()) {
-    const folder = quoteFolder(rec.surgeon)
+    const folder = quoteFolder(next.surgeon)
     await ensureFolder(folder)
-    await uploadFile(`${folder}/${quoteFileName(rec.patient, q.number)}`, Buffer.from(pdf, 'base64'))
+    await uploadFile(`${folder}/${quoteFileName(next.patient, q.number)}`, Buffer.from(pdf, 'base64'))
     next.filed = true
   }
   const keys = distributorsOnQuote(q.lines)
@@ -182,16 +198,16 @@ async function followUp(id, rec) {
   for (const key of keys) {
     if (done.has(key)) continue
     const d = DISTRIBUTORS[key]
-    const surname = String(rec.patient || '').trim().split(/\s+/).pop() || 'patient'
+    const surname = String(next.patient || '').trim().split(/\s+/).pop() || 'patient'
     const lines = [`Hi ${d.name} team,`, '',
       'Just a heads up — we have sent CNS the attached quote for a self-funding patient.', '',
-      `Surgeon: ${rec.surgeon || 'TBC'}`, `Patient: ${surname}`, `Procedure: ${rec.procedure || 'TBC'}`, 'Date: to be confirmed', '',
+      `Surgeon: ${next.surgeon || 'TBC'}`, `Patient: ${surname}`, `Procedure: ${next.procedure || 'TBC'}`, 'Date: to be confirmed', '',
       'Our standing 20% self-funding discount has been applied to your products. We will mark the usage SELF FUNDING and attach the quote when the case goes ahead.']
     await sendBookingNotice({
-      to: d.to, subject: `Self-funding quote sent — ${surname}${rec.surgeon ? ` · ${rec.surgeon}` : ''}`,
+      to: d.to, subject: `Self-funding quote sent — ${surname}${next.surgeon ? ` · ${next.surgeon}` : ''}`,
       text: lines.join('\n'), html: lines.map(l => (l ? `<p style="margin:0 0 6px">${escapeHtml(l)}</p>` : '')).join(''),
       sender: SENDER, caseId: `quote:${q.number}`,
-      attachments: [{ filename: quoteFileName(rec.patient, q.number), content: pdf, content_type: 'application/pdf' }]
+      attachments: [{ filename: quoteFileName(next.patient, q.number), content: pdf, content_type: 'application/pdf' }]
     })
     done.add(key)
   }
