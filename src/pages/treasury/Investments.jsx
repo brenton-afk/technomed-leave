@@ -25,7 +25,7 @@ const SOURCE = { live: 'live', stale: 'last quote', typed: 'typed in', statement
 const day = d => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—')
 const KIND = {
   distribution: 'Distribution', withholding: 'Withholding tax', divfee: 'Distribution fee', refund: 'Tax refund',
-  buy: 'Buy', sell: 'Sell', brokerage: 'Brokerage', to_aud: 'To A$', from_aud: 'From A$', fx_in: 'From US$', fx_out: 'To US$', other: 'Other'
+  buy: 'Buy', sell: 'Sell', brokerage: 'Brokerage', to_aud: 'To A$', from_aud: 'From A$', fx_in: 'From US$', fx_out: 'To US$', deposit: 'Paid in', withdrawal: 'Withdrawn', other: 'Other'
 }
 
 export default function Investments({ user, onBack, onLocked }) {
@@ -143,7 +143,8 @@ export default function Investments({ user, onBack, onLocked }) {
             <Figure label="Cost" value={aud(totalCost)} sub={known.length < rows.length ? `of the ${known.length} with a known cost` : 'incl. brokerage'} />
             {knownValue != null && <Figure label="Unrealised" value={aud(knownValue - totalCost)} sub={pct(totalCost ? (knownValue / totalCost - 1) * 100 : null)} tone={knownValue < totalCost ? 'danger' : undefined} />}
             <Figure label={`Income ${data.income[0]?.fy || ''}`} value={aud(fyNet)} sub="net of withholding and fees, in A$ at today's rate" />
-            {data.cash && <Figure label="Cash in account" value={usd(data.cash.usd, true)} sub={`at ${day(data.cash.at)}`} />}
+            {data.cash?.usd != null && <Figure label="Cash, US$ account" value={usd(data.cash.usd, true)} sub={`at ${day(data.cash.at)}`} />}
+            {data.cash?.aud != null && <Figure label="Cash, A$ account" value={money(data.cash.aud, 'AUD', true)} sub={`at ${day(data.cash.audAt)}`} />}
           </Grid>
         )}
 

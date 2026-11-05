@@ -140,3 +140,35 @@ describe('the A$ account', () => {
     expect(usd.currency).toBe('USD')
   })
 })
+
+describe('the A$ account\'s own wording', () => {
+  it('reads ASX orders priced in A$', () => {
+    expect(classify('Order 50: Buy 121 SLVX @ A$82.25')).toMatchObject({ kind: 'buy', units: 121, ticker: 'SLVX', price: 82.25 })
+  })
+
+  it('reads a conversion worded the way the account it arrives in words it', () => {
+    expect(classify('Convert 527.00 USD TO AUD. 1 USD = 1.430341 AUD')).toMatchObject({ kind: 'to_aud', usd: 527, rate: 1.430341 })
+    expect(classify('Convert 12,889.30 AUD to USD. Estimate 1 AUD = 0.699103 USD')).toMatchObject({ kind: 'from_aud', aud: 12889.3, rate: 0.699103 })
+  })
+
+  it('reads money paid in, and a withdrawal by its own reference', () => {
+    expect(classify('PAYMENT FROM A TEST PERSON')).toMatchObject({ kind: 'deposit', ref: 'A TEST PERSON' })
+    expect(classify('Withdrawal')).toMatchObject({ kind: 'withdrawal' })
+    let y = 700
+    const items = [{ p: 1, x: 164, y: 720, s: 'Opening Balance' }, { p: 1, x: 514, y: 720, s: '$0.00' }]
+    const row = (date, desc, credit, debit, balance) => {
+      y -= 30
+      items.push({ p: 1, x: 60, y, s: date }, { p: 1, x: 164, y, s: desc })
+      if (credit) items.push({ p: 1, x: 384, y, s: credit })
+      if (debit) items.push({ p: 1, x: 455, y, s: debit })
+      items.push({ p: 1, x: 513, y, s: balance })
+    }
+    row('14 July 2026 06:32:01', 'Convert 100.00 USD TO AUD. 1 USD = 1.500000 AUD', '$150.00', null, '$150.00')
+    row('15 July 2026 16:36:24', 'SAVINGS SWEEP', null, '$100.00', '$50.00')
+    items.push({ p: 1, x: 164, y: y - 30, s: 'Closing Balance at end of day 30 June 2027' }, { p: 1, x: 513, y: y - 30, s: '$50.00' })
+    const r = parseCashReport(items)
+    expect(r).toMatchObject({ currency: 'AUD', reconciles: true, others: [] })
+    expect(r.rows.map(x => x.kind)).toEqual(['fx_in', 'withdrawal'])
+    expect(r.rows[1].ref).toBe('SAVINGS SWEEP')
+  })
+})

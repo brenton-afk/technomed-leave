@@ -623,6 +623,7 @@ const ACTIONS = {
     for (const [k, v] of Object.entries(live)) if (!v.stale || !prices[k]) prices[k] = v
     // Cash: the latest running balance on the US$ side (statements carry none).
     const last = [...rows].reverse().find(r => r.balance != null && (r.currency || 'USD') === 'USD')
+    const lastAud = [...rows].reverse().find(r => r.balance != null && r.currency === 'AUD')
     return res.json({
       today: today(), fx, prices, roc, rocCfg,
       holdings,
@@ -634,7 +635,7 @@ const ACTIONS = {
       openings, actions,
       suggestedOpenings: suggestOpenings(rows, L.openings),
       suggestedConsolidations: suggestConsolidations(rows, L.openings, L.actions),
-      cash: last ? { usd: last.balance, at: last.date } : null,
+      cash: last || lastAud ? { usd: last?.balance ?? null, at: last?.date ?? null, aud: lastAud?.balance ?? null, audAt: lastAud?.date ?? null } : null,
       reports: sw.reports || [],
       recent: rows.slice(-40).reverse()
     })

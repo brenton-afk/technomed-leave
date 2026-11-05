@@ -393,7 +393,7 @@ describe('SelfWealth cash reports', () => {
     expect(inv.body.holdings[0]).toMatchObject({ ticker: 'MSTY', units: 10, costUsd: 50 })
     expect(inv.body.income[0]).toMatchObject({ fy: 'FY26', gross: 10, net: 10 })
     expect(inv.body.prices.MSTY.price).toBe(6)
-    expect(inv.body.cash).toEqual({ usd: 60, at: '2025-07-08' })
+    expect(inv.body.cash).toEqual({ usd: 60, at: '2025-07-08', aud: null, audAt: null })
   })
 
   // An invented annual statement: 100 XYZ held at the start, 50 bought, then 1-for-5.

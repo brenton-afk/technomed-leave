@@ -108,10 +108,16 @@ const PATTERNS = [
   [new RegExp(`^${N} ([A-Z.]+) CASHDIV @ USD ${N} \\(Cash Div Fee\\)$`, 'i'), m => ({ kind: 'divfee', units: +m[1], ticker: m[2], perUnit: +m[3] })],
   [new RegExp(`^${N} ([A-Z.]+) CASHDIV @ USD ${N}$`, 'i'), m => ({ kind: 'distribution', units: +m[1], ticker: m[2], perUnit: +m[3] })],
   [new RegExp(`^${N} ([A-Z.]+) TAX REFUND @ USD ${N}$`, 'i'), m => ({ kind: 'refund', units: +m[1], ticker: m[2], perUnit: +m[3] })],
-  [new RegExp(`^Order (\\d+): (Buy|Sell) ${N} ([A-Z.]+) @ (?:US)?\\$([\\d,.]+)$`, 'i'), m => ({ kind: m[2].toLowerCase(), order: m[1], units: +m[3], ticker: m[4], price: +m[5].replace(/,/g, '') })],
+  // US$ orders read "@ US$12.57", ASX orders "@ A$82.25".
+  [new RegExp(`^Order (\\d+): (Buy|Sell) ${N} ([A-Z.]+) @ (?:US|A)?\\$([\\d,.]+)$`, 'i'), m => ({ kind: m[2].toLowerCase(), order: m[1], units: +m[3], ticker: m[4], price: +m[5].replace(/,/g, '') })],
   [/^Order (\d+): Brokerage (BUY|SELL) ([A-Z.]+)$/i, m => ({ kind: 'brokerage', order: m[1], side: m[2].toLowerCase(), ticker: m[3] })],
-  [/^(?:Convert|Transfer) ([\d,.]+) USD to AUD\. Estimate 1 USD = ([\d.]+) AUD$/i, m => ({ kind: 'to_aud', usd: +m[1].replace(/,/g, ''), rate: +m[2] })],
-  [/^(?:Convert|Transfer) ([\d,.]+) AUD TO USD\. 1 AUD = ([\d.]+) USD$/i, m => ({ kind: 'from_aud', aud: +m[1].replace(/,/g, ''), rate: +m[2] })]
+  // A conversion is worded with "Estimate" in the account it leaves and
+  // without it in the one it arrives in; both are read.
+  [/^(?:Convert|Transfer) ([\d,.]+) USD to AUD\. (?:Estimate )?1 USD = ([\d.]+) AUD$/i, m => ({ kind: 'to_aud', usd: +m[1].replace(/,/g, ''), rate: +m[2] })],
+  [/^(?:Convert|Transfer) ([\d,.]+) AUD TO USD\. (?:Estimate )?1 AUD = ([\d.]+) USD$/i, m => ({ kind: 'from_aud', aud: +m[1].replace(/,/g, ''), rate: +m[2] })],
+  // Money in from a bank account, and out to one.
+  [/^PAYMENT FROM (.+)$/i, m => ({ kind: 'deposit', ref: m[1] })],
+  [/^Withdrawal$/i, () => ({ kind: 'withdrawal', ref: '' })]
 ]
 
 export function classify(desc) {
@@ -161,6 +167,9 @@ export function parseCashReport(items) {
   // In the A$ report a conversion is the same event the US$ report already
   // counts, so it is kept (it moves the balance) but not counted again.
   if (currency === 'AUD') for (const r of out) if (r.kind === 'to_aud' || r.kind === 'from_aud') r.kind = r.kind === 'to_aud' ? 'fx_in' : 'fx_out'
+  // A withdrawal from the A$ account carries the reference typed when it was
+  // made ("NEED FUNDS"), so a plain-words debit there is one.
+  if (currency === 'AUD') for (const r of out) if (r.kind === 'other' && r.amount < 0 && !/\d/.test(r.desc)) Object.assign(r, { kind: 'withdrawal', ref: r.desc })
   return {
     account, currency, opening, closing, reconciles, breaks,
     from: out[0].date, to: out[out.length - 1].date, rows: out,
