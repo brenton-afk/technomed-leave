@@ -74,18 +74,19 @@ function dayChoices(from) {
   return Array.from({ length: 7 }, (_, i) => shiftDay(start, i))
 }
 
-export default function NewTask({ user, date: openOn, days = [], onClose, onCreated }) {
+export default function NewTask({ user, date: openOn, days = [], preset = null, onClose, onCreated }) {
   const [date, setDate] = useState(() => openOn || todayStr())
-  const [kind, setKind] = useState('')
-  const [thing, setThing] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [kind, setKind] = useState(preset?.kind || '')
+  const [thing, setThing] = useState(preset?.thing || '')
+  const [from, setFrom] = useState(preset?.from || '')
+  const [to, setTo] = useState(preset?.to || '')
   const [who, setWho] = useState('')
   const [note, setNote] = useState('')
   // The case a kit move is for (Toni, 4 Nov 2026): the cases on the week that
   // use the kit chosen, from the day the task is for. One tap links it and
   // sends the kit to that case's hospital.
-  const [forCase, setForCase] = useState(null)
+  // A dispatch worked out from the bookings arrives with its case (dispatch.js).
+  const [forCase, setForCase] = useState(preset?.caseId ? { id: preset.caseId, label: preset.forCase, date: preset.caseDate } : null)
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
 
@@ -105,7 +106,7 @@ export default function NewTask({ user, date: openOn, days = [], onClose, onCrea
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user?.token}` },
         body: JSON.stringify({
           date, kind, thing, from, to, who, note,
-          ...(forCase && kind === 'move' ? { caseId: forCase.id, forCase: caseLabel(forCase) } : {})
+          ...(forCase && kind === 'move' ? { caseId: forCase.id, forCase: forCase.label || caseLabel(forCase) } : {})
         })
       })
       const data = await res.json()

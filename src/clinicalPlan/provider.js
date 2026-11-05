@@ -4,6 +4,7 @@
 // which it is looking at.
 
 import { buildWeekPlan } from './buildWeekPlan.js'
+import { addCivilDays, parseDateStr, toDateStr } from './week.js'
 import { readBooking, detectHospital } from './parse.js'
 import { FIXTURE_WEEK } from './fixture.js'
 import { formatListPlace } from './listPlace.js'
@@ -64,6 +65,9 @@ export function planSignature(plan) {
           (c.notes || []).map(n => n.text).join('~')].join('\u0001'))
       }
     }
+    // Tasks too — a dispatch suggestion appearing, or a task ticked in Google,
+    // is a change to the day that has to reach the screen.
+    for (const t of day.tasks || []) parts.push([t.id, t.what, t.done ? 'done' : '', t.suggested ? 'suggested' : ''].join('\u0001'))
     for (const item of day.nonSurgeonItems || []) parts.push(item.text)
     for (const item of day.otherRollup || []) parts.push(item.text || String(item))
   }
@@ -221,7 +225,9 @@ export async function fetchWeekPlan(window, { token, force = false, useFixture =
 
   try {
     const res = await fetch(
-      `/api/calendar/today?action=week&start=${window.startDate}&end=${window.endDate}`,
+      // Four days past the week: a TM loan kit for next Monday or Tuesday has
+      // to leave this Friday, so those bookings are read too (see dispatch.js).
+      `/api/calendar/today?action=week&start=${window.startDate}&end=${aheadOf(window.endDate)}`,
       { headers: token ? { Authorization: `Bearer ${token}` } : {} }
     )
     const data = await res.json()
@@ -243,4 +249,9 @@ export async function fetchWeekPlan(window, { token, force = false, useFixture =
     }
     throw err
   }
+}
+
+/** The last day fetched for a week: four days on, for kits sent ahead. */
+function aheadOf(endDate) {
+  try { return toDateStr(addCivilDays(parseDateStr(endDate), 4)) } catch { return endDate }
 }

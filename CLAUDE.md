@@ -385,6 +385,26 @@ board header); a task's division is its project's, else its assignee's
 `projectId` (it was dropped, so tasks typed on a board landed in General).
 View, division and Only-mine are remembered per browser (`tm_projects_view`).
 
+### TM loan kits are sent ahead (Brent, 5 Nov 2026)
+
+When a case takes a **TM Loan** kit — written on the booking, or the
+portal's own suggestion (the second Dakota at Calvary on a day) — the week
+shows a dashed task on the **dispatch day: the last weekday at least two
+days before the case** (Tue 24 → Fri 20; Mon/Tue → the Friday before):
+"Send the Dakota TM loan kit to Calvary · for Ibbett · Calvary · Tue 24 Nov".
+Worked out from the bookings every time the week is built
+(`tmLoanDispatches` in `src/clinicalPlan/dispatch.js`, counting consignment
+sets per site per day in list order exactly as `withDaySupplies` does) —
+never written to Google by itself, so a moved or cancelled case takes it with
+it. The week fetch reads **four days past the week** (`aheadOf` in
+`provider.js`, `DISPATCH_AHEAD_DAYS`) so Friday can see next Monday–Thursday.
+Tapping it opens Add a task prefilled (Move a kit, the kit, TM Office → the
+hospital, the case); once a real Move a kit task for that kit and hospital
+exists before the case (`alreadyTasked`), the suggestion steps aside. Hospitals
+are compared by `siteCode` — the plan carries full names. `planSignature` now
+includes each day's tasks, so a dispatch appearing, or a task ticked in
+Google, reaches the screen.
+
 ### Tasks are done once, everywhere
 
 Tapping a calendar task opens `cases/TaskSheet.jsx`; it no longer ticks on the

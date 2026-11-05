@@ -186,6 +186,26 @@ const KIND_TONE = {
  */
 function TaskRow({ task, onDone, compact }) {
   const done = Boolean(task.done)
+  // Worked out from the bookings, not yet a task anyone has added (dispatch.js):
+  // dashed, and a tap opens Add a task with it filled in.
+  if (task.suggested) {
+    return (
+      <button type="button" onClick={() => onDone?.(task)} data-suggested="true"
+        aria-label={`${task.what} — for ${task.forCase}. Add it as a task`}
+        style={{
+          display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+          padding: compact ? '4px 7px' : `6px ${space.sm}px`, marginBottom: 4,
+          borderRadius: radius.control, background: colour.warningSoft,
+          border: `1.5px dashed ${colour.warningLine}`,
+          ...text('micro'), textTransform: 'none', letterSpacing: 0, lineHeight: 1.35,
+          color: colour.ink, fontWeight: 600
+        }}>
+        <span aria-hidden="true" style={{ marginRight: 6 }}>⇢</span>
+        {task.what}
+        <span style={{ fontWeight: 400, color: colour.inkMuted }}> · for {task.forCase} · tap to add</span>
+      </button>
+    )
+  }
   return (
     <button type="button"
       onClick={() => onDone?.(task, !done)}
@@ -1783,7 +1803,12 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
       return null
     }
   }, [user, load, window_])
-  const openTaskSheet = useCallback(task => setOpenTask(task), [])
+  // A suggested dispatch opens Add a task, filled in; a real task, its sheet.
+  const [taskPreset, setTaskPreset] = useState(null)
+  const openTaskSheet = useCallback(task => {
+    if (task?.suggested) { setTaskPreset(task); setAddingTask(task.date); return }
+    setOpenTask(task)
+  }, [])
 
   const countQueue = useCallback(async () => {
     try {
@@ -2144,7 +2169,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
           user={user}
           date={addingTask}
           days={fullPlan?.days || []}
-          onClose={() => setAddingTask(null)}
+          preset={taskPreset}
+          onClose={() => { setAddingTask(null); setTaskPreset(null) }}
           onCreated={() => load(window_, { quiet: true })} />
       )}
 

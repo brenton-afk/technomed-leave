@@ -12,8 +12,9 @@ import {
 import { colourNameFor, colourHexFor, surgeonForColourName } from './colours.js'
 import {
   formatWeekRange, formatDayHeading, weekdayName, formatTimeRange,
-  zonedCivil, parseDateStr, TZ
+  zonedCivil, parseDateStr, TZ, addCivilDays, toDateStr
 } from './week.js'
+import { tmLoanDispatches, alreadyTasked, dispatchTask } from './dispatch.js'
 import { bySession } from './listPlace.js'
 import { inventoryFor, suggestSupplyOnDay } from './inventory.js'
 import { STAFF } from '../staffConfig.js'
@@ -109,6 +110,9 @@ function isAlertFlag(kind) {
 }
 
 /** Groups events by the Hobart calendar day they start on. */
+/** How far past the week a TM loan kit's case can be and still be sent within it. */
+const DISPATCH_AHEAD_DAYS = 4
+
 function bucketByDay(events, days, tz) {
   const buckets = new Map(days.map(d => [d, []]))
   for (const event of events) {
@@ -612,6 +616,31 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       })
     }
   }
+  // ── TM loan kits to send out (Brent, 5 Nov 2026) ──
+  // A kit for Monday or Tuesday has to leave the Friday before, so the week
+  // also looks at the four days after it: bookings there are read only to
+  // work out what has to be sent on a day of this week.
+  const lastDay = days[days.length - 1]
+  const ahead = Array.from({ length: DISPATCH_AHEAD_DAYS },
+    (_, i) => toDateStr(addCivilDays(parseDateStr(lastDay), i + 1)))
+  const aheadBuckets = bucketByDay(events, ahead, tz)
+  const aheadCases = []
+  for (const dayDate of ahead) {
+    for (const event of aheadBuckets.get(dayDate) || []) {
+      if (event.allDay) continue
+      const read = readBooking(event.rawTitle, event.description, {
+        colourSurgeon: surgeonForColourName(colourNameFor(event.colorId)), knownPatient: event.knownPatient
+      })
+      if (!read) continue
+      aheadCases.push({
+        id: event.id, date: dayDate, start: event.start, surgeon: read.surgeon, supplies: read.supplies,
+        cancelled: isCancelled(event.rawTitle, event.description) || undefined,
+        hospital: detectHospital(event.location, event.description, { caseEvent: true })
+      })
+    }
+  }
+  const dispatches = tmLoanDispatches([...allCases.map(c => ({ ...c, date: c.dayDate })), ...aheadCases])
+
   const surgeonsWithCases = [...new Set(allCases.map(c => c.surgeon))]
 
   // Second pass: note where a surgeon was inferred from a colour rather than named.
@@ -756,6 +785,14 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
   const startCivil = parseDateStr(window.startDate)
   const endCivil = parseDateStr(window.endDate)
   const fridayCivil = parseDateStr(days[4])
+
+  // Each dispatch on its day, unless a real task already covers it.
+  const realTasks = dayPlans.flatMap(d => d.tasks || [])
+  for (const dispatch of dispatches) {
+    const day = dayPlans.find(d => d.date === dispatch.date)
+    if (!day || alreadyTasked(dispatch, realTasks)) continue
+    day.tasks = [...(day.tasks || []), dispatchTask(dispatch)]
+  }
 
   return {
     weekStart: window.startDate,
