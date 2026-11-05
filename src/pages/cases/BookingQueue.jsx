@@ -366,17 +366,11 @@ function Candidate({ candidate, user, onDone }) {
           which we do: two consignment kits of it at Calvary. */}
       <LoanNote systems={systemsInKit(fields.kit)} hospital={fields.hospital} />
 
-      {candidate.returned && !moves && (
-        <div role="note" style={{
-          ...text('caption'), color: colour.ink, marginTop: space.sm,
-          background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
-          borderRadius: radius.control, padding: space.sm
-        }}>
-          <strong>Not on the calendar any more.</strong>{' '}
-          {candidate.returned.by ? `${candidate.returned.by} added this` : 'This was on the calendar'},
-          and it has since been taken off. Add it back, or tap Not a booking if the case is off.
-        </div>
-      )}
+      {/* No history here (Brent, 5 Nov 2026): "If a booking isn't in the
+          portal it shouldn't say that it was added. It should check if it's in
+          the portal currently." The check is against the calendar as it is
+          now (reconcileQueue); a booking not on it is simply one to add, and
+          the card reads like any other. */}
 
       {moves && (
         <div role="note" style={{
@@ -579,9 +573,9 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
                       ? `${lastScan.already} ${lastScan.already === 1 ? 'was' : 'were'} `
                         + 'already on the calendar.'
                       : null,
+                    // Said as it stands now, not as it once was.
                     lastScan.returned
-                      ? `${lastScan.returned} added earlier ${lastScan.returned === 1 ? 'is' : 'are'} `
-                        + 'no longer on the calendar — shown below.'
+                      ? `${lastScan.returned} ${lastScan.returned === 1 ? 'is' : 'are'} not on the calendar — shown below to add.`
                       : null,
                     lastScan.nowBooked
                       ? `${lastScan.nowBooked} waiting ${lastScan.nowBooked === 1 ? 'has' : 'have'} `

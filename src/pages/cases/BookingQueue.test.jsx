@@ -498,3 +498,15 @@ describe('a cover request from KT for a JPW ACDF', () => {
     expect(calls.find(c => c.url.includes('action=accept')).body.fields.kit).toBe('Lonestar (Consignment)')
   })
 })
+
+// Brent, 5 Nov 2026: "If a booking isn't in the portal it shouldn't say that
+// it was added. It should check if it's in the portal currently." A booking
+// that came back because it is not on the calendar reads like any other.
+describe('a booking that is not on the calendar now', () => {
+  it('says nothing about having been added before', async () => {
+    const src = (await import('node:fs')).readFileSync('src/pages/cases/BookingQueue.jsx', 'utf8')
+    expect(src).not.toMatch(/Not on the calendar any more/)
+    expect(src).not.toMatch(/added earlier/)
+    expect(src).toMatch(/not on the calendar — shown below to add/)
+  })
+})
