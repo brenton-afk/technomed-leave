@@ -151,7 +151,16 @@ export function parseCashReport(items) {
     if (r.balance != null && Math.abs(running - r.balance) > 0.011) { breaks.push(r.at); running = r.balance }
   }
   const reconciles = closing == null ? null : Math.abs(running - closing) < 0.011 && !breaks.length
-  const currency = out.some(r => r.kind === 'to_aud' || /@ US(D|\$)/.test(r.desc)) ? 'USD' : 'AUD'
+  // Which account: US$ prices and payments say US$. A conversion appears in
+  // both accounts' reports, so it says which by the way its money moves —
+  // "USD to AUD" leaves the US$ account and arrives in the A$ one.
+  const usdSide = r => (r.kind === 'to_aud' && r.amount < 0) || (r.kind === 'from_aud' && r.amount > 0)
+  const audSide = r => (r.kind === 'to_aud' && r.amount > 0) || (r.kind === 'from_aud' && r.amount < 0)
+  const usd = out.filter(r => usdSide(r) || /@ US(D|\$)/.test(r.desc)).length
+  const currency = usd > out.filter(audSide).length ? 'USD' : 'AUD'
+  // In the A$ report a conversion is the same event the US$ report already
+  // counts, so it is kept (it moves the balance) but not counted again.
+  if (currency === 'AUD') for (const r of out) if (r.kind === 'to_aud' || r.kind === 'from_aud') r.kind = r.kind === 'to_aud' ? 'fx_in' : 'fx_out'
   return {
     account, currency, opening, closing, reconciles, breaks,
     from: out[0].date, to: out[out.length - 1].date, rows: out,

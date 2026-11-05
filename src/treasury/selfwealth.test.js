@@ -104,3 +104,39 @@ describe('the investments', () => {
     ])
   })
 })
+
+describe('the A$ account', () => {
+  // An invented A$ cash report: money arrives from the US$ side, then two ASX buys.
+  let y = 700
+  const items = [{ p: 1, x: 164, y: 720, s: 'Opening Balance' }, { p: 1, x: 514, y: 720, s: '$10.00' }]
+  const row = (date, desc, credit, debit, balance, wrap) => {
+    y -= 30
+    items.push({ p: 1, x: 60, y, s: date }, { p: 1, x: 164, y, s: desc })
+    if (wrap) items.push({ p: 1, x: 164, y: y - 10, s: wrap })
+    if (credit) items.push({ p: 1, x: 384, y, s: credit })
+    if (debit) items.push({ p: 1, x: 455, y, s: debit })
+    items.push({ p: 1, x: 513, y, s: balance })
+  }
+  row('12 July 2026 20:34:14', 'Convert 500.00 USD to AUD. Estimate 1 USD =', '$750.00', null, '$760.00', '1.500000 AUD')
+  row('14 July 2026 10:00:01', 'Order 7: Buy 10 SLVX @ $50.00', null, '$500.00', '$260.00')
+  row('14 July 2026 10:00:05', 'Order 7: Brokerage BUY SLVX', null, '$9.50', '$250.50')
+  row('15 July 2026 10:00:01', 'Order 8: Buy 4 GLDX @ $50.00', null, '$200.00', '$50.50')
+  items.push({ p: 1, x: 164, y: y - 30, s: 'Closing Balance at end of day 30 June 2027' }, { p: 1, x: 513, y: y - 30, s: '$50.50' })
+  const r = parseCashReport(items)
+
+  it('is read as A$ although it carries a conversion from US$, which it does not count again', () => {
+    expect(r).toMatchObject({ currency: 'AUD', reconciles: true })
+    expect(r.rows[0].kind).toBe('fx_in')
+    expect(conversionsByYear(r.rows)).toEqual([])
+  })
+
+  it('gives the ASX holdings in A$, with brokerage', () => {
+    const h = holdingsFrom(r.rows.map(x => ({ ...x, currency: r.currency })))
+    expect(h.map(x => [x.ticker, x.currency, x.units, x.costUsd])).toEqual([['GLDX', 'AUD', 4, 200], ['SLVX', 'AUD', 10, 509.5]])
+  })
+
+  it('a US$ report with a conversion out is still US$', () => {
+    const usd = parseCashReport(items.map(i => (i.s === '$750.00' ? { ...i, x: 455, s: '$500.00' } : i)))
+    expect(usd.currency).toBe('USD')
+  })
+})

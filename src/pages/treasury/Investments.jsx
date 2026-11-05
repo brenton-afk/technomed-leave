@@ -25,7 +25,7 @@ const SOURCE = { live: 'live', stale: 'last quote', typed: 'typed in', statement
 const day = d => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—')
 const KIND = {
   distribution: 'Distribution', withholding: 'Withholding tax', divfee: 'Distribution fee', refund: 'Tax refund',
-  buy: 'Buy', sell: 'Sell', brokerage: 'Brokerage', to_aud: 'To A$', from_aud: 'From A$', other: 'Other'
+  buy: 'Buy', sell: 'Sell', brokerage: 'Brokerage', to_aud: 'To A$', from_aud: 'From A$', fx_in: 'From US$', fx_out: 'To US$', other: 'Other'
 }
 
 export default function Investments({ user, onBack, onLocked }) {
