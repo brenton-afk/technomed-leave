@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
@@ -6,7 +6,7 @@ import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
 import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
 import { resolveKit, systemsInKit } from '../../clinicalPlan/systems.js'
 import { BRAINLAB, navigationChoice, kitWithoutNavigation, kitWithNavigation } from '../../clinicalPlan/brainlab.js'
-import { loanNeed } from '../../clinicalPlan/inventory.js'
+import { loanNeed, siteCode } from '../../clinicalPlan/inventory.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { distributorNameOf } from '../../clinicalPlan/bookingSources.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
@@ -150,13 +150,37 @@ function LoanNote({ systems, hospital }) {
   )
 }
 
-function Candidate({ candidate, user, onDone }) {
+/**
+ * For each waiting card, which case it is that day at that hospital with its
+ * kit (1st, 2nd…), in the order the cards are listed. Two Lonestar cases at
+ * RHH on one day with one set there: the second is a Calvary Loan (Brent,
+ * 6 Nov 2026), and the week then shows the transfer the day before.
+ */
+export function kitOrderOnDay(candidates = []) {
+  const seen = new Map()
+  const out = {}
+  for (const c of candidates) {
+    const kit = kitWithoutNavigation(resolveKit(c.kit || '', c.procedure || ''))
+    const system = kit
+      ? systemsInKit(kit)[0]
+      : assumedKit({ surgeon: c.surgeon, procedure: c.procedure, hospital: c.hospital, kit: '' })?.system
+    if (!system || !c.date) continue
+    const key = `${c.date}|${siteCode(c.hospital) || c.hospital}|${system}`
+    const n = (seen.get(key) || 0) + 1
+    seen.set(key, n)
+    out[c.id] = n
+  }
+  return out
+}
+
+function Candidate({ candidate, user, onDone, nth = 1 }) {
   // A booking that names no kit, for an operation whose kit this surgeon's
   // preference settles (JPW's ACDFs are Lonestar), arrives filled in — marked
   // as assumed, and one tap to change. See assumedKit.
   const [assumed] = useState(() => assumedKit({
     surgeon: candidate.surgeon, procedure: candidate.procedure, hospital: candidate.hospital,
-    kit: kitWithoutNavigation(resolveKit(candidate.kit || '', candidate.procedure || ''))
+    kit: kitWithoutNavigation(resolveKit(candidate.kit || '', candidate.procedure || '')),
+    nth
   }))
   const [fields, setFields] = useState({
     patient: candidate.patient || '',
@@ -439,6 +463,7 @@ function Candidate({ candidate, user, onDone }) {
 
 export default function BookingQueue({ user, onClose, onAccepted }) {
   const [pending, setPending] = useState(null)
+  const nths = useMemo(() => kitOrderOnDay(pending || []), [pending])
   const [error, setError] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
@@ -605,7 +630,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
             )}
 
             {(pending || []).map(candidate => (
-              <Candidate key={candidate.id} candidate={candidate} user={user} onDone={done} />
+              <Candidate key={candidate.id} candidate={candidate} user={user} onDone={done} nth={nths[candidate.id] || 1} />
             ))}
           </div>
 

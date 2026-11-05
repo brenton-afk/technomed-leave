@@ -417,7 +417,14 @@ it. The week fetch reads **four days past the week** (`aheadOf` in
 Tapping it opens Add a task prefilled (Move a kit, the kit, TM Office → the
 hospital, the case); once a real Move a kit task for that kit and hospital
 exists before the case (`alreadyTasked`), the suggestion steps aside. Hospitals
-are compared by `siteCode` — the plan carries full names. `planSignature` now
+are compared by `siteCode` — the plan carries full names.
+**A kit borrowed from the other hospital is a transfer the working day
+before** (Brent, 6 Nov 2026: two Lonestar cases at RHH, one set there):
+`tmLoanDispatches` also returns `kind: 'transfer'` for a Calvary Loan / RHH
+Loan (and for a "Consignment" past the sets on that shelf), dated
+`transferDay` — "Transfer the Lonestar kit from Calvary to RHH". The Inbox
+numbers same-day cards per kit and hospital (`kitOrderOnDay`) and passes
+`nth` to `assumedKit`, so the second card arrives as Calvary Loan. `planSignature` now
 includes each day's tasks, so a dispatch appearing, or a task ticked in
 Google, reaches the screen.
 

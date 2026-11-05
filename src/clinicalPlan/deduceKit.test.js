@@ -429,3 +429,34 @@ describe('KT is the distributor, not a system (Brent, 6 Nov 2026)', () => {
     expect(assumeFromRules({ surgeon: 'JPW', procedure: 'C4/5 ACDF', hospital: 'RHH', kit })?.system).toBe('Lonestar')
   })
 })
+
+import { tmLoanDispatches, dispatchTask } from './dispatch.js'
+describe('two Lonestar cases at RHH on one day (Brent, 6 Nov 2026)', () => {
+  it('the second is a Calvary Loan', () => {
+    expect(assumeFromRules({ surgeon: 'JPW', procedure: 'C4/5 ACDF', hospital: 'RHH', kit: '', nth: 1 }).supply).toBe('Consignment')
+    expect(assumeFromRules({ surgeon: 'JPW', procedure: 'C4/5 ACDF', hospital: 'RHH', kit: '', nth: 2 }).supply).toBe('Calvary Loan')
+  })
+  it('and the week shows the transfer from Calvary the working day before', () => {
+    const cases = [
+      { id: 'a', date: '2026-11-10', start: '08:00', hospital: 'RHH', surgeon: 'JPW', supplies: [{ system: 'Lonestar', supply: 'Consignment' }] },
+      { id: 'b', date: '2026-11-10', start: '10:00', hospital: 'RHH', surgeon: 'JPW', supplies: [{ system: 'Lonestar', supply: 'Calvary Loan' }] }
+    ]
+    const out = tmLoanDispatches(cases)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ kind: 'transfer', date: '2026-11-09', from: 'Calvary', to: 'RHH', system: 'Lonestar' })
+    expect(dispatchTask(out[0]).what).toBe('Transfer the Lonestar kit from Calvary to RHH')
+  })
+  it('a Monday case borrows on the Friday before', () => {
+    const out = tmLoanDispatches([{ id: 'c', date: '2026-11-16', hospital: 'RHH', surgeon: 'JPW', supplies: [{ system: 'Lonestar', supply: 'Calvary Loan' }] }])
+    expect(out[0].date).toBe('2026-11-13')
+  })
+})
+
+describe('two cases both written as Consignment, one set on the shelf', () => {
+  it('still shows the transfer', () => {
+    const cases = ['a', 'b'].map((id, i) => ({ id, date: '2026-11-10', start: `0${8 + i}:00`, hospital: 'RHH', surgeon: 'JPW', supplies: [{ system: 'Lonestar', supply: 'Consignment' }] }))
+    const out = tmLoanDispatches(cases)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ kind: 'transfer', caseId: 'b', from: 'Calvary' })
+  })
+})

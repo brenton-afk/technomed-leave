@@ -26,6 +26,19 @@ export function dispatchDay(caseDate) {
   return day
 }
 
+/** The working day before: Tuesday's case → Monday, Monday's → the Friday before. */
+export function transferDay(caseDate) {
+  let day = shift(caseDate, -1)
+  while (isWeekend(day)) day = shift(day, -1)
+  return day
+}
+
+// Brent, 6 Nov 2026: two Lonestar cases at RHH on one day, one consignment kit
+// there — "we will need to set one of the cases as Calvary Loan and put a
+// reminder on Monday to transfer the Calvary Lonestar kit to RHH". A kit
+// borrowed from the other hospital is a transfer the working day before.
+const FROM_HOSPITAL = { 'Calvary Loan': 'Calvary', 'RHH Loan': 'RHH' }
+
 /**
  * Every TM loan kit that has to go out for these cases, with the day it must go.
  *
@@ -56,10 +69,30 @@ export function tmLoanDispatches(cases = []) {
         if (!supply || supply === 'Consignment') {
           const nth = (taken.get(item) || 0) + 1
           taken.set(item, nth)
-          supply = supply || suggestSupplyOnDay(entry.system, c.hospital, nth)
+          // Written as Consignment past the sets on the shelf is still a
+          // borrowed kit — the shelf cannot hold two cases' worth of one.
+          const held = item.consigned?.[siteCode(c.hospital)] || 0
+          supply = !supply || nth > held ? suggestSupplyOnDay(entry.system, c.hospital, nth) : supply
         }
         const place = PLACES[siteCode(c.hospital)]
-        if (supply !== 'TM Loan' || !place) continue
+        if (!place) continue
+        const fromHospital = FROM_HOSPITAL[supply]
+        if (fromHospital && fromHospital !== place) {
+          out.push({
+            id: `transfer:${c.id}:${item.system}`,
+            kind: 'transfer',
+            date: transferDay(c.date),
+            caseDate: c.date,
+            caseId: c.id,
+            system: item.system,
+            from: fromHospital,
+            to: place,
+            surgeon: c.surgeon || '',
+            forCase: [c.surgeon, place, shortDay(c.date)].filter(Boolean).join(' · ')
+          })
+          continue
+        }
+        if (supply !== 'TM Loan') continue
         out.push({
           id: `dispatch:${c.id}:${item.system}`,
           date: dispatchDay(c.date),
@@ -87,6 +120,22 @@ export function alreadyTasked(dispatch, tasks = []) {
 
 /** As a row on the day, for the week view. */
 export function dispatchTask(dispatch) {
+  if (dispatch.kind === 'transfer') {
+    return {
+      id: dispatch.id,
+      suggested: true,
+      kind: 'move',
+      what: `Transfer the ${dispatch.system} kit from ${dispatch.from} to ${dispatch.to}`,
+      thing: dispatch.system,
+      from: dispatch.from,
+      to: dispatch.to,
+      forCase: dispatch.forCase,
+      caseId: dispatch.caseId,
+      caseDate: dispatch.caseDate,
+      date: dispatch.date,
+      note: `For ${dispatch.forCase} — the ${dispatch.to} kit is on another case that day`
+    }
+  }
   return {
     id: dispatch.id,
     suggested: true,

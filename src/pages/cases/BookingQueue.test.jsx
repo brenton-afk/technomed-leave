@@ -510,3 +510,12 @@ describe('a booking that is not on the calendar now', () => {
     expect(src).toMatch(/not on the calendar — shown below to add/)
   })
 })
+
+import { kitOrderOnDay } from './BookingQueue.jsx'
+import { describe as d2, it as i2, expect as e2 } from 'vitest'
+d2('kitOrderOnDay', () => {
+  i2('counts same-day cases with the same kit at the same hospital', () => {
+    const c = (id, date) => ({ id, date, surgeon: 'JPW', procedure: 'C4/5 ACDF', hospital: 'RHH', kit: '' })
+    e2(kitOrderOnDay([c('a', '2026-11-10'), c('b', '2026-11-10'), c('x', '2026-11-11')])).toEqual({ a: 1, b: 2, x: 1 })
+  })
+})

@@ -30,7 +30,7 @@
 import { systemsToSupply } from './kitSupply.js'
 import { findImplantProcedures } from './procedureImplants.js'
 import { preferenceFor, hasRecordedPreferences } from './surgeonPreferences.js'
-import { inventoryFor, siteCode, suggestSupply } from './inventory.js'
+import { inventoryFor, siteCode, suggestSupply, suggestSupplyOnDay } from './inventory.js'
 import { suggestSystems, SYSTEM_GROUPS } from './systemSuggestions.js'
 
 /**
@@ -149,7 +149,7 @@ function questionFor(acronyms, needs, preference, surgeon) {
  *
  * @returns {null | { kit: string, system: string, supply: string|null, why: string }}
  */
-export function assumedKit({ surgeon, procedure, hospital, kit, fromRules = true } = {}) {
+export function assumedKit({ surgeon, procedure, hospital, kit, fromRules = true, nth = 1 } = {}) {
   if (systemsToSupply({ kit }).length) return null
   const found = findImplantProcedures(String(procedure || '')).filter(e => e.needs)
   // One operation, one preference. "ACDF and PLIF" is two kits and asks.
@@ -171,6 +171,18 @@ export function assumedKit({ surgeon, procedure, hospital, kit, fromRules = true
   const held = site ? (inventoryFor(preference.system)?.consigned?.[site] || 0) : 0
   // Booked to us, so it is a case we are covering: a set on the shelf there is
   // the answer even for a distributor's kit we do not usually attend with.
+  // nth: this is the nth case using the kit at this hospital that day. Past
+  // the sets on the shelf it is borrowed (Brent, 6 Nov 2026: the second
+  // Lonestar at RHH is a Calvary Loan, transferred the day before).
+  const daySupply = nth > 1 ? suggestSupplyOnDay(preference.system, hospital, nth) : null
+  if (daySupply && daySupply !== 'Consignment') {
+    return {
+      system: preference.system,
+      supply: daySupply,
+      kit: `${preference.system} (${daySupply})`,
+      why: `${preference.system} — ${surgeon ? `${surgeon}'s kit` : 'the kit'} for ${/^[AEIOUaeiou]/.test(what) ? 'an' : 'a'} ${what}. Case ${nth} with it at ${site === 'CLV' ? 'Calvary' : site} that day, so ${daySupply === 'TM Loan' ? 'the TM loan kit' : `the ${daySupply.replace(' Loan', '')} kit, moved the day before`}.`
+    }
+  }
   const supply = held > 0 ? 'Consignment' : suggestSupply(preference.system, hospital)
   const where = held > 0
     ? ` ${held === 1 ? 'One' : held === 2 ? 'Two' : held} consignment ${held === 1 ? 'kit' : 'kits'} at ${site === 'CLV' ? 'Calvary' : site} — no loan set needed.`
