@@ -7,6 +7,7 @@ import { sendUsageReminderEmail, PORTAL_URL } from '../_email.js'
 import { notify } from '../_push.js'
 import { TZ, zonedCivil, toDateStr, addCivilDays } from '../../src/clinicalPlan/week.js'
 import { autoInvoice } from '../_poAuto.js'
+import { autoQuotes } from '../_quoteAuto.js'
 
 // ─── The two daily runs ──────────────────────────────────────────────────────
 // Vercel's Hobby plan allows two scheduled jobs, so both share this function
@@ -92,10 +93,13 @@ export default async function handler(req, res) {
   // a Xero or Gmail failure must not cost the reminders.
   let invoices = null
   if (job === 'evening' || job === 'morning') {
-    try { invoices = await autoInvoice({ by: `cron-${job}` }) } catch (err) {
-      console.error('po auto-invoice failed:', err.message)
-      invoices = { error: err.message }
-    }
+    // Purchase orders and self-funding quotes side by side, each in its own
+    // catch, so neither can cost the other (or the reminders) its turn.
+    const [po, quotes] = await Promise.all([
+      autoInvoice({ by: `cron-${job}` }).catch(err => { console.error('po auto-invoice failed:', err.message); return { error: err.message } }),
+      autoQuotes({ by: `cron-${job}` }).catch(err => { console.error('quote auto failed:', err.message); return { error: err.message } })
+    ])
+    invoices = { po, quotes }
   }
 
   // Each part in its own try, so a calendar that will not answer does not stop

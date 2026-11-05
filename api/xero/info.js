@@ -9,6 +9,7 @@ import { listPurchaseOrders, readPurchaseOrder, invoicedByPo, splitOrders } from
 import { autoInvoice, autoRecords, retryPo } from '../_poAuto.js'
 import { accountsAudit } from '../_remittances.js'
 import { listQuoteRequests } from '../_quoteRequests.js'
+import { autoQuotes, quoteRecords, forgetQuoteRequest } from '../_quoteAuto.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getTimesheetDraft, registeredDeviceCount } from '../_redis.js'
 import { pushConfigured, pushFault } from '../_push.js'
@@ -259,12 +260,17 @@ export default async function handler(req, res) {
   }
 }
 
-const INVOICE_ACTIONS = new Set(['quote-requests', 'quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
+const INVOICE_ACTIONS = new Set(['quote-auto', 'quote-retry', 'quote-requests', 'quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
 
 async function handleInvoices(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   try {
-    if (action === 'quote-requests') return res.status(200).json(await listQuoteRequests())
+    if (action === 'quote-requests') {
+      const found = await listQuoteRequests()
+      const records = await quoteRecords(found.requests.map(r => r.id)).catch(() => ({}))
+      for (const r of found.requests) if (records[r.id]) r.auto = records[r.id]
+      return res.status(200).json(found)
+    }
     if (action === 'quote-templates') return res.status(200).json({ templates: await quoteTemplates() })
     if (action === 'accounts-audit') return res.status(200).json(await accountsAudit())
     if (action === 'po-list') {
@@ -297,6 +303,13 @@ async function handleInvoices(action, req, res, session) {
       return res.status(200).json({ contacts: contacts.slice(0, 50), items })
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    if (action === 'quote-auto') return res.status(200).json(await autoQuotes({ by: session.email }))
+    if (action === 'quote-retry') {
+      const id = String(body.id || '')
+      if (!/^[A-Za-z0-9_-]{6,}$/.test(id)) return res.status(400).json({ error: 'Which request?' })
+      await forgetQuoteRequest(id)
+      return res.status(200).json({ ok: true })
+    }
     if (action === 'po-auto') return res.status(200).json(await autoInvoice({ by: session.email }))
     if (action === 'po-retry') {
       const po = String(body.po || '').toUpperCase()

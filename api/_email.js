@@ -678,7 +678,7 @@ export function bookingSignature(sender) {
   return { text, html }
 }
 
-export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId }) {
+export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId, attachments = [] }) {
   const sig = bookingSignature(sender)
   const lower = a => String(a).toLowerCase()
   const addressed = new Set((to || []).map(lower))
@@ -688,7 +688,7 @@ export async function sendBookingNotice({ to, cc, subject, html, text, sender, c
     to, cc: copies, subject, caseId, sender,
     html: `${html || ''}${sig.html}`,
     text: `${String(text || '').replace(/\s+$/, '')}\n${sig.text}`,
-    attachments: [signatureLogo()],
+    attachments: [signatureLogo(), ...attachments],
     replyTo: [sender?.email, BOOKINGS_INBOX].filter(Boolean)
   })
 }

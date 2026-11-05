@@ -179,6 +179,29 @@ export async function quoteTemplates(contactName = process.env.QUOTE_TEMPLATE_CO
   return out
 }
 
+/** One quote as Xero has it now: status, number, contact and lines. */
+export async function getQuote(id) {
+  const data = await call('GET', `/Quotes/${encodeURIComponent(id)}`)
+  const q = data.Quotes?.[0]
+  if (!q) return null
+  return {
+    id: q.QuoteID, number: q.QuoteNumber, status: q.Status, title: q.Title || '', summary: q.Summary || '',
+    reference: q.Reference || '', total: q.Total,
+    lines: (q.LineItems || []).map(l => ({ code: l.ItemCode || '', description: l.Description || '', quantity: l.Quantity, unitPrice: l.UnitAmount, discount: l.DiscountRate || 0 }))
+  }
+}
+
+/** The quote as the PDF Xero would send — base64. */
+export async function quotePdf(id) {
+  const { token, tenantId } = await getXeroToken()
+  const res = await fetch(`${API}/Quotes/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/pdf' }
+  })
+  if (res.status === 401 || res.status === 403) throw Object.assign(new Error(NEEDS_PERMISSION), { code: 'permission' })
+  if (!res.ok) throw new Error(`Xero would not give the quote PDF (${res.status})`)
+  return Buffer.from(await res.arrayBuffer()).toString('base64')
+}
+
 /** A draft quote. */
 export async function createDraftQuote({ contactId, reference, title, summary, date, expiryDate, lines }) {
   if (!contactId) throw new Error('Choose who the quote is for')

@@ -206,3 +206,49 @@ describe('quote requests from CNS', () => {
     expect(out.map(m => m.mailboxes.length)).toEqual([2, 1])
   })
 })
+
+import { checkPlan, quoteFolder, quoteFileName, distributorsOnQuote, quoteSummary } from './_quoteAuto.js'
+
+describe('self-funding quotes from templates', () => {
+  const templates = [{ id: 't1', title: 'Diplomat single level fixation', number: 'QU-0001', lines: [
+    { code: 'AB0321-xxxxx', description: 'DIPLOMAT Pedicle Screw', quantity: 4, unitPrice: 524, discount: 20 },
+    { code: 'AB0010-55001', description: 'DIPLOMAT Tulip', quantity: 4, unitPrice: 686, discount: 20 },
+    { code: 'MP0068', description: 'K-Wire 1.8 x 500mm', quantity: 1, unitPrice: 50, discount: 0 }
+  ] }]
+
+  it('copies lines and prices only from the chosen template, letting quantities change', () => {
+    const out = checkPlan({ templateId: 't1', lines: [
+      { code: 'AB0321-xxxxx', description: 'DIPLOMAT Pedicle Screw', quantity: 6 },
+      { code: 'MP0068', description: 'K-Wire 1.8 x 500mm', quantity: 1 }
+    ] }, templates)
+    expect(out.ok).toBe(true)
+    expect(out.lines).toEqual([
+      { code: 'AB0321-xxxxx', description: 'DIPLOMAT Pedicle Screw', quantity: 6, unitPrice: 524, discount: 20 },
+      { code: 'MP0068', description: 'K-Wire 1.8 x 500mm', quantity: 1, unitPrice: 50, discount: 0 }
+    ])
+  })
+
+  it('holds a line the template does not have, and an unknown template', () => {
+    expect(checkPlan({ templateId: 't1', lines: [{ code: 'NEW', description: 'Something', quantity: 1 }] }, templates).ok).toBe(false)
+    expect(checkPlan({ templateId: 'nope', lines: [] }, templates).reason).toMatch(/No quote template/)
+    expect(checkPlan({ hold: 'Surgeon unclear' }, templates).reason).toBe('Surgeon unclear')
+  })
+
+  it('files where the team files them, named as they name them', () => {
+    expect(quoteFolder('Dr Nova Thani')).toBe('/ALL SURGEON USAGE/SPINE Usage/THANI - SPINE/Thani Self Funding Quotes')
+    expect(quoteFolder('Ibbett')).toBe('/ALL SURGEON USAGE/SPINE Usage/IBBETT - SPINE/Self Funding Quotes')
+    expect(quoteFolder('Dubey')).toBe('/ALL SURGEON USAGE/SPINE Usage/DUBEY - SPINE/Dubey Self Funding Quotes')
+    expect(quoteFolder('')).toMatch(/Surgeon Unknown$/)
+    expect(quoteFileName('Test Patient', 'QU-0501')).toBe('Test Patient Self Funding Quote QU0501.pdf')
+  })
+
+  it('tells each distributor with a product on the quote', () => {
+    expect(distributorsOnQuote([{ description: 'DIPLOMAT Tulip' }, { description: 'CYLOX cage' }, { description: 'Dakota plate' }]).sort()).toEqual(['e4', 'signus'])
+    expect(distributorsOnQuote([{ description: 'Freight' }])).toEqual([])
+  })
+
+  it('writes the summary lines the team puts on a quote', () => {
+    expect(quoteSummary({ surgeon: 'Dr Test', patient: 'Test Patient', procedure: 'Fixation', levels: 'T8/9', system: 'Diplomat' }))
+      .toBe('Surgeon: Dr Test\nPatient: Test Patient\nDate: TBC\nProcedure: Fixation (T8/9)\nKit/System: Diplomat')
+  })
+})

@@ -602,6 +602,20 @@ admin-only; no new function).
   sometimes only him), searched narrowly (CNS domains + quote wording), the same
   email in both counted once by Message-ID. Reading brenton@ uses the same
   domain-wide `gmail.readonly` grant as bookings@.
+- **Self-funding quotes draft and follow up by themselves** (`api/_quoteAuto.js`,
+  Brent 5 Nov 2026: "use the templates to inform; 20% is blanket for all
+  distributors; email the distributor with the quote once we send it; save it
+  the same way"). Each CNS request is matched by Claude to one Xero quote
+  template; `checkPlan` keeps **only that template's lines and prices**
+  (quantities may change for levels, nothing invented), 20% on distributor
+  lines unless the template says otherwise; a DRAFT quote for Centre for
+  Neurosurgery with the Surgeon/Patient/Date/Procedure/Kit summary. Once the
+  quote is SENT in Xero: PDF filed in the surgeon's self-funding folder
+  (`quoteFolder`, the team's existing paths; `{Patient} Self Funding Quote
+  QU0492.pdf`) and each distributor on it (`distributorsOnQuote`) emailed a
+  heads-up with the PDF, from Brent, bookings@ copied — surname only in the
+  body. Runs in both crons and when Invoices opens; records `quote:req:{id}`,
+  each step once; held requests have Try again.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

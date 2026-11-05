@@ -78,7 +78,8 @@ export default function Invoices({ user }) {
     setAuto({ running: true })
     try {
       const result = await api('po-auto', { body: {} })
-      setAuto(result)
+      const quotes = await api('quote-auto', { body: {} }).catch(() => null)
+      setAuto({ ...result, quotes })
       if (result.drafted?.length || result.held?.length || result.failed?.length) await load()
     } catch (err) {
       setAuto({ error: err.code === 'permission' ? null : err.message })
@@ -168,7 +169,7 @@ export default function Invoices({ user }) {
         Only a PO that could not be done the usual way is left here, with the reason.
       </div>
 
-      {requests && !requests.running && <QuoteRequests data={requests} onClose={() => setRequests(null)} />}
+      {requests && !requests.running && <QuoteRequests data={requests} onClose={() => setRequests(null)} onRetry={async id => { try { await api('quote-retry', { body: { id } }); await api('quote-auto', { body: {} }); await showRequests() } catch (err) { setError(err.message) } }} />}
       {templates && !templates.running && <QuoteTemplates data={templates} onClose={() => setTemplates(null)} />}
       {audit && !audit.running && <AccountsAudit audit={audit} onClose={() => setAudit(null)} />}
       {xero === 'permission' && <AllowInvoices />}
@@ -179,6 +180,12 @@ export default function Invoices({ user }) {
       {auto?.drafted?.length > 0 && (
         <div style={{ ...card, background: '#e6f4f1', border: '1px solid #bfe3db', fontSize: 13, color: NAVY }}>
           Drafted in Xero just now: {auto.drafted.map(d => `${d.invoice} for ${d.po}`).join(', ')}. Approve them in Xero.
+        </div>
+      )}
+      {(auto?.quotes?.drafted?.length > 0 || auto?.quotes?.followed?.length > 0) && (
+        <div style={{ ...card, background: '#e6f4f1', border: '1px solid #bfe3db', fontSize: 13, color: NAVY }}>
+          {auto.quotes.drafted?.length > 0 && <div>Self-funding quotes drafted in Xero: {auto.quotes.drafted.map(d => d.quote).join(', ')}. Check and send them from Xero.</div>}
+          {auto.quotes.followed?.length > 0 && <div>Sent quotes filed and distributors told: {auto.quotes.followed.map(f => f.quote).join(', ')}.</div>}
         </div>
       )}
       {auto?.error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>The automatic pass did not finish: {auto.error}</div>}
@@ -214,7 +221,7 @@ export default function Invoices({ user }) {
 }
 
 // Read-only: CNS's self-funding quote requests in bookings@ and brenton@.
-function QuoteRequests({ data, onClose }) {
+function QuoteRequests({ data, onClose, onRetry }) {
   if (data.error) return <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Could not read the mailboxes: {data.error}</div>
   const list = data.requests || []
   const row = { fontSize: 12, color: '#5a6478' }
@@ -231,6 +238,14 @@ function QuoteRequests({ data, onClose }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{when(r.receivedAt)} · {r.subject || '(no subject)'}</div>
           <div style={row}>{r.from} · in {r.mailboxes.join(' and ')}</div>
           <div style={row}>{[r.levels && `Levels ${r.levels}`, r.mbs.length && `MBS ${r.mbs.join(', ')}`, r.uninsured && 'uninsured'].filter(Boolean).join(' · ') || 'No levels or MBS items read'}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: r.auto?.status === 'held' ? '#b54708' : ACCENT, marginTop: 2 }}>
+            {!r.auto ? 'Not drafted yet'
+              : r.auto.status === 'held' ? `Held: ${r.auto.reason}`
+                : r.auto.status === 'drafted' ? `Draft ${r.auto.quoteNumber} in Xero (${r.auto.template}) — send it from Xero; the distributors are told after`
+                  : r.auto.status === 'sent' ? `Sent · ${r.auto.filed ? 'filed in Dropbox' : 'not filed'} · told: ${(r.auto.notified || []).join(', ') || 'no distributor found on the quote'}`
+                    : r.auto.reason || r.auto.status}
+          </div>
+          {r.auto?.status === 'held' && onRetry && <button style={{ ...btn(false), marginTop: 4, padding: '4px 10px' }} onClick={() => onRetry(r.id)}>Try again</button>}
         </div>
       ))}
     </div>
