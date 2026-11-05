@@ -245,6 +245,10 @@ function QuoteRequests({ data, onClose, onRetry }) {
                   : r.auto.status === 'sent' ? `Sent · ${r.auto.filed ? 'filed in Dropbox' : 'not filed'} · told: ${(r.auto.notified || []).join(', ') || 'no distributor found on the quote'}`
                     : r.auto.reason || r.auto.status}
           </div>
+          {r.auto?.status === 'drafted' && r.auto.priceList && <div style={row}>Prices from {r.auto.priceList}</div>}
+          {r.auto?.status === 'drafted' && (r.auto.flags || []).map((f, i) => (
+            <div key={i} style={{ fontSize: 12, color: '#b54708' }}>Check: {[f.code, f.description].filter(Boolean).join(' ')}{f.price != null ? ` at $${Number(f.price).toFixed(2)}` : ''} — {f.reason}</div>
+          ))}
           {r.auto?.status === 'held' && onRetry && <button style={{ ...btn(false), marginTop: 4, padding: '4px 10px' }} onClick={() => onRetry(r.id)}>Try again</button>}
         </div>
       ))}

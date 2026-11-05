@@ -220,6 +220,21 @@ export async function ensureFolder(path) {
   return path
 }
 
+/** One file's bytes (not under the locked usage tree). */
+export async function downloadFile(path) {
+  assertUsageReadable(path)
+  const res = await fetch('https://content.dropboxapi.com/2/files/download', {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Dropbox-API-Arg': JSON.stringify({ path }) }
+  })
+  if (!res.ok) {
+    let summary = ''
+    try { summary = JSON.parse(await res.text()).error_summary } catch { /* keep blank */ }
+    throw dropboxFault('download a file', res.status, summary)
+  }
+  return Buffer.from(await res.arrayBuffer())
+}
+
 export async function uploadFile(path, buffer) {
   const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
     method: 'POST',

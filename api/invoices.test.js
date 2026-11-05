@@ -263,3 +263,52 @@ describe('a patient already quoted is not quoted twice', () => {
     expect(alreadyQuoted('', quotes)).toBe(null)
   })
 })
+
+import ExcelJS from 'exceljs'
+import { listPrice, readPriceWorkbook } from './_priceList.js'
+
+describe('distributor price list (invented prices)', () => {
+  const rows = [
+    { code: 'AB0321-04530', price: 500 }, { code: 'AB0321-05540', price: 500 },
+    { code: 'QQ741', price: 600 }, { code: 'WIRE18470 R/R', price: 90 },
+    { code: 'CC1-01', price: 10 }, { code: 'CC1-02', price: 20 }
+  ]
+  it('matches an exact code, ignoring case', () => {
+    expect(listPrice('qq741', rows)).toMatchObject({ found: true, price: 600 })
+  })
+  it('matches a template code written with x for sizes', () => {
+    expect(listPrice('AB0321-xxxxx', rows)).toMatchObject({ found: true, price: 500 })
+    expect(listPrice('WIRExxxxx R/R', rows)).toMatchObject({ found: true, price: 90 })
+  })
+  it('will not choose between different prices', () => {
+    expect(listPrice('CC1-xx', rows)).toMatchObject({ found: false, ambiguous: true })
+  })
+  it('does not find a code that is not there', () => {
+    expect(listPrice('AB00955-xxxxx', rows).found).toBe(false)
+    expect(listPrice('', rows).found).toBe(false)
+  })
+  it('reads each tab from its header row', async () => {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Maker A')
+    ws.addRow(['Maker A price list'])
+    ws.addRow(['Product range', 'Product type', 'Description', 'Product code', 'Rebate (PL) code', 'Price (AUD)'])
+    ws.addRow(['Range', 'Screw', 'Test screw', 'T-1', 'PL1', 123.5])
+    ws.addRow(['Range', 'Note', 'No price', 'T-2', '', ''])
+    const out = await readPriceWorkbook(await wb.xlsx.writeBuffer())
+    expect(out).toEqual([{ sheet: 'Maker A', range: 'Range', description: 'Test screw', code: 'T-1', rebate: 'PL1', price: 123.5 }])
+  })
+  it('prices quote lines from the list and flags the rest', () => {
+    const templates = [{ id: 't', title: 'T', lines: [
+      { code: 'AB0321-xxxxx', description: 'Screw', quantity: 4, unitPrice: 540, discount: 0 },
+      { code: 'ZZ9', description: 'Mystery', quantity: 1, unitPrice: 77, discount: 0 }
+    ] }]
+    const out = checkPlan({ templateId: 't', lines: [
+      { code: 'AB0321-xxxxx', description: 'Screw', quantity: 4 },
+      { code: 'ZZ9', description: 'Mystery', quantity: 1 }
+    ] }, templates, { prices: rows })
+    expect(out.ok).toBe(true)
+    expect(out.lines.map(l => l.unitPrice)).toEqual([500, 77])
+    expect(out.flags).toHaveLength(1)
+    expect(out.flags[0]).toMatchObject({ code: 'ZZ9', price: 77 })
+  })
+})

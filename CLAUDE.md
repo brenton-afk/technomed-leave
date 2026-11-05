@@ -618,6 +618,15 @@ admin-only; no new function).
   body. A patient already on a CNS quote in Xero (`alreadyQuoted`, by surname)
   is not drafted again. Runs in both crons and when Invoices opens; records `quote:req:{id}`,
   each step once; held requests have Try again.
+- **Quote prices come from Toni's price list** (Brent, 5 Nov 2026, "option 2"):
+  the template decides the lines, `api/_priceList.js` the prices — the newest
+  `…Distributor_Price_Lists….xlsx` in Dropbox `/Admin/Accounts`
+  (`PRICE_LIST_FOLDER`), each tab read from its "Product code" / "Price" header
+  row, cached 12h in `pricelist:cache`. `listPrice` matches the exact code, or a
+  template code with x's for sizes (`AB0321-xxxxx`) when every match costs the
+  same. Anything else keeps the template price and is listed as a **Check:**
+  flag on the request (`flags` on the record); an unreadable list flags the
+  whole quote rather than holding it.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

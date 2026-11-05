@@ -5,6 +5,7 @@ import { quoteTemplates, quotesFor, findContacts, createDraftQuote, getQuote, qu
 import { DISTRIBUTORS, detectDistributor, distributorsForKit } from './_distributors.js'
 import { ensureFolder, uploadFile, dropboxConfigured } from './_dropbox.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
+import { priceList, listPrice } from './_priceList.js'
 import { todayStr, addCivilDays, parseDateStr, toDateStr } from '../src/clinicalPlan/week.js'
 
 // ─── Self-funding quotes, drafted and followed up by themselves ──────────────
@@ -72,8 +73,12 @@ export function distributorsOnQuote(lines = []) {
  * only from the chosen template: a quantity may change (levels), a line may
  * be dropped, nothing may be invented or repriced. 20% off every line that
  * carries a distributor's product unless the template says otherwise.
+ *
+ * Prices (Brent, 5 Nov 2026, "option 2"): from Toni's distributor price list
+ * when the line's code is on it; otherwise the template's price, and the
+ * line is flagged so a person checks it before the quote is sent.
  */
-export function checkPlan(plan, templates) {
+export function checkPlan(plan, templates, { prices = null } = {}) {
   const hold = reason => ({ ok: false, reason })
   if (!plan || plan.hold) return hold(plan?.hold || 'No reading of the request')
   const tpl = templates.find(t => t.id === plan.templateId)
@@ -81,16 +86,24 @@ export function checkPlan(plan, templates) {
   const byKey = new Map(tpl.lines.map(l => [`${l.code}|${l.description}`.toLowerCase(), l]))
   const byCode = new Map(tpl.lines.filter(l => l.code).map(l => [l.code.toLowerCase(), l]))
   const lines = []
+  const flags = []
   for (const l of plan.lines || []) {
     const from = byKey.get(`${l.code || ''}|${l.description || ''}`.toLowerCase()) || (l.code && byCode.get(String(l.code).toLowerCase()))
     if (!from) return hold(`A line not in the "${tpl.title || tpl.number}" template was proposed: ${l.description || l.code}`)
     const quantity = Number(l.quantity)
     if (!(quantity > 0)) continue
     const discount = from.discount || (distributorsOnQuote([from]).length ? DISCOUNT : 0)
-    lines.push({ code: from.code, description: from.description, quantity, unitPrice: Number(from.unitPrice), discount })
+    let unitPrice = Number(from.unitPrice)
+    if (prices) {
+      const lp = listPrice(from.code, prices)
+      if (lp.found) unitPrice = lp.price
+      else flags.push({ code: from.code || '', description: from.description || '', price: unitPrice,
+        reason: lp.ambiguous ? 'several prices on the price list for this code — template price used' : 'not on the price list — template price used' })
+    }
+    lines.push({ code: from.code, description: from.description, quantity, unitPrice, discount })
   }
   if (!lines.length) return hold('No lines left after matching the template')
-  return { ok: true, template: tpl, lines }
+  return { ok: true, template: tpl, lines, flags }
 }
 
 const PROMPT = `You prepare self-funding (uninsured) implant quotes for TechnoMed, a surgical implant distributor in Tasmania.
@@ -215,6 +228,7 @@ export async function autoQuotes({ max = 2, by = 'automatic' } = {}) {
       const templates = await quoteTemplates()
       const contact = (await findContacts(CUSTOMER)).find(c => c.name.toLowerCase() === CUSTOMER.toLowerCase())
       const existing = await quotesFor(CUSTOMER).catch(() => [])
+      const list = await priceList().catch(err => { console.log('price list unavailable', err.message); return null })
       for (const r of todo) {
         try {
           if (!templates.length) { held.push({ request: r.id, reason: 'No quote templates found in Xero' }); await save(r.id, { status: 'held', reason: 'No quote templates found in Xero' }); continue }
@@ -222,7 +236,7 @@ export async function autoQuotes({ max = 2, by = 'automatic' } = {}) {
           const p = await plan(r, templates)
           const before = alreadyQuoted(p.patient, existing)
           if (before) { await save(r.id, { status: 'already', reason: `Already quoted in Xero: ${before.number}`, quoteNumber: before.number }); continue }
-          const checked = checkPlan(p, templates)
+          const checked = checkPlan(p, templates, { prices: list?.rows || null })
           if (!checked.ok) { held.push({ request: r.id, reason: checked.reason }); await save(r.id, { status: 'held', reason: checked.reason, why: p.why || '' }); continue }
           const today = todayStr()
           const made = await createDraftQuote({
@@ -233,7 +247,8 @@ export async function autoQuotes({ max = 2, by = 'automatic' } = {}) {
           })
           drafted.push({ request: r.id, quote: made.number, total: made.total })
           await save(r.id, { status: 'drafted', quoteId: made.id, quoteNumber: made.number, template: checked.template.title,
-            patient: p.patient || '', surgeon: p.surgeon || '', procedure: [p.procedure, p.levels].filter(Boolean).join(' '), notified: [] })
+            patient: p.patient || '', surgeon: p.surgeon || '', procedure: [p.procedure, p.levels].filter(Boolean).join(' '), notified: [],
+            priceList: list?.file || '', flags: list ? checked.flags : [{ reason: 'Price list could not be read — every price is from the template' }] })
         } catch (err) {
           if (err.code === 'permission') throw err
           failed.push({ request: r.id, error: err.message })
