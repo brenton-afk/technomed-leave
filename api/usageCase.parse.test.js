@@ -70,3 +70,28 @@ describe('parseFolderName', () => {
     }
   })
 })
+
+import { procedureLabel } from './_usageCase.js'
+
+describe('the procedure in a folder name is a label, not a description', () => {
+  it('keeps only the keywords Brent uses', () => {
+    expect(procedureLabel('C5/6 Anterior Cervical Discectomy and Fusion')).toBe('ACDF')
+    expect(procedureLabel('L4/5 PLIF')).toBe('PLIF')
+    expect(procedureLabel('L5/S1 anterior lumbar interbody fusion')).toBe('ALIF')
+    expect(procedureLabel('Right L4/5 transforaminal lumbar interbody fusion')).toBe('TLIF')
+    expect(procedureLabel('T8/9 discectomy + single level posterior fixation')).toBe('Fixation')
+    expect(procedureLabel('T12-L2 PSF')).toBe('Fixation')
+    expect(procedureLabel('L4/5 PLIF and pedicle screw fixation')).toBe('PLIF+Fixation')
+  })
+  it('adds Boost UF when Boost was used', () => {
+    expect(procedureLabel('C5/6 ACDF', [{ productName: '2.5g BOOST Ultrafibres', referenceCode: 'ABT-AB-DT401' }])).toBe('ACDF+Boost UF')
+  })
+  it('falls back to something short, never the whole description', () => {
+    expect(procedureLabel('L3/4 XLIF lateral approach')).toBe('XLIF')
+    expect(procedureLabel('removal of hardware from previous surgery')).toBe('removal of')
+  })
+  it('makes a short folder name', () => {
+    const name = buildFolderName({ patientSurname: 'Hollis', date: '2026-11-05', surgeonSurname: 'Thani', procedure: 'C5/6 Anterior Cervical Discectomy and Fusion', hospital: 'CLV' })
+    expect(name).toBe('Hollis_05112026_Thani_ACDF_CLV')
+  })
+})

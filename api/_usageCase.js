@@ -56,13 +56,43 @@ function safeSegment(value) {
     .replace(/ /g, '-')
 }
 
+// ─── The procedure as a label, not a description (Brent, 5 Nov 2026) ─────────
+// "You don't need a full op description including hyphens. Just use the
+// keywords/acronyms: PLIF, ACDF, Fixation, TLIF, ALIF, Boost UF." A folder
+// called Smith_05112026_Thani_C5-6-anterior-cervical-discectomy-and-fusion_CLV
+// is a line nobody can scan in Dropbox. Every keyword the operation (or, for
+// Boost, the implants used) mentions, in this order, joined by "+".
+const PROCEDURE_KEYWORDS = [
+  ['ACDF', /\bacdf\b|anterior\s+cervical\s+disc\w*(\s+(and|&|\+))?\s+fusion/i],
+  ['ALIF', /\balif\b|anterior\s+lumbar\s+interbody/i],
+  ['PLIF', /\bplif\b|posterior\s+lumbar\s+interbody/i],
+  ['TLIF', /\btlif\b|transforaminal/i],
+  ['Fixation', /fixation|\bfixate|\bpsf\b|pedicle\s+screw|instrument(ed|ation)|stabili[sz]ation|posterior\s+(spinal\s+)?fusion|percutaneous\s+screw/i],
+  ['Boost UF', /\bboost\b|ultrafib/i]
+]
+const LEVEL = /^[CTLS]\d{1,2}([-/]?[CTLS]?\d{1,2})*$/i
+
+export function procedureLabel(procedure, items = []) {
+  const text = str(procedure)
+  const used = items.map(i => `${i?.productName || ''} ${i?.referenceCode || ''}`).join(' ')
+  const found = PROCEDURE_KEYWORDS
+    .filter(([name, re]) => re.test(text) || (name === 'Boost UF' && /\bboost\b|ultrafib|ABT-AB/i.test(used)))
+    .map(([name]) => name)
+  if (found.length) return found.join('+')
+  // Nothing on the list: an acronym the form used (XLIF, OLIF…), else the
+  // first two words — short either way, never the whole description.
+  const words = text.replace(/[^A-Za-z0-9/ -]/g, ' ').split(/\s+/).filter(w => w && !LEVEL.test(w))
+  const acronym = words.find(w => /^[A-Z]{3,6}$/.test(w))
+  return acronym || words.slice(0, 2).join(' ')
+}
+
 // {Patient Surname}_{DDMMYYYY}_{Surgeon Surname}_{Procedure}_{Hospital}
-export function buildFolderName({ patientSurname, date, surgeonSurname, procedure, hospital }) {
+export function buildFolderName({ patientSurname, date, surgeonSurname, procedure, hospital, items }) {
   return [
     safeSegment(patientSurname) || 'UnknownPatient',
     ddmmyyyy(date) || 'UnknownDate',
     safeSegment(surgeonSurname) || 'UnknownSurgeon',
-    safeSegment(procedure) || 'Procedure',
+    safeSegment(procedureLabel(procedure, items)) || 'Procedure',
     safeSegment(hospital) || 'Hospital'
   ].join('_')
 }
@@ -297,7 +327,7 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
 
   return {
     ...caseDetails,
-    folderName: buildFolderName({ patientSurname, date, surgeonSurname, procedure, hospital }),
+    folderName: buildFolderName({ patientSurname, date, surgeonSurname, procedure, hospital, items }),
     monthFolder: monthFolder(date),
     items,
     missingFields: missing,
@@ -340,7 +370,7 @@ export function recomputeCase(caseRecord) {
     hospital,
     procedure,
     items,
-    folderName: buildFolderName({ patientSurname, date, surgeonSurname, procedure, hospital }),
+    folderName: buildFolderName({ patientSurname, date, surgeonSurname, procedure, hospital, items }),
     monthFolder: monthFolder(date)
   }
 }
