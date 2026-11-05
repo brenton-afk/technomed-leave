@@ -5,14 +5,17 @@ import { askClaude } from './_anthropic.js'
 // Read-only, through the same domain-wide Gmail grant that reads bookings@:
 // nothing here sends, deletes, labels or marks anything read. It searches
 // narrowly — Calvary's domain, with an attachment — and only an admin can ask.
-// Calvary's numbers look like LVP0008868 (Lenah Valley) and ACP0000294.
+// Calvary's numbers look like LVH0012240 — nearly every invoice in Xero carries
+// one of those as its reference — and LVP0005413; older ones ACP0000294.
 
 export const PO_MAILBOX = process.env.PO_MAILBOX || 'accounts@technomed.com.au'
 export const PO_QUERY = process.env.PO_QUERY
   || 'from:calvarycare.org.au has:attachment newer_than:120d'
 
 const MODEL = process.env.PO_VISION_MODEL || 'claude-opus-5'
-const PO_NUMBER = /\b(?:LVP|ACP|CLV|PO)[-\s]?\d{5,}\b/i
+// Two letters for the site, H or P, seven digits (LVH0012240, LVP0005413);
+// and the older forms. A bare "PO 12345" is accepted only with the space or dash.
+const PO_NUMBER = /(?<![A-Za-z0-9])(?:[A-Z]{2}[HP]\d{7}|(?:ACP|CLV)\d{5,}|(?:LV[HP]|ACP|CLV|PO)[-\s]\d{5,})(?![0-9])/i
 
 /** A PO number in a subject, file name or text, or ''. */
 export function poNumberIn(...texts) {
@@ -24,7 +27,7 @@ export function poNumberIn(...texts) {
 }
 
 /** The purchase orders waiting in accounts@, newest first. */
-export async function listPurchaseOrders({ max = 30 } = {}) {
+export async function listPurchaseOrders({ max = 40 } = {}) {
   const ids = await searchMailboxOf(PO_MAILBOX, PO_QUERY, { max })
   const read = await Promise.all(ids.map(id => readMessageHeadline(PO_MAILBOX, id).catch(() => null)))
   const out = []
@@ -37,6 +40,56 @@ export async function listPurchaseOrders({ max = 30 } = {}) {
     out.push({ id: m.id, from: m.from, subject: m.subject, receivedAt: m.receivedAt, poNumber, files })
   }
   return out.sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)))
+}
+
+/**
+ * Which PO numbers Xero has already invoiced: Map of PO number → invoices.
+ * The PO number is found in each invoice's Reference the same way it is found
+ * in an email, so "LVH0012240", "PO LVH0012240" and "lvh0012240 – Jackson
+ * kits" all count as that PO.
+ */
+export function invoicedByPo(invoices = []) {
+  const map = new Map()
+  for (const inv of invoices) {
+    if (['VOIDED', 'DELETED'].includes(inv.status)) continue
+    const po = poNumberIn(inv.reference)
+    if (!po) continue
+    if (!map.has(po)) map.set(po, [])
+    map.get(po).push({ number: inv.number, status: inv.status })
+  }
+  return map
+}
+
+/**
+ * The purchase orders split three ways, for a screen that offers only what is
+ * waiting to be invoiced:
+ *   outstanding — a PO number Xero has no invoice for (the only ones offered)
+ *   invoiced    — already on an invoice in Xero
+ *   noNumber    — no PO number could be read; a person checks these by hand
+ * The same PO sent more than once (Calvary resend and amend) is one order, the
+ * newest email, with `copies` saying how many arrived. With `invoiced` null —
+ * Xero could not be asked — nothing is outstanding: it is `unchecked`, because
+ * offering a PO that may already be invoiced is the mistake this screen is
+ * here to prevent.
+ */
+export function splitOrders(orders = [], invoiced = null) {
+  const byPo = new Map()
+  const noNumber = []
+  for (const o of orders) {
+    if (!o.poNumber) { noNumber.push(o); continue }
+    const seen = byPo.get(o.poNumber)
+    if (seen) { seen.copies++; continue }
+    byPo.set(o.poNumber, { ...o, copies: 1 })
+  }
+  const numbered = [...byPo.values()]
+  if (!invoiced) return { outstanding: [], invoiced: [], noNumber, unchecked: numbered }
+  const out = { outstanding: [], invoiced: [], noNumber, unchecked: [] }
+  for (const o of numbered) {
+    const invoices = invoiced.get(o.poNumber)
+    if (invoices?.length) out.invoiced.push({ ...o, invoices })
+    else out.outstanding.push({ ...o, invoices: [] })
+  }
+  return out
 }
 
 const PROMPT = `This is a purchase order from a hospital to TechnoMed, a medical device distributor.

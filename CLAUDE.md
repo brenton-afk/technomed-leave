@@ -555,9 +555,17 @@ admin-only; no new function).
   approved, sent or emailed from Xero. A line with no quantity or a blank price
   is refused, not drafted at $0. A known Xero item code is sent as `ItemCode`;
   an unknown code is kept in the description.
+- **Only POs with no invoice are offered** (Brent, 5 Nov 2026). `po-list`
+  reads Xero's sales invoices once, from 60 days before the oldest PO
+  (`salesInvoicesSince`), finds the PO number in each Reference
+  (`invoicedByPo`) and `splitOrders` returns `outstanding` (the only ones with
+  Read PO), `invoiced` and `noNumber` (folded away), the same PO sent twice
+  counted once. If Xero cannot be asked, nothing is outstanding — it is all
+  `unchecked`. Calvary's numbers are mostly **LVH0012240**-style (two letters,
+  H or P, seven digits); the reader once knew only LVP/ACP and missed them.
 - **A PO is invoiced once**: before creating, Xero is asked for an ACCREC
-  invoice (not voided/deleted) whose Reference is the PO number; if one exists
-  nothing is created (409). The PO list shows that state from Xero.
+  invoice (not voided/deleted) whose Reference contains the PO number; if one
+  exists nothing is created (409).
 - **Permission is a separate connection**: "Allow invoices" is
   `/api/xero/connect?invoices=1`, adding `XERO_INVOICE_SCOPES` to payroll's.
   A plain "Reconnect Xero" asks for payroll only and drops invoicing, so after

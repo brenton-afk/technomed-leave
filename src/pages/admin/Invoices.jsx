@@ -38,13 +38,13 @@ function AllowInvoices() {
 }
 
 export default function Invoices({ user }) {
-  const [mode, setMode] = useState('orders') // orders | quote
-  const [orders, setOrders] = useState([])
+  const [list, setList] = useState({ outstanding: [], invoiced: [], noNumber: [], unchecked: [] })
   const [xero, setXero] = useState('ok')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState(null) // { kind, order?, ... }
   const [reading, setReading] = useState(null)
+  const [open, setOpen] = useState('') // which folded group is showing
 
   const headers = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
   const api = useCallback(async (action, { query = '', body } = {}) => {
@@ -62,7 +62,8 @@ export default function Invoices({ user }) {
     setLoading(true); setError('')
     try {
       const data = await api('po-list')
-      setOrders(data.orders || []); setXero(data.xero || 'ok')
+      setList({ outstanding: data.outstanding || [], invoiced: data.invoiced || [], noNumber: data.noNumber || [], unchecked: data.unchecked || [] })
+      setXero(data.xero || 'ok')
     } catch (err) { setError(err.message) }
     setLoading(false)
   }, [api])
@@ -82,6 +83,34 @@ export default function Invoices({ user }) {
     return <Editor api={api} draft={draft} onClose={(made) => { setDraft(null); if (made) load() }} />
   }
 
+  const muted = { fontSize: 13, color: '#5a6478' }
+  const fold = (id, label, rows, render) => rows.length > 0 && (
+    <div style={{ marginTop: 10 }}>
+      <button style={{ ...btn(false), width: '100%', textAlign: 'left' }} onClick={() => setOpen(v => v === id ? '' : id)}>
+        {open === id ? '▾' : '▸'} {label} ({rows.length})
+      </button>
+      {open === id && <div style={{ marginTop: 8 }}>{rows.map(render)}</div>}
+    </div>
+  )
+  const orderCard = (o, { action, badge } = {}) => (
+    <div key={o.id} style={card}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>{o.poNumber || 'No PO number found'}</div>
+        <div style={{ fontSize: 12, color: '#5a6478' }}>{when(o.receivedAt)}</div>
+        {o.copies > 1 && <span style={{ fontSize: 11, color: '#5a6478' }}>sent {o.copies} times</span>}
+        {badge}
+      </div>
+      <div style={{ fontSize: 13, color: '#5a6478', marginTop: 3 }}>{o.subject}</div>
+      <div style={{ fontSize: 12, color: '#8a93a6', marginTop: 2 }}>{o.from}{o.files?.length ? ` · ${o.files.join(', ')}` : ''}</div>
+      {action && <div style={{ marginTop: 8 }}>{action}</div>}
+    </div>
+  )
+  const readButton = (o, primary = true) => (
+    <button style={btn(primary)} disabled={reading === o.id} onClick={() => readOrder(o)}>
+      {reading === o.id ? 'Reading the order…' : 'Read PO'}
+    </button>
+  )
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -91,42 +120,30 @@ export default function Invoices({ user }) {
           <button style={btn(true)} onClick={() => setDraft({ kind: 'quote' })}>New quote</button>
         </div>
       </div>
-      <div style={{ fontSize: 13, color: '#5a6478', marginBottom: 12 }}>
-        Purchase orders from Calvary in accounts@. Read one, check its lines, and a <b>draft</b> invoice is made in Xero —
-        nothing is approved or sent from here.
+      <div style={{ ...muted, marginBottom: 12 }}>
+        Calvary purchase orders in accounts@ that have <b>no invoice in Xero yet</b>. Read one, check its lines,
+        and a <b>draft</b> invoice is made in Xero — nothing is approved or sent from here.
       </div>
 
       {xero === 'permission' && <AllowInvoices />}
+      {xero === 'error' && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Xero could not be checked just now, so no purchase order is offered — one may already be invoiced. Try Refresh.</div>}
       {error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>{error}</div>}
-      {loading && <div style={{ fontSize: 13, color: '#5a6478' }}>Looking in accounts@…</div>}
-      {!loading && !orders.length && !error && <div style={{ ...card, fontSize: 13, color: '#5a6478' }}>No purchase orders from Calvary in the last four months.</div>}
+      {loading && <div style={muted}>Looking in accounts@ and checking Xero…</div>}
 
-      {orders.map(o => {
-        const invoiced = (o.invoices || [])
-        return (
-          <div key={o.id} style={card}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>{o.poNumber || 'No PO number found'}</div>
-              <div style={{ fontSize: 12, color: '#5a6478' }}>{when(o.receivedAt)}</div>
-              {invoiced.length > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#e6f4f1', color: ACCENT }}>
-                  Invoiced {invoiced.map(i => `${i.number || 'draft'} (${String(i.status).toLowerCase()})`).join(', ')}
-                </span>
-              )}
-              {o.invoices && !invoiced.length && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#fff4e5', color: '#b54708' }}>Not invoiced</span>
-              )}
-            </div>
-            <div style={{ fontSize: 13, color: '#5a6478', marginTop: 3 }}>{o.subject}</div>
-            <div style={{ fontSize: 12, color: '#8a93a6', marginTop: 2 }}>{o.from}{o.files?.length ? ` · ${o.files.join(', ')}` : ''}</div>
-            <div style={{ marginTop: 8 }}>
-              <button style={btn(!invoiced.length)} disabled={reading === o.id} onClick={() => readOrder(o)}>
-                {reading === o.id ? 'Reading the order…' : invoiced.length ? 'Read it anyway' : 'Read PO'}
-              </button>
-            </div>
-          </div>
-        )
-      })}
+      {!loading && xero === 'ok' && (
+        <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: '6px 0 8px' }}>
+          {list.outstanding.length ? `Waiting to be invoiced (${list.outstanding.length})` : 'Every purchase order with a PO number is already invoiced.'}
+        </div>
+      )}
+      {list.outstanding.map(o => orderCard(o, { action: readButton(o) }))}
+
+      {fold('none', 'No PO number found — check by hand', list.noNumber, o => orderCard(o, { action: readButton(o, false) }))}
+      {fold('done', 'Already invoiced in Xero', list.invoiced, o => orderCard(o, {
+        badge: <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#e6f4f1', color: ACCENT }}>
+          {o.invoices.map(i => `${i.number || 'draft'} (${String(i.status).toLowerCase()})`).join(', ')}
+        </span>
+      }))}
+      {fold('unchecked', 'Not checked against Xero', list.unchecked, o => orderCard(o))}
     </div>
   )
 }

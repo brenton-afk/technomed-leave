@@ -65,10 +65,28 @@ export async function listItems() {
   })).filter(i => i.code)
 }
 
-/** Invoices already carrying this reference (a PO number), not voided or deleted. */
+/**
+ * Every sales invoice dated on or after `since` (YYYY-MM-DD), any status, as
+ * { id, number, status, reference } — one paged read, so the PO list can be
+ * checked against Xero in a single pass rather than a call per PO.
+ */
+export async function salesInvoicesSince(since, { maxPages = 20 } = {}) {
+  const [y, m, d] = String(since).split('-').map(Number)
+  const where = encodeURIComponent(`Type=="ACCREC" AND Date>=DateTime(${y},${m},${d})`)
+  const out = []
+  for (let page = 1; page <= maxPages; page++) {
+    const data = await call('GET', `/Invoices?where=${where}&summaryOnly=true&page=${page}`)
+    const got = data.Invoices || []
+    for (const i of got) out.push({ id: i.InvoiceID, number: i.InvoiceNumber, status: i.Status, reference: i.Reference || '' })
+    if (got.length < 100) break
+  }
+  return out
+}
+
+/** Invoices whose reference contains this PO number, not voided or deleted. */
 export async function invoicesWithReference(reference) {
   if (!reference) return []
-  const where = encodeURIComponent(`Type=="ACCREC" AND Reference=="${quoted(reference)}"`)
+  const where = encodeURIComponent(`Type=="ACCREC" AND Reference!=null AND Reference.Contains("${quoted(reference)}")`)
   const data = await call('GET', `/Invoices?where=${where}&summaryOnly=true`)
   return (data.Invoices || [])
     .filter(i => !['VOIDED', 'DELETED'].includes(i.Status))

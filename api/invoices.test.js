@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { lineItems } from './_xeroAccounting.js'
-import { poNumberIn, cleanOrder } from './_purchaseOrders.js'
+import { poNumberIn, cleanOrder, invoicedByPo, splitOrders } from './_purchaseOrders.js'
 
 // Admin → Invoices (Brent, 5 Nov 2026): Calvary POs from accounts@ into draft
 // Xero invoices, and quotes. Invented data.
@@ -9,6 +9,13 @@ describe('reading a purchase order', () => {
     expect(poNumberIn('Purchase Order LVP0008868')).toBe('LVP0008868')
     expect(poNumberIn('', 'ACP0000294.pdf')).toBe('ACP0000294')
     expect(poNumberIn('Quote QU-0480')).toBe('')
+  })
+
+  it('finds the LVH numbers nearly every Calvary invoice carries', () => {
+    expect(poNumberIn('Purchase Order LVH0012240')).toBe('LVH0012240')
+    expect(poNumberIn('', 'PO_lvh0012240.pdf')).toBe('LVH0012240')
+    expect(poNumberIn('Order SJH0001234')).toBe('SJH0001234')
+    expect(poNumberIn('Phone 0412345678')).toBe('')
   })
 
   it('tidies the reading into typed lines, and falls back to the email for the PO number', () => {
@@ -70,5 +77,37 @@ describe('lines pasted from a spreadsheet', () => {
     expect(lineItems([{ description: 'A', quantity: 1, unitPrice: 10, discount: 20 }], [])[0].DiscountRate).toBe(20)
     expect(lineItems([{ description: 'A', quantity: 1, unitPrice: 10 }], [])[0].DiscountRate).toBeUndefined()
     expect(() => lineItems([{ description: 'A', quantity: 1, unitPrice: 10, discount: 120 }], [])).toThrow(/discount/)
+  })
+})
+
+describe('only purchase orders without an invoice are offered', () => {
+  const orders = [
+    { id: 'a', poNumber: 'LVH0010001', receivedAt: '2026-11-04T00:00:00Z' },
+    { id: 'b', poNumber: 'LVH0010002', receivedAt: '2026-11-03T00:00:00Z' },
+    { id: 'c', poNumber: 'LVH0010001', receivedAt: '2026-11-02T00:00:00Z' },
+    { id: 'd', poNumber: '', receivedAt: '2026-11-01T00:00:00Z' },
+    { id: 'e', poNumber: 'LVP0020003', receivedAt: '2026-10-30T00:00:00Z' }
+  ]
+  const invoiced = invoicedByPo([
+    { number: 'INV-1', status: 'PAID', reference: 'LVH0010002' },
+    { number: 'INV-2', status: 'AUTHORISED', reference: 'po lvp0020003 - kits' },
+    { number: 'INV-3', status: 'VOIDED', reference: 'LVH0010001' }
+  ])
+
+  it('offers a PO Xero has no invoice for, once however often it was sent', () => {
+    const out = splitOrders(orders, invoiced)
+    expect(out.outstanding.map(o => [o.id, o.copies])).toEqual([['a', 2]])
+    expect(out.invoiced.map(o => o.id)).toEqual(['b', 'e'])
+    expect(out.noNumber.map(o => o.id)).toEqual(['d'])
+  })
+
+  it('a voided invoice does not count as invoiced', () => {
+    expect(invoiced.has('LVH0010001')).toBe(false)
+  })
+
+  it('offers nothing when Xero could not be asked', () => {
+    const out = splitOrders(orders, null)
+    expect(out.outstanding).toEqual([])
+    expect(out.unchecked.map(o => o.id)).toEqual(['a', 'b', 'e'])
   })
 })

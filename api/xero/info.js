@@ -4,8 +4,8 @@ import {
   listEmployees, listLeaveTypes
 } from '../_xeroClient.js'
 import { readXero } from '../_xeroResponse.js'
-import { findContacts, listItems, invoicesWithReference, createDraftInvoice, createDraftQuote } from '../_xeroAccounting.js'
-import { listPurchaseOrders, readPurchaseOrder } from '../_purchaseOrders.js'
+import { findContacts, listItems, salesInvoicesSince, createDraftInvoice, createDraftQuote } from '../_xeroAccounting.js'
+import { listPurchaseOrders, readPurchaseOrder, invoicedByPo, splitOrders } from '../_purchaseOrders.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getTimesheetDraft, registeredDeviceCount } from '../_redis.js'
 import { pushConfigured, pushFault } from '../_push.js'
@@ -262,15 +262,19 @@ async function handleInvoices(action, req, res) {
   try {
     if (action === 'po-list') {
       const orders = await listPurchaseOrders()
-      // Which are already invoiced, by PO number — asked of Xero, so the list
-      // says "invoiced" only when Xero does. Unknown, not "no", if Xero cannot
-      // be asked (no invoicing permission yet).
+      // One read of Xero's sales invoices from two months before the oldest
+      // PO, then each PO is matched by number. Only a PO Xero has no invoice
+      // for is offered; if Xero cannot be asked, none is (splitOrders).
+      const times = orders.map(o => Date.parse(o.receivedAt)).filter(Number.isFinite)
+      const from = new Date((times.length ? Math.min(...times) : Date.now() - 120 * 864e5) - 60 * 864e5)
+      const since = from.toISOString().slice(0, 10)
+      let invoiced = null
       let xero = 'ok'
-      for (const o of orders) {
-        if (!o.poNumber || xero !== 'ok') continue
-        try { o.invoices = await invoicesWithReference(o.poNumber) } catch (err) { xero = err.code === 'permission' ? 'permission' : 'error' }
+      try { invoiced = invoicedByPo(await salesInvoicesSince(since)) } catch (err) {
+        xero = err.code === 'permission' ? 'permission' : 'error'
+        console.error('po-list: Xero check failed', err.message)
       }
-      return res.status(200).json({ orders, xero })
+      return res.status(200).json({ ...splitOrders(orders, invoiced), xero, since })
     }
     if (action === 'po-read') {
       const id = String(req.query.id || '')
