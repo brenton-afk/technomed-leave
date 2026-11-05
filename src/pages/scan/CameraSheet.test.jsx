@@ -965,3 +965,44 @@ describe('the mesh over the page', () => {
     expect(d).toContain('M 50,15 L 50,85')
   })
 })
+
+// ─── Too few pixels to read a sticker (Bowes usage, 5 Nov 2026) ─────────────
+// Filed at about 100 dpi and unreadable. The review says so before filing.
+describe('a page captured with too little detail', () => {
+  const corners = [{ x: 0.12, y: 0.21 }, { x: 0.86, y: 0.21 }, { x: 0.86, y: 0.77 }, { x: 0.12, y: 0.77 }]
+  const base = {
+    preview: 'data:image/jpeg;base64,x', original: 'data:image/jpeg;base64,y',
+    originalWidth: 900, originalHeight: 1600, corners
+  }
+  const noop = () => {}
+  const show = detail => render(
+    <CropReview capture={{ ...base, detail }} cv={null} pageCount={0}
+      onConfirm={noop} onRetake={noop} onAddAnother={noop} onCancel={noop} />)
+
+  it('warns on a 1080-wide frame, before anything is filed', () => {
+    show({ width: 1080, height: 1920, method: 'best of 5', sharpness: 40 })
+    expect(screen.getByRole('alert')).toHaveTextContent(/Not enough detail to read the stickers/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/Retake closer/)
+  })
+
+  it('says nothing on a 4K frame of the same framing', () => {
+    show({ width: 2160, height: 3840, method: 'best of 5', sharpness: 40 })
+    expect(document.querySelector('[data-low-detail]')).toBeNull()
+  })
+})
+
+describe('the way to full detail', () => {
+  it('offers the phone’s own camera from the low-detail warning', () => {
+    const onPhoneCamera = vi.fn()
+    render(
+      <CropReview capture={{
+        preview: 'data:image/jpeg;base64,x', original: 'data:image/jpeg;base64,y',
+        originalWidth: 900, originalHeight: 1600,
+        corners: [{ x: 0.12, y: 0.21 }, { x: 0.86, y: 0.21 }, { x: 0.86, y: 0.77 }, { x: 0.12, y: 0.77 }],
+        detail: { width: 1080, height: 1920, method: 'best of 5', sharpness: 40 }
+      }} cv={null} pageCount={0} onPhoneCamera={onPhoneCamera}
+        onConfirm={() => {}} onRetake={() => {}} onAddAnother={() => {}} onCancel={() => {}} />)
+    screen.getByRole('button', { name: 'Use the phone’s camera' }).click()
+    expect(onPhoneCamera).toHaveBeenCalled()
+  })
+})

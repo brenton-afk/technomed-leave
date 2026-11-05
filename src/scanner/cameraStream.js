@@ -250,27 +250,43 @@ async function continuousModes(track) {
  * Many will go higher. Only the width is raised — never a width and a height,
  * which is what once made an iPhone crop its sensor and magnify the view — and
  * the result is checked: if the picture's shape changed, the camera achieved
- * the width by cropping, so it is put back the way it was.
+ * the width by switching mode, so that width is abandoned.
+ *
+ * Several widths are tried, largest first, and the first that keeps the shape
+ * is kept. It used to try one — the camera's maximum, 4032 — and an iPhone
+ * only offers that as a 4:3 photo mode, so the shape changed, the check put it
+ * back to 1920, and every scan was taken from a 1080-pixel-wide frame. A page
+ * came out about 800 pixels across, 100 dpi, and the lot numbers on the
+ * stickers could not be read (Bowes usage, 5 Nov 2026). 4K at the same 16:9
+ * shape — 3840 — was there all along.
  */
+export const WIDTH_LADDER = [4032, 3840, 3264, 2880, 2560, 2304]
+
 export async function raiseResolution(track, { limit = 4032 } = {}) {
   const caps = track?.getCapabilities?.() || {}
   const before = track?.getSettings?.() || {}
-  const max = caps.width?.max
-  if (!before.width || !before.height || !max || max <= before.width * 1.15) return false
+  if (!before.width || !before.height) return false
+  // Safari may not say what it can do; then every width is worth asking.
+  const max = caps.width?.max || Infinity
   const shape = s => (s.width && s.height ? Math.max(s.width, s.height) / Math.min(s.width, s.height) : 0)
   const was = shape(before)
-  try {
-    await track.applyConstraints({ ...stripSize(track.getConstraints?.() || {}), width: { ideal: Math.min(max, limit) } })
-  } catch {
-    return false
+  const longest = Math.max(before.width, before.height)
+  const widths = WIDTH_LADDER.filter(w => w <= Math.min(max, limit) && w > longest * 1.15)
+  if (!widths.length) return false
+
+  for (const width of widths) {
+    try {
+      await track.applyConstraints({ ...stripSize(track.getConstraints?.() || {}), width: { ideal: width } })
+    } catch {
+      continue
+    }
+    const after = track.getSettings?.() || {}
+    const gained = Math.max(after.width || 0, after.height || 0) > longest * 1.15
+    if (gained && Math.abs(shape(after) - was) <= 0.04) return true
   }
-  const after = track.getSettings?.() || {}
-  if (Math.abs(shape(after) - was) > 0.04) {
-    // Cropped to get there. Back to the view somebody can actually frame a page in.
-    try { await track.applyConstraints({ ...stripSize(track.getConstraints?.() || {}), width: { ideal: before.width } }) } catch { /* as it is */ }
-    return false
-  }
-  return (after.width || 0) > before.width
+  // None kept its shape: back to the view somebody can actually frame a page in.
+  try { await track.applyConstraints({ ...stripSize(track.getConstraints?.() || {}), width: { ideal: before.width } }) } catch { /* as it is */ }
+  return false
 }
 
 function stripSize(constraints) {

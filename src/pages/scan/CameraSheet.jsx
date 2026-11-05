@@ -4,6 +4,7 @@ import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument, cornersAreSupported } from '../../scanner/documentDetect.js'
 import { DocumentTracker, maxCornerShift } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
+import { pageDpi, MIN_READABLE_DPI } from '../../scanner/rectify.js'
 import { sharpnessOf, boxOf } from '../../scanner/sharpness.js'
 import {
   startDetectWorker, detectWorkerState, onDetectWorkerState, detectWorkerBusy, detectInWorker
@@ -109,6 +110,7 @@ const MAX_IMAGE_DIM = 1568
 // an A4 form, where 1568 (the reading size) was about 130 and soft on a lot
 // number. Only the reading copy goes to the model.
 const FILE_IMAGE_DIM = 2400
+const FILE_JPEG_QUALITY = 0.92
 
 /**
  * The way out, and it is never conditional on anything.
@@ -380,11 +382,14 @@ function Countdown({ progress }) {
  * mean dragging a point whose relationship to the paper is exactly what is in
  * question.
  */
-export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onCancel, pageCount }) {
+export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onCancel, onPhoneCamera, pageCount }) {
   const [corners, setCorners] = useState(
     capture.corners || [{ x: 0.06, y: 0.06 }, { x: 0.94, y: 0.06 }, { x: 0.94, y: 0.94 }, { x: 0.06, y: 0.94 }])
   const [preview, setPreview] = useState(capture.preview)
   const [dragging, setDragging] = useState(null)
+  const dpi = pageDpi(corners,
+    capture.detail?.width || capture.source?.width || 0, capture.detail?.height || capture.source?.height || 0)
+  const lowDetail = dpi > 0 && dpi < MIN_READABLE_DPI
   const frameRef = useRef(null)
 
   // ── The box is measured, not calculated ──
@@ -458,7 +463,9 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
     try {
       // One warp at filing resolution; the copy that is read is shrunk from it.
       const { canvas } = flattenCapture(cv, capture.source, corners, { maxDimension: FILE_IMAGE_DIM })
-      const full = canvas.toDataURL('image/jpeg', 0.85)
+      // The filed copy at 0.92: at 0.85 the compression smudged the small print
+      // on the stickers, which is the print the copy is filed for.
+      const full = canvas.toDataURL('image/jpeg', FILE_JPEG_QUALITY)
       const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(canvas.width, canvas.height))
       if (scale >= 1) return { preview: full, full }
       const small = document.createElement('canvas')
@@ -542,12 +549,34 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
           style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
       </div>
 
+      {/* Too few pixels on the page to read a sticker's lot number — said here,
+          before filing, while stepping closer and retaking is one tap away.
+          The Bowes usage (5 Nov 2026) went out at about 100 dpi unreadable. */}
+      {lowDetail && (
+        <div role="alert" data-low-detail="true" style={{
+          margin: '8px 16px 0', padding: '8px 12px', borderRadius: 10,
+          background: 'rgba(255,193,7,0.16)', border: '1px solid rgba(255,193,7,0.55)',
+          color: '#ffe8a3', fontSize: 12.5, lineHeight: 1.45, textAlign: 'left'
+        }}>
+          <strong style={{ color: '#fff' }}>Not enough detail to read the stickers</strong> (about {dpi} dpi).
+          {' '}Retake closer, so the page fills the screen
+          {onPhoneCamera ? ' — or take it with the phone’s own camera, which has far more detail.' : '.'}
+          {onPhoneCamera && (
+            <button type="button" onClick={onPhoneCamera}
+              style={{
+                display: 'block', marginTop: 6, padding: '7px 12px', borderRadius: 8, border: 'none',
+                background: '#fff', color: '#042746', fontSize: 13, fontWeight: 700, cursor: 'pointer'
+              }}>Use the phone’s camera</button>
+          )}
+        </div>
+      )}
+
       <div style={{ padding: '10px 16px', color: 'rgba(255,255,255,0.7)', fontSize: 12.5, textAlign: 'center' }}>
         Drag a corner if the edges are wrong
         {/* The facts behind a blurry scan, small, so it can be reported. */}
         {capture.detail && (
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>
-            {capture.detail.width}×{capture.detail.height} · {capture.detail.method} · sharpness {capture.detail.sharpness}
+            {capture.detail.width}×{capture.detail.height} · {capture.detail.method} · sharpness {capture.detail.sharpness}{dpi ? ` · ${dpi} dpi` : ''}
           </div>
         )}
       </div>
@@ -1195,6 +1224,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         onConfirm={accept}
         onAddAnother={keepAndContinue}
         onCancel={onCancel}
+        onPhoneCamera={onFallback}
         onRetake={() => { setPending(null); busyRef.current = false; trackerRef.current?.reset() }} />
     )}
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column', visibility: pending ? 'hidden' : 'visible' }}>

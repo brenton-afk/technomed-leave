@@ -11,6 +11,9 @@ import { useIsDesktop } from '../design/viewport.js'
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
 const MAX_IMAGE_DIM = 1568
 const JPEG_QUALITY = 0.85
+// The filed copy: see CameraSheet's FILE_IMAGE_DIM. Kept in step with it.
+const FILE_IMAGE_DIM = 2400
+const FILE_JPEG_QUALITY = 0.92
 const MAX_PAYLOAD_BYTES = 4_000_000
 
 const NAVY = '#042746'
@@ -78,21 +81,33 @@ async function fileToPage(file) {
   }
 
   const bitmap = await loadBitmap(file)
-  const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(bitmap.width, bitmap.height))
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-  const ctx = canvas.getContext('2d')
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.drawImage(bitmap.source || bitmap, 0, 0, canvas.width, canvas.height)
+  const drawn = maxDimension => {
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingQuality = 'high'
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(bitmap.source || bitmap, 0, 0, canvas.width, canvas.height)
+    return canvas
+  }
+  const dataUrl = drawn(MAX_IMAGE_DIM).toDataURL('image/jpeg', JPEG_QUALITY)
+  // The copy that is filed and sent to the distributor, as sharp as the photo
+  // allows: a photo from the phone's own camera is 12 megapixels, and this
+  // shrank it to the 1568-pixel reading size like everything else, which is
+  // about 130 dpi on an A4 form — too soft for a sticker's lot number.
+  const full = Math.max(bitmap.width, bitmap.height) > MAX_IMAGE_DIM
+    ? drawn(FILE_IMAGE_DIM).toDataURL('image/jpeg', FILE_JPEG_QUALITY).split(',')[1]
+    : null
   if (typeof bitmap.close === 'function') bitmap.close()
 
-  const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY)
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     mediaType: 'image/jpeg',
     data: dataUrl.split(',')[1],
+    full,
     preview: dataUrl,
     name: file.name || 'photo.jpg'
   }

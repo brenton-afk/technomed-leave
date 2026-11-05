@@ -156,3 +156,26 @@ export function worthRectifying(quad, width, height) {
   // only to rule out a sliver.
   return aspect > 0.25 && aspect < 4
 }
+
+// ─── Is there enough detail to read the stickers? ────────────────────────────
+// A usage form's implant stickers carry lot and reference numbers in print
+// about 1.5mm high. Below roughly 150 dots per inch that print is a few pixels
+// tall and cannot be read — by the distributor or by the extraction. The Bowes
+// usage of 5 Nov 2026 was filed at about 100 and was useless. Said on the
+// review screen, before filing, so the rep can step closer and retake.
+
+/** The A4 long side, in inches: forms here are A4. */
+const A4_LONG_INCHES = 11.69
+export const MIN_READABLE_DPI = 150
+
+/**
+ * Roughly how many dots per inch the page will have, from its corners
+ * (normalised 0..1) in a photograph of `width` x `height` pixels.
+ */
+export function pageDpi(corners, width, height) {
+  if (!corners || corners.length !== 4 || !width || !height) return 0
+  const px = corners.map(c => ({ x: c.x * width, y: c.y * height }))
+  const span = (a, b) => Math.hypot(px[a].x - px[b].x, px[a].y - px[b].y)
+  const long = Math.max(span(0, 1), span(3, 2), span(0, 3), span(1, 2))
+  return Math.round(long / A4_LONG_INCHES)
+}

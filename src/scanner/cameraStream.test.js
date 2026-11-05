@@ -278,6 +278,25 @@ describe('raising the resolution without changing the view', async () => {
     expect(t.getSettings()).toEqual({ width: 1920, height: 1440 })
   })
 
+  it('on an iPhone, steps down to 4K at the same shape when the maximum is a 4:3 photo mode', async () => {
+    // Bowes usage, 5 Nov 2026: one try at 4032 changed the shape, was put back
+    // to 1920, and every page came out about 100 dpi. 3840 x 2160 was there.
+    const t = track(w => (w >= 4032 ? { width: 4032, height: 3024 } : w >= 3840 ? { width: 3840, height: 2160 } : { width: 1920, height: 1080 }))
+    let current = { width: 1920, height: 1080 }
+    t.getSettings = () => current
+    t.applyConstraints = async c => { t.applied.push(c); current = (w => (w >= 4032 ? { width: 4032, height: 3024 } : w >= 3840 ? { width: 3840, height: 2160 } : { width: 1920, height: 1080 }))(c.width.ideal) }
+    expect(await raiseResolution(t)).toBe(true)
+    expect(current).toEqual({ width: 3840, height: 2160 })
+    expect(t.applied.map(c => c.width.ideal)).toEqual([4032, 3840])
+  })
+
+  it('asks anyway when the browser will not say what it can do', async () => {
+    const t = track(w => ({ width: w, height: w * 0.75 }))
+    t.getCapabilities = () => ({})
+    expect(await raiseResolution(t)).toBe(true)
+    expect(t.getSettings().width).toBe(4032)
+  })
+
   it('leaves a camera that cannot go higher alone', async () => {
     const t = track(w => ({ width: w, height: w * 0.75 }))
     t.getCapabilities = () => ({ width: { max: 1920 } })

@@ -705,6 +705,21 @@ Invariants worth preserving:
   component that stops its tracks on unmount re-opens the camera for every page,
   which on iOS is a stall and a second of black each time.
 
+**Resolution is the first thing that makes a scan unreadable** (Bowes usage,
+5 Nov 2026: filed at ~800x1100 px, about 100 dpi, sticker lot numbers
+illegible). iPhone Safari has no full-resolution still from a web page, so the
+page comes from a video frame, and the stream was stuck at 1920: `raiseResolution`
+tried only the camera's maximum (4032), which an iPhone offers only as a 4:3
+photo mode, so the shape check reverted it every time. It now walks
+`WIDTH_LADDER` (4032, 3840, 3264, 2880, 2560, 2304) and keeps the first width
+that keeps the shape — 3840x2160 on an iPhone — and asks even when
+`getCapabilities` says nothing. The review screen measures the page
+(`pageDpi` in `rectify.js`) and, under `MIN_READABLE_DPI` (150), says "Not
+enough detail to read the stickers" with **Use the phone's camera** (the
+existing photo picker, which on iOS offers the 12 MP system camera). Filed
+copies are JPEG 0.92 (`FILE_JPEG_QUALITY`), and photos from the picker now keep
+a 2400 px filing copy instead of being shrunk to the 1568 reading size.
+
 Two constraints here were learned the hard way and must not be undone:
 
 - **Never request a width *and* a height.** An iPhone has several rear lenses at

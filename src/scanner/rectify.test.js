@@ -165,3 +165,20 @@ describe('the outward nudge', () => {
     expect(same).toEqual(rect(10, 20, 30, 40))
   })
 })
+
+describe('enough detail to read a sticker', async () => {
+  const { pageDpi, MIN_READABLE_DPI } = await import('./rectify.js')
+  it('reads about 100 dpi for a page across a 1080-wide frame, as the Bowes scan was', () => {
+    const page = [{ x: 0.12, y: 0.21 }, { x: 0.86, y: 0.21 }, { x: 0.86, y: 0.77 }, { x: 0.12, y: 0.77 }]
+    const dpi = pageDpi(page, 1080, 1920)
+    expect(dpi).toBeGreaterThan(85)
+    expect(dpi).toBeLessThan(MIN_READABLE_DPI)
+  })
+  it('reads enough for the same framing on a 4K stream', () => {
+    const page = [{ x: 0.12, y: 0.21 }, { x: 0.86, y: 0.21 }, { x: 0.86, y: 0.77 }, { x: 0.12, y: 0.77 }]
+    expect(pageDpi(page, 2160, 3840)).toBeGreaterThanOrEqual(MIN_READABLE_DPI)
+  })
+  it('says nothing it cannot measure', () => {
+    expect(pageDpi(null, 100, 100)).toBe(0)
+  })
+})
