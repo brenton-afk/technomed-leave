@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { todayStr } from '../../clinicalPlan/week.js'
+import { parsePastedLines, lineAmount } from '../../invoiceLines.js'
 
 // ─── Invoices and quotes (Brent, 5 Nov 2026) ─────────────────────────────────
 // Calvary's purchase orders from accounts@, read by Claude into lines that a
@@ -130,7 +131,7 @@ export default function Invoices({ user }) {
   )
 }
 
-const blankLine = () => ({ code: '', description: '', quantity: 1, unitPrice: '' })
+const blankLine = () => ({ code: '', description: '', quantity: 1, unitPrice: '', discount: '' })
 
 function Editor({ api, draft, onClose }) {
   const isInvoice = draft.kind === 'invoice'
@@ -142,6 +143,8 @@ function Editor({ api, draft, onClose }) {
   const [reference, setReference] = useState(order.poNumber || '')
   const [date, setDate] = useState(order.date || todayStr())
   const [title, setTitle] = useState('')
+  const [summary, setSummary] = useState('')
+  const [paste, setPaste] = useState('')
   const [expiryDate, setExpiryDate] = useState('')
   const [lines, setLines] = useState(order.lines?.length ? order.lines.map(l => ({ ...l, unitPrice: l.unitPrice || '' })) : [blankLine()])
   const [busy, setBusy] = useState(false)
@@ -165,17 +168,24 @@ function Editor({ api, draft, onClose }) {
 
   const itemFor = code => items.find(i => String(i.code).toUpperCase() === String(code || '').toUpperCase())
   const setLine = (n, patch) => setLines(ls => ls.map((l, i) => i === n ? { ...l, ...patch } : l))
-  const total = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0)
+  const total = lines.reduce((s, l) => s + lineAmount(l), 0)
+  function addPasted() {
+    const got = parsePastedLines(paste)
+    if (!got.length) { setError('No lines found — copy the rows (code, description, quantity, price, discount) from the spreadsheet and paste them here.'); return }
+    setError('')
+    setLines(ls => [...ls.filter(l => l.code || l.description || l.unitPrice !== ''), ...got])
+    setPaste('')
+  }
 
   async function submit() {
     setBusy(true); setError('')
     try {
-      const body = { contactId, reference, date, lines: lines.map(l => ({ ...l, unitPrice: l.unitPrice === '' ? NaN : Number(l.unitPrice) })) }
+      const body = { contactId, reference, date, lines: lines.map(l => ({ ...l, unitPrice: l.unitPrice === '' ? NaN : Number(l.unitPrice), discount: Number(l.discount) || 0 })) }
       if (isInvoice) {
         const { invoice } = await api('invoice-create', { body })
         setMade({ ...invoice, what: 'invoice' })
       } else {
-        const { quote } = await api('quote-create', { body: { ...body, title, expiryDate } })
+        const { quote } = await api('quote-create', { body: { ...body, title, summary, expiryDate } })
         setMade({ ...quote, what: 'quote' })
       }
     } catch (err) {
@@ -243,6 +253,17 @@ function Editor({ api, draft, onClose }) {
               <input style={input} value={title} onChange={e => setTitle(e.target.value)} /></div>
           </>}
         </div>
+        {!isInvoice && <div style={{ marginTop: 10 }}>
+          <label style={label}>Summary (shown at the top of the quote)</label>
+          <textarea style={{ ...input, minHeight: 80 }} value={summary} placeholder={'Surgeon: …\nPatient: …\nProcedure: …\nKit/System: …'} onChange={e => setSummary(e.target.value)} />
+        </div>}
+      </div>
+
+      <div style={card}>
+        <label style={label}>Paste lines from a spreadsheet</label>
+        <textarea style={{ ...input, minHeight: 60 }} value={paste} placeholder="Copy the rows (code, description, quantity, price, discount) and paste here"
+          onChange={e => setPaste(e.target.value)} />
+        <button style={{ ...btn(false), marginTop: 6 }} disabled={!paste.trim()} onClick={addPasted}>Add these lines</button>
       </div>
 
       <datalist id="xero-items">
@@ -254,7 +275,7 @@ function Editor({ api, draft, onClose }) {
         const xeroPrice = item && Number.isFinite(item.price) ? item.price : null
         return (
           <div key={n} style={card}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px auto', gap: 6, alignItems: 'end' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 90px 64px auto', gap: 6, alignItems: 'end' }}>
               <div><label style={label}>Code</label>
                 <input style={input} list="xero-items" value={l.code} onChange={e => {
                   const code = e.target.value
@@ -265,6 +286,8 @@ function Editor({ api, draft, onClose }) {
                 <input style={input} type="number" min="0" step="1" value={l.quantity} onChange={e => setLine(n, { quantity: e.target.value })} /></div>
               <div><label style={label}>Unit ex GST</label>
                 <input style={input} type="number" min="0" step="0.01" value={l.unitPrice} onChange={e => setLine(n, { unitPrice: e.target.value })} /></div>
+              <div><label style={label}>Disc %</label>
+                <input style={input} type="number" min="0" max="100" step="1" value={l.discount ?? ''} onChange={e => setLine(n, { discount: e.target.value })} /></div>
               <button style={{ ...btn(false), padding: '7px 10px' }} aria-label="Remove line" onClick={() => setLines(ls => ls.filter((_, i) => i !== n))}>✕</button>
             </div>
             <input style={{ ...input, marginTop: 6 }} placeholder="Description" value={l.description} onChange={e => setLine(n, { description: e.target.value })} />

@@ -43,3 +43,32 @@ describe('lines for Xero', () => {
     expect(lineItems([{ description: 'A', quantity: 1, unitPrice: 0 }], items)[0].UnitAmount).toBe(0)
   })
 })
+
+import { parsePastedLines, discountOf, lineAmount } from '../src/invoiceLines.js'
+
+describe('lines pasted from a spreadsheet', () => {
+  it('reads code, description, quantity, price and discount, skipping the header and totals', () => {
+    const text = [
+      'Item\tDescription\tQuantity\tUnit Price\tDiscount\tGST\tAmount',
+      'AB0010-55001\tDIPLOMAT Tulip\t4\t686\t20.00%\t10%\t2195.2',
+      'MP0068\tK-Wire\t1\t$50.00\t\t10%\t50',
+      '\t\t\t\t\tSubtotal\t2245.2'
+    ].join('\n')
+    expect(parsePastedLines(text)).toEqual([
+      { code: 'AB0010-55001', description: 'DIPLOMAT Tulip', quantity: 4, unitPrice: 686, discount: 20 },
+      { code: 'MP0068', description: 'K-Wire', quantity: 1, unitPrice: 50, discount: 0 }
+    ])
+  })
+  it('reads a discount as a percentage however it is written', () => {
+    expect(discountOf('20%')).toBe(20)
+    expect(discountOf('0.2')).toBe(20)
+    expect(discountOf('20')).toBe(20)
+    expect(discountOf('')).toBe(0)
+  })
+  it('totals a line after its discount, and sends the discount to Xero', () => {
+    expect(lineAmount({ quantity: 4, unitPrice: 524, discount: 20 })).toBeCloseTo(1676.8)
+    expect(lineItems([{ description: 'A', quantity: 1, unitPrice: 10, discount: 20 }], [])[0].DiscountRate).toBe(20)
+    expect(lineItems([{ description: 'A', quantity: 1, unitPrice: 10 }], [])[0].DiscountRate).toBeUndefined()
+    expect(() => lineItems([{ description: 'A', quantity: 1, unitPrice: 10, discount: 120 }], [])).toThrow(/discount/)
+  })
+})

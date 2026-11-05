@@ -562,6 +562,11 @@ admin-only; no new function).
   `/api/xero/connect?invoices=1`, adding `XERO_INVOICE_SCOPES` to payroll's.
   A plain "Reconnect Xero" asks for payroll only and drops invoicing, so after
   one, tap Allow invoices again. The scopes must also be enabled on the Xero app.
+- **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
+  the standard 20% off implants. A quote's **Summary** holds the Surgeon /
+  Patient / Procedure lines. **Paste lines** reads rows copied from a
+  spreadsheet (code, description, qty, price, discount; `src/invoiceLines.js`),
+  skipping headers and total rows and never guessing a price.
 
 ### Google Calendar
 

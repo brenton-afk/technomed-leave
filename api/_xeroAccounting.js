@@ -92,6 +92,8 @@ export function lineItems(lines = [], items = []) {
       const blank = l.unitPrice === null || l.unitPrice === undefined || String(l.unitPrice).trim() === ''
       const unit = blank ? NaN : Number(l.unitPrice)
       if (!(quantity > 0)) throw new Error(`Line ${n + 1} needs a quantity`)
+      const discount = Number(l.discount) || 0
+      if (discount < 0 || discount > 100) throw new Error(`Line ${n + 1}: the discount must be 0 to 100%`)
       if (!Number.isFinite(unit) || unit < 0) throw new Error(`Line ${n + 1} needs a price`)
       const item = l.code && known.get(String(l.code).toUpperCase())
       return {
@@ -100,7 +102,8 @@ export function lineItems(lines = [], items = []) {
           ? (l.description || item.description || item.name)
           : [l.code, l.description].filter(Boolean).join(' — '),
         Quantity: quantity,
-        UnitAmount: Math.round(unit * 100) / 100
+        UnitAmount: Math.round(unit * 100) / 100,
+        ...(discount > 0 ? { DiscountRate: discount } : {})
       }
     })
 }
