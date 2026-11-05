@@ -1,7 +1,7 @@
 import { redis, redisSetBody } from './_redis.js'
 import { askClaude } from './_anthropic.js'
 import { listQuoteRequests } from './_quoteRequests.js'
-import { quoteTemplates, findContacts, createDraftQuote, getQuote, quotePdf } from './_xeroAccounting.js'
+import { quoteTemplates, quotesFor, findContacts, createDraftQuote, getQuote, quotePdf } from './_xeroAccounting.js'
 import { DISTRIBUTORS, detectDistributor, distributorsForKit } from './_distributors.js'
 import { ensureFolder, uploadFile, dropboxConfigured } from './_dropbox.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
@@ -139,6 +139,18 @@ export async function quoteRecords(ids = []) {
 
 export async function forgetQuoteRequest(id) { await redis('DEL', KEY(id)) }
 
+/**
+ * A quote already in Xero for this patient — made by hand, or before the
+ * portal did this. The patient's surname in its title, summary or reference
+ * is enough: a duplicate draft is worse than a request left to a person.
+ */
+export function alreadyQuoted(patient, quotes = []) {
+  const surname = String(patient || '').trim().split(/\s+/).pop()
+  if (!surname || surname.length < 3) return null
+  const re = new RegExp(`\\b${surname.replace(/[^A-Za-z'-]/g, '')}\\b`, 'i')
+  return quotes.find(q => q.status !== 'DELETED' && re.test(`${q.title} ${q.summary} ${q.reference}`)) || null
+}
+
 /** Step 2 for one drafted quote: once sent, file it and tell the distributors. */
 async function followUp(id, rec) {
   const q = await getQuote(rec.quoteId)
@@ -202,11 +214,14 @@ export async function autoQuotes({ max = 2, by = 'automatic' } = {}) {
     if (todo.length) {
       const templates = await quoteTemplates()
       const contact = (await findContacts(CUSTOMER)).find(c => c.name.toLowerCase() === CUSTOMER.toLowerCase())
+      const existing = await quotesFor(CUSTOMER).catch(() => [])
       for (const r of todo) {
         try {
           if (!templates.length) { held.push({ request: r.id, reason: 'No quote templates found in Xero' }); await save(r.id, { status: 'held', reason: 'No quote templates found in Xero' }); continue }
           if (!contact) { held.push({ request: r.id, reason: `No Xero contact named ${CUSTOMER}` }); await save(r.id, { status: 'held', reason: `No Xero contact named ${CUSTOMER}` }); continue }
           const p = await plan(r, templates)
+          const before = alreadyQuoted(p.patient, existing)
+          if (before) { await save(r.id, { status: 'already', reason: `Already quoted in Xero: ${before.number}`, quoteNumber: before.number }); continue }
           const checked = checkPlan(p, templates)
           if (!checked.ok) { held.push({ request: r.id, reason: checked.reason }); await save(r.id, { status: 'held', reason: checked.reason, why: p.why || '' }); continue }
           const today = todayStr()

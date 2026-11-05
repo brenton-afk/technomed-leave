@@ -8,8 +8,10 @@ import { searchMailboxOf, readMessageHeadline } from './_gmail.js'
 
 export const QUOTE_MAILBOXES = (process.env.QUOTE_MAILBOXES || 'bookings@technomed.com.au,brenton@technomed.com.au')
   .split(',').map(s => s.trim()).filter(Boolean)
+// The request has to be in the SUBJECT: a booking email that merely mentions
+// a self-funding patient ("SURGICAL BOOKING …", 5 Nov 2026) is not a request.
 const QUERY = process.env.QUOTE_QUERY
-  || 'from:(cnstas.com.au OR tasmanianspineservice.com.au) (quote OR quotation OR uninsured OR "self funding" OR "self-funding" OR "self funded") -in:sent newer_than:60d'
+  || 'from:(cnstas.com.au OR tasmanianspineservice.com.au) subject:(quote OR quotation OR uninsured OR "self funding" OR "self-funding" OR "self funded") -subject:"surgical booking" -in:sent newer_than:60d'
 
 const MBS = /\b5\d{4}\b/g
 const LEVEL = /\b([CTLS]\d{1,2})\s*[/-]\s*([CTLS]?\d{1,2})\b/i

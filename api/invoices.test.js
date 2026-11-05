@@ -252,3 +252,14 @@ describe('self-funding quotes from templates', () => {
       .toBe('Surgeon: Dr Test\nPatient: Test Patient\nDate: TBC\nProcedure: Fixation (T8/9)\nKit/System: Diplomat')
   })
 })
+
+import { alreadyQuoted } from './_quoteAuto.js'
+
+describe('a patient already quoted is not quoted twice', () => {
+  const quotes = [{ number: 'QU-0492', status: 'DRAFT', title: 'Single Level ACDF using CYLOX', summary: 'Surgeon: Test\nPatient: Alex Testerson', reference: '' }]
+  it('finds the earlier quote by surname', () => {
+    expect(alreadyQuoted('Alex Testerson', quotes)?.number).toBe('QU-0492')
+    expect(alreadyQuoted('Sam Other', quotes)).toBe(null)
+    expect(alreadyQuoted('', quotes)).toBe(null)
+  })
+})

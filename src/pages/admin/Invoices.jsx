@@ -241,6 +241,7 @@ function QuoteRequests({ data, onClose, onRetry }) {
             {!r.auto ? 'Not drafted yet'
               : r.auto.status === 'held' ? `Held: ${r.auto.reason}`
                 : r.auto.status === 'drafted' ? `Draft ${r.auto.quoteNumber} in Xero (${r.auto.template}) — send it from Xero; the distributors are told after`
+                  : r.auto.status === 'already' ? `${r.auto.reason} — nothing new drafted`
                   : r.auto.status === 'sent' ? `Sent · ${r.auto.filed ? 'filed in Dropbox' : 'not filed'} · told: ${(r.auto.notified || []).join(', ') || 'no distributor found on the quote'}`
                     : r.auto.reason || r.auto.status}
           </div>

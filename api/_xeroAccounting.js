@@ -157,6 +157,11 @@ export async function createDraftInvoice({ contactId, reference, date, dueDate, 
  * contact named like "DRAFT QUOTE TEMPLATE", with its lines. Read-only.
  */
 export async function quoteTemplates(contactName = process.env.QUOTE_TEMPLATE_CONTACT || 'DRAFT QUOTE TEMPLATE') {
+  return quotesFor(contactName)
+}
+
+/** Every quote for the contact(s) named like `contactName`, with lines. */
+export async function quotesFor(contactName) {
   const contacts = (await findContacts(contactName)).filter(c => c.name.toLowerCase().includes(contactName.toLowerCase()))
   const out = []
   for (const c of contacts) {
@@ -166,7 +171,7 @@ export async function quoteTemplates(contactName = process.env.QUOTE_TEMPLATE_CO
       for (const q of got) {
         out.push({
           id: q.QuoteID, number: q.QuoteNumber, status: q.Status, title: q.Title || '', summary: q.Summary || '',
-          reference: q.Reference || '', total: q.Total,
+          reference: q.Reference || '', total: q.Total, date: String(q.DateString || q.Date || '').slice(0, 10),
           lines: (q.LineItems || []).map(l => ({
             code: l.ItemCode || '', description: l.Description || '', quantity: l.Quantity,
             unitPrice: l.UnitAmount, discount: l.DiscountRate || 0

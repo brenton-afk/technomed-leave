@@ -597,7 +597,8 @@ admin-only; no new function).
   Procedures, May 2024) builds each quote from these; they are meant to become
   the rules for drafting Shelley's (CNS) uninsured quotes automatically.
 - **Quote requests** (`quote-requests`, `api/_quoteRequests.js`) — read-only:
-  CNS self-funding quote requests found in **bookings@ and brenton@**
+  CNS self-funding quote requests (quote wording in the **subject** — a booking
+  email that only mentions self-funding is not one) found in **bookings@ and brenton@**
   (`QUOTE_MAILBOXES`; Brent, 5 Nov 2026: CNS sends to bookings and cc's him,
   sometimes only him), searched narrowly (CNS domains + quote wording), the same
   email in both counted once by Message-ID. Reading brenton@ uses the same
@@ -614,7 +615,8 @@ admin-only; no new function).
   (`quoteFolder`, the team's existing paths; `{Patient} Self Funding Quote
   QU0492.pdf`) and each distributor on it (`distributorsOnQuote`) emailed a
   heads-up with the PDF, from Brent, bookings@ copied — surname only in the
-  body. Runs in both crons and when Invoices opens; records `quote:req:{id}`,
+  body. A patient already on a CNS quote in Xero (`alreadyQuoted`, by surname)
+  is not drafted again. Runs in both crons and when Invoices opens; records `quote:req:{id}`,
   each step once; held requests have Try again.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
