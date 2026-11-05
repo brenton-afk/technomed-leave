@@ -269,6 +269,12 @@ for JPW, and Atallah at RHH** (`ONLY_FOR`); **TM Screw Removal only when the
 procedure says extension, revision or removal, and the Mariner Outrigger only
 for an extension** (`ONLY_WHEN`). A revision is an add-on to its fusion, never
 pre-ticked; only a booking that is nothing but a removal leads with the kit.
+**Bookings from email assume the kit from the same rules** (Brent, 6 Nov 2026):
+`assumedKit` falls back to `suggestSystems` when `SURGEON_PREFERENCES` has no
+row — one operation and one pick only, otherwise it asks. Fowler and Atallah
+at RHH: Dakota for ACDF, Reform Cervical for posterior cervical. A cervical
+range with posterior screws/fusion and nothing anterior is posterior cervical,
+not pedicle screws. `NewBooking` passes `fromRules: false` (its own picks).
 
 Brainlab / AIRO is navigation, not an implant system. At **RHH** TechnoMed runs
 the navigation and AIRO and **bills Brainlab per case: $300 with AIRO, $250 for

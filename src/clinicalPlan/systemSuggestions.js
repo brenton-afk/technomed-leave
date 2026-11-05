@@ -88,7 +88,11 @@ const GROUP_TESTS = [
   // is still a fusion — the removal kit comes with it as an add-on (ONLY_WHEN).
   { group: 'removal', test: /\b(?:removal|remove|rem\s*o\s*s)\b/i },
   { group: 'deformity', test: /\b(?:deformity|scoliosis|kyphosis|reline)\b/i },
-  { group: 'posteriorCervical', test: /\b(?:posterior\s+cervical|pcf|lateral\s+mass|c1\s*[-–/]\s*c?2|c\d\s*[-–/]\s*t\d)\b/i }
+  { group: 'posteriorCervical', test: /\b(?:posterior\s+cervical|pcf|lateral\s+mass|c1\s*[-–/]\s*c?2|c\d\s*[-–/]\s*t\d)\b/i },
+  // Screws over a cervical range with nothing anterior (Toby's RHH list,
+  // 6 Nov 2026: "C4-C7 laminectomy + C3-C7 posterior screw fixation") is a
+  // posterior cervical construct, not thoracolumbar pedicle screws.
+  { group: 'posteriorCervical', test: /^(?![\s\S]*\b(?:acdf|accf|anterior)\b)(?=[\s\S]*\bc\d\s*[-–]\s*c\d\b)(?=[\s\S]*\b(?:posterior|screws?|fixation|fusion|instrumented)\b)/i }
 ]
 
 const ACRONYM_GROUP = {
@@ -133,6 +137,9 @@ export const SURGEON_SYSTEMS = [
   { surgeon: 'Thani', group: 'corpectomy', first: [], with: ['TM Locking Distractor'] },
   { surgeon: 'Fowler', group: 'acdf', hospital: 'RHH', first: ['Dakota'] },
   { surgeon: 'Atallah', group: 'acdf', hospital: 'RHH', first: ['Dakota'] },
+  // Brent, 6 Nov 2026: Reform for Fowler's and Atallah's posterior cervicals at RHH.
+  { surgeon: 'Fowler', group: 'posteriorCervical', hospital: 'RHH', first: ['Reform Cervical'] },
+  { surgeon: 'Atallah', group: 'posteriorCervical', hospital: 'RHH', first: ['Reform Cervical'] },
   { surgeon: 'Ibbett', group: 'acdf', hospital: 'CLV', first: ['Dakota'], with: ['TM Locking Distractor'], pick: ['Dakota', 'TM Locking Distractor'] },
   { surgeon: 'Dubey', group: 'posteriorCervical', first: ['Northstar'] },
   { surgeon: 'Hannan', group: 'deformity', first: ['REline'] },

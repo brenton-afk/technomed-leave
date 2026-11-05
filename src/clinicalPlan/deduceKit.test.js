@@ -395,3 +395,22 @@ describe('the kit assumed for a booking that names none', async () => {
     expect(assumedKit({ surgeon: 'Dubey', procedure: 'C5/6 ACDF', hospital: 'CLV', kit: '' })).toBeNull()
   })
 })
+
+import { assumedKit as assumeFromRules } from './deduceKit.js'
+describe('an RHH cervical week assumes the usual kit (Brent, 6 Nov 2026)', () => {
+  const kitFor = (surgeon, procedure) => assumeFromRules({ surgeon, procedure, hospital: 'Royal Hobart Hospital', kit: '' })?.system || null
+  it('reads each booking as the surgeon would kit it', () => {
+    expect(kitFor('Fowler', 'C4-C7 laminectomy + C3-C7 posterior screw fixation')).toBe('Reform Cervical')
+    expect(kitFor('Fowler', 'C4/5 ACDF')).toBe('Dakota')
+    expect(kitFor('JPW', 'C3/4, C4/5 + C5/6 ACDF')).toBe('Lonestar')
+    expect(kitFor('Fowler', 'C5/6 + C6/7 ACDF')).toBe('Dakota')
+    expect(kitFor('Atallah', 'C3-C6 laminectomy, decompression & lateral mass fusion')).toBe('Reform Cervical')
+  })
+  it('still asks when the rules give more than one kit, or none', () => {
+    expect(kitFor('Gupta', 'L4/5 PLIF')).toBe(null)
+    expect(kitFor('Fowler', 'Craniotomy')).toBe(null)
+  })
+  it('a hand-entered booking can leave it to its own ticks', () => {
+    expect(assumeFromRules({ surgeon: 'Fowler', procedure: 'C4/5 ACDF', hospital: 'RHH', kit: '', fromRules: false })).toBe(null)
+  })
+})

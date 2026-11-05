@@ -296,7 +296,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   useEffect(() => {
     const key = `${surgeon}|${procedure}|${hospital}`
     if (systems.length || assumedFor.current === key) return
-    const guess = assumedKit({ surgeon, procedure, hospital, kit: '' })
+    const guess = assumedKit({ surgeon, procedure, hospital, kit: '', fromRules: false }) // its own picks below say it better
     if (guess) {
       assumedFor.current = key
       setSystems([{ name: guess.system, supply: guess.supply || supplyFor(guess.system) }])

@@ -31,6 +31,7 @@ import { systemsToSupply } from './kitSupply.js'
 import { findImplantProcedures } from './procedureImplants.js'
 import { preferenceFor, hasRecordedPreferences } from './surgeonPreferences.js'
 import { inventoryFor, siteCode, suggestSupply } from './inventory.js'
+import { suggestSystems, SYSTEM_GROUPS } from './systemSuggestions.js'
 
 /**
  * The implant question a booking raises, or null when it raises none.
@@ -148,15 +149,25 @@ function questionFor(acronyms, needs, preference, surgeon) {
  *
  * @returns {null | { kit: string, system: string, supply: string|null, why: string }}
  */
-export function assumedKit({ surgeon, procedure, hospital, kit } = {}) {
+export function assumedKit({ surgeon, procedure, hospital, kit, fromRules = true } = {}) {
   if (systemsToSupply({ kit }).length) return null
   const found = findImplantProcedures(String(procedure || '')).filter(e => e.needs)
   // One operation, one preference. "ACDF and PLIF" is two kits and asks.
-  if (found.length !== 1) return null
-  const preference = preferenceFor(surgeon, found[0].acronym, hospital)
-  if (!preference) return null
-
   const site = siteCode(hospital)
+  let preference = found.length === 1 ? preferenceFor(surgeon, found[0].acronym, hospital) : null
+  let what = preference ? found[0].acronym : ''
+  // Otherwise the surgeon rules in systemSuggestions.js (Brent, 6 Nov 2026:
+  // "when Mat asks the portal to book cases make sure these preferences are
+  // stored") — but only one operation and one system, so a booking that
+  // needs two kits still asks.
+  if (!preference) {
+    if (!fromRules) return null
+    const s = suggestSystems({ operation: procedure, surgeon, hospital: site })
+    if (s.groups.length !== 1 || s.picks.length !== 1) return null
+    preference = { system: s.picks[0] }
+    what = SYSTEM_GROUPS[s.groups[0]].label.replace(/^([A-Z])(?=[a-z])/, c => c.toLowerCase())
+  }
+
   const held = site ? (inventoryFor(preference.system)?.consigned?.[site] || 0) : 0
   // Booked to us, so it is a case we are covering: a set on the shelf there is
   // the answer even for a distributor's kit we do not usually attend with.
@@ -168,6 +179,6 @@ export function assumedKit({ surgeon, procedure, hospital, kit } = {}) {
     system: preference.system,
     supply: supply || null,
     kit: supply ? `${preference.system} (${supply})` : preference.system,
-    why: `${preference.system} — ${surgeon}'s kit for an ${found[0].acronym}.${where}`
+    why: `${preference.system} — ${surgeon ? `${surgeon}'s kit` : 'the kit'} for ${/^[AEIOUaeiou]/.test(what) ? 'an' : 'a'} ${what}.${where}`
   }
 }
