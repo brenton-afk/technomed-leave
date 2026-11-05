@@ -261,6 +261,17 @@ export default function App() {
   // so the service worker has it before the next dead spot. See lazyScreens.jsx.
   useEffect(() => { if (user) prefetchScreens() }, [user])
 
+  // Bookings@ read into Cases → Inbox in the background on opening (Brent,
+  // 6 Nov 2026: "add the bookings so Mat can just log in and check them").
+  // Cards only, waiting for a tap; the server skips it if anyone checked in
+  // the last ten minutes, and a failure here is silent — the Inbox checks again.
+  useEffect(() => {
+    if (!user?.token || typeof fetch !== 'function') return
+    fetch('/api/calendar/today?action=ingest&background=1', {
+      method: 'POST', headers: { Authorization: `Bearer ${user.token}` }
+    }).catch(() => {})
+  }, [user?.token])
+
   // The stored login time is checked, not just written, so a session really does
   // expire after its hour.
   useEffect(() => {

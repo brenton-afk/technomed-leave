@@ -202,6 +202,13 @@ were made — so a booking changed in Google meanwhile is refused (409) and show
 as "make the change again", never overwritten. Only Edit booking saves are
 queued. Nothing that emails a distributor is ever queued.
 
+**Bookings@ is read into Cases → Inbox by itself** (Brent, 6 Nov 2026):
+`ingestBookings` in `api/calendar/today.js` runs from the Inbox, from both
+daily cron jobs, and in the background whenever a signed-in person opens the
+app (`action=ingest&background=1`, skipped if any check ran in the last ten
+minutes — `bookings:ingest:recent`). Cards only; nothing reaches the calendar
+without Accept.
+
 **Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
 `action=search` in `api/calendar/today.js`): Google's own full-text search over
 2020 to a year ahead, each hit read through `readBooking`, cases only.

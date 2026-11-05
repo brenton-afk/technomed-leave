@@ -44,7 +44,7 @@ import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate,
-  setTeamLeaderFor, setDayLeader, getWorklist
+  setTeamLeaderFor, setDayLeader, getWorklist, redis
 } from '../_redis.js'
 import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
@@ -1222,8 +1222,31 @@ async function inBatches(items, limit, work) {
 async function handleIngest(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
-
+  // background=1: the app's quiet check on opening (Brent, 6 Nov 2026: "add
+  // the bookings so Mat can just log in and check them"). It skips if another
+  // check ran in the last ten minutes, and never fails loudly.
+  if (req.query.background) {
+    if (await redis('SET', INGEST_RECENT, '1', 'NX', 'EX', '600').catch(() => null) !== 'OK') {
+      return res.status(200).json({ ok: true, skipped: 'checked recently' })
+    }
+  }
   try {
+    return res.status(200).json(await ingestBookings())
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+const INGEST_RECENT = 'bookings:ingest:recent'
+
+/**
+ * One pass over bookings@: new booking emails read and queued as cards in
+ * Cases → Inbox, waiting for a person to accept. Nothing reaches the
+ * calendar from here. Used by the Inbox, the app's background check on
+ * opening, and both daily jobs.
+ */
+export async function ingestBookings() {
+  {
     // A fortnight back is enough to catch up after a quiet week without trawling
     // the whole mailbox on every run.
     const messageIds = await searchMailbox('newer_than:14d -in:spam', { max: 60 })
@@ -1427,13 +1450,11 @@ async function handleIngest(req, res) {
 
     const settled = await reconcileQueue(await getBookingQueue(), todayInHobart())
     const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
-    return res.status(200).json({
+    return {
       ok: true, read, skipped, remaining, unreadable, echoes, already,
       returned: settled.returned, nowBooked: settled.nowBooked,
       found: queued.length, count: pending.length, pending
-    })
-  } catch (err) {
-    return res.status(500).json({ error: err.message })
+    }
   }
 }
 

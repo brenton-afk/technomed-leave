@@ -8,6 +8,7 @@ import { notify } from '../_push.js'
 import { TZ, zonedCivil, toDateStr, addCivilDays } from '../../src/clinicalPlan/week.js'
 import { autoInvoice } from '../_poAuto.js'
 import { autoQuotes } from '../_quoteAuto.js'
+import { ingestBookings } from '../calendar/today.js'
 
 // ─── The two daily runs ──────────────────────────────────────────────────────
 // Vercel's Hobby plan allows two scheduled jobs, so both share this function
@@ -95,11 +96,14 @@ export default async function handler(req, res) {
   if (job === 'evening' || job === 'morning') {
     // Purchase orders and self-funding quotes side by side, each in its own
     // catch, so neither can cost the other (or the reminders) its turn.
-    const [po, quotes] = await Promise.all([
+    // And bookings@ read into Cases → Inbox, so cards are waiting for whoever
+    // books (Brent, 6 Nov 2026). Cards only — nothing reaches the calendar.
+    const [po, quotes, bookings] = await Promise.all([
       autoInvoice({ by: `cron-${job}` }).catch(err => { console.error('po auto-invoice failed:', err.message); return { error: err.message } }),
-      autoQuotes({ by: `cron-${job}` }).catch(err => { console.error('quote auto failed:', err.message); return { error: err.message } })
+      autoQuotes({ by: `cron-${job}` }).catch(err => { console.error('quote auto failed:', err.message); return { error: err.message } }),
+      ingestBookings().then(({ pending, ...rest }) => rest).catch(err => { console.error('booking inbox check failed:', err.message); return { error: err.message } })
     ])
-    invoices = { po, quotes }
+    invoices = { po, quotes, bookings }
   }
 
   // Each part in its own try, so a calendar that will not answer does not stop
