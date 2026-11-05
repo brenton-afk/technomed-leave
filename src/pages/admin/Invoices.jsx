@@ -46,6 +46,7 @@ export default function Invoices({ user }) {
   const [reading, setReading] = useState(null)
   const [open, setOpen] = useState('') // which folded group is showing
   const [auto, setAuto] = useState(null) // the last automatic pass: { running } | result
+  const [audit, setAudit] = useState(null) // the accounts@ check: { running } | result | { error }
 
   const headers = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
   const api = useCallback(async (action, { query = '', body } = {}) => {
@@ -83,6 +84,11 @@ export default function Invoices({ user }) {
   }, [api, load])
 
   useEffect(() => { load().then(() => runAuto()) }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function checkAccounts() {
+    setAudit({ running: true })
+    try { setAudit(await api('accounts-audit')) } catch (err) { setAudit({ error: err.message }) }
+  }
 
   async function retry(o) {
     try { await api('po-retry', { body: { po: o.poNumber } }); await runAuto() } catch (err) { setError(err.message) }
@@ -134,6 +140,7 @@ export default function Invoices({ user }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Invoices &amp; quotes</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button style={btn(false)} onClick={checkAccounts} disabled={audit?.running}>{audit?.running ? 'Checking accounts@…' : 'Check accounts@'}</button>
           <button style={btn(false)} onClick={load}>Refresh</button>
           <button style={btn(true)} onClick={() => setDraft({ kind: 'quote' })}>New quote</button>
         </div>
@@ -144,6 +151,7 @@ export default function Invoices({ user }) {
         Only a PO that could not be done the usual way is left here, with the reason.
       </div>
 
+      {audit && !audit.running && <AccountsAudit audit={audit} onClose={() => setAudit(null)} />}
       {xero === 'permission' && <AllowInvoices />}
       {xero === 'error' && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Xero could not be checked just now, so no purchase order is offered — one may already be invoiced. Try Refresh.</div>}
       {error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>{error}</div>}
@@ -182,6 +190,42 @@ export default function Invoices({ user }) {
         </span>
       }))}
       {fold('unchecked', 'Not checked against Xero', list.unchecked, o => orderCard(o))}
+    </div>
+  )
+}
+
+// Read-only: what Calvary has sent accounts@ and where each is filed.
+function AccountsAudit({ audit, onClose }) {
+  if (audit.error) return <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Could not read accounts@: {audit.error}</div>
+  const row = { fontSize: 13, color: '#5a6478', margin: '2px 0' }
+  return (
+    <div style={{ ...card, border: '1px solid rgba(24,154,133,0.35)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>accounts@ — last {audit.days} days from Calvary</div>
+        <button style={{ ...btn(false), marginLeft: 'auto', padding: '4px 10px' }} onClick={onClose}>Close</button>
+      </div>
+      <div style={row}>
+        {Object.entries(audit.counts || {}).map(([k, n]) => `${n} ${k}${n === 1 ? '' : 's'}`).join(' · ') || 'Nothing from Calvary.'}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginTop: 10 }}>How it is filed now</div>
+      {Object.entries(audit.filing || {}).map(([kind, by]) => (
+        <div key={kind} style={row}><b>{kind}:</b> {Object.entries(by).map(([l, n]) => `${l} (${n})`).join(', ')}</div>
+      ))}
+      <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginTop: 10 }}>Remittances ({audit.remittances.length})</div>
+      {!audit.remittances.length && <div style={row}>None found — Calvary may not be emailing remittances to accounts@.</div>}
+      {audit.remittances.map(r => (
+        <div key={r.id} style={{ ...row, borderTop: '1px solid rgba(26,43,74,0.08)', paddingTop: 6, marginTop: 6 }}>
+          <div style={{ color: NAVY, fontWeight: 600 }}>{when(r.receivedAt)} · {r.subject || '(no subject)'}</div>
+          <div>{r.files.length ? r.files.join(', ') : 'no attachment'} · filed under: {r.filedUnder.join(', ') || 'not filed'}{r.inbox ? ' · still in inbox' : ''}</div>
+          <div>{r.invoices.length ? `Our invoices named: ${r.invoices.join(', ')}` : 'No invoice numbers in the email text (may be in the attachment)'}</div>
+        </div>
+      ))}
+      {audit.others?.length > 0 && <>
+        <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginTop: 10 }}>Other Calvary mail ({audit.others.length})</div>
+        {audit.others.map(o => <div key={o.id} style={row}>{when(o.receivedAt)} · {o.subject} · {o.filedUnder.join(', ') || 'not filed'}</div>)}
+      </>}
+      <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginTop: 10 }}>All folders in accounts@</div>
+      <div style={row}>{audit.labels.join(' · ') || 'No folders.'}</div>
     </div>
   )
 }

@@ -221,9 +221,16 @@ export async function readMessageHeadline(mailbox, id) {
     cc: header(message.payload, 'Cc'),
     subject: header(message.payload, 'Subject'),
     receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : null,
+    labelIds: message.labelIds || [],
     text: parts.text || stripHtml(parts.html),
     attachments: parts.attachments.map(a => ({ ...a, size: sizeOf(a) }))
   }
+}
+
+/** A mailbox's own labels (its folders), as { id, name } — read-only. */
+export async function listLabelsOf(mailbox) {
+  const data = await gmail('/labels', { impersonate: mailbox })
+  return (data.labels || []).filter(l => l.type === 'user').map(l => ({ id: l.id, name: l.name }))
 }
 
 /** One attachment's bytes, as standard base64, with its sniffed type. */

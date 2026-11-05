@@ -584,6 +584,13 @@ admin-only; no new function).
   `/api/xero/connect?invoices=1`, adding `XERO_INVOICE_SCOPES` to payroll's.
   A plain "Reconnect Xero" asks for payroll only and drops invoicing, so after
   one, tap Allow invoices again. The scopes must also be enabled on the Xero app.
+- **Check accounts@** (`accounts-audit`, `api/_remittances.js`) — read-only:
+  Calvary's remittances and other mail in accounts@ over 180 days, the Gmail
+  labels each sits under (Toni's filing), and invoice numbers named. Calvary
+  pays in batches (one deposit, several invoices), so remittances are what a
+  payment would be split by. **Filing by the portal is not built**: the Gmail
+  grant is read-only (`gmail.readonly`); labelling needs `gmail.modify` added in
+  Google Admin, and the format comes from this report first.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

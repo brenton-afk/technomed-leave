@@ -180,3 +180,11 @@ describe('a purchase order drafted by itself', () => {
     expect(planInvoice(order([{ quantity: 1, xeroCode: 'KIT-1' }]), { ...base, poNumber: 'ACP0000294' }).ok).toBe(false)
   })
 })
+
+import { invoiceNumbersIn } from './_remittances.js'
+
+describe('reading a remittance', () => {
+  it('finds our invoice numbers however they are written', () => {
+    expect(invoiceNumbersIn('Payment of INV-2016, INV 2017 and inv2021; ref LVH0016091')).toEqual(['INV-2016', 'INV-2017', 'INV-2021'])
+  })
+})

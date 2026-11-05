@@ -7,6 +7,7 @@ import { readXero } from '../_xeroResponse.js'
 import { findContacts, listItems, salesInvoicesSince, createDraftInvoice, createDraftQuote } from '../_xeroAccounting.js'
 import { listPurchaseOrders, readPurchaseOrder, invoicedByPo, splitOrders } from '../_purchaseOrders.js'
 import { autoInvoice, autoRecords, retryPo } from '../_poAuto.js'
+import { accountsAudit } from '../_remittances.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getTimesheetDraft, registeredDeviceCount } from '../_redis.js'
 import { pushConfigured, pushFault } from '../_push.js'
@@ -257,11 +258,12 @@ export default async function handler(req, res) {
   }
 }
 
-const INVOICE_ACTIONS = new Set(['po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
+const INVOICE_ACTIONS = new Set(['accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
 
 async function handleInvoices(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   try {
+    if (action === 'accounts-audit') return res.status(200).json(await accountsAudit())
     if (action === 'po-list') {
       const orders = await listPurchaseOrders()
       // One read of Xero's sales invoices from two months before the oldest
