@@ -596,6 +596,12 @@ admin-only; no new function).
   with its lines. Brent's self-funding procedure (Dropbox, Admin/Policies and
   Procedures, May 2024) builds each quote from these; they are meant to become
   the rules for drafting Shelley's (CNS) uninsured quotes automatically.
+- **Quote requests** (`quote-requests`, `api/_quoteRequests.js`) — read-only:
+  CNS self-funding quote requests found in **bookings@ and brenton@**
+  (`QUOTE_MAILBOXES`; Brent, 5 Nov 2026: CNS sends to bookings and cc's him,
+  sometimes only him), searched narrowly (CNS domains + quote wording), the same
+  email in both counted once by Message-ID. Reading brenton@ uses the same
+  domain-wide `gmail.readonly` grant as bookings@.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

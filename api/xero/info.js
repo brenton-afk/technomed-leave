@@ -8,6 +8,7 @@ import { quoteTemplates, findContacts, listItems, salesInvoicesSince, createDraf
 import { listPurchaseOrders, readPurchaseOrder, invoicedByPo, splitOrders } from '../_purchaseOrders.js'
 import { autoInvoice, autoRecords, retryPo } from '../_poAuto.js'
 import { accountsAudit } from '../_remittances.js'
+import { listQuoteRequests } from '../_quoteRequests.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getTimesheetDraft, registeredDeviceCount } from '../_redis.js'
 import { pushConfigured, pushFault } from '../_push.js'
@@ -258,11 +259,12 @@ export default async function handler(req, res) {
   }
 }
 
-const INVOICE_ACTIONS = new Set(['quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
+const INVOICE_ACTIONS = new Set(['quote-requests', 'quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
 
 async function handleInvoices(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   try {
+    if (action === 'quote-requests') return res.status(200).json(await listQuoteRequests())
     if (action === 'quote-templates') return res.status(200).json({ templates: await quoteTemplates() })
     if (action === 'accounts-audit') return res.status(200).json(await accountsAudit())
     if (action === 'po-list') {

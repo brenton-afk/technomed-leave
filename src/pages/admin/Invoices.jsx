@@ -46,6 +46,7 @@ export default function Invoices({ user }) {
   const [reading, setReading] = useState(null)
   const [open, setOpen] = useState('') // which folded group is showing
   const [auto, setAuto] = useState(null) // the last automatic pass: { running } | result
+  const [requests, setRequests] = useState(null) // { running } | { requests, errors } | { error }
   const [templates, setTemplates] = useState(null) // { running } | { templates } | { error }
   const [audit, setAudit] = useState(null) // the accounts@ check: { running } | result | { error }
 
@@ -85,6 +86,11 @@ export default function Invoices({ user }) {
   }, [api, load])
 
   useEffect(() => { load().then(() => runAuto()) }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function showRequests() {
+    setRequests({ running: true })
+    try { setRequests(await api('quote-requests')) } catch (err) { setRequests({ error: err.message }) }
+  }
 
   async function showTemplates() {
     setTemplates({ running: true })
@@ -149,6 +155,7 @@ export default function Invoices({ user }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Invoices &amp; quotes</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button style={btn(false)} onClick={showRequests} disabled={requests?.running}>{requests?.running ? 'Looking…' : 'Quote requests'}</button>
           <button style={btn(false)} onClick={showTemplates} disabled={templates?.running}>{templates?.running ? 'Reading templates…' : 'Quote templates'}</button>
           <button style={btn(false)} onClick={checkAccounts} disabled={audit?.running}>{audit?.running ? 'Checking accounts@…' : 'Check accounts@'}</button>
           <button style={btn(false)} onClick={load}>Refresh</button>
@@ -161,6 +168,7 @@ export default function Invoices({ user }) {
         Only a PO that could not be done the usual way is left here, with the reason.
       </div>
 
+      {requests && !requests.running && <QuoteRequests data={requests} onClose={() => setRequests(null)} />}
       {templates && !templates.running && <QuoteTemplates data={templates} onClose={() => setTemplates(null)} />}
       {audit && !audit.running && <AccountsAudit audit={audit} onClose={() => setAudit(null)} />}
       {xero === 'permission' && <AllowInvoices />}
@@ -201,6 +209,30 @@ export default function Invoices({ user }) {
         </span>
       }))}
       {fold('unchecked', 'Not checked against Xero', list.unchecked, o => orderCard(o))}
+    </div>
+  )
+}
+
+// Read-only: CNS's self-funding quote requests in bookings@ and brenton@.
+function QuoteRequests({ data, onClose }) {
+  if (data.error) return <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Could not read the mailboxes: {data.error}</div>
+  const list = data.requests || []
+  const row = { fontSize: 12, color: '#5a6478' }
+  return (
+    <div style={{ ...card, border: '1px solid rgba(24,154,133,0.35)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Quote requests from CNS — last 60 days ({list.length})</div>
+        <button style={{ ...btn(false), marginLeft: 'auto', padding: '4px 10px' }} onClick={onClose}>Close</button>
+      </div>
+      {(data.errors || []).map(e => <div key={e.mailbox} style={{ fontSize: 12, color: '#b42318' }}>{e.mailbox}: {e.error}</div>)}
+      {!list.length && <div style={row}>None found in bookings@ or brenton@.</div>}
+      {list.map(r => (
+        <div key={r.id} style={{ borderTop: '1px solid rgba(26,43,74,0.08)', paddingTop: 6, marginTop: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{when(r.receivedAt)} · {r.subject || '(no subject)'}</div>
+          <div style={row}>{r.from} · in {r.mailboxes.join(' and ')}</div>
+          <div style={row}>{[r.levels && `Levels ${r.levels}`, r.mbs.length && `MBS ${r.mbs.join(', ')}`, r.uninsured && 'uninsured'].filter(Boolean).join(' · ') || 'No levels or MBS items read'}</div>
+        </div>
+      ))}
     </div>
   )
 }

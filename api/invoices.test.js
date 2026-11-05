@@ -188,3 +188,21 @@ describe('reading a remittance', () => {
     expect(invoiceNumbersIn('Payment of INV-2016, INV 2017 and inv2021; ref LVH0016091')).toEqual(['INV-2016', 'INV-2017', 'INV-2021'])
   })
 })
+
+import { readRequest, dedupe } from './_quoteRequests.js'
+
+describe('quote requests from CNS', () => {
+  it('reads levels and MBS items from the email, and nothing it does not say', () => {
+    expect(readRequest({ subject: 'T8/9 DISCECTOMY + SINGLE LEVEL FIXATION - UNINSURED', text: 'quote please 51011, 51021, 51031' }))
+      .toEqual({ mbs: ['51011', '51021', '51031'], levels: 'T8/9', uninsured: true })
+    expect(readRequest({ subject: 'Quote request', text: 'hello' })).toEqual({ mbs: [], levels: '', uninsured: false })
+  })
+  it('counts the same email in bookings@ and brenton@ once', () => {
+    const out = dedupe([
+      { messageId: '<a@x>', mailbox: 'bookings@technomed.com.au', receivedAt: '2026-11-05T00:00:00Z' },
+      { messageId: '<a@x>', mailbox: 'brenton@technomed.com.au', receivedAt: '2026-11-05T00:00:00Z' },
+      { messageId: '<b@x>', mailbox: 'brenton@technomed.com.au', receivedAt: '2026-11-04T00:00:00Z' }
+    ])
+    expect(out.map(m => m.mailboxes.length)).toEqual([2, 1])
+  })
+})
