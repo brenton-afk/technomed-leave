@@ -282,6 +282,9 @@ row — one operation and one pick only, otherwise it asks. Fowler and Atallah
 at RHH: Dakota for ACDF, Reform Cervical for posterior cervical. A cervical
 range with posterior screws/fusion and nothing anterior is posterior cervical,
 not pedicle screws. `NewBooking` passes `fromRules: false` (its own picks).
+**KT is the distributor, never a system** (Brent, 6 Nov 2026): `resolveKit`
+drops "KT"/"KT Medical" from a kit line, so "KT Lonestar" is Lonestar and a
+kit of only "KT" is empty — and a JPW ACDF then assumes Lonestar.
 
 Brainlab / AIRO is navigation, not an implant system. At **RHH** TechnoMed runs
 the navigation and AIRO and **bills Brainlab per case: $300 with AIRO, $250 for

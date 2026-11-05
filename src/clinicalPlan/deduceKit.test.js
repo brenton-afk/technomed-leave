@@ -414,3 +414,18 @@ describe('an RHH cervical week assumes the usual kit (Brent, 6 Nov 2026)', () =>
     expect(assumeFromRules({ surgeon: 'Fowler', procedure: 'C4/5 ACDF', hospital: 'RHH', kit: '', fromRules: false })).toBe(null)
   })
 })
+
+import { resolveKit as resolveKitLine } from './systems.js'
+describe('KT is the distributor, not a system (Brent, 6 Nov 2026)', () => {
+  it('drops KT from a kit line', () => {
+    expect(resolveKitLine('KT')).toBe('')
+    expect(resolveKitLine('KT Medical')).toBe('')
+    expect(resolveKitLine('KT Lonestar')).toBe('Lonestar')
+    expect(resolveKitLine('Lonestar (KT)')).toBe('Lonestar')
+    expect(resolveKitLine('Forza XP + Firebird (KT)')).toBe('Forza XP + Firebird')
+  })
+  it('so a JPW ACDF that only said KT is Lonestar', () => {
+    const kit = resolveKitLine('KT')
+    expect(assumeFromRules({ surgeon: 'JPW', procedure: 'C4/5 ACDF', hospital: 'RHH', kit })?.system).toBe('Lonestar')
+  })
+})

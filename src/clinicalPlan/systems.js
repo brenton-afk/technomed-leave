@@ -430,7 +430,12 @@ const SYSTEM_ALIASES = [
   { written: new RegExp(`\\bmariners?\\s*[-–(]?\\s*(?:${PERC})(?:\\s+(?:pedicle\\s+)?screws?)?(?:\\s+(?:system|set|kit))?(?:\\s*\\))?`, 'gi'), means: 'Mariner MIS' },
   { written: new RegExp(`(?<!mariners?\\s*)\\b(?:${PERC})\\s+(?:pedicle\\s+)?screws?(?:\\s+(?:system|set|kit))?\\b`, 'gi'), means: 'Mariner MIS' },
   // "MIS" as a kit entry of its own: the only MIS screw set we bring.
-  { written: /(^|[/+,&;]\s*|\band\s+)MIS(?=\s*(?:$|[/+,&;(]|\band\b))/g, means: '$1Mariner MIS' }
+  { written: /(^|[/+,&;]\s*|\band\s+)MIS(?=\s*(?:$|[/+,&;(]|\band\b))/g, means: '$1Mariner MIS' },
+  // Brent, 6 Nov 2026: "KT is not a system." KT Medical is the distributor
+  // (Lonestar, Firebird, Forza), so the word is dropped: "KT Lonestar" is
+  // Lonestar, and a kit of only "KT" is no kit — which lets the surgeon's
+  // usual fill it (JPW's ACDF is Lonestar).
+  { written: /\bKT(?:[\s-]+medical)?\b(?:'s)?/gi, means: '' }
 ]
 
 /**
@@ -455,7 +460,11 @@ export function resolveKit(kit, context = '') {
   const e4 = resolveE4Product(text, context)
   if (e4) text = text.replace(/\bE4(?:\s+(?:global\s+)?cages?)?\b/i, e4)
 
-  return onceEach(text.replace(/\s{2,}/g, ' ').trim(), 'Mariner MIS')
+  text = text.replace(/\s{2,}/g, ' ').trim()
+    // Whatever an alias emptied leaves no stray separator behind.
+    .replace(/^(?:\s*(?:[/+,&;]|\band\b)\s*)+/i, '').replace(/(?:\s*(?:[/+,&;]|\band\b)\s*)+$/i, '')
+    .replace(/\s*([/+,&;])(?:\s*[/+,&;])+\s*/g, ' $1 ').replace(/\s*\(\s*\)/g, '').trim()
+  return onceEach(text, 'Mariner MIS')
 }
 
 /** "Mariner MIS and Mariner MIS" → "Mariner MIS": one set, however often it was named. */
