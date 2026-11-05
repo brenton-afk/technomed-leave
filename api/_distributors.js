@@ -140,11 +140,14 @@ export const CLINICAL_TEAM_CC = [
 
 // Haemostatic agents and other peripherals are recorded by the hospital on the
 // same form but are never TechnoMed implants — they must not reach a sheet.
+// Floseal, TachoSil and Gelfoam are dropped from a scan altogether (Brent,
+// 5 Nov 2026: "not TechnoMed related and do not need to be included").
 const EXCLUDED_PRODUCT_PATTERNS = [
-  /flo\s*seal/i,
+  /flo[\s-]*seal/i,
+  /tacho[\s-]*sil/i,
   /surgicel/i,
   /spongistan/i,
-  /gelfoam/i,
+  /gel[\s-]*foam/i,
   /tisseel/i,
   /arista/i,
   /bone\s*wax/i,

@@ -95,3 +95,27 @@ describe('the procedure in a folder name is a label, not a description', () => {
     expect(name).toBe('Hollis_05112026_Thani_ACDF_CLV')
   })
 })
+
+import { normaliseCase } from './_usageCase.js'
+import { isExcludedProduct } from './_distributors.js'
+
+describe('products that are not TechnoMed are left off a scan', () => {
+  it('drops Floseal, TachoSil and Gelfoam however they are written', () => {
+    for (const name of ['FLOSEAL Hemostatic Matrix', 'Flo-Seal 10ml', 'TachoSil patch', 'Tacho sil', 'Gelfoam', 'Gel Foam sponge', 'gel-foam']) {
+      expect(isExcludedProduct(name)).toBe(true)
+    }
+    expect(isExcludedProduct('DIPLOMAT Tulip')).toBe(false)
+  })
+  it('does not list them on the scan at all', () => {
+    const c = normaliseCase({
+      patientSurname: 'Testcase', surgeonName: 'Dr A Thani', date: '05/11/2026', hospital: 'Calvary', procedure: 'ACDF',
+      items: [
+        { productName: 'Floseal', quantity: '1' },
+        { productName: 'TachoSil', quantity: '1' },
+        { productName: 'Gel Foam', quantity: '2' },
+        { productName: 'CYLOX cage', distributor: 'Signus', referenceCode: 'CY08041512', quantity: '1' }
+      ]
+    }, { repName: 'Test Rep', repEmail: 'rep@example.com', scanDate: '2026-11-05' })
+    expect(c.items.map(i => i.productName)).toEqual(['CYLOX cage'])
+  })
+})

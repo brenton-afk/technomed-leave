@@ -291,6 +291,9 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
   const items = (Array.isArray(extracted.items) ? extracted.items : [])
     .map(normaliseItem)
     .filter(it => it.productName || it.referenceCode || it.lotNumber)
+    // Not TechnoMed's (Floseal, TachoSil, Gelfoam, other haemostats): left off
+    // the scan entirely rather than listed as excluded for the rep to scroll past.
+    .filter(it => !isExcludedProduct(it.productName, it.description, it.referenceCode))
 
   const caseDetails = {
     patientSurname,
