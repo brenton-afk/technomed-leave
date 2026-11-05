@@ -1006,3 +1006,16 @@ describe('the way to full detail', () => {
     expect(onPhoneCamera).toHaveBeenCalled()
   })
 })
+
+// Brent, 5 Nov 2026: "The resolution is crisp when the camera first previews,
+// but as soon as it captures the quality drops. This can't happen." The review
+// showed a 900-pixel, JPEG 0.7 copy stretched over a phone screen.
+describe('the photograph on the review screen', () => {
+  it('is big enough to stay sharp at a phone’s pixel density', async () => {
+    const src = (await import('node:fs')).readFileSync('src/pages/scan/CameraSheet.jsx', 'utf8')
+    const dim = Number(/const EDITOR_IMAGE_DIM = (\d+)/.exec(src)?.[1])
+    expect(dim).toBeGreaterThanOrEqual(2000)
+    expect(src).toMatch(/original: shrunk\.toDataURL\('image\/jpeg', 0\.88\)/)
+    expect(src).not.toMatch(/900 \/ Math\.max\(source\.width/)
+  })
+})

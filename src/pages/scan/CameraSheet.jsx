@@ -112,6 +112,9 @@ const MAX_IMAGE_DIM = 1568
 // number. Only the reading copy goes to the model.
 const FILE_IMAGE_DIM = 2400
 const FILE_JPEG_QUALITY = 0.92
+// The photograph shown for dragging corners: sharp at a phone's full pixel
+// density, which a 900-pixel copy was not.
+const EDITOR_IMAGE_DIM = 2048
 
 /**
  * The way out, and it is never conditional on anything.
@@ -1038,11 +1041,20 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     }
 
     const { canvas, flattened } = flattenCapture(cvRef.current, source, corners, { maxDimension: MAX_IMAGE_DIM })
+    // The photograph the corners are dragged on. It was shrunk to 900 pixels
+    // at JPEG 0.7 to keep dragging light — and on a phone that is stretched to
+    // twice its size, so a crisp 3024x4032 capture *looked* as though it had
+    // lost its resolution the instant the shutter went (Brent, 5 Nov 2026:
+    // "as soon as it captures the quality drops. This can't happen"). The
+    // filed copy never came from this image; it is warped from the full photo
+    // when the page is accepted. Now big enough to stay sharp on any phone.
     const shrunk = document.createElement('canvas')
-    const scale = Math.min(1, 900 / Math.max(source.width, source.height))
+    const scale = Math.min(1, EDITOR_IMAGE_DIM / Math.max(source.width, source.height))
     shrunk.width = Math.round(source.width * scale)
     shrunk.height = Math.round(source.height * scale)
-    shrunk.getContext('2d').drawImage(source, 0, 0, shrunk.width, shrunk.height)
+    const shrinking = shrunk.getContext('2d')
+    shrinking.imageSmoothingQuality = 'high'
+    shrinking.drawImage(source, 0, 0, shrunk.width, shrunk.height)
 
     setPending({
       source,
@@ -1054,7 +1066,7 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
       preview: canvas.toDataURL('image/jpeg', 0.85),
       // Small copy for the corner editor, so dragging is not laid over a
       // full-resolution photograph.
-      original: shrunk.toDataURL('image/jpeg', 0.7),
+      original: shrunk.toDataURL('image/jpeg', 0.88),
       // Its shape, so the editor can give the photograph and the handles over
       // it one box that cannot come apart. See CropReview.
       originalWidth: shrunk.width,

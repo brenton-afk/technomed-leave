@@ -757,6 +757,12 @@ screenshot says what the phone saw. The review's detail line should read
 `photo` and several thousand pixels on Android; `best of 5` there means the
 photograph path failed.
 
+**The review's photograph is 2048 px at JPEG 0.88** (`EDITOR_IMAGE_DIM`). It
+was 900 px at 0.7 to keep corner-dragging light, and stretched over a phone
+screen it made a crisp 3024x4032 capture look as though resolution was lost
+on the shutter. The filed copy never came from it — `asItWillBeSaved` warps
+the full photo at `FILE_IMAGE_DIM` when the page is accepted.
+
 Two constraints here were learned the hard way and must not be undone:
 
 - **Never request a width *and* a height.** An iPhone has several rear lenses at
