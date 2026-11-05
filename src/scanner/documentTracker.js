@@ -373,6 +373,8 @@ export class DocumentTracker {
       readyToCapture: eligible && stillFor >= this.stillForMs,
       reason,
       hint: HOLD_REASONS[reason],
+      // Which of the detector's rules made it unsure: 'edge', 'glare' or 'corner'.
+      unsureWhy: reason === 'unsure' ? (this.latest?.unsureWhy || '') : '',
       areaFraction: area,
       fill,
       contrast

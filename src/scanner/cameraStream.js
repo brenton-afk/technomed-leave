@@ -62,7 +62,7 @@ export function acquireCamera() {
     return Promise.reject(new Error('This browser cannot open the camera directly.'))
   }
 
-  opening = tryEach(CONSTRAINT_LADDER)
+  opening = tryEach(constraintLadder())
     .then(async granted => {
       stream = granted
       opening = null
@@ -92,6 +92,29 @@ const CONSTRAINT_LADDER = [
   { video: { facingMode: { ideal: 'environment' } }, audio: false },
   { video: true, audio: false }
 ]
+
+/**
+ * Where the browser can take a real photograph (Chrome on Android), the stream
+ * is asked for the sensor's own 4:3 shape first.
+ *
+ * Asked for a width alone, Chrome on Aimee's Samsung S25 FE opened a 1920 x 886
+ * stream — the screen's 19.5:9 shape, cut out of the middle of the sensor. The
+ * view was narrowed ("the width of the camera is narrowed"), a page got about
+ * 880 pixels across, and the full-resolution photograph was then thrown away
+ * because its 4:3 shape did not match the video's (5 Nov 2026). 4:3 is the
+ * sensor's native shape on every phone, so asking for it crops nothing — it is
+ * the widest view the camera has.
+ *
+ * Only where a photograph can be taken: an iPhone keeps the width-only request,
+ * which is what it was tuned on (see raiseResolution).
+ */
+export function constraintLadder(canPhotograph = typeof window !== 'undefined' && 'ImageCapture' in window) {
+  if (!canPhotograph) return CONSTRAINT_LADDER
+  return [
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, aspectRatio: { ideal: 4 / 3 } }, audio: false },
+    ...CONSTRAINT_LADDER
+  ]
+}
 
 async function tryEach(ladder) {
   let lastError = null
@@ -289,8 +312,10 @@ export async function raiseResolution(track, { limit = 4032 } = {}) {
   return false
 }
 
+// The size goes; the shape asked for, if any, stays — raising the width of a
+// 4:3 stream must not let it wander back to the screen's shape.
 function stripSize(constraints) {
-  const { width, height, aspectRatio, ...rest } = constraints
+  const { width, height, ...rest } = constraints
   return rest
 }
 
@@ -323,7 +348,14 @@ export async function takeStill({ timeoutMs = 2500 } = {}) {
     const streamWidth = Math.max(track.getSettings?.().width || 0, track.getSettings?.().height || 0)
     const photoMax = Math.max(caps?.imageWidth?.max || 0, caps?.imageHeight?.max || 0)
     if (!photoMax || photoMax < streamWidth * 1.3) return null
-    const blob = await withTimeout(capture.takePhoto(), timeoutMs)
+    // No flash unless the torch is already on. Left to the default ('auto' on
+    // Android), a dim theatre fires it — and a flash on paper over stainless
+    // steel is a white blot over exactly the stickers being photographed.
+    const settings = {}
+    if (Array.isArray(caps?.fillLightMode) && caps.fillLightMode.includes('off') && !torchIsOn) {
+      settings.fillLightMode = 'off'
+    }
+    const blob = await withTimeout(capture.takePhoto(settings), timeoutMs)
     return await createImageBitmap(blob, { imageOrientation: 'from-image' })
   } catch {
     stillsWork = false

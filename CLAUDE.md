@@ -720,6 +720,24 @@ existing photo picker, which on iOS offers the 12 MP system camera). Filed
 copies are JPEG 0.92 (`FILE_JPEG_QUALITY`), and photos from the picker now keep
 a 2400 px filing copy instead of being shrunk to the 1568 reading size.
 
+**Android (Aimee's Samsung S25 FE, 5 Nov 2026) was worse, for two reasons.**
+Asked for width alone, Chrome opened a 1920x886 stream — the screen's 19.5:9,
+cut from the middle of the sensor, so the view was narrowed and a page got ~880
+px across. And the full-resolution photo (`takeStill`, ImageCapture) was
+discarded because its 4:3 shape did not match the video's. Now: where
+ImageCapture exists, `constraintLadder()` asks for `aspectRatio: 4/3` first
+(the sensor's native shape — crops nothing; iPhones keep the width-only
+request), `stripSize` keeps a requested aspect when raising the width, and a
+photo of another shape is used anyway, the outline carried across by the
+centred crop between the two (`cornersOnStill` in `stillMapping.js`) before
+the usual re-detection on the photo. `takePhoto` is told `fillLightMode: 'off'`
+unless the torch is on — an auto flash over steel is glare on the stickers.
+The camera hint shows which rule made an outline unsure (`unsureWhy`: one edge
+faint / corner in glare / corners disagree) and the stream size, small, so a
+screenshot says what the phone saw. The review's detail line should read
+`photo` and several thousand pixels on Android; `best of 5` there means the
+photograph path failed.
+
 Two constraints here were learned the hard way and must not be undone:
 
 - **Never request a width *and* a height.** An iPhone has several rear lenses at

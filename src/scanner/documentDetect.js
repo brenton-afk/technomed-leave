@@ -986,9 +986,14 @@ export function detectDocument(cv, rgba, width, height, opts = {}) {
       // look: the light has erased exactly the two edges that would have
       // placed it. Found on random steel scenes, where the one wrong outline
       // that still fired had its corner 10px out, inside a glare patch.
-      confident: (chosen.weakestSide >= CONFIDENT_SIDE || chosen.filledSide >= BUSY_SIDE)
-        && !chosen.corners.some(c => cornerInGlare(grey, c))
-        && !disputed(chosen, candidates, width),
+      ...(() => {
+        const why = !(chosen.weakestSide >= CONFIDENT_SIDE || chosen.filledSide >= BUSY_SIDE) ? 'edge'
+          : chosen.corners.some(c => cornerInGlare(grey, c)) ? 'glare'
+            : disputed(chosen, candidates, width) ? 'corner' : ''
+        // Which rule held the shutter, shown small on the camera screen so a
+        // screenshot from a phone says it outright.
+        return { confident: !why, unsureWhy: why }
+      })(),
       weakestSide: chosen.weakestSide,
 
       // What "close enough to capture" is actually judged on.

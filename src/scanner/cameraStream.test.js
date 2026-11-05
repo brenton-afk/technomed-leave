@@ -304,3 +304,15 @@ describe('raising the resolution without changing the view', async () => {
     expect(t.applied).toEqual([])
   })
 })
+
+describe('the camera on a phone that can take a photograph', async () => {
+  const { constraintLadder } = await import('./cameraStream.js')
+  it('asks for the sensor’s 4:3 first, so the view is not cut to the screen’s shape', () => {
+    const first = constraintLadder(true)[0].video
+    expect(first.aspectRatio).toEqual({ ideal: 4 / 3 })
+    expect(first.height).toBeUndefined()
+  })
+  it('leaves an iPhone’s request as it was tuned', () => {
+    expect(constraintLadder(false)[0].video.aspectRatio).toBeUndefined()
+  })
+})

@@ -5,6 +5,7 @@ import { detectDocument, cornersAreSupported } from '../../scanner/documentDetec
 import { DocumentTracker, maxCornerShift } from '../../scanner/documentTracker.js'
 import { flattenCapture } from '../../scanner/flatten.js'
 import { pageDpi, MIN_READABLE_DPI } from '../../scanner/rectify.js'
+import { cornersOnStill } from '../../scanner/stillMapping.js'
 import { sharpnessOf, boxOf } from '../../scanner/sharpness.js'
 import {
   startDetectWorker, detectWorkerState, onDetectWorkerState, detectWorkerBusy, detectInWorker
@@ -774,13 +775,27 @@ async function sharpestPicture(video, corners) {
   const scratch = document.createElement('canvas')
 
   const still = await takeStill().catch(() => null)
-  if (still && shapeOf(still.width, still.height) === shapeOf(video.videoWidth, video.videoHeight)) {
+  // The photograph whenever there is one, whatever its shape. It used to be
+  // kept only if it matched the video's shape, and on a Samsung S25 FE the
+  // video was 19.5:9 and the photo 4:3 — so the 12-megapixel photograph was
+  // thrown away and an 886-pixel video frame filed instead. The outline is
+  // carried across by the crop between the two (see stillMapping.js) and the
+  // capture re-detects on the photo as always.
+  const sameShape = still && shapeOf(still.width, still.height) === shapeOf(video.videoWidth, video.videoHeight)
+  const mapped = still && !sameShape
+    ? cornersOnStill(corners, video.videoWidth, video.videoHeight, still.width, still.height)
+    : null
+  if (still && (sameShape || mapped)) {
     const canvas = document.createElement('canvas')
     canvas.width = still.width
     canvas.height = still.height
     canvas.getContext('2d', { willReadFrequently: true }).drawImage(still, 0, 0)
     still.close?.()
-    return { source: canvas, method: 'photo', sharpness: sharpnessOf(canvas, canvas.width, canvas.height, scratch, box) }
+    const onPhoto = mapped || corners
+    return {
+      source: canvas, method: 'photo', corners: onPhoto,
+      sharpness: sharpnessOf(canvas, canvas.width, canvas.height, scratch, boxOf(onPhoto))
+    }
   }
   still?.close?.()
 
@@ -953,7 +968,9 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
     setFlash(true)
     setTimeout(() => setFlash(false), 130)
 
-    const { source, method, sharpness } = await sharpestPicture(video, corners)
+    const { source, method, sharpness, corners: onSource } = await sharpestPicture(video, corners)
+    // A photograph of another shape than the video carries its own outline.
+    if (onSource) corners = onSource
 
     // The corners handed in came from a detection up to a tenth of a second
     // ago, and this photograph was taken now. In between, a hand-held phone
@@ -1330,6 +1347,14 @@ export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCa
         <div style={{ padding: '12px 16px calc(20px + env(safe-area-inset-bottom, 0px))', background: 'rgba(0,0,0,0.55)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)' }}>{hint}</div>
+            {/* Which rule is holding the shutter, and the stream's size — small,
+                so a screenshot sent back says exactly what the phone saw. */}
+            {view?.unsureWhy && (
+              <div data-unsure-why={view.unsureWhy} style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>
+                {{ edge: 'one edge faint', glare: 'corner in glare', corner: 'corners disagree' }[view.unsureWhy]}
+                {frame ? ` · ${frame.width}×${frame.height}` : ''}
+              </div>
+            )}
             {/* A switch you can find and hit, not a checkbox in a caption.
                 It was a 34px tick beside grey text and was asked for again as
                 though it did not exist, which is the only review a control
