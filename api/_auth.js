@@ -1,5 +1,6 @@
 import { redis } from './_redis.js'
 import { STAFF } from '../src/staffConfig.js'
+import { trackSession } from './_pinSecurity.js'
 
 // Sessions replace the shared admin password. A token is minted when a staff
 // member proves their PIN, and expires server-side via a Redis TTL so a leaked
@@ -37,6 +38,8 @@ export async function createSession(email) {
     createdAt: new Date().toISOString()
   }
   await redis('set', `session:${token}`, JSON.stringify(session), 'EX', String(SESSION_TTL_SECONDS))
+  // Indexed by person so a PIN reset can end every device at once.
+  await trackSession(staff.email, token).catch(() => {})
   return { token, session }
 }
 
@@ -66,7 +69,10 @@ export async function destroySession(token) {
 function tokenFrom(req) {
   const header = req.headers?.authorization || ''
   if (header.startsWith('Bearer ')) return header.slice(7)
-  return req.body?.token || req.query?.token || null
+  // Never from the query string: a token in a web address lands in server
+  // logs, browser history and Referer headers. The body is kept for logout
+  // and the Blob upload handshake, which cannot set a header.
+  return req.body?.token || null
 }
 
 // Any signed-in staff member. Use this to guard routes that handle patient or

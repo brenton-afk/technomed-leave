@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { connectXero } from './xeroConnect.js'
 
 const NAVY = '#042746'
 const TEAL = '#189a85'
@@ -217,10 +218,11 @@ export default function SystemStatus({ user }) {
                 Timesheets, leave approvals and leave balances all fail while this is expired.
                 Reconnecting takes one approval in Xero.
               </div>
-              <a href="/api/xero/connect"
-                style={{ display:'block', padding:12, background:TEAL, color:'white', borderRadius:10, fontSize:14, fontWeight:700, textAlign:'center', textDecoration:'none' }}>
+              <button type="button"
+                onClick={() => connectXero(user?.token).catch(e => alert(e.message))}
+                style={{ display:'block', width:'100%', border:'none', cursor:'pointer', padding:12, background:TEAL, color:'white', borderRadius:10, fontSize:14, fontWeight:700, textAlign:'center' }}>
                 Reconnect Xero →
-              </a>
+              </button>
             </>
           )}
         </div>

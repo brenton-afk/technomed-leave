@@ -62,6 +62,9 @@ export default function PinScreen({ onLogin }) {
   const [selectedEmail, setSelectedEmail] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
+  // First sign-in: the code emailed to the staff address (api/_pinSecurity.js).
+  const [code, setCode] = useState('')
+  const [codeSentTo, setCodeSentTo] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)])
@@ -254,8 +257,14 @@ export default function PinScreen({ onLogin }) {
         // to setup instead of claiming the PIN was wrong.
         setFirstTime(true); setStep('setup'); setPin(''); setPinInput('')
         setError('')
+      } else if (data.locked) {
+        setError(data.error || "Too many wrong PINs. Wait 15 minutes, use Face ID, or tap \"I don't know my PIN\".")
+        setPin(''); setPinInput('')
       } else {
-        setError('Incorrect PIN. Please try again.')
+        const left = data.triesLeft
+        setError(left != null && left <= 2
+          ? `Incorrect PIN. ${left} ${left === 1 ? 'try' : 'tries'} left before it locks for 15 minutes.`
+          : 'Incorrect PIN. Please try again.')
         setPin(''); setPinInput('')
       }
     } catch (err) {
@@ -278,25 +287,38 @@ export default function PinScreen({ onLogin }) {
   function submitNewPin(chosen, confirmValue) {
     if (confirmValue.length !== 4) return
     if (chosen !== confirmValue) { setError('PINs do not match. Try again.'); setConfirmPin(''); return }
-    {
-      setLoading(true)
-      fetch('/api/auth/pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set', email: selectedEmail, newPin: pin })
-      }).then(r => r.json()).then(data => {
-        setLoading(false)
-        if (data.success) onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin, staff: data.staff, token: data.token })
-        else {
-          setError(data.error || 'Failed to set PIN. Please try again.')
-          setPin(''); setConfirmPin(''); setStep('setup')
-        }
-      }).catch(() => {
-        setLoading(false)
-        setError('Could not reach the server. Check your connection and try again.')
-        setConfirmPin('')
-      })
-    }
+    setCode('')
+    sendSetPin({})
+  }
+
+  // One call for every stage of a first PIN: without a code the server emails
+  // one and says so; with it, the PIN is set and the person is signed in.
+  function sendSetPin({ withCode = '' }) {
+    setLoading(true)
+    fetch('/api/auth/pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set', email: selectedEmail, newPin: pin, ...(withCode ? { code: withCode } : {}) })
+    }).then(r => r.json()).then(data => {
+      setLoading(false)
+      if (data.success) {
+        onLogin({ name: data.name, email: selectedEmail, isAdmin: data.isAdmin, staff: data.staff, token: data.token })
+      } else if (data.needsCode) {
+        setCodeSentTo(data.sentTo || '')
+        setStep('code')
+        setCode('')
+        setError(data.wrongCode ? 'That code is not right. Check the email and try again.'
+          : data.codeExpired ? 'That code has expired. Tap "Send a new code".'
+          : '')
+      } else {
+        setError(data.error || 'Failed to set PIN. Please try again.')
+        setPin(''); setConfirmPin(''); setStep('setup')
+      }
+    }).catch(() => {
+      setLoading(false)
+      setError('Could not reach the server. Check your connection and try again.')
+      setConfirmPin('')
+    })
   }
 
   // Desktop PIN input change handler
@@ -442,6 +464,47 @@ export default function PinScreen({ onLogin }) {
               style={{ color: '#2ab5a0', cursor: 'pointer', textDecoration: 'underline' }}>Choose a different name</span>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  // ─── First sign-in: the code from the email ───
+  if (step === 'code') {
+    const ready = code.length === 6 && !loading
+    return (
+      <div style={page}>
+        <div style={top}>
+          <img src="/logo.png" alt="TechnoMed" style={{ height:'48px', width:'auto', marginBottom:'6px' }} />
+          <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'32px' }}>Staff Portal</div>
+          <div style={{ fontSize:'22px', fontWeight:'700', color:'white', marginBottom:'8px', textAlign:'center' }}>Check your email</div>
+          <div style={{ fontSize:'14px', color:'rgba(255,255,255,0.55)', marginBottom:'24px', textAlign:'center', lineHeight:1.6 }}>
+            We've sent a 6-digit code to {codeSentTo || 'your work email'}.<br />Enter it to finish setting your PIN.
+          </div>
+          <input data-signin-code type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" maxLength={6}
+            placeholder="000000" value={code} autoFocus
+            onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
+            onKeyDown={e => { if (e.key === 'Enter' && ready) sendSetPin({ withCode: code }) }}
+            style={{ ...desktopInputStyle, WebkitTextSecurity: 'none', letterSpacing: '10px', fontSize: 28 }} />
+          {error && <div style={{ fontSize:'13px', color:'#ff6b6b', marginTop:10, textAlign:'center' }}>{error}</div>}
+          <button style={{ ...btnStyle, marginTop:16, opacity: ready ? 1 : 0.5 }} disabled={!ready}
+            onClick={() => sendSetPin({ withCode: code })}>
+            {loading ? 'Please wait…' : 'Finish'}
+          </button>
+          <button style={{ marginTop:14, background:'transparent', border:'none', color:'#2ab5a0', fontSize:14, cursor:'pointer', padding:10 }}
+            disabled={loading} onClick={() => { setError(''); sendSetPin({}) }}>
+            Send a new code
+          </button>
+          <div style={{ fontSize:11.5, color:'rgba(255,255,255,0.35)', textAlign:'center', lineHeight:1.6, marginTop:8 }}>
+            Can't see it? Check junk mail. A new code can be sent once a minute.
+          </div>
+        </div>
+        <div style={{ display:'flex', justifyContent:'center', paddingBottom:'32px' }}>
+          <button style={{ background:'transparent', border:'none', color:'rgba(255,255,255,0.4)', fontSize:'14px', cursor:'pointer', padding:'12px' }}
+            onClick={() => { setStep('setup'); setPin(''); setConfirmPin(''); setCode(''); setError('') }}>
+            ← Back
+          </button>
+        </div>
+        <BuildStamp />
       </div>
     )
   }

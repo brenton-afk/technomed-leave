@@ -29,10 +29,9 @@ const EXEMPT = {
   // CRON_SECRET signature instead, and refuses outright when none is set.
   'api/cron/timesheet-reminder.js': { why: 'signed with CRON_SECRET, fails closed', wholly: true },
   // Xero redirects the browser here after consent, so there is no header of
-  // ours on the request. Protected by the OAuth `state` — which is currently a
-  // fixed string rather than a nonce, and is the next thing to fix here.
-  'api/xero/callback.js': { why: 'OAuth redirect target; see the note about `state`', wholly: true },
-  'api/xero/connect.js': { why: 'starts the OAuth redirect; see the note about `state`', wholly: true }
+  // ours on the request. Protected by the OAuth `state`: a one-off value that
+  // only an admin's session can mint (connect.js), held ten minutes, used once.
+  'api/xero/callback.js': { why: 'OAuth redirect target, protected by a one-off state', wholly: true }
 }
 
 function routes(dir = 'api') {

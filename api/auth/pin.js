@@ -5,7 +5,13 @@ import {
   beginRegistration, finishRegistration, beginAuthentication, finishAuthentication,
   listPasskeys, hasPasskeys, removePasskey, removeAllPasskeys
 } from '../_passkeys.js'
-import { sendPinResetRequestEmail } from '../_email.js'
+import { sendPinResetRequestEmail, sendSignInCodeEmail } from '../_email.js'
+import {
+  hashPin, isHashed, pinMatches, lockedFor, recordFailure, clearFailures,
+  issueCode, checkCode, maskEmail, endAllSessions
+} from '../_pinSecurity.js'
+
+const minutes = seconds => Math.max(1, Math.ceil(seconds / 60))
 
 export default async function handler(req, res) {
   const body = req.method === 'POST' ? req.body : req.query
@@ -25,7 +31,20 @@ async function route(req, res, body, { action, email, pin, newPin }) {
     if (!email || !pin) return res.status(400).json({ error: 'Email and PIN required' })
     const stored = await redis('get', `pin:${email}`)
     if (!stored) return res.status(200).json({ valid: false, needsSetup: true })
-    if (stored !== pin) return res.status(200).json({ valid: false })
+    const wait = await lockedFor(email)
+    if (wait) {
+      return res.status(429).json({
+        valid: false, locked: true,
+        error: `Too many wrong PINs. Try again in ${minutes(wait)} minutes, use Face ID, or tap "I don't know my PIN".`
+      })
+    }
+    if (!pinMatches(stored, pin)) {
+      const left = await recordFailure(email)
+      return res.status(200).json({ valid: false, triesLeft: left, locked: left === 0 })
+    }
+    await clearFailures(email)
+    // A PIN from before hashing signs in once more and is stored hashed.
+    if (!isHashed(stored)) await redis('set', `pin:${email}`, hashPin(pin))
     const { token, session } = await createSession(email)
     const staff = STAFF.find(s => s.email === email)
     return res.status(200).json({
@@ -47,7 +66,21 @@ async function route(req, res, body, { action, email, pin, newPin }) {
     // PIN has to go through an admin reset.
     const existing = await redis('get', `pin:${email}`)
     if (existing) return res.status(409).json({ error: 'A PIN is already set. Ask an admin to reset it.' })
-    await redis('set', `pin:${email}`, newPin)
+
+    // Proof of the inbox before the account is claimed. No code yet → one is
+    // emailed and the screen asks for it; then the same call again with it.
+    if (!body.code) {
+      const code = await issueCode(email)
+      if (code) await sendSignInCodeEmail(staff, code)
+      return res.status(200).json({ needsCode: true, sentTo: maskEmail(email), resent: Boolean(code) })
+    }
+    const checked = await checkCode(email, body.code)
+    if (checked === 'wrong') return res.status(200).json({ needsCode: true, wrongCode: true, sentTo: maskEmail(email) })
+    if (checked === 'expired') {
+      return res.status(200).json({ needsCode: true, codeExpired: true, sentTo: maskEmail(email) })
+    }
+    await redis('set', `pin:${email}`, hashPin(newPin))
+    await clearFailures(email)
     const { token, session } = await createSession(email)
     return res.status(200).json({
       success: true,
@@ -91,8 +124,13 @@ async function route(req, res, body, { action, email, pin, newPin }) {
     if (!STAFF.some(s => s.email === targetEmail)) {
       return res.status(404).json({ error: 'Staff member not found' })
     }
+    // A reset means "this PIN can no longer be trusted", so everything it
+    // opened is shut too: every signed-in device and every Face ID passkey.
     await redis('del', `pin:${targetEmail}`)
-    return res.status(200).json({ success: true, targetEmail })
+    await clearFailures(targetEmail)
+    const signedOut = await endAllSessions(targetEmail)
+    await removeAllPasskeys(targetEmail)
+    return res.status(200).json({ success: true, targetEmail, signedOut })
   }
 
   // A locked-out staff member asking an admin to clear their PIN. Deliberately

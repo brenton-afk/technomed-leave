@@ -366,6 +366,34 @@ export async function sendPinResetRequestEmail(staff) {
   })
 }
 
+// The one-time code for a first sign-in (api/_pinSecurity.js). Goes only to
+// the staff member's own address, which is the whole point: whoever reads that
+// inbox is the person the account belongs to.
+export async function sendSignInCodeEmail(staff, code) {
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#042746;padding:26px 30px;">
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Staff Portal</div>
+  <div style="font-size:19px;font-weight:700;color:#ffffff;">Your sign-in code</div>
+  </td></tr>
+  <tr><td style="padding:24px 30px;font-size:14px;color:#042746;line-height:1.65;">
+  Hi ${escapeHtml(staff.firstName || staff.name.split(' ')[0])}, enter this code in the portal to finish setting your PIN:
+  <div style="margin:18px 0;font-size:30px;font-weight:700;letter-spacing:8px;color:#042746;">${escapeHtml(code)}</div>
+  <div style="font-size:13px;color:#6b7a8d;">It works for 15 minutes. If you did not ask for it, tell Brenton — somebody tried to set up your account.</div>
+  </td></tr>
+  <tr><td style="padding:0 30px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Staff Portal · technomed.com.au</td></tr>
+  </table></td></tr></table>
+  </body></html>`
+  return send({
+    kind: 'pin',
+    to: [staff.email],
+    subject: 'Your TechnoMed portal sign-in code',
+    html,
+    text: `Your TechnoMed portal sign-in code is ${code}. It works for 15 minutes. If you did not ask for it, tell Brenton.`
+  })
+}
+
 // ─── TIMESHEETS ────────────────────────────────────────────
 
 const TIMESHEET_APPROVERS = ['brenton@technomed.com.au', 'erin@technomed.com.au']

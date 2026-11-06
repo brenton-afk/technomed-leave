@@ -1,9 +1,14 @@
 import { storeXeroTokens } from '../_xeroClient.js'
 import { readXero } from '../_xeroResponse.js'
+import { redis } from '../_redis.js'
 
 export default async function handler(req, res) {
-  const { code } = req.query
+  const { code, state } = req.query
   if (!code) return res.status(400).json({ error: 'No code' })
+  // Only a connection an admin started in the last ten minutes, and only once.
+  const who = state ? await redis('get', `xero_state:${state}`).catch(() => null) : null
+  if (!who) return res.redirect('/?xero=error&msg=' + encodeURIComponent('That Xero connection had expired — start it again from Admin.'))
+  await redis('del', `xero_state:${state}`).catch(() => {})
   try {
     const tokenRes = await fetch('https://identity.xero.com/connect/token', {
       method: 'POST',

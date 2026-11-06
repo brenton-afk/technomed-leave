@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { connectXero } from './xeroConnect.js'
 import { todayStr } from '../../clinicalPlan/week.js'
 import { parsePastedLines, lineAmount } from '../../invoiceLines.js'
 
@@ -25,14 +26,17 @@ function when(iso) {
   return new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short', year: 'numeric' }).format(d)
 }
 
-function AllowInvoices() {
+function AllowInvoices({ user }) {
+  const [err, setErr] = useState('')
   return (
     <div style={{ ...card, background: '#fff8e6', border: '1px solid #f0d58a' }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: NAVY, marginBottom: 4 }}>Xero needs permission for invoices</div>
       <div style={{ fontSize: 13, color: '#5a6478', marginBottom: 10 }}>
         One tap, once. It adds invoicing to the existing Xero connection — leave and timesheets carry on as they are.
       </div>
-      <a href="/api/xero/connect?invoices=1" style={{ ...btn(true), display: 'inline-block', textDecoration: 'none' }}>Allow invoices →</a>
+      <button type="button" style={btn(true)}
+        onClick={() => connectXero(user?.token, { invoices: true }).catch(e => setErr(e.message))}>Allow invoices →</button>
+      {err && <div style={{ fontSize: 13, color: '#c0392b', marginTop: 8 }}>{err}</div>}
     </div>
   )
 }
@@ -172,7 +176,7 @@ export default function Invoices({ user }) {
       {requests && !requests.running && <QuoteRequests data={requests} onClose={() => setRequests(null)} onRetry={async id => { try { await api('quote-retry', { body: { id } }); await api('quote-auto', { body: {} }); await showRequests() } catch (err) { setError(err.message) } }} />}
       {templates && !templates.running && <QuoteTemplates data={templates} onClose={() => setTemplates(null)} />}
       {audit && !audit.running && <AccountsAudit audit={audit} onClose={() => setAudit(null)} />}
-      {xero === 'permission' && <AllowInvoices />}
+      {xero === 'permission' && <AllowInvoices user={user} />}
       {xero === 'error' && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>Xero could not be checked just now, so no purchase order is offered — one may already be invoiced. Try Refresh.</div>}
       {error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>{error}</div>}
       {loading && <div style={muted}>Looking in accounts@ and checking Xero…</div>}
@@ -412,7 +416,7 @@ function Editor({ api, draft, onClose }) {
         <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{isInvoice ? (draft.blank ? 'New invoice' : `Invoice for ${order.poNumber || 'this order'}`) : 'New quote'}</div>
       </div>
 
-      {permission && <AllowInvoices />}
+      {permission && <AllowInvoices user={user} />}
 
       {isInvoice && !draft.blank && (
         <div style={{ ...card, fontSize: 13, color: '#5a6478' }}>
