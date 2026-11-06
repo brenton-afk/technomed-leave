@@ -64,19 +64,25 @@ export function logoTiles({ count = 90, seed = 7 } = {}) {
   return tiles
 }
 const TILES = logoTiles()
+// The phone's: fewer, smaller and faint, across the whole band — texture
+// behind the (solid) buttons rather than a picture (Brent, 6 Nov 2026).
+const SUBTLE_TILES = logoTiles({ count: 46, seed: 19 }).map(t => ({
+  ...t, size: Math.min(t.size, 16), opacity: Number((0.06 + t.opacity * 0.16).toFixed(2))
+}))
 
-function BandArt() {
+function BandArt({ subtle }) {
+  const tiles = subtle ? SUBTLE_TILES : TILES
   return (
     <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '62%' }}>
-        {TILES.map((t, i) => (
+      <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: subtle ? '100%' : '62%' }}>
+        {tiles.map((t, i) => (
           <span key={i} style={{
             position: 'absolute', left: `${t.left}%`, top: `${t.top}%`, width: t.size, height: t.size,
             background: t.colour, opacity: t.opacity
           }} />
         ))}
       </div>
-      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${colour.navy} 0%, ${colour.navy} 36%, rgba(4,39,70,0) 78%)` }} />
+      {!subtle && <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${colour.navy} 0%, ${colour.navy} 36%, rgba(4,39,70,0) 78%)` }} />}
     </div>
   )
 }
@@ -115,7 +121,7 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children, comp
         ? `calc(env(safe-area-inset-top, 0px) + ${space.md}px) ${space.lg}px ${space.sm}px`
         : `calc(env(safe-area-inset-top, 0px) + ${space.xl}px) ${space.lg}px ${space.lg}px`
     }}>
-      {art && <BandArt />}
+      {art && <BandArt subtle={art === 'subtle'} />}
       {logo && <div className="tm-measure" style={{ position: 'relative', marginBottom: space.sm }}>{logo}</div>}
       <div className="tm-measure" style={{ display: 'flex', alignItems: 'flex-start', gap: space.md, ...(art ? { position: 'relative' } : {}) }}>
         {onBack && (

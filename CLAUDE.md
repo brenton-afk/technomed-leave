@@ -325,6 +325,9 @@ Revised the same day: on a phone the band has **just the tile mark**
 the header's search, span toggle and week arrows are **solid** (`navySoft` /
 `navyDeep`), never see-through over the tiles; the **Mine** button is gone
 ("I don't think it helps" — `onlyMine` stays for the projects' use only).
+Then (same day): the phone band gets **subtle tiles** back behind the solid
+buttons (`art="subtle"`, `SUBTLE_TILES`: small, faint, across the full band,
+no gradient) for texture, with `BandMark` still top left.
 
 ### Cases layout (Brent, 4 Nov 2026)
 

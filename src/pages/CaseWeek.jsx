@@ -1867,7 +1867,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
       {/* Desktop: the wordmark over the field of the logo's tiles. Phone: just
           the tile mark — the scattered tiles were too busy there (Brent,
           6 Nov 2026). */}
-      <Header title="Cases" compact sticky art={desktop}
+      <Header title="Cases" compact sticky art={desktop ? true : 'subtle'}
         logo={desktop ? <BandLogo height={40} /> : <BandMark size={40} />}
         eyebrow={desktop ? greeting : undefined}
         right={(
