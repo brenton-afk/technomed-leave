@@ -85,3 +85,15 @@ export function identifierWarning(text) {
   const what = list.length ? `${list.join(', ')} and ${last}` : last
   return `That looks like ${what}. Surnames only is the rule everywhere else in the app.`
 }
+
+/**
+ * What the chat warns about now (Brent, 6 Nov 2026): "We will not include
+ * patient details in chats other than names and occasionally UR numbers when
+ * needed." Names and UR numbers are part of running the business and are
+ * stored safely and archived, so only a date of birth — which nobody needs in
+ * a chat — still gets a second look.
+ */
+export function chatWarning(text) {
+  const found = identifiersIn(text).filter(f => f.kind === 'dob')
+  return found.length ? 'That looks like a date of birth — names and UR numbers are fine, a date of birth is not needed here.' : null
+}

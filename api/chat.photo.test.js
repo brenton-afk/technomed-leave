@@ -53,9 +53,13 @@ describe('the upload handshake', () => {
     expect(SOURCE).toMatch(/onBeforeGenerateToken[\s\S]{0,400}getSession/)
   })
 
-  it('will only accept images', () => {
+  it('accepts the kinds a chat carries, and not anything at all', async () => {
     // This endpoint mints a write token. One that took anything would be a
-    // place to park anything.
-    expect(SOURCE).toMatch(/allowedContentTypes:\s*\[\s*'image\//)
+    // place to park anything. Brent, 6 Nov 2026: photos, GIFs, scans, documents.
+    expect(SOURCE).toMatch(/allowedContentTypes:\s*FILE_TYPES/)
+    const { FILE_TYPES } = await import('./chat.js')
+    expect(FILE_TYPES).toEqual(expect.arrayContaining(['image/gif', 'application/pdf', 'video/mp4']))
+    expect(FILE_TYPES).not.toContain('application/x-msdownload')
+    expect(FILE_TYPES).not.toContain('text/html')
   })
 })

@@ -13,6 +13,9 @@ let sent
 function serving(messages = []) {
   sent = null
   global.fetch = vi.fn(async (url, init) => {
+    if (init?.method === 'POST' && String(url).includes('action=typing')) {
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    }
     if (init?.method === 'POST') {
       sent = JSON.parse(init.body)
       return { ok: true, status: 200, json: async () => ({ ok: true, message: sent }) }
@@ -153,5 +156,62 @@ describe('a booking\'s own thread', () => {
     // case: is a namespace on purpose — a booking whose id happened to be
     // "spine" must not open the spine channel.
     expect(`case:spine`).not.toBe('spine')
+  })
+})
+
+// Brent, 6 Nov 2026: "like WhatsApp … adopt the advantages of apps like Slack".
+describe('the WhatsApp and Slack parts', () => {
+  const MSGS = [
+    { id: 'm1', seq: 1, author: 'mat@technomed.com.au', authorName: 'Mat', text: 'Diplomat is at RHH @Brent', at: '2026-11-06T01:00:00Z', mentions: ['brenton@technomed.com.au'] },
+    { id: 'm2', seq: 2, author: 'brenton@technomed.com.au', authorName: 'Brent', text: 'Thanks', at: '2026-11-06T01:01:00Z',
+      reactions: { '👍': ['Mat'] }, files: [{ url: 'https://x.public.blob.vercel-storage.com/a.pdf', type: 'application/pdf', name: 'Tray list.pdf', size: 20480 }] }
+  ]
+  const serveWith = extra => {
+    global.fetch = vi.fn(async (url, init) => {
+      if (init?.method === 'POST') {
+        sent = { url: String(url), ...JSON.parse(init.body) }
+        return { ok: true, status: 200, json: async () => ({ ok: true }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, messages: MSGS, total: 2, typing: ['Toni'], seenBy: { Mat: 2 }, ...extra }) }
+    })
+  }
+
+  it('shows files, reactions, who is typing and who has seen it', async () => {
+    serveWith()
+    channel()
+    await waitFor(() => expect(screen.getByText('Tray list.pdf')).toBeInTheDocument())
+    expect(screen.getByText('👍 1')).toBeInTheDocument()
+    expect(screen.getByText(/Toni is typing/)).toBeInTheDocument()
+    expect(screen.getByText(/Seen by Mat/)).toBeInTheDocument()
+  })
+
+  it('replies to a message, quoting it', async () => {
+    serveWith()
+    channel()
+    await waitFor(() => expect(screen.getByText(/Diplomat is at RHH/)).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/Diplomat is at RHH/))
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+    expect(screen.getByText(/Replying to/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'On it' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(sent?.replyTo).toBe('m1'))
+  })
+
+  it('reacts with one tap', async () => {
+    serveWith()
+    channel()
+    await waitFor(() => expect(screen.getByText(/Diplomat is at RHH/)).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/Diplomat is at RHH/))
+    fireEvent.click(screen.getByRole('button', { name: 'React ❤️' }))
+    await waitFor(() => expect(sent).toMatchObject({ id: 'm1', emoji: '❤️' }))
+    expect(sent.url).toContain('action=react')
+  })
+
+  it('lets names and UR numbers through without a warning', async () => {
+    serveWith()
+    channel()
+    await waitFor(() => expect(screen.getByLabelText('Message')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Pt Rowe John UR 1234567 is second' } })
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
   })
 })

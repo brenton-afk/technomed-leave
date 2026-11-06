@@ -1,8 +1,10 @@
 import { handleUpload } from '@vercel/blob/client'
 import { requireSession, getSession } from './_auth.js'
 import {
-  postMessage, readChannel, channelSizes, knownChannels, readMarkers, markRead
+  postMessage, readChannel, channelSizes, knownChannels, readMarkers, markRead,
+  getMessages, updateMessage, setTyping, whoIsTyping, seenIn
 } from './_redis.js'
+import { searchChat } from './_chatSearch.js'
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import { notify, preview } from './_push.js'
 
@@ -20,8 +22,44 @@ export const CHANNELS = [
   { id: 'general', name: 'General', detail: 'Anything that is not the others' },
   { id: 'spine', name: 'Spine', detail: 'Cases, kit, surgeons' },
   { id: 'logistics', name: 'Logistics', detail: 'Sets, loans, deliveries' },
-  { id: 'theatre-lists', name: 'Theatre lists', detail: 'Running orders and changes' }
+  { id: 'theatre-lists', name: 'Theatre lists', detail: 'Running orders and changes' },
+  // Brent, 6 Nov 2026: feedback about the portal comes here instead of a
+  // WhatsApp group exported by hand. The improvement agent reads it overnight.
+  { id: 'portal-feedback', name: 'Portal feedback', detail: 'Changes and problems — picked up overnight and fixed' }
 ]
+
+/** Reactions anyone can add. A short list reads faster than an emoji keyboard. */
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '🙏', '✅']
+
+const BLOB_URL = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i
+
+/** What can be sent: pictures (GIFs included), video, PDFs, Office files, text. */
+export const FILE_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/gif',
+  'video/mp4', 'video/quicktime', 'video/webm',
+  'application/pdf',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain', 'text/csv'
+]
+
+/** Files on a message: only ones this app's blob store issued, described plainly. */
+export function readFiles(given) {
+  const list = Array.isArray(given) ? given : []
+  const side = n => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : null)
+  return list.slice(0, 10).map(f => {
+    const url = String(f?.url || '').trim()
+    if (!BLOB_URL.test(url)) return null
+    const type = FILE_TYPES.includes(String(f.type)) ? String(f.type) : 'application/octet-stream'
+    return {
+      url: url.slice(0, 500), type,
+      name: String(f.name || 'file').replace(/[\u0000-\u001f]/g, '').slice(0, 120),
+      size: Number.isFinite(Number(f.size)) ? Number(f.size) : null,
+      width: side(f.width), height: side(f.height)
+    }
+  }).filter(Boolean)
+}
 
 /** A booking's own thread. Namespaced, so it cannot collide with a channel. */
 export const caseChannel = eventId => `case:${String(eventId || '').trim()}`
@@ -36,7 +74,7 @@ export const caseChannel = eventId => `case:${String(eventId || '').trim()}`
  */
 function readPhoto(given) {
   const url = String(given?.url || '').trim()
-  if (!/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i.test(url)) return null
+  if (!BLOB_URL.test(url)) return null
   const side = n => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : null)
   return { url: url.slice(0, 500), width: side(given.width), height: side(given.height) }
 }
@@ -65,6 +103,10 @@ export default async function handler(req, res) {
 
   try {
     if (req.query.action === 'overview') return overview(req, res, session)
+    if (req.query.action === 'search') return search(req, res)
+    if (req.query.action === 'react') return react(req, res, session)
+    if (req.query.action === 'delete') return remove(req, res, session)
+    if (req.query.action === 'typing') return typing(req, res, session)
     if (req.method === 'POST') return send(req, res, session)
     return read(req, res, session)
   } catch (err) {
@@ -109,11 +151,12 @@ async function photoUpload(req, res) {
         const who = await getSession(token)
         if (!who) throw new Error('Not signed in, or your session has expired')
         return {
-          // Images only. This endpoint mints a write token, and one that would
-          // accept anything is a place to park anything.
-          allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
+          // The kinds a chat carries (FILE_TYPES), not anything at all: this
+          // endpoint mints a write token, and one that would accept any type
+          // is a place to park anything.
+          allowedContentTypes: FILE_TYPES,
           addRandomSuffix: true,
-          maximumSizeInBytes: 8 * 1024 * 1024,
+          maximumSizeInBytes: 100 * 1024 * 1024,
           tokenPayload: JSON.stringify({ by: who.email })
         }
       },
@@ -153,12 +196,73 @@ async function read(req, res, session) {
   const channel = validChannel(req.query.channel)
   if (!channel) return res.status(400).json({ error: 'No such channel' })
 
-  const messages = await readChannel(channel)
+  const [messages, total, typingNow, seen] = await Promise.all([
+    readChannel(channel),
+    channelSizes([channel]).then(s => s[channel] || 0),
+    whoIsTyping(channel, session.email),
+    seenIn(channel)
+  ])
   // Opening a channel is reading it. Marked here rather than from the phone so
   // a badge cannot be cleared by a request that never showed anybody anything.
-  await markRead(session.email, channel, messages.length)
+  await markRead(session.email, channel, total)
 
-  return res.status(200).json({ ok: true, channel, messages })
+  // Who has read how far, by first name, so the sender sees "Seen by Mat, Toni".
+  const seenBy = Object.fromEntries(Object.entries(seen)
+    .filter(([email]) => email.toLowerCase() !== String(session.email).toLowerCase())
+    .map(([email, n]) => [firstNameFor(email) || email, n]))
+
+  return res.status(200).json({ ok: true, channel, messages, total, typing: typingNow, seenBy })
+}
+
+async function search(req, res) {
+  const q = String(req.query.q || '').trim().slice(0, 80)
+  const found = await searchChat(q, { channels: CHANNELS.map(c => c.id) })
+  const name = id => CHANNELS.find(c => c.id === id)?.name || (id.startsWith('case:') ? 'Case thread' : id)
+  return res.status(200).json({ ok: true, results: found.map(m => ({ ...m, channelName: name(m.channel) })) })
+}
+
+const bodyOf = req => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {}))
+
+async function react(req, res, session) {
+  const { id, emoji } = bodyOf(req)
+  if (!REACTIONS.includes(emoji)) return res.status(400).json({ error: 'Not a reaction this chat has' })
+  const who = firstNameFor(session.email) || session.email
+  const next = await updateMessage(String(id || ''), m => {
+    const reactions = { ...(m.reactions || {}) }
+    const people = new Set(reactions[emoji] || [])
+    if (people.has(who)) people.delete(who); else people.add(who)
+    if (people.size) reactions[emoji] = [...people]; else delete reactions[emoji]
+    return { ...m, reactions }
+  })
+  if (!next) return res.status(404).json({ error: 'That message is gone' })
+  return res.status(200).json({ ok: true, message: next })
+}
+
+/** Your own message, taken back. Kept as "deleted" so a reply to it still makes sense. */
+async function remove(req, res, session) {
+  const { id } = bodyOf(req)
+  let refused = false
+  const next = await updateMessage(String(id || ''), m => {
+    if (String(m.author).toLowerCase() !== String(session.email).toLowerCase()) { refused = true; return m }
+    return { ...m, deleted: true, text: '', files: [], photo: null, deletedAt: new Date().toISOString() }
+  })
+  if (refused) return res.status(403).json({ error: 'Only the person who sent it can delete it' })
+  if (!next) return res.status(404).json({ error: 'That message is gone' })
+  return res.status(200).json({ ok: true, message: next })
+}
+
+async function typing(req, res, session) {
+  const channel = validChannel(bodyOf(req).channel)
+  if (!channel) return res.status(400).json({ error: 'No such channel' })
+  await setTyping(channel, session.email, firstNameFor(session.email) || session.email)
+  return res.status(200).json({ ok: true })
+}
+
+/** "@Mat" (or "@all") in a message: whom it is for. */
+export function mentionsIn(text) {
+  const said = String(text || '')
+  if (/@(all|everyone|team)\b/i.test(said)) return STAFF.map(p => p.email)
+  return STAFF.filter(p => new RegExp(`@${p.firstName}\\b`, 'i').test(said)).map(p => p.email)
 }
 
 async function send(req, res, session) {
@@ -170,7 +274,22 @@ async function send(req, res, session) {
   // A photograph on its own is a message. "Here is the form" with nothing typed
   // is most of what the group sends.
   const photo = readPhoto(body.photo)
-  if (!text && !photo) return res.status(400).json({ error: 'Nothing to send' })
+  const files = readFiles(body.files)
+  if (!text && !photo && !files.length) return res.status(400).json({ error: 'Nothing to send' })
+
+  // A reply carries a snapshot of what it answers, so it still reads right if
+  // the original scrolls off or is deleted.
+  let replyTo = null
+  if (body.replyTo) {
+    const [orig] = await getMessages([String(body.replyTo)])
+    if (orig) {
+      replyTo = {
+        id: orig.id, authorName: orig.authorName,
+        text: orig.deleted ? 'Deleted message' : String(orig.text || (orig.files?.[0]?.name) || (orig.photo ? 'Photo' : '')).slice(0, 140)
+      }
+    }
+  }
+  const mentions = mentionsIn(text)
   if (text.length > 4000) return res.status(400).json({ error: 'That message is too long' })
 
   // Stored as written. The app warns about patient identifiers before sending
@@ -184,6 +303,9 @@ async function send(req, res, session) {
     authorName: firstNameFor(session.email) || session.email,
     text,
     photo,
+    files,
+    replyTo,
+    mentions,
     // Recorded when the sender was warned and sent anyway, so it is possible to
     // find out later how often that happens and whether the wording is working.
     warned: Boolean(body.warned)
@@ -200,15 +322,17 @@ async function send(req, res, session) {
     .filter(email => email.toLowerCase() !== String(session.email).toLowerCase())
 
   const where = CHANNELS.find(c => c.id === channel)
+  const fileWord = files.length ? (files[0].type.startsWith('image/') ? '📷 Photo' : `📎 ${files[0].name}`) : ''
   await notify(others, {
     // Who and where, so a lock screen says whether this is worth stopping for.
-    title: where ? `${saved.authorName} · ${where.name}` : `${saved.authorName} · this case`,
+    // A mention says so first: "Mat mentioned you" is worth stopping for.
+    title: `${saved.authorName}${where ? ` · ${where.name}` : ' · this case'}`,
     // The message itself. A notification you have to open the app to read is
     // half a notification, and the running order at four o'clock is exactly the
     // thing somebody needs off a lock screen. What is safe to put there is
     // whatever the channels already allow — no patient identifiers, which the
     // composer warns about before anything is sent. See src/chat/identifiers.js.
-    body: preview(text),
+    body: preview(text || fileWord || 'Photo'),
     // One per channel, replaced rather than stacked: six messages in Spine is
     // one conversation, not six things to clear.
     tag: channel,

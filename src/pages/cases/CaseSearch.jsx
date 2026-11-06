@@ -65,7 +65,7 @@ export function matchScreens(q, { isAdmin = false } = {}) {
     .slice(0, 4)
 }
 
-const GROUP_ICON = { inbox: 'Inbox', usage: 'Usage', resupply: 'Resupply', kit: 'Kit', trayline: 'Tray', pref: 'Card' }
+const GROUP_ICON = { chat: 'Chat', inbox: 'Inbox', usage: 'Usage', resupply: 'Resupply', kit: 'Kit', trayline: 'Tray', pref: 'Card' }
 
 /** A result from anywhere else in the portal: a tag, a title, one line. */
 function PortalResult({ result, onOpen }) {

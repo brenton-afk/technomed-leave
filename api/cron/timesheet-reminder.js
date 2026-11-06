@@ -9,6 +9,7 @@ import { TZ, zonedCivil, toDateStr, addCivilDays } from '../../src/clinicalPlan/
 import { autoInvoice } from '../_poAuto.js'
 import { autoQuotes } from '../_quoteAuto.js'
 import { ingestBookings } from '../calendar/today.js'
+import { archiveChat } from '../_chatArchive.js'
 
 // ─── The two daily runs ──────────────────────────────────────────────────────
 // Vercel's Hobby plan allows two scheduled jobs, so both share this function
@@ -88,6 +89,18 @@ export default async function handler(req, res) {
   }
 
   const job = String(req.query?.job || '')
+
+  // Overnight (Vercel Pro, Brent 6 Nov 2026): yesterday's chat to the Dropbox
+  // archive, with its photos and files.
+  if (job === 'nightly') {
+    const yesterday = toDateStr(addCivilDays(zonedCivil(new Date(), TZ), -1))
+    try {
+      return res.status(200).json({ ran: 'nightly', archive: await archiveChat(yesterday) })
+    } catch (err) {
+      console.error('chat archive failed:', err.message)
+      return res.status(500).json({ error: err.message })
+    }
+  }
 
   // Calvary purchase orders into draft Xero invoices, self-funding quotes and
   // bookings@ into Cases → Inbox, at both runs (Brent, 5–6 Nov 2026). Started

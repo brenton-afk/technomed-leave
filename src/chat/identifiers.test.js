@@ -113,3 +113,13 @@ describe('the warning itself', () => {
     expect(identifierWarning('Rowe is second up')).toBeNull()
   })
 })
+
+describe('what the chat warns about now', async () => {
+  const { chatWarning } = await import('./identifiers.js')
+  it('lets names and UR numbers through — Brent, 6 Nov 2026', () => {
+    expect(chatWarning('Pt Rowe John UR 1234567 is second on the list')).toBeNull()
+  })
+  it('still asks about a date of birth', () => {
+    expect(chatWarning('DOB 12/03/1958')).toMatch(/date of birth/)
+  })
+})

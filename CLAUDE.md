@@ -263,6 +263,28 @@ and drops a given name after a comma or in lower case after a capitalised
 surname. Titles typed by hand use `handTypedSurnameLength` plus title/Pt-line
 agreement. Never go back to "first word" (or, for usage forms, "last word").
 
+### Messages (Brent, 6 Nov 2026: "like WhatsApp … adopt the advantages of Slack")
+
+`api/chat.js` + `src/pages/Chat.jsx`. Channels (General, Spine, Logistics,
+Theatre lists, **Portal feedback** — read by the overnight improvement agent)
+and a thread per booking. A channel refreshes every 2.5s while open (push
+notifications otherwise). Messages carry `files` (photos — shrunk, GIFs kept
+as GIFs — video, PDF, Office, text; `FILE_TYPES`, 100 MB, only this app's blob
+URLs accepted by `readFiles`), `replyTo` (a snapshot), `reactions`
+(`REACTIONS`, toggled under a per-message lock, `updateMessage`), `mentions`
+(`@Mat`, `@all`), and `deleted` (author only, kept as "This message was
+deleted"). Typing (`chat:typing:{channel}`), "Seen by" (`chat:seen:{channel}`,
+written with every read mark) and a running count per channel
+(`chat:count:{channel}`, `seq` on each message — the list is trimmed at 500,
+so its length is not a count). Reads use one MGET. **Search** across every
+channel (`api/_chatSearch.js`, every word in text, author or file name), also
+in the portal-wide search glass. **Names and UR numbers are allowed** (Brent:
+health data needed to run the business, stored safely); only a date of birth
+is queried (`chatWarning`). **Archived nightly** to Dropbox
+(`api/_chatArchive.js`, `job=nightly` cron at 15:27 UTC ≈ 2:30am Hobart):
+`/Admin/Chat Archive/{YYYY}/{MM}/{date}/{channel}.txt` plus every attachment
+under `files/`.
+
 ### Supplier booking notices (Tasks 8/9)
 
 `api/_bookingNotices.js` holds the rules and contacts (Redis `notices:settings`,

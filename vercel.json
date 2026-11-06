@@ -61,6 +61,10 @@
       "schedule": "0 22 * * *"
     },
     {
+      "path": "/api/cron/timesheet-reminder?job=nightly",
+      "schedule": "27 15 * * *"
+    },
+    {
       "path": "/api/treasury?action=cron",
       "schedule": "40 19 * * *"
     },

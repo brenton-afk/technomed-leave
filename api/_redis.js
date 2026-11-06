@@ -588,7 +588,10 @@ const channelKey = channel => `chat:${channel}`
 const KEEP = 500
 
 export async function postMessage(channel, message) {
-  const stored = { ...message, at: message.at || new Date().toISOString() }
+  // A running number per channel. The list is trimmed at KEEP, so its length
+  // stops growing at 500 and unread counts built on it froze; this does not.
+  const seq = Number(await redis('incr', `chat:count:${channel}`)) || 0
+  const stored = { ...message, seq, at: message.at || new Date().toISOString() }
   await redisSetBody(`chat:msg:${stored.id}`, JSON.stringify(stored))
   await redis('lpush', channelKey(channel), stored.id)
   await redis('ltrim', channelKey(channel), '0', String(KEEP - 1))
@@ -597,22 +600,92 @@ export async function postMessage(channel, message) {
   return stored
 }
 
+const parse = raw => { try { return raw ? JSON.parse(raw) : null } catch { return null } }
+
+/** Messages by id in one call (MGET), in the order asked. */
+export async function getMessages(ids) {
+  if (!ids.length) return []
+  const out = []
+  for (let i = 0; i < ids.length; i += 100) {
+    const raws = await redis('mget', ...ids.slice(i, i + 100).map(id => `chat:msg:${id}`)) || []
+    out.push(...raws.map(parse))
+  }
+  return out
+}
+
 /** The most recent messages in a channel, oldest first for reading. */
 export async function readChannel(channel, limit = 80) {
   const ids = await redis('lrange', channelKey(channel), '0', String(limit - 1)) || []
-  if (!ids.length) return []
-  const messages = await Promise.all(ids.map(async id => {
-    const raw = await redis('get', `chat:msg:${id}`)
-    try { return raw ? JSON.parse(raw) : null } catch { return null }
-  }))
-  return messages.filter(Boolean).reverse()
+  return (await getMessages(ids)).filter(Boolean).reverse()
 }
 
-/** How many messages each channel holds, for the unread counts. */
+/** Every message id a channel still lists, newest first. */
+export async function channelIds(channel) {
+  return await redis('lrange', channelKey(channel), '0', String(KEEP - 1)) || []
+}
+
+/**
+ * Changes one message under a short lock: a reaction, a deletion. Two people
+ * reacting at the same moment each re-read the message, so neither loses the
+ * other's reaction.
+ */
+export async function updateMessage(id, change) {
+  const lock = `chat:lock:${id}`
+  for (let i = 0; i < 20; i++) {
+    if (await redis('set', lock, '1', 'NX', 'EX', '5') === 'OK') {
+      try {
+        const current = parse(await redis('get', `chat:msg:${id}`))
+        if (!current) return null
+        const next = change(current)
+        await redisSetBody(`chat:msg:${id}`, JSON.stringify(next))
+        return next
+      } finally {
+        await redis('del', lock).catch(() => {})
+      }
+    }
+    await new Promise(r => setTimeout(r, 60))
+  }
+  throw new Error('That message is busy — try again')
+}
+
+/** Who is typing in a channel now: a hash of email to expiry time. */
+export async function setTyping(channel, email, name) {
+  await redis('hset', `chat:typing:${channel}`, email, `${Date.now() + 6000}|${name}`)
+  await redis('expire', `chat:typing:${channel}`, '30')
+}
+
+export async function whoIsTyping(channel, except) {
+  const all = hashOf(await redis('hgetall', `chat:typing:${channel}`))
+  const now = Date.now()
+  return Object.entries(all)
+    .filter(([email, v]) => email !== except && Number(String(v).split('|')[0]) > now)
+    .map(([, v]) => String(v).split('|').slice(1).join('|'))
+}
+
+/** Where everybody has read up to in one channel: email → message number. */
+export async function seenIn(channel) {
+  const all = hashOf(await redis('hgetall', `chat:seen:${channel}`))
+  return Object.fromEntries(Object.entries(all).map(([k, v]) => [k, Number(v) || 0]))
+}
+
+function hashOf(all) {
+  if (!all) return {}
+  if (Array.isArray(all)) {
+    const out = {}
+    for (let i = 0; i < all.length; i += 2) out[all[i]] = all[i + 1]
+    return out
+  }
+  return all
+}
+
+/** How many messages each channel has ever had, for the unread counts. */
 export async function channelSizes(channels) {
   const sizes = {}
-  await Promise.all(channels.map(async channel => {
-    sizes[channel] = Number(await redis('llen', channelKey(channel))) || 0
+  if (!channels.length) return sizes
+  const counts = await redis('mget', ...channels.map(c => `chat:count:${c}`)) || []
+  await Promise.all(channels.map(async (channel, i) => {
+    // Channels from before the counter: their length is their count.
+    sizes[channel] = Number(counts[i]) || Number(await redis('llen', channelKey(channel))) || 0
   }))
   return sizes
 }
@@ -640,6 +713,8 @@ export async function readMarkers(email) {
 
 export async function markRead(email, channel, count) {
   await redis('hset', `chat:read:${email}`, channel, String(count))
+  // The same mark, kept per channel too, so "seen by" is one read.
+  await redis('hset', `chat:seen:${channel}`, email, String(count))
 }
 
 // ─── PUSH SUBSCRIPTIONS ──────────────────────────────────────

@@ -50,6 +50,7 @@ import {
 import { listKits } from '../_kits.js'
 import { getPreferences } from '../_preferences.js'
 import { searchPortal } from '../_portalSearch.js'
+import { searchChat } from '../_chatSearch.js'
 import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
@@ -2222,7 +2223,19 @@ async function handleFind(req, res) {
     const raws = await safe(redis('mget', ...kits.map(k => `kits:list:${k.id}`)), [])
     kits.forEach((k, i) => { try { if (raws[i]) trayLists[k.id] = JSON.parse(raws[i]) } catch { /* skip */ } })
   }
-  return res.status(200).json({ ok: true, groups: searchPortal(q, { usage, resupplies, kits, trayLists, prefs, inbox }) })
+  const groups = searchPortal(q, { usage, resupplies, kits, trayLists, prefs, inbox })
+  const said = await safe(searchChat(q, { limit: 9 }), [])
+  if (said.length) {
+    groups.push({
+      key: 'chat', label: 'Messages', more: said.length > 8,
+      items: said.slice(0, 8).map(m => ({
+        type: 'chat', id: m.id, channel: m.channel, date: String(m.at || '').slice(0, 10),
+        title: `${m.authorName}: ${m.text || (m.files || []).map(f => f.name).join(', ') || 'Photo'}`.slice(0, 140),
+        detail: m.channel.startsWith('case:') ? 'Case thread' : `# ${m.channel}`
+      }))
+    })
+  }
+  return res.status(200).json({ ok: true, groups })
 }
 
 

@@ -2296,6 +2296,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onOpenPortal={result => {
             setSearching(false)
             if (result.type === 'inbox') { setShowQueue(true); return }
+            if (result.type === 'chat') { onNavigate({ tab: 'messages' }); return }
             const scan = result.type === 'usage' ? 'usage' : result.type === 'resupply' ? 'resupply' : result.kind
             if (scan) saveScanKind(scan)
             if (result.type === 'screen') onNavigate(result.to)
