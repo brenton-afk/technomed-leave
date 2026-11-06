@@ -258,7 +258,11 @@ the client shows them in `cases/NoticeSheet.jsx` and confirms by id
 subject and wording edited — `edits: {id: {subject, text}}` on `notify`, the
 html rebuilt from the edited text through `escapeHtml`. **Recipients are never
 taken from the client**; they stay as the server wrote them. A rule may be set to send
-on its own. Device Technologies are on no rule: they asked not to get booking
+on its own. **Every confirm-to-send acts once**: `takeNotice` is a GETDEL (a failed
+send is put back by `restoreNotice`), Inbox Accept claims
+`bookingcand:accepting:{id}`, leave approve/decline `leave:acting:{id}`, meeting
+minutes `meeting:finalizing:{id}` — each let go only if the action failed
+before writing. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
 **A supplier is judged on the booking as it now stands** (the hospital, before
@@ -850,6 +854,15 @@ Invariants worth preserving:
   usage for that surname and date from another case is **held** (`held: true`,
   shown amber, "Send to … anyway" sends with `confirmRepeat`); a real addition
   belongs in Amend, which sends a correction. Tests are never held.
+- **Each distributor gets a case once** (review, 6 Nov 2026). `action=save`
+  over an existing id keeps the *stored* `emailsSent`, `createdAt`,
+  `createdByEmail` and `amendments` (a phone's stale copy used to wipe the
+  record of a send), and once a real send has gone the `folderName` is frozen.
+  `action=email` holds a distributor this case already went to (`held`, same
+  "Send anyway" → `confirmRepeat`), claims each send (`claimUsageSend`, SET NX
+  120s) so a double tap sends once, and merges results onto the record as
+  re-read after sending. A removed record is 410 on save and email and never
+  goes back on `usage:all`.
 - **A case is filed once** (Brent, 6 Nov 2026: "is there already a folder in
   Dropbox?"). Before anything is written, `action=save` checks the portal's
   records and the Dropbox case folders for that patient and day
