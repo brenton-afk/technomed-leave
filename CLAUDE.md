@@ -842,6 +842,13 @@ Invariants worth preserving:
   login. A test is also not written to `emailsSent`, so it cannot make a case look
   sent when the distributor has had nothing.
 - **Nothing uncertain is ever sent.** `groupByDistributor` skips anything excluded, flagged, or without a resolved distributor. Held-back rows still appear on the Dropbox sheet — shaded amber, with a `Held back from email` line in the header block saying how many. That replaced the `Manual Review Flag` column and is the whole record that they did not leave the building, so it has to survive any further tidying of that sheet. A distributor's sheet never shades a row: it is built from items that already passed the filter, and amber would be telling them a transcription was uncertain.
+- **The same patient's usage on the same day goes to a distributor once**
+  (`earlierSends` in `api/_usageRepeat.js`, checked in `action=email`).
+  Matthews, 6 Nov 2026: one form scanned twice, two cases with different folder
+  names, Device's Boost desk emailed twice. A distributor that already had a
+  usage for that surname and date from another case is **held** (`held: true`,
+  shown amber, "Send to … anyway" sends with `confirmRepeat`); a real addition
+  belongs in Amend, which sends a correction. Tests are never held.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
 - **The distributor email carries two attachments**: the 20-column sheet of their
   own items, and the scanned form with every page merged into one PDF

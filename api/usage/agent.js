@@ -20,6 +20,7 @@ import {
   listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile
 } from '../_dropbox.js'
 import { amendItems, changesByDistributor } from '../_usageAmend.js'
+import { earlierSends } from '../_usageRepeat.js'
 import { sendUsageEmail } from '../_email.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
@@ -313,7 +314,7 @@ async function handleSave(req, res, session) {
 async function handleEmail(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { usageId, only, testOnly, pages } = req.body || {}
+  const { usageId, only, testOnly, pages, confirmRepeat } = req.body || {}
   if (!usageId) throw badRequest('No usage record specified')
 
   const record = await getUsageRecord(usageId)
@@ -368,8 +369,26 @@ async function handleEmail(req, res, session) {
 
   const results = []
 
+  // The same patient's usage on the same day, already sent to a distributor
+  // from another case (see api/_usageRepeat.js), is held back unless the rep
+  // has said to send it anyway. A test always goes — it goes only to them.
+  const repeats = test || confirmRepeat
+    ? new Map()
+    : earlierSends(record, targets, await getUsageHistory(200))
+
   for (const key of targets) {
     const distributor = DISTRIBUTORS[key]
+    const earlier = repeats.get(key)
+    if (earlier) {
+      results.push({
+        key, name: distributor.name, to: [], itemCount: groups.get(key).length, ok: false, held: true,
+        earlier,
+        error: `Not sent: ${distributor.name} already had this patient's usage for this day`
+          + `${earlier.sentAt ? ` (sent ${new Date(earlier.sentAt).toLocaleTimeString('en-AU', { timeZone: 'Australia/Hobart', hour: 'numeric', minute: '2-digit' })})` : ''}.`
+          + ' If something was missed, use Amend on the earlier scan instead.'
+      })
+      continue
+    }
     const items = groups.get(key)
     const to = test ? [session.email] : distributor.to
     try {

@@ -663,8 +663,8 @@ export default function UsageScan({ user, switcher }) {
     setBusy(false)
   }
 
-  async function resendFailed() {
-    const failedKeys = (result?.emails || []).filter(e => !e.ok).map(e => e.key)
+  async function resendFailed({ held = false } = {}) {
+    const failedKeys = (result?.emails || []).filter(e => !e.ok && Boolean(e.held) === held).map(e => e.key)
     if (!failedKeys.length) return
     setBusy(true)
     try {
@@ -674,6 +674,9 @@ export default function UsageScan({ user, switcher }) {
         body: JSON.stringify({
           usageId: result.record.id,
           only: failedKeys,
+          // Only from the "Send anyway" button: the rep has seen that this
+          // distributor already had this patient's usage today.
+          confirmRepeat: held,
           // Still in memory unless the app has been reloaded, in which case the
           // retry sends the sheet without the scan and says so.
           pages: filingPages(pages)
@@ -735,7 +738,8 @@ export default function UsageScan({ user, switcher }) {
             </div>
           )}
           {history.map(h => {
-            const failed = (h.emailsSent || []).filter(e => !e.ok).length
+            const failed = (h.emailsSent || []).filter(e => !e.ok && !e.held).length
+            const heldBack = (h.emailsSent || []).filter(e => e.held).length
             const sent = (h.emailsSent || []).filter(e => e.ok).length
             if (amending === h.id) {
               return <AmendUsage key={h.id} usageId={h.id} user={user}
@@ -753,6 +757,7 @@ export default function UsageScan({ user, switcher }) {
                   </span>
                   {sent > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#eaf4fc', color: BLUE }}>{sent} emailed</span>}
                   {failed > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#fdecea', color: '#c0392b' }}>{failed} failed</span>}
+                  {heldBack > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: AMBER, color: AMBER_TEXT }}>{heldBack} held — already sent</span>}
                   {h.amendments > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#fff3cd', color: '#856404' }}>Amended{h.amendments > 1 ? ` ×${h.amendments}` : ''}</span>}
                   {/* Something missed after it had gone — Aimee's cross link. */}
                   <button type="button" onClick={() => setAmending(h.id)}
@@ -1049,11 +1054,12 @@ export default function UsageScan({ user, switcher }) {
 
   // ── Done ─────────────────────────────────────────────────
   if (step === 'done' && result) {
-    const failed = result.emails.filter(e => !e.ok)
+    const failed = result.emails.filter(e => !e.ok && !e.held)
+    const held = result.emails.filter(e => e.held)
     return (
       <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
         <Header
-          title={result.test ? 'Test sent to you only' : (failed.length ? 'Filed, with email issues' : 'Usage filed and sent')}
+          title={result.test ? 'Test sent to you only' : (failed.length ? 'Filed, with email issues' : held.length ? 'Filed — one already sent' : 'Usage filed and sent')}
           subtitle={result.record.folderName} />
         <div style={{ padding: 16 }}>
           {result.test && (
@@ -1146,17 +1152,23 @@ export default function UsageScan({ user, switcher }) {
                     {e.itemCount} item{e.itemCount === 1 ? '' : 's'}
                     {e.ok ? (e.test ? ` · to you` : ` · ${e.to.length} recipient${e.to.length === 1 ? '' : 's'}`) : ''}
                   </div>
-                  {!e.ok && <div style={{ fontSize: 11, color: '#c0392b', marginTop: 3 }}>{e.error}</div>}
+                  {!e.ok && <div style={{ fontSize: 11, color: e.held ? AMBER_TEXT : '#c0392b', marginTop: 3, lineHeight: 1.45 }}>{e.error}</div>}
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, color: e.ok ? TEAL : '#c0392b', whiteSpace: 'nowrap' }}>
-                  {e.ok ? (e.test ? '✓ Test sent' : '✓ Sent') : '✕ Failed'}
+                  {e.ok ? (e.test ? '✓ Test sent' : '✓ Sent') : e.held ? 'Held' : '✕ Failed'}
                 </span>
               </div>
             ))}
           </div>
 
+          {held.length > 0 && (
+            <button onClick={() => resendFailed({ held: true })} disabled={busy}
+              style={{ width: '100%', padding: 14, background: 'white', color: AMBER_TEXT, border: `1px solid ${AMBER_TEXT}`, borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+              {busy ? 'Sending…' : `Send to ${held.map(e => e.name).join(', ')} anyway`}
+            </button>
+          )}
           {failed.length > 0 && (
-            <button onClick={resendFailed} disabled={busy}
+            <button onClick={() => resendFailed()} disabled={busy}
               style={{ width: '100%', padding: 14, background: BLUE, color: 'white', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
               {busy ? 'Resending…' : `Retry ${failed.length} failed email${failed.length === 1 ? '' : 's'}`}
             </button>
