@@ -62,6 +62,24 @@ body {
   flex-direction: column;
 }
 
+/* Installed on the home screen, the status bar is see-through
+   (black-translucent) and the page runs up under it — and there iOS reports
+   100dvh as the screen *less* the status bar, so the frame stopped short and
+   left a navy strip under the tab bar (Brent, 6 Nov 2026: "there's a gap at
+   the bottom"). Pinned to all four edges instead, it is the whole screen
+   whatever iOS says the viewport is. Only the installed app: a Safari tab has
+   its own toolbars and 100dvh is right there. */
+@media (display-mode: standalone) {
+  #root {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: auto;
+  }
+}
+
 input, select, textarea, button {
   font-family: inherit;
 }
@@ -264,6 +282,7 @@ a {
    the plan has @page A4 rules and gets printed and handed round. */
 @media print {
   #root {
+    position: static;
     height: auto;
     overflow: visible;
     display: block;

@@ -307,3 +307,20 @@ describe('typing into a field must not resize the app', () => {
     expect(css, 'the iOS zoom threshold is 16px').toMatch(rule)
   })
 })
+
+// "Now you've made the white panel at the bottom with tabs too big — there's a
+// gap at the bottom" (Brent, 6 Nov 2026). Installed on the home screen with a
+// black-translucent status bar, iOS gives 100dvh as the screen less the status
+// bar, so the frame stopped short. The installed app pins the frame to the
+// screen's edges instead.
+describe('the installed app fills the whole screen', () => {
+  it('pins #root to all four edges when standalone', () => {
+    const css = read('src/index.css')
+    const block = css.match(/@media \(display-mode: standalone\)\s*\{([\s\S]*?)\n\}/)?.[1] || ''
+    expect(block).toMatch(/#root\s*\{[^}]*position:\s*fixed/)
+    for (const edge of ['top', 'right', 'bottom', 'left']) {
+      expect(block).toMatch(new RegExp(`${edge}:\\s*0`))
+    }
+    expect(block).toMatch(/height:\s*auto/)
+  })
+})
