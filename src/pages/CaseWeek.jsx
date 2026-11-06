@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { Page, Header, Banner, BandLogo } from '../design/Shell.jsx'
+import { Page, Header, Banner, BandLogo, BandMark } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { useLiveRefresh, useToday, useReturn } from '../liveRefresh.js'
 import { dueOnDay } from '../projects/model.js'
@@ -87,7 +87,7 @@ const arrowStyle = {
   justifyContent: 'center',
   borderRadius: radius.pill,
   border: '1px solid rgba(255,255,255,0.18)',
-  background: 'rgba(255,255,255,0.10)',
+  background: colour.navySoft,
   color: 'white',
   // Glyphs, but the type scale is closed and a closed scale with exceptions in
   // it is not closed.
@@ -114,7 +114,7 @@ function SpanToggle({ span, onChange, options = ['day', 'week', 'lists'] }) {
     <div role="tablist" aria-label="How much of the week to show"
       style={{
         display: 'flex', flexShrink: 0, padding: 3, gap: 2,
-        background: 'rgba(0,0,0,0.22)', borderRadius: radius.pill
+        background: colour.navyDeep, borderRadius: radius.pill
       }}>
       {options.map(id => {
         const on = span === id
@@ -127,7 +127,7 @@ function SpanToggle({ span, onChange, options = ['day', 'week', 'lists'] }) {
               // itself further down the screen than the toggle is worth.
               minWidth: 46, height: 34, border: 'none', borderRadius: radius.pill,
               background: on ? 'white' : 'transparent',
-              color: on ? colour.navy : 'rgba(255,255,255,0.7)',
+              color: on ? colour.navy : 'rgba(255,255,255,0.82)',
               ...text('bodyStrong'), cursor: 'pointer'
             }}>
             {SPAN_LABELS[id]}
@@ -1378,7 +1378,6 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
   // to. Everything else on the day — leave, reminders — stays, because it is
   // still the day they are working in.
   const me = firstNameFor(user?.email)
-  const [mine, setMine] = useState(() => Boolean(readPrefs().mineOnly))
   // Only ever the week on screen (Brent, 6 Nov 2026: "the portal says nothing
   // booked when there is"). Stepping to another week kept drawing the last
   // week's plan until the new one arrived — on hospital 5G, seconds of every
@@ -1388,7 +1387,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
     if (fullPlan?.weekStart === window_.startDate) return fullPlan
     return readCachedPlan(window_.startDate)?.plan || null
   }, [fullPlan, window_])
-  const plan = useMemo(() => (mine && me && weekPlan ? onlyMine(weekPlan, me) : weekPlan), [weekPlan, mine, me])
+  // "Mine" came off the header (Brent, 6 Nov 2026: "I don't think it helps").
+  const plan = weekPlan
   const [status, setStatus] = useState('loading')
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
@@ -1864,21 +1864,15 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
       {/* No summary line under the title any more ("It's pretty busy") — each
           day says its own count — and the header stays pinned, so the week
           arrows are always in reach however far down the week is scrolled. */}
-      <Header title="Cases" compact sticky art
-        logo={<BandLogo height={desktop ? 40 : 28} />}
+      {/* Desktop: the wordmark over the field of the logo's tiles. Phone: just
+          the tile mark — the scattered tiles were too busy there (Brent,
+          6 Nov 2026). */}
+      <Header title="Cases" compact sticky art={desktop}
+        logo={desktop ? <BandLogo height={40} /> : <BandMark size={40} />}
         eyebrow={desktop ? greeting : undefined}
         right={(
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
             <SearchButton onClick={() => setSearching(true)} />
-            {me && (
-              <button type="button" aria-pressed={mine} onClick={() => {
-                setMine(m => { writePrefs({ ...readPrefs(), mineOnly: !m }); return !m })
-              }} style={{
-                height: 36, padding: '0 12px', flexShrink: 0, borderRadius: radius.pill, cursor: 'pointer',
-                border: '1px solid rgba(255,255,255,0.18)', ...text('caption'), fontWeight: 700,
-                background: mine ? 'white' : 'rgba(255,255,255,0.08)', color: mine ? colour.navy : 'white'
-              }}>Mine</button>
-            )}
             <SpanToggle span={span}
               options={desktop ? ['week', 'lists'] : ['day', 'week', 'lists']}
               onChange={next => { setSpan(next); remember({ caseSpan: next }) }} />

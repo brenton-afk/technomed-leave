@@ -310,6 +310,11 @@ wordmark with its navy made transparent). Cases uses both; on a desktop the
 eyebrow is the greeting and date (Header A), on a phone three tiles give the
 week at a glance — cases this week, today, who is leading (Header C,
 `data-glance`; tests look past it for cards and the leader chip).
+Revised the same day: on a phone the band has **just the tile mark**
+(`BandMark`, `public/logo-mark.png`) and no scattered tiles ("too busy");
+the header's search, span toggle and week arrows are **solid** (`navySoft` /
+`navyDeep`), never see-through over the tiles; the **Mine** button is gone
+("I don't think it helps" — `onlyMine` stays for the projects' use only).
 
 ### Cases layout (Brent, 4 Nov 2026)
 

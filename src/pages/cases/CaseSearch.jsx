@@ -26,7 +26,8 @@ export function SearchButton({ onClick }) {
     <button type="button" onClick={onClick} aria-label="Search bookings"
       style={{
         width: 36, height: 36, flexShrink: 0, borderRadius: radius.pill, cursor: 'pointer',
-        border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)',
+        // Solid, not see-through: the band behind it carries the logo's tiles.
+        border: '1px solid rgba(255,255,255,0.18)', background: colour.navySoft,
         color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
       <IconSearch size={19} />

@@ -1680,3 +1680,16 @@ describe('the top band', () => {
     expect(glance.textContent).toMatch(/today/)
   })
 })
+
+describe('the band, as revised (Brent, 6 Nov 2026)', () => {
+  it('has no Mine button', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Mine' })).not.toBeInTheDocument()
+  })
+  it('shows just the tile mark on a phone', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.getByAltText('TechnoMed').getAttribute('src')).toBe('/logo-mark.png')
+  })
+})

@@ -81,6 +81,11 @@ function BandArt() {
   )
 }
 
+/** Just the tile mark — the phone's band (Brent, 6 Nov 2026: the scattered tiles were too busy there). */
+export function BandMark({ size = 40 }) {
+  return <img src="/logo-mark.png" alt="TechnoMed" width={size} height={size} style={{ display: 'block' }} />
+}
+
 /** The wordmark, for a band that carries the brand (Cases). */
 export function BandLogo({ height = 34 }) {
   return <img src="/logo-band.png" alt="TechnoMed — Surgical Solutions & Support" style={{ height, width: 'auto', display: 'block' }} />
