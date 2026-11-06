@@ -67,8 +67,23 @@ const TILES = logoTiles()
 // The phone's: fewer, smaller and faint, across the whole band — texture
 // behind the (solid) buttons rather than a picture (Brent, 6 Nov 2026).
 const SUBTLE_TILES = logoTiles({ count: 46, seed: 19 }).map(t => ({
-  ...t, size: Math.min(t.size, 16), opacity: Number((0.06 + t.opacity * 0.16).toFixed(2))
+  ...t, size: Math.min(Math.max(t.size, 8), 20), opacity: Number((0.4 + t.opacity * 0.4).toFixed(2))
 }))
+
+// Pressed tin (Brent, 6 Nov 2026: "a little more visible … sort of embossed").
+// Each tile is the navy itself, raised: lit from the top left, a bright edge
+// there and a dark one bottom right, a soft shadow under it, and only a breath
+// of the logo's colour — relief rather than paint, so it stays texture.
+const EMBOSS = {
+  boxShadow: [
+    'inset 1px 1px 0 rgba(255,255,255,0.28)',
+    'inset -1px -1px 0 rgba(0,0,0,0.45)',
+    '1px 1.5px 2px rgba(0,0,0,0.45)',
+    '-0.5px -0.5px 0 rgba(255,255,255,0.08)'
+  ].join(', '),
+  borderRadius: 2
+}
+const tinFace = hex => `linear-gradient(135deg, ${hex}66 0%, ${hex}26 55%, rgba(0,0,0,0.18) 100%)`
 
 function BandArt({ subtle }) {
   const tiles = subtle ? SUBTLE_TILES : TILES
@@ -78,7 +93,8 @@ function BandArt({ subtle }) {
         {tiles.map((t, i) => (
           <span key={i} style={{
             position: 'absolute', left: `${t.left}%`, top: `${t.top}%`, width: t.size, height: t.size,
-            background: t.colour, opacity: t.opacity
+            opacity: t.opacity,
+            ...(subtle ? { background: tinFace(t.colour), ...EMBOSS } : { background: t.colour })
           }} />
         ))}
       </div>

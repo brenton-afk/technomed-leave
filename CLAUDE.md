@@ -327,7 +327,10 @@ the header's search, span toggle and week arrows are **solid** (`navySoft` /
 ("I don't think it helps" — `onlyMine` stays for the projects' use only).
 Then (same day): the phone band gets **subtle tiles** back behind the solid
 buttons (`art="subtle"`, `SUBTLE_TILES`: small, faint, across the full band,
-no gradient) for texture, with `BandMark` still top left.
+no gradient) for texture, with `BandMark` still top left. Then made **pressed
+tin** ("a little more visible … embossed"): each tile raised with an inset
+highlight top-left, a dark edge bottom-right and a drop shadow (`EMBOSS`,
+`tinFace` in `Shell.jsx`), only a faint wash of the logo colours.
 
 ### Cases layout (Brent, 4 Nov 2026)
 
