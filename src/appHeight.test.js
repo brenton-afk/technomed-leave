@@ -75,10 +75,9 @@ describe('the canvas colour', () => {
   })
 })
 
-describe('the shell edges (Brent, 6 Nov 2026)', async () => {
-  const { readFileSync } = await import('fs')
-  const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
-  const app = readFileSync(new URL('./App.jsx', import.meta.url), 'utf8')
+describe('the shell edges (Brent, 6 Nov 2026)', () => {
+  const css = readFileSync(join(__dirname, 'index.css'), 'utf8')
+  const app = readFileSync(join(__dirname, 'App.jsx'), 'utf8')
   it('covers the status bar so nothing scrolls under the clock', () => {
     expect(app).toMatch(/className="tm-status-cover"/)
     expect(css).toMatch(/\.tm-status-cover \{[^}]*height: env\(safe-area-inset-top/)
