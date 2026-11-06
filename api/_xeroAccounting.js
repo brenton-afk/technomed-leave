@@ -101,7 +101,9 @@ export async function invoicesWithReference(reference) {
  * the purchase order is lost. Quantities and prices are numbers or the line is
  * refused — an invoice with a blank price is a question, not a draft.
  */
-export function lineItems(lines = [], items = []) {
+export function lineItems(lines = [], items = [], accountCode = null) {
+  // A line that is not a Xero item needs an account, or Xero refuses it.
+  const account = /^[A-Za-z0-9.-]{1,10}$/.test(String(accountCode || '')) ? String(accountCode) : null
   const known = new Map(items.map(i => [String(i.code).toUpperCase(), i]))
   return lines
     .filter(l => l && (l.description || l.code))
@@ -121,20 +123,22 @@ export function lineItems(lines = [], items = []) {
           : [l.code, l.description].filter(Boolean).join(' — '),
         Quantity: quantity,
         UnitAmount: Math.round(unit * 100) / 100,
+        ...(!item && account ? { AccountCode: account } : {}),
         ...(discount > 0 ? { DiscountRate: discount } : {})
       }
     })
 }
 
 /** A draft sales invoice. Refuses a PO number already invoiced. */
-export async function createDraftInvoice({ contactId, reference, date, dueDate, lines }) {
+export async function createDraftInvoice({ contactId, reference, date, dueDate, lines, accountCode }) {
   if (!contactId) throw new Error('Choose who the invoice is for')
   const already = await invoicesWithReference(reference)
   if (already.length) {
     throw Object.assign(new Error(`Already invoiced: ${already.map(i => `${i.number || 'draft'} (${i.status})`).join(', ')}. Nothing was created.`), { code: 'duplicate', existing: already })
   }
-  const LineItems = lineItems(lines, await listItems().catch(() => []))
+  const LineItems = lineItems(lines, await listItems().catch(() => []), accountCode)
   if (!LineItems.length) throw new Error('Add at least one line')
+  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) throw new Error('The due date is not a date')
   const data = await call('POST', '/Invoices', {
     Invoices: [{
       Type: 'ACCREC',

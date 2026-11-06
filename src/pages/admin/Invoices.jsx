@@ -160,6 +160,7 @@ export default function Invoices({ user }) {
           <button style={btn(false)} onClick={showTemplates} disabled={templates?.running}>{templates?.running ? 'Reading templates…' : 'Quote templates'}</button>
           <button style={btn(false)} onClick={checkAccounts} disabled={audit?.running}>{audit?.running ? 'Checking accounts@…' : 'Check accounts@'}</button>
           <button style={btn(false)} onClick={load}>Refresh</button>
+          <button style={btn(true)} onClick={() => setDraft({ kind: 'invoice', blank: true })}>New invoice</button>
           <button style={btn(true)} onClick={() => setDraft({ kind: 'quote' })}>New quote</button>
       </div>
       <div style={{ ...muted, marginBottom: 12 }}>
@@ -328,7 +329,10 @@ const blankLine = () => ({ code: '', description: '', quantity: 1, unitPrice: ''
 function Editor({ api, draft, onClose }) {
   const isInvoice = draft.kind === 'invoice'
   const order = draft.order || {}
-  const [search, setSearch] = useState(isInvoice ? 'Calvary' : '')
+  // An invoice from a PO is for Calvary; a new one (commissions, fees) can be for anyone.
+  const [search, setSearch] = useState(isInvoice && !draft.blank ? 'Calvary' : '')
+  const [dueDate, setDueDate] = useState('')
+  const [accountCode, setAccountCode] = useState('200')
   const [contacts, setContacts] = useState([])
   const [items, setItems] = useState([])
   const [contactId, setContactId] = useState('')
@@ -372,7 +376,7 @@ function Editor({ api, draft, onClose }) {
   async function submit() {
     setBusy(true); setError('')
     try {
-      const body = { contactId, reference, date, lines: lines.map(l => ({ ...l, unitPrice: l.unitPrice === '' ? NaN : Number(l.unitPrice), discount: Number(l.discount) || 0 })) }
+      const body = { contactId, reference, date, ...(isInvoice ? { dueDate: dueDate || undefined, accountCode } : {}), lines: lines.map(l => ({ ...l, unitPrice: l.unitPrice === '' ? NaN : Number(l.unitPrice), discount: Number(l.discount) || 0 })) }
       if (isInvoice) {
         const { invoice } = await api('invoice-create', { body })
         setMade({ ...invoice, what: 'invoice' })
@@ -405,12 +409,12 @@ function Editor({ api, draft, onClose }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <button style={btn(false)} onClick={() => onClose(false)}>← Back</button>
-        <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{isInvoice ? `Invoice for ${order.poNumber || 'this order'}` : 'New quote'}</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{isInvoice ? (draft.blank ? 'New invoice' : `Invoice for ${order.poNumber || 'this order'}`) : 'New quote'}</div>
       </div>
 
       {permission && <AllowInvoices />}
 
-      {isInvoice && (
+      {isInvoice && !draft.blank && (
         <div style={{ ...card, fontSize: 13, color: '#5a6478' }}>
           Read from the order by Claude — check every line against the PDF before making the draft.
           {order.requestedBy && <div>Requested by: {order.requestedBy}</div>}
@@ -434,10 +438,16 @@ function Editor({ api, draft, onClose }) {
         </select>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginTop: 10 }}>
-          <div><label style={label}>{isInvoice ? 'Reference (PO number)' : 'Reference'}</label>
+          <div><label style={label}>{isInvoice && !draft.blank ? 'Reference (PO number)' : 'Reference'}</label>
             <input style={input} value={reference} onChange={e => setReference(e.target.value)} /></div>
           <div><label style={label}>Date</label>
             <input style={input} type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
+          {isInvoice && <>
+            <div><label style={label}>Due</label>
+              <input style={input} type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
+            <div><label style={label}>Account (lines without a code)</label>
+              <input style={input} value={accountCode} onChange={e => setAccountCode(e.target.value)} /></div>
+          </>}
           {!isInvoice && <>
             <div><label style={label}>Expires</label>
               <input style={input} type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} /></div>

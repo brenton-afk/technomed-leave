@@ -334,3 +334,12 @@ describe('PO auto-invoicing is paused until PO_AUTO=on (Brent, 6 Nov 2026)', () 
     if (before !== undefined) process.env.PO_AUTO = before
   })
 })
+
+describe('a line that is not a Xero item', () => {
+  it('goes to the account given, so Xero accepts it', () => {
+    const [l] = lineItems([{ description: 'Commission on sales of $1,000 @ 20%', quantity: 1, unitPrice: 200 }], [], '200')
+    expect(l).toMatchObject({ Description: 'Commission on sales of $1,000 @ 20%', UnitAmount: 200, AccountCode: '200' })
+    expect(lineItems([{ code: 'A1', quantity: 1, unitPrice: 5 }], [{ code: 'A1', name: 'Item' }], '200')[0].AccountCode).toBeUndefined()
+    expect(lineItems([{ description: 'X', quantity: 1, unitPrice: 5 }], [], 'bad code!')[0].AccountCode).toBeUndefined()
+  })
+})
