@@ -47,7 +47,8 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 const card = async () => {
   render(<CaseWeek user={USER} />)
   await waitFor(() => expect(screen.getByText('Whiteley')).toBeInTheDocument())
-  return screen.getByText('Whiteley').closest('button')
+  // The whole card: the rep sits on its footer row, beside the actions.
+  return screen.getByText('Whiteley').closest('[data-case-card]')
 }
 
 describe('the order of a booking card', () => {

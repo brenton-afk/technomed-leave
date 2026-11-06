@@ -337,6 +337,16 @@ shadow, no see-through fills); the glance cards are solid `navySoft` with teal
 labels; the chosen day in the strip is a solid teal tile, not a tint and an
 underline. Check the band in a real browser render, not a mock.
 
+**Case cards, face lift** (Brent, 6 Nov 2026: "a bit basic … make it look
+nice and slick"): the surgeon's colour still fills the card (`backgroundColor:
+fill` — the parity tests hold it) under a white sheen and a soft shadow
+(`CARD_SHEEN`, `CARD_SHADOW`, radius 18). The patient leads at `title` size
+with the surgeon as an uppercase tag on the right; the operation is one line
+at body/600; each system is a chip (`chipOn(ink)`) with its supply; the list
+place is an outlined badge; the rep or planned rep shares the footer row with
+the list-order and copy icons (so it sits outside the card's tap target —
+tests find the card by `data-case-card`).
+
 ### Cases layout (Brent, 4 Nov 2026)
 
 Calmer page, as approved from a mock-up: the header is pinned (`Header sticky`)

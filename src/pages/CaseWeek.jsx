@@ -410,6 +410,15 @@ function CopyCase({ surgicalCase, date, ink, style, label = 'Copy details', icon
   )
 }
 
+// The case card's finish (Brent, 6 Nov 2026). The sheen is white light over
+// the surgeon's colour, never a second colour, so the colour still means whose.
+const CARD_RADIUS = 18
+const CARD_SHEEN = 'linear-gradient(155deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.06) 38%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.05) 100%)'
+const CARD_SHADOW = '0 1px 2px rgba(4,39,70,0.10), 0 6px 18px rgba(4,39,70,0.12)'
+const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }
+/** A chip on the card: lighter than the fill on a dark ink, a veil of the ink on a white one. */
+const chipOn = ink => ink.ink === '#ffffff' ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.42)'
+
 const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy, onSetPlace }) {
   const off = Boolean(surgicalCase.cancelled)
   // Told about, not attending. Drawn back like a cancelled case rather than
@@ -447,14 +456,17 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
   const question = useMemo(() => implantQuestion(surgicalCase), [surgicalCase])
 
   return (
-    <div
+    <div data-case-card
       style={{
         display: 'flex', width: '100%', gap: 0, padding: 0, alignItems: 'stretch',
-        background: fill, border: `1px solid ${off ? colour.line : 'transparent'}`,
-        // Closer together, so more of a day fits on the glass. "The goal is to
-        // be able to see the blocks of bookings on the phone view more
-        // easily, so the coloured boxes are smaller tiles."
-        borderRadius: radius.card, marginBottom: 6, overflow: 'hidden',
+        backgroundColor: fill, border: `1px solid ${off ? colour.line : 'transparent'}`,
+        // A face lift (Brent, 6 Nov 2026: "a bit basic … make it look nice
+        // and slick"): the surgeon's colour still fills the card — that is
+        // what it means — under a soft sheen from the top left and a shadow
+        // that lifts it off the page.
+        backgroundImage: off ? 'none' : CARD_SHEEN,
+        boxShadow: off ? 'none' : CARD_SHADOW,
+        borderRadius: CARD_RADIUS, marginBottom: 10, overflow: 'hidden',
         opacity: busy ? 0.55 : spare ? 0.72 : 1, transition: 'opacity 120ms'
       }}>
 
@@ -467,7 +479,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
           and a real browser hit-tests first. */}
       <span style={{
         flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'flex-start', padding: `${space.xs}px ${space.md}px ${space.sm}px`
+        alignItems: 'flex-start', padding: `${space.sm}px ${space.md}px ${space.xs}px`
       }}>
       <button type="button" onClick={() => onOpen?.(surgicalCase)}
         style={{
@@ -475,13 +487,24 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
           textAlign: 'left', background: 'none', border: 'none', font: 'inherit',
           cursor: onOpen ? 'pointer' : 'default'
         }}>
-        <span style={{
-          ...text('bodyStrong'), display: 'block', color: ink.ink,
-          ...(off ? { textDecoration: 'line-through' } : {})
-        }}>
-          {label}
-          <span style={{ color: ink.faint, fontWeight: 400 }}> / </span>
-          <span style={{ color: ink.ink }}>{surgicalCase.surgeon}</span>
+        {/* The patient leads, large; the surgeon is a tag beside it. */}
+        <span style={{ display: 'flex', alignItems: 'center', gap: space.sm, width: '100%' }}>
+          <span style={{
+            ...text('title'), color: ink.ink, flex: 1, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            ...(off ? { textDecoration: 'line-through' } : {})
+          }}>
+            {label}
+            <span style={VISUALLY_HIDDEN}> / </span>
+          </span>
+          {surgicalCase.surgeon && (
+            <span style={{
+              ...text('micro'), letterSpacing: '0.6px', textTransform: 'uppercase', flexShrink: 0,
+              padding: '3px 9px', borderRadius: radius.pill,
+              background: chipOn(ink), color: ink.ink,
+              ...(off ? { textDecoration: 'line-through' } : {})
+            }}>{surgicalCase.surgeon}</span>
+          )}
         </span>
 
         {(off || spare || surgicalCase.navigation || surgicalCase.selfFunding
@@ -544,7 +567,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             implant system does. */}
         {surgicalCase.operation && (
           <span style={{
-            ...text('bodyStrong'), color: ink.ink,
+            ...text('body'), fontWeight: 600, color: ink.ink, marginTop: 2,
             // One line. It is the thing that tells two of a surgeon's cases
             // apart at a glance, and the glance is all this tile is for —
             // the whole of it is a tap away inside the booking.
@@ -562,10 +585,12 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             per system, because a case is often two systems with different
             answers and one line for both said the wrong thing about one. */}
         {supplies && (
-          <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
-            {supplies.map((entry, i) => (
-              <React.Fragment key={entry.system}>
-                {i > 0 && ' · '}
+          <span style={{ ...text('caption'), display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6, color: ink.muted }}>
+            {supplies.map(entry => (
+              <span key={entry.system} style={{
+                display: 'inline-block',
+                padding: '2px 9px', borderRadius: 8, background: chipOn(ink)
+              }}>
                 {/* "The name of the system should be what is in bold, rather
                     than the Loan/Consignment word." The system is what somebody
                     is looking for when they scan a card — where it comes from
@@ -582,7 +607,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
                   <span style={{ color: ink.ink, fontWeight: 700 }}> (supply?)</span>
                 )}
                 {entry.note && <span style={{ color: ink.muted }}> ({entry.note})</span>}
-              </React.Fragment>
+              </span>
             ))}
           </span>
         )}
@@ -622,10 +647,12 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             description, then the system and loan/consignment, then the
             information about where it is on the list". */}
         {place && !off && (
-          <span style={{ display: 'block', marginTop: 3 }}>
+          <span style={{ display: 'block', marginTop: 6 }}>
             <span style={{
-              ...text('bodyStrong'),
-              fontWeight: 700, color: ink.ink
+              ...text('caption'), fontWeight: 700, color: ink.ink,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '2px 9px', borderRadius: radius.pill,
+              border: `1.5px solid ${ink.ink}`
             }}>{place.headline}</span>
             {place.ahead && (
               <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
@@ -675,34 +702,38 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             on the green surgeon bookings. The panel lifts the name off whatever
             is behind it and works the same on Banana as on Grape, being made
             from the ink already chosen to be readable on that fill. */}
-        {surgicalCase.rep && (
-          <span style={{
-            ...text('caption'), display: 'inline-flex', alignItems: 'center',
-            marginTop: 4, padding: '1px 8px', borderRadius: radius.pill,
-            background: ink.line, color: ink.ink, fontWeight: 700
-          }}>
-            {/* The name in its own element, so it can be read — and found —
-                as a name rather than as part of a sentence. */}
-            Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
-          </span>
-        )}
-        {/* Who the team leader allocated, until somebody records who went —
-            then "Rep" says it. Outlined, not filled, because it is a plan. */}
-        {!surgicalCase.rep && surgicalCase.planned?.length > 0 && (
-          <span style={{
-            ...text('caption'), display: 'inline-flex', alignItems: 'center',
-            marginTop: 4, padding: '0 8px', borderRadius: radius.pill,
-            border: `1px solid ${ink.line}`, color: ink.ink
-          }}>
-            Planned: <strong style={{ fontWeight: 700, marginLeft: 3 }}>{surgicalCase.planned.join(' + ')}</strong>
-          </span>
-        )}
       </button>
 
         {/* The card shows the case; its two actions are a row of icons at the
             foot (Brent, 4 Nov 2026: "It's pretty busy"). The list order, once
             set, still reads as words beside its icon. */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2, marginTop: 2 }}>
+        {/* One footer row: who went (or is planned) on the left, the card's
+            two actions on the right. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 6, width: '100%' }}>
+          <span style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {surgicalCase.rep && (
+            <span style={{
+              ...text('caption'), display: 'inline-block',
+              padding: '2px 9px', borderRadius: radius.pill,
+              background: chipOn(ink), color: ink.ink, fontWeight: 700
+            }}>
+              {/* The name in its own element, so it can be read — and found —
+                  as a name rather than as part of a sentence. */}
+              Rep: <strong style={{ fontWeight: 700 }}>{surgicalCase.rep}</strong>
+            </span>
+          )}
+          {/* Who the team leader allocated, until somebody records who went —
+              then "Rep" says it. Outlined, not filled, because it is a plan. */}
+          {!surgicalCase.rep && surgicalCase.planned?.length > 0 && (
+            <span style={{
+              ...text('caption'), display: 'inline-block',
+              padding: '1px 9px', borderRadius: radius.pill,
+              border: `1px solid ${ink.line}`, color: ink.ink
+            }}>
+              Planned: <strong style={{ fontWeight: 700, }}>{surgicalCase.planned.join(' + ')}</strong>
+            </span>
+          )}
+          </span>
           {onSetPlace && !off && (
             <button type="button"
               aria-label={`Set where ${label} is on the list`}

@@ -182,7 +182,7 @@ describe('a navigation case', () => {
     // of our surgeons stays their colour rather than turning blueberry, which
     // would say the case is somebody else's.
     const card = [...container.querySelectorAll('div')]
-      .find(el => el.style.background === 'rgb(246, 192, 38)')   // Banana
+      .find(el => el.style.backgroundColor === 'rgb(246, 192, 38)')   // Banana, under the sheen
     expect(card, 'the card should be drawn in Banana').toBeTruthy()
   })
 

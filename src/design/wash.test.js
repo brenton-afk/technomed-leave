@@ -139,7 +139,7 @@ describe('the phone card and the week card are one thing at two sizes', () => {
   both('says who is on the case', /surgicalCase\.rep\b/)
 
   both('lifts the rep onto a panel so the name is readable on any colour',
-    /background: ink\.line, color: ink\.ink, fontWeight: 700/)
+    /background: (?:ink\.line|chipOn\(ink\)), color: ink\.ink, fontWeight: 700/)
 
   both('offers the list order', /onSetPlace\b/)
 
@@ -175,7 +175,7 @@ describe('the cards actually use it', () => {
     // apart at full strength end up about 6 apart on the card. That is the
     // whole reason Sage and Basil looked alike.
     for (const name of ['CaseCard', 'WeekCase']) {
-      expect(bodyOf(name), name).toMatch(/background: fill/)
+      expect(bodyOf(name), name).toMatch(/background(?:Color)?: fill/)
       expect(bodyOf(name), name).not.toMatch(/background: wash\b/)
     }
   })
