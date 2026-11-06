@@ -293,6 +293,34 @@ export function usageRoot() {
 }
 
 /** Folders and files directly under `path`, folders first. */
+/**
+ * The case folders already filed for this patient on this day, by name only.
+ *
+ * Brent, 6 Nov 2026, after the Matthews double-up: "a check should be 'is
+ * there already a folder in Dropbox?'". A deliberate, narrow exception to the
+ * usage read lock: it lists one surgeon's month folder and returns only the
+ * names that start `{Surname}_{DDMMYYYY}_` — never a file, never any content.
+ * The procedure part of the name is left out of the match because it is what
+ * differed between the two Matthews scans.
+ */
+export async function caseFoldersOnDay({ surgeonSurname, monthFolder, folderName }) {
+  const prefix = String(folderName || '').split('_').slice(0, 2).join('_').toLowerCase()
+  if (!surgeonSurname || !monthFolder || !/_\d{8}$/.test(prefix)) return []
+  const { ok, data, text } = await rpc('files/list_folder', {
+    path: `${ROOT}/${segment(surgeonSurname)}/${segment(monthFolder)}`,
+    recursive: false,
+    include_deleted: false,
+    limit: 500
+  })
+  if (!ok) {
+    if (String(data?.error_summary || text || '').includes('not_found')) return []
+    throw dropboxFault('check for an existing case folder', 0, data?.error_summary)
+  }
+  return (data.entries || [])
+    .filter(e => e['.tag'] === 'folder' && e.name.toLowerCase().startsWith(prefix + '_'))
+    .map(e => e.name)
+}
+
 export async function listFolder(path) {
   assertUsageReadable(path)
   const { ok, data, status, text } = await rpc('files/list_folder', {

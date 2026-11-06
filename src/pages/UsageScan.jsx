@@ -255,7 +255,8 @@ function Banner({ tone, children }) {
   const tones = {
     error: { bg: '#fdecea', fg: '#c0392b' },
     warn: { bg: AMBER, fg: AMBER_TEXT },
-    ok: { bg: '#e6f4f2', fg: TEAL }
+    ok: { bg: "#e6f4f2", fg: TEAL },
+    success: { bg: "#e6f4f2", fg: TEAL }
   }
   const t = tones[tone] || tones.ok
   return (
@@ -393,6 +394,58 @@ function AddMoreRow({ onScan, onUpload }) {
   )
 }
 
+/**
+ * This case is already filed (api/_usageDuplicate.js). Nothing has been filed
+ * or sent; this says what was, and offers the right next step — which is
+ * almost never filing it again.
+ */
+export function AlreadyFiled({ duplicate, busy, onDiscard, onAmend, onSeparate }) {
+  const { kind, earlier, added } = duplicate
+  const when = earlier.at
+    ? new Date(earlier.at).toLocaleString('en-AU', { timeZone: 'Australia/Hobart', weekday: 'short', hour: 'numeric', minute: '2-digit' })
+    : ''
+  const button = { width: '100%', padding: 13, borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: busy ? 'default' : 'pointer', marginTop: 8 }
+  return (
+    <div data-already-filed style={{ background: AMBER, border: `1px solid ${AMBER_TEXT}`, borderRadius: 12, padding: 14, marginTop: 18, color: AMBER_TEXT }}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
+        {kind === 'folder' ? 'A case is already filed for this patient today' : 'This usage is already filed'}
+      </div>
+      <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+        <strong style={{ wordBreak: 'break-all' }}>{earlier.folderName}</strong>
+        {earlier.by || when ? ` — filed${earlier.by ? ` by ${earlier.by}` : ''}${when ? ` ${when}` : ''}` : ''}
+        {earlier.sentTo?.length ? `, sent to ${earlier.sentTo.join(', ')}` : ''}.
+        {' '}Nothing from this scan has been filed or sent.
+      </div>
+      {kind === 'identical' && (
+        <div style={{ fontSize: 13, lineHeight: 1.5, marginTop: 6 }}>
+          This scan has nothing on it that case does not already have — the same items, lots and graft numbers.
+        </div>
+      )}
+      {kind === 'adds' && (
+        <div style={{ fontSize: 13, lineHeight: 1.5, marginTop: 6 }}>
+          It has {added.length} item{added.length === 1 ? '' : 's'} that case does not:{' '}
+          {added.map(i => `${i.quantity} × ${i.productName || i.referenceCode}${i.lotNumber ? ` (${i.lotNumber})` : ''}`).join('; ')}.
+          Add {added.length === 1 ? 'it' : 'them'} to the earlier case with Amend — the distributor gets a correction, not a second usage.
+        </div>
+      )}
+      {kind === 'adds' && (
+        <button type="button" onClick={onAmend} disabled={busy}
+          style={{ ...button, background: AMBER_TEXT, color: 'white', border: 'none' }}>
+          Amend the earlier case
+        </button>
+      )}
+      <button type="button" onClick={onDiscard} disabled={busy}
+        style={{ ...button, background: kind === 'adds' ? 'white' : AMBER_TEXT, color: kind === 'adds' ? AMBER_TEXT : 'white', border: kind === 'adds' ? `1px solid ${AMBER_TEXT}` : 'none' }}>
+        Discard this scan
+      </button>
+      <button type="button" onClick={onSeparate} disabled={busy}
+        style={{ ...button, background: 'transparent', color: AMBER_TEXT, border: 'none', fontWeight: 600, fontSize: 13 }}>
+        It is a different operation — file it as a separate case
+      </button>
+    </div>
+  )
+}
+
 export default function UsageScan({ user, switcher }) {
   // Usage forms are scanned on a phone, held over the paper on a theatre bench.
   // Nobody has ever scanned one with a laptop and nobody is going to — there is
@@ -411,6 +464,8 @@ export default function UsageScan({ user, switcher }) {
   // away, without reading state that has not been committed yet.
   const pagesRef = useRef([])
   const [caseRecord, setCaseRecord] = useState(null)
+  // Set when the save found this case already filed (see confirmAndSend).
+  const [duplicate, setDuplicate] = useState(null)
   // Which past usage is open for a correction (scan/AmendUsage.jsx).
   const [amending, setAmending] = useState(null)
   const [history, setHistory] = useState([])
@@ -512,7 +567,7 @@ export default function UsageScan({ user, switcher }) {
 
   function startNew() {
     pagesRef.current = []
-    setPages([]); setCaseRecord(null); setResult(null)
+    setPages([]); setCaseRecord(null); setResult(null); setDuplicate(null)
     setError(''); setNotice(''); setStep('capture'); setShowCamera(true)
   }
 
@@ -612,7 +667,7 @@ export default function UsageScan({ user, switcher }) {
 
   // Save to Dropbox, then email. Emails only go out once the files are safely
   // stored, so a Dropbox failure is always retryable without double-sending.
-  async function confirmAndSend({ testOnly = false } = {}) {
+  async function confirmAndSend({ testOnly = false, separate = false } = {}) {
     setBusy(true); setError(''); setNotice('')
     try {
       const saveRes = await fetch('/api/usage/agent?action=save', {
@@ -620,11 +675,24 @@ export default function UsageScan({ user, switcher }) {
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           case: caseRecord,
-          pages: filingPages(pages)
+          pages: filingPages(pages),
+          // Only from "It's a different operation" on the already-filed panel.
+          confirmSeparate: separate
         })
       })
       const saved = await saveRes.json()
+      // Already filed (api/_usageDuplicate.js): nothing was filed or sent.
+      // The panel on this screen says what was, and what to do instead.
+      if (saved.error === 'duplicate' && saved.duplicate) {
+        setDuplicate(saved.duplicate)
+        setBusy(false)
+        return
+      }
       if (saved.error) throw new Error(saved.error)
+      // This scan is now that case. Any later save of it — the real send after
+      // a test, a second tap — updates the case rather than making another.
+      setCaseRecord(c => ({ ...c, id: saved.record.id, createdAt: saved.record.createdAt }))
+      setDuplicate(null)
 
       const emailRes = await fetch('/api/usage/agent?action=email', {
         method: 'POST',
@@ -661,6 +729,27 @@ export default function UsageScan({ user, switcher }) {
       setError(err.message)
     }
     setBusy(false)
+  }
+
+  // Takes a case scanned twice off the record (kept, marked removed — see
+  // handleRemoveDuplicate). Never touches Dropbox or what was emailed.
+  async function removeDuplicate(h) {
+    const sure = window.confirm(`Remove ${h.folderName} as a duplicate?\n\n`
+      + 'It comes off the usage history and Still owed. Its Dropbox folder and any emails already sent are not changed.')
+    if (!sure) return
+    try {
+      const res = await fetch('/api/usage/agent?action=remove-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ usageId: h.id, reason: 'duplicate scan' })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setNotice(`${h.folderName} removed as a duplicate.`)
+      loadHistory()
+    } catch (err) {
+      setError('Could not remove it: ' + err.message)
+    }
   }
 
   async function resendFailed({ held = false } = {}) {
@@ -705,6 +794,7 @@ export default function UsageScan({ user, switcher }) {
         </Header>
         <div style={{ padding: 16 }}>
           {error && <Banner tone="danger">{error}</Banner>}
+          {notice && <Banner tone="success">{notice}</Banner>}
           {!desktop && (
             <button onClick={startNew}
               style={{
@@ -760,6 +850,12 @@ export default function UsageScan({ user, switcher }) {
                   {heldBack > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: AMBER, color: AMBER_TEXT }}>{heldBack} held — already sent</span>}
                   {h.amendments > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#fff3cd', color: '#856404' }}>Amended{h.amendments > 1 ? ` ×${h.amendments}` : ''}</span>}
                   {/* Something missed after it had gone — Aimee's cross link. */}
+                  {(user?.isAdmin || (h.createdByEmail && h.createdByEmail === user?.email)) && (
+                    <button type="button" onClick={() => removeDuplicate(h)}
+                      style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', minHeight: 32, borderRadius: 20, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: '#c0392b' }}>
+                      Remove duplicate
+                    </button>
+                  )}
                   <button type="button" onClick={() => setAmending(h.id)}
                     style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, padding: '4px 12px', minHeight: 32, borderRadius: 20, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: NAVY }}>
                     Amend
@@ -1032,7 +1128,13 @@ export default function UsageScan({ user, switcher }) {
             )
           ))}
 
-          <button onClick={confirmAndSend} disabled={busy || sendable.length === 0}
+          {duplicate && (
+            <AlreadyFiled duplicate={duplicate} busy={busy}
+              onDiscard={() => { startNew(); setShowCamera(false); setStep(desktop ? 'history' : 'capture') }}
+              onAmend={() => { setAmending(duplicate.earlier.id); setDuplicate(null); setStep('history'); loadHistory() }}
+              onSeparate={() => confirmAndSend({ separate: true })} />
+          )}
+          <button onClick={() => confirmAndSend()} disabled={busy || sendable.length === 0 || Boolean(duplicate)}
             style={{ width: '100%', padding: 15, background: (busy || sendable.length === 0) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', margin: '18px 0 10px' }}>
             {busy ? 'Saving and sending…' : `Confirm — file to Dropbox & email${sendable.length ? ` (${sendable.length} item${sendable.length === 1 ? '' : 's'})` : ''}`}
           </button>
@@ -1040,7 +1142,7 @@ export default function UsageScan({ user, switcher }) {
               sends the identical message and attachment to whoever is signed in,
               and to nobody else — the address comes from the session, so there is
               no way to type one in. */}
-          <button onClick={() => confirmAndSend({ testOnly: true })} disabled={busy || sendable.length === 0}
+          <button onClick={() => confirmAndSend({ testOnly: true })} disabled={busy || sendable.length === 0 || Boolean(duplicate)}
             style={{ width: '100%', padding: 13, background: 'transparent', border: `1px solid ${TEAL}`, borderRadius: 10, fontSize: 13.5, fontWeight: 600, color: TEAL, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', marginBottom: 10 }}>
             {busy ? 'Sending…' : `Send a test to me only (${user?.email || 'your address'})`}
           </button>

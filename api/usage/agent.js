@@ -5,7 +5,7 @@ import { STAFF, firstNameFor } from '../../src/staffConfig.js'
 import {
   saveUsageRecord, getUsageRecord, getUsageHistory,
   setUsageReviewed, getUsageReviews,
-  claimResupply, saveResupply, getResupply, getCaseResupplies
+  claimResupply, saveResupply, getResupply, getCaseResupplies, removeUsageRecord
 } from '../_redis.js'
 import {
   RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply,
@@ -17,10 +17,11 @@ import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
-  listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile
+  listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile, caseFoldersOnDay
 } from '../_dropbox.js'
 import { amendItems, changesByDistributor } from '../_usageAmend.js'
 import { earlierSends } from '../_usageRepeat.js'
+import { findDuplicate, freeFolderName } from '../_usageDuplicate.js'
 import { sendUsageEmail } from '../_email.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
@@ -86,6 +87,7 @@ export default async function handler(req, res) {
     if (action === 'reviewed') return await handleReviewed(req, res, session)
     if (action === 'record') return await handleRecord(req, res)
     if (action === 'amend') return await handleAmend(req, res, session)
+    if (action === 'remove-duplicate') return await handleRemoveDuplicate(req, res, session)
     if (action === 'resupply-read') return await handleResupplyRead(req, res)
     if (action === 'resupply-compare') return await handleResupplyCompare(req, res)
     if (action === 'resupply-save') return await handleResupplySave(req, res, session)
@@ -237,6 +239,28 @@ async function handleSave(req, res, session) {
 
   const included = caseRecord.items.filter(i => !i.excluded)
   if (included.length === 0) throw badRequest('There are no items to save')
+
+  // Already filed? (api/_usageDuplicate.js — the Matthews double-up.) The
+  // portal's own records and the Dropbox case folders for this patient and
+  // day, before anything is written. A duplicate is not filed and not sent;
+  // the rep sees what was filed and decides. Only "this is a different case"
+  // files it — under a name that cannot be an existing folder.
+  const records = await getUsageHistory(300)
+  let folders = []
+  if (dropboxConfigured()) {
+    try { folders = await caseFoldersOnDay(caseRecord) } catch { /* the records still answer */ }
+  }
+  const duplicate = findDuplicate({ ...caseRecord, id: incoming.id }, records, folders)
+  if (duplicate && !req.body?.confirmSeparate) {
+    return res.status(409).json({ error: 'duplicate', duplicate })
+  }
+  if (duplicate) {
+    const taken = [...folders, ...records
+      .filter(r => String(r.patientSurname || '').toLowerCase() === String(caseRecord.patientSurname).toLowerCase()
+        && r.date === caseRecord.date)
+      .map(r => r.folderName)]
+    caseRecord.folderName = freeFolderName(caseRecord.folderName, taken)
+  }
 
   const folderPath = caseFolderPath(caseRecord)
   const [scanPdf, usageSheet] = await Promise.all([
@@ -696,6 +720,7 @@ async function handleList(req, res) {
       filesSaved: r.filesSaved || [],
       emailsSent: r.emailsSent || [],
       amendments: (r.amendments || []).length,
+      createdByEmail: r.createdByEmail || '',
       createdAt: r.createdAt
     }))
   })
@@ -874,4 +899,26 @@ async function handleResupplyOwing(req, res) {
   }
   rows.sort((a, b) => (b.days || 0) - (a.days || 0))
   return res.status(200).json({ rows, trackingFrom: TRACK_FROM })
+}
+
+// ─── Removing a duplicate case (Brent, 6 Nov 2026) ─────────────────────────
+// The Matthews double-up left a second case on record; without this it would
+// sit in history and on Still owed asking for a second Boost resupply. An
+// admin, or whoever scanned it, can take it off — kept, marked removed, never
+// erased. Dropbox and the email log are left as they are.
+async function handleRemoveDuplicate(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { usageId, reason } = req.body || {}
+  if (!usageId) throw badRequest('No usage case chosen')
+  const record = await getUsageRecord(usageId)
+  if (!record) return res.status(404).json({ error: 'That usage case could not be found' })
+  const admin = STAFF.some(s => s.email === session.email && s.isAdmin)
+  if (!admin && record.createdByEmail !== session.email) {
+    return res.status(403).json({ error: 'Only an admin, or whoever scanned it, can remove a case' })
+  }
+  const removed = await removeUsageRecord(usageId, {
+    by: session.name, byEmail: session.email, at: new Date().toISOString(),
+    reason: String(reason || 'duplicate').slice(0, 200)
+  })
+  return res.status(200).json({ removed: Boolean(removed) })
 }

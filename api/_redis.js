@@ -250,6 +250,22 @@ export async function saveUsageRecord(record) {
   await redis('lpush', 'usage:all', record.id)
 }
 
+/**
+ * Takes a duplicate case out of everything that reads usage — history, Still
+ * owed, resupply matching, the duplicate checks — without erasing it. The
+ * record stays, marked with who removed it, when and why, under
+ * `usage:removed`. Dropbox and the sent-email log are not touched.
+ */
+export async function removeUsageRecord(id, removed) {
+  const data = await redis('get', `usage:${id}`)
+  if (!data) return null
+  const record = { ...JSON.parse(data), removed }
+  await redisSetBody(`usage:${id}`, JSON.stringify(record))
+  await redis('lrem', 'usage:all', '0', id)
+  await redis('lpush', 'usage:removed', id)
+  return record
+}
+
 export async function getUsageRecord(id) {
   const data = await redis('get', `usage:${id}`)
   return data ? JSON.parse(data) : null

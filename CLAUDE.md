@@ -849,6 +849,23 @@ Invariants worth preserving:
   usage for that surname and date from another case is **held** (`held: true`,
   shown amber, "Send to … anyway" sends with `confirmRepeat`); a real addition
   belongs in Amend, which sends a correction. Tests are never held.
+- **A case is filed once** (Brent, 6 Nov 2026: "is there already a folder in
+  Dropbox?"). Before anything is written, `action=save` checks the portal's
+  records and the Dropbox case folders for that patient and day
+  (`caseFoldersOnDay` — names only in one surgeon's month folder, a deliberate
+  narrow exception to the read lock, matching `{Surname}_{DDMMYYYY}_` so a
+  differently-read procedure cannot hide it) and compares items by code, lot /
+  graft number and quantity (`findDuplicate` in `api/_usageDuplicate.js`).
+  Identical or nothing new → 409 `duplicate`, nothing filed or sent, and the
+  review shows **AlreadyFiled** (Discard); something new → Amend the earlier
+  case; a folder with no record → confirm. "It is a different operation"
+  sends `confirmSeparate`, filed under `freeFolderName` (`…_2`) so it can never
+  land in or overwrite an existing folder. A folder of exactly this case's name
+  and no record is a retry of the same save and passes. After a save the
+  screen keeps the case id, so a test then the real send update one case.
+  **Remove duplicate** (admins, or whoever scanned it) takes a case off history,
+  Still owed and matching — `removeUsageRecord`, kept under `usage:removed`,
+  never erased; Dropbox and the email log are untouched.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
 - **The distributor email carries two attachments**: the 20-column sheet of their
   own items, and the scanned form with every page merged into one PDF
