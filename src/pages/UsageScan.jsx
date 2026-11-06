@@ -3,9 +3,11 @@ import { reorder } from './scan/pageList.js'
 import RegistrarText from './scan/RegistrarText.jsx'
 import AmendUsage from './scan/AmendUsage.jsx'
 import CameraSheet from './scan/CameraSheet.jsx'
+import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { partitionItems } from '../usageReview.js'
 import { useIsDesktop } from '../design/viewport.js'
+import { Header as ShellHeader } from '../design/Shell.jsx'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -217,15 +219,9 @@ function folderPreview(c) {
 // used to be: that number is one particular iPhone's status bar, and it is wrong on
 // a desktop and on the newest phones alike.
 function Header({ title, subtitle, children }) {
-  return (
-    <div style={{ background: NAVY, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)', paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }}>
-      <img src="/logo.png" alt="TechnoMed" style={{ height: 36, width: 'auto', marginBottom: 4 }} />
-      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 }}>Usage Scanning</div>
-      <div style={{ fontSize: 19, fontWeight: 700, color: 'white' }}>{title}</div>
-      {subtitle && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>{subtitle}</div>}
-      {children}
-    </div>
-  )
+  // The app's own header, so Usage and Resupply read as one Scan tab (Brent,
+  // 6 Nov 2026: "keep it consistent"). It carries the safe-area inset itself.
+  return <ShellHeader title={title} subtitle={subtitle}>{children}</ShellHeader>
 }
 
 const inputStyle = {
@@ -270,129 +266,8 @@ function Banner({ tone, children }) {
 
 
 // ─── The first screen of a scan ──────────────────────────────────────────────
-// "Change the first scan page from that green button with a camera, it looks a
-// bit basic and primitive. Make it look sleek and modern."
-//
-// It was two squat buttons wearing emoji — 📷 and 📄 — set at the same weight,
-// so the screen said nothing about which of the two anybody came to do. Nearly
-// everyone opening this is about to photograph a form; uploading a PDF is the
-// exception. An emoji is also a different typeface on every handset, which is
-// most of what made it look improvised.
-//
-// So: one target to aim at, drawn in the same language as the scanner it opens.
-// The corner brackets are the viewfinder's own outline, which is what the next
-// screen puts over the page — the button looks like the thing it leads to.
-// Upload keeps its place underneath, quieter, where an exception belongs.
-//
-// Once there are pages, the target gives way: the thumbnails are the subject of
-// the screen by then, and a hero above work already done is decoration.
-
-/** Line icons, at a common stroke so they sit together. */
-function Icon({ path, size = 22, stroke = 1.7 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true"
-      stroke="currentColor" strokeWidth={stroke}
-      strokeLinecap="round" strokeLinejoin="round">
-      {path}
-    </svg>
-  )
-}
-
-const CameraIcon = props => (
-  <Icon {...props} path={<>
-    <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.8a1 1 0 0 0 .83-.45l.74-1.1A1 1 0 0 1 9.7 4h4.6a1 1 0 0 1 .83.45l.74 1.1a1 1 0 0 0 .83.45h1.8A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5Z" />
-    <circle cx="12" cy="12.5" r="3.4" />
-  </>} />
-)
-
-const UploadIcon = props => (
-  <Icon {...props} path={<>
-    <path d="M12 15.5V4.5" />
-    <path d="m8 8 4-3.5L16 8" />
-    <path d="M4.5 14.5v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" />
-  </>} />
-)
-
-/**
- * The viewfinder's brackets, as the corners of a box.
- *
- * preserveAspectRatio="none" on purpose: the brackets are meant to sit at the
- * corners of whatever shape this is drawn over, not to keep their own.
- * strokeWidth is in the stretched space, so it is set small and the stretch
- * carries it — the alternative is four separately positioned SVGs.
- */
-function Brackets({ inset = 10, colour = 'rgba(255,255,255,0.7)' }) {
-  return (
-    <svg aria-hidden="true" style={{ position: 'absolute', inset, pointerEvents: 'none' }}
-      width="100%" height="100%"
-      viewBox="0 0 100 100" preserveAspectRatio="none" fill="none"
-      stroke={colour} strokeWidth={0.8} vectorEffect="non-scaling-stroke">
-      <path d="M 0 13 L 0 0 L 9 0" />
-      <path d="M 91 0 L 100 0 L 100 13" />
-      <path d="M 100 87 L 100 100 L 91 100" />
-      <path d="M 9 100 L 0 100 L 0 87" />
-    </svg>
-  )
-}
-
-/**
- * The thing you came here to press.
- *
- * Tall enough to aim at without looking, which is the posture this is used in:
- * a phone in one hand over a bench, the other hand holding the form flat.
- */
-function ScanTarget({ onClick, pageCount }) {
-  return (
-    <button type="button" onClick={onClick}
-      style={{
-        position: 'relative', width: '100%', cursor: 'pointer',
-        border: 'none', borderRadius: 18, padding: '30px 20px 26px',
-        background: `linear-gradient(150deg, ${NAVY} 0%, #0b3f5e 55%, ${TEAL} 180%)`,
-        color: 'white', overflow: 'hidden',
-        boxShadow: '0 10px 28px rgba(4,39,70,0.22)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10
-      }}>
-      <Brackets />
-      <span style={{
-        width: 54, height: 54, borderRadius: 27,
-        background: 'rgba(255,255,255,0.14)',
-        border: '1px solid rgba(255,255,255,0.28)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}>
-        <CameraIcon size={26} />
-      </span>
-      <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.2px' }}>
-        {pageCount ? 'Add another page' : 'Scan the usage form'}
-      </span>
-      <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', textAlign: 'center' }}>
-        Any surface, any angle — the edges are found for you
-      </span>
-    </button>
-  )
-}
-
-/** The same action, once the pages below it have become the subject. */
-function AddMoreRow({ onScan, onUpload }) {
-  const style = primary => ({
-    flexGrow: 1, flexShrink: 1, flexBasis: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-    minHeight: 48, borderRadius: 12, cursor: 'pointer',
-    fontSize: 14, fontWeight: 700,
-    background: primary ? NAVY : 'white',
-    color: primary ? 'white' : NAVY,
-    border: primary ? 'none' : `1px solid ${BORDER}`
-  })
-  return (
-    <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-      <button type="button" onClick={onScan} style={style(true)}>
-        <CameraIcon size={19} />Add a page
-      </button>
-      <button type="button" onClick={onUpload} style={style(false)}>
-        <UploadIcon size={19} />Upload
-      </button>
-    </div>
-  )
-}
+// Drawn by scan/ScanPages.jsx, shared with the Resupply scanner so the two
+// look and work the same (Brent, 6 Nov 2026: "keep it consistent").
 
 /**
  * This case is already filed (api/_usageDuplicate.js). Nothing has been filed
@@ -796,16 +671,7 @@ export default function UsageScan({ user, switcher }) {
           {error && <Banner tone="danger">{error}</Banner>}
           {notice && <Banner tone="success">{notice}</Banner>}
           {!desktop && (
-            <button onClick={startNew}
-              style={{
-                width: '100%', minHeight: 54, marginBottom: 16,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-                background: TEAL, color: 'white', border: 'none', borderRadius: 14,
-                fontSize: 15.5, fontWeight: 700, letterSpacing: '-0.2px',
-                cursor: 'pointer', boxShadow: '0 6px 18px rgba(24,154,133,0.28)'
-              }}>
-              <CameraIcon size={20} />New usage scan
-            </button>
+            <NewScanButton label="New usage scan" onClick={startNew} />
           )}
           {/* Said once, plainly, rather than offering a button that cannot
               work. A laptop has no camera pointed at a usage form. */}
@@ -883,87 +749,13 @@ export default function UsageScan({ user, switcher }) {
           <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ fontSize: 16, display: 'none' }}
             onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
 
-          {/* Before anything has been photographed the target is the screen;
-              afterwards the pages are, and it steps back into a row. */}
-          {pages.length === 0 ? (
-            <>
-              <ScanTarget onClick={() => setShowCamera(true)} pageCount={0} />
-              <button type="button" onClick={() => uploadRef.current?.click()}
-                style={{
-                  width: '100%', minHeight: 46, marginTop: 10, marginBottom: 18,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  background: 'transparent', border: `1px solid ${BORDER}`,
-                  borderRadius: 12, color: MUTED, fontSize: 13.5, fontWeight: 600,
-                  cursor: 'pointer'
-                }}>
-                <UploadIcon size={18} />Upload a file instead
-              </button>
-            </>
-          ) : (
-            <AddMoreRow
-              onScan={() => setShowCamera(true)}
-              onUpload={() => uploadRef.current?.click()} />
-          )}
-
-          {pages.length > 0 && (
-            <>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase',
-                letterSpacing: '0.6px', marginBottom: 10
-              }}>
-                {pages.length} page{pages.length === 1 ? '' : 's'} ready
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
-                {pages.map((p, i) => (
-                  <div key={p.id} style={{ position: 'relative', background: 'white', borderRadius: 10, overflow: 'hidden', border: `1px solid ${BORDER}`, aspectRatio: '3/4' }}>
-                    {p.preview
-                      ? <img src={p.preview} alt={`Page ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 4, color: MUTED, fontSize: 11, padding: 6, textAlign: 'center' }}>
-                          <span style={{ fontSize: 22 }}>📄</span>PDF
-                        </div>}
-                    <button onClick={() => removePage(p.id)} aria-label={`Remove page ${i + 1}`}
-                      style={{ position: 'absolute', top: 4, right: 4, width: 24, height: 24, borderRadius: 12, border: 'none', background: 'rgba(4,39,70,0.75)', color: 'white', fontSize: 14, cursor: 'pointer', lineHeight: 1 }}>×</button>
-                    {/* Put a page back in its right place rather than scanning
-                        the form again. Only offered where there is somewhere
-                        for it to go — a lone page has no order to be in. */}
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', alignItems: 'stretch', background: 'rgba(4,39,70,0.72)' }}>
-                      {pages.length > 1 && (
-                        <button onClick={() => movePage(p.id, -1)} disabled={i === 0}
-                          aria-label={`Move page ${i + 1} earlier`}
-                          style={{ width: 26, border: 'none', background: 'transparent', color: i === 0 ? 'rgba(255,255,255,0.3)' : 'white', fontSize: 13, cursor: i === 0 ? 'default' : 'pointer', padding: '3px 0' }}>‹</button>
-                      )}
-                      <span style={{ flex: 1, color: 'white', fontSize: 10, padding: '3px 2px', textAlign: 'center' }}>Page {i + 1}</span>
-                      {pages.length > 1 && (
-                        <button onClick={() => movePage(p.id, 1)} disabled={i === pages.length - 1}
-                          aria-label={`Move page ${i + 1} later`}
-                          style={{ width: 26, border: 'none', background: 'transparent', color: i === pages.length - 1 ? 'rgba(255,255,255,0.3)' : 'white', fontSize: 13, cursor: i === pages.length - 1 ? 'default' : 'pointer', padding: '3px 0' }}>›</button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Only once there is something to read. An action that is present
-              and dead on arrival is the thing that makes a screen feel
-              unfinished — and on this one it was the first thing under the
-              buttons, greyed, on every fresh scan. */}
-          {pages.length > 0 && (
-            <button onClick={processScan} disabled={busy}
-              style={{
-                width: '100%', minHeight: 54, marginBottom: 10,
-                background: TEAL, color: 'white', border: 'none', borderRadius: 14,
-                fontSize: 15.5, fontWeight: 700, letterSpacing: '-0.2px',
-                cursor: busy ? 'default' : 'pointer',
-                boxShadow: '0 6px 18px rgba(24,154,133,0.28)',
-                opacity: busy ? 0.65 : 1
-              }}>
-              {busy
-                ? 'Reading…'
-                : `Read ${pages.length} page${pages.length === 1 ? '' : 's'}`}
-            </button>
-          )}
+          <ScanPages pages={pages} busy={busy}
+            scanLabel="Scan the usage form"
+            onScan={() => setShowCamera(true)}
+            onUpload={() => uploadRef.current?.click()}
+            onRemove={removePage}
+            onMove={movePage}
+            onRead={processScan} />
           <button onClick={() => setStep('history')}
             style={{
               width: '100%', minHeight: 44, background: 'transparent', border: 'none',

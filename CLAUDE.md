@@ -893,6 +893,14 @@ The Scan tab is one camera with a choice of what the paper is — **Usage |
 Resupply** (`scan/ScanKind.jsx`, remembered per phone in `tm_scan_kind`;
 `ScanTab.jsx` picks the screen). Tray restock and stock-take join that row
 later. `ResupplyScan.jsx` reuses UsageScan's page helpers and `CameraSheet`.
+**Both draw their capture step with `scan/ScanPages.jsx`** (Brent, 6 Nov 2026:
+"keep it consistent … mimic the scan pages of Google Drive"): a white card
+with a page-and-corners picture and one round shutter before the first page;
+then a strip of thumbnails (number, ×, ‹ ›) ending in a dashed "Add page"
+tile, one wide "Read N pages" pill and Upload. `NewScanButton` is the start
+pill on both. UsageScan's local `Header` now wraps Shell's, so both tabs share
+one header; the Usage | Resupply switch hides mid-scan on both. New scan
+kinds use these — never a screen of their own.
 
 What comes back after a usage — a delivery docket, packing slip, or the photo
 E4 replies to the usage email with — is read (`RESUPPLY_PROMPT` in

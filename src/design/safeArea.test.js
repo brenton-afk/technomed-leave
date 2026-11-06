@@ -74,10 +74,11 @@ describe('the app shell', () => {
 })
 
 describe('every screen with its own navy header', () => {
-  // Two screens predate the design system and draw their own. Both hardcoded a
+  // Screens that predate the design system and draw their own. They hardcoded a
   // 56px top padding, which is one particular iPhone's status bar: too much on a
-  // desktop, too little on the newest phones.
-  const bespoke = ['src/pages/UsageScan.jsx', 'src/pages/admin/AdminPortal.jsx']
+  // desktop, too little on the newest phones. UsageScan left this list on
+  // 6 Nov 2026 — it now uses Shell's Header, which carries the inset itself.
+  const bespoke = ['src/pages/admin/AdminPortal.jsx']
 
   it.each(bespoke)('%s uses the inset rather than a fixed guess', file => {
     const source = read(file)
@@ -127,7 +128,7 @@ describe('no screen is left out', () => {
     'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx',
     // The Scan tab's wrapper and its Usage | Resupply switch: drawn inside
     // UsageScan's or ResupplyScan's header.
-    'ScanTab.jsx', 'scan/ScanKind.jsx',
+    'ScanTab.jsx', 'scan/ScanKind.jsx', 'scan/ScanPages.jsx',
    
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import CameraSheet from './scan/CameraSheet.jsx'
 import ScanKindSwitch from './scan/ScanKind.jsx'
+import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
+import { reorder } from './scan/pageList.js'
 import { fileToPage, pageFromPreview, filingPages, payloadBytes } from './UsageScan.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { Page, Header, Banner, Button } from '../design/Shell.jsx'
@@ -210,9 +212,11 @@ export default function ResupplyScan({ user, kind, onKind }) {
     setBusy(false)
   }
 
+  // The Usage | Resupply switch, except mid-scan — as on the Usage side,
+  // switching then would drop the pages already taken.
   const header = (title, subtitle) => (
     <Header title={title} subtitle={subtitle}>
-      <ScanKindSwitch kind={kind} onChange={onKind} />
+      {!(pages.length && ['capture', 'reading', 'review'].includes(step)) && <ScanKindSwitch kind={kind} onChange={onKind} />}
     </Header>
   )
 
@@ -309,7 +313,7 @@ export default function ResupplyScan({ user, kind, onKind }) {
             </Banner>
           )}
           <Comparison comparison={saved.comparison} />
-          <Button onClick={startNew}>Scan another resupply</Button>
+          <NewScanButton label="Scan another resupply" onClick={startNew} />
           <div style={{ height: space.sm }} />
           <Button variant="quiet" onClick={() => setStep('home')}>Still owed</Button>
         </div>
@@ -321,32 +325,23 @@ export default function ResupplyScan({ user, kind, onKind }) {
   if (step === 'capture') {
     return (
       <Page>
-        {header('Resupply pages', 'The docket, packing slip or the photo that came with the stock')}
+        {header('Add pages', 'Photograph or upload every page of the resupply')}
         <div style={{ padding: space.md }}>
           {error && <Banner tone="danger">{error}</Banner>}
           <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none', fontSize: 16 }}
             onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-          <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md }}>
-            {pages.map((p, i) => (
-              <div key={p.id} style={{ position: 'relative' }}>
-                {p.preview
-                  ? <img src={p.preview} alt={`Page ${i + 1}`} style={{ width: 84, height: 112, objectFit: 'cover', borderRadius: radius.control, border: `1px solid ${colour.line}` }} />
-                  : <div style={{ width: 84, height: 112, borderRadius: radius.control, border: `1px solid ${colour.line}`, display: 'grid', placeItems: 'center', ...text('caption') }}>PDF</div>}
-                <button type="button" aria-label={`Remove page ${i + 1}`}
-                  onClick={() => { pagesRef.current = pages.filter(x => x.id !== p.id); setPages(pagesRef.current) }}
-                  style={{ display: 'block', width: '100%', minHeight: 32, marginTop: 2, border: 'none', background: 'none', color: colour.danger, ...text('caption'), cursor: 'pointer' }}>
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
-          <Button onClick={() => setShowCamera(true)}>{pages.length ? 'Add another page' : 'Open the camera'}</Button>
-          <div style={{ height: space.sm }} />
-          <Button variant="secondary" onClick={() => uploadRef.current?.click()}>Choose a photo or PDF</Button>
-          <div style={{ height: space.sm }} />
-          {pages.length > 0 && <Button onClick={readIt} disabled={busy}>Read the resupply</Button>}
-          <div style={{ height: space.sm }} />
-          <Button variant="quiet" onClick={() => setStep('home')}>Cancel</Button>
+          <ScanPages pages={pages} busy={busy}
+            scanLabel="Scan the resupply"
+            hint="The docket, packing slip or the photo that came with the stock — hold the phone over it."
+            onScan={() => setShowCamera(true)}
+            onUpload={() => uploadRef.current?.click()}
+            onRemove={id => { pagesRef.current = pages.filter(x => x.id !== id); setPages(pagesRef.current) }}
+            onMove={(id, by) => { const next = reorder(pages, id, by); if (next !== pages) { pagesRef.current = next; setPages(next) } }}
+            onRead={readIt} />
+          <button type="button" onClick={() => setStep('home')}
+            style={{ width: '100%', minHeight: 44, background: 'transparent', border: 'none', ...text('bodyStrong'), color: colour.inkFaint, cursor: 'pointer' }}>
+            Still owed
+          </button>
         </div>
         {showCamera && (
           <CameraSheet
@@ -370,9 +365,7 @@ export default function ResupplyScan({ user, kind, onKind }) {
         {error && <Banner tone="danger">{error}</Banner>}
         <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none', fontSize: 16 }}
           onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-        <Button onClick={startNew}>Scan a resupply</Button>
-        <div style={{ height: space.sm }} />
-        <Button variant="secondary" onClick={() => uploadRef.current?.click()}>From a photo or emailed PDF</Button>
+        <NewScanButton label="New resupply scan" onClick={startNew} />
 
         <div style={label}>Still owed{rows.length ? ` · ${rows.length}` : ''}</div>
         {!owing && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}

@@ -18,7 +18,7 @@ const MIGRATED = [
   'cases/NewTask.jsx', 'cases/ListOrder.jsx',
   'cases/BookingQueue.jsx', 'cases/DictateBooking.jsx', 'cases/ListPlace.jsx',
   'cases/TeamLeaderStrip.jsx', 'cases/CaseSearch.jsx', 'PreferenceCards.jsx', 'cases/NoticeSheet.jsx', 'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx',
-  'ResupplyScan.jsx', 'ScanTab.jsx', 'scan/ScanKind.jsx',
+  'ResupplyScan.jsx', 'ScanTab.jsx', 'scan/ScanKind.jsx', 'scan/ScanPages.jsx',
   'projects/ProjectList.jsx', 'projects/ProjectBoard.jsx', 'projects/TaskSheet.jsx', 'projects/Workspace.jsx', 'projects/MyToDo.jsx',
   'voice/VoiceSheet.jsx',
   'leave/DateRange.jsx',

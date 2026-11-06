@@ -49,7 +49,7 @@ describe('the resupply scanner', () => {
     const { container } = render(<ScanTab user={{ token: 't' }} />)
     const input = container.querySelector('input[type=file]')
     fireEvent.change(input, { target: { files: [pdf()] } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Read the resupply' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
     await waitFor(() => expect(screen.getByText('1 still owed')).toBeInTheDocument())
     expect(screen.getAllByText('Reform polyaxial screw').length).toBeGreaterThan(0)
     expect(screen.getByRole('radio', { checked: true })).toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('the resupply scanner', () => {
   it('records it once, against the chosen case, with the pages for filing', async () => {
     const { container } = render(<ScanTab user={{ token: 't' }} />)
     fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Read the resupply' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Record and file in the case folder' }))
     await waitFor(() => expect(screen.getByText(/Filed in the case folder as/)).toBeInTheDocument())
     const save = calls.find(c => c.action === 'resupply-save')
