@@ -67,7 +67,7 @@ const TILES = logoTiles()
 // The phone's: fewer, smaller and faint, across the whole band — texture
 // behind the (solid) buttons rather than a picture (Brent, 6 Nov 2026).
 const SUBTLE_TILES = logoTiles({ count: 46, seed: 19 }).map(t => ({
-  ...t, size: Math.min(Math.max(t.size, 8), 20), opacity: Number((0.4 + t.opacity * 0.4).toFixed(2))
+  ...t, size: Math.min(Math.max(t.size, 8), 20), opacity: Number((0.45 + t.opacity * 0.35).toFixed(2))
 }))
 
 // Pressed tin (Brent, 6 Nov 2026: "a little more visible … sort of embossed").
@@ -83,13 +83,19 @@ const EMBOSS = {
   ].join(', '),
   borderRadius: 2
 }
-const tinFace = hex => `linear-gradient(135deg, ${hex}b3 0%, ${hex}66 55%, rgba(0,0,0,0.12) 100%)`
+const FADE_ABOVE_STRIP = 'linear-gradient(to bottom, #000 0, #000 calc(100% - 118px), transparent calc(100% - 82px))'
+const tinFace = hex => `linear-gradient(135deg, ${hex} 0%, ${hex}bb 60%, ${hex}88 100%)`
 
 function BandArt({ subtle }) {
   const tiles = subtle ? SUBTLE_TILES : TILES
   return (
     <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: subtle ? '100%' : '62%' }}>
+      {/* The phone's tiles stop above the day strip at the foot of the band
+          ("don't have them encroaching on to the days and dates tab"). */}
+      <div style={{
+        position: 'absolute', top: 0, bottom: 0, right: 0, width: subtle ? '100%' : '62%',
+        ...(subtle ? { WebkitMaskImage: FADE_ABOVE_STRIP, maskImage: FADE_ABOVE_STRIP } : {})
+      }}>
         {tiles.map((t, i) => (
           <span key={i} style={{
             position: 'absolute', left: `${t.left}%`, top: `${t.top}%`, width: t.size, height: t.size,

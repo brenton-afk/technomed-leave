@@ -1894,7 +1894,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
         {!desktop && plan && (
           <div data-glance style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.xs, marginBottom: space.sm }}>
             {glance.map(([value, label]) => (
-              <div key={label} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: radius.control, padding: '6px 10px', minWidth: 0 }}>
+              <div key={label} style={{ position: 'relative', background: colour.navySoft, border: '1px solid rgba(255,255,255,0.12)', borderRadius: radius.control, padding: '6px 10px', minWidth: 0 }}>
                 {/* The value is a text node beside its label, not an element of
                     its own, so "1" or "Ben" up here is never mistaken for a
                     card's or the leader chip's. */}

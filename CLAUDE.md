@@ -332,7 +332,10 @@ tin** ("a little more visible … embossed"): each tile raised with an inset
 highlight top-left, a dark edge bottom-right and a drop shadow (`EMBOSS`,
 `tinFace` in `Shell.jsx`), a subtle wash of the logo colours (raised again on request). The
 day strip at the foot of the band is solid `navyDeep` above the tiles
-(`data-day-strip`), so none show through the days and dates.
+(`data-day-strip`), and the tiles fade out above it (`FADE_ABOVE_STRIP`,
+a mask on the phone's tile layer), so none sit beside or under the days.
+The tiles carry the logo colours properly (`tinFace`), and the three glance
+boxes are solid `navySoft` — check this in a real browser render, not a mock.
 
 ### Cases layout (Brent, 4 Nov 2026)
 
