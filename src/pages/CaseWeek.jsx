@@ -78,6 +78,11 @@ const shiftDay = (day, by) => toDateStr(addCivilDays(parseDateStr(day), by))
 // also the most-used control on the screen.
 const TAP = 44
 
+// The band's controls, raised a hair off the navy: a hairline of light on the
+// top edge and a soft shadow under — solid, never see-through (Brent, 6 Nov
+// 2026: "overhaul it to make it look slick").
+const RAISED = 'inset 0 1px 0 rgba(255,255,255,0.10), 0 2px 6px rgba(0,0,0,0.28)'
+
 const arrowStyle = {
   width: TAP,
   height: TAP,
@@ -86,8 +91,9 @@ const arrowStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   borderRadius: radius.pill,
-  border: '1px solid rgba(255,255,255,0.18)',
+  border: 'none',
   background: colour.navySoft,
+  boxShadow: RAISED,
   color: 'white',
   // Glyphs, but the type scale is closed and a closed scale with exceptions in
   // it is not closed.
@@ -1894,13 +1900,13 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
         {!desktop && plan && (
           <div data-glance style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.xs, marginBottom: space.sm }}>
             {glance.map(([value, label]) => (
-              <div key={label} style={{ position: 'relative', background: colour.navySoft, border: '1px solid rgba(255,255,255,0.12)', borderRadius: radius.control, padding: '6px 10px', minWidth: 0 }}>
+              <div key={label} style={{ position: 'relative', background: colour.navySoft, boxShadow: RAISED, borderRadius: radius.card, padding: '8px 12px', minWidth: 0 }}>
                 {/* The value is a text node beside its label, not an element of
                     its own, so "1" or "Ben" up here is never mistaken for a
                     card's or the leader chip's. */}
                 <div style={{ ...text('heading'), color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {value}
-                  <div style={{ ...text('micro'), color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>{label}</div>
+                  <div style={{ ...text('micro'), color: 'rgba(122,214,196,0.9)', textTransform: 'uppercase', letterSpacing: 0.6 }}>{label}</div>
                 </div>
               </div>
             ))}
@@ -1945,7 +1951,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
         {!(desktop && span === 'week') && (
         // Solid and above the band's tiles (Brent, 6 Nov 2026: "don't have
         // them encroaching on to the days and dates tab").
-        <div data-day-strip style={{ position: 'relative', zIndex: 1, background: colour.navyDeep, borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
+        <div data-day-strip style={{ position: 'relative', zIndex: 1, background: colour.navyDeep, borderRadius: '16px 16px 0 0', padding: '6px 6px 8px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
             {days.map(day => {
               const on = day === activeDay
@@ -1958,21 +1964,23 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
                   aria-current={on ? 'date' : undefined}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    padding: '5px 2px 7px', border: 'none', cursor: 'pointer',
-                    borderRadius: '8px 8px 0 0',
-                    background: on ? 'rgba(24,154,133,0.25)' : 'transparent',
-                    borderBottom: on ? `3px solid ${colour.accent}` : '3px solid transparent'
+                    padding: '6px 2px 7px', border: 'none', cursor: 'pointer',
+                    borderRadius: 12,
+                    // The chosen day is a solid teal tile, not a tint and an
+                    // underline — one clear "you are here".
+                    background: on ? colour.accent : 'transparent',
+                    boxShadow: on ? '0 3px 10px rgba(24,154,133,0.45)' : 'none'
                   }}>
                   {/* The whole name where there is room for it. Seven columns
                       of "Wednesday" do not fit across a phone. */}
                   <span style={{
                     ...text('micro'), textTransform: 'none',
                     whiteSpace: 'nowrap', overflow: 'hidden',
-                    color: isToday ? colour.accent : 'rgba(255,255,255,0.55)'
+                    color: on ? 'rgba(255,255,255,0.85)' : isToday ? colour.accent : 'rgba(255,255,255,0.55)'
                   }}>{desktop ? DAY_NAMES[weekday] : DAY_LABELS[weekday]}</span>
                   <span style={{
                     ...text('bodyStrong'), marginTop: 1,
-                    color: isToday ? colour.accent : 'white'
+                    color: on ? 'white' : isToday ? colour.accent : 'white'
                   }}>{ordinal(dayNum(day))}</span>
                 </button>
               )

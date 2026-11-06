@@ -325,17 +325,15 @@ Revised the same day: on a phone the band has **just the tile mark**
 the header's search, span toggle and week arrows are **solid** (`navySoft` /
 `navyDeep`), never see-through over the tiles; the **Mine** button is gone
 ("I don't think it helps" — `onlyMine` stays for the projects' use only).
-Then (same day): the phone band gets **subtle tiles** back behind the solid
-buttons (`art="subtle"`, `SUBTLE_TILES`: small, faint, across the full band,
-no gradient) for texture, with `BandMark` still top left. Then made **pressed
-tin** ("a little more visible … embossed"): each tile raised with an inset
-highlight top-left, a dark edge bottom-right and a drop shadow (`EMBOSS`,
-`tinFace` in `Shell.jsx`), a subtle wash of the logo colours (raised again on request). The
-day strip at the foot of the band is solid `navyDeep` above the tiles
-(`data-day-strip`), and the tiles fade out above it (`FADE_ABOVE_STRIP`,
-a mask on the phone's tile layer), so none sit beside or under the days.
-The tiles carry the logo colours properly (`tinFace`), and the three glance
-boxes are solid `navySoft` — check this in a real browser render, not a mock.
+Then (same day, after several rounds): the phone band's tiles are a
+**burst in the top-right corner** on a tidy grid (`cornerTiles` in
+`Shell.jsx`, `art="subtle"`) — "I don't like the tiles randomness" — embossed
+like pressed tin (`EMBOSS`, `tinFace`) in the logo's colours, clear of the
+controls. "Overhaul it to make it look slick": every control on the band is
+solid and raised (`RAISED` in `CaseWeek.jsx` — hairline highlight, soft
+shadow, no see-through fills); the glance cards are solid `navySoft` with teal
+labels; the chosen day in the strip is a solid teal tile, not a tint and an
+underline. Check the band in a real browser render, not a mock.
 
 ### Cases layout (Brent, 4 Nov 2026)
 

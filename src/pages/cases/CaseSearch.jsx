@@ -27,7 +27,7 @@ export function SearchButton({ onClick }) {
       style={{
         width: 36, height: 36, flexShrink: 0, borderRadius: radius.pill, cursor: 'pointer',
         // Solid, not see-through: the band behind it carries the logo's tiles.
-        border: '1px solid rgba(255,255,255,0.18)', background: colour.navySoft,
+        border: 'none', background: colour.navySoft, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), 0 2px 6px rgba(0,0,0,0.28)',
         color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
       <IconSearch size={19} />

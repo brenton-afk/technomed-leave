@@ -66,9 +66,32 @@ export function logoTiles({ count = 90, seed = 7 } = {}) {
 const TILES = logoTiles()
 // The phone's: fewer, smaller and faint, across the whole band — texture
 // behind the (solid) buttons rather than a picture (Brent, 6 Nov 2026).
-const SUBTLE_TILES = logoTiles({ count: 46, seed: 19 }).map(t => ({
-  ...t, size: Math.min(Math.max(t.size, 8), 20), opacity: Number((0.45 + t.opacity * 0.35).toFixed(2))
-}))
+// The phone's: a burst in the top-right corner on a tidy grid (Brent, 6 Nov
+// 2026: "I don't like the tiles randomness, can you focus them at the top
+// right"). Biggest and closest-packed in the corner, smaller and sparser
+// outwards, like the mark itself. Seeded, so it never moves.
+export function cornerTiles({ step = 14, reach = 150, seed = 23 } = {}) {
+  let s = seed
+  const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280 }
+  const tiles = []
+  for (let row = 0; row * step < reach; row++) {
+    for (let col = 0; col * step < reach; col++) {
+      const d = Math.hypot(col + 0.5, (row + 0.5) * 1.9) * step / reach   // 0 in the corner, 1 at the edge
+      if (d >= 1) continue
+      const keep = rnd()
+      if (keep > 1.3 - d * 1.15) continue
+      const size = Math.round((step - 3) * (1 - d * 0.6))
+      const inset = (step - size) / 2
+      tiles.push({
+        right: col * step + inset + 6, top: row * step + inset + 4, size,
+        colour: LOGO_TILES[(row + col * 3 + Math.floor(rnd() * 2)) % LOGO_TILES.length],
+        opacity: Number((0.95 - d * 0.6).toFixed(2))
+      })
+    }
+  }
+  return tiles
+}
+const CORNER_TILES = cornerTiles()
 
 // Pressed tin (Brent, 6 Nov 2026: "a little more visible … sort of embossed").
 // Each tile is the navy itself, raised: lit from the top left, a bright edge
@@ -83,28 +106,32 @@ const EMBOSS = {
   ].join(', '),
   borderRadius: 2
 }
-const FADE_ABOVE_STRIP = 'linear-gradient(to bottom, #000 0, #000 calc(100% - 118px), transparent calc(100% - 82px))'
 const tinFace = hex => `linear-gradient(135deg, ${hex} 0%, ${hex}bb 60%, ${hex}88 100%)`
 
 function BandArt({ subtle }) {
-  const tiles = subtle ? SUBTLE_TILES : TILES
-  return (
-    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      {/* The phone's tiles stop above the day strip at the foot of the band
-          ("don't have them encroaching on to the days and dates tab"). */}
-      <div style={{
-        position: 'absolute', top: 0, bottom: 0, right: 0, width: subtle ? '100%' : '62%',
-        ...(subtle ? { WebkitMaskImage: FADE_ABOVE_STRIP, maskImage: FADE_ABOVE_STRIP } : {})
-      }}>
-        {tiles.map((t, i) => (
+  if (subtle) {
+    return (
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        {CORNER_TILES.map((t, i) => (
           <span key={i} style={{
-            position: 'absolute', left: `${t.left}%`, top: `${t.top}%`, width: t.size, height: t.size,
-            opacity: t.opacity,
-            ...(subtle ? { background: tinFace(t.colour), ...EMBOSS } : { background: t.colour })
+            position: 'absolute', right: t.right, top: t.top, width: t.size, height: t.size,
+            opacity: t.opacity, background: tinFace(t.colour), ...EMBOSS
           }} />
         ))}
       </div>
-      {!subtle && <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${colour.navy} 0%, ${colour.navy} 36%, rgba(4,39,70,0) 78%)` }} />}
+    )
+  }
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '62%' }}>
+        {TILES.map((t, i) => (
+          <span key={i} style={{
+            position: 'absolute', left: `${t.left}%`, top: `${t.top}%`, width: t.size, height: t.size,
+            background: t.colour, opacity: t.opacity
+          }} />
+        ))}
+      </div>
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${colour.navy} 0%, ${colour.navy} 36%, rgba(4,39,70,0) 78%)` }} />
     </div>
   )
 }
