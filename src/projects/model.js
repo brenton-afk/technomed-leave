@@ -1,3 +1,5 @@
+import { INVENTORY } from '../clinicalPlan/inventory.js'
+import { SURGEON_SERVICES } from '../clinicalPlan/colours.js'
 // ─── Projects, and the tasks that belong to them ─────────────────────────────
 // "Can you build the task/project section out to be more comprehensive. We want
 // it similar to monday.com as a true project page."
@@ -72,11 +74,66 @@ export const GENERAL = {
  */
 export const DIVISIONS = ['Operations', 'Spine', 'Orthopaedics', 'CMF']
 
-/** A task's division: its project's, else its assignee's, else none. */
+// ─── Which division a task belongs to (Brent, 6 Nov 2026) ───────────────────
+// "The portal is confused … it assigns spine tasks inside the CMF portfolio
+// because they are attached to Mat who is director of CMF. Tasks should be
+// allocated according to product groups and references … a CMF task will be
+// specific to Stryker, or CMF products, or KLS — not just automatically CMF
+// because Mat is its owner. Mat works across most areas of the business
+// except Ortho."
+//
+// So the words of the task decide first: a product, a distributor, a surgeon
+// or an operation that belongs to one area. A task naming two areas is left
+// for the project to decide rather than guessed at.
+
+const words = list => new RegExp(`\\b(?:${list.join('|')})\\b`, 'i')
+
+const SPINE_SYSTEMS = INVENTORY.map(i => i.system)
+  .concat(['Cascadia', 'Boost'])
+  .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'))
+
+export const DIVISION_SIGNS = {
+  Spine: [
+    words(SPINE_SYSTEMS),
+    words(['Signus', 'SeaSpine', 'E4', 'KT Medical', 'Orthofix', 'Nuvasive', 'Globus']),
+    words(SURGEON_SERVICES.find(s => s.service === 'Spine').surgeons),
+    words(['spine', 'spinal', 'ACDF', 'PLIF', 'TLIF', 'ALIF', 'XLIF', 'pedicle', 'lamin\\w*',
+      'discectom\\w*', 'cervical', 'lumbar', 'thoracolumbar', 'kyphoplasty', 'vertebr\\w*'])
+  ],
+  CMF: [
+    words(['CMF', 'Stryker', 'KLS', 'KLS\\s*Martin', 'max\\s*fax', 'maxfax', 'maxillofacial', 'mandib\\w*',
+      'orbital', 'orbit', 'zygoma\\w*', 'midface', 'orthognathic', 'cranio\\w*', 'PSI', 'CCI']),
+    words(SURGEON_SERVICES.find(s => s.service === 'Max Fax').surgeons)
+  ],
+  Orthopaedics: [
+    words(['ortho', 'orthopaedics?', 'orthopedics?', 'arthroplasty', 'hip', 'hips', 'knee', 'knees',
+      'shoulder', 'ankle', 'wrist', 'fracture\\s*fixation', 'Synthes']),
+    words(SURGEON_SERVICES.find(s => s.service === 'Orthopaedics').surgeons)
+  ]
+}
+
+/** The one division a task's own words point to, or '' when none or several. */
+export function divisionFromText(...texts) {
+  const said = texts.filter(Boolean).join(' ')
+  if (!said.trim()) return ''
+  const hits = Object.entries(DIVISION_SIGNS)
+    .filter(([, signs]) => signs.some(sign => sign.test(said)))
+    .map(([division]) => division)
+  return hits.length === 1 ? hits[0] : ''
+}
+
+/**
+ * A task's division: what its words name, else its project's, else its
+ * assignee's — but only for somebody who works in one area. Mat works across
+ * them (`acrossDivisions` in staffConfig), so his name alone says nothing.
+ */
 export function divisionOf(task, project, staff = []) {
+  const named = divisionFromText(task?.task, task?.notes)
+  if (named) return named
   if (project?.division) return project.division
   const who = staff.find(s => s.name === task?.assignee)
-  return who?.division && DIVISIONS.includes(who.division) ? who.division : ''
+  if (!who || who.acrossDivisions) return ''
+  return who.division && DIVISIONS.includes(who.division) ? who.division : ''
 }
 
 /** The colours a project can be given, as names the design tokens resolve. */

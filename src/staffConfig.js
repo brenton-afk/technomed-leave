@@ -39,7 +39,7 @@ export const STAFF = [
   // never displayed; it is what lets an old worklist item assigned to
   // "Matthew Usher" still be his, and what lets a transcript saying "Matt"
   // find him. Removing them would fix the display and break the reading.
-  { name: 'Mat Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
+  { name: 'Mat Usher', email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', acrossDivisions: true, role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
   { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'April Foale', email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'Aimee Vulinovich', email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0477 334 561', mobileNumber: '' }

@@ -461,7 +461,14 @@ People (each person's load). Your rows have a teal edge and "You"; others show
 initials in their division's colour (`DIVISION_TINT`). Projects carry a
 `division` (`DIVISIONS` in `projects/model.js`, set on New project and in the
 board header); a task's division is its project's, else its assignee's
-(`divisionOf`). The one-line add takes `@Name`, and `add-task` now honours
+(`divisionOf`). **Revised 6 Nov 2026** (Brent: spine tasks were filed under
+CMF because Mat owns them): a task's own words decide first —
+`divisionFromText` / `DIVISION_SIGNS` in `projects/model.js` read spine
+systems (from `INVENTORY`), spine distributors, surgeons by service
+(`SURGEON_SERVICES`) and operations; Stryker / KLS / CMF / max-fax words; ortho
+words (`\bortho\b`, so Orthofix stays Spine). One area named wins over the
+project; two named is left to the project. The assignee is used last, and
+never for somebody with `acrossDivisions` in `staffConfig.js` (Mat). The one-line add takes `@Name`, and `add-task` now honours
 `projectId` (it was dropped, so tasks typed on a board landed in General).
 View, division and Only-mine are remembered per browser (`tm_projects_view`).
 **From the 6 Nov mock-ups Brent picked** (Projects & To Do canvas): on a
