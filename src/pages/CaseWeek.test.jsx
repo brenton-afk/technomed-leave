@@ -1680,6 +1680,17 @@ describe('the top band', () => {
     expect(glance.textContent).toMatch(/this week/)
     expect(glance.textContent).toMatch(/today/)
   })
+
+  it('counts the day picked in the strip, not only today', async () => {
+    // "When I tap Monday next week the number stays at 0" (Brent, 6 Nov 2026).
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    const glance = () => document.querySelector('[data-glance]').textContent
+    expect(glance()).toMatch(/1\s*today/)
+    fireEvent.click(screen.getByRole('button', { name: /^Tuesday 22 September/ }))
+    // Two live cases on the Tuesday; the cancelled one is not counted.
+    await waitFor(() => expect(glance()).toMatch(/2\s*Tue 22/))
+  })
 })
 
 describe('the band, as revised (Brent, 6 Nov 2026)', () => {

@@ -1880,13 +1880,21 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
   const hour = Number(new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Hobart', hour: 'numeric', hourCycle: 'h23' }).format(new Date()))
   const greeting = `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}${me ? `, ${me}` : ''} · ${weekdayName(today)} ${dayNum(today)} ${monthOf(today)}`
   const weekCases = (plan?.days || []).reduce((n, d) => n + (d.casesByHospital || []).reduce((m, g) => m + g.cases.filter(c => !c.cancelled).length, 0), 0)
-  const todayCases = (plan?.days || []).filter(d => d.date === today)
+  // The middle and last tiles follow the day picked in the strip (Brent,
+  // 6 Nov 2026: "when I tap Monday next week the number stays at 0") —
+  // labelled "today" on today, else the day itself.
+  const shownDay = window_.days.includes(activeDay) ? activeDay
+    : window_.days.includes(today) ? today : null
+  const dayCases = (plan?.days || []).filter(d => d.date === shownDay)
     .reduce((n, d) => n + (d.casesByHospital || []).reduce((m, g) => m + g.cases.filter(c => !c.cancelled).length, 0), 0)
-  const leadToday = leader?.byDay?.[today]?.email ? firstNameFor(leader.byDay[today].email) : leader?.email ? firstNameFor(leader.email) : ''
+  const dayLabel = !shownDay ? 'today' : shownDay === today ? 'today'
+    : `${weekdayName(shownDay).slice(0, 3)} ${dayNum(shownDay)}`
+  const leadOnDay = leader?.byDay?.[shownDay]?.email ? firstNameFor(leader.byDay[shownDay].email)
+    : leader?.email ? firstNameFor(leader.email) : ''
   const glance = [
     [String(weekCases), 'this week'],
-    [window_.days.includes(today) ? String(todayCases) : '—', 'today'],
-    [leadToday || '—', 'leading']
+    [shownDay ? String(dayCases) : '—', dayLabel],
+    [leadOnDay || '—', 'leading']
   ]
   const caseCount = day => (day?.casesByHospital || []).reduce(
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
