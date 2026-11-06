@@ -330,7 +330,9 @@ buttons (`art="subtle"`, `SUBTLE_TILES`: small, faint, across the full band,
 no gradient) for texture, with `BandMark` still top left. Then made **pressed
 tin** ("a little more visible … embossed"): each tile raised with an inset
 highlight top-left, a dark edge bottom-right and a drop shadow (`EMBOSS`,
-`tinFace` in `Shell.jsx`), a subtle wash of the logo colours (raised again on request).
+`tinFace` in `Shell.jsx`), a subtle wash of the logo colours (raised again on request). The
+day strip at the foot of the band is solid `navyDeep` above the tiles
+(`data-day-strip`), so none show through the days and dates.
 
 ### Cases layout (Brent, 4 Nov 2026)
 

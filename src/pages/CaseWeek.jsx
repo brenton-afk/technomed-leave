@@ -1943,7 +1943,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
             their dates, and the strip was saying the same seven dates again
             (Brent, 4 Nov 2026). On a phone it is how a day is picked. */}
         {!(desktop && span === 'week') && (
-        <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
+        // Solid and above the band's tiles (Brent, 6 Nov 2026: "don't have
+        // them encroaching on to the days and dates tab").
+        <div data-day-strip style={{ position: 'relative', zIndex: 1, background: colour.navyDeep, borderRadius: '12px 12px 0 0', padding: '4px 8px 0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
             {days.map(day => {
               const on = day === activeDay
