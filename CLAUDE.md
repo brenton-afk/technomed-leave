@@ -246,6 +246,16 @@ without Accept.
 **Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
 `action=search` in `api/calendar/today.js`): Google's own full-text search over
 2020 to a year ahead, each hit read through `readBooking`, cases only.
+**It searches the whole portal** (Brent, 6 Nov 2026: "search literally
+anything"): screens to jump to (`SCREENS` / `matchScreens`, admin only for
+admins), then the calendar (`action=search`), then `action=find` —
+`api/_portalSearch.js`: usage scans down to a product code or lot number
+(letters and digits only, so "LOT 778" finds "LOT778…"), resupplies, kits and
+where they are, every tray-list line, preference cards and the Inbox. Every
+word must match; a kit name alone is the kit, not its lines. Tapping goes
+where the thing lives (`onOpenPortal` in `CaseWeek.jsx`). **The floating
+microphone is gone** ("the team are not using it"); the voice code remains,
+unreachable.
 
 **Surnames from every reader go through `surnameFromField` in `parse.js`** —
 emails, dictation, the RHH list and usage forms. It keeps a surname field whole

@@ -44,8 +44,12 @@ import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate,
-  setTeamLeaderFor, setDayLeader, getWorklist, redis
+  setTeamLeaderFor, setDayLeader, getWorklist, redis,
+  getUsageHistory, getRecentResupplies
 } from '../_redis.js'
+import { listKits } from '../_kits.js'
+import { getPreferences } from '../_preferences.js'
+import { searchPortal } from '../_portalSearch.js'
 import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
@@ -182,6 +186,7 @@ export default async function handler(req, res) {
   // What this patient already has in, for a revision or a removal.
   if (req.query.action === 'prior') return handlePrior(req, res)
   if (req.query.action === 'search') return handleSearch(req, res)
+  if (req.query.action === 'find') return handleFind(req, res)
   if (req.query.action === 'notify') return handleNotify(req, res)
   if (req.query.action === 'nousage') return handleNoUsage(req, res)
   if (req.query.action === 'noticesettings') return handleNoticeSettings(req, res)
@@ -2191,6 +2196,33 @@ async function handleSearch(req, res) {
     console.error('calendar/search failed:', err.message)
     return res.status(500).json({ error: 'Search is unavailable right now. Try again in a moment.' })
   }
+}
+
+
+/**
+ * The rest of the portal for the search glass (api/_portalSearch.js): usage,
+ * resupplies, kits, tray lists, preference cards, the Inbox. Each source is
+ * read on its own and a failure loses only that group.
+ */
+async function handleFind(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  const q = String(req.query.q || '').trim().slice(0, 60)
+  if (q.length < 2) return res.status(200).json({ ok: true, groups: [] })
+  const safe = (p, fallback) => p.catch(err => { console.error('find source failed:', err.message); return fallback })
+  const [usage, resupplies, kits, prefs, inbox] = await Promise.all([
+    safe(getUsageHistory(400), []),
+    safe(getRecentResupplies(200), []),
+    safe(listKits(), []),
+    safe(getPreferences().then(p => p.data), null),
+    safe(getBookingQueue(), [])
+  ])
+  let trayLists = {}
+  if (kits.length) {
+    const raws = await safe(redis('mget', ...kits.map(k => `kits:list:${k.id}`)), [])
+    kits.forEach((k, i) => { try { if (raws[i]) trayLists[k.id] = JSON.parse(raws[i]) } catch { /* skip */ } })
+  }
+  return res.status(200).json({ ok: true, groups: searchPortal(q, { usage, resupplies, kits, trayLists, prefs, inbox }) })
 }
 
 

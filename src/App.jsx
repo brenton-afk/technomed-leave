@@ -32,7 +32,6 @@ import NoticeSheet from './pages/cases/NoticeSheet.jsx'
 import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
 import { watchZoom, blockPinch } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
-import VoiceSheet, { Mic } from './pages/voice/VoiceSheet.jsx'
 import { weekdayName } from './clinicalPlan/week.js'
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -439,7 +438,7 @@ export default function App() {
         <>
           <FaceIdSetup user={user} />
           <Cases user={user} promptBanner={<PromptBanner user={user} onNavigate={navigate} />}
-            spoken={spoken} onSpokenDone={() => setSpoken(null)} />
+            spoken={spoken} onSpokenDone={() => setSpoken(null)} onNavigate={navigate} />
         </>
       )
     }
@@ -602,29 +601,10 @@ export default function App() {
         <LazyScreen screenKey={`${nav.tab}/${nav.sub || ''}`}>{renderContent()}</LazyScreen>
       </div>
 
-      {/* ── The microphone ──
-          Above the bar rather than in it: the bar is full at five, and a sixth
-          destination would make all six harder to hit. Floating keeps it one
-          tap from everywhere, which is the whole point of speaking a command
-          rather than navigating to the screen that does it. */}
-      {user && (
-        <button onClick={() => setMicOpen(true)} aria-label="Speak a command"
-          style={{
-            position: 'fixed', zIndex: 120, right: 16,
-            bottom: `calc(${desktop ? 78 : 86}px + var(--tm-bottom-inset, env(safe-area-inset-bottom, 0px)))`,
-            width: 56, height: 56, borderRadius: 999, border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: colour.navy, color: 'white', cursor: 'pointer',
-            boxShadow: '0 6px 20px rgba(4,39,70,0.32)'
-          }}>
-          <Mic size={24} />
-        </button>
-      )}
-
-      {micOpen && (
-        <VoiceSheet user={user} onClose={() => setMicOpen(false)}
-          onPlan={actOnSpoken} weekdayOf={weekdayName} />
-      )}
+      {/* The floating "ask the portal" microphone is gone (Brent, 6 Nov 2026:
+          "the team are not using it … ditch it"). Finding anything is the
+          search glass in the Cases header, which now searches the whole portal
+          (cases/CaseSearch.jsx). */}
 
       {/* Not `position: fixed`. It is the last child of a column that is exactly
           the height of the viewport, so it is pinned by the layout itself — which

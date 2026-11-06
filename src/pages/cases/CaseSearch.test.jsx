@@ -34,7 +34,7 @@ describe('the search sheet', () => {
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, results: [] }) }))
     render(<CaseSearch user={{ token: 't' }} onClose={() => {}} onOpen={() => {}} />)
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nobody' } })
-    await waitFor(() => expect(screen.getByText(/No bookings found/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Nothing found/)).toBeInTheDocument())
   })
 })
 
@@ -53,5 +53,31 @@ describe('tasks in the results', () => {
     expect(screen.getByText(/For Aimee · Done · on the Projects board/)).toBeInTheDocument()
     fireEvent.click(screen.getByText('Get Athlet back from RHH'))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ type: 'task', id: 't1' }))
+  })
+})
+
+// "Make the search hourglass … search literally anything in the portal."
+describe('searching the whole portal', () => {
+  it('asks the calendar and the portal at once, and shows each group', async () => {
+    global.fetch = vi.fn(async url => ({ ok: true, json: async () => (String(url).includes('action=find')
+      ? { ok: true, groups: [
+        { key: 'usage', label: 'Usage scans', items: [{ type: 'usage', id: 'u1', title: 'Testa_01112026_Sample_ACDF_CLV', detail: 'Cage · Lot LOT123', date: '2026-11-01' }] },
+        { key: 'kit', label: 'Kits', items: [{ type: 'kit', id: 'k1', title: 'Diplomat', detail: 'At Calvary' }] }
+      ] }
+      : { ok: true, results: [] }) }))
+    const onOpenPortal = vi.fn()
+    render(<CaseSearch user={{ token: 't' }} onClose={() => {}} onOpen={() => {}} onOpenPortal={onOpenPortal} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'lot123' } })
+    await waitFor(() => expect(screen.getByText('Usage scans')).toBeInTheDocument())
+    expect(global.fetch.mock.calls.map(c => c[0]).join(' ')).toMatch(/action=search[\s\S]*action=find/)
+    fireEvent.click(screen.getByText('Diplomat'))
+    expect(onOpenPortal).toHaveBeenCalledWith(expect.objectContaining({ type: 'kit', id: 'k1' }))
+  })
+
+  it('offers screens to jump to, admin ones only to admins', async () => {
+    const { matchScreens } = await import('./CaseSearch.jsx')
+    expect(matchScreens('timesheet').map(s => s.label)).toEqual(['Timesheets'])
+    expect(matchScreens('invoices')).toEqual([])
+    expect(matchScreens('invoices', { isAdmin: true }).map(s => s.label)).toEqual(['Admin portal'])
   })
 })

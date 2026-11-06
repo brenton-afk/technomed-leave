@@ -21,35 +21,13 @@ const SHEET = read('src/pages/voice/VoiceSheet.jsx')
 const COMMAND = read('src/voice/command.js')
 const SERVER = read('api/_voiceCommand.js')
 
-describe('the microphone is where it was asked to be', () => {
-  it('is on every screen, not inside one', () => {
-    // "The point of voice is that you don't have to navigate first — a button
-    // you have to find defeats it." It is rendered by the shell, outside
-    // renderContent, so it does not belong to a tab.
-    const atRender = APP.indexOf('function renderContent')
-    const atButton = APP.indexOf('aria-label="Speak a command"')
-    expect(atButton).toBeGreaterThan(-1)
-    // After the render function's definition means it is in the shell's own
-    // JSX rather than in a branch of it.
-    expect(atButton).toBeGreaterThan(atRender)
-  })
-
-  it('floats clear of the bottom bar rather than joining it', () => {
-    // Five is the limit a bottom bar stays scannable at, and the bar is full.
-    expect(APP).toMatch(/aria-label="Speak a command"[\s\S]{0,400}position: 'fixed'/)
-    expect(APP).toMatch(/aria-label="Speak a command"[\s\S]{0,500}env\(safe-area-inset-bottom/)
-  })
-
-  it('is not offered to somebody who is not signed in', () => {
-    expect(APP).toMatch(/\{user && \([\s\S]{0,300}aria-label="Speak a command"/)
-  })
-
-  it('actually opens the sheet when it is tapped', () => {
-    // Added after a deliberate break went unnoticed: the button was still
-    // there, still labelled, and tapping it did nothing. A dead control is
-    // worse than no control, and this is the only test that sees it.
-    expect(APP).toMatch(/onClick=\{\(\) => setMicOpen\(true\)\}/)
-    expect(APP).toMatch(/\{micOpen && \(\s*<VoiceSheet/)
+describe('the floating microphone', () => {
+  it('is gone — finding anything is the search glass now', () => {
+    // Brent, 6 Nov 2026: "I don't think the team are using the 'ask the portal
+    // anything' button … ditch it please". The voice code stays for now, but
+    // nothing on screen opens it.
+    expect(APP).not.toMatch(/aria-label="Speak a command"/)
+    expect(APP).not.toMatch(/<VoiceSheet/)
   })
 })
 

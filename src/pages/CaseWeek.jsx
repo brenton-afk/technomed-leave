@@ -27,6 +27,7 @@ import NewTask from './cases/NewTask.jsx'
 import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import CaseSearch, { SearchButton } from './cases/CaseSearch.jsx'
+import { saveScanKind } from './scan/ScanKind.jsx'
 import ListPlace from './cases/ListPlace.jsx'
 import TeamLeaderStrip from './cases/TeamLeaderStrip.jsx'
 import { weekOf, withinWeek } from '../clinicalPlan/teamLeader.js'
@@ -1360,7 +1361,7 @@ export function onlyMine(plan, name) {
   }
 }
 
-export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
+export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onNavigate = () => {} }) {
   // A week in columns on a desktop, a list on a phone — different shapes of
   // screen, different right answer.
   const desktop = useIsDesktop()
@@ -2290,6 +2291,17 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
             setSearching(false)
             if (result.type === 'task') openTaskSheet(result)
             else setEditing({ id: result.id })
+          }}
+          // Anything else in the portal: go where it lives.
+          onOpenPortal={result => {
+            setSearching(false)
+            if (result.type === 'inbox') { setShowQueue(true); return }
+            const scan = result.type === 'usage' ? 'usage' : result.type === 'resupply' ? 'resupply' : result.kind
+            if (scan) saveScanKind(scan)
+            if (result.type === 'screen') onNavigate(result.to)
+            else if (scan) onNavigate({ tab: 'scan' })
+            else if (result.type === 'kit' || result.type === 'trayline') onNavigate({ tab: 'kit', sub: 'kitroom' })
+            else if (result.type === 'pref') onNavigate({ tab: 'kit', sub: 'guides' })
           }} />
       )}
 

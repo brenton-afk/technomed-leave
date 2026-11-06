@@ -7,7 +7,7 @@ import CaseWeek from './CaseWeek.jsx'
 // leader tab and incorporate that information into kits for now") — one less
 // control above the cases, which is what the page is for.
 
-export default function Cases({ user, promptBanner, spoken, onSpokenDone }) {
+export default function Cases({ user, promptBanner, spoken, onSpokenDone, onNavigate }) {
   return <CaseWeek user={user} promptBanner={promptBanner}
-    spoken={spoken} onSpokenDone={onSpokenDone} />
+    spoken={spoken} onSpokenDone={onSpokenDone} onNavigate={onNavigate} />
 }
