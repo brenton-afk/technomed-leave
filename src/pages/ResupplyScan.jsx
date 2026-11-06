@@ -360,12 +360,19 @@ export default function ResupplyScan({ user, kind, onKind }) {
   const rows = owing?.rows || []
   return (
     <Page>
-      {header('Resupply', 'Scan what comes back, and see what is still owed')}
+      {header('Add pages', 'Photograph or upload every page of the resupply')}
       <div style={{ padding: space.md }}>
         {error && <Banner tone="danger">{error}</Banner>}
         <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none', fontSize: 16 }}
           onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-        <NewScanButton label="New resupply scan" onClick={startNew} />
+        {/* The same first screen as the Usage side: the scan card, then what
+            is still owed underneath (Brent, 6 Nov 2026: "the resupply scan
+            page looks different to the usage scan page"). */}
+        <ScanPages pages={[]} busy={false}
+          scanLabel="Scan the resupply"
+          hint="The docket, packing slip or the photo that came with the stock — hold the phone over it."
+          onScan={startNew}
+          onUpload={() => uploadRef.current?.click()} />
 
         <div style={label}>Still owed{rows.length ? ` · ${rows.length}` : ''}</div>
         {!owing && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}

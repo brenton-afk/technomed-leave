@@ -8,6 +8,7 @@ import { releaseCamera } from '../scanner/cameraStream.js'
 import { partitionItems } from '../usageReview.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { Header as ShellHeader } from '../design/Shell.jsx'
+import { colour } from '../design/tokens.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -659,7 +660,7 @@ export default function UsageScan({ user, switcher }) {
   // ── History ──────────────────────────────────────────────
   if (step === 'history') {
     return (
-      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
         <Header
           title={desktop ? 'Filed usage' : 'Usage Scanning'}
           subtitle={desktop
@@ -738,7 +739,7 @@ export default function UsageScan({ user, switcher }) {
   // ── Capture ──────────────────────────────────────────────
   if (step === 'capture') {
     return (
-      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Add pages" subtitle="Photograph or upload every page of the usage form">
           {/* Only before the first page: switching kind mid-scan would drop it. */}
           {pages.length === 0 && switcher}
@@ -802,7 +803,7 @@ export default function UsageScan({ user, switcher }) {
     const { inReview, outstanding, clean, excluded, sendable } = partitionItems(caseRecord.items)
 
     return (
-      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
         <Header title="Review extracted usage" subtitle="Check every field before filing and sending" />
         <div style={{ padding: 16 }}>
           {error && <Banner tone="danger">{error}</Banner>}
@@ -951,7 +952,7 @@ export default function UsageScan({ user, switcher }) {
     const failed = result.emails.filter(e => !e.ok && !e.held)
     const held = result.emails.filter(e => e.held)
     return (
-      <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
+      <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
         <Header
           title={result.test ? 'Test sent to you only' : (failed.length ? 'Filed, with email issues' : held.length ? 'Filed — one already sent' : 'Usage filed and sent')}
           subtitle={result.record.folderName} />
