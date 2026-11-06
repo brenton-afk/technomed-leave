@@ -95,3 +95,25 @@ describe('sending a usage', () => {
     expect(sends).toHaveLength(0)
   })
 })
+
+describe('amending a usage', () => {
+  it('sends a correction only to distributors that had the usage', async () => {
+    records.set(CASE.id, CASE)
+    await call('email', { usageId: CASE.id })
+    sends.length = 0
+    const items = [
+      { ...CASE.items[0], quantity: 2 },
+      { productName: 'Interbody cage', referenceCode: 'ZZ-9', quantity: 1, distributorKey: 'e4' }
+    ]
+    const r = await call('amend', { usageId: CASE.id, items })
+    const byKey = Object.fromEntries(r.data.results.map(x => [x.key, x]))
+    expect(byKey.device_boost.ok).toBe(true)
+    expect(byKey.e4).toMatchObject({ ok: false, needsFirstSend: true })
+    expect(sends).toEqual([expect.stringMatching(/Boost/)])
+    // The case keeps its name and the record of what was sent.
+    const kept = records.get(CASE.id)
+    expect(kept.folderName).toBe(CASE.folderName)
+    expect(kept.emailsSent.filter(e => e.ok)).toHaveLength(1)
+  })
+})
+

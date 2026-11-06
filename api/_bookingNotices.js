@@ -545,6 +545,18 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
   return out
 }
 
+/**
+ * Whether the sets asked for have changed — Mariner MIS to Mariner Open, or a
+ * second set added. A change of set used to send nothing: the supplier packed
+ * what was first asked for. A set requested before systems were recorded
+ * (no list) is not treated as changed.
+ */
+function setChanged(had, now) {
+  if (!Array.isArray(had) || !had.length) return false
+  const key = list => [...new Set((list || []).map(x => String(x).trim().toLowerCase()))].sort().join('|')
+  return key(had) !== key(now)
+}
+
 export function loanRequestsFor({ kind, before, after, eventId, settings, sent = {} }) {
   const out = []
   const contacts = new Map(settings.contacts.map(c => [c.id, c]))
@@ -559,7 +571,8 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
     let status = null
     if (needs && !had) status = newToBooking(kind, before?.loans?.[d] || [], after.loans[d]) ? 'request' : null
     else if (had && !needs) status = 'cancel'
-    else if (had && needs && (had.date !== after.date || had.hospital !== after.hospital)) status = 'update'
+    else if (had && needs && (had.date !== after.date || had.hospital !== after.hospital
+      || setChanged(had.systems, after.loans[d]))) status = 'update'
     if (!status) continue
 
     const b = status === 'cancel' ? (after || before) : after
@@ -574,6 +587,7 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
         ? `This case has changed — please redirect the loan set (${systems.join(' + ')}).`
           + `${had.date !== b.date ? ` Date: ${shortDate(had.date)} → ${shortDate(b.date)}.` : ''}`
           + `${had.hospital !== b.hospital ? ` Hospital: ${had.hospital} → ${b.hospital}.` : ''}`
+          + `${setChanged(had.systems, systems) ? ` Set: ${(had.systems || []).join(' + ') || '—'} → ${systems.join(' + ')}.` : ''}`
         : `This case ${kind === 'cancelled' ? 'has been cancelled' : 'no longer needs the loan set'} — please do not send ${systems.join(' + ')}, or recall it if it is on its way.`
     const rows = [
       ['Surgery', shortDate(b?.date)], ['Hospital', b?.hospital], ['Surgeon', b?.surgeon],

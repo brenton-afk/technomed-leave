@@ -6,7 +6,7 @@ import {
   saveUsageRecord, getUsageRecord, getUsageHistory,
   setUsageReviewed, getUsageReviews,
   claimResupply, saveResupply, getResupply, getCaseResupplies, removeUsageRecord,
-  claimUsageSend, releaseUsageSend
+  claimUsageSend, releaseUsageSend, releaseResupply
 } from '../_redis.js'
 import {
   RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply,
@@ -544,6 +544,10 @@ async function handleAmend(req, res, session) {
   if (!Array.isArray(items)) throw badRequest('No items supplied')
 
   const amended = recomputeCase({ ...record, items: amendItems(record.items || [], items, normaliseItem) })
+  // The case keeps its name: adding Boost would otherwise relabel the
+  // procedure, and the correction would arrive under a different subject from
+  // the usage it corrects, in a different folder.
+  if (record.folderName) amended.folderName = record.folderName
   const changes = changesByDistributor(record.items || [], amended.items)
   if (preview) return res.status(200).json({ changes })
   if (!changes.length) throw badRequest('Nothing has changed for any distributor')
@@ -568,10 +572,22 @@ async function handleAmend(req, res, session) {
   }
 
   const sentOn = String(record.createdAt || record.submittedAt || '').slice(0, 10)
+  // A correction only makes sense to a distributor who had the usage. One
+  // who never did (their rows were held back, or the item is new to them)
+  // gets the usage itself, by Send on the case — not a "CORRECTION" of an
+  // email they never received.
+  const hadIt = new Set((record.emailsSent || []).filter(e => e && e.ok && !e.test && !e.testOnly).map(e => e.key))
   const results = []
   for (const change of changes) {
     const distributor = DISTRIBUTORS[change.key]
     if (!distributor) continue
+    if (!test && !hadIt.has(change.key)) {
+      results.push({
+        key: change.key, name: distributor.name, ok: false, needsFirstSend: true, lines: change.lines,
+        error: `Not sent: ${distributor.name} has not had this usage yet. Send it to them from the case — it will include this change.`
+      })
+      continue
+    }
     const theirs = groups.get(change.key) || []
     const to = test ? [session.email] : distributor.to
     try {
@@ -593,10 +609,14 @@ async function handleAmend(req, res, session) {
 
   let saved = record
   if (!test) {
+    // Onto the record as it is now: a send that finished while this amend
+    // was going out is kept, not overwritten.
+    const fresh = (await getUsageRecord(record.id)) || record
     saved = {
       ...amended,
-      filesSaved: filed ? [...(record.filesSaved || []), filed] : record.filesSaved,
-      amendments: [...(record.amendments || []), { at: now, by: session.name, changes, results }],
+      emailsSent: fresh.emailsSent || [],
+      filesSaved: filed ? [...(fresh.filesSaved || []), filed] : fresh.filesSaved,
+      amendments: [...(fresh.amendments || []), { at: now, by: session.name, changes, results }],
       updatedAt: now
     }
     await saveUsageRecord(saved)
@@ -863,15 +883,30 @@ async function handleResupplySave(req, res, session) {
   // answers with what was saved the first time.
   if (!(await claimResupply(id))) {
     const existing = await getResupply(id)
-    return res.status(200).json({ entry: existing, alreadySaved: true })
+    if (existing) return res.status(200).json({ entry: existing, alreadySaved: true })
+    // Claimed but not saved: another tap still in progress.
+    return res.status(409).json({ error: 'This resupply is already being saved — check Still owed in a moment.' })
   }
+  try {
+    return await saveClaimedResupply(req, res, session, { id, usageId, resupply })
+  } catch (err) {
+    // Nothing was recorded, so the same scan must be able to try again.
+    await releaseResupply(id)
+    throw err
+  }
+}
+
+async function saveClaimedResupply(req, res, session, { id, usageId, resupply }) {
 
   let record = null
   let comparison = null
   let earlier = []
   if (usageId) {
     const found = await comparisonFor(usageId, resupply)
-    if (!found) return res.status(404).json({ error: 'That usage case could not be found' })
+    if (!found) {
+      await releaseResupply(id)
+      return res.status(404).json({ error: 'That usage case could not be found' })
+    }
     ;({ record, comparison, earlier } = found)
   }
 
@@ -888,8 +923,11 @@ async function handleResupplySave(req, res, session) {
         partial: comparison.totals.owing > 0 || earlier.length > 0,
         n: earlier.length + 1
       })
-      await uploadFile(`${record.dropboxPath}/${name}`, pdf)
-      filed = name
+      // Kept, never overwritten: a second document of the same name (a
+      // partial resupply scanned twice, or a count that missed one) is added
+      // beside it as "… (1).pdf" rather than replacing the first.
+      const up = await uploadFile(`${record.dropboxPath}/${name}`, pdf, { keep: true })
+      filed = String(up?.path_display || up?.name || name).split('/').pop()
     } catch (err) {
       fileError = err.message
     }

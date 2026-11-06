@@ -42,7 +42,7 @@ vi.mock('./_readBookingDocument.js', () => ({
   })
 }))
 vi.mock('./_redis.js', () => ({
-  redis: vi.fn(async (cmd, key) => (String(cmd).toUpperCase() === 'SET' && String(key).startsWith('bookingcand:accepting:') ? 'OK' : null)), redisSetBody: vi.fn(),
+  redis: vi.fn(async (cmd, key) => (String(cmd).toUpperCase() === 'SET' ? 'OK' : null)), redisSetBody: vi.fn(),
   bookingEmailRecord: vi.fn(async id => (seen.has(id) ? (records.get(id) || { count: 1, rule: 2 }) : null)),
   markBookingEmailSeen: vi.fn(async (id, count, extra) => { seen.add(id); records.set(id, { count, rule: 2, ...extra }) }),
   markBookingEmailFailed: vi.fn(),
@@ -208,5 +208,16 @@ describe('every booking checked against the calendar as it is now', async () => 
     const result = await reconcileQueue(queue, TODAY, async () => { throw new Error('down') })
     expect(result.returned).toBe(0)
     expect(updates()).toEqual([])
+  })
+})
+
+describe('two checks of bookings@ at once', () => {
+  it('the second answers with the queue and reads nothing', async () => {
+    const { ingestBookings } = await import('./calendar/today.js')
+    const redisMod = await import('./_redis.js')
+    redisMod.redis.mockImplementationOnce(async () => null) // the lock is held
+    const r = await ingestBookings()
+    expect(r.skipped).toMatch(/another check/)
+    expect(r.found).toBe(0)
   })
 })

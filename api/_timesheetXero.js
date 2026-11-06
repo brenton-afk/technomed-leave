@@ -94,20 +94,28 @@ async function postTimesheet(payload) {
  */
 async function existingTimesheet(token, tenantId, employeeID, start) {
   try {
-    const res = await fetch(`${XERO_API_BASE}/Timesheets`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Xero-tenant-id': tenantId,
-        Accept: 'application/json'
-      }
-    })
-    const { ok, data } = await readXero(res, 'Xero timesheets')
-    if (!ok) return null
-    const all = Array.isArray(data) ? data : data.Timesheets || []
     const wanted = String(start).slice(0, 10)
-    return all.find(t =>
-      t.EmployeeID === employeeID
-      && xeroDateToIso(t.StartDate) === wanted) || null
+    // Xero answers 100 timesheets a page, oldest first. Reading only the first
+    // page found nothing once the org had more than 100 — every person, every
+    // fortnight since June — and a resubmission then posted a second one.
+    for (let page = 1; page <= 30; page++) {
+      const res = await fetch(`${XERO_API_BASE}/Timesheets?page=${page}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Xero-tenant-id': tenantId,
+          Accept: 'application/json'
+        }
+      })
+      const { ok, data } = await readXero(res, 'Xero timesheets')
+      if (!ok) return null
+      const all = Array.isArray(data) ? data : data.Timesheets || []
+      const found = all.find(t =>
+        t.EmployeeID === employeeID
+        && xeroDateToIso(t.StartDate) === wanted)
+      if (found) return found
+      if (all.length < 100) return null
+    }
+    return null
   } catch {
     return null
   }
@@ -135,8 +143,10 @@ export async function submitTimesheetToXero({ staffName, start, end, entries, ca
 
   // Unless payroll has already dealt with it. Overwriting an approved or
   // processed timesheet is changing what somebody has been paid, and that is
-  // not a thing a resubmission should do quietly.
-  if (already && !['DRAFT', 'PROCESSED'].includes(String(already.Status || '').toUpperCase())) {
+  // not a thing a resubmission should do quietly. PROCESSED (in a pay run —
+  // paid) used to be on the allowed list, which was exactly backwards; only a
+  // draft, or one payroll sent back, may be replaced.
+  if (already && !['DRAFT', 'REJECTED'].includes(String(already.Status || '').toUpperCase())) {
     throw new Error(
       `Xero already has this fortnight marked ${String(already.Status).toLowerCase()}. `
       + 'Ask Brent or Erin to reopen it before resubmitting.')

@@ -181,7 +181,10 @@ export function fromSummary(summary = '') {
 }
 
 /** Step 2 for one drafted quote: once sent, file it and tell the distributors. */
-async function followUp(id, rec) {
+// `persist` saves progress as each step lands: the record of who had the
+// heads-up used to be written only at the end, so one failed email meant the
+// distributors before it were emailed again on the next pass.
+async function followUp(id, rec, persist = async () => {}) {
   const q = await getQuote(rec.quoteId)
   if (!q) return { ...rec, status: 'gone', reason: 'The quote is no longer in Xero' }
   if (!SENT.has(q.status)) return rec
@@ -192,6 +195,7 @@ async function followUp(id, rec) {
     await ensureFolder(folder)
     await uploadFile(`${folder}/${quoteFileName(next.patient, q.number)}`, Buffer.from(pdf, 'base64'))
     next.filed = true
+    await persist(next)
   }
   const keys = distributorsOnQuote(q.lines)
   const done = new Set(next.notified || [])
@@ -210,6 +214,8 @@ async function followUp(id, rec) {
       attachments: [{ filename: quoteFileName(next.patient, q.number), content: pdf, content_type: 'application/pdf' }]
     })
     done.add(key)
+    next = { ...next, notified: [...done] }
+    await persist(next)
   }
   next.notified = [...done]
   next.status = 'sent'
@@ -229,7 +235,7 @@ export async function autoQuotes({ max = 2, by = 'automatic' } = {}) {
       const rec = records[r.id]
       if (!rec || !['drafted', 'sent'].includes(rec.status) || rec.complete) continue
       try {
-        const next = await followUp(r.id, rec)
+        const next = await followUp(r.id, rec, progress => save(r.id, progress))
         if (next !== rec) {
           next.complete = next.status === 'sent' && (next.filed || !dropboxConfigured())
           await save(r.id, next)
@@ -262,6 +268,9 @@ export async function autoQuotes({ max = 2, by = 'automatic' } = {}) {
             lines: checked.lines
           })
           drafted.push({ request: r.id, quote: made.number, total: made.total })
+          // Two requests for the same patient in one pass (Shelley's email to
+          // bookings@ and to Brent) must not both be drafted.
+          existing.push({ number: made.number, status: 'DRAFT', title: checked.template.title || '', summary: quoteSummary(p), reference: p.patient || '' })
           await save(r.id, { status: 'drafted', quoteId: made.id, quoteNumber: made.number, template: checked.template.title,
             patient: p.patient || '', surgeon: p.surgeon || '', procedure: [p.procedure, p.levels].filter(Boolean).join(' '), notified: [],
             priceList: list?.file || '', flags: list ? checked.flags : [{ reason: 'Price list could not be read — every price is from the template' }] })

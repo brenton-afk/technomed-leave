@@ -163,9 +163,15 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
       {done && (
         <div>
           {done.results.map(r => (
-            <div key={r.key} style={{ ...text('caption'), color: r.ok ? colour.accentDeep : colour.danger, marginBottom: 4 }}>
-              {r.ok ? '✓' : '✕'} {r.test ? 'Test sent to you' : `Correction sent to ${r.name}`}{r.ok ? '' : ` — ${r.error}`}
-            </div>
+            r.needsFirstSend ? (
+              <div key={r.key} data-needs-first-send style={{ ...text('caption'), color: colour.warning, marginBottom: 4 }}>
+                ! {r.error}
+              </div>
+            ) : (
+              <div key={r.key} style={{ ...text('caption'), color: r.ok ? colour.accentDeep : colour.danger, marginBottom: 4 }}>
+                {r.ok ? '✓' : '✕'} {r.test ? 'Test sent to you' : `Correction sent to ${r.name}`}{r.ok ? '' : ` — ${r.error}`}
+              </div>
+            )
           ))}
           {done.filed && <div style={{ ...text('caption'), color: colour.inkMuted }}>Corrected sheet filed in Dropbox beside the original.</div>}
           <button type="button" onClick={done.test ? () => setDone(null) : onClose} style={{ ...button(false), marginTop: space.sm, width: '100%' }}>

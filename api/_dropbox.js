@@ -235,7 +235,13 @@ export async function downloadFile(path) {
   return Buffer.from(await res.arrayBuffer())
 }
 
-export async function uploadFile(path, buffer) {
+/**
+ * `keep: true` never replaces a file already there: Dropbox adds " (1)" to the
+ * new one instead. For documents that each matter (a second resupply for the
+ * same case must not overwrite the first); re-runs of the same filing keep
+ * the default overwrite.
+ */
+export async function uploadFile(path, buffer, { keep = false } = {}) {
   const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
     method: 'POST',
     headers: {
@@ -244,8 +250,8 @@ export async function uploadFile(path, buffer) {
       // `overwrite` keeps a re-run from littering the folder with (1) copies.
       'Dropbox-API-Arg': JSON.stringify({
         path,
-        mode: 'overwrite',
-        autorename: false,
+        mode: keep ? 'add' : 'overwrite',
+        autorename: keep,
         mute: true,
         strict_conflict: false
       })

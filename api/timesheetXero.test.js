@@ -98,8 +98,15 @@ describe('resubmitting a fortnight Xero already has', () => {
 
   it('refuses to overwrite one payroll has already approved', () => {
     // Changing an approved timesheet is changing what somebody has been paid.
-    expect(SOURCE).toMatch(/DRAFT', 'PROCESSED'/)
+    expect(SOURCE).toMatch(/DRAFT', 'REJECTED'/)
+    // Processed means paid: never on the list of things a resubmission replaces.
+    expect(SOURCE).not.toMatch(/includes\([^)]*PROCESSED/)
     expect(SOURCE).toMatch(/reopen it before resubmitting/)
+  })
+
+  it('reads every page of timesheets, not only the first hundred', () => {
+    const fn = SOURCE.slice(SOURCE.indexOf('async function existingTimesheet'))
+    expect(fn.slice(0, fn.indexOf('\n}'))).toMatch(/Timesheets\?page=\$\{page\}/)
   })
 
   it('treats a failed lookup as unknown, not as nothing', () => {

@@ -1245,7 +1245,25 @@ const INGEST_RECENT = 'bookings:ingest:recent'
  * calendar from here. Used by the Inbox, the app's background check on
  * opening, and both daily jobs.
  */
+const INGEST_LOCK = 'bookings:ingest:lock'
+
 export async function ingestBookings() {
+  // One pass at a time. The two crons, the Inbox and the background check on
+  // opening can all start one, and two passes over the same new email both
+  // found it unseen and queued it twice — two cards for one case. A second
+  // pass just answers with the queue as it stands.
+  if (await redis('SET', INGEST_LOCK, '1', 'NX', 'EX', '90').catch(() => 'OK') !== 'OK') {
+    const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
+    return { ok: true, skipped: 'another check is running', found: 0, count: pending.length, pending }
+  }
+  try {
+    return await ingestPass()
+  } finally {
+    await redis('DEL', INGEST_LOCK).catch(() => {})
+  }
+}
+
+async function ingestPass() {
   {
     // A fortnight back is enough to catch up after a quiet week without trawling
     // the whole mailbox on every run.

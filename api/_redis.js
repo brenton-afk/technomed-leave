@@ -298,6 +298,11 @@ export async function claimResupply(id) {
   return (await redis('set', `resupply:claim:${id}`, '1', 'NX', 'EX', '604800')) === 'OK'
 }
 
+/** Lets an id go again when saving it failed, so the retry is not told "already saved". */
+export async function releaseResupply(id) {
+  await redis('del', `resupply:claim:${id}`).catch(() => {})
+}
+
 export async function saveResupply(entry) {
   await redisSetBody(`resupply:${entry.id}`, JSON.stringify(entry))
   if (entry.usageId) await redis('rpush', `resupply:case:${entry.usageId}`, entry.id)

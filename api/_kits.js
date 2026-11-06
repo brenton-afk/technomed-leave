@@ -534,7 +534,25 @@ function stale() {
  *   rename   rename the tray to `name`
  * Returns the whole list as it now stands.
  */
-export async function editTrayList(kitId, { op, tray, index, line, expect, name }, by) {
+/**
+ * One edit to a kit's list at a time. Each edit reads the whole list, changes
+ * a line and writes the whole list back, so two people saving at once (both
+ * phones open on the same tray during a stock-take) could each write a list
+ * without the other's change. The line check alone could not see that, since
+ * they were editing different lines.
+ */
+export async function editTrayList(kitId, change, by) {
+  const lock = `kits:list:lock:${kitId}`
+  for (let i = 0; i < 25; i++) {
+    if (await redis('set', lock, '1', 'NX', 'EX', '15') === 'OK') {
+      try { return await editTrayListNow(kitId, change, by) } finally { await redis('del', lock).catch(() => {}) }
+    }
+    await new Promise(r => setTimeout(r, 120))
+  }
+  throw new Error('Someone else is saving this tray list — try again in a moment')
+}
+
+async function editTrayListNow(kitId, { op, tray, index, line, expect, name }, by) {
   const list = await getTrayList(kitId)
   if (!list) throw new Error('This kit has no tray list yet')
   const t = list.trays.find(x => x.name === tray)

@@ -42,6 +42,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Unknown leave type' })
   }
 
+  // The comparisons below are string comparisons, which are only right for
+  // YYYY-MM-DD; anything else passed them and failed later, at Xero, on approval.
+  const isDay = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d)) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`))
+  if (![startDate, endDate, returnDate].every(isDay)) {
+    return res.status(400).json({ error: 'Dates must be real days (YYYY-MM-DD)' })
+  }
+
   if (endDate < startDate) {
     return res.status(400).json({ error: 'Last day must not be before the first day' })
   }

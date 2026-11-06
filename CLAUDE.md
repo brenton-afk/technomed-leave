@@ -550,6 +550,26 @@ project item ticked on the Projects page ticks its calendar copies the same way.
 twin is done. Exact words for calendar copies: the same trip written on two
 days may be two trips.
 
+### Review fixes (6 Nov 2026)
+
+Small rules from the full review, each with a test:
+- **Loan-set update on a change of set**: `loanRequestsFor` sends an update
+  when the sets asked for change (`setChanged`), not only date or hospital.
+- **Timesheet resubmission** replaces only a `DRAFT` or `REJECTED` Xero
+  timesheet (PROCESSED is paid), and `existingTimesheet` reads every page.
+- **Amend** keeps the case's `folderName`, re-reads the record before saving,
+  and sends a correction only to distributors that had the usage; others get
+  `needsFirstSend` and are sent the usage from the case.
+- **Resupply save** lets the claim go if saving fails; the PDF is uploaded
+  with `keep: true` (Dropbox adds " (1)") so a resupply never overwrites one.
+- **Self-funding quotes** save each heads-up as it goes (`persist`), and a
+  quote drafted in a pass counts for `alreadyQuoted` in the same pass.
+- **The daily crons** start PO/quotes/inbox work alongside the reminders and
+  wait for it only until 50s in; `ingestBookings` holds `bookings:ingest:lock`.
+- **Preference cards** claim each version (`prefs:claim:{n}`); **tray-list
+  edits** take `kits:list:lock:{kit}` — no lost update between two editors.
+- **Leave dates** must be real `YYYY-MM-DD` days.
+
 ### Kit room
 
 `api/_kits.js`, served from `api/guides.js?kits=` (no new function). Kits are

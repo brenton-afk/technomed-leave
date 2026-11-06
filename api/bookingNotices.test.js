@@ -105,6 +105,17 @@ describe('a booking changed from Diplomat to Mariner', () => {
     expect(out[0]).toMatchObject({ contactId: 'device', loan: { status: 'request', systems: ['Mariner'] } })
   })
 
+  it('tells Device when the set asked for changes, and not when nothing about it did', async () => {
+    const { loanRequestsFor, DEFAULT_CONTACTS, DEFAULT_LOAN_REQUESTS } = await import('./_bookingNotices.js')
+    const settings = { contacts: DEFAULT_CONTACTS, loanRequests: DEFAULT_LOAN_REQUESTS }
+    const sent = { device: { date: after.date, hospital: after.hospital, systems: ['Mariner'] } }
+    expect(loanRequestsFor({ kind: 'changed', before: after, after: { ...after, procedure: 'L4/5 TLIF' }, eventId: 'e1', settings, sent })).toEqual([])
+    const swapped = { ...after, loans: { ...after.loans, device: ['Mariner Open'] } }
+    const out = loanRequestsFor({ kind: 'changed', before: after, after: swapped, eventId: 'e1', settings, sent })
+    expect(out[0].loan).toMatchObject({ status: 'update', systems: ['Mariner Open'] })
+    expect(out[0].text).toContain('Set: Mariner → Mariner Open.')
+  })
+
   it('tells Calvary\'s loan sets team the set is coming, and that the booking changed', async () => {
     const { hospitalLoanNoticesFor, DEFAULT_CONTACTS } = await import('./_bookingNotices.js')
     const out = hospitalLoanNoticesFor({ kind: 'changed', before, after, eventId: 'e1', settings: { contacts: DEFAULT_CONTACTS } })

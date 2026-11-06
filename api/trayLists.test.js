@@ -58,6 +58,7 @@ vi.mock('./_redis.js', () => ({
     if (cmd === 'mget') return args.map(k => store.get(k) ?? null)
     if (cmd === 'lpush') { lists.set(args[0], [args[1], ...(lists.get(args[0]) || [])]); return 1 }
     if (cmd === 'ltrim' || cmd === 'del' || cmd === 'expire') return 1
+    if (cmd === 'set') return 'OK'
     if (cmd === 'lrange') return lists.get(args[0]) || []
     return null
   }),

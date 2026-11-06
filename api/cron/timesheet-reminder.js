@@ -89,31 +89,43 @@ export default async function handler(req, res) {
 
   const job = String(req.query?.job || '')
 
-  // Calvary purchase orders into draft Xero invoices, at both runs (Brent,
-  // 5 Nov 2026). First and in its own try: nothing else here waits on it, and
-  // a Xero or Gmail failure must not cost the reminders.
-  let invoices = null
-  if (job === 'evening' || job === 'morning') {
-    // Purchase orders and self-funding quotes side by side, each in its own
-    // catch, so neither can cost the other (or the reminders) its turn.
-    // And bookings@ read into Cases → Inbox, so cards are waiting for whoever
-    // books (Brent, 6 Nov 2026). Cards only — nothing reaches the calendar.
-    const [po, quotes, bookings] = await Promise.all([
+  // Calvary purchase orders into draft Xero invoices, self-funding quotes and
+  // bookings@ into Cases → Inbox, at both runs (Brent, 5–6 Nov 2026). Started
+  // here and NOT waited on before the reminders: each of the three reads with
+  // Claude and together they can take most of the function's 60 seconds, and
+  // the reminders used to queue behind them and be cut off. Now the reminders
+  // run alongside, and the three are waited on only until 50s in — each is
+  // locked and picks up where it left off on the next run. Each in its own
+  // catch, so none can cost another (or the reminders) its turn.
+  const started = Date.now()
+  const work = (job === 'evening' || job === 'morning')
+    ? Promise.all([
       autoInvoice({ by: `cron-${job}` }).catch(err => { console.error('po auto-invoice failed:', err.message); return { error: err.message } }),
       autoQuotes({ by: `cron-${job}` }).catch(err => { console.error('quote auto failed:', err.message); return { error: err.message } }),
       ingestBookings().then(({ pending, ...rest }) => rest).catch(err => { console.error('booking inbox check failed:', err.message); return { error: err.message } })
-    ])
-    invoices = { po, quotes, bookings }
+    ]).then(([po, quotes, bookings]) => ({ po, quotes, bookings }))
+    : Promise.resolve(null)
+  const settled = () => {
+    let timer
+    return Promise.race([
+      work,
+      new Promise(resolve => {
+        timer = setTimeout(() => resolve({ unfinished: 'still running at the time limit — the next run carries on' }),
+          Math.max(1000, 50000 - (Date.now() - started)))
+      })
+    ]).finally(() => clearTimeout(timer))
   }
 
   // Each part in its own try, so a calendar that will not answer does not stop
   // the timesheet reminders, and the other way round.
   if (job === 'evening') {
-    if (!usageRemindersOn()) return res.status(200).json({ ran: 'evening', usage: 'paused', invoices })
+    if (!usageRemindersOn()) return res.status(200).json({ ran: 'evening', usage: 'paused', invoices: await settled() })
     try {
-      return res.status(200).json({ ran: 'evening', usage: await usageEvening(), invoices })
+      const usage = await usageEvening()
+      return res.status(200).json({ ran: 'evening', usage, invoices: await settled() })
     } catch (err) {
       console.error('usage reminder (evening) failed:', err.message)
+      await settled()
       return res.status(500).json({ error: err.message })
     }
   }
@@ -128,7 +140,7 @@ export default async function handler(req, res) {
     }
     // Timesheet reminders only at the weekend, as when this ran Sat/Sun only.
     if (!['Sat', 'Sun'].includes(hobartWeekday())) {
-      return res.status(200).json({ ran: 'morning', usage, invoices, timesheets: 'not a weekend' })
+      return res.status(200).json({ ran: 'morning', usage, invoices: await settled(), timesheets: 'not a weekend' })
     }
   }
 
@@ -146,7 +158,7 @@ export default async function handler(req, res) {
 
     if (!twilioConfigured()) {
       return res.status(200).json({
-        ran: true, usage, period: period.start,
+        ran: true, usage, invoices: await settled(), period: period.start,
         skippedAll: 'Twilio is not configured',
         owing: owing.map(s => s.name)
       })
@@ -170,9 +182,11 @@ export default async function handler(req, res) {
       }
     }
 
+    const invoices = await settled()
     return res.status(200).json({
       ran: true,
       usage,
+      invoices,
       today: todayAest(),
       period: { start: period.start, end: period.end },
       owing: owing.length,
@@ -182,6 +196,7 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('timesheet-reminder failed:', err.message)
+    await settled()
     return res.status(500).json({ error: err.message })
   }
 }

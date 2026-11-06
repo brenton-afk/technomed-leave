@@ -58,6 +58,12 @@ export function cleanCard(card) {
 
 async function store(next, summary, by) {
   const version = next.version
+  // Two saves made against the same version both passed the check above and
+  // both wrote version n+1 — the second silently replacing the first. Each
+  // version number can now be taken once; the loser is told to reload.
+  if (await redis('set', `prefs:claim:${version}`, String(by || ''), 'NX', 'EX', '604800') !== 'OK') {
+    throw new Stale(await getPreferences())
+  }
   await redisSetBody(`prefs:v:${version}`, JSON.stringify(next.data))
   await redisSetBody(CURRENT, JSON.stringify(next))
   await redis('lpush', HISTORY, JSON.stringify({ version, at: next.updatedAt, by, summary }))
