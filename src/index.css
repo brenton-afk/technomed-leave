@@ -62,22 +62,17 @@ body {
   flex-direction: column;
 }
 
-/* Installed on the home screen, the status bar is see-through
-   (black-translucent) and the page runs up under it — and there iOS reports
-   100dvh as the screen *less* the status bar, so the frame stopped short and
-   left a navy strip under the tab bar (Brent, 6 Nov 2026: "there's a gap at
-   the bottom"). Fixed to the top, with the height the screen really is
-   (--tm-app-height and the tm-app-height class, both set by
-   src/appHeight.js only when it measures the shortfall). Only the installed app: a Safari
-   tab has its own toolbars and 100dvh is right there. */
-html.tm-app-height #root {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  /* Not pinned to the bottom edge: on iOS the edge itself is short.
-     src/appHeight.js measures the screen and sets the class and this. */
-  height: var(--tm-app-height);
+/* Installed on an iPhone's home screen, iOS sizes the viewport a status bar
+   short of the glass and draws nothing of the page below it — only the canvas
+   colour reaches there. src/appHeight.js adds this class when it detects that:
+   the canvas becomes the tab bar's white, so the strip reads as part of the
+   bar, and the bar drops its home-indicator padding, which the strip already
+   covers. The frame itself stays the viewport's height — sizing it past that
+   put the tab bar's labels where iOS draws nothing (Brent, 6 Nov 2026). */
+html.tm-short-viewport {
+  background: #ffffff;
+  --tm-bar-bg: #ffffff;
+  --tm-bottom-inset: 0px;
 }
 
 input, select, textarea, button {

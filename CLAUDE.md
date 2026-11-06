@@ -53,14 +53,17 @@ Three details are load-bearing:
 - **`height: 100dvh`, with a `100vh` line before it as the fallback.** On iOS
   `100vh` is the large viewport — taller than what is actually on screen — which
   is why fixed elements appeared to shift under momentum scrolling.
-- **Installed on the home screen, the frame is the screen's measured
-  height** (`src/appHeight.js`, run from `main.jsx`). The status bar is
-  black-translucent, and there iOS sizes the viewport as the screen *less*
-  the status bar — `100dvh` and the bottom edge are both short — so the frame
-  stopped short and left a navy strip under the tab bar (Brent, 6 Nov 2026,
-  twice: pinning to `bottom: 0` did not fix it). When installed and short by
-  no more than 80pt, it sets `--tm-app-height` to the screen height and the
-  `tm-app-height` class on `<html>`; otherwise nothing, and `100dvh` stands.
+- **An installed iPhone draws nothing below a short viewport — so the frame
+  never goes there** (`src/appHeight.js`). With the black-translucent status
+  bar, iOS sizes the viewport a status bar (~59pt) short of the glass and
+  paints only the canvas colour below it. Pinning to `bottom: 0` and sizing
+  the frame to the screen were both tried (Brent, 6 Nov 2026) and both failed:
+  the edge is short, and anything placed past it is cut off — the tab bar's
+  labels vanished. Now: the frame stays `100dvh`; when installed and short,
+  `tm-short-viewport` on `<html>` turns the canvas white (inline too — index.html
+  sets an inline navy on `<html>` for the first paint) and sets `--tm-bar-bg`
+  white and `--tm-bottom-inset: 0px`, which the tab bar reads, so the strip
+  below is part of a solid white bar. Never size anything past the viewport.
 - **A `@media print` block undoing all of it.** A viewport-height frame with
   hidden overflow clips a printout to one screen, and the case plan has `@page A4`
   rules and gets printed.

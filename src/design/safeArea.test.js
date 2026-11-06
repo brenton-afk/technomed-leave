@@ -57,7 +57,9 @@ describe('the app shell', () => {
   const app = read('src/App.jsx')
 
   it('keeps the tab bar above the home indicator', () => {
-    expect(app).toMatch(/paddingBottom: 'env\(safe-area-inset-bottom/)
+    // Through --tm-bottom-inset, which only a short iOS viewport turns off
+    // (src/appHeight.js); everywhere else it is the inset itself.
+    expect(app).toMatch(/paddingBottom: 'var\(--tm-bottom-inset, env\(safe-area-inset-bottom/)
   })
 
   // There was a test here asserting the content reserved `76px + inset` of
@@ -308,24 +310,5 @@ describe('typing into a field must not resize the app', () => {
     const css = read('src/index.css')
     const rule = /input,\s*select,\s*textarea\s*\{[^}]*font-size:\s*16px/
     expect(css, 'the iOS zoom threshold is 16px').toMatch(rule)
-  })
-})
-
-// "Now you've made the white panel at the bottom with tabs too big — there's a
-// gap at the bottom" (Brent, 6 Nov 2026). Installed on the home screen with a
-// black-translucent status bar, iOS gives 100dvh as the screen less the status
-// bar, so the frame stopped short. The installed app pins the frame to the
-// screen's edges instead.
-describe('the installed app fills the whole screen', () => {
-  it('pins #root to the top and sizes it to the real screen when standalone', () => {
-    const css = read('src/index.css')
-    const block = css.match(/html\.tm-app-height #root\s*\{[^}]*\}/)?.[0] || ''
-    expect(block).toMatch(/position:\s*fixed/)
-    for (const edge of ['top', 'right', 'left']) {
-      expect(block).toMatch(new RegExp(`${edge}:\\s*0`))
-    }
-    // Not the bottom edge: on iOS the edge itself is short. The height is
-    // measured from the screen (appHeight.js), else 100dvh.
-    expect(block).toMatch(/height:\s*var\(--tm-app-height\)/)
   })
 })

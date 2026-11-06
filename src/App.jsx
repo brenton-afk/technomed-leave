@@ -609,7 +609,7 @@ export default function App() {
         <button onClick={() => setMicOpen(true)} aria-label="Speak a command"
           style={{
             position: 'fixed', zIndex: 120, right: 16,
-            bottom: `calc(${desktop ? 78 : 86}px + env(safe-area-inset-bottom, 0px))`,
+            bottom: `calc(${desktop ? 78 : 86}px + var(--tm-bottom-inset, env(safe-area-inset-bottom, 0px)))`,
             width: 56, height: 56, borderRadius: 999, border: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: colour.navy, color: 'white', cursor: 'pointer',
@@ -637,10 +637,14 @@ export default function App() {
           display: 'flex', zIndex: 100
         } : {
           flexShrink: 0,
-          background: 'rgba(255,255,255,0.92)',
+          // Both through variables that src/appHeight.js can turn: on an
+          // iPhone whose viewport stops short of the glass the strip below is
+          // the canvas, painted this same white, so the bar is solid and its
+          // home-indicator padding is already that strip.
+          background: 'var(--tm-bar-bg, rgba(255,255,255,0.92))',
           backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
           borderTop: `1px solid ${colour.line}`, display: 'flex', zIndex: 100,
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+          paddingBottom: 'var(--tm-bottom-inset, env(safe-area-inset-bottom, 0px))'
         }}>
 
         {/* The column needs a head, or it reads as five buttons floating in a
