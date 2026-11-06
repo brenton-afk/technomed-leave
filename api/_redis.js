@@ -255,6 +255,43 @@ export async function getUsageRecord(id) {
   return data ? JSON.parse(data) : null
 }
 
+// ─── RESUPPLY ────────────────────────────────────────────────
+// One key per resupply document and a list of them per usage case — appended,
+// never rewritten. Two people scanning resupplies for the same case at once
+// each add their own entry; neither can overwrite the other, which a field on
+// the usage record would have allowed. The claim key makes a double tap, or a
+// retry after a dropped connection, save once.
+
+/** True the first time an id is claimed, false ever after (for a week). */
+export async function claimResupply(id) {
+  return (await redis('set', `resupply:claim:${id}`, '1', 'NX', 'EX', '604800')) === 'OK'
+}
+
+export async function saveResupply(entry) {
+  await redisSetBody(`resupply:${entry.id}`, JSON.stringify(entry))
+  if (entry.usageId) await redis('rpush', `resupply:case:${entry.usageId}`, entry.id)
+  await redis('lpush', 'resupply:all', entry.id)
+  await redis('ltrim', 'resupply:all', '0', '499')
+}
+
+export async function getResupply(id) {
+  const data = await redis('get', `resupply:${id}`)
+  return data ? JSON.parse(data) : null
+}
+
+/** Every resupply recorded against a usage case, oldest first. */
+export async function getCaseResupplies(usageId) {
+  const ids = await redis('lrange', `resupply:case:${usageId}`, '0', '-1') || []
+  const rows = await Promise.all(ids.map(id => redis('get', `resupply:${id}`)))
+  return rows.map(readRow).filter(Boolean)
+}
+
+export async function getRecentResupplies(limit = 50) {
+  const ids = await redis('lrange', 'resupply:all', '0', String(Math.max(0, limit - 1))) || []
+  const rows = await Promise.all(ids.map(id => redis('get', `resupply:${id}`)))
+  return rows.map(readRow).filter(Boolean)
+}
+
 // ─── Who has checked a filed case ────────────────────────────────────────────
 // The one thing the app holds about a Dropbox folder, and deliberately the
 // only thing: Dropbox owns the documents, this owns "Toni has been through

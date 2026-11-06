@@ -69,7 +69,7 @@ function readAsBase64(file) {
   })
 }
 
-async function fileToPage(file) {
+export async function fileToPage(file) {
   if (file.type === 'application/pdf') {
     return {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -125,7 +125,7 @@ function deviceToday() {
   ].join('-')
 }
 
-function payloadBytes(pages) {
+export function payloadBytes(pages) {
   // base64 inflates by ~4/3.
   return pages.reduce((sum, p) => sum + Math.ceil(p.data.length * 0.75), 0)
 }
@@ -154,7 +154,7 @@ function newPageId() {
 
 // A drawn canvas → the same page shape produced by fileToPage.
 /** A page from an already-flattened preview, as the scanner hands it over. */
-function pageFromPreview(page, index) {
+export function pageFromPreview(page, index) {
   return {
     id: newPageId(),
     mediaType: 'image/jpeg',
@@ -393,7 +393,7 @@ function AddMoreRow({ onScan, onUpload }) {
   )
 }
 
-export default function UsageScan({ user }) {
+export default function UsageScan({ user, switcher }) {
   // Usage forms are scanned on a phone, held over the paper on a theatre bench.
   // Nobody has ever scanned one with a laptop and nobody is going to — there is
   // no camera pointed at the right thing and no hand free to hold it.
@@ -697,7 +697,9 @@ export default function UsageScan({ user }) {
           title={desktop ? 'Filed usage' : 'Usage Scanning'}
           subtitle={desktop
             ? 'Every usage form the team has scanned and sent'
-            : `${user?.name?.split(' ')[0] || 'Rep'} · scan a usage form to file and send it`} />
+            : `${user?.name?.split(' ')[0] || 'Rep'} · scan a usage form to file and send it`}>
+          {switcher}
+        </Header>
         <div style={{ padding: 16 }}>
           {error && <Banner tone="danger">{error}</Banner>}
           {!desktop && (
@@ -770,7 +772,10 @@ export default function UsageScan({ user }) {
   if (step === 'capture') {
     return (
       <div style={{ minHeight: '100%', background: '#f0f3f7', fontFamily: '-apple-system,sans-serif' }}>
-        <Header title="Add pages" subtitle="Photograph or upload every page of the usage form" />
+        <Header title="Add pages" subtitle="Photograph or upload every page of the usage form">
+          {/* Only before the first page: switching kind mid-scan would drop it. */}
+          {pages.length === 0 && switcher}
+        </Header>
         <div style={{ padding: 16 }}>
           {error && <Banner tone="danger">{error}</Banner>}
 

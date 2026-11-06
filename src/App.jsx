@@ -8,7 +8,7 @@ import Cases from './pages/Cases.jsx'
 import { Screens, LazyScreen, prefetchScreens } from './lazyScreens.jsx'
 // Loaded when opened rather than with the app — see lazyScreens.jsx.
 const {
-  LeaveForm, KitRoom, Projects, TeamLeader, UsageScan, TheatreGuides, Chat, Timesheets,
+  LeaveForm, KitRoom, Projects, TeamLeader, UsageScan, ScanTab, TheatreGuides, Chat, Timesheets,
   AdminPortal, FileBrowser, PatientHistory, Notifications
 } = Screens
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
@@ -444,7 +444,7 @@ export default function App() {
       )
     }
 
-    if (tab === 'scan') return <UsageScan user={user} />
+    if (tab === 'scan') return <ScanTab user={user} />
 
     if (tab === 'messages') return <Chat user={user} onRead={unread.refresh} />
 

@@ -859,6 +859,35 @@ Invariants worth preserving:
 - **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
+### Resupply scanning (Brent, 6 Nov 2026)
+
+The Scan tab is one camera with a choice of what the paper is — **Usage |
+Resupply** (`scan/ScanKind.jsx`, remembered per phone in `tm_scan_kind`;
+`ScanTab.jsx` picks the screen). Tray restock and stock-take join that row
+later. `ResupplyScan.jsx` reuses UsageScan's page helpers and `CameraSheet`.
+
+What comes back after a usage — a delivery docket, packing slip, or the photo
+E4 replies to the usage email with — is read (`RESUPPLY_PROMPT` in
+`api/_resupply.js`, surname only as on the usage side), matched to the saved
+usage case (`candidateCases`: the usage folder name as a reference beats the
+surname, then date, surgeon, product codes in common; a case with none of that
+distributor's items is never offered; matched outright only when named and
+clearly ahead, else the person picks), and compared **by product code, never
+lot** — resupplied stock has new lots (`compareResupply`: used, back before,
+this paper, still owed; lines the case did not use listed apart as a top-up or
+substitute). Device and Boost count as one company there.
+
+Recording is `action=resupply-save` in `api/usage/agent.js` (no new function):
+one key per resupply, **appended** to `resupply:case:{usageId}` — never a
+field rewritten on the usage record, so two people cannot overwrite each other
+— and claimed by the client's id (`claimResupply`, SET NX) so a double tap or a
+retry saves once. The pages are filed **in the usage case's own Dropbox folder,
+the way the team already names them**: `{Surname} {Distributor} resupply.pdf`,
+`{Surname} partial {Distributor} resupply {n}.pdf` (`resupplyFileName`). The
+Scan tab's Resupply side opens on **Still owed** (`action=resupply-owing`),
+per case and distributor, for cases since `RESUPPLY_TRACK_FROM` (default
+2026-11-06 — earlier cases were resupplied on paper and would all read owed).
+
 ### The scanner
 
 `src/pages/scan/CameraSheet.jsx` plus four modules in `src/scanner/`:

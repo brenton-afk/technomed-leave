@@ -123,6 +123,9 @@ describe('no screen is left out', () => {
     'cases/LoanTrail.jsx',
     // A section of the usage screen after filing.
     'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx',
+    // The Scan tab's wrapper and its Usage | Resupply switch: drawn inside
+    // UsageScan's or ResupplyScan's header.
+    'ScanTab.jsx', 'scan/ScanKind.jsx',
    
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',

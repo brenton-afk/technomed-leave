@@ -21,6 +21,7 @@ const loaders = {
   Projects: () => import('./pages/Projects.jsx'),
   TeamLeader: () => import('./pages/TeamLeader.jsx'),
   UsageScan: () => import('./pages/UsageScan.jsx'),
+  ScanTab: () => import('./pages/ScanTab.jsx'),
   TheatreGuides: () => import('./pages/TheatreGuides.jsx'),
   Chat: () => import('./pages/Chat.jsx'),
   Timesheets: () => import('./pages/Timesheets.jsx'),

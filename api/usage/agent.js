@@ -4,8 +4,13 @@ import { markAttendance } from '../_googleCalendar.js'
 import { STAFF, firstNameFor } from '../../src/staffConfig.js'
 import {
   saveUsageRecord, getUsageRecord, getUsageHistory,
-  setUsageReviewed, getUsageReviews
+  setUsageReviewed, getUsageReviews,
+  claimResupply, saveResupply, getResupply, getCaseResupplies
 } from '../_redis.js'
+import {
+  RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply,
+  resupplyFileName, itemsFor
+} from '../_resupply.js'
 import { normaliseCase, recomputeCase, normaliseItem } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
@@ -80,6 +85,10 @@ export default async function handler(req, res) {
     if (action === 'reviewed') return await handleReviewed(req, res, session)
     if (action === 'record') return await handleRecord(req, res)
     if (action === 'amend') return await handleAmend(req, res, session)
+    if (action === 'resupply-read') return await handleResupplyRead(req, res)
+    if (action === 'resupply-compare') return await handleResupplyCompare(req, res)
+    if (action === 'resupply-save') return await handleResupplySave(req, res, session)
+    if (action === 'resupply-owing') return await handleResupplyOwing(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     // err.message here is ours or the provider's; extracted content is never
@@ -671,4 +680,179 @@ async function handleList(req, res) {
       createdAt: r.createdAt
     }))
   })
+}
+
+// ─── Resupply (see api/_resupply.js) ───────────────────────
+
+// How far back a resupply looks for its case. Distributors resupply within
+// days, occasionally weeks for a back-order.
+const RESUPPLY_LOOKBACK = 150
+
+/** A case as the resupply screens show it: what is needed to recognise it. */
+function caseSummary(record) {
+  return {
+    id: record.id,
+    folderName: record.folderName,
+    patientSurname: record.patientSurname,
+    surgeonSurname: record.surgeonSurname,
+    hospital: record.hospital,
+    date: record.date,
+    filed: Boolean(record.dropboxPath)
+  }
+}
+
+async function comparisonFor(usageId, resupply) {
+  const record = await getUsageRecord(usageId)
+  if (!record) return null
+  const earlier = (await getCaseResupplies(usageId))
+    .filter(e => !resupply.distributorKey || e.distributorKey === resupply.distributorKey)
+  return { record, earlier, comparison: compareResupply(record, resupply.distributorKey, resupply.lines, earlier) }
+}
+
+async function handleResupplyRead(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!process.env.ANTHROPIC_API_KEY) throw badRequest('Scanning is not switched on yet (ANTHROPIC_API_KEY is missing).')
+  const pages = validatePages(req.body?.pages)
+
+  const message = await streamClaude({
+    feature: 'resupply-scan',
+    whenUnavailable: 'The resupply could not be read right now — try again shortly.',
+    request: {
+      model: VISION_MODEL,
+      max_tokens: 8000,
+      output_config: { effort: 'high' },
+      messages: [{ role: 'user', content: [...contentBlocksFor(pages), { type: 'text', text: RESUPPLY_PROMPT }] }]
+    }
+  })
+  if (message.stop_reason === 'refusal') throw new Error('The document could not be processed. Please contact Brenton.')
+  const textBlock = message.content.find(b => b.type === 'text')
+  if (!textBlock) throw new Error('No data was returned from the document')
+
+  const resupply = normaliseResupply(parseExtraction(textBlock.text))
+  const records = await getUsageHistory(RESUPPLY_LOOKBACK)
+  const candidates = candidateCases(resupply, records)
+  const best = candidates[0]
+  // Matched outright only when the document named the case — by reference or
+  // surname — and nothing else comes close. Otherwise the person picks.
+  const sure = best && (best.why.includes('reference') || best.why.includes('surname'))
+    && (!candidates[1] || best.score - candidates[1].score >= 4)
+  const matched = sure ? await comparisonFor(best.record.id, resupply) : null
+
+  return res.status(200).json({
+    resupply,
+    candidates: candidates.map(c => ({ ...caseSummary(c.record), why: c.why })),
+    matchedId: matched ? best.record.id : null,
+    comparison: matched?.comparison || null,
+    earlierCount: matched?.earlier.length || 0
+  })
+}
+
+/** The comparison against a case the person chose (or a corrected document). */
+async function handleResupplyCompare(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { usageId } = req.body || {}
+  if (!usageId) throw badRequest('No usage case chosen')
+  const resupply = normaliseResupply(req.body?.resupply || {})
+  const found = await comparisonFor(usageId, { ...resupply, distributorKey: req.body?.resupply?.distributorKey || resupply.distributorKey })
+  if (!found) return res.status(404).json({ error: 'That usage case could not be found' })
+  return res.status(200).json({ comparison: found.comparison, earlierCount: found.earlier.length, case: caseSummary(found.record) })
+}
+
+async function handleResupplySave(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { id, usageId } = req.body || {}
+  if (!/^[a-z0-9-]{8,64}$/i.test(String(id || ''))) throw badRequest('Missing resupply id')
+  const given = req.body?.resupply || {}
+  const resupply = { ...normaliseResupply(given), distributorKey: given.distributorKey || normaliseResupply(given).distributorKey }
+  if (!resupply.lines.length) throw badRequest('There are no lines to record')
+
+  // Saved once, whatever happens to the connection: a retry of the same scan
+  // answers with what was saved the first time.
+  if (!(await claimResupply(id))) {
+    const existing = await getResupply(id)
+    return res.status(200).json({ entry: existing, alreadySaved: true })
+  }
+
+  let record = null
+  let comparison = null
+  let earlier = []
+  if (usageId) {
+    const found = await comparisonFor(usageId, resupply)
+    if (!found) return res.status(404).json({ error: 'That usage case could not be found' })
+    ;({ record, comparison, earlier } = found)
+  }
+
+  // Filed beside the usage, named the way the team names them. Dropbox first,
+  // so a failed filing records nothing and can simply be retried.
+  let filed = ''
+  let fileError = ''
+  if (record?.dropboxPath && dropboxConfigured() && Array.isArray(req.body?.pages) && req.body.pages.length) {
+    try {
+      const pdf = await buildScanPdf(validatePages(req.body.pages))
+      const name = resupplyFileName({
+        patientSurname: record.patientSurname,
+        distributorKey: resupply.distributorKey,
+        partial: comparison.totals.owing > 0 || earlier.length > 0,
+        n: earlier.length + 1
+      })
+      await uploadFile(`${record.dropboxPath}/${name}`, pdf)
+      filed = name
+    } catch (err) {
+      fileError = err.message
+    }
+  }
+
+  const entry = {
+    id,
+    usageId: usageId || null,
+    distributorKey: resupply.distributorKey,
+    distributor: resupply.distributor,
+    documentNumber: resupply.documentNumber,
+    documentDate: resupply.documentDate,
+    lines: resupply.lines.map(({ referenceCode, description, lotNumber, quantity, backordered }) =>
+      ({ referenceCode, description, lotNumber, quantity, backordered })),
+    owingAfter: comparison ? comparison.totals.owing : null,
+    filed,
+    scannedBy: session.name,
+    scannedByEmail: session.email,
+    at: new Date().toISOString()
+  }
+  await saveResupply(entry)
+  return res.status(200).json({ entry, comparison, fileError, case: record ? caseSummary(record) : null })
+}
+
+// Tracking starts the day it went live: every case before it would otherwise
+// read as wholly owed, because nobody scanned its resupply.
+const TRACK_FROM = process.env.RESUPPLY_TRACK_FROM || '2026-11-06'
+
+/** Every recent case with something still owed, per distributor, oldest first. */
+async function handleResupplyOwing(req, res) {
+  const records = (await getUsageHistory(RESUPPLY_LOOKBACK))
+    .filter(r => (r.date || '') >= TRACK_FROM || (r.createdAt || '').slice(0, 10) >= TRACK_FROM)
+  const today = new Date().toISOString().slice(0, 10)
+  const rows = []
+  for (const record of records) {
+    const sent = new Set((record.emailsSent || []).filter(e => e && !e.testOnly && (e.ok !== false)).map(e => e.key || e.distributorKey))
+    const keys = [...new Set(itemsFor(record).map(i => i.distributorKey).filter(Boolean))]
+    if (!keys.length) continue
+    const resupplies = await getCaseResupplies(record.id)
+    for (const key of keys) {
+      const earlier = resupplies.filter(e => e.distributorKey === key
+        || (key === 'device_boost' && e.distributorKey === 'device') || (key === 'device' && e.distributorKey === 'device_boost'))
+      const { totals } = compareResupply(record, key, [], earlier)
+      if (totals.owing <= 0) continue
+      rows.push({
+        ...caseSummary(record),
+        distributorKey: key,
+        distributor: DISTRIBUTORS[key]?.name || key,
+        used: totals.used,
+        resupplied: totals.before,
+        owing: totals.owing,
+        usageSent: sent.size ? sent.has(key) : null,
+        days: record.date ? Math.round((Date.parse(today) - Date.parse(record.date)) / 86400000) : null
+      })
+    }
+  }
+  rows.sort((a, b) => (b.days || 0) - (a.days || 0))
+  return res.status(200).json({ rows, trackingFrom: TRACK_FROM })
 }
