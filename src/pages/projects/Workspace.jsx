@@ -99,7 +99,9 @@ const TABLE_COLUMNS = '28px minmax(0, 1fr) 150px 150px 120px 90px 64px'
 
 export default function Workspace({
   projects = [], items = [], user, today, wide,
-  onOpenProject, onOpenTask, onMove, onCreateProject, busyProject, onAdd, adding
+  onOpenProject, onOpenTask, onMove, onCreateProject, busyProject, onAdd, adding,
+  // Given by Projects.jsx, whose one row of tabs chooses it on a phone.
+  phoneTab: phoneTabGiven
 }) {
   const me = STAFF.find(p => p.email === user?.email)
   const isMine = task => (me ? isSameStaff(task.assignee, me) : task.assignee === user?.name)
@@ -107,7 +109,10 @@ export default function Workspace({
   const saved = useMemo(loadPrefs, [])
   const [view, setViewRaw] = useState(saved.view || 'list')
   // On a phone the page opens on your own to-do list (Brent, 6 Nov 2026).
-  const [phoneTab, setPhoneTabRaw] = useState(saved.phoneTab || 'todo')
+  const [phoneTabOwn, setPhoneTabRaw] = useState(saved.phoneTab || 'todo')
+  const phoneTab = phoneTabGiven || phoneTabOwn
+  // A phone's filters stay folded until asked for (Brent, 6 Nov 2026: "way too busy").
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [division, setDivisionRaw] = useState(saved.division || 'All')
   const [onlyMine, setOnlyMineRaw] = useState(Boolean(saved.onlyMine))
   const [showDone, setShowDone] = useState(false)
@@ -252,6 +257,7 @@ export default function Workspace({
           ...text('field'), flex: '1 1 220px', minWidth: 0, border: 'none', outline: 'none',
           padding: `${space.sm}px ${space.sm}px`, background: 'transparent', color: colour.ink
         }} />
+      {(wide || draft.trim()) && <>
       <select value={draftWho} onChange={e => setDraftWho(e.target.value)} aria-label="Who has it"
         style={{ ...text('field'), flex: '0 1 150px', minWidth: 0, padding: '6px 8px', border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface }}>
         <option value="">Me</option>
@@ -266,11 +272,19 @@ export default function Workspace({
           borderRadius: radius.control, cursor: draft.trim() ? 'pointer' : 'default',
           background: draft.trim() ? colour.accent : colour.line, color: draft.trim() ? 'white' : colour.inkFainter
         }}>{adding ? 'Adding…' : 'Add'}</button>
+      </>}
     </div>
   )
 
+  const filtering = division !== 'All' || onlyMine || showDone || stat
   const filters = (
     <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center', marginBottom: space.md }}>
+      {!wide && (
+        <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(v => !v)} style={chip(filtersOpen || filtering)}>
+          Filter{filtering ? ' · on' : ''}
+        </button>
+      )}
+      {(wide || filtersOpen) && <>
       {['All', ...DIVISIONS].map(d => (
         <button key={d} type="button" aria-pressed={division === d} onClick={() => setDivision(d)} style={chip(division === d)}>
           {d !== 'All' && <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: radius.pill, background: tintOfDivision(d).solid }} />}
@@ -288,6 +302,8 @@ export default function Workspace({
           Show done
         </label>
       )}
+      </>}
+      {!wide && <span style={{ flex: '1 0 8px' }} />}
       <div role="tablist" aria-label="View" style={{ display: 'inline-flex', background: colour.lineSoft, borderRadius: radius.control, padding: 3 }}>
         {[['list', wide ? 'Table' : 'List'], ['board', 'Board'], ['people', 'People']].map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
@@ -609,7 +625,7 @@ export default function Workspace({
   if (!wide && phoneTab === 'todo') {
     return (
       <div>
-        {phoneTabs}
+        {!phoneTabGiven && phoneTabs}
         <MyToDo name={me?.firstName} tasks={live.filter(isMine)} today={today}
           projectFor={projectFor}
           tintFor={p => (p.division ? tintOfDivision(p.division) : tintOf(p.colour))}
@@ -620,8 +636,8 @@ export default function Workspace({
 
   return (
     <div>
-      {phoneTabs}
-      {statTiles}
+      {!phoneTabGiven && phoneTabs}
+      {(wide || filtersOpen) && statTiles}
       {quickAdd}
       {filters}
       <div style={wide ? { display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: space.md, alignItems: 'start' } : {}}>

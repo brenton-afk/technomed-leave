@@ -4,6 +4,14 @@ import React from 'react'
 import Projects from './Projects.jsx'
 import { DEFAULT_COLUMNS } from '../projects/model.js'
 
+// A phone folds the filters and the counts behind one Filter button (Brent,
+// 6 Nov 2026: "way too busy"); these tests open it first.
+const openFilters = () => {
+  const b = screen.queryByRole('button', { name: /^Filter/ })
+  if (b && b.getAttribute('aria-expanded') !== 'true') fireEvent.click(b)
+}
+
+
 // ─── A true project page ─────────────────────────────────────────────────────
 // "Can you build the task/project section out to be more comprehensive. We want
 // it similar to monday.com as a true project page."
@@ -258,14 +266,15 @@ describe('yours against everybody else’s (Brent, 4 Nov 2026)', () => {
     await show()
     const row = screen.getByText('Book the first case').closest('[data-mine]')
     expect(row).toHaveAttribute('data-mine', 'true')
-    expect(screen.getByRole('tab', { name: /2 yours/ })).toBeInTheDocument()
+    // The count of yours is on the desktop tab; a phone opens on My To Do instead.
+    expect(screen.getByRole('tab', { name: 'My To Do' })).toBeInTheDocument()
   })
 
   it('narrows to my tasks when asked, and remembers it', async () => {
     await show()
-    fireEvent.click(screen.getByLabelText('Show done'))
+    openFilters(); fireEvent.click(screen.getByLabelText('Show done'))
     expect(screen.getByText('Get Mat credentialled')).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Only my tasks'))
+    openFilters(); fireEvent.click(screen.getByLabelText('Only my tasks'))
     expect(screen.queryByText('Get Mat credentialled')).not.toBeInTheDocument()
     expect(screen.getByText('Book the first case')).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('tm_projects_view')).onlyMine).toBe(true)
@@ -293,7 +302,7 @@ describe('yours against everybody else’s (Brent, 4 Nov 2026)', () => {
 
   it('the numbers are filters: overdue shows only what is late', async () => {
     await show()
-    fireEvent.click(screen.getByText('Overdue').closest('button'))
+    openFilters(); fireEvent.click(screen.getByText('Overdue').closest('button'))
     expect(screen.getByText('Book the first case')).toBeInTheDocument()
     expect(screen.queryByText('Get the Athlet tray back from RHH')).not.toBeInTheDocument()
   })
@@ -301,6 +310,7 @@ describe('yours against everybody else’s (Brent, 4 Nov 2026)', () => {
   it('filters by division, from the project or the person', async () => {
     await show()
     // Both of Erin's are Operations by person; Globus has no division set.
+    openFilters()
     fireEvent.click(screen.getByRole('button', { name: /^Spine$/ }))
     expect(screen.queryByText('Book the first case')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^Operations$/ }))
@@ -378,7 +388,7 @@ describe('what it refuses to lose', () => {
     await openBoard()
     fireEvent.click(screen.getByLabelText('Back'))
     await waitFor(() =>
-      expect(screen.getByRole('tab', { name: /Projects and tasks/ })).toBeInTheDocument())
+      expect(screen.getByRole('tab', { name: /^Projects$/ })).toBeInTheDocument())
   })
 })
 

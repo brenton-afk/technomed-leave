@@ -78,6 +78,18 @@ export default function Projects({ user, onBack }) {
   const [savingProject, setSavingProject] = useState(false)
   const today = todayISO()
   const wide = useIsDesktop()
+  // Which of the phone's tabs is open, remembered with the rest of the
+  // workspace's choices (tm_projects_view). Opens on your own list.
+  const [phoneTab, setPhoneTab] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('tm_projects_view') || '{}').phoneTab || 'todo' } catch { return 'todo' }
+  })
+  const choosePhoneTab = key => {
+    setPhoneTab(key)
+    try {
+      const saved = JSON.parse(localStorage.getItem('tm_projects_view') || '{}') || {}
+      localStorage.setItem('tm_projects_view', JSON.stringify({ ...saved, phoneTab: key }))
+    } catch { /* private mode */ }
+  }
 
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
@@ -508,8 +520,10 @@ export default function Projects({ user, onBack }) {
 
   return (
     <Page>
-      <Header eyebrow="Team" title="Projects"
-        subtitle={board ? board.name : 'Projects, tasks and what was agreed'}
+      {/* A phone gets the short band — the page under it is the list (Brent,
+          6 Nov 2026: "way too busy"). */}
+      <Header eyebrow={wide ? 'Team' : undefined} title="Projects" compact={!wide}
+        subtitle={board ? board.name : wide ? 'Projects, tasks and what was agreed' : undefined}
         onBack={board ? () => setOpenId(null) : onBack} />
 
       <div className="tm-measure" style={{ padding: 16 }}>
@@ -757,7 +771,25 @@ export default function Projects({ user, onBack }) {
           </div>
         )}
 
-        {!board && (
+        {/* On a phone, one row of three: your list, the projects, a meeting.
+            It used to be two rows of tabs, one inside the other. */}
+        {!board && !wide && (
+          <div role="tablist" aria-label="Projects" style={{ display: 'flex', gap: 4, background: colour.lineSoft, borderRadius: radius.control, padding: 4, marginBottom: space.md }}>
+            {[['todo', 'My To Do'], ['projects', 'Projects'], ['capture', 'Meeting']].map(([key, label]) => {
+              const on = key === 'capture' ? at === 'capture' : at === 'projects' && phoneTab === key
+              return (
+                <button key={key} type="button" role="tab" aria-selected={on}
+                  onClick={() => { if (key === 'capture') setView('capture'); else { setView('projects'); choosePhoneTab(key) } }}
+                  style={{
+                    ...text('bodyStrong'), flex: 1, minHeight: 44, border: 'none', borderRadius: radius.control - 2, cursor: 'pointer',
+                    background: on ? colour.surface : 'transparent', color: on ? colour.ink : colour.inkFaint
+                  }}>{label}</button>
+              )
+            })}
+          </div>
+        )}
+
+        {!board && wide && (
           <div style={{ display: 'flex', gap: 6, marginBottom: space.md }} role="tablist">
             {[
               ['projects', `Projects and tasks${mineCount ? ` · ${mineCount} yours` : ''}`],
@@ -890,7 +922,8 @@ export default function Projects({ user, onBack }) {
             onCreateProject={createProject}
             busyProject={savingProject}
             onAdd={addFromWorkspace}
-            adding={addingTask} />
+            adding={addingTask}
+            phoneTab={phoneTab} />
         )}
       </div>
 

@@ -432,6 +432,13 @@ Projects tab beside it is the workspace as before. On a desktop the List view
 is the **Table** (Desktop A): a column header per project group, the status
 as a full coloured cell, priority, notes count, and the group's done/under-way
 bar.
+**A phone's Projects page, de-cluttered** (Brent, 6 Nov 2026: "way too
+busy"): a compact band (no eyebrow or subtitle); one row of three tabs in
+`Projects.jsx` — My To Do · Projects · Meeting — replacing the two nested rows
+(it owns `phoneTab` and passes it to `Workspace`); on the Projects tab the
+four counts, the division chips, Only mine and Show done fold behind one
+**Filter** button, and the quick-add shows its who/when/Add only once
+something is typed. Tests open the filter with `openFilters()`.
 
 ### TM loan kits are sent ahead (Brent, 5 Nov 2026)
 

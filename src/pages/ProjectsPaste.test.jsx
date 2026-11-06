@@ -5,6 +5,14 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import Projects from './Projects.jsx'
 
+// A phone folds the filters and the counts behind one Filter button (Brent,
+// 6 Nov 2026: "way too busy"); these tests open it first.
+const openFilters = () => {
+  const b = screen.queryByRole('button', { name: /^Filter/ })
+  if (b && b.getAttribute('aria-expanded') !== 'true') fireEvent.click(b)
+}
+
+
 // ─── Dumping things into the projects tab ────────────────────────────────────
 // "Can you make those tabs interactive so Erin can dump data into them and
 // build project lists within the portal? For example, could she dump a
@@ -67,8 +75,8 @@ afterEach(() => vi.restoreAllMocks())
  */
 const open = async () => {
   render(<Projects user={USER} onBack={() => {}} />)
-  await waitFor(() => expect(screen.getByRole('tab', { name: /Capture/ })).toBeInTheDocument())
-  fireEvent.click(screen.getByRole('tab', { name: /Capture/ }))
+  await waitFor(() => expect(screen.getByRole('tab', { name: /Capture|Meeting/ })).toBeInTheDocument())
+  fireEvent.click(screen.getByRole('tab', { name: /Capture|Meeting/ }))
   await waitFor(() => expect(screen.getByText('New meeting')).toBeInTheDocument())
 }
 
@@ -229,7 +237,7 @@ describe('whose list it is', () => {
 
   it('narrows to mine in one tap, which is what somebody between cases came for', async () => {
     await openBoard()
-    fireEvent.click(screen.getByLabelText('Only my tasks'))
+    openFilters(); fireEvent.click(screen.getByLabelText('Only my tasks'))
     expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument()
     expect(screen.queryByText('Get the Athlet tray back')).not.toBeInTheDocument()
   })
@@ -237,6 +245,7 @@ describe('whose list it is', () => {
   it('counts only what is still to do', async () => {
     // Three items, two mine, one of those already done.
     await openBoard()
+    openFilters()
     const tile = screen.getByText('My open tasks').closest('button')
     expect(within(tile).getByText('1')).toBeInTheDocument()
   })
@@ -250,7 +259,7 @@ describe('whose list it is', () => {
   it('still shows what is finished when asked, so progress is visible', async () => {
     // Erin keeping track of items being completed is half the point.
     await openBoard()
-    fireEvent.click(screen.getByLabelText('Show done'))
+    openFilters(); fireEvent.click(screen.getByLabelText('Show done'))
     expect(screen.getByText('Book the in-service')).toBeInTheDocument()
   })
 
