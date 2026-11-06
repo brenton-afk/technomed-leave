@@ -63,10 +63,16 @@ function startsAt(cases) {
  * a theatre list is a sequence, and "two cranis and a discectomy" is three
  * places in it.
  *
- * Where the words name exactly as many cases as the gap, they fill it. Where
- * they do not — unrecognised prose, or a count that disagrees with the
- * position the hospital gave — it falls back to saying how many. A list with a
- * name invented onto it is worse than one that admits what it does not know.
+ * Every case the team was told about is listed by name (Brent, 6 Nov 2026:
+ * "if the portal knows what the cases are before our case, you need to list
+ * the cases individually, not just '2 cases not ours' … it could be 2
+ * craniotomy cases, or 2 carpal tunnels, with wildly different timing").
+ * Where the words name as many cases as the gap, each takes its numbered
+ * place. Where they name fewer, the named ones are numbered and the rest is
+ * counted; where they name more than the hospital's number allows, they are
+ * listed unnumbered — the type is still worth seeing, the order is not ours
+ * to invent. Words nothing recognises are shown as typed beside the count.
+ * The words come from the List line, else a note starting "After …".
  *
  * It also works the other way round. A case with no position whose notes say
  * what is ahead of it has a position: three cases in front makes us fourth.
@@ -74,13 +80,24 @@ function startsAt(cases) {
  *
  * A case nobody has rung about at all keeps its order and gets no number.
  */
-function rowsFor(cases) {
+const AFTER_NOTE = /^\s*(?:we\s+are\s+)?(?:after|behind|following)\s+\S/i
+
+export function aheadWords(surgicalCase) {
+  const said = surgicalCase?.listPlace?.ahead
+  if (said) return said
+  const notes = Array.isArray(surgicalCase?.notes) ? surgicalCase.notes : []
+  const hit = notes.map(n => typeof n === 'string' ? n : n?.text).find(line => AFTER_NOTE.test(line || ''))
+  return hit || ''
+}
+
+export function rowsFor(cases) {
   const ordered = bySession(cases)
   const rows = []
   let last = 0
 
   for (const surgicalCase of ordered) {
-    const named = casesAhead(surgicalCase.listPlace?.ahead)
+    const words = aheadWords(surgicalCase)
+    const named = casesAhead(words)
     // The hospital's number where there is one; otherwise what the words imply,
     // and only for the first of ours — after that the count is relative to a
     // place already established.
@@ -89,12 +106,21 @@ function rowsFor(cases) {
 
     const gap = at ? at - last - 1 : 0
     if (gap > 0) {
-      if (named.length === gap) {
+      if (named.length > gap) {
+        named.forEach((what, i) => rows.push({
+          ahead: true, at: null, what, key: `ahead-${at}-${i}`
+        }))
+      } else {
         named.forEach((what, i) => rows.push({
           ahead: true, at: last + 1 + i, what, key: `ahead-${at}-${i}`
         }))
-      } else {
-        rows.push({ gap: true, count: gap, key: `gap-${at}` })
+        const rest = gap - named.length
+        if (rest > 0) {
+          rows.push({
+            gap: true, count: rest, more: named.length > 0,
+            said: named.length ? '' : words, key: `gap-${at}`
+          })
+        }
       }
     }
 
@@ -139,7 +165,7 @@ function TheatreList({ surgeon, cases }) {
           display: 'flex', gap: space.sm, padding: '3px 0',
           ...text('caption'), color: colour.inkFainter, fontStyle: 'italic'
         }}>
-          <span style={{ width: 18, flexShrink: 0, textAlign: 'right' }}>{row.at}</span>
+          <span style={{ width: 18, flexShrink: 0, textAlign: 'right' }}>{row.at || '·'}</span>
           <span>{row.what}</span>
         </div>
       ) : row.gap ? (
@@ -149,7 +175,10 @@ function TheatreList({ surgeon, cases }) {
         }}>
           <span style={{ width: 18, flexShrink: 0, textAlign: 'right' }}>·</span>
           <span>
-            {row.count === 1 ? 'one case' : `${row.count} cases`} not ours
+            {row.more
+              ? `${row.count === 1 ? 'one more' : `${row.count} more`} not ours`
+              : `${row.count === 1 ? 'one case' : `${row.count} cases`} not ours`}
+            {row.said ? ` — ${row.said}` : ''}
           </span>
         </div>
       ) : (

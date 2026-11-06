@@ -200,6 +200,6 @@ describe('both views show them', () => {
   })
 
   it('does not call a day with a task on it empty', () => {
-    expect(phone).toMatch(/&& !\(day\.tasks \|\| \[\]\)\.length/)
+    expect(phone).toMatch(/&& !openTasks\(day\.tasks\)\.length/)
   })
 })

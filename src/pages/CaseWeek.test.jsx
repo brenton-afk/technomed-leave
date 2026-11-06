@@ -1552,13 +1552,14 @@ describe('project tasks that fall due', () => {
     expect(screen.queryByText(/Book the Calvary in-service/)).not.toBeInTheDocument()
   })
 
-  it('keeps what is already done on its day, ticked rather than gone', async () => {
-    // "We don't want them disappearing."
+  it('drops what is already done from the Cases page', async () => {
+    // Brent, 6 Nov 2026: "if they're done they're done and gone, they're just
+    // taking up valuable space on the page".
     withWorklist()
     show()
     await waitFor(() =>
       expect(screen.getByText(/Get the Athlet tray back/)).toBeInTheDocument())
-    expect(screen.getByLabelText('Already handled — done — open')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Already handled — done — open')).not.toBeInTheDocument()
   })
 
   it('names who has it, so the day view says whose job it is', async () => {

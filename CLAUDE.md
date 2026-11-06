@@ -453,6 +453,18 @@ four counts, the division chips, Only mine and Show done fold behind one
 **Filter** button, and the quick-add shows its who/when/Add only once
 something is typed. Tests open the filter with `openFilters()`.
 
+**Cases page, less in the way** (Brent, 6 Nov 2026): a ticked task or a done
+project item is no longer drawn on the Cases page at all (`openTasks` /
+`undoneDue` in `CaseWeek.jsx`) — "done and gone"; the record stays on the
+event and the task sheet. The day heading stacks date over the count with the
+leader chip beside it, so the chip no longer wraps to a row of its own.
+**The list view names every case ahead of ours it knows** (`rowsFor` in
+`ListOrder.jsx`): from the List line's words, else a note starting "After …"
+(`aheadWords`). Fewer named than the gap: the named ones numbered, then "N
+more not ours"; more named than the hospital's number allows: listed
+unnumbered. Only words nothing recognises fall back to a count, with the words
+beside it — two craniotomies and two carpal tunnels are very different waits.
+
 ### TM loan kits are sent ahead (Brent, 5 Nov 2026)
 
 When a case takes a **TM Loan** kit — written on the booking, or the

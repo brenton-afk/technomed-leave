@@ -180,10 +180,17 @@ const KIND_TONE = {
  * surgeon owns it — a task in a surgeon's colour reads as that surgeon having
  * a case. Loud on purpose: the whole problem is that these get forgotten.
  *
- * Done greys it out and strikes it through rather than removing it. A task that
- * vanishes when it is finished leaves nobody able to answer "did anybody
- * actually fetch that tray", which is the question it was written to prevent.
+ * A finished task is no longer drawn here (see openTasks); the record of who
+ * did it stays on the calendar event and in the task sheet.
  */
+/**
+ * Only what is still to do (Brent, 6 Nov 2026: "if they're done they're done
+ * and gone, they're just taking up valuable space on the page"). A ticked task
+ * stays in Google and on the Projects page; the Cases page is for the day ahead.
+ */
+export const openTasks = tasks => (tasks || []).filter(t => t.suggested || !t.done)
+export const undoneDue = due => (due || []).filter(t => t.status !== 'done')
+
 function TaskRow({ task, onDone, compact }) {
   const done = Boolean(task.done)
   // Worked out from the bookings, not yet a task anyone has added (dispatch.js):
@@ -1135,13 +1142,13 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
               {/* Kit to move, trays to get back, things to restock. Above the
                   cases, because a job that has to happen before the list
                   starts is the thing somebody needs to see first. */}
-              {(day.tasks || []).map(task => (
+              {openTasks(day.tasks).map(task => (
                 <TaskRow key={task.id} task={task} onDone={onTaskDone} compact />
               ))}
 
               {/* And what falls due off the project board. Same row as the day
                   view uses, so the two cannot drift apart. */}
-              {(due || []).map(task => (
+              {undoneDue(due).map(task => (
                 <DueRow key={task.id} task={task} today={today}
                   onDone={onDueDone} compact />
               ))}
@@ -1208,7 +1215,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   // those are the same sentence twice, a few centimetres apart — and the one
   // that can be acted on is the other one.
   const empty = !groups.length && !others.length && !away.length
-    && !attention.length && !(day.flags || []).length && !(day.tasks || []).length
+    && !attention.length && !(day.flags || []).length && !openTasks(day.tasks).length
 
   return (
     <>
@@ -1235,13 +1242,13 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           because a job that has to happen before the list starts is the thing
           somebody needs to see first. Same component as the week column, so
           the two cannot drift apart. */}
-      {(day.tasks || []).map(task => (
+      {openTasks(day.tasks).map(task => (
         <TaskRow key={task.id} task={task} onDone={onTaskDone} />
       ))}
 
       {/* And whatever falls due today off the project board, so the morning
           view is one place to look rather than two. */}
-      {(due || []).map(task => (
+      {undoneDue(due).map(task => (
         <DueRow key={task.id} task={task} today={today} onDone={onDueDone} />
       ))}
 
@@ -2044,14 +2051,19 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
           <>
             {/* One line: the strip above already picked the day, so this
                 only says which, how busy, and who is leading it. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md }}>
-              <span style={{ ...text('heading'), color: colour.ink }}>
-                {activeDay === today ? 'Today' : weekdayName(activeDay)} {dayNum(activeDay)} {monthOf(activeDay).slice(0, 3)}
-              </span>
-              {dayPlan?.caseCountLine && (
-                <span style={{ ...text('caption'), color: colour.inkFaint }}>· {dayPlan.caseCountLine}</span>
-              )}
-              <span style={{ marginLeft: 'auto' }}>{leaderChip(activeDay)}</span>
+            {/* The date and its count stacked, the leader chip beside them:
+                in one wrapping row the chip fell onto a line of its own on a
+                phone and left a gap above the day (Brent, 6 Nov 2026). */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ ...text('heading'), color: colour.ink }}>
+                  {activeDay === today ? 'Today' : weekdayName(activeDay)} {dayNum(activeDay)} {monthOf(activeDay).slice(0, 3)}
+                </div>
+                {dayPlan?.caseCountLine && (
+                  <div style={{ ...text('caption'), color: colour.inkFaint }}>{dayPlan.caseCountLine}</div>
+                )}
+              </div>
+              <span style={{ flexShrink: 0 }}>{leaderChip(activeDay)}</span>
             </div>
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing}

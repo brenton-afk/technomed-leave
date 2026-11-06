@@ -175,17 +175,40 @@ describe('naming what is in front of us', () => {
     expect(screen.getByText(/2 cases not ours/)).toBeInTheDocument()
   })
 
-  it('falls back where the words disagree with the number given', () => {
+  it('still names them where the words disagree with the number given', () => {
     // Told we are 2nd, and told two cases are ahead. One of those is wrong and
-    // this does not get to choose which.
+    // this does not get to choose which — but the type of case is still worth
+    // seeing, so they are listed without numbers.
     show([
       ev('a', 'Whiteley CYLOX - Thani',
         'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
         + 'Procedure: C5/6 ACDF\n'
         + 'List: 2nd · morning · After two cranis', 9, 'Calvary')
     ])
-    expect(screen.getByText(/one case not ours/)).toBeInTheDocument()
-    expect(screen.queryByText('Craniotomy')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Craniotomy')).toHaveLength(2)
+    expect(screen.queryByText(/not ours/)).not.toBeInTheDocument()
+  })
+
+  it('names what it knows and counts the rest', () => {
+    show([
+      ev('a', 'Whiteley CYLOX - Thani',
+        'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+        + 'Procedure: C5/6 ACDF\n'
+        + 'List: 4th · morning · After a crani', 11, 'Calvary')
+    ])
+    expect(screen.getByText('Craniotomy')).toBeInTheDocument()
+    expect(screen.getByText(/2 more not ours/)).toBeInTheDocument()
+  })
+
+  it('reads what is ahead from a note when the list line does not say', () => {
+    show([
+      ev('a', 'Whiteley CYLOX - Thani',
+        'Surgeon: Thani\nPatient: Whiteley\nHospital: CLV\n'
+        + 'Procedure: C5/6 ACDF\nList: 3rd · morning\n'
+        + 'After two carpal tunnels', 10, 'Calvary')
+    ])
+    expect(screen.getAllByText('Carpal tunnels')).toHaveLength(2)
+    expect(screen.queryByText(/not ours/)).not.toBeInTheDocument()
   })
 })
 
