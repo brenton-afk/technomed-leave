@@ -234,3 +234,15 @@ describe('a change only in capitals or spacing is not a change', () => {
     expect(changesBetween(before, { ...before, kit: 'Mariner' }).map(c => c.key)).toEqual(['kit'])
   })
 })
+
+import { noticesFor as noticesForLabel, DEFAULT_CONTACTS as CONTACTS_L, DEFAULT_RULES as RULES_L } from './_bookingNotices.js'
+import { describe as dL, it as iL, expect as eL } from 'vitest'
+dL('sent-email log label', () => {
+  iL('names the notice and supplier, never the patient', () => {
+    const after = { patient: 'Testperson', date: '2026-11-06', hospital: 'RHH', surgeon: 'Ibbett', procedure: 'L3 fixation', kit: 'Diplomat', distributors: ['signus'] }
+    const out = noticesForLabel({ kind: 'new', after, eventId: 'e1', settings: { contacts: CONTACTS_L, rules: RULES_L } })
+    const signus = out.find(n => n.contactId === 'signus')
+    eL(signus.label).toMatch(/^New booking → Signus · Ibbett · RHH/)
+    eL(signus.label).not.toMatch(/Testperson/)
+  })
+})

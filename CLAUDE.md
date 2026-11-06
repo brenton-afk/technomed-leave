@@ -1143,7 +1143,7 @@ A usage email goes **only to the distributor it is for** — no Bcc, no archive 
 
 There is **no fallback sender**. A rejected send fails loudly: staff see `Email not sent — please contact Brenton.` and the technical cause goes to the server log and the sent-email log. The previous silent retry — reported as success — is what let a usage go out from an address the distributor could not reply to.
 
-Every send is recorded by `api/_emailLog.js`, readable at Admin → Email. **The subject is deliberately not stored**: for a usage email it is the case folder name, which is built from the patient's surname. The case id is the link back instead.
+Every send is recorded by `api/_emailLog.js`, readable at Admin → Email. **The subject is deliberately not stored**: for a usage email it is the case folder name, which is built from the patient's surname. The case id is the link back instead. Each entry carries a **`label`** saying which email it was without the patient (Brent, 6 Nov 2026: "no way to tell which outgoing message it is"): booking and loan notices build it from the notice word, supplier, systems, surgeon, hospital and day (`New booking → Signus · Ibbett · RHH Fri 6 Nov`); usage is `Usage · {distributor}`; leave, timesheet, meeting and PIN emails use their subject, which names staff, never patients. Admin → Email shows it with To and Cc.
 
 ## Conventions
 

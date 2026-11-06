@@ -356,7 +356,9 @@ ${changeLines.length ? `<ul>${changeLines.map(l => `<li>${escapeHtml(l)}</li>`).
   `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
 </div>`
     out.push({ ruleId: rule.id, contactId: contact.id, name: contact.name, to: contact.to, cc: contact.cc,
-      subject: title, text, html, autoSend: rule.autoSend, eventId, kind })
+      subject: title, text, html, autoSend: rule.autoSend, eventId, kind,
+      // For the sent-email log: which email, without the patient.
+      label: [`${WORD[kind]} → ${contact.name}`, subject.surgeon, subject.hospital, shortDate(subject.date)].filter(Boolean).join(' · ') })
   }
   return out
 }
@@ -530,6 +532,7 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
 </div>`
     out.push({ ruleId: key, contactId: contact.id, name: `${contact.name} — ${status === 'request' ? 'loan set ordered' : status === 'update' ? 'case changed' : 'loan set not coming'}`,
       to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
+      label: [`${{ request: 'Loan set ordered', update: 'Loan set — case changed', cancel: 'Loan set not coming' }[status]} → ${contact.name}`, systems.join(' + '), b?.hospital, shortDate(b?.date)].filter(Boolean).join(' · '),
       loan: { distributor: key, status, date: b?.date, hospital: b?.hospital, systems } })
   }
   return out
@@ -583,6 +586,7 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
 <p>Please reply to confirm.</p></div>`
     out.push({ ruleId: `loan-${d}`, contactId: contact.id, name: `${contact.name} — ${LOAN_WORD[status].toLowerCase()}`,
       to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
+      label: [`${LOAN_WORD[status]} → ${contact.name}`, systems.join(' + '), b?.surgeon, b?.hospital, shortDate(b?.date)].filter(Boolean).join(' · '),
       loan: { distributor: d, status, date: b?.date, hospital: b?.hospital, systems } })
   }
   return out

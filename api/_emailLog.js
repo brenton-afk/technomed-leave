@@ -51,13 +51,17 @@ export function scrubDetail(text) {
  * would be raised after Resend had already accepted the message.
  */
 export async function recordEmail({
-  kind, sentByEmail, from, to, cc, caseId, status, messageId, detail, at
+  kind, label, sentByEmail, from, to, cc, caseId, status, messageId, detail, at
 }) {
   try {
     await saveEmailLogEntry({
       id: `${Date.parse(at || new Date().toISOString())}-${Math.random().toString(36).slice(2, 8)}`,
       at: at || new Date().toISOString(),
       kind: EMAIL_KINDS.includes(kind) ? kind : 'notification',
+      // Which email this was, in words with no patient in them — the callers
+      // build it from the supplier, surgeon, hospital and day (never the
+      // subject of a usage or booking email, which carries the surname).
+      label: String(label || '').slice(0, 160),
       sentByEmail: sentByEmail || '',
       from: String(from || '').slice(0, 120),
       to: (to || []).filter(Boolean).slice(0, 12),

@@ -146,9 +146,15 @@ export default function EmailLog({ user }) {
             </span>
           </div>
 
+          {/* Which email it was — supplier, surgeon, hospital, day; never the
+              patient. Older entries, sent before labels, have none. */}
+          {e.label && (
+            <div style={{ fontSize: 13.5, color: '#042746', marginTop: 4, lineHeight: 1.4 }}>{e.label}</div>
+          )}
           <div style={{ fontSize: 12.5, color: '#6b7a8d', marginTop: 4, lineHeight: 1.5 }}>
             <div>From {e.from || '—'}</div>
             <div>To {(e.to || []).join(', ') || '—'}</div>
+            {(e.cc || []).length > 0 && <div>Cc {e.cc.join(', ')}</div>}
           </div>
 
           {/* The technical cause, which is why an admin is on this screen. It

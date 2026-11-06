@@ -198,8 +198,13 @@ export function fromAddress(sender) {
   return configured
 }
 
+// Kinds whose subject carries no patient detail, so it can stand in for the
+// label in the log. Usage and booking emails name the patient in the subject
+// and pass a label of their own instead.
+const SUBJECT_IS_SAFE = new Set(['leave', 'timesheet', 'meeting', 'pin'])
+
 async function send({
-  to, cc, subject, html, text, attachments, sender, replyTo, kind, caseId
+  to, cc, subject, html, text, attachments, sender, replyTo, kind, caseId, label
 }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new EmailNotSent('RESEND_API_KEY not configured')
@@ -217,6 +222,7 @@ async function send({
 
   const note = (status, extra) => recordEmail({
     kind,
+    label: label || (SUBJECT_IS_SAFE.has(kind) ? subject : ''),
     sentByEmail: sender?.email,
     from,
     to: recipients,
@@ -489,6 +495,7 @@ export async function sendUsageEmail({
     cc,
     kind: 'usage',
     caseId,
+    label: [test ? 'Usage (test)' : correction ? 'Usage correction' : 'Usage', distributorLabel].filter(Boolean).join(' · '),
     subject: heading,
     html,
     text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${fix || body}\n\nWarm regards,\nTechnoMed`,
@@ -615,6 +622,7 @@ export async function sendServiceAlertEmail({ feature, fault, detail }) {
   return send({
     to: [to],
     kind: 'notification',
+    label: `Alert: ${what.toLowerCase()} is down`,
     subject: `Portal: ${what.toLowerCase()} is down`,
     html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
@@ -678,14 +686,14 @@ export function bookingSignature(sender) {
   return { text, html }
 }
 
-export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId, attachments = [] }) {
+export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId, attachments = [], label = '' }) {
   const sig = bookingSignature(sender)
   const lower = a => String(a).toLowerCase()
   const addressed = new Set((to || []).map(lower))
   const copies = [...new Set([...(cc || []), BOOKINGS_INBOX].filter(a => !addressed.has(lower(a))).map(String))]
   return send({
     kind: 'notification',
-    to, cc: copies, subject, caseId, sender,
+    to, cc: copies, subject, caseId, sender, label,
     html: `${html || ''}${sig.html}`,
     text: `${String(text || '').replace(/\s+$/, '')}\n${sig.text}`,
     attachments: [signatureLogo(), ...attachments],
@@ -707,6 +715,7 @@ export async function sendUsageReminderEmail({ to, firstName, lines, escalation 
 <p><a href="${PORTAL_URL}">Open the portal</a></p></div>`
   return send({
     kind: 'notification', to: [to],
+    label: escalation ? 'Reminder: usage still not sent from yesterday' : 'Reminder: usage not sent yet today',
     subject: escalation ? 'Usage still not sent from yesterday' : 'Usage not sent yet today',
     html, text
   })

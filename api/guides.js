@@ -264,7 +264,8 @@ async function handleKits(req, res, session) {
         to: email.to, cc: email.cc, subject: email.subject, text: email.text,
         html: `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.5">${
           escapeHtml(email.text).replace(/\n/g, '<br>')}</div>`,
-        sender: { name: from.name, email: from.email }
+        sender: { name: from.name, email: from.email },
+        label: 'Kit move'
       })))
     }
     if (what === 'return') { await returnKit(body.kitId, sender); return res.status(200).json({ ok: true }) }
