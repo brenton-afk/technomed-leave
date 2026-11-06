@@ -314,13 +314,15 @@ describe('typing into a field must not resize the app', () => {
 // bar, so the frame stopped short. The installed app pins the frame to the
 // screen's edges instead.
 describe('the installed app fills the whole screen', () => {
-  it('pins #root to all four edges when standalone', () => {
+  it('pins #root to the top and sizes it to the real screen when standalone', () => {
     const css = read('src/index.css')
-    const block = css.match(/@media \(display-mode: standalone\)\s*\{([\s\S]*?)\n\}/)?.[1] || ''
-    expect(block).toMatch(/#root\s*\{[^}]*position:\s*fixed/)
-    for (const edge of ['top', 'right', 'bottom', 'left']) {
+    const block = css.match(/html\.tm-app-height #root\s*\{[^}]*\}/)?.[0] || ''
+    expect(block).toMatch(/position:\s*fixed/)
+    for (const edge of ['top', 'right', 'left']) {
       expect(block).toMatch(new RegExp(`${edge}:\\s*0`))
     }
-    expect(block).toMatch(/height:\s*auto/)
+    // Not the bottom edge: on iOS the edge itself is short. The height is
+    // measured from the screen (appHeight.js), else 100dvh.
+    expect(block).toMatch(/height:\s*var\(--tm-app-height\)/)
   })
 })

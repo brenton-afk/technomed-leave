@@ -53,11 +53,14 @@ Three details are load-bearing:
 - **`height: 100dvh`, with a `100vh` line before it as the fallback.** On iOS
   `100vh` is the large viewport — taller than what is actually on screen — which
   is why fixed elements appeared to shift under momentum scrolling.
-- **Installed on the home screen, `#root` is `position: fixed` on all four
-  edges** (`@media (display-mode: standalone)`). The status bar is
-  black-translucent, and there iOS reports `100dvh` as the screen *less* the
-  status bar, so the frame stopped short and left a navy strip under the tab
-  bar (Brent, 6 Nov 2026). A Safari tab keeps `100dvh`.
+- **Installed on the home screen, the frame is the screen's measured
+  height** (`src/appHeight.js`, run from `main.jsx`). The status bar is
+  black-translucent, and there iOS sizes the viewport as the screen *less*
+  the status bar — `100dvh` and the bottom edge are both short — so the frame
+  stopped short and left a navy strip under the tab bar (Brent, 6 Nov 2026,
+  twice: pinning to `bottom: 0` did not fix it). When installed and short by
+  no more than 80pt, it sets `--tm-app-height` to the screen height and the
+  `tm-app-height` class on `<html>`; otherwise nothing, and `100dvh` stands.
 - **A `@media print` block undoing all of it.** A viewport-height frame with
   hidden overflow clips a printout to one screen, and the case plan has `@page A4`
   rules and gets printed.

@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { registerWorker } from './push.js'
+import { watchAppHeight } from './appHeight.js'
+
+// Before the first paint, so the installed app never draws short — see appHeight.js.
+watchAppHeight()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

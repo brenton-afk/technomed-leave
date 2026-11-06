@@ -66,18 +66,18 @@ body {
    (black-translucent) and the page runs up under it — and there iOS reports
    100dvh as the screen *less* the status bar, so the frame stopped short and
    left a navy strip under the tab bar (Brent, 6 Nov 2026: "there's a gap at
-   the bottom"). Pinned to all four edges instead, it is the whole screen
-   whatever iOS says the viewport is. Only the installed app: a Safari tab has
-   its own toolbars and 100dvh is right there. */
-@media (display-mode: standalone) {
-  #root {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: auto;
-  }
+   the bottom"). Fixed to the top, with the height the screen really is
+   (--tm-app-height and the tm-app-height class, both set by
+   src/appHeight.js only when it measures the shortfall). Only the installed app: a Safari
+   tab has its own toolbars and 100dvh is right there. */
+html.tm-app-height #root {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  /* Not pinned to the bottom edge: on iOS the edge itself is short.
+     src/appHeight.js measures the screen and sets the class and this. */
+  height: var(--tm-app-height);
 }
 
 input, select, textarea, button {
