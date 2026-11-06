@@ -83,7 +83,7 @@ const EMBOSS = {
   ].join(', '),
   borderRadius: 2
 }
-const tinFace = hex => `linear-gradient(135deg, ${hex}66 0%, ${hex}26 55%, rgba(0,0,0,0.18) 100%)`
+const tinFace = hex => `linear-gradient(135deg, ${hex}b3 0%, ${hex}66 55%, rgba(0,0,0,0.12) 100%)`
 
 function BandArt({ subtle }) {
   const tiles = subtle ? SUBTLE_TILES : TILES
