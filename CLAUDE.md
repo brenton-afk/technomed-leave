@@ -300,6 +300,17 @@ cranial). At **Calvary** we do not support navigation and do not bill. Bookings
 are meant to become the single source of truth on the front end (e.g. to
 populate the Brainlab invoice) and usages on the back end (resupply).
 
+### The top band (Brent, 6 Nov 2026)
+
+"The big blue band is pretty empty." From the mock-ups he picked: `Header`
+takes `art` (the logo's own tiles — `logoTiles()` in `Shell.jsx`, seeded so
+the pattern never moves — scattered over the right of the band and fading
+towards the title) and `logo` (`BandLogo`, `public/logo-band.png`: the
+wordmark with its navy made transparent). Cases uses both; on a desktop the
+eyebrow is the greeting and date (Header A), on a phone three tiles give the
+week at a glance — cases this week, today, who is leading (Header C,
+`data-glance`; tests look past it for cards and the leader chip).
+
 ### Cases layout (Brent, 4 Nov 2026)
 
 Calmer page, as approved from a mock-up: the header is pinned (`Header sticky`)

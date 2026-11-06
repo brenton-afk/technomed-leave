@@ -40,7 +40,53 @@ export function Overlay({ children }) {
  * laptop that was most of the screen before the first booking appeared. The
  * header is scaffolding; the bookings are the work.
  */
-export function Header({ eyebrow, title, subtitle, onBack, right, children, compact, sticky }) {
+// ─── The logo's tiles, as a field across the band (Brent, 6 Nov 2026) ────────
+// "The big blue band is pretty empty… some artwork built from our logo."
+// Approved as Header A: the mark's own squares, in its four colours, scattered
+// over the right of the band and fading towards the title. Fixed by a seed, so
+// the pattern is the same on every visit and never shifts while the page polls.
+const LOGO_TILES = ['#4fc6f5', '#2b98da', '#1d9a85', '#0b6470']
+
+export function logoTiles({ count = 90, seed = 7 } = {}) {
+  let s = seed
+  const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280 }
+  const tiles = []
+  for (let i = 0; i < count; i++) {
+    const x = Math.pow(rnd(), 0.6)            // 0 at the left edge of the field, 1 at the right
+    const big = rnd() > 0.85
+    tiles.push({
+      left: x * 100, top: rnd() * 100,
+      size: big ? 22 + Math.round(rnd() * 16) : 6 + Math.round(rnd() * 10),
+      colour: LOGO_TILES[i % LOGO_TILES.length],
+      opacity: Number((0.2 + 0.7 * x * rnd()).toFixed(2))
+    })
+  }
+  return tiles
+}
+const TILES = logoTiles()
+
+function BandArt() {
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '62%' }}>
+        {TILES.map((t, i) => (
+          <span key={i} style={{
+            position: 'absolute', left: `${t.left}%`, top: `${t.top}%`, width: t.size, height: t.size,
+            background: t.colour, opacity: t.opacity
+          }} />
+        ))}
+      </div>
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${colour.navy} 0%, ${colour.navy} 36%, rgba(4,39,70,0) 78%)` }} />
+    </div>
+  )
+}
+
+/** The wordmark, for a band that carries the brand (Cases). */
+export function BandLogo({ height = 34 }) {
+  return <img src="/logo-band.png" alt="TechnoMed — Surgical Solutions & Support" style={{ height, width: 'auto', display: 'block' }} />
+}
+
+export function Header({ eyebrow, title, subtitle, onBack, right, children, compact, sticky, art, logo }) {
   return (
     // `tm-bleed` on the navy, `tm-measure` on what is written on it. On a wide
     // screen the bar reaches both edges of the window while the title lines up
@@ -49,6 +95,7 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children, comp
     // reads as two pages.
     <div className="tm-bleed" style={{
       background: colour.navy,
+      ...(art ? { position: sticky ? 'sticky' : 'relative', overflow: 'hidden' } : {}),
       // Pinned to the top of the scrolling page where asked (the Cases week:
       // "if you scroll down on the desktop version, you don't lose the ability
       // to scroll the weeks"). One set of arrows that never leaves the screen,
@@ -63,7 +110,9 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children, comp
         ? `calc(env(safe-area-inset-top, 0px) + ${space.md}px) ${space.lg}px ${space.sm}px`
         : `calc(env(safe-area-inset-top, 0px) + ${space.xl}px) ${space.lg}px ${space.lg}px`
     }}>
-      <div className="tm-measure" style={{ display: 'flex', alignItems: 'flex-start', gap: space.md }}>
+      {art && <BandArt />}
+      {logo && <div className="tm-measure" style={{ position: 'relative', marginBottom: space.sm }}>{logo}</div>}
+      <div className="tm-measure" style={{ display: 'flex', alignItems: 'flex-start', gap: space.md, ...(art ? { position: 'relative' } : {}) }}>
         {onBack && (
           <button onClick={onBack} aria-label="Back"
             style={{
@@ -89,7 +138,7 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children, comp
         {right}
       </div>
       {children && (
-        <div className="tm-measure" style={{ marginTop: compact ? space.sm : space.lg }}>
+        <div className="tm-measure" style={{ marginTop: compact ? space.sm : space.lg, ...(art ? { position: 'relative' } : {}) }}>
           {children}
         </div>
       )}

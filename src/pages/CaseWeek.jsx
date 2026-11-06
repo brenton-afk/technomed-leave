@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { Page, Header, Banner } from '../design/Shell.jsx'
+import { Page, Header, Banner, BandLogo } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { useLiveRefresh, useToday, useReturn } from '../liveRefresh.js'
 import { dueOnDay } from '../projects/model.js'
@@ -1834,6 +1834,18 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
 
   useEffect(() => { countQueue() }, [countQueue])
 
+  // The band's greeting (desktop) and week at a glance (phone).
+  const hour = Number(new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Hobart', hour: 'numeric', hourCycle: 'h23' }).format(new Date()))
+  const greeting = `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}${me ? `, ${me}` : ''} · ${weekdayName(today)} ${dayNum(today)} ${monthOf(today)}`
+  const weekCases = (plan?.days || []).reduce((n, d) => n + (d.casesByHospital || []).reduce((m, g) => m + g.cases.filter(c => !c.cancelled).length, 0), 0)
+  const todayCases = (plan?.days || []).filter(d => d.date === today)
+    .reduce((n, d) => n + (d.casesByHospital || []).reduce((m, g) => m + g.cases.filter(c => !c.cancelled).length, 0), 0)
+  const leadToday = leader?.byDay?.[today]?.email ? firstNameFor(leader.byDay[today].email) : leader?.email ? firstNameFor(leader.email) : ''
+  const glance = [
+    [String(weekCases), 'this week'],
+    [window_.days.includes(today) ? String(todayCases) : '—', 'today'],
+    [leadToday || '—', 'leading']
+  ]
   const caseCount = day => (day?.casesByHospital || []).reduce(
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
@@ -1852,7 +1864,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
       {/* No summary line under the title any more ("It's pretty busy") — each
           day says its own count — and the header stays pinned, so the week
           arrows are always in reach however far down the week is scrolled. */}
-      <Header title="Cases" compact sticky
+      <Header title="Cases" compact sticky art
+        logo={<BandLogo height={desktop ? 40 : 28} />}
+        eyebrow={desktop ? greeting : undefined}
         right={(
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
             <SearchButton onClick={() => setSearching(true)} />
@@ -1875,6 +1889,22 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
             smallest thing on the screen. Three items now, not four — the
             Day/Week pair moved up beside the title — so the range has room to
             be read and the arrows have room to be hit. */}
+        {/* The week at a glance, on a phone (Header C, Brent 6 Nov 2026). */}
+        {!desktop && plan && (
+          <div data-glance style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.xs, marginBottom: space.sm }}>
+            {glance.map(([value, label]) => (
+              <div key={label} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: radius.control, padding: '6px 10px', minWidth: 0 }}>
+                {/* The value is a text node beside its label, not an element of
+                    its own, so "1" or "Ben" up here is never mistaken for a
+                    card's or the leader chip's. */}
+                <div style={{ ...text('heading'), color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {value}
+                  <div style={{ ...text('micro'), color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>{label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
           <button onClick={() => goWeek(-1)} aria-label="Previous week" style={arrowStyle}>‹</button>
           <button onClick={goToday}

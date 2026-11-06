@@ -76,6 +76,10 @@ afterEach(() => {
 })
 
 const show = (props = {}) => render(<CaseWeek user={USER} {...props} />)
+// The band's week-at-a-glance tiles (Header C) repeat a count and the leader's
+// name; these tests are about the cards and the leader chip below them.
+const outsideGlance = els => els.filter(el => !el.closest('[data-glance]'))
+const byTextOutsideGlance = t => outsideGlance(screen.getAllByText(t))[0]
 
 describe('a case, in full', () => {
   it('shows everything the booking says', async () => {
@@ -268,7 +272,7 @@ describe('following the calendar', () => {
 
     events = [{ ...BOOKINGS[0], summary: 'Mardon DIPLOMAT + E4 Cages - Fowler (Ben)' }]
     await vi.advanceTimersByTimeAsync(61000)
-    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    await waitFor(() => expect(byTextOutsideGlance('Ben')).toBeInTheDocument())
   })
 
   it('keeps the week on screen when a check fails', async () => {
@@ -519,8 +523,8 @@ describe('no numbers, and no arrows', () => {
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     // Nothing on a card is a bare ordinal any more.
-    expect(screen.queryByText('1')).not.toBeInTheDocument()
-    expect(screen.queryByText('2')).not.toBeInTheDocument()
+    expect(outsideGlance(screen.queryAllByText('1'))).toEqual([])
+    expect(outsideGlance(screen.queryAllByText('2'))).toEqual([])
   })
 
   it('offers no arrows to move a case with', async () => {
@@ -979,7 +983,7 @@ describe('who is team leader this week', () => {
 
   it('opens a picker on a tap', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    await waitFor(() => expect(byTextOutsideGlance('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
@@ -992,7 +996,7 @@ describe('who is team leader this week', () => {
 
   it('changes just the one day by default', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    await waitFor(() => expect(byTextOutsideGlance('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
     fireEvent.click(screen.getByText(/^Aimee/))
@@ -1005,7 +1009,7 @@ describe('who is team leader this week', () => {
 
   it('saves the person tapped, against that week', async () => {
     show()
-    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    await waitFor(() => expect(byTextOutsideGlance('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
     fireEvent.click(screen.getByText(/^Aimee/))
@@ -1023,7 +1027,7 @@ describe('who is team leader this week', () => {
     // A week nobody is covering should say so, rather than keep naming
     // whoever held it last.
     show()
-    await waitFor(() => expect(screen.getByText('Ben')).toBeInTheDocument())
+    await waitFor(() => expect(byTextOutsideGlance('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('tab', { name: 'Their whole turn' }))
@@ -1121,7 +1125,7 @@ describe('the rota and covering for somebody', () => {
       rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
     })
     show()
-    await waitFor(() => expect(screen.getByText('Brent')).toBeInTheDocument())
+    await waitFor(() => expect(byTextOutsideGlance('Brent')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByText(/Brent covering for Mat this turn/)).toBeInTheDocument())
   })
@@ -1146,7 +1150,7 @@ describe('the rota and covering for somebody', () => {
       rostered: { email: 'mat@technomed.com.au', firstName: 'Mat' }
     })
     show()
-    await waitFor(() => expect(screen.getByText('Brent')).toBeInTheDocument())
+    await waitFor(() => expect(byTextOutsideGlance('Brent')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Their whole turn' }))
     await waitFor(() =>
@@ -1662,5 +1666,17 @@ describe('the week on screen is the week drawn', () => {
     fireEvent.click(screen.getByLabelText(/next week/i))
     await waitFor(() => expect(screen.getByText(/could not be loaded/)).toBeInTheDocument())
     expect(screen.queryByText(/Nothing booked/)).not.toBeInTheDocument()
+  })
+})
+
+// ─── The band (Brent, 6 Nov 2026): Header A on desktop, C on a phone ────────
+describe('the top band', () => {
+  it('carries the logo and, on a phone, the week at a glance', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    expect(screen.getByAltText(/TechnoMed/)).toBeInTheDocument()
+    const glance = document.querySelector('[data-glance]')
+    expect(glance.textContent).toMatch(/this week/)
+    expect(glance.textContent).toMatch(/today/)
   })
 })
