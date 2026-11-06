@@ -1379,7 +1379,16 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
   // still the day they are working in.
   const me = firstNameFor(user?.email)
   const [mine, setMine] = useState(() => Boolean(readPrefs().mineOnly))
-  const plan = useMemo(() => (mine && me && fullPlan ? onlyMine(fullPlan, me) : fullPlan), [fullPlan, mine, me])
+  // Only ever the week on screen (Brent, 6 Nov 2026: "the portal says nothing
+  // booked when there is"). Stepping to another week kept drawing the last
+  // week's plan until the new one arrived — on hospital 5G, seconds of every
+  // day reading "Nothing booked", and for good if the fetch failed. The saved
+  // copy of the new week stands in while it loads; with none, it says Loading.
+  const weekPlan = useMemo(() => {
+    if (fullPlan?.weekStart === window_.startDate) return fullPlan
+    return readCachedPlan(window_.startDate)?.plan || null
+  }, [fullPlan, window_])
+  const plan = useMemo(() => (mine && me && weekPlan ? onlyMine(weekPlan, me) : weekPlan), [weekPlan, mine, me])
   const [status, setStatus] = useState('loading')
   const [stale, setStale] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
@@ -1964,6 +1973,14 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
         {status === 'loading' && !plan && (
           <div style={{ textAlign: 'center', padding: space.xl, color: colour.inkFaint }}>Loading…</div>
         )}
+        {status === 'error' && !plan && (
+          <div style={{ textAlign: 'center', padding: space.xl, color: colour.inkFaint }}>
+            This week could not be loaded — it is not that nothing is booked.{' '}
+            <button type="button" onClick={() => load(window_)} style={{
+              background: 'none', border: 'none', color: colour.accent, cursor: 'pointer', ...text('caption'), padding: 0
+            }}>Try again</button>
+          </div>
+        )}
 
         {sourceErrors.map(({ source, error, shareWith }) => (
           <Banner key={source} tone="warning">
@@ -2168,7 +2185,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone }) {
         <NewTask
           user={user}
           date={addingTask}
-          days={fullPlan?.days || []}
+          days={weekPlan?.days || []}
           preset={taskPreset}
           onClose={() => { setAddingTask(null); setTaskPreset(null) }}
           onCreated={() => load(window_, { quiet: true })} />

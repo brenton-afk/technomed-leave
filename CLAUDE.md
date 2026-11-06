@@ -189,6 +189,13 @@ shell is saved at install, because the first visit loads before the worker is in
 control. Saved files are matched with `ignoreVary` — the server sends
 `Vary: Origin` and a module request carries an Origin the install fetch did not.
 
+**The Cases tab only ever draws the week on screen** (Brent, 6 Nov 2026:
+"says nothing booked when there is"). `weekPlan` in `CaseWeek.jsx` uses the
+fetched plan only when its `weekStart` is the window's, else the saved copy of
+that week, else nothing — "Loading…", or "could not be loaded" with Try
+again. It used to keep drawing the last week's plan until the new one came,
+so every day read "Nothing booked" on hospital 5G.
+
 Offline, the Cases tab draws from the week plan `provider.js` already keeps in
 `localStorage`, with "Offline — showing data from <time>". Screens other than
 Cases are split out (`src/lazyScreens.jsx`) and prefetched in the background once

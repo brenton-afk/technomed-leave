@@ -1639,3 +1639,28 @@ describe('the Friday handover', () => {
     })
   })
 })
+
+// ─── Never another week's plan (Brent, 6 Nov 2026) ──────────────────────────
+// "The portal says nothing booked when there is." Stepping a week kept drawing
+// the previous week's plan until the new one arrived, so every day read
+// "Nothing booked" on a slow connection — and for good if the fetch failed.
+describe('the week on screen is the week drawn', () => {
+  it('says Loading, not Nothing booked, while another week fetches', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    global.fetch = vi.fn(() => new Promise(() => {}))
+    fireEvent.click(screen.getByLabelText(/next week/i))
+    await waitFor(() => expect(screen.getByText('Loading…')).toBeInTheDocument())
+    expect(screen.queryByText('Mardon')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Nothing booked/)).not.toBeInTheDocument()
+  })
+
+  it('says it could not load, rather than that nothing is booked', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    global.fetch = vi.fn(async () => { throw new Error('offline') })
+    fireEvent.click(screen.getByLabelText(/next week/i))
+    await waitFor(() => expect(screen.getByText(/could not be loaded/)).toBeInTheDocument())
+    expect(screen.queryByText(/Nothing booked/)).not.toBeInTheDocument()
+  })
+})
