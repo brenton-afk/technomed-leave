@@ -13,6 +13,7 @@ vi.mock('./_redis.js', () => ({
     if (cmd === 'lrange') return (lists.get(key) || []).slice(args[0], Number(args[1]) + 1)
     if (cmd === 'del') store.delete(key)
     if (cmd === 'get') return store.get(key) || null
+    if (cmd === 'getdel') { const v = store.get(key) ?? null; store.delete(key); return v }
     return null
   }),
   redisSetBody: vi.fn(async (key, value) => { store.set(key, value) })

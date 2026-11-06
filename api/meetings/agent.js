@@ -6,7 +6,7 @@ import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
   saveMeeting, getMeeting, updateMeetingStatus,
   saveWorklistItem, getWorklist, getWorklistItem, updateWorklistItem, deleteWorklistItem,
-  saveProject, getProject, getProjects
+  saveProject, getProject, getProjects, redis
 } from '../_redis.js'
 import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
@@ -446,6 +446,16 @@ async function handleFinalize(req, res) {
 
   const meeting = await getMeeting(meetingId)
   if (!meeting) return res.status(404).json({ error: 'Meeting not found' })
+  // Minutes go to the team once. A second tap (or a retry after a slow reply)
+  // emailed all nine people again and put every action item on the worklist
+  // twice. The claim is let go only if nothing was written.
+  if (meeting.status === 'sent') {
+    return res.status(409).json({ error: 'These minutes have already been sent to the team.' })
+  }
+  const claim = `meeting:finalizing:${meetingId}`
+  if (await redis('set', claim, '1', 'NX', 'EX', '2592000') !== 'OK') {
+    return res.status(409).json({ error: 'These minutes are already being sent.' })
+  }
 
   const stamped = actionItems.map((it, i) => ({
     id: `${meetingId}-${i}`,
@@ -461,8 +471,13 @@ async function handleFinalize(req, res) {
     createdAt: new Date().toISOString()
   }))
 
-  await Promise.all(stamped.map(item => saveWorklistItem(item)))
-  await updateMeetingStatus(meetingId, 'sent', stamped)
+  try {
+    await Promise.all(stamped.map(item => saveWorklistItem(item)))
+    await updateMeetingStatus(meetingId, 'sent', stamped)
+  } catch (err) {
+    await redis('del', claim).catch(() => {})
+    throw err
+  }
 
   const emailResults = []
   for (const staff of STAFF) {

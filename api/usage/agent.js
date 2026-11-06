@@ -5,7 +5,8 @@ import { STAFF, firstNameFor } from '../../src/staffConfig.js'
 import {
   saveUsageRecord, getUsageRecord, getUsageHistory,
   setUsageReviewed, getUsageReviews,
-  claimResupply, saveResupply, getResupply, getCaseResupplies, removeUsageRecord
+  claimResupply, saveResupply, getResupply, getCaseResupplies, removeUsageRecord,
+  claimUsageSend, releaseUsageSend
 } from '../_redis.js'
 import {
   RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply,
@@ -228,6 +229,20 @@ async function handleSave(req, res, session) {
   // surname, surgeon or distributor on the review screen.
   const caseRecord = recomputeCase({ ...incoming, repName: session.name, repEmail: session.email })
 
+  // Saving again over a case already on file (a test send, then the real one)
+  // keeps what the server knows about it: which distributors have had it,
+  // who scanned it first, when, and its corrections. These came from the
+  // client before, and a phone holding an older copy wiped the record of a
+  // send — after which the next Send went to everybody again.
+  const stored = incoming.id ? await getUsageRecord(incoming.id) : null
+  if (stored?.removed) {
+    return res.status(410).json({ error: 'This scan was removed as a duplicate, so it cannot be saved again. Start a new scan if it is a different case.' })
+  }
+  const realSends = (stored?.emailsSent || []).filter(e => e && e.ok && !e.test && !e.testOnly)
+  // Once a distributor has had it, the case name is what their email was
+  // titled; renaming the folder now would file it apart from what they hold.
+  if (realSends.length && stored.folderName) caseRecord.folderName = stored.folderName
+
   const blocking = []
   if (!caseRecord.patientSurname) blocking.push('patient surname')
   if (!caseRecord.date) blocking.push('date')
@@ -293,9 +308,10 @@ async function handleSave(req, res, session) {
     dropboxPath: dropboxSkipped ? '' : folderPath,
     dropboxSkipped,
     filesSaved: saved,
-    emailsSent: incoming.emailsSent || [],
-    createdByEmail: session.email,
-    createdAt: incoming.createdAt || new Date().toISOString(),
+    emailsSent: stored?.emailsSent || [],
+    ...(stored?.amendments ? { amendments: stored.amendments } : {}),
+    createdByEmail: stored?.createdByEmail || session.email,
+    createdAt: stored?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   }
   await saveUsageRecord(record)
@@ -343,6 +359,7 @@ async function handleEmail(req, res, session) {
 
   const record = await getUsageRecord(usageId)
   if (!record) return res.status(404).json({ error: 'Usage record not found' })
+  if (record.removed) return res.status(410).json({ error: 'This scan was removed as a duplicate — nothing was sent.' })
   // A saved case is the precondition, not a Dropbox path — Dropbox may be
   // deliberately switched off.
   if (!record.submittedAt && !record.createdAt) {
@@ -400,10 +417,36 @@ async function handleEmail(req, res, session) {
     ? new Map()
     : earlierSends(record, targets, await getUsageHistory(200))
 
+  // Distributors this very case has already gone to. Sending again is the
+  // double-up Device cannot tell from a second usage, so it is held like a
+  // repeat from another case, and released the same way.
+  const alreadySent = new Map(test || confirmRepeat ? [] : (record.emailsSent || [])
+    .filter(e => e && e.ok && !e.test && !e.testOnly)
+    .map(e => [e.key, e]))
+
   for (const key of targets) {
     const distributor = DISTRIBUTORS[key]
+    const done = alreadySent.get(key)
+    if (done) {
+      results.push({
+        key, name: distributor.name, to: [], itemCount: groups.get(key).length, ok: false, held: true,
+        earlier: { sentAt: done.sentAt, sameCase: true },
+        error: `Not sent: ${distributor.name} already had this usage`
+          + `${done.sentAt ? ` (sent ${new Date(done.sentAt).toLocaleTimeString('en-AU', { timeZone: 'Australia/Hobart', hour: 'numeric', minute: '2-digit' })})` : ''}.`
+          + ' If something changed, use Amend to send a correction.'
+      })
+      continue
+    }
+    if (!test && !(await claimUsageSend(record.id, key))) {
+      results.push({
+        key, name: distributor.name, to: [], itemCount: groups.get(key).length, ok: false, held: true,
+        error: `Not sent: ${distributor.name} is already being sent from another tap or phone. Check Past scans in a minute.`
+      })
+      continue
+    }
     const earlier = repeats.get(key)
     if (earlier) {
+      if (!test) await releaseUsageSend(record.id, key)
       results.push({
         key, name: distributor.name, to: [], itemCount: groups.get(key).length, ok: false, held: true,
         earlier,
@@ -440,17 +483,23 @@ async function handleEmail(req, res, session) {
     } catch (err) {
       results.push({ key, name: distributor.name, to, itemCount: items.length, ok: false, test, error: err.message })
     }
+    if (!test) await releaseUsageSend(record.id, key)
   }
 
   // A test is not recorded against the case. Otherwise it would show as sent, and
   // the distributor would never get the real one — a test that quietly satisfies
   // the thing it was testing is worse than no test.
+  // Merged onto the record as it is now, not as it was when the sends began:
+  // an Amend or another send finished meanwhile is kept, not overwritten.
+  // A held result never replaces a send that went.
+  const fresh = test ? record : (await getUsageRecord(record.id)) || record
   const updated = test
     ? record
     : (() => {
+      const recorded = results.filter(r => !(r.held && (fresh.emailsSent || []).some(e => e.key === r.key && e.ok)))
       // Keep the latest outcome per distributor so a retry replaces the failure.
-      const merged = [...(record.emailsSent || [])].filter(e => !results.some(r => r.key === e.key))
-      return { ...record, emailsSent: [...merged, ...results], updatedAt: new Date().toISOString() }
+      const merged = [...(fresh.emailsSent || [])].filter(e => !recorded.some(r => r.key === e.key))
+      return { ...fresh, emailsSent: [...merged, ...recorded], updatedAt: new Date().toISOString() }
     })()
   if (!test) await saveUsageRecord(updated)
 

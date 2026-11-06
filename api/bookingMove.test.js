@@ -38,6 +38,7 @@ vi.mock('./_googleCalendar.js', () => ({
   createTaskEvent: vi.fn(), deleteCalendarEvent: vi.fn()
 }))
 vi.mock('./_redis.js', () => ({
+  redis: vi.fn(async () => 'OK'), redisSetBody: vi.fn(),
   getBookingCandidate: vi.fn(async () => candidate),
   updateBookingCandidate: vi.fn(async (id, up) => ({ ...candidate, ...up }))
 }))

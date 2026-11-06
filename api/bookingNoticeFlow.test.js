@@ -12,6 +12,7 @@ vi.mock('./_auth.js', () => ({
 vi.mock('./_redis.js', () => ({
   redis: vi.fn(async (cmd, key) => {
     if (cmd === 'get') return store.get(key) ?? null
+    if (cmd === 'getdel') { const v = store.get(key) ?? null; store.delete(key); return v }
     if (cmd === 'del') { store.delete(key); return 1 }
     return 'OK'
   }),
@@ -66,6 +67,27 @@ describe('creating a Signus booking', () => {
     expect(sentMail[0].sender).toEqual({ name: 'Toni Hoppitt', email: 'toni@technomed.com.au' })
     const again = await call('notify', { ids: [preview.id] })
     expect(again.payload.ok).toBe(false)
+    expect(sentMail).toHaveLength(1)
+  })
+
+  it('two Send taps together send once', async () => {
+    const res = await call('create', { date: '2026-11-06',
+      fields: { patient: 'Testa', surgeon: 'Ibbett', kit: 'Ascot (Consignment)', hospital: 'CLV' } })
+    const id = res.payload.notices[0].id
+    await Promise.all([call('notify', { ids: [id] }), call('notify', { ids: [id] })])
+    expect(sentMail).toHaveLength(1)
+  })
+
+  it('a notice that failed to send can be sent again', async () => {
+    const { sendBookingNotice } = await import('./_email.js')
+    const res = await call('create', { date: '2026-11-06',
+      fields: { patient: 'Testa', surgeon: 'Ibbett', kit: 'Ascot (Consignment)', hospital: 'CLV' } })
+    const id = res.payload.notices[0].id
+    sendBookingNotice.mockImplementationOnce(async () => { throw new Error('Email not sent') })
+    const failed = await call('notify', { ids: [id] })
+    expect(failed.payload.ok).toBe(false)
+    const retry = await call('notify', { ids: [id] })
+    expect(retry.payload.ok).toBe(true)
     expect(sentMail).toHaveLength(1)
   })
 

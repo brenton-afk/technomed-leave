@@ -376,10 +376,17 @@ export async function holdNotice(notice) {
 
 export async function takeNotice(id) {
   if (!/^n_[a-z0-9]+_[a-z0-9]+$/.test(String(id || ''))) return null
-  const raw = await redis('get', `notice:pending:${id}`)
+  // One atomic read-and-delete: a GET then a DEL let two Send taps both read
+  // the notice before either deleted it, and the supplier got it twice.
+  const raw = await redis('getdel', `notice:pending:${id}`)
   if (!raw) return null
-  await redis('del', `notice:pending:${id}`)
   try { return JSON.parse(raw) } catch { return null }
+}
+
+/** Puts a notice back under its id when sending it failed, so Send can be tried again. */
+export async function restoreNotice(id, notice) {
+  await redisSetBody(`notice:pending:${id}`, JSON.stringify(notice))
+  await redis('expire', `notice:pending:${id}`, '86400').catch(() => {})
 }
 
 /** Preview for the client: who and what, without anything it could alter. */

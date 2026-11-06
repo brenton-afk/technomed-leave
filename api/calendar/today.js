@@ -9,7 +9,7 @@ import {
 import { requireSession, requireAdmin } from '../_auth.js'
 import {
   getNoticeSettings, saveNoticeSettings, noticesFor, describeBooking,
-  holdNotice, takeNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest, loanLogFor,
+  holdNotice, takeNotice, restoreNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest, loanLogFor,
   hospitalLoanNoticesFor, DEFAULT_HOSPITAL_LOAN_NOTICES
 } from '../_bookingNotices.js'
 import { sendBookingNotice, escapeHtml } from '../_email.js'
@@ -1573,6 +1573,7 @@ async function handleAccept(req, res) {
   if (!session) return
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  let claim = null
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     const id = String(body.id || '').trim()
@@ -1581,6 +1582,14 @@ async function handleAccept(req, res) {
     if (candidate.status === 'accepted') {
       // Two taps on a slow connection must not make two bookings.
       return res.status(200).json({ ok: true, alreadyAccepted: true, candidate })
+    }
+    // The status check alone let two taps that arrive together both pass it
+    // and both write a booking. The claim is what makes it once; it is let
+    // go if the write fails, so Accept can be tried again.
+    claim = `bookingcand:accepting:${id}`
+    if (await redis('SET', claim, '1', 'NX', 'EX', '90') !== 'OK') {
+      claim = null
+      return res.status(409).json({ error: 'That booking is already being accepted — it will be on the calendar in a moment.', inProgress: true })
     }
 
     // A booking that has moved: the existing entry is moved, not copied.
@@ -1642,6 +1651,7 @@ async function handleAccept(req, res) {
       ...notices
     })
   } catch (err) {
+    if (claim) await redis('DEL', claim).catch(() => {})
     return res.status(err.status || 500).json({ error: err.message })
   }
 }
@@ -2229,6 +2239,7 @@ async function handleNotify(req, res) {
     // "Ideally be able to edit them if needed." The wording and subject can be
     // changed; who it goes to cannot — that stays as the server wrote it, so
     // an edit can never turn a notice into an email to somebody else.
+    const original = { ...notice }
     const edit = body.edits?.[id]
     if (edit && (typeof edit.text === 'string' || typeof edit.subject === 'string')) {
       const textBody = typeof edit.text === 'string' ? edit.text.slice(0, 8000) : notice.text
@@ -2244,6 +2255,7 @@ async function handleNotify(req, res) {
       await recordLoanRequest(notice, firstNameFor(session.email)).catch(() => {})
       results.push({ id, ok: true, name: notice.name })
     } catch (err) {
+      await restoreNotice(id, original).catch(() => {})
       results.push({ id, ok: false, name: notice.name, error: err.message || 'Email not sent' })
     }
   }

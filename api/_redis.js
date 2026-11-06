@@ -246,8 +246,23 @@ export async function deleteProject(id) {
 export async function saveUsageRecord(record) {
   // Body-form SET: a case with many line items outgrows a URL path.
   await redisSetBody(`usage:${record.id}`, JSON.stringify(record))
+  // A case removed as a duplicate stays off the list, whatever saves it later
+  // — otherwise an email retry on the removed scan put it straight back.
+  if (record.removed) return
   await redis('lrem', 'usage:all', '0', record.id)
   await redis('lpush', 'usage:all', record.id)
+}
+
+/**
+ * One send per case and distributor at a time. A double tap on Send, or two
+ * phones sending the same case, otherwise both reach the distributor.
+ */
+export async function claimUsageSend(id, key) {
+  return (await redis('set', `usage:sending:${id}:${key}`, '1', 'NX', 'EX', '120')) === 'OK'
+}
+
+export async function releaseUsageSend(id, key) {
+  await redis('del', `usage:sending:${id}:${key}`).catch(() => {})
 }
 
 /**

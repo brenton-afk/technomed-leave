@@ -8,6 +8,7 @@ const lists = new Map()
 vi.mock('./_redis.js', () => ({
   redis: vi.fn(async (cmd, ...args) => {
     if (cmd === 'get') return store.get(args[0]) ?? null
+    if (cmd === 'getdel') { const v = store.get(args[0]) ?? null; store.delete(args[0]); return v }
     if (cmd === 'mget') return args.map(k => store.get(k) ?? null)
     if (cmd === 'set') { store.set(args[0], args[1]); return 'OK' }
     if (cmd === 'del') { store.delete(args[0]); return 1 }

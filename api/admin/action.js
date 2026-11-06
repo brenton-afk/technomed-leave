@@ -1,4 +1,4 @@
-import { getApplication, updateApplicationStatus, redisSetBody } from '../_redis.js'
+import { getApplication, updateApplicationStatus, redisSetBody, redis } from '../_redis.js'
 import { requireAdmin } from '../_auth.js'
 import { submitToXero } from '../_xeroClient.js'
 import { addCalendarEvent } from '../_googleCalendar.js'
@@ -43,6 +43,23 @@ export default async function handler(req, res) {
   if (application.status !== 'pending') {
     return res.status(409).json({ error: `Application has already been ${application.status}` })
   }
+
+  // Two admins (or one double tap) acting together both read "pending" before
+  // either wrote, and the leave went to Xero and the calendar twice. Whoever
+  // claims it first acts; the claim is let go if that fails before the status
+  // changes, so it can be tried again.
+  const claim = `leave:acting:${id}`
+  if (await redis('set', claim, session.email, 'NX', 'EX', '120') !== 'OK') {
+    return res.status(409).json({ error: 'Someone is already approving or declining this application.' })
+  }
+  try {
+    return await decide()
+  } catch (err) {
+    await redis('del', claim).catch(() => {})
+    throw err
+  }
+
+  async function decide() {
 
   if (action === 'decline') {
     if (!declineReason?.trim()) {
@@ -116,6 +133,7 @@ export default async function handler(req, res) {
     calendarError,
     emailError
   })
+  }
 }
 
 /** What Xero said about this application, stored on it. */
