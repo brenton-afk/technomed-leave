@@ -117,7 +117,14 @@ export async function retryPo(po) {
  * the tab at 6pm cannot both draft the same PO; and createDraftInvoice asks
  * Xero once more, immediately before creating, whether the PO is invoiced.
  */
+// PAUSED (Brent, 6 Nov 2026: "pause the Invoice and PO auto completion in
+// the portal until I've chatted to Toni"). Nothing is drafted by itself —
+// not from the crons, not on opening Admin → Invoices — until PO_AUTO=on is
+// set in Vercel. Reading POs and drafting one by hand still work.
+export const PO_AUTO_ON = () => process.env.PO_AUTO === 'on'
+
 export async function autoInvoice({ max = 4, by = 'automatic' } = {}) {
+  if (!PO_AUTO_ON()) return { paused: true, drafted: [], held: [], failed: [] }
   const got = await redis('SET', LOCK, by, 'NX', 'EX', '90')
   if (got !== 'OK') return { skipped: 'already running' }
   try {

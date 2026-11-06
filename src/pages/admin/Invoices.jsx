@@ -187,6 +187,11 @@ export default function Invoices({ user }) {
           {auto.quotes.followed?.length > 0 && <div>Sent quotes filed and distributors told: {auto.quotes.followed.map(f => f.quote).join(', ')}.</div>}
         </div>
       )}
+      {auto?.paused && (
+        <div style={{ ...card, fontSize: 13, color: '#4b5b68' }}>
+          Automatic PO invoicing is paused — nothing is drafted by itself. Read a PO and draft it by hand if needed.
+        </div>
+      )}
       {auto?.error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>The automatic pass did not finish: {auto.error}</div>}
 
       {!loading && xero === 'ok' && (

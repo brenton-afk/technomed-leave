@@ -324,3 +324,13 @@ describe('the sent quote is the truth for the heads-up', () => {
     expect(fromSummary('')).toEqual({})
   })
 })
+
+import { autoInvoice as autoInvoicePaused } from './_poAuto.js'
+describe('PO auto-invoicing is paused until PO_AUTO=on (Brent, 6 Nov 2026)', () => {
+  it('drafts nothing and touches nothing', async () => {
+    const before = process.env.PO_AUTO
+    delete process.env.PO_AUTO
+    expect(await autoInvoicePaused({ by: 'test' })).toMatchObject({ paused: true, drafted: [] })
+    if (before !== undefined) process.env.PO_AUTO = before
+  })
+})

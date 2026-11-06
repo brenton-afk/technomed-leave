@@ -593,6 +593,9 @@ admin-only; no new function).
   counted once. If Xero cannot be asked, nothing is outstanding — it is all
   `unchecked`. Calvary's numbers are mostly **LVH0012240**-style (two letters,
   H or P, seven digits); the reader once knew only LVP/ACP and missed them.
+- **PAUSED 6 Nov 2026** (Brent: "until I've chatted to Toni"): `autoInvoice`
+  returns `{paused: true}` and drafts nothing unless `PO_AUTO=on` is set in
+  Vercel. Reading POs and drafting by hand are unaffected.
 - **POs are invoiced by themselves** (Brent, 5 Nov 2026: "the whole point is
   to automate them from email"). `autoInvoice` in `api/_poAuto.js` runs in both
   daily cron jobs and whenever Admin → Invoices opens (`po-auto`): each
