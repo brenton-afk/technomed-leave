@@ -53,7 +53,7 @@ import { readDictatedBooking } from '../_readDictatedBooking.js'
 import { readVoiceCommand } from '../_voiceCommand.js'
 import {
   sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar, asksForCover, DISTRIBUTOR_REQUEST,
-  movedOnCalendar
+  movedOnCalendar, loanLogisticsTwin
 } from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
@@ -1400,8 +1400,8 @@ export async function ingestBookings() {
           // outright. So this check existed and kept missing, and the case
           // was offered a second time — reported as the app wanting to book
           // cases twice.
-          const twinOnCalendar = alreadyInCalendar(
-            candidate, (await calendarFor(candidate.date)).filter(c => !c.cancelled))
+          const onDays = (await calendarFor(candidate.date)).filter(c => !c.cancelled)
+          const twinOnCalendar = alreadyInCalendar(candidate, onDays) || loanLogisticsTwin(candidate, onDays)
           if (twinOnCalendar) {
             already += 1
             await saveBookingCandidate({
@@ -1499,7 +1499,7 @@ export async function reconcileQueue(queue, today, readCalendar = bookingsOnCale
 
   for (const c of upcoming) {
     if (c.status === 'pending') {
-      const twin = alreadyInCalendar(c, live)
+      const twin = alreadyInCalendar(c, live) || loanLogisticsTwin(c, live)
       if (twin) {
         await updateBookingCandidate(c.id, { status: 'onCalendar', matchedEventId: twin.id, matchedSummary: twin.summary })
         out.nowBooked += 1

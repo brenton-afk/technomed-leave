@@ -329,7 +329,34 @@ function hobartToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
 }
 
+// ─── A loan-set email is not a booking (Brent, 6 Nov 2026) ───────────────────
+// Munro: booked for Fri 13 Nov, Device's Mariner set arriving Tue 10 Nov. The
+// set's paperwork ("KIT Mariner MIS MINUS SCREWS … Booking sets must arrive
+// by PM … ships to Calvary") was read as a booking, its logistics date taken
+// for the surgery, and the card offered to MOVE the real case to the 12th.
+// Such an email is about a case already on the calendar, never a new or moved
+// one: matched to it by surname (and surgeon, where both name one) within a
+// week, it is treated as already booked and never offered as a move.
+const LOAN_LOGISTICS = /\b(?:ships? to|shipp(?:ed|ing) to|must arrive by|sets? must arrive|booking sets?|loan sets? (?:confirm|dispatch|booked)|set has been booked|con(?:signment)? ?note|connote|tracking (?:number|no))\b|(?:^|[;\n]\s*)KIT\s+[A-Z]/i
+
+export function looksLikeLoanLogistics(candidate) {
+  const text = [candidate?.subject, candidate?.note, candidate?.notes, candidate?.kit].filter(Boolean).join('\n')
+  return LOAN_LOGISTICS.test(text)
+}
+
+export function loanLogisticsTwin(candidate, events = [], { withinDays = 7 } = {}) {
+  if (!looksLikeLoanLogistics(candidate) || !candidate?.patient) return null
+  const same = (x, y) => String(x || '').trim().toLowerCase() === String(y || '').trim().toLowerCase()
+  const day = date => { const [y, m, d] = String(date || '').split('-').map(Number); return y ? Date.UTC(y, m - 1, d) / 86400000 : NaN }
+  const target = day(candidate.date)
+  const hits = events.filter(e => e && !e.cancelled && same(e.patient, candidate.patient)
+    && (!candidate.surgeon || !e.surgeon || same(e.surgeon, candidate.surgeon))
+    && (!Number.isFinite(target) || Math.abs(day(e.date) - target) <= withinDays))
+  return hits.length === 1 ? hits[0] : null
+}
+
 export function movedOnCalendar(candidate, events = [], { withinDays = 28, today = hobartToday() } = {}) {
+  if (looksLikeLoanLogistics(candidate)) return null
   if (!candidate?.date || !candidate?.patient || !candidate?.surgeon) return null
   if (NEW_OPERATION.test(String(candidate.procedure || candidate.operation || ''))) return null
   const theirs = levelsIn(candidate.procedure || candidate.operation)

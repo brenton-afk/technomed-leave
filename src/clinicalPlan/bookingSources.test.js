@@ -216,3 +216,20 @@ describe('a distributor asking for cover', async () => {
     expect(asksForCover('Invoice 2041', 'Please find attached')).toBe(false)
   })
 })
+
+import { looksLikeLoanLogistics, loanLogisticsTwin, movedOnCalendar as movedL } from './bookingSources.js'
+import { describe as dLL, it as iLL, expect as eLL } from 'vitest'
+dLL('a loan-set email is not a booking (Munro, 6 Nov 2026)', () => {
+  const card = {
+    patient: 'Testcase', surgeon: 'Gupta', date: '2026-11-12', hospital: 'CLV', procedure: 'MIS posterior pedicle screws',
+    kit: 'KIT Mariner MIS MINUS SCREWS; KIT MARINER FENESTRATED SHANK BANK; KIT NAVIGATION ADAPTORS',
+    note: 'Booking sets must arrive by PM ships to Calvary Hospital - Lenah Valley'
+  }
+  const calendar = [{ id: 'e1', patient: 'Testcase', surgeon: 'Gupta', date: '2026-11-13', procedure: 'L5/S1 pedicle screw fixation' }]
+  iLL('is recognised', () => eLL(looksLikeLoanLogistics(card)).toBe(true))
+  iLL('is never offered as a move', () => eLL(movedL(card, calendar, { today: '2026-11-06' })).toBe(null))
+  iLL('counts as the case already on the calendar', () => eLL(loanLogisticsTwin(card, calendar)?.id).toBe('e1'))
+  iLL('an ordinary booking is not mistaken for one', () => {
+    eLL(looksLikeLoanLogistics({ kit: 'Mariner MIS (Distributor Loan)', note: 'Prone. Brainlab.' })).toBe(false)
+  })
+})
