@@ -346,6 +346,11 @@ at body/600; each system is a chip (`chipOn(ink)`) with its supply; the list
 place is an outlined badge; the rep or planned rep shares the footer row with
 the list-order and copy icons (so it sits outside the card's tap target —
 tests find the card by `data-case-card`).
+**Nothing in a card is absolutely positioned** — a visually-hidden span did
+that once, escaped the frame, made the document taller than the screen, and
+iOS scrolled the page itself, pushing the tab bar's labels off the bottom
+("the options on the tab are hidden"). `wash.test.js` guards it; check
+`document.documentElement.scrollHeight === innerHeight` in a real render.
 
 ### Cases layout (Brent, 4 Nov 2026)
 

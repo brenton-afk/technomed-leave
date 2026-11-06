@@ -415,7 +415,6 @@ function CopyCase({ surgicalCase, date, ink, style, label = 'Copy details', icon
 const CARD_RADIUS = 18
 const CARD_SHEEN = 'linear-gradient(155deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.06) 38%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.05) 100%)'
 const CARD_SHADOW = '0 1px 2px rgba(4,39,70,0.10), 0 6px 18px rgba(4,39,70,0.12)'
-const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }
 /** A chip on the card: lighter than the fill on a dark ink, a veil of the ink on a white one. */
 const chipOn = ink => ink.ink === '#ffffff' ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.42)'
 
@@ -495,7 +494,6 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             ...(off ? { textDecoration: 'line-through' } : {})
           }}>
             {label}
-            <span style={VISUALLY_HIDDEN}> / </span>
           </span>
           {surgicalCase.surgeon && (
             <span style={{

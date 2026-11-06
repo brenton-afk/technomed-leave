@@ -192,3 +192,16 @@ describe('the cards actually use it', () => {
     }
   })
 })
+
+// Brent, 6 Nov 2026: "Look at the bottom. The options on the tab are hidden."
+// A visually-hidden " / " in the card was position: absolute with no positioned
+// ancestor, so it escaped the card and the frame and made the whole document
+// taller than the screen — iOS then let the page itself scroll, dragging the
+// tab bar's labels off the bottom. Nothing in a card may be absolutely placed.
+describe('nothing in a case card escapes the frame', () => {
+  it('has no absolutely positioned element in either card', () => {
+    for (const name of ['CaseCard', 'WeekCase']) {
+      expect(bodyOf(name), name).not.toMatch(/position: 'absolute'/)
+    }
+  })
+})
