@@ -147,3 +147,26 @@ describe('watching for the app being come back to', () => {
     expect(() => watchZoom(undefined)()).not.toThrow()
   })
 })
+
+import { blockPinch, isZoomable } from './lockZoom.js'
+describe('no pinch outside the places made for it (Brent, 6 Nov 2026)', () => {
+  it('refuses a pinch on the page, allows it on [data-zoomable]', () => {
+    const stop = blockPinch(window)
+    const page = document.createElement('div')
+    const zoom = document.createElement('div')
+    zoom.setAttribute('data-zoomable', '')
+    const inner = document.createElement('img')
+    zoom.appendChild(inner)
+    document.body.append(page, zoom)
+    const pinch = el => {
+      const e = new Event('gesturestart', { bubbles: true, cancelable: true })
+      el.dispatchEvent(e)
+      return e.defaultPrevented
+    }
+    expect(pinch(page)).toBe(true)
+    expect(pinch(inner)).toBe(false)
+    expect(isZoomable(inner)).toBe(true)
+    stop()
+    expect(pinch(page)).toBe(false)
+  })
+})

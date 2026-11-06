@@ -122,12 +122,11 @@ describe('the viewport the app asks for', () => {
     expect(html).toMatch(/viewport-fit=cover/)
   })
 
-  it('does not forbid pinch-zoom', () => {
-    // Blocking it would hide the symptom and take the magnifying glass away:
-    // people zoom into a photo of a booking form on purpose. The font sizes
-    // above are what stop the *unasked-for* zoom.
+  it('holds the page at 1:1 (Brent, 6 Nov 2026)', () => {
+    // Pinch is refused in lockZoom.js except on [data-zoomable]; the scanner's
+    // detail view keeps it for reading stickers.
+    expect(html).toMatch(/maximum-scale=1/)
     expect(html).not.toMatch(/user-scalable\s*=\s*no/)
-    expect(html).not.toMatch(/maximum-scale/)
   })
 })
 

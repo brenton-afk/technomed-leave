@@ -63,6 +63,16 @@ every screen scroll by the height of that chrome. `PinScreen` and `Success` rend
 before the shell and are the exceptions. `design/safeArea.test.js` asserts all of
 this.
 
+### Zoom (Brent, 6 Nov 2026)
+
+The page holds 1:1. After repeated "page not holding size so you have to zoom
+out with your fingers", the viewport has `maximum-scale=1` (stops focus-zoom
+everywhere, pinch on Android) and `blockPinch` in `src/lockZoom.js` refuses
+iOS pinch gestures and two-finger moves — except inside `[data-zoomable]`,
+which is the scanner's "Check the detail" view, kept pinchable for reading
+sticker lot numbers. `watchZoom` still straightens a stuck zoom on return.
+This reverses the earlier "never block pinch" rule; the tests now assert it.
+
 ### Design system
 
 `src/design/` is the single source for appearance and must be used by new screens:

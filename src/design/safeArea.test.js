@@ -24,12 +24,9 @@ describe('the viewport', () => {
     expect(viewport).toContain('viewport-fit=cover')
   })
 
-  it('does not block pinch-zoom', () => {
-    // This app is used to read case detail and handwritten forms. `maximum-scale`
-    // and `user-scalable=no` were removed with the viewport fix rather than
-    // carried along by habit.
-    expect(viewport).not.toMatch(/maximum-scale/)
-    expect(viewport).not.toMatch(/user-scalable\s*=\s*no/)
+  it('holds the page at 1:1, pinch kept only where it is needed', () => {
+    // Brent, 6 Nov 2026: the page kept not holding its size. See lockZoom.js.
+    expect(viewport).toMatch(/maximum-scale=1/)
   })
 })
 

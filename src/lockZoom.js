@@ -64,6 +64,34 @@ export function resetZoom(doc = globalThis.document) {
   return true
 }
 
+// ─── Then: no pinch at all, outside the places made for it ──────────────────
+// Brent, 6 Nov 2026, after the reset above was not enough: "still issues with
+// zoom … the page not holding size so you have to zoom out with your
+// fingers". The page now holds 1:1 while in use too. iOS ignores
+// user-scalable=no, so the pinch itself is refused: its gesture events, and
+// any two-finger move. Somewhere marked [data-zoomable] — the scanner's
+// "Check the detail" — still pinches, because reading a lot number off a
+// sticker is what magnification is for.
+export function isZoomable(target) {
+  return Boolean(target?.closest?.('[data-zoomable]'))
+}
+
+export function blockPinch(target = globalThis) {
+  const doc = target?.document
+  if (!doc?.addEventListener) return () => {}
+  const refuse = e => { if (!isZoomable(e.target)) e.preventDefault() }
+  const twoFingers = e => { if (e.touches && e.touches.length > 1 && !isZoomable(e.target)) e.preventDefault() }
+  const opts = { passive: false }
+  doc.addEventListener('gesturestart', refuse, opts)
+  doc.addEventListener('gesturechange', refuse, opts)
+  doc.addEventListener('touchmove', twoFingers, opts)
+  return () => {
+    doc.removeEventListener('gesturestart', refuse, opts)
+    doc.removeEventListener('gesturechange', refuse, opts)
+    doc.removeEventListener('touchmove', twoFingers, opts)
+  }
+}
+
 /**
  * Watches for the app being returned to, and straightens it out.
  *

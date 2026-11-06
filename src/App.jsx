@@ -30,7 +30,7 @@ import { useOnline } from './online.js'
 import { useOfflineQueue, dismissChange } from './offlineQueue.js'
 import NoticeSheet from './pages/cases/NoticeSheet.jsx'
 import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
-import { watchZoom } from './lockZoom.js'
+import { watchZoom, blockPinch } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
 import VoiceSheet, { Mic } from './pages/voice/VoiceSheet.jsx'
 import { weekdayName } from './clinicalPlan/week.js'
@@ -234,6 +234,8 @@ export default function App() {
   // the edge. Pinch stays available — this only straightens the page up on
   // the way back into it. See lockZoom.js.
   useEffect(() => watchZoom(), [])
+  // And no pinch while in use, except on [data-zoomable] (Brent, 6 Nov 2026).
+  useEffect(() => blockPinch(), [])
 
   useEffect(() => {
     // A phone that filled up before the cap existed gets its room back here.

@@ -589,7 +589,8 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
             <button type="button" onClick={() => setInspecting(null)}
               style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'white', color: '#042746', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Done</button>
           </div>
-          <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {/* The one place a pinch is allowed (see lockZoom.js): a sticker's lot number. */}
+          <div data-zoomable style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y pinch-zoom' }}>
             <img src={inspecting} alt="The page at full size" style={{ display: 'block', maxWidth: 'none' }} />
           </div>
         </div>
