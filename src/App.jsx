@@ -495,6 +495,8 @@ export default function App() {
 
   return (
     <div className="tm-shell" style={{ background: colour.canvas, fontFamily: font }}>
+      <ShellOn />
+      <div className="tm-status-cover" aria-hidden="true" data-status-cover />
       {nav.sub && !SELF_BACK.has(nav.sub) && (
         <button onClick={back} aria-label="Back"
           style={{
@@ -723,4 +725,14 @@ export default function App() {
 function renderTarget(nav, user) {
   if (nav.tab === 'admin' && !user.isAdmin) return { tab: 'cases', sub: null }
   return nav
+}
+
+/** Marks <html> while the signed-in shell is up — see `.tm-shell-on` in index.css. */
+function ShellOn() {
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.add('tm-shell-on')
+    return () => root.classList.remove('tm-shell-on')
+  }, [])
+  return null
 }

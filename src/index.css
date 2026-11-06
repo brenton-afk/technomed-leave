@@ -69,6 +69,35 @@ body {
    bar, and the bar drops its home-indicator padding, which the strip already
    covers. The frame itself stays the viewport's height — sizing it past that
    put the tab bar's labels where iOS draws nothing (Brent, 6 Nov 2026). */
+/* The status bar's own strip (Brent, 6 Nov 2026: the Usage title scrolled up
+   under the clock). With the black-translucent status bar the page runs under
+   the clock, and whatever scrolls up there sat behind the time and battery.
+   A navy strip the height of the inset sits over the top of the shell, so the
+   clock always has the band's navy behind it. Zero height wherever there is
+   no inset (a browser tab, a desktop). Never in a printout. */
+.tm-status-cover {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: #042746;
+  z-index: 60;
+  pointer-events: none;
+}
+
+/* Whatever shows below the app's frame on a phone is the tab bar's white,
+   not the navy page behind it (Brent, 6 Nov 2026: a navy strip under the tab
+   bar, again). Set while the signed-in shell is on screen, so the navy sign-in
+   screen keeps its own colour. The canvas alone was not enough: the body was
+   still navy, and it is the body that showed. */
+@media (max-width: 639px) {
+  html.tm-shell-on,
+  html.tm-shell-on body {
+    background: #ffffff !important;
+  }
+}
+
 html.tm-short-viewport {
   background: #ffffff;
   --tm-bar-bg: #ffffff;
@@ -102,6 +131,7 @@ a {
    on a phone, whose viewport is already narrower, so no media query is needed
    for the constraint itself — only for the surrounding frame. */
 .tm-shell {
+  position: relative;
   width: 100%;
   max-width: 460px;
   margin: 0 auto;
@@ -276,6 +306,8 @@ a {
    case plan to whatever happened to be on screen. Printing is a real path here:
    the plan has @page A4 rules and gets printed and handed round. */
 @media print {
+  .tm-status-cover { display: none; }
+
   #root {
     position: static;
     height: auto;

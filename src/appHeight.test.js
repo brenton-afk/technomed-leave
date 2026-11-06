@@ -74,3 +74,17 @@ describe('the canvas colour', () => {
     stop()
   })
 })
+
+describe('the shell edges (Brent, 6 Nov 2026)', async () => {
+  const { readFileSync } = await import('fs')
+  const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
+  const app = readFileSync(new URL('./App.jsx', import.meta.url), 'utf8')
+  it('covers the status bar so nothing scrolls under the clock', () => {
+    expect(app).toMatch(/className="tm-status-cover"/)
+    expect(css).toMatch(/\.tm-status-cover \{[^}]*height: env\(safe-area-inset-top/)
+  })
+  it('backs the signed-in phone app with white, not navy, below the tab bar', () => {
+    expect(app).toMatch(/classList\.add\('tm-shell-on'\)/)
+    expect(css).toMatch(/html\.tm-shell-on body \{\s*background: #ffffff !important/)
+  })
+})

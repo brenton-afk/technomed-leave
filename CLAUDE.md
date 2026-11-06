@@ -64,6 +64,12 @@ Three details are load-bearing:
   sets an inline navy on `<html>` for the first paint) and sets `--tm-bar-bg`
   white and `--tm-bottom-inset: 0px`, which the tab bar reads, so the strip
   below is part of a solid white bar. Never size anything past the viewport.
+- **The clock and the strip below the bar** (Brent, 6 Nov 2026, second
+  report). A navy `.tm-status-cover` (height `env(safe-area-inset-top)`, over
+  the top of the shell) stops scrolled content showing under the clock. And
+  while the signed-in shell is up, `tm-shell-on` on `<html>` makes html *and
+  body* white on a phone — the canvas alone had not been enough, because body
+  was still navy and that was what showed below the tab bar.
 - **A `@media print` block undoing all of it.** A viewport-height frame with
   hidden overflow clips a printout to one screen, and the case plan has `@page A4`
   rules and gets printed.
