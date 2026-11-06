@@ -74,16 +74,30 @@ export function cornerTiles({ step = 14, reach = 150, seed = 23 } = {}) {
   let s = seed
   const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280 }
   const tiles = []
-  for (let row = 0; row * step < reach; row++) {
-    for (let col = 0; col * step < reach; col++) {
-      const d = Math.hypot(col + 0.5, (row + 0.5) * 1.9) * step / reach   // 0 in the corner, 1 at the edge
+  const taken = new Set()
+  const rows = Math.ceil(reach / step)
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < rows; col++) {
+      if (taken.has(`${row},${col}`)) continue
+      const d = Math.hypot(col + 0.5, (row + 0.5) * 1.7) * step / reach   // 0 in the corner, 1 at the edge
       if (d >= 1) continue
       const keep = rnd()
       if (keep > 1.3 - d * 1.15) continue
-      const size = Math.round((step - 3) * (1 - d * 0.6))
-      const inset = (step - size) / 2
+      // Sizes vary like the mark's: now and then a double tile near the
+      // corner, otherwise a square somewhere between small and the full cell.
+      const double = d < 0.5 && rnd() > 0.72
+        && !taken.has(`${row},${col + 1}`) && !taken.has(`${row + 1},${col}`)
+      if (double) ['0,1', '1,0', '1,1'].forEach(k => {
+        const [r, c] = k.split(',').map(Number)
+        taken.add(`${row + r},${col + c}`)
+      })
+      const cell = double ? step * 2 : step
+      const size = double
+        ? cell - 4
+        : Math.max(4, Math.round((step - 3) * (1 - d * 0.55) * (0.5 + rnd() * 0.55)))
+      const inset = (cell - size) / 2
       tiles.push({
-        right: col * step + inset + 6, top: row * step + inset + 4, size,
+        right: col * step + inset + 6, top: row * step + inset + 8, size,
         colour: LOGO_TILES[(row + col * 3 + Math.floor(rnd() * 2)) % LOGO_TILES.length],
         opacity: Number((0.95 - d * 0.6).toFixed(2))
       })
@@ -114,7 +128,10 @@ function BandArt({ subtle }) {
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
         {CORNER_TILES.map((t, i) => (
           <span key={i} style={{
-            position: 'absolute', right: t.right, top: t.top, width: t.size, height: t.size,
+            position: 'absolute', right: t.right, width: t.size, height: t.size,
+            // Below the phone's status bar: the band runs up under the clock,
+            // which hid the top rows on a real phone.
+            top: `calc(env(safe-area-inset-top, 0px) + ${t.top}px)`,
             opacity: t.opacity, background: tinFace(t.colour), ...EMBOSS
           }} />
         ))}

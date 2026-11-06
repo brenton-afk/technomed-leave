@@ -329,7 +329,9 @@ Then (same day, after several rounds): the phone band's tiles are a
 **burst in the top-right corner** on a tidy grid (`cornerTiles` in
 `Shell.jsx`, `art="subtle"`) — "I don't like the tiles randomness" — embossed
 like pressed tin (`EMBOSS`, `tinFace`) in the logo's colours, clear of the
-controls. "Overhaul it to make it look slick": every control on the band is
+controls, sizes varied like the mark (an occasional double tile near the
+corner), and placed below `env(safe-area-inset-top)` — on an iPhone the band
+runs up under the clock, which hid the top rows. "Overhaul it to make it look slick": every control on the band is
 solid and raised (`RAISED` in `CaseWeek.jsx` — hairline highlight, soft
 shadow, no see-through fills); the glance cards are solid `navySoft` with teal
 labels; the chosen day in the strip is a solid teal tile, not a tint and an
