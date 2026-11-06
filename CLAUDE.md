@@ -407,6 +407,15 @@ board header); a task's division is its project's, else its assignee's
 (`divisionOf`). The one-line add takes `@Name`, and `add-task` now honours
 `projectId` (it was dropped, so tasks typed on a board landed in General).
 View, division and Only-mine are remembered per browser (`tm_projects_view`).
+**From the 6 Nov mock-ups Brent picked** (Projects & To Do canvas): on a
+phone the page opens on **My To Do** (`projects/MyToDo.jsx`, `phoneTab` in
+the same prefs) — your open tasks as Overdue / Today / This week / Later /
+No date, then Done today (from `doneAt`), one-tap check-boxes (`tick`), a ring
+for today; tapping a to-do opens the task sheet, where its notes are. The
+Projects tab beside it is the workspace as before. On a desktop the List view
+is the **Table** (Desktop A): a column header per project group, the status
+as a full coloured cell, priority, notes count, and the group's done/under-way
+bar.
 
 ### TM loan kits are sent ahead (Brent, 5 Nov 2026)
 

@@ -6,6 +6,8 @@ import {
 } from '../../projects/model.js'
 import { tintOf, dueState, DUE_TONES, formatShort, PROJECT_TINTS } from './shared.js'
 import { NewProject } from './ProjectList.jsx'
+import MyToDo from './MyToDo.jsx'
+import { commentCount } from '../../projects/model.js'
 
 // ─── Projects, as one workspace (Brent, 4 Nov 2026) ──────────────────────────
 // "Make the projects page better, more interactive, more appealing to look
@@ -86,6 +88,15 @@ const STATE_STYLE = {
   done: { background: colour.accentSoft, color: colour.accentDeep }
 }
 
+// The desktop table's status cell — the whole cell in the state's colour, as a
+// status column reads on monday.com (Brent approved Desktop A, 6 Nov 2026).
+const STATE_CELL = {
+  open: { background: colour.lineSoft, color: colour.inkMuted },
+  in_progress: { background: colour.warning, color: 'white' },
+  done: { background: colour.accent, color: 'white' }
+}
+const TABLE_COLUMNS = '28px minmax(0, 1fr) 150px 150px 120px 90px 64px'
+
 export default function Workspace({
   projects = [], items = [], user, today, wide,
   onOpenProject, onOpenTask, onMove, onCreateProject, busyProject, onAdd, adding
@@ -95,6 +106,8 @@ export default function Workspace({
 
   const saved = useMemo(loadPrefs, [])
   const [view, setViewRaw] = useState(saved.view || 'list')
+  // On a phone the page opens on your own to-do list (Brent, 6 Nov 2026).
+  const [phoneTab, setPhoneTabRaw] = useState(saved.phoneTab || 'todo')
   const [division, setDivisionRaw] = useState(saved.division || 'All')
   const [onlyMine, setOnlyMineRaw] = useState(Boolean(saved.onlyMine))
   const [showDone, setShowDone] = useState(false)
@@ -106,7 +119,8 @@ export default function Workspace({
   const [draftWho, setDraftWho] = useState('')
   const [draftDue, setDraftDue] = useState('')
 
-  const remember = patch => savePrefs({ view, division, onlyMine, ...patch })
+  const remember = patch => savePrefs({ view, division, onlyMine, phoneTab, ...patch })
+  const setPhoneTab = v => { setPhoneTabRaw(v); remember({ phoneTab: v }) }
   const setView = v => { setViewRaw(v); remember({ view: v }) }
   const setDivision = d => { setDivisionRaw(d); setProjectId(''); remember({ division: d }) }
   const setOnlyMine = v => { setOnlyMineRaw(v); remember({ onlyMine: v }) }
@@ -275,7 +289,7 @@ export default function Workspace({
         </label>
       )}
       <div role="tablist" aria-label="View" style={{ display: 'inline-flex', background: colour.lineSoft, borderRadius: radius.control, padding: 3 }}>
-        {[['list', 'List'], ['board', 'Board'], ['people', 'People']].map(([key, label]) => (
+        {[['list', wide ? 'Table' : 'List'], ['board', 'Board'], ['people', 'People']].map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
             style={{
               ...text('caption'), fontWeight: view === key ? 700 : 400, minHeight: 30, padding: `0 ${space.md}px`,
@@ -366,8 +380,9 @@ export default function Workspace({
     return (
       <div key={task.id} data-mine={mine ? 'true' : undefined} style={{
         display: 'grid', alignItems: 'center', columnGap: space.sm, rowGap: 2,
-        gridTemplateColumns: wide ? '24px minmax(0, 1fr) 150px 120px 96px' : '24px minmax(0, 1fr) auto',
-        padding: `${space.sm}px ${space.md}px ${space.sm}px ${space.sm}px`,
+        gridTemplateColumns: wide ? TABLE_COLUMNS : '24px minmax(0, 1fr) auto',
+        padding: wide ? `0 ${space.md}px 0 ${space.sm}px` : `${space.sm}px ${space.md}px ${space.sm}px ${space.sm}px`,
+        minHeight: wide ? 46 : undefined,
         borderBottom: `1px solid ${colour.lineSoft}`,
         borderLeft: `4px solid ${mine ? colour.accent : 'transparent'}`,
         background: mine ? colour.accentSoft : 'transparent'
@@ -396,16 +411,54 @@ export default function Workspace({
           : <Avatar name={task.assignee} mine={mine} />}
         <button type="button" onClick={() => advance(task)} title="Move it on to the next column"
           style={{
-            ...text('caption'), fontWeight: 600, border: 'none', borderRadius: radius.control, cursor: 'pointer',
-            padding: '4px 8px', minHeight: 28, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            ...STATE_STYLE[state.tone], ...(wide ? {} : { gridColumn: '2', justifySelf: 'start' })
+            ...text('caption'), fontWeight: 600, border: 'none', cursor: 'pointer',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            ...(wide
+              ? { ...STATE_CELL[state.tone], alignSelf: 'stretch', margin: '3px 0', borderRadius: radius.control - 2, padding: '0 8px', textAlign: 'center' }
+              : { ...STATE_STYLE[state.tone], borderRadius: radius.control, padding: '4px 8px', minHeight: 28, gridColumn: '2', justifySelf: 'start' })
           }}>{state.label}</button>
         <span style={{
           ...text('caption'), textAlign: 'right', fontVariantNumeric: 'tabular-nums',
           color: due && !finished ? DUE_TONES[due.tone].colour : colour.inkFaint,
           fontWeight: due && due.tone !== 'calm' && !finished ? 700 : 400
         }}>{finished && task.due_date ? formatShort(task.due_date) : due ? due.label : ''}</span>
+        {wide && (
+          <span style={{ ...text('caption'), color: task.priority === 'urgent' ? colour.danger : colour.inkFaint, fontWeight: task.priority === 'urgent' ? 700 : 400, textTransform: 'capitalize' }}>
+            {task.priority && task.priority !== 'normal' ? task.priority : '—'}
+          </span>
+        )}
+        {wide && (
+          <span aria-label={`${commentCount(task)} notes`} style={{ ...text('caption'), color: colour.inkFaint, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" /></svg>
+            {commentCount(task)}
+          </span>
+        )}
       </div>
+    )
+  }
+
+  const tableHead = (
+    <div aria-hidden="true" style={{
+      display: 'grid', gridTemplateColumns: TABLE_COLUMNS, columnGap: space.sm, padding: `6px ${space.md}px 6px ${space.sm + 4}px`,
+      ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, background: colour.canvas, borderBottom: `1px solid ${colour.lineSoft}`
+    }}>
+      <span /><span>Task</span><span>Owner</span><span style={{ textAlign: 'center' }}>Status</span><span style={{ textAlign: 'right' }}>Due</span><span>Priority</span><span>Notes</span>
+    </div>
+  )
+
+  /** The group's bar: done, under way and not started, in the status colours. */
+  const groupBar = rows => {
+    const all = rows.length || 1
+    const done = rows.filter(t => t.status === 'done').length
+    const going = rows.filter(t => t.status === 'in_progress').length
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: space.xs, ...text('caption'), color: colour.inkFaint }}>
+        <span aria-hidden="true" style={{ display: 'flex', width: 140, height: 8, borderRadius: radius.pill, background: colour.lineSoft, overflow: 'hidden' }}>
+          <span style={{ width: `${(done / all) * 100}%`, background: colour.accent }} />
+          <span style={{ width: `${(going / all) * 100}%`, background: colour.warning }} />
+        </span>
+        {Math.round((done / all) * 100)}% done
+      </span>
     )
   }
 
@@ -428,7 +481,9 @@ export default function Workspace({
             {p.division && (
               <span style={{ ...text('caption'), fontWeight: 600, padding: '2px 8px', borderRadius: radius.pill, background: tint.wash, color: tint.ink }}>{p.division}</span>
             )}
+            {wide && groupBar(tasksOf(p.id, live))}
           </div>
+          {wide && tableHead}
           {rows.map(row)}
         </section>
       )
@@ -538,8 +593,34 @@ export default function Workspace({
     )
   }
 
+  const phoneTabs = !wide && (
+    <div role="tablist" aria-label="Projects" style={{ display: 'flex', gap: 4, background: colour.lineSoft, borderRadius: radius.control, padding: 4, marginBottom: space.md }}>
+      {[['todo', 'My To Do'], ['projects', 'Projects']].map(([key, label]) => (
+        <button key={key} type="button" role="tab" aria-selected={phoneTab === key} onClick={() => setPhoneTab(key)}
+          style={{
+            ...text('bodyStrong'), flex: 1, minHeight: 44, border: 'none', borderRadius: radius.control - 2, cursor: 'pointer',
+            background: phoneTab === key ? colour.surface : 'transparent', color: phoneTab === key ? colour.ink : colour.inkFaint,
+            boxShadow: phoneTab === key ? `0 1px 2px ${colour.lineSoft}` : 'none'
+          }}>{label}</button>
+      ))}
+    </div>
+  )
+
+  if (!wide && phoneTab === 'todo') {
+    return (
+      <div>
+        {phoneTabs}
+        <MyToDo name={me?.firstName} tasks={live.filter(isMine)} today={today}
+          projectFor={projectFor}
+          tintFor={p => (p.division ? tintOfDivision(p.division) : tintOf(p.colour))}
+          onTick={tick} onOpenTask={onOpenTask} quickAdd={quickAdd} />
+      </div>
+    )
+  }
+
   return (
     <div>
+      {phoneTabs}
       {statTiles}
       {quickAdd}
       {filters}

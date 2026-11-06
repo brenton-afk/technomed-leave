@@ -78,6 +78,8 @@ const widthOf = px => {
 beforeEach(() => {
   sent = []
   try { localStorage.clear() } catch { /* none */ }
+  // A phone opens on the to-do list now; these tests are about the projects tab.
+  localStorage.setItem('tm_projects_view', JSON.stringify({ phoneTab: 'projects' }))
   widthOf(390)
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.setSystemTime(new Date('2026-10-13T02:00:00.000Z'))
@@ -376,7 +378,7 @@ describe('what it refuses to lose', () => {
     await openBoard()
     fireEvent.click(screen.getByLabelText('Back'))
     await waitFor(() =>
-      expect(screen.getByRole('tab', { name: /Projects/ })).toBeInTheDocument())
+      expect(screen.getByRole('tab', { name: /Projects and tasks/ })).toBeInTheDocument())
   })
 })
 

@@ -26,6 +26,8 @@ let calls
 
 beforeEach(() => {
   calls = []
+  // A phone opens on the to-do list now; these tests are about the projects tab.
+  try { localStorage.setItem('tm_projects_view', JSON.stringify({ phoneTab: 'projects' })) } catch { /* none */ }
   global.fetch = vi.fn(async (url, init) => {
     calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null })
     if (String(url).includes('action=board')) {
@@ -219,7 +221,7 @@ describe('whose list it is', () => {
       }
       return { ok: true, json: async () => ({}) }
     })
-    try { localStorage.clear() } catch { /* none */ }
+    try { localStorage.clear(); localStorage.setItem('tm_projects_view', JSON.stringify({ phoneTab: 'projects' })) } catch { /* none */ }
     render(<Projects user={USER} onBack={() => {}} />)
     await waitFor(() =>
       expect(screen.getByText('Chase the Globus paperwork')).toBeInTheDocument())
