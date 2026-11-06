@@ -1248,7 +1248,15 @@ actual phone — single-frame accuracy on piecewise-flat synthetic renders turne
 out not to predict either temporal stability or Canny's behaviour on a real
 camera frame.
 
-The vision call uses `claude-opus-5` at `effort: 'high'`, streaming (a slow extraction would otherwise hit the HTTP timeout), overridable via `USAGE_VISION_MODEL`. `budget_tokens` and `temperature` are rejected on this model family — don't add them. `maxDuration` is set to 60s in `vercel.json`; a very long form on a slow connection can still exceed it, which needs a Pro plan (300s).
+**Reading is per page, in parallel, at medium effort** (Brent, 6 Nov 2026:
+"cut it to 15-20 seconds"): `readForm` in `api/usage/agent.js` sends each
+page as its own request at `USAGE_VISION_EFFORT` (default medium), joins them
+with `mergeExtractions` (header from the first page that has each field, items
+in page order), and re-reads a page at high effort when its answer is
+unusable or truncated. `USAGE_FAST=off` restores the single full-effort read.
+`maxDuration` for the usage function is 120s (Vercel Pro).
+
+The vision call uses `claude-opus-5` (first pass at medium effort, see above), streaming (a slow extraction would otherwise hit the HTTP timeout), overridable via `USAGE_VISION_MODEL`. `budget_tokens` and `temperature` are rejected on this model family — don't add them. `maxDuration` is set to 60s in `vercel.json`; a very long form on a slow connection can still exceed it, which needs a Pro plan (300s).
 
 ### Timesheets
 

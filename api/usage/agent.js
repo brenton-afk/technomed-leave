@@ -156,6 +156,79 @@ function parseExtraction(text) {
   }
 }
 
+// ─── Reading faster (Brent, 6 Nov 2026: "can we cut it to 15-20 seconds?") ──
+// It took a minute or more because the whole form went in one request at the
+// highest thinking effort. Now each page is read in its own request, all at
+// the same time, at medium effort — the wait is the slowest page, not the sum —
+// and a page whose answer cannot be used is read again at full effort.
+// USAGE_FAST=off in Vercel puts back the single full-effort read;
+// USAGE_VISION_EFFORT sets the first-pass effort.
+
+const FAST = process.env.USAGE_FAST !== 'off'
+const FIRST_EFFORT = process.env.USAGE_VISION_EFFORT || 'medium'
+const HEADER_FIELDS = ['patientSurname', 'surgeonName', 'date', 'hospital', 'procedure', 'repName']
+
+async function readOnce(pages, effort, note = '') {
+  // Streaming so a long extraction cannot trip the HTTP request timeout.
+  const message = await streamClaude({
+    feature: 'usage-scan',
+    whenUnavailable: 'The scan could not be read right now — the form can still '
+      + 'be entered by hand, or try again shortly.',
+    request: {
+      model: VISION_MODEL,
+      max_tokens: 16000,
+      output_config: { effort },
+      messages: [{
+        role: 'user',
+        content: [...contentBlocksFor(pages), { type: 'text', text: EXTRACTION_PROMPT + note }]
+      }]
+    }
+  })
+  if (message.stop_reason === 'refusal') {
+    throw new Error('The document could not be processed. Please contact Brenton.')
+  }
+  const textBlock = message.content.find(b => b.type === 'text')
+  if (!textBlock) throw new Error('No data was returned from the document')
+  return { extracted: parseExtraction(textBlock.text), truncated: message.stop_reason === 'max_tokens' }
+}
+
+/**
+ * One form from its pages' readings: the header from the first page that has
+ * each field, the items from every page in page order.
+ */
+export function mergeExtractions(readings) {
+  const merged = { items: [] }
+  for (const field of HEADER_FIELDS) {
+    merged[field] = readings.map(r => r?.[field]).find(v => String(v || '').trim()) || ''
+  }
+  for (const r of readings) merged.items.push(...(Array.isArray(r?.items) ? r.items : []))
+  return merged
+}
+
+async function readForm(pages) {
+  if (!FAST) return readOnce(pages, 'high')
+  const readPage = async (page, i) => {
+    const note = pages.length > 1
+      ? `\n\nThis image is page ${i + 1} of ${pages.length} of one form. Return the header fields only where they are visible on this page, and every item on this page.`
+      : ''
+    try {
+      const first = await readOnce([page], FIRST_EFFORT, note)
+      if (first.truncated) return readOnce([page], 'high', note)
+      return first
+    } catch (err) {
+      // An answer that could not be used is read again, properly. A refusal or
+      // an unavailable service is not retried — it would only fail twice.
+      if (err.name === 'AiUnavailable' || /could not be processed/.test(err.message)) throw err
+      return readOnce([page], 'high', note)
+    }
+  }
+  const readings = await Promise.all(pages.map(readPage))
+  return {
+    extracted: mergeExtractions(readings.map(r => r.extracted)),
+    truncated: readings.some(r => r.truncated)
+  }
+}
+
 /**
  * The name this person is known by, from the roster.
  *
@@ -176,30 +249,7 @@ async function handleScan(req, res, session) {
 
   const pages = validatePages(req.body?.pages)
 
-  // Streaming so a long extraction cannot trip the HTTP request timeout.
-  const message = await streamClaude({
-    feature: 'usage-scan',
-    whenUnavailable: 'The scan could not be read right now — the form can still '
-      + 'be entered by hand, or try again shortly.',
-    request: {
-      model: VISION_MODEL,
-      max_tokens: 16000,
-      output_config: { effort: 'high' },
-      messages: [{
-        role: 'user',
-        content: [...contentBlocksFor(pages), { type: 'text', text: EXTRACTION_PROMPT }]
-      }]
-    }
-  })
-
-  if (message.stop_reason === 'refusal') {
-    throw new Error('The document could not be processed. Please contact Brenton.')
-  }
-
-  const textBlock = message.content.find(b => b.type === 'text')
-  if (!textBlock) throw new Error('No data was returned from the document')
-
-  const extracted = parseExtraction(textBlock.text)
+  const { extracted, truncated } = await readForm(pages)
   const caseRecord = normaliseCase(extracted, {
     // The device's own date. The server has none to offer: Vercel runs in UTC, so
     // through a Hobart evening its "today" is already tomorrow here, and a case
@@ -212,7 +262,7 @@ async function handleScan(req, res, session) {
   return res.status(200).json({
     case: caseRecord,
     pageCount: pages.length,
-    truncated: message.stop_reason === 'max_tokens'
+    truncated
   })
 }
 

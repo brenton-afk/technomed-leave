@@ -30,7 +30,7 @@
       "memory": 1024
     },
     "api/usage/agent.js": {
-      "maxDuration": 60,
+      "maxDuration": 120,
       "memory": 1024
     },
     "api/timesheet/agent.js": {
