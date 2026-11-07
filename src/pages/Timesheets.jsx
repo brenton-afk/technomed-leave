@@ -406,7 +406,19 @@ export default function Timesheets({ user, onBack }) {
 
       fetch(`/api/timesheet/agent?action=callins&periodStart=${data.period.start}`, { headers: authHeaders })
         .then(r => r.json())
-        .then(d => { setCallIns(d.suggestions || []); setOnCall(d.onCall || null) })
+        .then(d => {
+          setCallIns(d.suggestions || [])
+          setOnCall(d.onCall || null)
+          // Logged on the server just now (Brent, 7 Nov 2026): put the same
+          // call-ins on the grid on screen, which was read before they were.
+          if (d.logged?.length) {
+            setEntries(prev => {
+              const row = { ...(prev.call_in || {}) }
+              for (const c of d.logged) row[c.day] = (Number(row[c.day]) || 0) + 1
+              return { ...prev, call_in: row }
+            })
+          }
+        })
         .catch(() => {})
       fetch('/api/timesheet/agent?action=toil', { headers: authHeaders })
         .then(r => r.json()).then(d => setToil(d.me || null)).catch(() => {})
@@ -628,7 +640,10 @@ export default function Timesheets({ user, onBack }) {
 
   // ── Entry grid ───────────────────────────────────────────
   const weekDays = days.slice(activeWeek * 7, activeWeek * 7 + 7)
-  const visibleCallIns = callIns.filter(c => !dismissedCallIns.includes(c.id))
+  // A logged call-in is shown only while it is on the grid: one somebody took
+  // off stays off, and is not offered again either.
+  const visibleCallIns = callIns.filter(c => !dismissedCallIns.includes(c.id)
+    && (!c.auto || Number(entries.call_in?.[c.day] || 0) > 0))
   const callInCategory = categories.find(c => c.key === 'call_in')
   const onCallCategory = categories.find(c => c.key === 'on_call')
   const doubleCategory = categories.find(c => c.key === 'overtime_double')
@@ -811,9 +826,13 @@ export default function Timesheets({ user, onBack }) {
         )}
 
         {callInCategory && visibleCallIns.filter(c => days.indexOf(c.day) >= activeWeek * 7 && days.indexOf(c.day) < activeWeek * 7 + 7).map(c => (
-          <div key={c.id} style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>
-            <div style={{ fontSize: 12.5, color: PURPLE, fontWeight: 700, marginBottom: 3 }}>Called in for this case?</div>
-            <div style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>{c.title} · {DAY_NAMES[days.indexOf(c.day) % 7]} {c.time} ({c.reason})</div>
+          <div key={c.id} data-call-in={c.auto ? 'logged' : 'offered'} style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>
+            <div style={{ fontSize: 12.5, color: PURPLE, fontWeight: 700, marginBottom: 3 }}>
+              {c.auto ? '✓ Call-in logged on your timesheet' : 'Called in for this case?'}
+            </div>
+            <div style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
+              {c.title} · {DAY_NAMES[days.indexOf(c.day) % 7]} {c.time} ({c.auto ? 'you were on call' : c.reason})
+            </div>
 
             {/* How long it ran. The allowance covers the first five hours;
                 past that every hour or part thereof is double the ordinary
@@ -847,6 +866,25 @@ export default function Timesheets({ user, onBack }) {
               </div>
             )}
 
+            {c.auto ? (
+            <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
+              {/* Already on the grid: all that is left is the double time past
+                  five hours, or taking it off if it was not a call-in. */}
+              <button
+                onClick={() => {
+                  const extra = extraDoubleTime(callInHours[c.id])
+                  if (extra > 0 && doubleCategory) addToCell(doubleCategory.key, c.day, extra)
+                  setDismissedCallIns(p => [...p, c.id])
+                }}
+                style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                {extraDoubleTime(callInHours[c.id]) > 0 ? `Add ${extraDoubleTime(callInHours[c.id])}h double` : 'Done'}
+              </button>
+              <button onClick={() => { addToCell(callInCategory.key, c.day, -1); setDismissedCallIns(p => [...p, c.id]) }}
+                style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, color: MUTED, cursor: 'pointer' }}>
+                Take it off
+              </button>
+            </div>
+            ) : (
             <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
               <button
                 onClick={() => {
@@ -865,6 +903,7 @@ export default function Timesheets({ user, onBack }) {
                 No
               </button>
             </div>
+            )}
           </div>
         ))}
       </div>

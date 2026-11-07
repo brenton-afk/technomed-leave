@@ -117,7 +117,12 @@ export function callInsFor(events, person, days, { onCallEntries = [] } = {}) {
         new Date(event.start.dateTime).getTime() + 10 * 3600 * 1000).getUTCMinutes()).padStart(2, '0')}`,
       location: event.location || null,
       // Why it is being asked about, so the prompt can say.
-      reason: attended ? 'you are down as the rep' : 'your on-call weekend'
+      reason: attended ? 'you are down as the rep' : 'your on-call weekend',
+      // On call that day as well (Brent, 7 Nov 2026: "Mat gets a call-in
+      // logged for pt White"). The roster and the booking agree, so the
+      // portal logs it on their timesheet rather than asking.
+      onCall: theirWeekends.has(date),
+      auto: theirWeekends.has(date)
     })
   }
   return found

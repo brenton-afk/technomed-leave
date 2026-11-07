@@ -1289,7 +1289,18 @@ Flow and invariants:
 - Resubmission is blocked with 409 unless the timesheet was returned; returning requires a reason.
 - `api/cron/timesheet-reminder.js` is now both daily jobs (Hobby allows two), chosen by `?job=`: `evening` 07:00 UTC (6pm AEDT) sends the "usage not sent" reminders (`api/_usageReminders.js`, Task 11), `morning` 22:00 UTC (9am AEDT) escalates yesterday's unsent usage to the week's team leader and, on Sat/Sun only, sends the timesheet reminders as before. It verifies `CRON_SECRET`. **Tasmania observes daylight saving**, so from October to April this lands at 9am local — Hobby allows only two crons total, so there is no seasonal second pair. Staff `mobileNumber` fields in `staffConfig.js` are blank, so every reminder is currently skipped rather than sent.
 
-Call-in detection reads after-hours bookings from the calendar, but the calendar has no rep field — it cannot know whose case it was, so these are always prompts, never auto-entered.
+**Call-ins are logged, not only offered** (Brent, 7 Nov 2026: "Mat gets a
+call-in logged for pt White"). `callInsFor` (`src/clinicalPlan/callIn.js`)
+marks a case `auto` when it is out of hours, the person is on the booking (or
+nobody is), **and** the calendar's on-call roster has them on call that day.
+`action=callins` then writes it into their timesheet draft as one call-in on
+that day (`logCallIns` in `api/timesheet/agent.js`) — once per case: the ids
+are kept as `autoCallIns` on the draft (a draft save from the screen keeps
+them), so one taken off stays off. Never into a fortnight already filed, and
+only where the person's pay items include `call_in`. The screen shows
+"✓ Call-in logged" with the hours buttons for double time past five hours and
+"Take it off". A rep on the booking who was **not** on call is still only
+offered it (tap to add).
 
 ## Verifying changes
 

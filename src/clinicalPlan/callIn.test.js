@@ -130,3 +130,24 @@ describe('whose call-in it is', () => {
     expect(callInsFor([weekday], BEN, DAYS, { onCallEntries: ON_CALL })).toEqual([])
   })
 })
+
+// Brent, 7 Nov 2026: "the portal already knows when staff are on call so
+// today, Mat gets a call-in logged for pt White". Invented patient below.
+describe('which call-ins are logged rather than offered', () => {
+  const MAT = { email: 'mat@technomed.com.au', firstName: 'Mat' }
+  const BRENT = { email: 'brenton@technomed.com.au', firstName: 'Brent' }
+  const CASE = ev('w1', 'Testa BRAINLAB AIRO & CURVE - Mackie (Brent/Mat)',
+    'Surgeon: Mackie\nPatient: Testa\nHospital: RHH\nPlanned rep: Brent / Mat', '2026-11-07T08:00:00+11:00')
+  const ROSTER = [{ title: 'Mat on Call 5:00pm Fri - 7:30 Mon', date: '2026-11-06' }]
+  const WEEK = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']
+
+  it('logs it for the rep on the booking who was on call that weekend', () => {
+    const [found] = callInsFor([CASE], MAT, WEEK, { onCallEntries: ROSTER })
+    expect(found).toMatchObject({ day: '2026-11-07', auto: true, onCall: true })
+  })
+
+  it('only offers it to another rep on the booking who was not on call', () => {
+    const [found] = callInsFor([CASE], BRENT, WEEK, { onCallEntries: ROSTER })
+    expect(found).toMatchObject({ day: '2026-11-07', auto: false })
+  })
+})

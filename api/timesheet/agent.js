@@ -224,6 +224,10 @@ async function handleDraft(req, res, session) {
     entries: req.body?.entries && typeof req.body.entries === 'object' ? req.body.entries : {},
     savedAt: new Date().toISOString()
   }
+  // Which call-ins the portal logged stays with the draft, so a save from the
+  // screen cannot make it log them again.
+  const before = await getTimesheetDraft(staff.email)
+  if (before?.periodStart === period.start && before.autoCallIns) draft.autoCallIns = before.autoCallIns
   await saveTimesheetDraft(staff.email, draft)
   return res.status(200).json({ saved: true, savedAt: draft.savedAt })
 }
@@ -364,11 +368,21 @@ async function handleCallIns(req, res, session) {
 
   const suggestions = callInsFor(events, staff, period.days, { onCallEntries })
 
+  // Logged, not just offered (Brent, 7 Nov 2026: "the portal should auto log
+  // call-ins … and prepopulate their timesheets"). A case out of hours on the
+  // person's own on-call weekend, where they are on the booking or nobody is,
+  // goes into their draft as one call-in on that day — once: the ids logged
+  // are kept on the draft, so a call-in somebody takes back out stays out.
+  // Never into a fortnight already filed, and only for people whose pay
+  // items include the call-in allowance.
+  const logged = await logCallIns(staff, period, suggestions.filter(s => s.auto))
+
   // The roster, read rather than computed — see src/clinicalPlan/onCall.js.
   const onCall = onCallHoursFor(onCallEntries, staff, period.days)
 
   return res.status(200).json({
     suggestions,
+    logged,
     onCall: {
       byDay: onCall,
       hours: onCallTotal(onCall),
@@ -379,6 +393,29 @@ async function handleCallIns(req, res, session) {
     coveredHours: COVERED_HOURS,
     period: { start: period.start, end: period.end }
   })
+}
+
+export async function logCallIns(staff, period, auto) {
+  if (!auto.length || !payItemsFor(staff.email).includes('call_in')) return []
+  const filed = (await getAllTimesheets(100))
+    .some(r => r.email === staff.email && r.periodStart === period.start && r.status !== 'rejected')
+  if (filed) return []
+  const draft = await getTimesheetDraft(staff.email)
+  const base = draft?.periodStart === period.start
+    ? draft
+    : { email: staff.email, staffName: staff.name, periodStart: period.start, periodEnd: period.end, entries: {} }
+  const done = new Set(base.autoCallIns || [])
+  const fresh = auto.filter(s => !done.has(s.id))
+  if (!fresh.length) return []
+  const row = { ...(base.entries?.call_in || {}) }
+  for (const s of fresh) row[s.day] = (Number(row[s.day]) || 0) + 1
+  await saveTimesheetDraft(staff.email, {
+    ...base,
+    entries: { ...(base.entries || {}), call_in: row },
+    autoCallIns: [...done, ...fresh.map(s => s.id)],
+    savedAt: new Date().toISOString()
+  })
+  return fresh.map(({ id, day, title, time }) => ({ id, day, title, time }))
 }
 
 // ─── The TOIL balance ────────────────────────────────────────────────────────
