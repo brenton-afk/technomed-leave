@@ -249,3 +249,31 @@ function stripHtml(html) {
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim()
 }
+
+// ─── Threads, for the Decisions review (Brent, 7 Nov 2026) ───────────────────
+// Read-only like everything here. Headers and Gmail's snippet only; the body of
+// the last message is fetched separately, and only for a thread that is waiting
+// on us.
+
+/** Thread ids in one mailbox matching a Gmail search. */
+export async function listThreadsOf(mailbox, query, { max = 40 } = {}) {
+  const data = await gmail(
+    `/threads?q=${encodeURIComponent(query)}&maxResults=${Math.min(max, 100)}`, { impersonate: mailbox })
+  return (data.threads || []).map(t => t.id)
+}
+
+/** One thread's messages as { id, from, to, subject, at, labelIds, snippet }, oldest first. */
+export async function threadMetaOf(mailbox, threadId) {
+  const data = await gmail(
+    `/threads/${encodeURIComponent(threadId)}?format=metadata`
+    + '&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject', { impersonate: mailbox })
+  return (data.messages || []).map(m => ({
+    id: m.id,
+    from: header(m.payload, 'From'),
+    to: header(m.payload, 'To'),
+    subject: header(m.payload, 'Subject'),
+    at: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : null,
+    labelIds: m.labelIds || [],
+    snippet: m.snippet || ''
+  }))
+}

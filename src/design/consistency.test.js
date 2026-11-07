@@ -23,7 +23,7 @@ const MIGRATED = [
   'voice/VoiceSheet.jsx',
   'leave/DateRange.jsx',
   'TheatreGuides.jsx',
-  'Chat.jsx', 'PatientHistory.jsx', 'Notifications.jsx',
+  'Chat.jsx', 'PatientHistory.jsx', 'Notifications.jsx', 'Decisions.jsx',
   'treasury/Treasury.jsx', 'treasury/ui.jsx', 'treasury/Home.jsx', 'treasury/Bitcoin.jsx',
   'treasury/Holdings.jsx', 'treasury/Dca.jsx', 'treasury/Cash.jsx', 'treasury/Trust.jsx',
   'treasury/Snapshots.jsx', 'treasury/Settings.jsx', 'treasury/Purchases.jsx', 'treasury/Scenario.jsx', 'treasury/Investments.jsx', 'treasury/RocSection.jsx'

@@ -49,6 +49,9 @@
     },
     "api/xero/info.js": {
       "maxDuration": 60
+    },
+    "api/decisions.js": {
+      "maxDuration": 150
     }
   },
   "crons": [

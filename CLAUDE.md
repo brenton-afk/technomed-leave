@@ -285,6 +285,29 @@ is queried (`chatWarning`). **Archived nightly** to Dropbox
 `/Admin/Chat Archive/{YYYY}/{MM}/{date}/{channel}.txt` plus every attachment
 under `files/`.
 
+### Decisions — trial on Brent's login (7 Nov 2026)
+
+"I need to see this functioning before we build it and fold it into the
+portal." Me → **Decisions**, shown only to `DECISIONS_USERS` (default
+brenton@ alone; everyone else gets a 404 from `api/decisions.js`, like the
+Treasury). One list of what is waiting on someone, each with an owner (Brent,
+Toni, Erin, Team leader, Clinical team): **unanswered emails** in
+`DECISIONS_MAILBOXES` (default brenton@, bookings@ → team leader, accounts@ →
+Toni), read with the existing `gmail.readonly` grant — a thread whose last
+message is from outside, from a person (`isAutomated`), 20h+ old
+(`waitingOnUs`), judged by Claude with an owner, an ask, urgency and a draft
+reply; verdicts cached per last message (`decisions:triage:*`), so a thread
+is judged once until someone writes again. Plus **usage not sent** (last three
+working days), **resupply owed** 7+ days, and **bookings waiting in the
+Inbox**. Read-only throughout: a draft is copied, never sent. Done / Later (3
+days) / Not needed / Wrong person per person (`decisions:state:{email}`),
+logged (`decisions:log`); "Not needed" on an email becomes a lesson
+(`decisions:lessons`) given to the next review — the start of the learned
+preferences. Inboxes are re-read when the screen opens and the last read is
+30+ minutes old, or on Check now. Not yet: other people's queues, a cron,
+POs/quotes held, Erin's or Toni's own inboxes (domain-wide delegation and
+their agreement first).
+
 ### Supplier booking notices (Tasks 8/9)
 
 `api/_bookingNotices.js` holds the rules and contacts (Redis `notices:settings`,
