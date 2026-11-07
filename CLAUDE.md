@@ -1301,6 +1301,9 @@ only where the person's pay items include `call_in`. The screen shows
 "✓ Call-in logged" with the hours buttons for double time past five hours and
 "Take it off". A rep on the booking who was **not** on call is still only
 offered it (tap to add).
+**Only people paid call-ins** see either (`paidCallIns`: on timesheets and
+`call_in` among their pay items) — Brent attends cases as a director and is
+not paid them (7 Nov 2026).
 
 ## Verifying changes
 

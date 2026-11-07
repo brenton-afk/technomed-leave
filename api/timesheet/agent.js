@@ -366,7 +366,13 @@ async function handleCallIns(req, res, session) {
     }))
     .filter(e => e.date)
 
-  const suggestions = callInsFor(events, staff, period.days, { onCallEntries })
+  // Only for people paid call-ins (Brent, 7 Nov 2026: "I am also attending
+  // but I'm not on call and I don't get paid call-ins as a director"): somebody
+  // not on timesheets, or without the call-in allowance among their pay items,
+  // is neither offered one nor has one logged.
+  const suggestions = paidCallIns(staff)
+    ? callInsFor(events, staff, period.days, { onCallEntries })
+    : []
 
   // Logged, not just offered (Brent, 7 Nov 2026: "the portal should auto log
   // call-ins … and prepopulate their timesheets"). A case out of hours on the
@@ -395,8 +401,13 @@ async function handleCallIns(req, res, session) {
   })
 }
 
+/** Whether this person is paid call-ins at all. */
+export function paidCallIns(staff) {
+  return Boolean(staff?.hasTimesheets) && payItemsFor(staff.email).includes('call_in')
+}
+
 export async function logCallIns(staff, period, auto) {
-  if (!auto.length || !payItemsFor(staff.email).includes('call_in')) return []
+  if (!auto.length || !paidCallIns(staff)) return []
   const filed = (await getAllTimesheets(100))
     .some(r => r.email === staff.email && r.periodStart === period.start && r.status !== 'rejected')
   if (filed) return []

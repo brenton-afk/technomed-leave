@@ -14,8 +14,8 @@ vi.mock('./_auth.js', () => ({ requireSession: vi.fn(), requireAdmin: vi.fn() })
 vi.mock('./_googleCalendar.js', () => ({ getGoogleToken: vi.fn(), getCalendarId: vi.fn(), CALENDAR_SCOPE_READONLY: 'r' }))
 vi.mock('./_email.js', () => ({ sendTimesheetSubmittedEmail: vi.fn(), sendTimesheetDecisionEmail: vi.fn() }))
 
-const { logCallIns } = await import('./timesheet/agent.js')
-const MAT = { email: 'mat@technomed.com.au', name: 'Mat Usher' }
+const { logCallIns, paidCallIns } = await import('./timesheet/agent.js')
+const MAT = { email: 'mat@technomed.com.au', name: 'Mat Usher', hasTimesheets: true }
 const PERIOD = { start: '2026-10-26', end: '2026-11-08' }
 const WHITE = { id: 'evt-1', day: '2026-11-07', title: 'Testa', time: '08:00', auto: true }
 
@@ -48,3 +48,16 @@ describe('logging a call-in', () => {
     expect(draft).toBeNull()
   })
 })
+
+describe('who is paid call-ins', () => {
+  it('is nobody off timesheets — Brent, as a director, attends but is not paid them', async () => {
+    const { STAFF } = await import('../src/staffConfig.js')
+    const brent = STAFF.find(p => p.firstName === 'Brent')
+    const mat = STAFF.find(p => p.firstName === 'Mat')
+    expect(paidCallIns(brent)).toBe(false)
+    expect(paidCallIns(mat)).toBe(true)
+    expect(await logCallIns(brent, PERIOD, [WHITE])).toEqual([])
+    expect(draft).toBeNull()
+  })
+})
+
