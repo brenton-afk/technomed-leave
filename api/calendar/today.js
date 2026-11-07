@@ -1914,7 +1914,10 @@ async function handleTeamLeader(req, res) {
       // One day only: an entry for that day, or cleared back to the turn's.
       const day = String(req.query.day || body.day || '').slice(0, 10)
       if (day) {
-        if (!weekdays.includes(day)) return res.status(400).json({ error: 'That day is not a weekday in this week' })
+        // Any day of the week, weekends included — somebody covers those too.
+        if (![0, 1, 2, 3, 4, 5, 6].map(n => addDaysTo(monday, n)).includes(day)) {
+          return res.status(400).json({ error: 'That day is not in this week' })
+        }
         if (!body.email) { await setDayLeader(day, null); return res.status(200).json({ ok: true, day, leader: null }) }
         const entry = cleanLeader({ email: body.email, setBy: session.email })
         if (!entry) return res.status(400).json({ error: 'That is not somebody on the team' })

@@ -1693,6 +1693,19 @@ describe('the top band', () => {
   })
 })
 
+describe('the leading tile (Brent, 7 Nov 2026: "tap and choose")', () => {
+  it('opens the team leader sheet for the day on show', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    const tile = document.querySelector('[data-leading-tile]')
+    expect(tile).not.toBeNull()
+    fireEvent.click(tile)
+    const sheet = await screen.findByRole('dialog', { name: 'Team leader' })
+    expect(sheet.textContent).toMatch(/This day only/)
+    expect(sheet.textContent).toMatch(/Their whole turn/)
+  })
+})
+
 describe('the band, as revised (Brent, 6 Nov 2026)', () => {
   it('has no Mine button', async () => {
     show()

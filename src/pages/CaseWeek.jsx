@@ -1370,6 +1370,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   const [editing, setEditing] = useState(null)
   // The search sheet. A result opens the same edit sheet a card does.
   const [searching, setSearching] = useState(false)
+  // The day whose team leader sheet is open from the band's "leading" tile.
+  const [leaderSheetDay, setLeaderSheetDay] = useState(null)
   // The day the sheet should open on, or null when it is closed.
   const [adding, setAdding] = useState(null)
   // Fields from a booking spoken at the mic, applied when the form opens.
@@ -1602,9 +1604,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   }, [leaderWeek, token, loadLeader])
 
   /** The chip under a weekday's date: that day's leader, the week's otherwise. */
-  const leaderChip = day => {
+  const leaderChip = (day, { sheetOnly = false, onSheetClose } = {}) => {
     const weekday = civilWeekday(parseDateStr(day)) <= 5
-    if (!weekday) return null
+    if (!weekday && !sheetOnly) return null
     // That day's leader, and the turn it sits in — worked out per day by the
     // server, because Monday to Thursday and Friday are different turns.
     const mine = leader?.byDay?.[day]
@@ -1619,7 +1621,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
         onChangeWeek={email => setTeamLeader(email, day)}
         week={window_.startDate}
         today={today}
-        hour={new Date().getHours()} />
+        hour={new Date().getHours()}
+        sheetOnly={sheetOnly}
+        onSheetClose={onSheetClose} />
     )
   }
 
@@ -1892,6 +1896,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
     : `${weekdayName(shownDay).slice(0, 3)} ${dayNum(shownDay)}`
   // Only the day's own answer: falling back to "the week's" leader named
   // Monday's turn on a weekend that belongs to the next one.
+  const leaderSheet = leaderSheetDay
+    ? leaderChip(leaderSheetDay, { sheetOnly: true, onSheetClose: () => setLeaderSheetDay(null) })
+    : null
   const leadOnDay = leader?.byDay?.[shownDay]?.email ? firstNameFor(leader.byDay[shownDay].email) : ''
   const glance = [
     [String(weekCases), 'this week'],
@@ -1938,17 +1945,29 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
         {/* The week at a glance, on a phone (Header C, Brent 6 Nov 2026). */}
         {!desktop && plan && (
           <div data-glance style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.xs, marginBottom: space.sm }}>
-            {glance.map(([value, label]) => (
-              <div key={label} style={{ position: 'relative', background: colour.navySoft, boxShadow: RAISED, borderRadius: radius.card, padding: '8px 12px', minWidth: 0 }}>
+            {glance.map(([value, label]) => {
+              // The "leading" tile opens the team leader sheet for the day on
+              // show (Brent, 7 Nov 2026: "tap and choose"). The others only say.
+              const tappable = label === 'leading' && shownDay
+              const Tile = tappable ? 'button' : 'div'
+              return (
+              <Tile key={label} {...(tappable ? {
+                type: 'button', 'data-leading-tile': true,
+                'aria-label': `Leading ${dayLabel}: ${value}. Tap to change who leads.`,
+                onClick: () => setLeaderSheetDay(shownDay)
+              } : {})}
+                style={{ position: 'relative', background: colour.navySoft, boxShadow: RAISED, borderRadius: radius.card, padding: '8px 12px', minWidth: 0,
+                  ...(tappable ? { border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', width: '100%' } : {}) }}>
                 {/* The value is a text node beside its label, not an element of
                     its own, so "1" or "Ben" up here is never mistaken for a
                     card's or the leader chip's. */}
                 <div style={{ ...text('heading'), color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {value}
-                  <div style={{ ...text('micro'), color: 'rgba(122,214,196,0.9)', textTransform: 'uppercase', letterSpacing: 0.6 }}>{label}</div>
+                  <div style={{ ...text('micro'), color: 'rgba(122,214,196,0.9)', textTransform: 'uppercase', letterSpacing: 0.6 }}>{label}{tappable ? ' ✎' : ''}</div>
                 </div>
-              </div>
-            ))}
+              </Tile>
+              )
+            })}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
@@ -2284,6 +2303,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           // read again for it to appear.
           onAccepted={() => { countQueue(); load(window_, { quiet: true }) }} />
       )}
+
+      {leaderSheet}
 
       {searching && (
         <CaseSearch user={user}

@@ -432,7 +432,11 @@ cases). `turnOf(date)` is the Friday a turn starts; turns are stored under it
 (`teamLeader:{friday}`) — the old Monday keys are no longer read. Ben's turn
 starts Fri 13 Nov 2026 (`ROTATION_ANCHOR`), alternating with Mat; Brent's cover
 for Fri 6–Thu 12 Nov is written into `COVERS` (a saved entry still wins).
-`api/_leaders.js` is the one answer to "who leads on this day" — day change,
+**The band's "leading" tile is tappable** (Brent, 7 Nov 2026): it opens the
+same sheet as a day's chip (`TeamLeaderStrip sheetOnly`) for the day on show,
+weekends included — `action=leader` returns `byDay` for all seven days and
+accepts a one-day change on any of them, so a weekend follows its own turn,
+never Monday's. `api/_leaders.js` is the one answer to "who leads on this day" — day change,
 then the turn's saved entry, then `COVERS`, then the rota — used by
 `?action=leader` (returns `byDay` for Mon–Fri, each with its `turnLeader`,
 because a Monday-to-Friday week spans two turns), by `canAllocate`, and by the

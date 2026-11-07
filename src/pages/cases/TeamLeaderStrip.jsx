@@ -35,9 +35,17 @@ function shortDate(day) {
 // date — "a daily editable tab in the days (underneath the date)". The week's
 // rota stays the default; the sheet changes this day only unless "Whole week"
 // is chosen. `leader` is then that day's leader, `weekLeader` the week's.
-export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour, day, weekLeader, onChangeWeek }) {
+// `sheetOnly` (Brent, 7 Nov 2026: "make the team leader tile at the top
+// editable"): just the sheet, already open — for the "leading" tile in the
+// Cases band — closed with `onSheetClose`.
+export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour, day, weekLeader, onChangeWeek, sheetOnly = false, onSheetClose }) {
   const monday = weekOf(week) || weekOf(today)
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(sheetOnly)
+  const open = openState
+  const setOpen = value => {
+    setOpenState(value)
+    if (!value && sheetOnly) onSheetClose?.()
+  }
   const [busy, setBusy] = useState(false)
   const [scope, setScope] = useState('day')
   const forDay = Boolean(day) && scope === 'day'
@@ -105,7 +113,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
 
   return (
     <>
-      {chip || <button onClick={() => setOpen(true)} disabled={busy}
+      {sheetOnly ? null : chip || <button onClick={() => setOpen(true)} disabled={busy}
         // The word "Change" used to sit at the end of the row and carry this.
         // It became a chevron to match the other cards, so the button has to
         // say what it does somewhere a screen reader can reach.
