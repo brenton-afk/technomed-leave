@@ -1,3 +1,4 @@
+process.env.PREF_ADDITIONS = 'off'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ─── Task 18: editing preference cards in the portal ────────────────────────
@@ -94,3 +95,27 @@ describe('who may edit', () => {
     expect(res.statusCode).toBe(403)
   })
 })
+
+// Brent, 7 Nov 2026: "Save as a card under the other orthopaedics cards".
+describe('a card added from a conversation', async () => {
+  const { applyAdditions } = await import('./_preferences.js')
+  const addition = [{ id: 'test-add', group: /ortho/i, groupName: 'Orthopaedics',
+    card: { name: 'Synthes Pelvic Recon (3.5 mm)', items: ['**3.5 cortex:** drill **2.5 mm**'] } }]
+  const live = (surgeons) => ({ version: 7, data: { surgeons } })
+
+  it('goes into the existing orthopaedics group, once', async () => {
+    const before = live([{ id: 'thani', name: 'Thani', systems: [] }, { id: 'ortho', name: 'Orthopaedics', systems: [{ name: 'Existing', items: ['x'] }] }])
+    const after = await applyAdditions(before, addition)
+    const group = after.data.surgeons.find(g => g.name === 'Orthopaedics')
+    expect(group.systems.map(c => c.name)).toEqual(['Existing', 'Synthes Pelvic Recon (3.5 mm)'])
+    expect(after.version).toBe(8)
+    const again = await applyAdditions(after, addition)
+    expect(again.version).toBe(8)
+  })
+
+  it('makes the group when there is none', async () => {
+    const after = await applyAdditions(live([{ id: 'thani', name: 'Thani', systems: [] }]), addition)
+    expect(after.data.surgeons.at(-1)).toMatchObject({ name: 'Orthopaedics' })
+  })
+})
+

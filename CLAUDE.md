@@ -672,7 +672,12 @@ admins edit; a save against an older version is refused (409); restoring is a ne
 version. Bold is `**text**`, never HTML. `GuideView` renders
 `pages/PreferenceCards.jsx` for the `surgeon-preferences` slug, so the booking's
 Preferences button and Theatre Guides both open it. The static HTML file remains
-only as the seed's source. Aimee's system guides still carry their own copy of each
+only as the seed's source. **Cards added from a conversation** (`CARD_ADDITIONS` in
+`api/_preferences.js`, Brent 7 Nov 2026: the Synthes Pelvic Recon 3.5 mm card
+"under the other orthopaedics cards"): applied on the first read after
+shipping, into the group whose name matches (made if none), as a normal new
+version; the id is kept in `data.added` so it happens once.
+`PREF_ADDITIONS=off` only for the editing tests. Aimee's system guides still carry their own copy of each
 surgeon's preferences ("Synced with the Surgeon Preferences app") — those are not
 editable here and will drift until she drops them.
 
