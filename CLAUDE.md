@@ -278,7 +278,16 @@ written with every read mark) and a running count per channel
 (`chat:count:{channel}`, `seq` on each message — the list is trimmed at 500,
 so its length is not a count). Reads use one MGET. **Search** across every
 channel (`api/_chatSearch.js`, every word in text, author or file name), also
-in the portal-wide search glass. **Names and UR numbers are allowed** (Brent:
+in the portal-wide search glass. **Looks like WhatsApp** (Brent, 7 Nov
+2026: "more slick … icons for the chats"): each chat has a round icon
+(`ChatAvatar`; an emoji from `ICON_CHOICES` or a photo through the same Blob
+upload, anyone may change it — `action=icon`, Redis `chat:icons`, only this
+app's blob URLs; defaults on `CHANNELS`), the list shows the last message
+(`lastLine` / `lastMessages`) with time and unread badge, messages are
+bubbles (yours right in `accentSoft`, unnamed, ✓✓ teal once seen; others
+left with a per-person name colour, `nameInk`), a dotted wallpaper, date
+chips, and a pill message bar with round attach and send (aria-labels
+"Send" / "Check"). **Names and UR numbers are allowed** (Brent:
 health data needed to run the business, stored safely); only a date of birth
 is queried (`chatWarning`). **Archived nightly** to Dropbox
 (`api/_chatArchive.js`, `job=nightly` cron at 15:27 UTC ≈ 2:30am Hobart):

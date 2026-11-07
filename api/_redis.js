@@ -828,3 +828,27 @@ export async function getToilOpening(email) {
 export async function setToilOpening(email, opening) {
   await redisSetBody(`toil:opening:${String(email).toLowerCase()}`, JSON.stringify(opening))
 }
+
+// ─── Chat icons and previews (Brent, 7 Nov 2026: "like WhatsApp") ─────────────
+
+/** The newest message in each channel, for the list's preview line. */
+export async function lastMessages(channels) {
+  if (!channels.length) return {}
+  const ids = await Promise.all(channels.map(c => redis('lindex', channelKey(c), '0').catch(() => null)))
+  const found = await getMessages(ids.filter(Boolean))
+  const byId = Object.fromEntries(found.filter(Boolean).map(m => [m.id, m]))
+  return Object.fromEntries(channels.map((c, i) => [c, ids[i] ? byId[ids[i]] || null : null]))
+}
+
+/** Each channel's chosen icon: { emoji } or { url }. */
+export async function chatIcons() {
+  const all = hashOf(await redis('hgetall', 'chat:icons'))
+  const out = {}
+  for (const [k, v] of Object.entries(all)) { try { out[k] = JSON.parse(v) } catch { /* skip */ } }
+  return out
+}
+
+export async function setChatIcon(channel, icon) {
+  if (!icon) return redis('hdel', 'chat:icons', channel)
+  return redis('hset', 'chat:icons', channel, JSON.stringify(icon))
+}

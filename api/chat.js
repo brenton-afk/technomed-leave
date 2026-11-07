@@ -2,7 +2,8 @@ import { handleUpload } from '@vercel/blob/client'
 import { requireSession, getSession } from './_auth.js'
 import {
   postMessage, readChannel, channelSizes, knownChannels, readMarkers, markRead,
-  getMessages, updateMessage, setTyping, whoIsTyping, seenIn
+  getMessages, updateMessage, setTyping, whoIsTyping, seenIn,
+  lastMessages, chatIcons, setChatIcon
 } from './_redis.js'
 import { searchChat } from './_chatSearch.js'
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
@@ -19,13 +20,13 @@ import { notify, preview } from './_push.js'
 
 /** The standing channels. Case threads are created on demand alongside them. */
 export const CHANNELS = [
-  { id: 'general', name: 'General', detail: 'Anything that is not the others' },
-  { id: 'spine', name: 'Spine', detail: 'Cases, kit, surgeons' },
-  { id: 'logistics', name: 'Logistics', detail: 'Sets, loans, deliveries' },
-  { id: 'theatre-lists', name: 'Theatre lists', detail: 'Running orders and changes' },
+  { id: 'general', name: 'General', detail: 'Anything that is not the others', icon: { emoji: '💬' } },
+  { id: 'spine', name: 'Spine', detail: 'Cases, kit, surgeons', icon: { emoji: '🦴' } },
+  { id: 'logistics', name: 'Logistics', detail: 'Sets, loans, deliveries', icon: { emoji: '📦' } },
+  { id: 'theatre-lists', name: 'Theatre lists', detail: 'Running orders and changes', icon: { emoji: '📋' } },
   // Brent, 6 Nov 2026: feedback about the portal comes here instead of a
   // WhatsApp group exported by hand. The improvement agent reads it overnight.
-  { id: 'portal-feedback', name: 'Portal feedback', detail: 'Changes and problems — picked up overnight and fixed' }
+  { id: 'portal-feedback', name: 'Portal feedback', detail: 'Changes and problems — picked up overnight and fixed', icon: { emoji: '🛠️' } }
 ]
 
 /** Reactions anyone can add. A short list reads faster than an emoji keyboard. */
@@ -107,6 +108,7 @@ export default async function handler(req, res) {
     if (req.query.action === 'react') return react(req, res, session)
     if (req.query.action === 'delete') return remove(req, res, session)
     if (req.query.action === 'typing') return typing(req, res, session)
+    if (req.query.action === 'icon') return setIcon(req, res)
     if (req.method === 'POST') return send(req, res, session)
     return read(req, res, session)
   } catch (err) {
@@ -173,12 +175,17 @@ async function overview(req, res, session) {
   const known = await knownChannels()
   const standing = CHANNELS.map(c => c.id)
   const all = [...new Set([...standing, ...known])]
-  const [sizes, marks] = await Promise.all([channelSizes(all), readMarkers(session.email)])
+  const [sizes, marks, lasts, icons] = await Promise.all([
+    channelSizes(all), readMarkers(session.email),
+    lastMessages(standing).catch(() => ({})), chatIcons().catch(() => ({}))
+  ])
 
   return res.status(200).json({
     ok: true,
     channels: CHANNELS.map(c => ({
       ...c,
+      icon: icons[c.id] || c.icon,
+      last: lastLine(lasts[c.id]),
       messages: sizes[c.id] || 0,
       unread: Math.max(0, (sizes[c.id] || 0) - (marks[c.id] || 0))
     })),
@@ -190,6 +197,41 @@ async function overview(req, res, session) {
       unread: Math.max(0, (sizes[id] || 0) - (marks[id] || 0))
     }))
   })
+}
+
+/** The preview a channel list shows: who, what (or what kind of file), when. */
+export function lastLine(m) {
+  if (!m) return null
+  const files = [...(m.photo?.url ? [{ type: 'image/jpeg' }] : []), ...(m.files || [])]
+  const kind = files.length
+    ? (String(files[0].type).startsWith('image/') ? '📷 Photo' : String(files[0].type).startsWith('video/') ? '🎥 Video' : `📎 ${files[0].name || 'File'}`)
+    : ''
+  const said = m.deleted ? 'This message was deleted' : (String(m.text || '').replace(/\s+/g, ' ').trim() || kind)
+  return { authorName: m.authorName || '', author: m.author || '', text: said.slice(0, 90), at: m.at || null }
+}
+
+// ─── A channel's icon (Brent, 7 Nov 2026) ────────────────────────────────────
+// Anyone in the team may change it, as in a WhatsApp group. An emoji, or a
+// photo already uploaded through this app's own Blob handshake — never a URL
+// from elsewhere, which would put someone else's image (and their logging) in
+// front of the team.
+const EMOJI_MAX = 16
+async function setIcon(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { channel, emoji, url } = req.body || {}
+  if (!CHANNELS.some(c => c.id === channel)) return res.status(400).json({ error: 'No such channel' })
+  let icon = null
+  if (emoji) {
+    const e = String(emoji).trim()
+    if (!e || e.length > EMOJI_MAX || /[<>"'`]/.test(e)) return res.status(400).json({ error: 'That icon cannot be used' })
+    icon = { emoji: e }
+  } else if (url) {
+    if (!BLOB_URL.test(String(url))) return res.status(400).json({ error: 'That picture cannot be used' })
+    icon = { url: String(url) }
+  }
+  await setChatIcon(channel, icon)
+  const fallback = CHANNELS.find(c => c.id === channel).icon
+  return res.status(200).json({ ok: true, icon: icon || fallback })
 }
 
 async function read(req, res, session) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Page, Header, Body, SectionLabel, Banner, Button, Overlay } from '../design/Shell.jsx'
-import { colour, text, space, radius } from '../design/tokens.js'
+import { colour, text, space, radius, site } from '../design/tokens.js'
 import { chatWarning } from '../chat/identifiers.js'
 import { usePush, installHint, installed } from '../push.js'
 import { upload } from '@vercel/blob/client'
@@ -36,7 +36,117 @@ const timeOf = iso => {
   return Number.isNaN(at.getTime()) ? '' : at.toTimeString().slice(0, 5)
 }
 
+/** The time beside a chat in the list: today's time, else Yesterday, else the date. */
+export function listTime(iso, now = new Date()) {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ''
+  const day = d => d.toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart' })
+  if (day(at) === day(now)) return at.toLocaleTimeString('en-AU', { timeZone: 'Australia/Hobart', hour: 'numeric', minute: '2-digit' })
+  if (day(at) === day(new Date(now.getTime() - 86400000))) return 'Yesterday'
+  return at.toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })
+}
+
 const sizeOf = n => (!n ? '' : n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`)
+
+// ─── Looking like WhatsApp, built for us (Brent, 7 Nov 2026) ─────────────────
+// "Make it look a bit more slick with the option to put icons for the chats."
+// Round icons on every chat (an emoji or a photo, changed by anyone, as in a
+// WhatsApp group), the last message under each name, bubbles — yours on the
+// right in the accent tint — and a rounded message bar.
+
+/** Names coloured per person in a group, the way WhatsApp tells people apart. */
+const NAME_INKS = [colour.accentDeep, site.CLV.ink, site.RHH.ink, colour.warning, colour.navy, colour.inkMuted]
+export function nameInk(key) {
+  let h = 0
+  for (const ch of String(key || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return NAME_INKS[h % NAME_INKS.length]
+}
+
+/** The icons offered for a chat. Anything else can be a photo. */
+export const ICON_CHOICES = ['💬', '🦴', '📦', '📋', '🛠️', '🏥', '🩺', '🔩', '🧠', '🦷', '🚚', '📅', '⭐', '☕', '🎉', '🔥']
+
+export function ChatAvatar({ icon, name, size = 48 }) {
+  const box = {
+    width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: colour.accentSoft, border: `1px solid ${colour.line}`
+  }
+  if (icon?.url) {
+    return <span data-chat-avatar style={box}><img src={icon.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></span>
+  }
+  const glyph = icon?.emoji || String(name || '?').slice(0, 1).toUpperCase()
+  return (
+    <span data-chat-avatar aria-hidden="true" style={{ ...box, ...text(size >= 44 ? 'title' : 'heading'), lineHeight: 1 }}>
+      {glyph}
+    </span>
+  )
+}
+
+/** Choose a chat's icon: an emoji, a photo, or back to the usual. */
+function IconSheet({ channel, user, onClose, onSaved }) {
+  const [busy, setBusy] = useState('')
+  const picker = useRef(null)
+  const auth = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+
+  async function save(body) {
+    setBusy('Saving…')
+    try {
+      const res = await fetch('/api/chat?action=icon', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ channel: channel.id, ...body })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'That icon did not save')
+      onSaved(data.icon)
+      onClose()
+    } catch (err) { setBusy(err.message) }
+  }
+
+  async function photo(file) {
+    if (!file) return
+    setBusy('Uploading…')
+    try {
+      const { blob } = await shrink(file)
+      const result = await upload(`chat/icon-${channel.id}-${Date.now()}.jpg`, blob, {
+        access: 'public', contentType: 'image/jpeg', handleUploadUrl: '/api/chat?action=blob-upload',
+        clientPayload: JSON.stringify({ token: user?.token || null })
+      })
+      await save({ url: result.url })
+    } catch { setBusy('That photo did not upload — try again') }
+  }
+
+  return (
+    <Overlay>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.35)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+        <div data-icon-sheet onClick={e => e.stopPropagation()} style={{
+          background: colour.surface, width: '100%', maxWidth: 520, borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
+          padding: `${space.lg}px ${space.lg}px calc(${space.lg}px + env(safe-area-inset-bottom, 0px))`
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.md, marginBottom: space.md }}>
+            <ChatAvatar icon={channel.icon} name={channel.name} size={44} />
+            <div style={{ flex: 1 }}>
+              <div style={{ ...text('heading'), color: colour.ink }}>Icon for {channel.name}</div>
+              <div style={{ ...text('caption'), color: colour.inkFaint }}>Everyone in the team sees it</div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: space.xs, marginBottom: space.md }}>
+            {ICON_CHOICES.map(e => (
+              <button key={e} type="button" aria-label={`Use ${e}`} onClick={() => save({ emoji: e })}
+                style={{ ...text('title'), aspectRatio: '1', border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.canvas, cursor: 'pointer', padding: 0 }}>{e}</button>
+            ))}
+          </div>
+          <input ref={picker} type="file" accept="image/*" style={{ fontSize: 16, display: 'none' }}
+            onChange={e => { photo(e.target.files?.[0]); e.target.value = '' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space.sm }}>
+            <Button onClick={() => picker.current?.click()}>Use a photo</Button>
+            <Button variant="secondary" onClick={() => save({})}>Back to the usual</Button>
+          </div>
+          {busy && <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: space.sm }}>{busy}</div>}
+        </div>
+      </div>
+    </Overlay>
+  )
+}
 
 /** One attached file, drawn as what it is. */
 export function Attachment({ file }) {
@@ -87,33 +197,39 @@ function WithMentions({ value }) {
     : <React.Fragment key={i}>{part}</React.Fragment>))
 }
 
-function Message({ message, mine, runOn, open, onToggle, onReact, onReply, onDelete, mentionsMe }) {
+function Message({ message, mine, runOn, open, onToggle, onReact, onReply, onDelete, mentionsMe, seenAll }) {
   const files = [...(message.photo?.url ? [{ ...message.photo, type: 'image/jpeg', name: 'Photo' }] : []), ...(message.files || [])]
   const reactions = Object.entries(message.reactions || {})
+  const corner = runOn ? 12 : 3
   return (
     <div data-message={message.id} style={{
-      marginBottom: runOn ? 2 : space.sm, padding: mentionsMe ? `2px ${space.xs}px` : 0,
-      background: mentionsMe ? colour.accentSoft : 'transparent', borderRadius: radius.control
+      display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start',
+      marginTop: runOn ? 2 : space.sm
     }}>
-      {!runOn && (
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, marginBottom: 1 }}>
-          <span style={{ ...text('bodyStrong'), color: mine ? colour.accentDeep : colour.ink }}>
+      <div data-bubble={mine ? 'mine' : 'theirs'} role="button" tabIndex={0} onClick={onToggle} style={{
+        cursor: 'pointer', maxWidth: '82%', minWidth: 72, boxSizing: 'border-box',
+        background: mine ? colour.accentSoft : colour.surface,
+        border: `1px solid ${mentionsMe ? colour.accent : mine ? 'rgba(24,154,133,0.22)' : colour.line}`,
+        borderRadius: mine ? `12px ${corner}px 12px 12px` : `${corner}px 12px 12px 12px`,
+        boxShadow: '0 1px 1px rgba(4,39,70,0.06)', padding: '6px 9px 4px'
+      }}>
+        {!runOn && !mine && (
+          <div style={{ ...text('caption'), fontWeight: 700, color: nameInk(message.author || message.authorName) }}>
             {message.authorName}
-          </span>
-          <span style={{ ...text('micro'), color: colour.inkFainter }}>{timeOf(message.at)}</span>
-        </div>
-      )}
-      <div role="button" tabIndex={0} onClick={onToggle} style={{ cursor: 'pointer' }}>
-        {message.replyTo && (
-          <div style={{
-            ...text('caption'), color: colour.inkMuted, borderLeft: `3px solid ${colour.accent}`,
-            padding: `2px ${space.sm}px`, margin: '2px 0 4px', background: colour.lineSoft, borderRadius: 4
-          }}>
-            <strong style={{ color: colour.ink }}>{message.replyTo.authorName}</strong> {message.replyTo.text}
           </div>
         )}
+        {message.replyTo && (
+          <div style={{
+            ...text('caption'), color: colour.inkMuted, borderLeft: `3px solid ${nameInk(message.replyTo.authorName)}`,
+            padding: `2px ${space.sm}px`, margin: '2px 0 4px', background: 'rgba(4,39,70,0.05)', borderRadius: 6
+          }}>
+            <strong style={{ color: nameInk(message.replyTo.authorName), display: 'block' }}>{message.replyTo.authorName}</strong>
+            {message.replyTo.text}
+          </div>
+        )}
+        {!message.deleted && files.map(f => <Attachment key={f.url} file={f} />)}
         {message.deleted
-          ? <div style={{ ...text('body'), color: colour.inkFaint, fontStyle: 'italic' }}>This message was deleted</div>
+          ? <div style={{ ...text('body'), color: colour.inkFaint, fontStyle: 'italic' }}>🚫 This message was deleted</div>
           : message.text && (
             // Wrapped, not truncated, and whitespace kept: people paste list
             // orders in here and a line break is part of what they wrote.
@@ -121,17 +237,21 @@ function Message({ message, mine, runOn, open, onToggle, onReact, onReply, onDel
               <WithMentions value={message.text} />
             </div>
           )}
-        {!message.deleted && files.map(f => <Attachment key={f.url} file={f} />)}
-        {message.pending && <div style={{ ...text('micro'), color: colour.inkFainter }}>Sending…</div>}
+        <div style={{ ...text('micro'), fontWeight: 400, letterSpacing: 0, color: colour.inkFainter, textAlign: 'right', marginTop: 1 }}>
+          {message.pending ? 'Sending…' : timeOf(message.at)}
+          {mine && !message.pending && (
+            <span aria-label={seenAll ? 'Seen' : 'Sent'} style={{ marginLeft: 4, color: seenAll ? colour.accent : colour.inkFainter }}>✓✓</span>
+          )}
+        </div>
       </div>
 
       {reactions.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: -4, padding: '0 6px' }}>
           {reactions.map(([emoji, people]) => (
             <button key={emoji} type="button" onClick={() => onReact(emoji)} title={people.join(', ')}
               style={{
                 ...text('caption'), border: `1px solid ${colour.line}`, background: colour.surface,
-                borderRadius: radius.pill, padding: '1px 8px', cursor: 'pointer'
+                borderRadius: radius.pill, padding: '0 7px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(4,39,70,0.08)'
               }}>{emoji} {people.length}</button>
           ))}
         </div>
@@ -247,9 +367,9 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply }) {
   const nothing = !draft.trim() && !files.length
 
   return (
-    <div style={{
-      borderTop: `1px solid ${colour.line}`, background: colour.surface,
-      padding: `${space.sm}px ${space.md}px calc(${space.sm}px + env(safe-area-inset-bottom, 0px))`
+    <div data-composer style={{
+      borderTop: `1px solid ${colour.line}`, background: colour.canvas,
+      padding: `${space.sm}px ${space.sm}px calc(${space.sm}px + env(safe-area-inset-bottom, 0px))`
     }}>
       {replyTo && (
         <div data-replying style={{
@@ -300,12 +420,16 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply }) {
         <button type="button" onClick={() => picker.current?.click()}
           aria-label="Attach photos or files" disabled={blocked}
           style={{
-            width: 40, height: 40, flexShrink: 0, borderRadius: radius.control,
-            border: `1px solid ${colour.line}`, background: colour.canvas,
-            cursor: blocked ? 'default' : 'pointer', ...text('body'),
-            color: colour.inkMuted, padding: 0
+            width: 42, height: 42, flexShrink: 0, borderRadius: '50%',
+            border: 'none', background: 'transparent',
+            cursor: blocked ? 'default' : 'pointer', color: colour.inkMuted, padding: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-          {busy === 'reading' ? '…' : '📎'}
+          {busy === 'reading' ? '…' : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9" />
+            </svg>
+          )}
         </button>
 
         <textarea
@@ -324,23 +448,29 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply }) {
             }
           }}
           rows={1}
-          placeholder={files.length ? 'Add a caption (optional)' : 'Message — @name to tag someone'}
+          placeholder={files.length ? 'Add a caption (optional)' : 'Message'}
           aria-label="Message"
           style={{
-            flex: 1, resize: 'none', minHeight: 40, maxHeight: 140,
-            padding: `${space.sm}px ${space.md}px`, boxSizing: 'border-box',
-            border: `1px solid ${colour.line}`, borderRadius: radius.control,
+            flex: 1, resize: 'none', minHeight: 42, maxHeight: 140,
+            padding: `10px ${space.lg}px`, boxSizing: 'border-box',
+            border: `1px solid ${colour.line}`, borderRadius: 21,
             ...text('field'), fontFamily: 'inherit',
-            color: colour.ink, background: colour.canvas, outline: 'none'
+            color: colour.ink, background: colour.surface, outline: 'none'
           }} />
         <button onClick={submit} disabled={nothing || blocked}
+          aria-label={warning && !override ? 'Check' : 'Send'}
           style={{
-            padding: `0 ${space.lg}px`, height: 40, borderRadius: radius.control,
-            border: 'none', ...text('bodyStrong'), color: 'white',
-            background: (nothing || blocked) ? colour.inkFainter : colour.accent,
-            cursor: (nothing || blocked) ? 'default' : 'pointer'
+            width: 42, height: 42, flexShrink: 0, borderRadius: '50%',
+            border: 'none', color: 'white', padding: 0,
+            background: (nothing || blocked) ? colour.inkFainter : warning && !override ? colour.warning : colour.accent,
+            cursor: (nothing || blocked) ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-          {busy === 'sending' ? '…' : sending ? '…' : warning && !override ? 'Check' : 'Send'}
+          {busy === 'sending' || sending ? '…' : warning && !override ? <span style={text('heading')}>!</span> : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3.4 20.4l17.4-7.5a1 1 0 000-1.8L3.4 3.6a1 1 0 00-1.4 1.1L3.9 11l9.1 1-9.1 1-1.9 6.3a1 1 0 001.4 1.1z" />
+            </svg>
+          )}
         </button>
       </div>
     </div>
@@ -452,7 +582,7 @@ function Notifications({ user }) {
 }
 
 /** One channel, open. */
-export function ChannelView({ channel, title, subtitle, user, onBack, focus }) {
+export function ChannelView({ channel, title, subtitle, user, onBack, focus, icon, onIcon }) {
   const [messages, setMessages] = useState(null)
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
@@ -565,9 +695,21 @@ export function ChannelView({ channel, title, subtitle, user, onBack, focus }) {
 
   return (
     <Page style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Header eyebrow="Team" title={title} subtitle={subtitle} onBack={onBack} compact />
+      <Header eyebrow="Team" title={title}
+        subtitle={subtitle}
+        onBack={onBack} compact
+        right={icon ? (
+          <button type="button" onClick={onIcon} disabled={!onIcon} aria-label={onIcon ? `Change the icon for ${title}` : title}
+            style={{ border: 'none', background: 'none', padding: 0, cursor: onIcon ? 'pointer' : 'default', flexShrink: 0 }}>
+            <ChatAvatar icon={icon} name={title} size={40} />
+          </button>
+        ) : null} />
 
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: space.md, minHeight: 0 }}>
+      <div data-chat-wall style={{
+        flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: `${space.sm}px ${space.md}px ${space.md}px`, minHeight: 0,
+        backgroundColor: colour.canvas,
+        backgroundImage: `radial-gradient(${colour.line} 1px, transparent 1.2px)`, backgroundSize: '18px 18px'
+      }}>
         {error && <Banner tone="danger">{error}</Banner>}
         {messages === null && (
           <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>
@@ -589,10 +731,12 @@ export function ChannelView({ channel, title, subtitle, user, onBack, focus }) {
           return (
             <div key={message.id}>
               {newDay && (
-                <div style={{
-                  ...text('micro'), textTransform: 'uppercase', color: colour.inkFainter,
-                  textAlign: 'center', margin: `${space.md}px 0 ${space.sm}px`
-                }}>{day}</div>
+                <div style={{ textAlign: 'center', margin: `${space.md}px 0 ${space.xs}px` }}>
+                  <span style={{
+                    ...text('micro'), textTransform: 'uppercase', color: colour.inkMuted, background: colour.surface,
+                    border: `1px solid ${colour.line}`, borderRadius: radius.pill, padding: '3px 10px'
+                  }}>{day}</span>
+                </div>
               )}
               <Message message={message} mine={mine} runOn={runOn}
                 mentionsMe={!mine && (message.mentions || []).includes(user?.email)}
@@ -600,7 +744,8 @@ export function ChannelView({ channel, title, subtitle, user, onBack, focus }) {
                 onToggle={() => setOpenId(id => (id === message.id ? null : message.id))}
                 onReact={emoji => react(message.id, emoji)}
                 onReply={() => { setReplyTo(message); setOpenId(null) }}
-                onDelete={() => remove(message.id)} />
+                onDelete={() => remove(message.id)}
+                seenAll={mine && message.id === myLast?.id && seen.length > 0} />
               {myLast && message.id === myLast.id && seen.length > 0 && (
                 <div data-seen-by style={{ ...text('micro'), color: colour.inkFainter, textAlign: 'right' }}>
                   ✓✓ Seen by {seen.join(', ')}
@@ -610,7 +755,11 @@ export function ChannelView({ channel, title, subtitle, user, onBack, focus }) {
           )
         })}
         {typing.length > 0 && (
-          <div data-typing style={{ ...text('caption'), color: colour.inkFaint, fontStyle: 'italic' }}>
+          <div data-typing style={{
+            ...text('caption'), color: colour.inkFaint, fontStyle: 'italic', marginTop: space.sm,
+            background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: '3px 12px 12px 12px',
+            padding: '6px 10px', width: 'fit-content'
+          }}>
             {typing.join(', ')} {typing.length === 1 ? 'is' : 'are'} typing…
           </div>
         )}
@@ -709,6 +858,7 @@ function ChatSearch({ user, onOpen }) {
 export default function Chat({ user, onBack, onRead }) {
   const [overview, setOverview] = useState(null)
   const [open, setOpen] = useState(null)
+  const [choosing, setChoosing] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -731,13 +881,21 @@ export default function Chat({ user, onBack, onRead }) {
 
   if (open) {
     return (
-      <ChannelView
-        channel={open.id}
-        title={open.name}
-        subtitle={open.detail}
-        focus={open.focus}
-        user={user}
-        onBack={() => { setOpen(null); load(); onRead?.() }} />
+      <>
+        <ChannelView
+          channel={open.id}
+          title={open.name}
+          subtitle={open.detail}
+          focus={open.focus}
+          icon={open.icon || { emoji: '💬' }}
+          onIcon={() => setChoosing(open)}
+          user={user}
+          onBack={() => { setOpen(null); load(); onRead?.() }} />
+        {choosing && (
+          <IconSheet channel={choosing} user={user} onClose={() => setChoosing(null)}
+            onSaved={icon => { setOpen(o => (o ? { ...o, icon } : o)); load() }} />
+        )}
+      </>
     )
   }
 
@@ -755,36 +913,51 @@ export default function Chat({ user, onBack, onRead }) {
         }} />
 
         <SectionLabel>Channels</SectionLabel>
-        {channels.map(channel => (
-          <button key={channel.id} onClick={() => setOpen(channel)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: space.md, width: '100%',
-              textAlign: 'left', background: colour.surface,
-              border: `1px solid ${colour.line}`, borderRadius: radius.card,
-              padding: space.md, marginBottom: space.sm, cursor: 'pointer'
-            }}>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block' }}>
-                # {channel.name}
-              </span>
-              <span style={{ ...text('caption'), color: colour.inkFaint }}>{channel.detail}</span>
-            </span>
-            {channel.unread > 0 && (
-              <span style={{
-                ...text('micro'), fontWeight: 700, flexShrink: 0,
-                background: colour.accent, color: 'white',
-                borderRadius: radius.pill, padding: '2px 8px'
-              }}>{channel.unread}</span>
-            )}
-            <span style={{ ...text('body'), color: colour.inkFaint }}>›</span>
-          </button>
-        ))}
+        <div data-chat-list style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden' }}>
+          {channels.map((channel, i) => (
+            <div key={channel.id} style={{ display: 'flex', alignItems: 'center', gap: space.md, padding: `${space.sm + 2}px ${space.md}px`, borderTop: i ? `1px solid ${colour.lineSoft}` : 'none' }}>
+              <button type="button" onClick={() => setChoosing(channel)} aria-label={`Change the icon for ${channel.name}`}
+                style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
+                <ChatAvatar icon={channel.icon} name={channel.name} />
+              </button>
+              <button type="button" onClick={() => setOpen(channel)} data-channel={channel.id}
+                style={{ flex: 1, minWidth: 0, display: 'block', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: space.sm }}>
+                  <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {channel.name}
+                  </span>
+                  {channel.last?.at && (
+                    <span style={{ ...text('caption'), color: channel.unread > 0 ? colour.accent : colour.inkFainter, flexShrink: 0, fontWeight: channel.unread > 0 ? 700 : 400 }}>
+                      {listTime(channel.last.at)}
+                    </span>
+                  )}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginTop: 1 }}>
+                  <span style={{ ...text('caption'), color: colour.inkFaint, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {channel.last
+                      ? <>{channel.last.author === user?.email ? <span style={{ color: colour.accent }}>✓✓ </span> : <strong style={{ fontWeight: 600 }}>{channel.last.authorName}: </strong>}{channel.last.text}</>
+                      : channel.detail}
+                  </span>
+                  {channel.unread > 0 && (
+                    <span style={{
+                      ...text('micro'), fontWeight: 700, flexShrink: 0, minWidth: 20, textAlign: 'center',
+                      background: colour.accent, color: 'white', borderRadius: radius.pill, padding: '2px 6px'
+                    }}>{channel.unread}</span>
+                  )}
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
 
         <div style={{ ...text('caption'), color: colour.inkFainter, marginTop: space.md }}>
-          Every booking has its own thread as well — open a case and look for the
-          messages at the foot of it.
+          Tap a chat's icon to change it. Every booking has its own thread as
+          well — open a case and look for the messages at the foot of it.
         </div>
       </Body>
+      {choosing && (
+        <IconSheet channel={choosing} user={user} onClose={() => setChoosing(null)} onSaved={() => load()} />
+      )}
     </Page>
   )
 }

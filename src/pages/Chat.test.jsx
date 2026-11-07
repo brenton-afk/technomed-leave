@@ -46,7 +46,7 @@ const channel = (props = {}) => render(
 describe('the channel list', () => {
   it('shows how much is waiting', async () => {
     render(<Chat user={USER} onBack={() => {}} />)
-    await waitFor(() => expect(screen.getByText('# Logistics')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Logistics')).toBeInTheDocument())
     expect(screen.getByText('3')).toBeInTheDocument()
   })
 })
@@ -119,7 +119,10 @@ describe('reading', () => {
     channel()
     await waitFor(() => expect(screen.getByText('Diplomat set back from CSSD')).toBeInTheDocument())
     expect(screen.getAllByText('Toni')).toHaveLength(1)
-    expect(screen.getByText('Brent')).toBeInTheDocument()
+    // Your own messages sit on the right, unnamed, as in WhatsApp.
+    const mine = screen.getByText('Second up, Aimee on site 8:30').closest('[data-bubble]')
+    expect(mine.getAttribute('data-bubble')).toBe('mine')
+    expect(screen.getByText('Diplomat set back from CSSD').closest('[data-bubble]').getAttribute('data-bubble')).toBe('theirs')
   })
 
   it('says when there is nothing yet', async () => {

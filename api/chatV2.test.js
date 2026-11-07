@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFiles, mentionsIn, CHANNELS, REACTIONS } from './chat.js'
+import { readFiles, mentionsIn, CHANNELS, REACTIONS, lastLine } from './chat.js'
 import { messageMatches } from './_chatSearch.js'
 
 // Chat, WhatsApp and Slack style (Brent, 6 Nov 2026). Invented content only.
@@ -39,5 +39,20 @@ describe('searching messages', () => {
     expect(messageMatches(m, ['tray', 'list'])).toBe(true)
     expect(messageMatches(m, ['toni', 'diplomat'])).toBe(false)
     expect(messageMatches({ ...m, deleted: true }, ['diplomat'])).toBe(false)
+  })
+})
+
+describe('looking like WhatsApp (7 Nov 2026)', () => {
+  it('every standing chat has an icon', () => {
+    expect(CHANNELS.every(c => c.icon?.emoji)).toBe(true)
+  })
+
+  it('the list preview says who said what, or what kind of file it was', () => {
+    expect(lastLine({ authorName: 'Mat', author: 'mat@x', text: 'Set is   back\nfrom CSSD', at: 't' }))
+      .toEqual({ authorName: 'Mat', author: 'mat@x', text: 'Set is back from CSSD', at: 't' })
+    expect(lastLine({ authorName: 'Toni', files: [{ type: 'image/jpeg' }] }).text).toBe('📷 Photo')
+    expect(lastLine({ authorName: 'Toni', files: [{ type: 'application/pdf', name: 'Tray list.pdf' }] }).text).toBe('📎 Tray list.pdf')
+    expect(lastLine({ authorName: 'Toni', text: 'secret', deleted: true }).text).toBe('This message was deleted')
+    expect(lastLine(null)).toBeNull()
   })
 })
