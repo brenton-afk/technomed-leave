@@ -292,8 +292,10 @@ portal." Me → **Decisions**, shown only to `DECISIONS_USERS` (default
 brenton@ alone; everyone else gets a 404 from `api/decisions.js`, like the
 Treasury). One list of what is waiting on someone, each with an owner (Brent,
 Toni, Erin, Team leader, Clinical team): **unanswered emails** in
-`DECISIONS_MAILBOXES` (default brenton@, bookings@ → team leader, accounts@ →
-Toni), read with the existing `gmail.readonly` grant — a thread whose last
+`DECISIONS_MAILBOXES` (default brenton@; bookings@ — cases and loan sets →
+team leader; accounts@ — invoices, sales reports, payments → Toni; admin@ —
+POs, resupply, stock follow-up → Toni; purposes in `MAILBOX_PURPOSE`, given
+to the review), read with the existing `gmail.readonly` grant — a thread whose last
 message is from outside, from a person (`isAutomated`), 20h+ old
 (`waitingOnUs`), judged by Claude with an owner, an ask, urgency and a draft
 reply; verdicts cached per last message (`decisions:triage:*`), so a thread

@@ -60,12 +60,19 @@ describe('who may open it', () => {
     expect(D.mayUseDecisions('', {})).toBe(false)
   })
 
-  it('reads brenton@, bookings@ and accounts@, each with its owner', () => {
+  it('reads brenton@, bookings@, accounts@ and admin@, each with its owner', () => {
     expect(D.decisionMailboxes({})).toEqual([
       { address: 'brenton@technomed.com.au', owner: 'brent' },
       { address: 'bookings@technomed.com.au', owner: 'leader' },
-      { address: 'accounts@technomed.com.au', owner: 'toni' }
+      { address: 'accounts@technomed.com.au', owner: 'toni' },
+      { address: 'admin@technomed.com.au', owner: 'toni' }
     ])
+  })
+
+  it('tells the review what each inbox is for', () => {
+    expect(D.triagePrompt('admin@technomed.com.au', 'toni', [])).toContain('purchase orders, resupply and stock follow-up')
+    expect(D.triagePrompt('accounts@technomed.com.au', 'toni', [])).toContain('invoices, sales reports and payments')
+    expect(D.triagePrompt('bookings@technomed.com.au', 'leader', [])).toContain('cases, theatre bookings and loan sets')
   })
 })
 

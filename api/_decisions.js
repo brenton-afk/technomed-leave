@@ -41,15 +41,25 @@ export function mayUseDecisions(email, env = process.env) {
 /** The inboxes read, each with whose it is by default. */
 export function decisionMailboxes(env = process.env) {
   const list = String(env.DECISIONS_MAILBOXES
-    || 'brenton@technomed.com.au,bookings@technomed.com.au,accounts@technomed.com.au')
+    || 'brenton@technomed.com.au,bookings@technomed.com.au,accounts@technomed.com.au,admin@technomed.com.au')
     .split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
   return list.map(address => ({ address, owner: defaultOwner(address) }))
+}
+
+// What each shared inbox is for (Brent, 7 Nov 2026): bookings@ is cases and
+// loan sets; accounts@ is invoices, sales reports and payments; admin@ is POs,
+// resupply and stock follow-up.
+export const MAILBOX_PURPOSE = {
+  bookings: 'cases, theatre bookings and loan sets',
+  accounts: 'invoices, sales reports and payments',
+  admin: 'purchase orders, resupply and stock follow-up',
+  brenton: "the director's own inbox"
 }
 
 export function defaultOwner(address) {
   const user = String(address).split('@')[0]
   if (user === 'bookings') return 'leader'
-  if (user === 'accounts' || user.startsWith('toni')) return 'toni'
+  if (user === 'accounts' || user === 'admin' || user.startsWith('toni')) return 'toni'
   if (user.startsWith('erin')) return 'erin'
   return 'brent'
 }
@@ -124,14 +134,15 @@ export function triagePrompt(mailbox, owner, threads, lessons = []) {
     ? `\nBrent has already told you these did not need flagging — treat anything like them the same way:\n${
       lessons.map(l => `- from ${l.from || 'someone'}${l.subject ? `, "${l.subject}"` : ''}: ${l.reason || 'not needed'}`).join('\n')}\n`
     : ''
-  return `You are reviewing the ${mailbox} inbox for TechnoMed, a nine-person surgical implant distributor in Hobart, Tasmania (spinal, orthopaedic and CMF implants, supporting surgeons at Calvary and the Royal Hobart Hospital).
+  const purpose = MAILBOX_PURPOSE[String(mailbox).split('@')[0]]
+  return `You are reviewing the ${mailbox} inbox${purpose ? ` (${purpose})` : ''} for TechnoMed, a nine-person surgical implant distributor in Hobart, Tasmania (spinal, orthopaedic and CMF implants, supporting surgeons at Calvary and the Royal Hobart Hospital).
 
 Each thread below has had no reply from anyone at TechnoMed. Decide whether it needs somebody here to do or answer something. Most inbox mail does not: receipts, distributor news, booking lists sent for information (the portal reads booking lists by itself), confirmations, thank-yous, CCs, anything already resolved in the thread.
 
 Who owns what:
-- toni: invoices, purchase orders, payments, remittances, resupply follow-up, supplier accounts
+- toni: invoices, sales reports, payments, remittances, purchase orders, resupply and stock follow-up, supplier accounts
 - erin: staff and people matters, contracts, distributor relationship and terms, bigger-picture strategy
-- leader: theatre bookings, case questions from hospitals or surgeons' rooms, kit and loan sets
+- leader: cases, theatre bookings, questions from hospitals or surgeons' rooms, kit and loan sets
 - clinical: usage forms and anything a rep in theatre has to do
 - brent: anything else, and anything only the director can decide
 The default owner for this inbox is ${owner}.
