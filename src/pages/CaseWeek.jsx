@@ -1890,8 +1890,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
     .reduce((n, d) => n + (d.casesByHospital || []).reduce((m, g) => m + g.cases.filter(c => !c.cancelled).length, 0), 0)
   const dayLabel = !shownDay ? 'today' : shownDay === today ? 'today'
     : `${weekdayName(shownDay).slice(0, 3)} ${dayNum(shownDay)}`
-  const leadOnDay = leader?.byDay?.[shownDay]?.email ? firstNameFor(leader.byDay[shownDay].email)
-    : leader?.email ? firstNameFor(leader.email) : ''
+  // Only the day's own answer: falling back to "the week's" leader named
+  // Monday's turn on a weekend that belongs to the next one.
+  const leadOnDay = leader?.byDay?.[shownDay]?.email ? firstNameFor(leader.byDay[shownDay].email) : ''
   const glance = [
     [String(weekCases), 'this week'],
     [shownDay ? String(dayCases) : '—', dayLabel],

@@ -27,6 +27,18 @@ describe('who leads, day by day', () => {
     expect(byDay['2026-11-13'].ends).toBe('2026-11-19')
   })
 
+  it('has Brent on the weekend of 7–8 November, not the turn before (Brent, 7 Nov 2026)', async () => {
+    const byDay = await leadersOn(['2026-11-07', '2026-11-08'])
+    expect(byDay['2026-11-07'].firstName).toBe('Brent')
+    expect(byDay['2026-11-08'].firstName).toBe('Brent')
+  })
+
+  it('the week view asks about all seven days, so a weekend is never Monday’s turn', async () => {
+    const { readFileSync } = await import('fs')
+    const route = readFileSync(require('path').join(process.cwd(), 'api/calendar/today.js'), 'utf8')
+    expect(route).toMatch(/leadersOn\(\[0, 1, 2, 3, 4, 5, 6\]/)
+  })
+
   it('lets a saved turn and a changed day override the rota, in that order', async () => {
     store.set('turn:2026-11-13', { email: 'mat@technomed.com.au', name: 'Mat Usher', firstName: 'Mat' })
     store.set('day:2026-11-17', { email: 'aimee@technomed.com.au', name: 'Aimee Vulinovich', firstName: 'Aimee' })

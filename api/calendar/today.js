@@ -1938,7 +1938,10 @@ async function handleTeamLeader(req, res) {
 
     // Every weekday's leader, worked out on its own: a Monday-to-Friday week
     // spans two turns, the Friday starting the next one (Brent, 5 Nov 2026).
-    const byDay = await leadersOn(weekdays)
+    // Saturday and Sunday too (Brent, 7 Nov 2026: "You have Ben listed this
+    // weekend"): without them a weekend fell back to the turn Monday was in,
+    // which is the turn before the one running on the weekend.
+    const byDay = await leadersOn([0, 1, 2, 3, 4, 5, 6].map(n => addDaysTo(monday, n)))
     const days = Object.fromEntries(Object.entries(byDay).filter(([, l]) => l?.source === 'day'))
     const first = byDay[monday]?.turnLeader || null
     return res.status(200).json({
