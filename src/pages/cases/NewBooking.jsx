@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { BRAINLAB, BRAINLAB_KIT } from '../../clinicalPlan/brainlab.js'
+import { BRAINLAB_KIT, brainlabOptions, brainlabFor } from '../../clinicalPlan/brainlab.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggestions.js'
 import { Overlay } from '../../design/Shell.jsx'
@@ -354,6 +354,11 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
     }).filter(Boolean)
   }, [systems, hospital, alreadyBooked])
 
+  // ETBS is RHH only: moving the booking to Calvary takes it off.
+  useEffect(() => {
+    if (brainlab && !brainlabFor(brainlab, hospital)) { setBrainlab(''); setAttendance('') }
+  }, [hospital, brainlab])
+
   const colourId = guideColorIdFor(surgeon)
   // A Brainlab case has to say whether we are wanted in the room.
   const ready = patient.trim() && surgeon && date && (!brainlab || attendance)
@@ -580,7 +585,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
 
             <div style={{ marginBottom: space.md }}>
               <Label>Brainlab navigation</Label>
-              <Choice options={BRAINLAB} value={brainlab}
+              <Choice options={brainlabOptions(hospital)} value={brainlab}
                 onChange={v => { setBrainlab(v); if (!v) setAttendance('') }} />
               {brainlab && (
                 <div style={{ marginTop: space.sm }}>

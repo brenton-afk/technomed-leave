@@ -14,7 +14,21 @@ import { parseKitSupplies, formatKitSupplies } from './kitSupply.js'
 
 // AIRO always comes with the Curve cart; the Curve can be used on its own.
 export const BRAINLAB = ['AIRO + Curve', 'Curve only', 'Other']
-export const BRAINLAB_KIT = { 'AIRO + Curve': 'BRAINLAB AIRO & CURVE', 'Curve only': 'BRAINLAB CURVE', Other: 'BRAINLAB' }
+export const BRAINLAB_KIT = { 'AIRO + Curve': 'BRAINLAB AIRO & CURVE', 'Curve only': 'BRAINLAB CURVE', ETBS: 'BRAINLAB ETBS', Other: 'BRAINLAB' }
+
+// ETBS is offered at RHH only (Brent, 8 Nov 2026). It sits before Other.
+const RHH_ONLY = ['ETBS']
+const isRhh = hospital => /\b(?:rhh|royal\s+hobart)\b/i.test(String(hospital || ''))
+
+/** The navigation buttons for a hospital: ETBS joins them at RHH. */
+export function brainlabOptions(hospital) {
+  return isRhh(hospital) ? ['AIRO + Curve', 'Curve only', 'ETBS', 'Other'] : BRAINLAB
+}
+
+/** A choice still on offer at this hospital, else '' (ETBS left behind on a move to Calvary). */
+export function brainlabFor(choice, hospital) {
+  return choice && (!RHH_ONLY.includes(choice) || isRhh(hospital)) ? choice : ''
+}
 
 /**
  * Which button the email's own words amount to, or ''.
