@@ -186,3 +186,12 @@ describe('one email in two inboxes is one item (8 Nov 2026)', () => {
     expect(D.openMerged([item], {})).toHaveLength(1)
   })
 })
+
+describe('whose items are yours (8 Nov 2026)', () => {
+  it('your own, plus Team leader only on a day you lead', () => {
+    expect(D.ownersFor('brenton@technomed.com.au', 'mat@technomed.com.au')).toEqual(['brent'])
+    expect(D.ownersFor('brenton@technomed.com.au', 'Brenton@technomed.com.au')).toEqual(['brent', 'leader'])
+    expect(D.ownersFor('toni@technomed.com.au', null)).toEqual(['toni'])
+    expect(D.ownersFor('mat@technomed.com.au', 'mat@technomed.com.au')).toEqual(['leader'])
+  })
+})

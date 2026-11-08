@@ -29,6 +29,15 @@ export const OWNERS = {
   clinical: 'Clinical team'
 }
 
+const PERSON_OWNER = { brenton: 'brent', toni: 'toni', erin: 'erin' }
+
+/** The owners whose items are this person's: their own, plus "Team leader" on a day they lead. */
+export function ownersFor(email, leaderEmail) {
+  const e = String(email || '').toLowerCase()
+  const own = PERSON_OWNER[e.split('@')[0]]
+  return [...(own ? [own] : []), ...(e && e === String(leaderEmail || '').toLowerCase() ? ['leader'] : [])]
+}
+
 /** Who may open it. DECISIONS_USERS, else Brent alone while it is a trial. */
 export function decisionUsers(env = process.env) {
   return String(env.DECISIONS_USERS || 'brenton@technomed.com.au')

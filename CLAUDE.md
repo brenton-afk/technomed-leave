@@ -326,7 +326,13 @@ phone), still only for `DECISIONS_USERS` (a 404 draws nothing). **Add to To
 Do** makes an ordinary task (`add-task`) for the owner where that is a person
 (Brent, Toni, Erin), else whoever accepts it, due today / +3 days by urgency,
 the email link in its notes; **Open email** opens the thread in Gmail;
-**Later** / **Not needed** as before. The portal never drafts or sends a
+**Later** / **Not needed** as before. **Yours and theirs** (Brent, same day:
+"these are all jobs for Toni … that will encroach on someone else's task"):
+`mine` from the server (`ownersFor`: your own name, plus Team leader on a day
+`leaderEmailOn` says you lead) gets those buttons as "For you"; everyone
+else's is folded under "In other people's inboxes", grouped by owner, with
+only Open email and **Not mine** (`wrong-person`: off your list, no lesson) —
+nothing there puts a task on anyone's list. The portal never drafts or sends a
 reply — replies are written in Gmail, where To and Cc are visible. The
 description below is the engine behind it.
 

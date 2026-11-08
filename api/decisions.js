@@ -1,8 +1,10 @@
 import { requireSession } from './_auth.js'
 import { redis } from './_redis.js'
+import { leaderEmailOn } from './_leaders.js'
+import { todayStr } from '../src/clinicalPlan/week.js'
 import {
   mayUseDecisions, decisionMailboxes, readInboxReviews, refreshInboxes, STALE_MINUTES, mergeDuplicateEmails, openMerged,
-  usageItems, resupplyItems, bookingInboxItems, readStates, markItem, openItems, ranked, OWNERS
+  usageItems, resupplyItems, bookingInboxItems, readStates, markItem, openItems, ranked, OWNERS, ownersFor
 } from './_decisions.js'
 
 // ─── Decisions (trial) ───────────────────────────────────────────────────────
@@ -21,9 +23,10 @@ async function build(session) {
     ['resupply', 'Resupply owed', () => resupplyItems()],
     ['bookings', 'Bookings Inbox', () => bookingInboxItems()]
   ]
-  const [reviews, states, ...results] = await Promise.all([
+  const [reviews, states, leaderEmail, ...results] = await Promise.all([
     readInboxReviews(mailboxes),
     readStates(session.email).catch(() => ({})),
+    leaderEmailOn(todayStr()).catch(() => null),
     ...sources.map(([, , fn]) => fn().then(items => ({ items }), err => ({ items: [], error: err.message })))
   ])
   const all = [...reviews.flatMap(r => r.items || []), ...results.flatMap(r => r.items)]
@@ -32,6 +35,9 @@ async function build(session) {
   return {
     items,
     owners: OWNERS,
+    // Whose items are this person's to act on; the rest are shown apart, as
+    // someone else's (Brent, 8 Nov 2026: Toni's jobs are Toni's).
+    mine: ownersFor(session.email, leaderEmail),
     cleared: all.length - items.length,
     mailboxes: reviews.map(r => ({
       address: r.address, owner: r.owner, at: r.at || null, error: r.error || null,

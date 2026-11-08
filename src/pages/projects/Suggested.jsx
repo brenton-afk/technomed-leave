@@ -15,6 +15,15 @@ import { STAFF } from '../../staffConfig.js'
 // back in three days. It never drafts or sends email — Open email opens the
 // message itself in Gmail, where To and Cc are in plain sight.
 //
+// Yours and theirs (Brent, 8 Nov 2026: "these are all jobs for Toni … if I do
+// something about that job then that will encroach on someone else's task").
+// The server says which owners are this person's (`mine`: their own name, and
+// Team leader on a day they lead). Those get the buttons. Everyone else's are
+// folded into "In other people's inboxes", grouped by whose they are, with
+// only Open email and Not mine to show — seen, never acted on from here.
+// "Not mine" on either list takes it off this person's list only, and teaches
+// nothing (it is the right job, for someone else).
+//
 // Only for DECISIONS_USERS (Brent, while it is a trial); everyone else gets a
 // 404 from the server and this draws nothing. Phone and desktop alike.
 
@@ -50,12 +59,24 @@ export function taskFrom(item, { me, today }) {
   return { task: what.slice(0, 300), assignee: assigneeFor(item, me), due_date: dueFor(item, today), notes: notes.slice(0, 500), priority: item.urgency === 'today' ? 'urgent' : 'normal' }
 }
 
+/** Splits the list into this person's and everyone else's, the others grouped by owner. */
+export function splitByOwner(items, mine = []) {
+  const ours = [], others = new Map()
+  for (const item of items) {
+    if (mine.includes(item.owner)) ours.push(item)
+    else others.set(item.owner, [...(others.get(item.owner) || []), item])
+  }
+  return { ours, others: [...others.entries()].map(([owner, list]) => ({ owner, items: list })) }
+}
+
 const OWNER = { brent: 'Brent', toni: 'Toni', erin: 'Erin', leader: 'Team leader', clinical: 'Clinical team' }
 const SOURCE = { email: 'Email', usage: 'Usage', resupply: 'Resupply', bookings: 'Bookings' }
 
 export default function Suggested({ user, today, onAdded }) {
   const [allowed, setAllowed] = useState(false)
   const [items, setItems] = useState([])
+  const [mine, setMine] = useState([])
+  const [othersOpen, setOthersOpen] = useState(false)
   const [reading, setReading] = useState(false)
   const [error, setError] = useState('')
   const [open, setOpen] = useState(true)
@@ -80,9 +101,10 @@ export default function Suggested({ user, today, onAdded }) {
       if (!live || !data) return
       setAllowed(true)
       setItems(data.items || [])
+      setMine(data.mine || [])
       if (data.stale) {
         setReading(true)
-        try { const fresh = await call('refresh', {}); if (live && fresh) setItems(fresh.items || []) } catch (e) { if (live) setError(e.message) }
+        try { const fresh = await call('refresh', {}); if (live && fresh) { setItems(fresh.items || []); setMine(fresh.mine || []) } } catch (e) { if (live) setError(e.message) }
         if (live) setReading(false)
       }
     }).catch(e => { if (live) setError(e.message) })
@@ -121,43 +143,69 @@ export default function Suggested({ user, today, onAdded }) {
     settle(item, 'not-needed')
   }
 
+  const { ours, others } = splitByOwner(items, mine)
+  const othersCount = others.reduce((n, g) => n + g.items.length, 0)
+
+  const row = (item, theirs) => (
+    <div key={item.id} data-suggestion={item.id} data-theirs={theirs ? '' : undefined} style={{ padding: `${space.sm + 2}px ${space.md}px`, borderBottom: `1px solid ${colour.lineSoft}` }}>
+      <div style={{ ...text('caption'), color: colour.inkFaint, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 2 }}>
+        <span style={{ color: theirs ? colour.inkFaint : item.urgency === 'today' ? colour.danger : colour.warning, fontWeight: 700 }}>
+          {item.urgency === 'today' ? 'Today' : item.urgency === 'week' ? 'This week' : 'Whenever'}
+        </span>
+        <span>· {SOURCE[item.source] || item.source}{item.mailbox ? ` · ${item.mailbox.split('@')[0]}@` : ''}</span>
+        {item.waitingDays > 0 && <span>· waiting {item.waitingDays} d</span>}
+      </div>
+      <div style={{ ...text(theirs ? 'body' : 'bodyStrong'), color: colour.ink }}>{item.ask || item.title}</div>
+      <div style={{ ...text('caption'), color: colour.inkFaint }}>{item.ask ? `${item.title} · ` : ''}{item.detail}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm }}>
+        {!theirs && <button type="button" onClick={() => add(item)} style={chip(true)}>Add to my To Do</button>}
+        {item.link && <a href={item.link} target="_blank" rel="noreferrer" style={chip(false)}>Open email</a>}
+        {!theirs && <button type="button" onClick={() => settle(item, 'later')} style={chip(false)}>Later</button>}
+        {!theirs && <button type="button" onClick={() => notNeeded(item)} style={chip(false)}>Not needed</button>}
+        <button type="button" onClick={() => settle(item, 'wrong-person')} style={chip(false)}>Not mine</button>
+      </div>
+    </div>
+  )
+
+  const box = { background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden' }
+  const label = { ...text('micro'), textTransform: 'uppercase', color: colour.accentDeep, flex: 1 }
+  const toggle = { display: 'flex', alignItems: 'center', gap: space.sm, width: '100%', background: 'none', border: 'none', padding: `0 ${space.xs}px`, marginBottom: space.xs, cursor: 'pointer', textAlign: 'left' }
+
   return (
     <section data-suggested style={{ marginBottom: space.lg }}>
-      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
-        style={{ display: 'flex', alignItems: 'center', gap: space.sm, width: '100%', background: 'none', border: 'none', padding: `0 ${space.xs}px`, marginBottom: space.xs, cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ ...text('micro'), textTransform: 'uppercase', color: colour.accentDeep, flex: 1 }}>
-          Suggested from email and the portal · {items.length}{reading ? ' · checking inboxes…' : ''}
-        </span>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} style={toggle}>
+        <span style={label}>For you, from email and the portal · {ours.length}{reading ? ' · checking inboxes…' : ''}</span>
         <span aria-hidden="true" style={{ ...text('caption'), color: colour.inkFaint }}>{open ? 'Hide' : 'Show'}</span>
       </button>
       {error && <div style={{ ...text('caption'), color: colour.danger, padding: `0 ${space.xs}px ${space.xs}px` }}>{error}</div>}
-      {open && items.length === 0 && !reading && (
-        <div style={{ ...text('caption'), color: colour.inkFaint, padding: space.md, background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card }}>
-          Nothing waiting. New suggestions appear here when an email or the portal needs someone to act.
+      {open && ours.length === 0 && !reading && (
+        <div style={{ ...text('caption'), color: colour.inkFaint, padding: space.md, ...box }}>
+          Nothing for you. New suggestions appear here when an email or the portal needs you to act.
         </div>
       )}
-      {open && items.length > 0 && (
-        <div style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden' }}>
-          {items.map(item => (
-            <div key={item.id} data-suggestion={item.id} style={{ padding: `${space.sm + 2}px ${space.md}px`, borderBottom: `1px solid ${colour.lineSoft}` }}>
-              <div style={{ ...text('caption'), color: colour.inkFaint, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 2 }}>
-                <span style={{ color: item.urgency === 'today' ? colour.danger : colour.warning, fontWeight: 700 }}>
-                  {item.urgency === 'today' ? 'Today' : item.urgency === 'week' ? 'This week' : 'Whenever'}
-                </span>
-                <span>· for {OWNER[item.owner] || item.owner}</span>
-                <span>· {SOURCE[item.source] || item.source}{item.mailbox ? ` · ${item.mailbox.split('@')[0]}@` : ''}</span>
-                {item.waitingDays > 0 && <span>· waiting {item.waitingDays} d</span>}
+      {open && ours.length > 0 && <div style={box}>{ours.map(item => row(item, false))}</div>}
+
+      {othersCount > 0 && (
+        <div data-others style={{ marginTop: space.md }}>
+          <button type="button" onClick={() => setOthersOpen(o => !o)} aria-expanded={othersOpen} style={toggle}>
+            <span style={{ ...label, color: colour.inkFaint }}>
+              In other people's inboxes · {others.map(g => `${OWNER[g.owner] || g.owner} ${g.items.length}`).join(' · ')}
+            </span>
+            <span aria-hidden="true" style={{ ...text('caption'), color: colour.inkFaint }}>{othersOpen ? 'Hide' : 'Show'}</span>
+          </button>
+          {othersOpen && (
+            <>
+              <div style={{ ...text('caption'), color: colour.inkFaint, padding: `0 ${space.xs}px ${space.xs}px` }}>
+                Theirs to action — shown so you can see what is waiting. Nothing here goes on anyone's list from your login.
               </div>
-              <div style={{ ...text('bodyStrong'), color: colour.ink }}>{item.ask || item.title}</div>
-              <div style={{ ...text('caption'), color: colour.inkFaint }}>{item.ask ? `${item.title} · ` : ''}{item.detail}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm }}>
-                <button type="button" onClick={() => add(item)} style={chip(true)}>Add to To Do</button>
-                {item.link && <a href={item.link} target="_blank" rel="noreferrer" style={chip(false)}>Open email</a>}
-                <button type="button" onClick={() => settle(item, 'later')} style={chip(false)}>Later</button>
-                <button type="button" onClick={() => notNeeded(item)} style={chip(false)}>Not needed</button>
-              </div>
-            </div>
-          ))}
+              {others.map(g => (
+                <div key={g.owner} style={{ marginBottom: space.sm }}>
+                  <div style={{ ...text('caption'), fontWeight: 700, color: colour.navy, padding: `0 ${space.xs}px 4px` }}>{OWNER[g.owner] || g.owner}</div>
+                  <div style={box}>{g.items.map(item => row(item, true))}</div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </section>
