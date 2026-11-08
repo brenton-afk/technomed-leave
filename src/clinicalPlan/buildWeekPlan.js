@@ -7,7 +7,7 @@ import { classifyItem } from './itemKind.js'
 import { readTask, settleCopies } from './tasks.js'
 import './types.js'
 import {
-  normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking, isCancelled
+  normaliseEvent, parseCaseTitle, detectHospital, stripIdentifiers, HOSPITALS, readBooking, isCancelled, isNotACase
 } from './parse.js'
 import { colourNameFor, colourHexFor, surgeonForColourName } from './colours.js'
 import {
@@ -95,6 +95,7 @@ const ROLLUP_HINT = /wfh|office|tm office|list order|day off|annual leave|person
 // screen can have.
 function looksLikeMisfiledCase(event, title) {
   if (event.allDay) return false
+  if (isNotACase(title, event.description)) return false
   if (ROLLUP_HINT.test(title)) return false
   const hasSeparator = /\s+[-–—]\s+/.test(title)
   const wearsSurgeonColour = Boolean(surgeonForColourName(colourNameFor(event.colorId)))

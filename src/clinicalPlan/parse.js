@@ -1434,7 +1434,23 @@ export function plainDescription(description) {
     .trim()
 }
 
+/**
+ * An entry that is plainly not a theatre case: a party, a dinner, a reminder,
+ * a renewal, the office shutting (audit of the calendar, 8 Nov 2026: "TechnoMed
+ * Christmas Dinner" in a surgeon's colour was read as a case with a patient
+ * called TechnoMed, and two Christmas parties were flagged as unreadable cases).
+ * Only when the notes carry no Surgeon or Patient line — a labelled booking is
+ * a booking whatever its title says.
+ */
+const SOCIAL_OR_ADMIN = /\b(christmas|xmas|party|parties|dinner|lunch|breakfast|drinks|function|celebration|farewell|birthday|bbq|barbecue|renewal|subscription|reminder|shutdown|operations resume|office closed)\b/i
+export function isNotACase(title, description) {
+  if (!SOCIAL_OR_ADMIN.test(String(title || ''))) return false
+  const labelled = parseLabelledDescription(plainDescription(description))
+  return !labelled.surgeon && !labelled.patient
+}
+
 export function readBooking(title, description, { colourSurgeon, knownPatient } = {}) {
+  if (isNotACase(title, description)) return null
   // Before anything reads it. See plainDescription: a booking Google stored as
   // HTML has no line breaks the parser can see, so every labelled field runs
   // together and the card comes back blank rather than merely imperfect.

@@ -918,7 +918,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
     // right, and a button inside a button is invalid HTML that browsers
     // resolve by dropping one — which is how a control looks perfectly fine
     // and does nothing at all.
-    <div style={{
+    <div data-week-case={surgicalCase.id} style={{
       marginBottom: 4, borderRadius: radius.control, overflow: 'hidden',
       border: `1px solid ${off ? colour.line : 'transparent'}`,
       background: fill,
@@ -2177,7 +2177,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
         )}
 
         {plan && span === 'week' && !desktop && (plan.days || []).map(day => (
-          <div key={day.date} style={{ marginBottom: space.xl }}>
+          // Named like the desktop's columns (data-week-column), so a check
+          // can compare the two day by day.
+          <div key={day.date} data-week-day={day.date} style={{ marginBottom: space.xl }}>
             <button onClick={() => pickDay(day.date)}
               style={{
                 display: 'block', width: '100%', textAlign: 'left', background: 'none',
