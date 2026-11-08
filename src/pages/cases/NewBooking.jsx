@@ -46,6 +46,16 @@ const SUPPLY = SUPPLY_OPTIONS
 // AIRO always comes with the Curve cart; the Curve can be used on its own.
 // The options and their kit wording live in clinicalPlan/brainlab.js, shared
 // with the bookings inbox.
+/** What still stops Add to calendar, in words a person can act on. */
+export function missingForBooking({ patient, surgeon, date, brainlab, attendance }) {
+  return [
+    !date && 'the date',
+    !surgeon && 'the surgeon',
+    !String(patient || '').trim() && 'the patient surname',
+    brainlab && !attendance && 'Attendance required or No F2F (under Brainlab)'
+  ].filter(Boolean)
+}
+
 const ATTENDANCE = ['Attendance required', 'No F2F']
 
 /** The next weekday, since a booking is far more often ahead than today. */
@@ -347,6 +357,10 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const colourId = guideColorIdFor(surgeon)
   // A Brainlab case has to say whether we are wanted in the room.
   const ready = patient.trim() && surgeon && date && (!brainlab || attendance)
+  // Say what is still needed rather than leave a grey button to puzzle over
+  // (Brent, 8 Nov 2026: details all in, Add to calendar stayed grey — the
+  // Brainlab case had no answer to "is anyone needed in the room?").
+  const missing = missingForBooking({ patient, surgeon, date, brainlab, attendance })
 
   /**
    * @param {object} [over] values to send instead of what is on screen.
@@ -613,9 +627,14 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
             </Row>
           </div>
 
+          {missing.length > 0 && (
+            <div data-missing style={{ ...text('caption'), color: colour.warning, fontWeight: 700, padding: `${space.xs}px ${space.md}px 0`, borderTop: `1px solid ${colour.line}` }}>
+              Still needed: {missing.join(' · ')}
+            </div>
+          )}
           <div style={{
             padding: `${space.sm}px ${space.md}px calc(${space.md}px + env(safe-area-inset-bottom, 0px))`,
-            borderTop: `1px solid ${colour.line}`, display: 'flex', gap: space.sm, flexShrink: 0
+            borderTop: missing.length ? 'none' : `1px solid ${colour.line}`, display: 'flex', gap: space.sm, flexShrink: 0
           }}>
             <button onClick={onClose} style={{
               flex: 1, padding: space.sm, cursor: 'pointer', ...text('bodyStrong'),

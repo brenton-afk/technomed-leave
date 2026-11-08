@@ -457,3 +457,13 @@ describe('suggested systems (Brent, 4 Nov 2026)', () => {
     expect(screen.getByRole('button', { name: /\+ TM Locking Distractor/ })).toHaveAttribute('aria-pressed', 'false')
   })
 })
+
+describe('a grey Add to calendar says why (Brent, 8 Nov 2026)', () => {
+  it('names what is missing, including the Brainlab attendance answer', async () => {
+    const { missingForBooking } = await import('./NewBooking.jsx')
+    expect(missingForBooking({ patient: 'Giana', surgeon: 'Fowler', date: '2026-11-10', brainlab: 'AIRO + Curve', attendance: '' }))
+      .toEqual(['Attendance required or No F2F (under Brainlab)'])
+    expect(missingForBooking({ patient: 'Giana', surgeon: 'Fowler', date: '2026-11-10', brainlab: 'AIRO + Curve', attendance: 'No F2F' })).toEqual([])
+    expect(missingForBooking({ patient: ' ', surgeon: '', date: '2026-11-10' })).toEqual(['the surgeon', 'the patient surname'])
+  })
+})
