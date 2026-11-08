@@ -133,10 +133,10 @@ describe('the standing rota: a turn runs Friday to Thursday (Brent, 5 Nov 2026)'
     expect(turnEnds('2026-11-06')).toBe('2026-11-12')
   })
 
-  it('gives Ben the turn from Friday 13 November, and Mat the next', () => {
-    for (const day of ['2026-11-13', '2026-11-16', '2026-11-19']) expect(rosteredLeader(day)?.firstName, day).toBe('Ben')
-    for (const day of ['2026-11-20', '2026-11-23', '2026-11-26']) expect(rosteredLeader(day)?.firstName, day).toBe('Mat')
-    expect(rosteredLeader('2026-11-27')?.firstName).toBe('Ben')
+  it('gives Mat the turn from Friday 13 November, then Ben (Brent, 8 Nov 2026)', () => {
+    for (const day of ['2026-11-13', '2026-11-16', '2026-11-19']) expect(rosteredLeader(day)?.firstName, day).toBe('Mat')
+    for (const day of ['2026-11-20', '2026-11-23', '2026-11-26']) expect(rosteredLeader(day)?.firstName, day).toBe('Ben')
+    expect(rosteredLeader('2026-11-27')?.firstName).toBe('Mat')
   })
 
   it('has Brent covering tomorrow to next Thursday, not in the cycle', () => {
@@ -145,13 +145,13 @@ describe('the standing rota: a turn runs Friday to Thursday (Brent, 5 Nov 2026)'
     }
     expect(standingCover('2026-11-13')).toBe(null)
     // The rota underneath still says whose turn it would have been.
-    expect(rosteredLeader('2026-11-06')?.firstName).toBe('Mat')
+    expect(rosteredLeader('2026-11-06')?.firstName).toBe('Ben')
   })
 
   it('works backwards too', () => {
     // Plain % gives -1 before the anchor and would have picked nobody.
-    expect(rosteredLeader('2026-10-30')?.firstName).toBe('Ben')
-    expect(rosteredLeader('2026-10-23')?.firstName).toBe('Mat')
+    expect(rosteredLeader('2026-10-30')?.firstName).toBe('Mat')
+    expect(rosteredLeader('2026-10-23')?.firstName).toBe('Ben')
   })
 
   it('keeps Brent out of the cycle', () => {
@@ -164,8 +164,8 @@ describe('the standing rota: a turn runs Friday to Thursday (Brent, 5 Nov 2026)'
   })
 
   it('holds up a year out', () => {
-    // 52 turns on from Ben's is Ben's.
-    expect(rosteredLeader('2027-11-12')?.firstName).toBe('Ben')
+    // 52 turns on from Mat's is Mat's.
+    expect(rosteredLeader('2027-11-12')?.firstName).toBe('Mat')
   })
 
   it('is nothing for a date that is not one', () => {

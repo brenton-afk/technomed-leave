@@ -1,10 +1,12 @@
 import { getTeamLeader, getDayLeaders } from './_redis.js'
-import { turnOf, turnEnds, rosteredLeader, standingCover } from '../src/clinicalPlan/teamLeader.js'
+import { turnOf, turnEnds, rosteredLeader, standingCover, holidayLeader, savedStillStands } from '../src/clinicalPlan/teamLeader.js'
 
 // ─── Who leads on a given day ────────────────────────────────────────────────
 // One answer, used by everything that asks: the week's chips, who may allocate
 // reps, and who the morning's unsent-usage escalation goes to. In order:
-//   1. that day, if somebody changed that day;
+//   1. that day, if somebody changed that day (after the 8 Nov roster —
+//      see savedStillStands);
+//   1b. the Christmas on-call roster (HOLIDAY_LEADS);
 //   2. the turn (Friday to Thursday), if somebody set it — stored under the
 //      turn's Friday;
 //   3. a cover written into the rota (COVERS in teamLeader.js);
@@ -21,6 +23,7 @@ export async function turnLeader(date) {
   if (!turn) return null
   let set = null
   try { set = await getTeamLeader(turn) } catch { set = null }
+  if (!savedStillStands(set, turn)) set = null
   const cover = set ? null : standingCover(turn)
   const rostered = rosteredLeader(turn)
   const chosen = set || cover || brief(rostered)
@@ -44,9 +47,13 @@ export async function leadersOn(dates) {
     if (!turn) continue
     if (!turns.has(turn)) turns.set(turn, await turnLeader(turn))
     const whole = turns.get(turn)
-    out[date] = days[date]
-      ? { ...days[date], source: 'day', rostered: whole?.rostered || null, turn, turnLeader: whole }
-      : whole && { ...whole, turnLeader: whole }
+    const day = savedStillStands(days[date], date) ? days[date] : null
+    const holiday = day ? null : holidayLeader(date)
+    out[date] = day
+      ? { ...day, source: 'day', rostered: whole?.rostered || null, turn, turnLeader: whole }
+      : holiday
+        ? { ...holiday, source: 'day', rostered: whole?.rostered || null, turn, turnLeader: whole }
+        : whole && { ...whole, turnLeader: whole }
   }
   return out
 }

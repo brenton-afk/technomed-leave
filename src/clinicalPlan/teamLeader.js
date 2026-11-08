@@ -30,8 +30,12 @@ import { STAFF } from '../staffConfig.js'
 // It used to be Monday to Friday, which handed a week over on the morning its
 // lists started.
 //
-// Ben's turn starts Friday 13 November 2026, and every second Friday after it;
-// Mat has the ones between.
+// **Brent, 8 Nov 2026:** Brent from Fri 6 Nov to Thu 12 Nov (COVERS), Mat from
+// Fri 13 Nov to Thu 19 Nov, then Ben — and so on, a turn each. Mat's turn
+// starts Friday 13 November 2026 and every second Friday after it; Ben has the
+// ones between. (It was Ben from the 13th until this.)
+//
+// Over the Christmas shutdown the on-call roster leads instead (HOLIDAY_LEADS).
 //
 // Brent is deliberately not in the rotation. He covers when somebody is away
 // or stretched, and a person who only ever covers should not be in the cycle,
@@ -43,9 +47,9 @@ import { STAFF } from '../staffConfig.js'
 // entry saved against a turn overrides it — see the handler — because the
 // whole point of a standing rota is that it says what happens unless somebody
 // says otherwise.
-export const ROTATION = ['ben@technomed.com.au', 'mat@technomed.com.au']
+export const ROTATION = ['mat@technomed.com.au', 'ben@technomed.com.au']
 
-/** The Friday Ben's turn starts from. Everything else counts out from here. */
+/** The Friday Mat's turn starts from (the first in ROTATION). Everything else counts out from here. */
 export const ROTATION_ANCHOR = '2026-11-13'
 
 /**
@@ -56,6 +60,43 @@ export const ROTATION_ANCHOR = '2026-11-13'
  */
 export const COVERS = {
   '2026-11-06': 'brenton@technomed.com.au'
+}
+
+/**
+ * Christmas shutdown (Brent, 8 Nov 2026): "then it will be the on call roster" —
+ * whoever is on call leads those days. Aimee 23–26 Dec, Ben 27–30 Dec, Mat
+ * 31 Dec – 3 Jan, inclusive. Matches the ON-CALL entries on the bookings
+ * calendar.
+ */
+const AIMEE = 'aimee@technomed.com.au'
+const BEN = 'ben@technomed.com.au'
+const MAT = 'mat@technomed.com.au'
+export const HOLIDAY_LEADS = {
+  '2026-12-23': AIMEE, '2026-12-24': AIMEE, '2026-12-25': AIMEE, '2026-12-26': AIMEE,
+  '2026-12-27': BEN, '2026-12-28': BEN, '2026-12-29': BEN, '2026-12-30': BEN,
+  '2026-12-31': MAT, '2027-01-01': MAT, '2027-01-02': MAT, '2027-01-03': MAT
+}
+
+/** The holiday on-call leader on `date`, as a stored entry would read, or null. */
+export function holidayLeader(date) {
+  const email = HOLIDAY_LEADS[String(date || '').slice(0, 10)]
+  const person = email && STAFF.find(p => p.email === email)
+  return person ? { email: person.email, name: person.name, firstName: person.firstName, setBy: 'holiday on-call roster, 8 Nov 2026' } : null
+}
+
+/**
+ * When Brent set this roster. A turn or a day saved in the portal *before*
+ * then, from 6 Nov 2026 on, is superseded by it and no longer read; anything
+ * saved after still wins, so the team can keep swapping in the portal.
+ */
+export const ROSTER_SET_AT = '2026-11-08T06:30:00.000Z'
+export const ROSTER_FROM = '2026-11-06'
+
+/** Whether a saved entry still stands against the roster set on ROSTER_SET_AT. */
+export function savedStillStands(entry, date) {
+  if (!entry) return false
+  if (String(date || '') < ROSTER_FROM) return true
+  return String(entry.setAt || '') >= ROSTER_SET_AT
 }
 
 /**
