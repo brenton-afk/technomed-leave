@@ -11,6 +11,7 @@ import ProjectBoard from './projects/ProjectBoard.jsx'
 import TaskSheet from './projects/TaskSheet.jsx'
 import { DIVISIONS } from '../projects/model.js'
 import { useIsDesktop } from '../design/viewport.js'
+import Suggested from './projects/Suggested.jsx'
 import {
   PRIORITY_COLOURS as PRIORITY_COLORS, PRIORITY_LABELS,
   formatDate, todayISO, tintOf
@@ -913,6 +914,12 @@ export default function Projects({ user, onBack }) {
         )}
 
         {/* ── Everything, as one workspace ── */}
+        {/* Suggested to-dos from email and the portal's own checks, above the
+            list on a phone and the table on a desktop alike. Draws nothing for
+            anyone not on the trial. See projects/Suggested.jsx. */}
+        {!board && at === 'projects' && !loadingBoard && (
+          <Suggested user={user} today={today} onAdded={loadWorklist} />
+        )}
         {!board && at === 'projects' && !loadingBoard && (
           <Workspace
             projects={projects} items={worklist} user={user} today={today} wide={wide}

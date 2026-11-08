@@ -16,8 +16,6 @@ import FaceIdSetup from './pages/FaceIdSetup.jsx'
 // signed-in phone, and the Treasury is one person's. Fetched only when opened.
 const Treasury = React.lazy(() => import('./pages/treasury/Treasury.jsx'))
 const OPEN_ON_TREASURY = 'tm_open_treasury'
-// Decisions is a trial on one login (Brent, 7 Nov 2026) — fetched only when opened.
-const Decisions = React.lazy(() => import('./pages/Decisions.jsx'))
 import { rememberUser } from './lastUser.js'
 import { KitHub, MeHub, ComingSoonSection } from './pages/Hubs.jsx'
 import PromptBanner from './pages/PromptBanner.jsx'
@@ -71,7 +69,7 @@ const SELF_BACK = new Set([
   'resources', 'guides', 'messages', 'stock', 'usagefiles', 'patient', 'security',
   'notifications', 'payslips',
   // Migrated to design/Shell.jsx's Header, so they draw their own.
-  'kitroom', 'projects', 'teamlead', 'timesheets', 'leave', 'treasury', 'decisions'
+  'kitroom', 'projects', 'teamlead', 'timesheets', 'leave', 'treasury'
 ])
 
 // Matches the server-side session TTL in api/_auth.js.
@@ -178,17 +176,6 @@ export default function App() {
     let live = true
     fetch('/api/treasury?action=access', { headers: { Authorization: `Bearer ${user.token}` } })
       .then(r => { if (live) setTreasuryAllowed(r.ok) })
-      .catch(() => {})
-    return () => { live = false }
-  }, [user?.token])
-  // The Decisions trial: same rule — the server answers 404 to anyone not on it.
-  const [decisionsAllowed, setDecisionsAllowed] = useState(false)
-  useEffect(() => {
-    setDecisionsAllowed(false)
-    if (!user?.token) return
-    let live = true
-    fetch('/api/decisions?action=access', { headers: { Authorization: `Bearer ${user.token}` } })
-      .then(r => { if (live) setDecisionsAllowed(r.ok) })
       .catch(() => {})
     return () => { live = false }
   }, [user?.token])
@@ -495,12 +482,10 @@ export default function App() {
             detail="Face ID is offered on the case plan the first time you sign in on a device. Managing enrolled devices from here is next." />
         case 'treasury':
           return <Treasury user={user} notice={nav.notice} onBack={back} />
-        case 'decisions':
-          return <Decisions user={user} onBack={back} />
         case 'payslips':
           return <ComingSoonSection eyebrow="Pay" title="Payslips" icon={IconPayslip} onBack={back}
             detail="Pay run history appears here once Xero payslip access is enabled." />
-        default: return <MeHub user={user} onNavigate={navigate} onLogout={handleLogout} treasury={treasuryAllowed} decisions={decisionsAllowed} />
+        default: return <MeHub user={user} onNavigate={navigate} onLogout={handleLogout} treasury={treasuryAllowed} />
       }
     }
 

@@ -47,7 +47,7 @@ export function KitHub({ user, onNavigate }) {
   )
 }
 
-export function MeHub({ user, onNavigate, onLogout, treasury = false, decisions = false }) {
+export function MeHub({ user, onNavigate, onLogout, treasury = false }) {
   const hasTimesheets = user?.staff?.hasTimesheets === true
   // An admin can open it without being on it — to check it, or to sit with
   // somebody who is stuck. Filing one is a separate question and still theirs
@@ -67,7 +67,7 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, decisions 
             people and knows where to look, while Messages is for all nine
             several times a day. First card here, so it is no further away
             than a tab was. */}
-        {(user?.isAdmin || treasury || decisions) && (
+        {(user?.isAdmin || treasury) && (
           <>
             <SectionLabel style={{ marginTop: 0 }}>Administration</SectionLabel>
             {user?.isAdmin && (
@@ -77,12 +77,6 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, decisions 
             )}
             {/* Only when the server has said this person may see it — it
                 answers 404 for everyone not on TREASURY_USERS, admins included. */}
-            {/* Trial (Brent, 7 Nov 2026): only for DECISIONS_USERS. */}
-            {decisions && (
-              <NavCard icon={IconTasks} label="Decisions" tone="accent"
-                detail="Trial · emails and jobs waiting on someone"
-                onClick={() => onNavigate({ tab: 'me', sub: 'decisions' })} />
-            )}
             {treasury && (
               <NavCard icon={IconChart} label="Treasury" tone="accent"
                 detail="Private · cash, ATO, Bitcoin and the trust"
@@ -91,7 +85,7 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, decisions 
             <SectionLabel>Pay and time</SectionLabel>
           </>
         )}
-        {!user?.isAdmin && !treasury && !decisions && <SectionLabel style={{ marginTop: 0 }}>Pay and time</SectionLabel>}
+        {!user?.isAdmin && !treasury && <SectionLabel style={{ marginTop: 0 }}>Pay and time</SectionLabel>}
         <NavCard icon={IconClock} label="Timesheets" tone="accent"
           detail={hasTimesheets
             ? 'Fortnightly hours for payroll'

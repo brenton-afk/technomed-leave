@@ -148,6 +148,8 @@ describe('no screen is left out', () => {
     // Cards, tables and fields shared by the Treasury screens, each of which
     // has its own Header.
     'treasury/ui.jsx',
+    // Suggested to-dos, drawn in the body of the Projects page under its Header.
+    'projects/Suggested.jsx',
   ])
 
   it('accounts for every screen that does not use the shared header', () => {

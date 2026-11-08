@@ -318,6 +318,18 @@ under `files/`.
 
 ### Decisions — trial on Brent's login (7 Nov 2026)
 
+**Now suggested to-dos, not a page** (Brent, 8 Nov 2026: "drag to-do lists
+into the portal My To Do … I don't know who is being cc'd"). The Decisions
+page and its Me card are gone; what it finds is drawn by
+`pages/projects/Suggested.jsx` at the top of Kit → Projects (My To Do on a
+phone), still only for `DECISIONS_USERS` (a 404 draws nothing). **Add to To
+Do** makes an ordinary task (`add-task`) for the owner where that is a person
+(Brent, Toni, Erin), else whoever accepts it, due today / +3 days by urgency,
+the email link in its notes; **Open email** opens the thread in Gmail;
+**Later** / **Not needed** as before. The portal never drafts or sends a
+reply — replies are written in Gmail, where To and Cc are visible. The
+description below is the engine behind it.
+
 "I need to see this functioning before we build it and fold it into the
 portal." Me → **Decisions**, shown only to `DECISIONS_USERS` (default
 brenton@ alone; everyone else gets a 404 from `api/decisions.js`, like the
