@@ -1,5 +1,6 @@
 // ─── Usage case normalisation ─────────────────────────────────────────────────
 import { surnameFromField } from '../src/clinicalPlan/parse.js'
+import { findSystems } from '../src/clinicalPlan/systems.js'
 // Turns whatever the vision extraction returned into a normalised case record:
 // distributors resolved by our own rules, peripherals dropped, uncertain rows
 // flagged, and the Dropbox folder name derived. Deliberately does not trust the
@@ -84,6 +85,40 @@ export function procedureLabel(procedure, items = []) {
   const words = text.replace(/[^A-Za-z0-9/ -]/g, ' ').split(/\s+/).filter(w => w && !LEVEL.test(w))
   const acronym = words.find(w => /^[A-Z]{3,6}$/.test(w))
   return acronym || words.slice(0, 2).join(' ')
+}
+
+const BOOST_ITEM = /\bboost\b|ultrafib|ABT-AB/i
+
+/**
+ * The case's name as one distributor should see it (Toni, 9 Nov 2026: the
+ * Shoreline usage went to Device titled "…_Boost-UF_RHH" — Boost was on the
+ * form but not in Device's sheet). The folder name stays the case's identity
+ * in Dropbox; the email subject and attachment names say what is in *this*
+ * distributor's sheet: the operation, Boost UF only if their items are Boost,
+ * and the systems their items name — "Boyd_09112026_Fowler_ACDF+Shoreline_RHH".
+ */
+export function nameForDistributor(folderName, procedure, items = []) {
+  const name = str(folderName)
+  const parts = name.split('_')
+  const at = parts.findIndex(p => /^\d{8}$/.test(p))
+  if (at < 1 || parts.length < at + 3) return name
+  // A "_2" on the end (a second case that day) stays on the end.
+  const suffix = /^\d{1,2}$/.test(parts[parts.length - 1]) ? [parts.pop()] : []
+  if (parts.length < at + 4) return name
+  const surgeon = parts[at + 1]
+  const hospital = parts[parts.length - 1]
+
+  const used = items.map(i => `${i?.productName || ''} ${i?.referenceCode || ''}`).join(' ')
+  const boost = BOOST_ITEM.test(used)
+  const ops = PROCEDURE_KEYWORDS
+    .filter(([label, re]) => label !== 'Boost UF' && re.test(str(procedure)))
+    .map(([label]) => label)
+  const systems = findSystems(items.map(i => i?.productName || '').join(' | '))
+    .map(s => s.name)
+    .filter(s => !(boost && /boost/i.test(s)))
+  const label = [...new Set([...ops, ...(boost ? ['Boost UF'] : []), ...systems])].join('+')
+  if (!label) return name
+  return [...parts.slice(0, at + 2), safeSegment(label), hospital, ...suffix].join('_')
 }
 
 // {Patient Surname}_{DDMMYYYY}_{Surgeon Surname}_{Procedure}_{Hospital}

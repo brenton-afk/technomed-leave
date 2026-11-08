@@ -28,3 +28,30 @@ describe('uploading an attachment (Toni, 8 Nov 2026: "not uploading attachments"
     await expect(uploadFile(file(10 * 1024 * 1024), 't', { direct, fetcher })).rejects.toThrow(/Content type not allowed/)
   })
 })
+
+describe('an upload that hangs (Toni, 9 Nov 2026: "still stalling")', () => {
+  it('gives up on the direct route after its time and sends through the portal', async () => {
+    const direct = vi.fn(() => new Promise(() => {}))   // never answers
+    const fetcher = vi.fn(async () => ({ ok: true, json: async () => ({ url: 'https://x.public.blob.vercel-storage.com/chat/y.jpg' }) }))
+    const steps = []
+    const url = await uploadFile(file(), 't', { direct, fetcher, timeoutMs: 20, onProgress: p => steps.push(p) })
+    expect(url).toMatch(/y\.jpg/)
+    expect(direct.mock.calls[0][2].abortSignal?.aborted).toBe(true)
+    expect(steps).toContain(null)
+  })
+  it('says why when both routes fail, rather than spinning', async () => {
+    const direct = vi.fn(() => new Promise(() => {}))
+    const fetcher = vi.fn(() => new Promise(() => {}))
+    vi.useFakeTimers()
+    const p = uploadFile(file(), 't', { direct, fetcher, timeoutMs: 10 })
+    const done = expect(p).rejects.toThrow(/took too long.*too slow/)
+    await vi.advanceTimersByTimeAsync(60000)
+    await done
+    vi.useRealTimers()
+  })
+  it('allows more time for a bigger file', async () => {
+    const { directTimeout } = await import('../pages/Chat.jsx')
+    expect(directTimeout(500 * 1024)).toBe(40000)
+    expect(directTimeout(50 * 1024 * 1024)).toBe(180000)
+  })
+})

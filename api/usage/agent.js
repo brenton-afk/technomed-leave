@@ -12,7 +12,7 @@ import {
   RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply,
   resupplyFileName, itemsFor
 } from '../_resupply.js'
-import { normaliseCase, recomputeCase, normaliseItem } from '../_usageCase.js'
+import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor } from '../_usageCase.js'
 import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
@@ -508,18 +508,20 @@ async function handleEmail(req, res, session) {
     }
     const items = groups.get(key)
     const to = test ? [session.email] : distributor.to
+    // Named for what is in this distributor's sheet, not the whole form.
+    const theirName = nameForDistributor(record.folderName, record.procedure, items)
     try {
       const xlsx = await buildUsageWorkbook(record, items)
       const sent = await sendUsageEmail({
         to,
         cc,
-        subject: record.folderName,
+        subject: theirName,
         caseId: record.id,
         distributorLabel: distributor.name,
         xlsx,
-        xlsxFilename: `${record.folderName}_Usage_Sheet.xlsx`,
+        xlsxFilename: `${theirName}_Usage_Sheet.xlsx`,
         scanPdf,
-        scanPdfFilename: `${record.folderName}_Scan.pdf`,
+        scanPdfFilename: `${theirName}_Scan.pdf`,
         test: test ? { wouldSendTo: distributor.to } : undefined,
         // Sent as the rep, and replies come back to them.
         sender: { name: session.name, email: session.email }
@@ -642,11 +644,12 @@ async function handleAmend(req, res, session) {
     const to = test ? [session.email] : distributor.to
     try {
       const xlsx = theirs.length ? await buildUsageWorkbook(amended, theirs) : null
+      const theirName = theirs.length ? nameForDistributor(amended.folderName, amended.procedure, theirs) : amended.folderName
       await sendUsageEmail({
         to, cc: test ? [] : ccFor(session.email),
-        subject: amended.folderName, caseId: record.id,
+        subject: theirName, caseId: record.id,
         distributorLabel: distributor.name,
-        xlsx, xlsxFilename: `${amended.folderName}_Usage_Sheet_corrected.xlsx`,
+        xlsx, xlsxFilename: `${theirName}_Usage_Sheet_corrected.xlsx`,
         test: test ? { wouldSendTo: distributor.to } : undefined,
         correction: { sentOn, lines: change.lines },
         sender: { name: session.name, email: session.email }

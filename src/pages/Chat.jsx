@@ -297,7 +297,9 @@ async function prepare(file) {
   // not at all.
   if (type.startsWith('image/') && !['image/gif', 'image/svg+xml'].includes(type)) {
     try {
-      const { blob, width, height } = await shrink(file)
+      // Shrinking a big or unusual photo can hang on some phones; after 10s the
+      // original goes as it is instead.
+      const { blob, width, height } = await withTimeout(() => shrink(file), 10000, 'shrink took too long')
       return { blob, type: 'image/jpeg', name: (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', size: blob.size, width, height, preview: URL.createObjectURL(blob) }
     } catch { /* fall through and send the original */ }
   }
@@ -321,26 +323,54 @@ function asBase64(blob) {
  * hospital network, an old phone — through the portal's own server. The reason
  * is kept, so a failure says what happened instead of "check the signal".
  */
-export async function uploadFile(f, token, { direct = upload, fetcher = fetch } = {}) {
+export async function uploadFile(f, token, { direct = upload, fetcher = fetch, onProgress, timeoutMs } = {}) {
+  // Never wait for ever (Toni, 9 Nov 2026: "still stalling when trying to
+  // upload attachments"). The direct upload had no limit, so on a poor
+  // connection it could sit there indefinitely and the second route was never
+  // tried. Now it is given a time that grows with the file, then abandoned.
+  const limit = timeoutMs ?? directTimeout(f.size)
   let first = ''
   try {
-    const result = await direct(`chat/${Date.now()}-${f.name}`, f.blob, {
+    const result = await withTimeout(signal => direct(`chat/${Date.now()}-${f.name}`, f.blob, {
       access: 'public', contentType: f.type, handleUploadUrl: '/api/chat?action=blob-upload',
-      clientPayload: JSON.stringify({ token: token || null })
-    })
+      clientPayload: JSON.stringify({ token: token || null }),
+      abortSignal: signal,
+      onUploadProgress: e => onProgress?.(Math.round(e?.percentage ?? 0))
+    }), limit, 'it took too long')
     return result.url
   } catch (err) {
     first = err?.message || 'upload refused'
   }
   if (f.size > DIRECT_MAX) throw new Error(`${f.name} did not upload (${first}). Files over 3 MB need a better connection — try again on wifi.`)
-  const res = await fetcher('/api/chat?action=upload', {
+  onProgress?.(null)
+  const body = JSON.stringify({ name: f.name, type: f.type, data: await asBase64(f.blob) })
+  const res = await withTimeout(signal => fetcher('/api/chat?action=upload', {
     method: 'POST',
+    signal,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ name: f.name, type: f.type, data: await asBase64(f.blob) })
-  })
+    body
+  }), FALLBACK_TIMEOUT_MS, 'the connection is too slow')
+    .catch(err => { throw new Error(`${f.name} did not upload (${first}; then ${err.message}). Try again on a better connection.`) })
   const data = await res.json().catch(() => ({}))
   if (!res.ok || !data.url) throw new Error(`${f.name} did not upload (${data.error || first}). Try again.`)
   return data.url
+}
+
+const FALLBACK_TIMEOUT_MS = 45000
+
+/** How long the direct upload gets: 25s, plus 15s a megabyte, at most 3 minutes. */
+export function directTimeout(bytes) {
+  return Math.min(180000, 25000 + Math.ceil((bytes || 0) / (1024 * 1024)) * 15000)
+}
+
+/** Runs `start(signal)`, aborting it and rejecting with `why` after `ms`. */
+function withTimeout(start, ms, why) {
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null
+  let timer
+  return Promise.race([
+    Promise.resolve().then(() => start(ctrl?.signal)),
+    new Promise((_, reject) => { timer = setTimeout(() => { ctrl?.abort(); reject(new Error(why)) }, ms) })
+  ]).finally(() => clearTimeout(timer))
 }
 
 function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply, incoming }) {
@@ -348,6 +378,7 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply, inc
   const [override, setOverride] = useState(false)
   const [files, setFiles] = useState([])
   const [busy, setBusy] = useState('')
+  const [progress, setProgress] = useState('')
   const picker = useRef(null)
   const lastTyping = useRef(0)
   const warning = chatWarning(draft)
@@ -394,14 +425,20 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply, inc
     if (files.length) {
       setBusy('sending')
       try {
-        for (const f of files) {
-          const url = await uploadFile(f, user?.token)
+        for (const [n, f] of files.entries()) {
+          const label = files.length > 1 ? `Sending ${n + 1} of ${files.length}` : 'Sending'
+          setProgress(`${label}…`)
+          const url = await uploadFile(f, user?.token, {
+            onProgress: pct => setProgress(pct == null ? `${label} — trying another way…` : `${label} · ${pct}%`)
+          })
           uploaded.push({ url, type: f.type, name: f.name, size: f.size, width: f.width, height: f.height })
         }
       } catch (err) {
+        setProgress('')
         setBusy(err.message || 'That did not send — try again')
         return
       }
+      setProgress('')
       setBusy('')
     }
 
@@ -443,6 +480,9 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply, inc
         </div>
       )}
 
+      {progress && (
+        <div data-upload-progress style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>{progress}</div>
+      )}
       {busy && busy !== 'reading' && busy !== 'sending' && (
         <div style={{ ...text('caption'), color: colour.danger, marginBottom: space.xs }}>{busy}</div>
       )}
