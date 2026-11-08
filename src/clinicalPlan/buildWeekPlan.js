@@ -44,7 +44,10 @@ const KIT_ON_THE_MOVE = new RegExp(
   + `|\\b${KIT_NOUN}\\b\\s*(?:to|from|at|over\\s+to)\\s+${SITE}\\b`, 'i')
 
 const PRIORITY_FLAG_RULES = [
-  { kind: 'recurringStaffing', boxed: true, test: /late start|early finish|reduced hours|boy'?s week/i },
+  // Who is not there when the day starts goes at the top, where the morning
+  // reads it (Brent, 8 Nov 2026: Ben's 9am appointment, "not available for an
+  // early start", sat at the foot of the day).
+  { kind: 'recurringStaffing', boxed: true, test: /late start|early start|early finish|reduced hours|boy'?s week|\bappointment\b|not available|unavailable/i },
   // "team leader" used to be in here, so a calendar entry naming one produced
   // a claim that competed with the portal's. That is how Mat could be shown as
   // Spine Team Leader during a week he was on TOIL: a stale entry nobody had

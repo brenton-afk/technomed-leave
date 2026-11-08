@@ -1122,8 +1122,12 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
         const groups = day.casesByHospital || []
         const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
         const away = everythingElse.filter(i => i.kind === 'leave')
-        const alerts = (day.flags || []).filter(f =>
-          ['clinicalAlert', 'kitTask'].includes(f.kind))
+        // Every flag the phone shows, in the same order and the same two tones
+        // (8 Nov 2026: the desktop showed only the red ones, so Ben's 9am
+        // appointment was at the top of a phone's Wednesday and missing from
+        // the desktop's — the two must never differ).
+        const alerts = day.flags || []
+        const danger = f => ['clinicalAlert', 'kitTask'].includes(f.kind)
 
   return (
           // Named so a test can count seven of them. The grid is a grid by its
@@ -1158,10 +1162,12 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
             <div style={{ padding: 7 }}>
               {/* The things that change the day, first and briefly. */}
               {alerts.map((flag, i) => (
-                <div key={i} style={{
+                <div key={i} data-day-flag={flag.kind} style={{
                   ...text('micro'), textTransform: 'none', fontWeight: 600,
-                  lineHeight: 1.35, color: colour.danger, background: colour.dangerSoft,
-                  border: `1px solid ${colour.dangerLine}`, borderRadius: radius.control,
+                  lineHeight: 1.35,
+                  color: danger(flag) ? colour.danger : colour.warning,
+                  background: danger(flag) ? colour.dangerSoft : colour.warningSoft,
+                  border: `1px solid ${danger(flag) ? colour.dangerLine : colour.warningLine}`, borderRadius: radius.control,
                   padding: '5px 7px', marginBottom: 4
                 }}>{flag.text}</div>
               ))}
@@ -1255,6 +1261,23 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
 
   return (
     <>
+      {/* First on the day, as on the desktop column (8 Nov 2026): who is not
+          there at the start, alerts, kit on the move. */}
+      {/* Kit on the move is drawn like an alert on purpose. It is a thing
+          somebody has to physically do, on that day, and it used to sit at the
+          foot of the page under "Also on" — below the cases, which is where a
+          task goes to be forgotten. */}
+      {(day.flags || []).length > 0 && (
+        <div style={{ marginBottom: space.sm }}>
+          {day.flags.map((flag, i) => (
+            <Banner key={i}
+              tone={['clinicalAlert', 'kitTask'].includes(flag.kind) ? 'danger' : 'warning'}>
+              {flag.text}
+            </Banner>
+          ))}
+        </div>
+      )}
+
       {away.length > 0 && (
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: space.sm
@@ -1287,21 +1310,6 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
       {undoneDue(due).map(task => (
         <DueRow key={task.id} task={task} today={today} onDone={onDueDone} />
       ))}
-
-      {/* Kit on the move is drawn like an alert on purpose. It is a thing
-          somebody has to physically do, on that day, and it used to sit at the
-          foot of the page under "Also on" — below the cases, which is where a
-          task goes to be forgotten. */}
-      {(day.flags || []).length > 0 && (
-        <div style={{ marginBottom: space.sm }}>
-          {day.flags.map((flag, i) => (
-            <Banner key={i}
-              tone={['clinicalAlert', 'kitTask'].includes(flag.kind) ? 'danger' : 'warning'}>
-              {flag.text}
-            </Banner>
-          ))}
-        </div>
-      )}
 
       {groups.map(group => {
         const cases = group.cases
