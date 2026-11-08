@@ -1,7 +1,7 @@
 import { requireSession } from './_auth.js'
 import { redis } from './_redis.js'
 import {
-  mayUseDecisions, decisionMailboxes, readInboxReviews, refreshInboxes, STALE_MINUTES,
+  mayUseDecisions, decisionMailboxes, readInboxReviews, refreshInboxes, STALE_MINUTES, mergeDuplicateEmails, openMerged,
   usageItems, resupplyItems, bookingInboxItems, readStates, markItem, openItems, ranked, OWNERS
 } from './_decisions.js'
 
@@ -27,7 +27,7 @@ async function build(session) {
     ...sources.map(([, , fn]) => fn().then(items => ({ items }), err => ({ items: [], error: err.message })))
   ])
   const all = [...reviews.flatMap(r => r.items || []), ...results.flatMap(r => r.items)]
-  const items = ranked(openItems(all, states))
+  const items = ranked(openMerged(mergeDuplicateEmails(all, mailboxes), states))
   const oldest = reviews.reduce((min, r) => Math.min(min, r.at ? Date.parse(r.at) : 0), Infinity)
   return {
     items,
@@ -64,9 +64,13 @@ export default async function handler(req, res) {
 
     if (action === 'mark') {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-      const { id, state, reason, item } = req.body || {}
+      const { id, ids, state, reason, item } = req.body || {}
       if (!id) return res.status(400).json({ error: 'Nothing chosen' })
+      // Every copy of a merged email, so the one in the other inbox does not
+      // come back on its own. Logged once.
+      const others = (Array.isArray(ids) ? ids : []).map(String).filter(x => x && x !== String(id)).slice(0, 10)
       const entry = await markItem(session.email, session.name, { id: String(id), state, reason, item: item || {} })
+      for (const other of others) await markItem(session.email, session.name, { id: other, state, reason: '', item: {} })
       return res.status(200).json({ ok: true, entry })
     }
 

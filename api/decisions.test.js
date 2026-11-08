@@ -170,3 +170,19 @@ describe('what people do with an item', () => {
     expect(r.map(i => i.id)).toEqual(['c', 'b', 'a'])
   })
 })
+
+describe('one email in two inboxes is one item (8 Nov 2026)', () => {
+  const kt = (mailbox, id) => ({ id, source: 'email', mailbox, owner: 'toni', from: 'kt@ktmedical.com.au', subject: id === 'a' ? 'October sales report' : 'RE: October sales report', title: 'KT Medical report' })
+
+  it('shows once, from the inbox whose owner it is for, naming the other', () => {
+    const merged = D.mergeDuplicateEmails([kt('brenton@technomed.com.au', 'a'), kt('accounts@technomed.com.au', 'b'), { id: 'usage:1', source: 'usage' }], D.decisionMailboxes({}))
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toMatchObject({ id: 'b', mailbox: 'accounts@technomed.com.au', ids: ['a', 'b'], alsoIn: ['brenton@technomed.com.au'] })
+  })
+
+  it('stays gone once dealt with, whichever copy was ticked', () => {
+    const [item] = D.mergeDuplicateEmails([kt('brenton@technomed.com.au', 'a'), kt('accounts@technomed.com.au', 'b')], D.decisionMailboxes({}))
+    expect(D.openMerged([item], { a: { state: 'done' }, b: { state: 'done' } })).toEqual([])
+    expect(D.openMerged([item], {})).toHaveLength(1)
+  })
+})

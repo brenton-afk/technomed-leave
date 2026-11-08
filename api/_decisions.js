@@ -417,3 +417,39 @@ export function ranked(items) {
   return [...items].sort((a, b) => (URGENCY[a.urgency] ?? 1) - (URGENCY[b.urgency] ?? 1)
     || (b.waitingDays || 0) - (a.waitingDays || 0))
 }
+
+// ─── One email, one item (Brent, 8 Nov 2026) ─────────────────────────────────
+// KT Medical's October report reached brenton@ and accounts@, and showed twice
+// — two people could have invoiced it twice. The same sender and subject in
+// several inboxes is one item: kept from the inbox whose usual owner matches
+// who it is for (accounts@ for Toni), the others listed beside it. Its `ids`
+// carry every copy, so dealing with it deals with all of them.
+const subjectKey = s => String(s || '').toLowerCase().replace(/^((re|fwd?|fw)\s*:\s*)+/g, '').replace(/\s+/g, ' ').trim()
+
+export function mergeDuplicateEmails(items, mailboxes = decisionMailboxes()) {
+  const ownerOf = Object.fromEntries(mailboxes.map(m => [m.address, m.owner]))
+  const groups = new Map()
+  const out = []
+  for (const item of items) {
+    if (item.source !== 'email' || !item.from) { out.push(item); continue }
+    const key = `${item.from}|${subjectKey(item.subject)}`
+    if (!groups.has(key)) { groups.set(key, []); out.push(key) }
+    groups.get(key).push(item)
+  }
+  return out.map(entry => {
+    if (typeof entry !== 'string') return entry
+    const copies = groups.get(entry)
+    if (copies.length === 1) return { ...copies[0], ids: [copies[0].id] }
+    const keep = copies.find(c => ownerOf[c.mailbox] === c.owner) || copies[0]
+    return {
+      ...keep,
+      ids: copies.map(c => c.id),
+      alsoIn: copies.filter(c => c !== keep).map(c => c.mailbox)
+    }
+  })
+}
+
+/** Open unless every copy of it has been dealt with. */
+export function openMerged(items, states, now = Date.now()) {
+  return items.filter(item => (item.ids || [item.id]).some(id => openItems([{ id }], states, now).length))
+}

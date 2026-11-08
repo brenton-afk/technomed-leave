@@ -76,6 +76,7 @@ function Item({ item, owners, open, onToggle, onMark }) {
           </span>
           <span style={{ ...text('micro'), color: colour.inkFaint, padding: '2px 0' }}>
             {SOURCE[item.source] || item.source}{item.mailbox ? ` · ${item.mailbox.split('@')[0]}@` : ''}
+            {item.alsoIn?.length ? ` (also in ${item.alsoIn.map(m => m.split('@')[0] + '@').join(', ')})` : ''}
             {item.waitingDays > 0 ? ` · waiting ${item.waitingDays} d` : ''}
           </span>
         </div>
@@ -161,7 +162,7 @@ export default function Decisions({ user, onBack }) {
     setOpenId(null)
     try {
       await call(user, 'mark', {
-        id: item.id, state, reason,
+        id: item.id, ids: item.ids, state, reason,
         item: { source: item.source, owner: item.owner, from: item.from, subject: item.subject }
       })
     } catch (e) { setError(e.message) }
