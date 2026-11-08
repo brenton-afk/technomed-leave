@@ -48,13 +48,27 @@ export function prefetchScreens() {
  * Without this a failed chunk is an exception in render, and React's answer to
  * an exception in render is a white screen — the exact symptom being fixed.
  */
+/** A screen's file could not be fetched (signal, or a deploy replaced it) — as opposed to a crash. */
+export function isChunkFailure(error) {
+  const m = String(error?.message || error || '')
+  return error?.name === 'ChunkLoadError'
+    || /dynamically imported module|Importing a module script failed|error loading dynamically|Loading chunk|Failed to fetch/i.test(m)
+}
+
 export class ScreenBoundary extends React.Component {
   constructor(props) {
     super(props)
     this.state = { failed: false }
   }
 
-  static getDerivedStateFromError() { return { failed: true } }
+  static getDerivedStateFromError(error) { return { failed: true, chunk: isChunkFailure(error) } }
+
+  componentDidCatch(error) {
+    // A screen that crashed is a bug, not the signal (Brent, 9 Nov 2026: the
+    // Cases tab said "the signal may be weak" over a render error). Logged so
+    // it can be found.
+    if (!isChunkFailure(error)) console.error('Screen failed:', error?.message || error)
+  }
 
   componentDidUpdate(prev) {
     // A different screen gets a fresh chance.
@@ -63,13 +77,16 @@ export class ScreenBoundary extends React.Component {
 
   render() {
     if (!this.state.failed) return this.props.children
+    const chunk = this.state.chunk
     return (
       <div role="alert" style={{ padding: space.lg, textAlign: 'center' }}>
         <div style={{ ...text('bodyStrong'), color: colour.ink }}>
-          This screen needs a connection to open the first time.
+          {chunk ? 'This screen needs a connection to open the first time.' : 'Something went wrong on this screen.'}
         </div>
         <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: space.xs }}>
-          The signal here may be weak. The Cases tab still works.
+          {chunk
+            ? 'The signal here may be weak. The Cases tab still works.'
+            : 'It is a fault in the portal, not your signal. Try again, and if it keeps happening tell Brent in Portal feedback.'}
         </div>
         <button onClick={() => window.location.reload()} style={{
           marginTop: space.md, padding: `${space.sm}px ${space.lg}px`, cursor: 'pointer',

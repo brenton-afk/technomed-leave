@@ -1718,3 +1718,15 @@ describe('the band, as revised (Brent, 6 Nov 2026)', () => {
     expect(screen.getByAltText('TechnoMed').getAttribute('src')).toBe('/logo-mark.png')
   })
 })
+
+describe('ETBS without a list place (Brent, 9 Nov 2026)', () => {
+  it('draws the card with the ETBS tag instead of crashing the Cases tab', async () => {
+    events = [ev('e1', 'Testcase MARINER MIS - Dubey',
+      'Surgeon: Dubey\nPatient: Testcase\nHospital: RHH\nProcedure: T8-T11 MIS Pedicle Screw Fixation\n'
+      + 'Kit: Mariner MIS (Consignment)\n\nETBS: Yes', { colorId: '8' })]
+    show()
+    await waitFor(() => expect(screen.getByText('Testcase')).toBeInTheDocument())
+    expect(document.querySelector('[data-etbs]')).not.toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})

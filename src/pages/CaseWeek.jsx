@@ -660,7 +660,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
               padding: '2px 9px', borderRadius: radius.pill, marginLeft: place ? 6 : 0,
               border: `1.5px solid ${ink.ink}`
             }}>ETBS</span>}
-            {place.ahead && (
+            {place?.ahead && (
               <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
                 {place.ahead}
               </span>
