@@ -56,3 +56,11 @@ describe('looking like WhatsApp (7 Nov 2026)', () => {
     expect(lastLine(null)).toBeNull()
   })
 })
+
+describe('attachments always get through (8 Nov 2026)', () => {
+  it('a file name is made safe for storage', async () => {
+    const { directUploadName } = await import('./chat.js')
+    expect(directUploadName('Toni\'s screen/shot (1).png')).toBe('Toni_s screen_shot _1_.png')
+    expect(directUploadName('')).toBe('file')
+  })
+})

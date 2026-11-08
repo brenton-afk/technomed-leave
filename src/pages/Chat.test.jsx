@@ -218,3 +218,24 @@ describe('the WhatsApp and Slack parts', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
   })
 })
+
+describe('attachments, as WhatsApp takes them (8 Nov 2026)', () => {
+  it('a file pasted into the message box is attached, ready to send', async () => {
+    serving([])
+    channel()
+    await waitFor(() => expect(screen.getByText(/Nothing here yet/)).toBeInTheDocument())
+    const pdf = new File(['%PDF-1.4'], 'Tray list.pdf', { type: 'application/pdf' })
+    fireEvent.paste(screen.getByLabelText('Message'), { clipboardData: { files: [pdf] } })
+    await waitFor(() => expect(screen.getByText(/Tray list\.pdf/)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled()
+  })
+
+  it('a file dropped on the conversation is attached', async () => {
+    serving([])
+    const { container } = channel()
+    await waitFor(() => expect(screen.getByText(/Nothing here yet/)).toBeInTheDocument())
+    const doc = new File(['x'], 'Booking.msg', { type: '' })
+    fireEvent.drop(container.querySelector('[data-drop-zone]'), { dataTransfer: { files: [doc], types: ['Files'] } })
+    await waitFor(() => expect(screen.getByText(/Booking\.msg/)).toBeInTheDocument())
+  })
+})

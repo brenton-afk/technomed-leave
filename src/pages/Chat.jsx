@@ -5,6 +5,7 @@ import { chatWarning } from '../chat/identifiers.js'
 import { usePush, installHint, installed } from '../push.js'
 import { upload } from '@vercel/blob/client'
 import { shrink } from '../chat/photo.js'
+import { fileTypeOf } from '../chat/fileTypes.js'
 
 // ─── The team's messages (Brent, 6 Nov 2026) ─────────────────────────────────
 // "It needs to run faultlessly and seamlessly like WhatsApp … share photos,
@@ -284,21 +285,65 @@ const actionStyle = {
   color: colour.navy, padding: '4px 8px'
 }
 
-const ACCEPT = 'image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt'
+// Anything at all, as in WhatsApp — a type nobody can name goes as a file card.
+const ACCEPT = undefined
 
 /** A picked file, ready to upload: photos shrunk, everything else as it is. */
 async function prepare(file) {
-  const type = file.type || 'application/octet-stream'
-  // A GIF stays a GIF — shrinking it would freeze it on its first frame.
-  if (type.startsWith('image/') && type !== 'image/gif') {
-    const { blob, width, height } = await shrink(file)
-    return { blob, type: 'image/jpeg', name: (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', size: blob.size, width, height, preview: URL.createObjectURL(blob) }
+  const type = fileTypeOf(file)
+  if (file.size > 100 * 1024 * 1024) throw new Error(`${file.name || 'That file'} is over 100 MB`)
+  // A GIF stays a GIF — shrinking it would freeze it on its first frame. A
+  // picture this browser cannot draw (a HEIC on a PC) goes as it is rather than
+  // not at all.
+  if (type.startsWith('image/') && !['image/gif', 'image/svg+xml'].includes(type)) {
+    try {
+      const { blob, width, height } = await shrink(file)
+      return { blob, type: 'image/jpeg', name: (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg', size: blob.size, width, height, preview: URL.createObjectURL(blob) }
+    } catch { /* fall through and send the original */ }
   }
-  if (file.size > 100 * 1024 * 1024) throw new Error(`${file.name} is over 100 MB`)
   return { blob: file, type, name: file.name || 'file', size: file.size, preview: type.startsWith('image/') ? URL.createObjectURL(file) : null }
 }
 
-function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply }) {
+const DIRECT_MAX = 3 * 1024 * 1024
+
+function asBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '')
+    reader.onerror = () => reject(new Error('That file could not be read'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * One file into storage, two ways (8 Nov 2026: "portal feedback not uploading
+ * attachments"). Straight to Blob storage first; if that is stopped — a
+ * hospital network, an old phone — through the portal's own server. The reason
+ * is kept, so a failure says what happened instead of "check the signal".
+ */
+export async function uploadFile(f, token, { direct = upload, fetcher = fetch } = {}) {
+  let first = ''
+  try {
+    const result = await direct(`chat/${Date.now()}-${f.name}`, f.blob, {
+      access: 'public', contentType: f.type, handleUploadUrl: '/api/chat?action=blob-upload',
+      clientPayload: JSON.stringify({ token: token || null })
+    })
+    return result.url
+  } catch (err) {
+    first = err?.message || 'upload refused'
+  }
+  if (f.size > DIRECT_MAX) throw new Error(`${f.name} did not upload (${first}). Files over 3 MB need a better connection — try again on wifi.`)
+  const res = await fetcher('/api/chat?action=upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ name: f.name, type: f.type, data: await asBase64(f.blob) })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data.url) throw new Error(`${f.name} did not upload (${data.error || first}). Try again.`)
+  return data.url
+}
+
+function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply, incoming }) {
   const [draft, setDraft] = useState('')
   const [override, setOverride] = useState(false)
   const [files, setFiles] = useState([])
@@ -306,6 +351,17 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply }) {
   const picker = useRef(null)
   const lastTyping = useRef(0)
   const warning = chatWarning(draft)
+
+  // Files dropped on the conversation arrive here.
+  useEffect(() => { if (incoming?.files?.length) choose(incoming.files) }, [incoming]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A screenshot pasted into the message box, as WhatsApp Desktop takes it.
+  function paste(e) {
+    const files = [...(e.clipboardData?.files || [])]
+    if (!files.length) return
+    e.preventDefault()
+    choose(files)
+  }
 
   async function choose(list) {
     const picked = [...(list || [])].slice(0, 10)
@@ -339,18 +395,11 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply }) {
       setBusy('sending')
       try {
         for (const f of files) {
-          const result = await upload(`chat/${Date.now()}-${f.name}`, f.blob, {
-            access: 'public',
-            contentType: f.type,
-            handleUploadUrl: '/api/chat?action=blob-upload',
-            // The SDK builds its own request, so the session cannot ride on a
-            // header. Checked server-side before a write token is issued.
-            clientPayload: JSON.stringify({ token: user?.token || null })
-          })
-          uploaded.push({ url: result.url, type: f.type, name: f.name, size: f.size, width: f.width, height: f.height })
+          const url = await uploadFile(f, user?.token)
+          uploaded.push({ url, type: f.type, name: f.name, size: f.size, width: f.width, height: f.height })
         }
-      } catch {
-        setBusy('That did not send — check the signal and try again')
+      } catch (err) {
+        setBusy(err.message || 'That did not send — try again')
         return
       }
       setBusy('')
@@ -439,6 +488,7 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply }) {
             const now = Date.now()
             if (e.target.value && now - lastTyping.current > TYPING_EVERY_MS) { lastTyping.current = now; onTyping() }
           }}
+          onPaste={paste}
           onKeyDown={e => {
             // Enter sends, Shift+Enter makes a line. On a phone the on-screen
             // return key inserts a line, which is what anyone expects there.
@@ -591,6 +641,8 @@ export function ChannelView({ channel, title, subtitle, user, onBack, focus, ico
   const [total, setTotal] = useState(0)
   const [openId, setOpenId] = useState(null)
   const [replyTo, setReplyTo] = useState(null)
+  const [incoming, setIncoming] = useState(null)
+  const [dragging, setDragging] = useState(false)
   const foot = useRef(null)
   const lastCount = useRef(0)
   const today = new Date().toISOString().slice(0, 10)
@@ -695,6 +747,10 @@ export function ChannelView({ channel, title, subtitle, user, onBack, focus, ico
 
   return (
     <Page style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div data-drop-zone style={{ display: 'contents' }}
+        onDragOver={e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); setDragging(true) } }}
+        onDragLeave={e => { if (e.currentTarget === e.target) setDragging(false) }}
+        onDrop={e => { const files = [...(e.dataTransfer?.files || [])]; setDragging(false); if (files.length) { e.preventDefault(); setIncoming({ files }) } }}>
       <Header eyebrow="Team" title={title}
         subtitle={subtitle}
         onBack={onBack} compact
@@ -766,9 +822,15 @@ export function ChannelView({ channel, title, subtitle, user, onBack, focus, ico
         <div ref={foot} />
       </div>
 
-      <Composer onSend={send} sending={sending} user={user}
+      {dragging && (
+        <div style={{ ...text('bodyStrong'), textAlign: 'center', padding: space.sm, background: colour.accentSoft, color: colour.accentDeep, borderTop: `1px dashed ${colour.accent}` }}>
+          Drop to attach
+        </div>
+      )}
+      <Composer onSend={send} sending={sending} user={user} incoming={incoming}
         onTyping={() => post('typing', { channel }).catch(() => {})}
         replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
+    </div>
     </Page>
   )
 }

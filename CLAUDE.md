@@ -287,7 +287,14 @@ app's blob URLs; defaults on `CHANNELS`), the list shows the last message
 bubbles (yours right in `accentSoft`, unnamed, ✓✓ teal once seen; others
 left with a per-person name colour, `nameInk`), a dotted wallpaper, date
 chips, and a pill message bar with round attach and send (aria-labels
-"Send" / "Check"). **Names and UR numbers are allowed** (Brent:
+"Send" / "Check"). **Attachments always get through** (Brent, 8 Nov 2026: "the
+portal MUST be able to accept attachments"): any file type (`FILE_TYPES` /
+`fileTypeOf` in `src/chat/fileTypes.js`, shared with the server; unknown →
+`application/octet-stream`, shown as a file card), a picture the browser
+cannot draw is sent as it is, a screenshot can be **pasted** into the message
+box and files **dropped** on the conversation, and `uploadFile` tries Blob
+direct first and falls back to `action=upload` (through the function, ≤3 MB,
+`put` server-side) — a failure says why. **Names and UR numbers are allowed** (Brent:
 health data needed to run the business, stored safely); only a date of birth
 is queried (`chatWarning`). **Archived nightly** to Dropbox
 (`api/_chatArchive.js`, `job=nightly` cron at 15:27 UTC ≈ 2:30am Hobart):
@@ -455,6 +462,11 @@ the day + Booking adds to); **+ Booking / + Task / Inbox** are one row
 in its own clock/running order — two theatres running at once (JPW and Ibbett
 at Calvary) are two lists, not one interleaved by time.
 
+**A day's chip says "On leave" only on the days that person is away** (Toni,
+8 Nov 2026: Ben read as on leave Tue 3, Wed 4 and Fri 13 because his leave ran
+Thu 5 – Mon 9; `isAway` in `TeamLeaderStrip` now checks `away[].days`). Leave
+comes from the Staff Leave calendar (`STAFF_LEAVE_CALENDAR_ID`), read with the
+bookings calendar.
 **The team leader is per day, under each weekday's date** (`TeamLeaderStrip`
 with `day`). The chip's sheet changes **this day only** unless "Their whole
 turn" is chosen. Day overrides are `teamLeader:day:{date}` (`getDayLeaders` /

@@ -1,4 +1,5 @@
 import { handleUpload } from '@vercel/blob/client'
+import { put } from '@vercel/blob'
 import { requireSession, getSession } from './_auth.js'
 import {
   postMessage, readChannel, channelSizes, knownChannels, readMarkers, markRead,
@@ -8,6 +9,7 @@ import {
 import { searchChat } from './_chatSearch.js'
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import { notify, preview } from './_push.js'
+import { FILE_TYPES } from '../src/chat/fileTypes.js'
 
 // ─── The internal channels ───────────────────────────────────────────────────
 // What the WhatsApp group does, inside the app that already holds the bookings
@@ -34,16 +36,8 @@ export const REACTIONS = ['👍', '❤️', '😂', '😮', '🙏', '✅']
 
 const BLOB_URL = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i
 
-/** What can be sent: pictures (GIFs included), video, PDFs, Office files, text. */
-export const FILE_TYPES = [
-  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/gif',
-  'video/mp4', 'video/quicktime', 'video/webm',
-  'application/pdf',
-  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain', 'text/csv'
-]
+/** What can be sent — one list, shared with the phone (src/chat/fileTypes.js). */
+export { FILE_TYPES }
 
 /** Files on a message: only ones this app's blob store issued, described plainly. */
 export function readFiles(given) {
@@ -109,6 +103,7 @@ export default async function handler(req, res) {
     if (req.query.action === 'delete') return remove(req, res, session)
     if (req.query.action === 'typing') return typing(req, res, session)
     if (req.query.action === 'icon') return setIcon(req, res)
+    if (req.query.action === 'upload') return directUpload(req, res, session)
     if (req.method === 'POST') return send(req, res, session)
     return read(req, res, session)
   } catch (err) {
@@ -168,6 +163,33 @@ async function photoUpload(req, res) {
   } catch (err) {
     return res.status(400).json({ error: err.message })
   }
+}
+
+// ─── The second way in (8 Nov 2026) ──────────────────────────────────────────
+// "Portal feedback not uploading attachments." The first way is the browser
+// straight to Blob storage, which a hospital network, an old phone or a
+// blocked third-party request can stop. This is the fallback: the file comes
+// through the portal's own function and the server puts it in the same store.
+// Vercel caps a request body at 4.5 MB, so this carries files up to 3 MB —
+// every photo (they are shrunk first), screenshot and most documents.
+export const DIRECT_MAX_BYTES = 3 * 1024 * 1024
+
+export function directUploadName(name) {
+  return String(name || 'file').replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 100) || 'file'
+}
+
+async function directUpload(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  const type = FILE_TYPES.includes(String(body.type)) ? String(body.type) : 'application/octet-stream'
+  const buf = Buffer.from(String(body.data || ''), 'base64')
+  if (!buf.length) return res.status(400).json({ error: 'The file arrived empty' })
+  if (buf.length > DIRECT_MAX_BYTES) return res.status(413).json({ error: 'That file is too big for this route' })
+  const blob = await put(`chat/${directUploadName(body.name)}`, buf, {
+    access: 'public', contentType: type, addRandomSuffix: true
+  })
+  console.log(`chat direct upload by ${session.email}: ${type}, ${buf.length} bytes`)
+  return res.status(200).json({ ok: true, url: blob.url })
 }
 
 /** The channel list with how much is unread in each. */

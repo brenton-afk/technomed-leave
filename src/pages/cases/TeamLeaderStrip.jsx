@@ -53,7 +53,13 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
   // Set as leader and on leave the same week. Two facts the app held at once
   // and never compared, which is how Mat was Spine Team Leader through a week
   // he spent on TOIL.
-  const isAway = email => away.some(p => p.email === email)
+  //
+  // On a day's chip, away means away *that day* (Toni, 8 Nov 2026: Ben showed
+  // "On leave" on Tue 3, Wed 4 and Fri 13 because his leave ran Thu 5 – Mon 9;
+  // the chip was asking "away at all this week?"). The week strip, with no
+  // day, still asks about the week.
+  const isAway = email => away.some(p => p.email === email
+    && (!day || !Array.isArray(p.days) || p.days.includes(day)))
   const leaderAway = leader?.email && isAway(leader.email)
   // Somebody other than whoever the standing rota names.
   const covering = leader?.source === 'set'

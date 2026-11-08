@@ -65,6 +65,17 @@ describe('being noticed', () => {
     expect(container.querySelector('button').style.border).toMatch(/2px/)
   })
 
+  it('on a day chip, says on leave only on the days they are away (Toni, 8 Nov 2026)', () => {
+    // Ben's leave ran Thu 5 – Mon 9 Nov. The chip under Tue 3 and Fri 13 said
+    // "On leave" because it asked about the whole week.
+    const away = [{ ...BEN, days: ['2026-11-05', '2026-11-06', '2026-11-09'] }]
+    const first = show({ day: '2026-11-03', week: '2026-11-02', today: '2026-11-08', away })
+    expect(screen.queryByText(/On leave/i)).toBeNull()
+    first.unmount()
+    show({ day: '2026-11-05', week: '2026-11-02', today: '2026-11-08', away })
+    expect(screen.getAllByText(/On leave/i).length).toBeGreaterThan(0)
+  })
+
   it('stays quiet where nobody is set', () => {
     show({ leader: null })
     expect(screen.getByText('Nobody set')).toBeInTheDocument()
