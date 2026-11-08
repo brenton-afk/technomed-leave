@@ -6,6 +6,7 @@ import {
 import { parseLabelledDescription, parseKitField, hospitalCode, descriptionNotes } from './labelledFields.js'
 import { isPreOpNoise } from './preOpNoise.js'
 import { parseListPlace } from './listPlace.js'
+import { etbsFrom } from './etbs.js'
 import { attendanceNotRequired } from './attendance.js'
 // ─── Event parsing ────────────────────────────────────────────────────────────
 // Surgical cases are titled `<Patient surname> <KIT> - <Surgeon>`. Everything
@@ -1652,6 +1653,8 @@ export function readBooking(title, description, { colourSurgeon, knownPatient } 
     // told. Not inferred from anything — an invented running order is worse
     // than a blank one, because nobody would know to check it.
     listPlace: parseListPlace(labelled.list) || undefined,
+    // ETBS on an RHH case, shown beside the list place (etbs.js).
+    etbs: etbsFrom(labelled.etbs) || undefined,
     navigation: findNavigation(everything).join(' + ') || undefined,
     notRequired: attendanceNotRequired(everything) || undefined,
     // The hospital told us about the case and said nobody from here is wanted

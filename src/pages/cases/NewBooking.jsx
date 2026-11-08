@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { BRAINLAB_KIT, brainlabOptions, brainlabFor } from '../../clinicalPlan/brainlab.js'
+import { BRAINLAB, BRAINLAB_KIT } from '../../clinicalPlan/brainlab.js'
+import { isRhh } from '../../clinicalPlan/etbs.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggestions.js'
 import { Overlay } from '../../design/Shell.jsx'
@@ -205,6 +206,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const [notes, setNotes] = useState('')
   const [brainlab, setBrainlab] = useState('')
   const [attendance, setAttendance] = useState('')
+  const [etbs, setEtbs] = useState(false)
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
   const [dictating, setDictating] = useState(false)
@@ -354,10 +356,6 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
     }).filter(Boolean)
   }, [systems, hospital, alreadyBooked])
 
-  // ETBS is RHH only: moving the booking to Calvary takes it off.
-  useEffect(() => {
-    if (brainlab && !brainlabFor(brainlab, hospital)) { setBrainlab(''); setAttendance('') }
-  }, [hospital, brainlab])
 
   const colourId = guideColorIdFor(surgeon)
   // A Brainlab case has to say whether we are wanted in the room.
@@ -404,7 +402,8 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
             surgeon: use.surgeon,
             procedure: String(use.procedure || '').trim(),
             kit,
-            hospital: use.hospital
+            hospital: use.hospital,
+            ...(etbs && isRhh(use.hospital) ? { etbs: true } : {})
           }
         })
       })
@@ -585,7 +584,7 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
 
             <div style={{ marginBottom: space.md }}>
               <Label>Brainlab navigation</Label>
-              <Choice options={brainlabOptions(hospital)} value={brainlab}
+              <Choice options={BRAINLAB} value={brainlab}
                 onChange={v => { setBrainlab(v); if (!v) setAttendance('') }} />
               {brainlab && (
                 <div style={{ marginTop: space.sm }}>
@@ -596,6 +595,14 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
                 </div>
               )}
             </div>
+
+            {/* ETBS, RHH only (Brent, 8 Nov 2026): shown on the case card. */}
+            {isRhh(hospital) && (
+              <div style={{ marginBottom: space.md }}>
+                <Label>At RHH</Label>
+                <Choice options={['ETBS']} value={etbs ? 'ETBS' : ''} onChange={v => setEtbs(Boolean(v))} />
+              </div>
+            )}
 
             {/* One verdict per system, because they can differ: Diplomat may be
                 consigned at Calvary while the E4 cages have to come from a loan

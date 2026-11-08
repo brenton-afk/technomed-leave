@@ -645,14 +645,21 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             of the information should be patient/surgeon, then the operation
             description, then the system and loan/consignment, then the
             information about where it is on the list". */}
-        {place && !off && (
+        {(place || surgicalCase.etbs) && !off && (
           <span style={{ display: 'block', marginTop: 6 }}>
-            <span style={{
+            {place && <span style={{
               ...text('caption'), fontWeight: 700, color: ink.ink,
               display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '2px 9px', borderRadius: radius.pill,
               border: `1.5px solid ${ink.ink}`
-            }}>{place.headline}</span>
+            }}>{place.headline}</span>}
+            {/* ETBS beside the list place (Brent, 8 Nov 2026). */}
+            {surgicalCase.etbs && <span data-etbs style={{
+              ...text('caption'), fontWeight: 700, color: ink.ink,
+              display: 'inline-flex', alignItems: 'center',
+              padding: '2px 9px', borderRadius: radius.pill, marginLeft: place ? 6 : 0,
+              border: `1.5px solid ${ink.ink}`
+            }}>ETBS</span>}
             {place.ahead && (
               <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
                 {place.ahead}
@@ -1008,11 +1015,11 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
             kind of drift the parity rule exists to stop and did not, because
             that rule asked whether both cards carried a thing and never
             whether they carried it in the same order. */}
-        {place?.headline && (
+        {(place?.headline || surgicalCase.etbs) && (
           <span style={{
             ...text('micro'), display: 'block', textTransform: 'none',
             fontWeight: 700, color: ink.ink
-          }}>{place.headline}</span>
+          }}>{[place?.headline, surgicalCase.etbs ? 'ETBS' : ''].filter(Boolean).join(' · ')}</span>
         )}
 
         {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} compact />}

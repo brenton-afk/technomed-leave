@@ -603,6 +603,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // Where we are on the hospital's running order, once somebody has rung
         // and been told. The fact that decides who is on site at half seven.
         listPlace: read.listPlace,
+        etbs: read.etbs,
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,
         end: event.end,

@@ -65,6 +65,7 @@ import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
+import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
 import { cleanListPlace, withListPlace, bySession, makeRoomFor, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
 import { weekOf, cleanLeader, turnOf } from '../../src/clinicalPlan/teamLeader.js'
 import { leadersOn, turnLeader, leaderEmailOn } from '../_leaders.js'
@@ -571,6 +572,13 @@ async function handleSave(req, res) {
         : removeLabelledLine(description, 'planned')
     }
 
+    // ETBS (Brent, 8 Nov 2026): a yes writes the line, a no takes it off.
+    if (Object.prototype.hasOwnProperty.call(body.fields || {}, 'etbs')) {
+      description = etbsFrom(body.fields.etbs) || body.fields.etbs === true
+        ? setLabelledValue(description, 'etbs', 'Yes')
+        : removeLabelledLine(description, 'etbs')
+    }
+
     // Free notes are the unlabelled remainder, so they are rewritten wholesale:
     // there is no label to patch and the client edited the whole block.
     if (typeof body.notes === 'string') {
@@ -798,6 +806,8 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
     const value = String(written[field] || '').trim()
     if (value) description = setLabelledValue(description, field, value)
   }
+  // ETBS (Brent, 8 Nov 2026), RHH only — see src/clinicalPlan/etbs.js.
+  if (fields.etbs && isRhh(fields.hospital)) description = setLabelledValue(description, 'etbs', 'Yes')
   for (const line of String(notes || '').split('\n').map(l => l.trim()).filter(Boolean)) {
     description += `\n\n${line}`
   }

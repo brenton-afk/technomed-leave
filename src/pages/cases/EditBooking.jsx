@@ -23,6 +23,7 @@ import { ATTENDING_REPS, ALLOCATABLE_REPS } from '../../staffConfig.js'
 import { queueBookingSave, isNetworkFailure } from '../../offlineQueue.js'
 import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 import { offerNotices } from '../../notices.js'
+import { isRhh, etbsFrom } from '../../clinicalPlan/etbs.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -618,9 +619,12 @@ export default function EditBooking({
   const repsChanged = Boolean(loaded && reps.join('/') !== (loaded.reps || []).join('/'))
   const plannedChanged = Boolean(loaded && planned.join('/') !== (loaded.planned || []).join('/'))
 
+  // ETBS on an RHH case (Brent, 8 Nov 2026) — a yes/no, not text.
+  const etbsChanged = Boolean(loaded && etbsFrom(fields.etbs) !== etbsFrom(loaded.fields?.etbs))
+
   const changed = loaded && (
     FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields?.[f.key] || ''))
-    || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged || plannedChanged)
+    || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged || plannedChanged || etbsChanged)
 
   async function save({ withTitle, base = loaded } = {}) {
     setStatus('saving'); setError('')
@@ -639,6 +643,7 @@ export default function EditBooking({
             if ((fields[f.key] || '') !== (base.fields[f.key] || '')) patch[f.key] = fields[f.key] || ''
           }
           if (plannedChanged) patch.planned = planned.join(' / ')
+          if (etbsFrom(fields.etbs) !== etbsFrom(base.fields?.etbs)) patch.etbs = etbsFrom(fields.etbs) ? 'Yes' : ''
           return {
             eventId,
             etag: base.etag,
@@ -1046,6 +1051,20 @@ export default function EditBooking({
                     )}
                   </React.Fragment>
                 ))}
+
+                {/* ETBS, RHH only (Brent, 8 Nov 2026): shown on the case card. */}
+                {(isRhh(fields.hospital) || etbsFrom(fields.etbs)) && (
+                  <div style={{ marginBottom: space.md }}>
+                    <button type="button" aria-pressed={etbsFrom(fields.etbs)}
+                      onClick={() => setFields(c => ({ ...c, etbs: etbsFrom(c.etbs) ? '' : 'Yes' }))}
+                      style={{
+                        padding: `6px ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer', ...text('bodyStrong'),
+                        background: etbsFrom(fields.etbs) ? colour.accent : colour.surface,
+                        color: etbsFrom(fields.etbs) ? 'white' : colour.inkMuted,
+                        border: `1px solid ${etbsFrom(fields.etbs) ? colour.accent : colour.line}`
+                      }}>ETBS{etbsFrom(fields.etbs) ? ' ✓' : ''}</button>
+                  </div>
+                )}
 
                 {/* ── What the room has to have set up ──
                     

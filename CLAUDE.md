@@ -637,6 +637,12 @@ booking when the place (or day) changes, and on the list-order control: same
 day, same surgeon, same hospital, and the same session unless one has none —
 whoever holds the place goes down one, and on until the first gap
 (`makeRoomFor` in `listPlace.js`). Each move rewrites that booking's List line.
+**ETBS on an RHH case** (Brent, 8 Nov 2026: "just extra information I want
+to show on the case tab like the list order arrows" — not a Brainlab choice,
+not billed). An "ETBS: Yes" line in the description (`etbs` label,
+`src/clinicalPlan/etbs.js`), set by an ETBS button on New booking and Edit
+booking when the hospital is RHH, read by `readBooking` as `etbs`, in
+`planSignature`, and drawn beside the list place on both cards.
 **The list view names every case ahead of ours it knows** (`rowsFor` in
 `ListOrder.jsx`): from the List line's words, else a note starting "After …"
 (`aheadWords`). Fewer named than the gap: the named ones numbered, then "N

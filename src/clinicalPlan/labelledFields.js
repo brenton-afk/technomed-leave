@@ -37,8 +37,14 @@ export const LABELS = {
   // Who the team leader has allocated (Task 10), written "Planned rep: Ben /
   // Aimee". Only the two-word forms: a bare "planned" turns up in prose — "as
   // planned - confirmed" — and would be read as a label.
-  planned: ['planned rep', 'planned reps']
+  planned: ['planned rep', 'planned reps'],
+  // "ETBS: Yes" on an RHH case (Brent, 8 Nov 2026) — see etbs.js.
+  etbs: ['etbs']
 }
+
+// How a label is written when the portal adds it, where capitalising the first
+// letter is wrong: ETBS is an acronym.
+const HEADINGS = { etbs: 'ETBS' }
 
 // Longest first, so "Procedure" is not matched as "Proc" and "Surgeon" is never
 // read as "Surg" with "eon" left over as the value.
@@ -153,7 +159,7 @@ export function setLabelledValue(description, field, value) {
     if (!clean) return text
     const label = LABELS[field]?.[0]
     if (!label) return text
-    const heading = label.charAt(0).toUpperCase() + label.slice(1)
+    const heading = HEADINGS[field] || label.charAt(0).toUpperCase() + label.slice(1)
     const separator = text && !text.endsWith('\n') ? '\n' : ''
     return `${text}${separator}${heading}: ${clean}`
   }

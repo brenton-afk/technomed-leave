@@ -330,7 +330,7 @@ export const NAVIGATION = [
 
 /** Words that name a navigation platform rather than something implanted. */
 const NAVIGATION_WORDS =
-  /\b(?:airo|brain\s*lab|curve|etbs|vario\s*guide|navigation|nav|stealth|o-?arm)\b/gi
+  /\b(?:airo|brain\s*lab|curve|vario\s*guide|navigation|nav|stealth|o-?arm)\b/gi
 
 /** Words that describe navigation without naming anything of ours. */
 const NAVIGATION_FILLER =

@@ -5,7 +5,7 @@ import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
 import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
 import { resolveKit, systemsInKit } from '../../clinicalPlan/systems.js'
-import { brainlabOptions, navigationChoice, kitWithoutNavigation, kitWithNavigation } from '../../clinicalPlan/brainlab.js'
+import { BRAINLAB, navigationChoice, kitWithoutNavigation, kitWithNavigation } from '../../clinicalPlan/brainlab.js'
 import { loanNeed, siteCode } from '../../clinicalPlan/inventory.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { distributorNameOf } from '../../clinicalPlan/bookingSources.js'
@@ -303,7 +303,7 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
       <div style={{ marginBottom: space.xs }}>
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: 4 }}>Brainlab navigation</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {brainlabOptions(fields.hospital).map(option => {
+          {BRAINLAB.map(option => {
             const on = brainlab === option
             return (
               <button key={option} type="button" aria-pressed={on}
