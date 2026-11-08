@@ -1582,6 +1582,12 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   }, [leaderWeek, token])
 
   useEffect(() => { loadLeader() }, [loadLeader])
+  // And kept current like the week itself (Brent, 8 Nov 2026: "there cannot be
+  // discrepancies between the desktop and phone versions"). It was fetched once
+  // per week shown, so a change made on the desktop never reached a phone that
+  // already had the week open. Now: every minute while in view, and the moment
+  // the app is looked at again.
+  useLiveRefresh(loadLeader, [loadLeader])
 
   // A whole turn (Friday to Thursday): the one `from` falls in.
   const setTeamLeader = useCallback(async (email, from) => {

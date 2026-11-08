@@ -214,7 +214,12 @@ desktop disagreed about the leader. `useNewBuild` in `src/appVersion.js`
 already noticed a deploy (the hashed bundle name changes); it used to only
 *offer* a reload. `applyWhenSafe` now applies it: at once when the tab comes
 back into view, otherwise a minute after the bar appears, put off while a
-field has focus so nobody's typing is lost.
+field has focus so nobody's typing is lost. The **team leader** is polled like the week
+(`useLiveRefresh(loadLeader)` in `CaseWeek.jsx` — every minute in view and on
+return); it used to be fetched once per week shown, so a change made on one
+device never reached another that had the week open. Phone and desktop read
+the same `action=leader` (`byDay`) and the same plan; layout is the only
+difference allowed between them.
 
 ### Weak signal and offline
 

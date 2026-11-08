@@ -104,6 +104,11 @@ describe('both calendar screens use it', () => {
     expect(source).toMatch(/useLiveRefresh/)
   })
 
+  it('keeps the team leader current too, so a phone and a desktop agree (8 Nov 2026)', () => {
+    const source = readFileSync(join(process.cwd(), 'src/pages/CaseWeek.jsx'), 'utf8')
+    expect(source).toMatch(/useLiveRefresh\(loadLeader/)
+  })
+
   it('keeps one poll interval, not one per screen', () => {
     for (const file of screens) {
       const source = readFileSync(join(process.cwd(), file), 'utf8')
