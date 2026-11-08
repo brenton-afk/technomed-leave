@@ -299,3 +299,32 @@ export function casesAhead(text) {
   }
   return out
 }
+
+/**
+ * Making room on a list (Brent, 8 Nov 2026: "If it put the add-on 1st then
+ * other cases need to move automatically into 2nd and 3rd place").
+ *
+ * `target` is the case just placed ({ position, session }); `others` are the
+ * other cases on the same surgeon's list at the same hospital that day
+ * ({ id, position, session }). Returns the moves — [{ id, position }] — that
+ * push whoever holds the place down one, and whoever that lands on down one
+ * more, stopping at the first gap. A morning place never moves an afternoon
+ * case; a case with no session recorded is treated as on the same list.
+ */
+export function makeRoomFor(target, others = []) {
+  const at = Number(target?.position)
+  if (!Number.isInteger(at) || at < 1) return []
+  const sameList = others
+    .filter(o => Number.isInteger(Number(o?.position)) && Number(o.position) >= 1)
+    .filter(o => !target.session || !o.session || o.session === target.session)
+    .sort((a, b) => a.position - b.position)
+  const moves = []
+  let next = at
+  for (const o of sameList) {
+    if (o.position < next) continue
+    if (o.position > next) break
+    next += 1
+    moves.push({ id: o.id, position: next })
+  }
+  return moves
+}

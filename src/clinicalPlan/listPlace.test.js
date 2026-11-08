@@ -250,3 +250,27 @@ describe('cases in front, as the team wrote them', () => {
     expect(casesAhead('after a spine case')).toEqual(['Spine case'])
   })
 })
+
+describe('making room on a list (Brent, 8 Nov 2026)', () => {
+  it('a case added 1st pushes the 1st and 2nd down to 2nd and 3rd', async () => {
+    const { makeRoomFor } = await import('./listPlace.js')
+    expect(makeRoomFor({ position: 1, session: 'morning' }, [
+      { id: 'nettlefold', position: 1, session: 'morning' },
+      { id: 'chandler', position: 2, session: 'morning' }
+    ])).toEqual([{ id: 'nettlefold', position: 2 }, { id: 'chandler', position: 3 }])
+  })
+
+  it('stops at the first gap, and leaves cases ahead alone', async () => {
+    const { makeRoomFor } = await import('./listPlace.js')
+    expect(makeRoomFor({ position: 2 }, [
+      { id: 'a', position: 1 }, { id: 'b', position: 2 }, { id: 'c', position: 4 }
+    ])).toEqual([{ id: 'b', position: 3 }])
+  })
+
+  it('moves nothing when the place is free, and never crosses morning and afternoon', async () => {
+    const { makeRoomFor } = await import('./listPlace.js')
+    expect(makeRoomFor({ position: 3 }, [{ id: 'a', position: 1 }, { id: 'b', position: 2 }])).toEqual([])
+    expect(makeRoomFor({ position: 1, session: 'morning' }, [{ id: 'pm', position: 1, session: 'afternoon' }])).toEqual([])
+    expect(makeRoomFor({}, [{ id: 'a', position: 1 }])).toEqual([])
+  })
+})

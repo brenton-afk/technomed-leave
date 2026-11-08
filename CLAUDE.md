@@ -491,8 +491,13 @@ turn" is chosen. Day overrides are `teamLeader:day:{date}` (`getDayLeaders` /
 Friday so the new leader can get their head around the following week's
 cases). `turnOf(date)` is the Friday a turn starts; turns are stored under it
 (`teamLeader:{friday}`) — the old Monday keys are no longer read. Ben's turn
-starts Fri 13 Nov 2026 (`ROTATION_ANCHOR`), alternating with Mat; Brent's cover
-for Fri 6–Thu 12 Nov is written into `COVERS` (a saved entry still wins).
+**Roster set by Brent, 8 Nov 2026:** Brent Fri 6 – Thu 12 Nov (`COVERS`), **Mat
+from Fri 13 Nov** (`ROTATION = [mat, ben]`, `ROTATION_ANCHOR` 2026-11-13), then
+Ben, alternating. Over the Christmas shutdown the on-call person leads
+(`HOLIDAY_LEADS`: Aimee 23–26 Dec, Ben 27–30 Dec, Mat 31 Dec – 3 Jan), applied
+per day in `leadersOn`. Turns or days saved in the portal **before**
+`ROSTER_SET_AT` (from 6 Nov on) no longer override this (`savedStillStands`);
+anything saved after does, so swaps still work.
 **The band's "leading" tile is tappable** (Brent, 7 Nov 2026): it opens the
 same sheet as a day's chip (`TeamLeaderStrip sheetOnly`) for the day on show,
 weekends included — `action=leader` returns `byDay` for all seven days and
@@ -607,6 +612,13 @@ project item is no longer drawn on the Cases page at all (`openTasks` /
 `undoneDue` in `CaseWeek.jsx`) — "done and gone"; the record stays on the
 event and the task sheet. The day heading stacks date over the count with the
 leader chip beside it, so the chip no longer wraps to a row of its own.
+**A case put in a place on a list moves the rest down** (Brent, 8 Nov 2026: a
+trauma add-on booked 1st on Fowler's RHH list; the others stayed 1st and 2nd).
+`makeRoomOnList` in `api/calendar/today.js` runs on a new booking, on Edit
+booking when the place (or day) changes, and on the list-order control: same
+day, same surgeon, same hospital, and the same session unless one has none —
+whoever holds the place goes down one, and on until the first gap
+(`makeRoomFor` in `listPlace.js`). Each move rewrites that booking's List line.
 **The list view names every case ahead of ours it knows** (`rowsFor` in
 `ListOrder.jsx`): from the List line's words, else a note starting "After …"
 (`aheadWords`). Fewer named than the gap: the named ones numbered, then "N

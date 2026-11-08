@@ -37,9 +37,10 @@ import {
 } from '../../src/clinicalPlan/labelledFields.js'
 import {
   readBooking, normaliseSurgeon, extractRep, stripIdentifiers,
-  markCancelled, stripCancellation, isCancelled
+  markCancelled, stripCancellation, isCancelled, detectHospital
 } from '../../src/clinicalPlan/parse.js'
 import { guideColorIdFor } from '../../src/clinicalPlan/colours.js'
+import { siteCode } from '../../src/clinicalPlan/inventory.js'
 import {
   getRunsheet, tickRunsheetItem, untickRunsheetItem,
   bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
@@ -64,7 +65,7 @@ import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
-import { cleanListPlace, withListPlace, bySession } from '../../src/clinicalPlan/listPlace.js'
+import { cleanListPlace, withListPlace, bySession, makeRoomFor, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
 import { weekOf, cleanLeader, turnOf } from '../../src/clinicalPlan/teamLeader.js'
 import { leadersOn, turnLeader, leaderEmailOn } from '../_leaders.js'
 import { dropboxConfigured, searchUsage } from '../_dropbox.js'
@@ -661,6 +662,14 @@ async function handleSave(req, res) {
     // arrived on has two cases in one hour. Tidying only the destination leaves
     // the gap behind it, which is how a calendar drifts back to needing a person.
     const nowOn = (saved.start?.dateTime || saved.start?.date || '').slice(0, 10)
+    // A place on the list newly given, or changed, or the case moved to another
+    // day: the list it lands on makes room for it.
+    const placeBefore = parseListPlace(parseLabelledDescription(current.description || '').list || '')
+    const placeAfter = parseListPlace(parseLabelledDescription(saved.description || '').list || '')
+    if (nowOn && placeAfter?.position && (placeAfter.position !== placeBefore?.position
+      || placeAfter.session !== placeBefore?.session || nowOn !== wasOn)) {
+      await makeRoomOnList(nowOn, eventId).catch(() => {})
+    }
     for (const day of [...new Set([wasOn, nowOn].filter(Boolean))]) {
       await tidyDay(day).catch(() => {})
     }
@@ -831,7 +840,9 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
 
   // Packed here rather than in each handler, so every route that makes a
   // booking — the sheet, dictation, accepting one out of the queue — leaves the
-  // day tidy without having to remember to.
+  // day tidy without having to remember to. A case booked into a place on a
+  // list moves the rest of that list down first (makeRoomOnList).
+  if (created?.id) await makeRoomOnList(day, created.id).catch(() => {})
   await tidyDay(day).catch(() => {})
   return created
 }
@@ -1101,6 +1112,60 @@ async function bookingsOnCalendar(from, to) {
  * Times here mean nothing about when anyone operates — they did not before
  * either, when every booking claimed 08:00 to 17:00. See dayLayout.js.
  */
+/**
+ * Makes room on a surgeon's list when a case is put in a place somebody else
+ * already holds (Brent, 8 Nov 2026: Boyd, a trauma add-on, booked 1st on
+ * Fowler's RHH list — Nettlefold and Chandler should have become 2nd and 3rd).
+ * Same day, same hospital, same surgeon; see makeRoomFor for the rule. Each
+ * move is written onto that booking's List line, as a person would.
+ */
+export async function makeRoomOnList(date, eventId) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) || !eventId) return { moved: [] }
+  const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
+    + `?timeMin=${encodeURIComponent(`${date}T00:00:00+11:00`)}`
+    + `&timeMax=${encodeURIComponent(`${date}T23:59:59+10:00`)}`
+    + '&singleEvents=true&orderBy=startTime&maxResults=250'
+    + `&timeZone=${encodeURIComponent(QUERY_TZ)}`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const data = await res.json()
+  if (data.error) throw new Error(data.error.message)
+
+  const cases = (data.items || [])
+    .filter(e => e.start?.dateTime && !isDistributorEmail(e.organizer?.email))
+    .filter(e => !isCancelled(e.summary || '', e.description || ''))
+    .map(e => {
+      const read = readBooking(e.summary || '', e.description || '', { knownPatient: knownPatientOf(e) })
+      if (!read?.patient && !read?.awaitingName) return null
+      return {
+        id: e.id, description: e.description || '',
+        surgeon: String(read.surgeon || '').trim().toLowerCase(),
+        site: siteCode(read.hospital || detectHospital(e.location, e.description, { caseEvent: true }) || e.location),
+        place: read.listPlace || null
+      }
+    })
+    .filter(Boolean)
+
+  const target = cases.find(c => c.id === eventId)
+  if (!target?.place?.position || !target.surgeon) return { moved: [] }
+  const others = cases.filter(c => c.id !== eventId && c.surgeon === target.surgeon
+    && (!target.site || !c.site || c.site === target.site))
+  const moves = makeRoomFor(target.place,
+    others.map(c => ({ id: c.id, position: c.place?.position, session: c.place?.session })))
+
+  const moved = []
+  for (const m of moves) {
+    const c = others.find(o => o.id === m.id)
+    try {
+      await updateCalendarEvent(c.id, { description: withListPlace(c.description, { ...c.place, position: m.position }) })
+      moved.push(m)
+    } catch {
+      // One booking that will not take the change is not a reason to stop the rest.
+    }
+  }
+  return { moved }
+}
+
 async function tidyDay(date, preferred = null) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return { moved: 0 }
 
@@ -1868,8 +1933,11 @@ async function handleListPlace(req, res) {
       description: withListPlace(current.description || '', safe)
     }, { etag: body.etag })
 
-    // The day re-packs around it: morning before afternoon, then by number.
+    // The day re-packs around it: morning before afternoon, then by number —
+    // after the rest of the list has made room for it.
     const day = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
+    const before = parseListPlace(parseLabelledDescription(current.description || '').list || '')
+    if (day && safe?.position && safe.position !== before?.position) await makeRoomOnList(day, eventId).catch(() => {})
     if (day) await tidyDay(day).catch(() => {})
 
     return res.status(200).json({
