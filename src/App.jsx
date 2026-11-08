@@ -680,14 +680,18 @@ export default function App() {
                 color: active ? colour.accentDeep : colour.inkMuted, font: 'inherit'
               } : {
                 flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-                justifyContent: 'center', gap: 4, padding: '9px 2px 8px',
+                // Tight (Brent, 8 Nov 2026: "it doesn't need to be that high").
+                // On an installed iPhone the strip iOS leaves below the page is
+                // already white under the bar, so the bar itself carries no
+                // padding it does not need.
+                justifyContent: 'center', gap: 2, padding: '5px 2px 2px',
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 color: active ? colour.accent : colour.inkFainter, font: 'inherit'
               }}>
               {/* Weight, not fill, marks the active tab — it keeps the set
                   looking like one family instead of two icon styles. */}
               <span style={{ position: 'relative', display: 'inline-flex' }}>
-                <Icon size={desktop ? 20 : 23} strokeWidth={active ? 2.1 : 1.6} />
+                <Icon size={desktop ? 20 : 22} strokeWidth={active ? 2.1 : 1.6} />
                 {waiting > 0 && (
                   <span
                     aria-label={`${waiting} unread message${waiting === 1 ? '' : 's'}`}
