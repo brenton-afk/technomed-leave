@@ -27,7 +27,7 @@ import {
   IconScan, IconCases, IconKit, IconMe, IconChat,
   IconStock, IconPayslip, IconLock, IconBack
 } from './design/icons.jsx'
-import { useNewBuild } from './appVersion.js'
+import { useNewBuild, applyWhenSafe } from './appVersion.js'
 import { useOnline } from './online.js'
 import { useOfflineQueue, dismissChange } from './offlineQueue.js'
 import NoticeSheet from './pages/cases/NoticeSheet.jsx'
@@ -154,6 +154,8 @@ export default function App() {
   // Whether a newer build has shipped since this tab was opened. Same reason for
   // being up here: the login screen is exactly where a stale tab tends to sit.
   const newBuild = useNewBuild()
+  // A newer build is applied, not only offered — see applyWhenSafe.
+  useEffect(() => (newBuild ? applyWhenSafe() : undefined), [newBuild])
   const online = useOnline()
   const [user, setUser] = useState(null)
   // Booking changes made with no signal, waiting to go. See offlineQueue.js.
@@ -524,9 +526,9 @@ export default function App() {
         </button>
       )}
 
-      {/* A build shipped while this tab was open. It never reloads on its own —
-          somebody halfway through a booking should not have the page taken out
-          from under them — so it offers and they choose. See appVersion.js. */}
+      {/* A build shipped while this tab was open. Said here, and applied by
+          itself a minute later (or on coming back to the tab) unless somebody
+          is typing. See applyWhenSafe in appVersion.js. */}
       {/* A deployment URL keeps working and never updates. It is
           indistinguishable from the real app until somebody notices a feature
           is missing, which is how one person could see a rep's name on a case
@@ -555,7 +557,7 @@ export default function App() {
             boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
             fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700
           }}>
-          Update available — tap to reload
+          Portal updated — reloading in a moment (tap to reload now)
         </button>
       )}
 

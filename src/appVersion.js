@@ -15,8 +15,13 @@ import { useState, useEffect, useCallback } from 'react'
 // the one this page is running? The built file is content-hashed, so the name
 // changing *is* the deploy.
 //
-// It never reloads on its own. Somebody halfway through typing a booking should
-// not have the page taken out from under them — it offers, and they choose.
+// It used to only offer, never reload. That let a desktop tab nobody tapped
+// keep running old code for days, and the phone and the desktop disagreed
+// about who was leading next week (Brent, 8 Nov 2026: "There cannot be
+// discrepancies between the two versions of the portal"). So now, once a newer
+// build is known: a page out of view reloads the moment it is looked at again,
+// before anyone reads anything off it; a page in view shows the bar and reloads
+// itself a minute later — never while somebody is typing (`applyWhenSafe`).
 
 const BUNDLE = /assets\/(index-[A-Za-z0-9_-]+\.js)/
 
@@ -85,4 +90,31 @@ export function useNewBuild() {
   }, [check, ready])
 
   return ready
+}
+
+export const AUTO_RELOAD_AFTER_MS = 60 * 1000
+
+/** Somebody is mid-entry: a text field, a text area or an editable block has focus. */
+export function busyTyping(doc = document) {
+  const el = doc.activeElement
+  if (!el) return false
+  if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true
+  return el.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'submit', 'range'].includes(String(el.type).toLowerCase())
+}
+
+/**
+ * Applies a newer build without losing anybody's typing: on returning to the
+ * page at once, otherwise after `after` ms, put off 15 s at a time while a
+ * field has focus. Returns a stop function.
+ */
+export function applyWhenSafe({ reload = () => window.location.reload(), after = AUTO_RELOAD_AFTER_MS, doc = document } = {}) {
+  let timer = null
+  const attempt = () => {
+    if (busyTyping(doc)) { timer = setTimeout(attempt, 15000); return }
+    reload()
+  }
+  const onVisible = () => { if (doc.visibilityState === 'visible' && !busyTyping(doc)) reload() }
+  if (doc.visibilityState === 'visible') timer = setTimeout(attempt, after)
+  doc.addEventListener('visibilitychange', onVisible)
+  return () => { clearTimeout(timer); doc.removeEventListener('visibilitychange', onVisible) }
 }

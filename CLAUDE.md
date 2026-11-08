@@ -206,6 +206,16 @@ colours, which are the ones carrying real meaning.
 
 Session lives in `localStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a 30-day age limit (`SESSION_MAX_AGE_MS`) on restore and re-checks every minute, matching `SESSION_TTL_SECONDS` in `api/_auth.js` — keep the two constants in step.
 
+### Every open copy runs the newest build (Brent, 8 Nov 2026)
+
+"There cannot be discrepancies between the two versions of the portal" — a
+desktop tab left open was still running days-old code, so the phone and the
+desktop disagreed about the leader. `useNewBuild` in `src/appVersion.js`
+already noticed a deploy (the hashed bundle name changes); it used to only
+*offer* a reload. `applyWhenSafe` now applies it: at once when the tab comes
+back into view, otherwise a minute after the bar appears, put off while a
+field has focus so nobody's typing is lost.
+
 ### Weak signal and offline
 
 `public/sw.js` now has a fetch handler, under narrow rules written at the top of
