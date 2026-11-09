@@ -1,4 +1,5 @@
 import { requireAdmin } from '../_auth.js'
+import { listSupplierQuotes, readSupplierQuote, saveSupplierPo, dismissSupplierQuote } from '../_supplierPos.js'
 import {
   getXeroConnectionStatus, getXeroToken, findEmployee,
   listEmployees, listLeaveTypes
@@ -260,7 +261,7 @@ export default async function handler(req, res) {
   }
 }
 
-const INVOICE_ACTIONS = new Set(['quote-auto', 'quote-retry', 'quote-requests', 'quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
+const INVOICE_ACTIONS = new Set(['supplier-quotes', 'supplier-quote-read', 'supplier-po-save', 'supplier-quote-dismiss', 'quote-auto', 'quote-retry', 'quote-requests', 'quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
 
 async function handleInvoices(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
@@ -270,6 +271,13 @@ async function handleInvoices(action, req, res, session) {
       const records = await quoteRecords(found.requests.map(r => r.id)).catch(() => ({}))
       for (const r of found.requests) if (records[r.id]) r.auto = records[r.id]
       return res.status(200).json(found)
+    }
+    // Purchase orders TO suppliers, from their quotes (Brent, 9 Nov 2026) — see api/_supplierPos.js.
+    if (action === 'supplier-quotes') return res.status(200).json(await listSupplierQuotes())
+    if (action === 'supplier-quote-read') {
+      const id = String(req.query.id || '')
+      if (!/^[A-Za-z0-9_-]{6,}$/.test(id)) return res.status(400).json({ error: 'Which email?' })
+      return res.status(200).json(await readSupplierQuote(String(req.query.mailbox || ''), id))
     }
     if (action === 'quote-templates') return res.status(200).json({ templates: await quoteTemplates() })
     if (action === 'accounts-audit') return res.status(200).json(await accountsAudit())
@@ -317,10 +325,12 @@ async function handleInvoices(action, req, res, session) {
       await retryPo(po)
       return res.status(200).json({ ok: true })
     }
+    if (action === 'supplier-po-save') return res.status(200).json(await saveSupplierPo({ ...body, by: session.email }))
+    if (action === 'supplier-quote-dismiss') return res.status(200).json(await dismissSupplierQuote(body.messageId, session.email))
     if (action === 'invoice-create') return res.status(200).json({ invoice: await createDraftInvoice(body) })
     if (action === 'quote-create') return res.status(200).json({ quote: await createDraftQuote(body) })
   } catch (err) {
-    const code = err.code === 'permission' ? 403 : err.code === 'duplicate' ? 409 : 400
+    const code = err.code === 'permission' ? 403 : (err.code === 'duplicate' || err.code === 'billed') ? 409 : 400
     return res.status(code).json({ error: err.message, code: err.code || null, existing: err.existing || null })
   }
 }

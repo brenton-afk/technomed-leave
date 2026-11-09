@@ -964,6 +964,21 @@ admin-only; no new function).
   same. Anything else keeps the template price and is listed as a **Check:**
   flag on the request (`flags` on the record); an unreadable list flags the
   whole quote rather than holding it.
+- **Supplier quotes → purchase orders** (Brent, 9 Nov 2026: "tap check for
+  POs in email … read a quote and generate a PO"; Cody at MAC Surgical, quote
+  00012501, "updated PO-0147"). Admin → Invoices → **Supplier quotes → PO**
+  (`SupplierPos` in `Invoices.jsx`, `api/_supplierPos.js`, actions
+  `supplier-quotes` / `supplier-quote-read` / `supplier-po-save` /
+  `supplier-quote-dismiss` on `xero/info.js`). Finds supplier emails in
+  brenton@ and admin@ (`SUPPLIER_PO_MAILBOXES`, `SUPPLIER_PO_QUERY`; not
+  Calvary or CNS) with a quote attached or a PO asked for; Claude reads the
+  quote into lines plus `checks` (e.g. a description contradicting the item);
+  the supplier is matched to a Xero contact and a PO named in the email
+  (`ourPoNumber`) is fetched. Save either **replaces the named PO's lines**
+  (keeping its status, account and tax; never a BILLED PO) or makes a **new
+  DRAFT PO**; quote number goes in the Reference. Nothing is sent to the
+  supplier — that is done from Xero. Each email remembers what was done
+  (`supplierpo:{messageId}`). Uses the invoices connection's Xero permission.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

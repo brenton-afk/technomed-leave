@@ -53,6 +53,7 @@ export default function Invoices({ user }) {
   const [requests, setRequests] = useState(null) // { running } | { requests, errors } | { error }
   const [templates, setTemplates] = useState(null) // { running } | { templates } | { error }
   const [audit, setAudit] = useState(null) // the accounts@ check: { running } | result | { error }
+  const [supplier, setSupplier] = useState(false) // supplier quotes → POs
 
   const headers = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
   const api = useCallback(async (action, { query = '', body } = {}) => {
@@ -126,6 +127,7 @@ export default function Invoices({ user }) {
   if (draft) {
     return <Editor api={api} draft={draft} onClose={(made) => { setDraft(null); if (made) load() }} />
   }
+  if (supplier) return <SupplierPos api={api} onClose={() => setSupplier(false)} onPermission={() => setXero('permission')} />
 
   const muted = { fontSize: 13, color: '#5a6478' }
   const fold = (id, label, rows, render) => rows.length > 0 && (
@@ -160,6 +162,7 @@ export default function Invoices({ user }) {
       {/* The page title is in the admin header; the actions wrap into a grid,
           so they never push the page wider than a phone. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6, marginBottom: 12 }}>
+          <button style={btn(true)} onClick={() => setSupplier(true)}>Supplier quotes → PO</button>
           <button style={btn(false)} onClick={showRequests} disabled={requests?.running}>{requests?.running ? 'Looking…' : 'Quote requests'}</button>
           <button style={btn(false)} onClick={showTemplates} disabled={templates?.running}>{templates?.running ? 'Reading templates…' : 'Quote templates'}</button>
           <button style={btn(false)} onClick={checkAccounts} disabled={audit?.running}>{audit?.running ? 'Checking accounts@…' : 'Check accounts@'}</button>
@@ -521,6 +524,200 @@ function Editor({ api, draft, onClose }) {
         disabled={busy || !contactId} onClick={submit}>
         {busy ? 'Making the draft in Xero…' : isInvoice ? 'Create draft invoice in Xero' : 'Create draft quote in Xero'}
       </button>
+    </div>
+  )
+}
+
+// ─── Supplier quotes → purchase orders (Brent, 9 Nov 2026) ───────────────────
+// "Build a module in the portal so I can just tap check for POs in email …
+// read a quote and generate a PO." Check finds supplier emails in brenton@ and
+// admin@ with a quote attached or a PO asked for; Read quote fills the lines;
+// the person checks them and saves a DRAFT PO in Xero — or, when the email
+// names one of ours (Cody: "updated PO-0147"), replaces that PO's lines.
+// Nothing is approved or sent from here: send the PO from Xero.
+export function SupplierPos({ api, onClose, onPermission }) {
+  const [list, setList] = useState(null) // { running } | { requests, errors } | { error }
+  const [open, setOpen] = useState(null) // the request being read / edited
+  const [read, setRead] = useState(null) // { running } | reading | { error }
+  const [form, setForm] = useState(null) // { contactId, lines, freight, reference }
+  const [saving, setSaving] = useState('')
+  const [done, setDone] = useState(null)
+  const [showDone, setShowDone] = useState(false)
+
+  const check = useCallback(async () => {
+    setList({ running: true })
+    try { setList(await api('supplier-quotes')) } catch (err) { setList({ error: err.message }) }
+  }, [api])
+  useEffect(() => { check() }, [check])
+
+  async function readQuote(r) {
+    setOpen(r); setRead({ running: true }); setDone(null); setForm(null)
+    try {
+      const data = await api('supplier-quote-read', { query: `&id=${encodeURIComponent(r.id)}&mailbox=${encodeURIComponent(r.mailbox)}` })
+      setRead(data)
+      setForm({
+        contactId: data.existing?.contact?.id || data.contacts?.[0]?.id || '',
+        lines: data.quote.lines.length ? data.quote.lines : [{ code: '', description: '', quantity: 1, unitPrice: '' }],
+        freight: data.quote.freight || 0,
+        reference: data.existing ? '' : (data.quote.lines[0]?.description || '').slice(0, 60)
+      })
+    } catch (err) {
+      if (err.code === 'permission') onPermission()
+      setRead({ error: err.message })
+    }
+  }
+
+  async function save(update) {
+    setSaving(update ? 'update' : 'new')
+    try {
+      const result = await api('supplier-po-save', { body: {
+        messageId: open.id, contactId: form.contactId, update: update || null,
+        lines: form.lines, freight: Number(form.freight) || 0,
+        reference: form.reference, quoteNumber: read.quote.quoteNumber
+      } })
+      setDone(result)
+      check()
+    } catch (err) {
+      if (err.code === 'permission') onPermission()
+      setRead(r => ({ ...r, saveError: err.message }))
+    }
+    setSaving('')
+  }
+
+  async function dismiss(r) {
+    try { await api('supplier-quote-dismiss', { body: { messageId: r.id } }); check() } catch (err) { setList(l => ({ ...l, error: err.message })) }
+  }
+
+  const muted = { fontSize: 13, color: '#5a6478' }
+  const setLine = (i, key, value) => setForm(f => ({ ...f, lines: f.lines.map((l, n) => (n === i ? { ...l, [key]: value } : l)) }))
+  const subTotal = form ? form.lines.reduce((t, l) => t + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0) + (Number(form.freight) || 0) : 0
+
+  if (open) {
+    const existing = read?.existing
+    const canUpdate = existing && !['BILLED', 'DELETED'].includes(existing.status)
+    return (
+      <div style={{ minWidth: 0, overflowWrap: 'anywhere' }} data-supplier-po>
+        <button style={{ ...btn(false), marginBottom: 10 }} onClick={() => { setOpen(null); setRead(null); setDone(null) }}>← Supplier quotes</button>
+        <div style={card}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>{open.subject}</div>
+          <div style={muted}>{open.from} · {when(open.receivedAt)}{open.files?.length ? ` · ${open.files.join(', ')}` : ''}</div>
+        </div>
+        {read?.running && <div style={muted}>Reading the quote and looking in Xero…</div>}
+        {read?.error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>{read.error}</div>}
+        {done && (
+          <div style={{ ...card, background: '#e6f4f1', border: '1px solid #bfe3db', fontSize: 14, color: NAVY }} data-po-done>
+            <b>{done.po.number}</b> {done.record.status === 'updated' ? 'updated' : 'drafted'} in Xero — {money(done.po.total)} inc GST.
+            <div style={{ ...muted, marginTop: 4 }}>Check it and send it to the supplier from Xero.</div>
+            {done.po.id && <a href={`https://go.xero.com/Accounts/Payable/PurchaseOrders/View/${done.po.id}`} target="_blank" rel="noreferrer" style={{ ...btn(true), display: 'inline-block', marginTop: 8, textDecoration: 'none' }}>Open in Xero</a>}
+          </div>
+        )}
+        {read && !read.running && !read.error && form && !done && (
+          <>
+            <div style={card}>
+              <div style={{ fontSize: 13, color: NAVY }}>
+                <b>{read.quote.supplier || 'Supplier'}</b>{read.quote.quoteNumber ? ` · quote ${read.quote.quoteNumber}` : ''}{read.quote.quoteDate ? ` · ${when(read.quote.quoteDate)}` : ''}
+              </div>
+              {read.quote.checks.length > 0 && (
+                <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: '#fff4e5', color: '#b54708', fontSize: 13 }} data-quote-checks>
+                  <b>Check before ordering:</b>
+                  {read.quote.checks.map((c, i) => <div key={i}>• {c}</div>)}
+                </div>
+              )}
+              {existing && (
+                <div style={{ marginTop: 8, fontSize: 13, color: NAVY }}>
+                  The email asks about <b>{existing.number}</b> ({String(existing.status).toLowerCase()}, {existing.contact.name}): now {money(existing.total)} inc GST
+                  {existing.lines.map((l, i) => <div key={i} style={muted}>{l.quantity} × {l.description} @ {money(l.unitPrice)}</div>)}
+                </div>
+              )}
+              {read.quote.poNumber && !existing && <div style={{ ...muted, marginTop: 8 }}>The email mentions {read.quote.poNumber}, but Xero has no PO with that number.</div>}
+            </div>
+
+            <div style={card}>
+              <label style={{ ...muted, display: 'block', marginBottom: 4 }}>Supplier in Xero</label>
+              <select style={input} value={form.contactId} onChange={e => setForm(f => ({ ...f, contactId: e.target.value }))} disabled={Boolean(canUpdate)}>
+                <option value="">{read.contacts.length ? 'Choose…' : 'No match found in Xero — add the supplier in Xero first'}</option>
+                {read.contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              {!canUpdate && (
+                <>
+                  <label style={{ ...muted, display: 'block', margin: '8px 0 4px' }}>Reference</label>
+                  <input style={input} value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} />
+                </>
+              )}
+            </div>
+
+            <div style={card}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 6 }}>Lines (ex GST)</div>
+              {form.lines.map((l, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 4, marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid rgba(26,43,74,0.08)' }} data-po-line>
+                  <input style={input} placeholder="Code" value={l.code} onChange={e => setLine(i, 'code', e.target.value)} />
+                  <input style={input} placeholder="Description" value={l.description} onChange={e => setLine(i, 'description', e.target.value)} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 6, alignItems: 'center' }}>
+                    <input style={input} inputMode="numeric" aria-label="Quantity" value={l.quantity ?? ''} onChange={e => setLine(i, 'quantity', e.target.value)} />
+                    <input style={input} inputMode="decimal" aria-label="Unit price" value={l.unitPrice ?? ''} onChange={e => setLine(i, 'unitPrice', e.target.value)} />
+                    <button style={btn(false)} onClick={() => setForm(f => ({ ...f, lines: f.lines.filter((_, n) => n !== i) }))} aria-label="Remove line">✕</button>
+                  </div>
+                </div>
+              ))}
+              <button style={btn(false)} onClick={() => setForm(f => ({ ...f, lines: [...f.lines, { code: '', description: '', quantity: 1, unitPrice: '' }] }))}>Add a line</button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'center', marginTop: 8 }}>
+                <span style={muted}>Freight (ex GST)</span>
+                <input style={input} inputMode="decimal" value={form.freight} onChange={e => setForm(f => ({ ...f, freight: e.target.value }))} />
+              </div>
+              <div style={{ marginTop: 8, fontSize: 14, color: NAVY }} data-po-total>
+                {money(subTotal)} + GST {money(subTotal * 0.1)} = <b>{money(subTotal * 1.1)}</b>
+                {read.quote.totalExGst != null && Math.abs(read.quote.totalExGst - subTotal) > 0.01 && (
+                  <div style={{ fontSize: 13, color: '#b54708' }}>The quote's total is {money(read.quote.totalExGst)} ex GST — check the lines.</div>
+                )}
+              </div>
+            </div>
+
+            {read.saveError && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>{read.saveError}</div>}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {canUpdate && <button style={btn(true)} disabled={Boolean(saving)} onClick={() => save(existing.number)}>{saving === 'update' ? 'Updating…' : `Update ${existing.number} in Xero`}</button>}
+              <button style={btn(!canUpdate)} disabled={Boolean(saving) || !form.contactId} onClick={() => save(null)}>{saving === 'new' ? 'Drafting…' : 'Draft a new PO in Xero'}</button>
+            </div>
+            <div style={{ ...muted, marginTop: 8 }}>A new PO is saved as a <b>draft</b>. Updating keeps the PO's status and number. Nothing is sent to the supplier — send it from Xero.</div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const waiting = (list?.requests || []).filter(r => !r.done)
+  const handled = (list?.requests || []).filter(r => r.done)
+  const row = r => (
+    <div key={r.id} style={card} data-supplier-quote>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>{r.subject || '(no subject)'}</div>
+        {r.poNumber && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#eef3fb', color: NAVY }}>{r.poNumber}</span>}
+        {r.done && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: '#e6f4f1', color: ACCENT }}>{r.done.status === 'dismissed' ? 'Not a PO request' : `${r.done.po} ${r.done.status}`}</span>}
+      </div>
+      <div style={muted}>{r.from} · {when(r.receivedAt)} · {r.mailbox.split('@')[0]}@</div>
+      {r.files?.length > 0 && <div style={{ fontSize: 12, color: '#8a93a6' }}>{r.files.join(', ')}</div>}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        <button style={btn(!r.done)} onClick={() => readQuote(r)}>Read quote</button>
+        {!r.done && <button style={btn(false)} onClick={() => dismiss(r)}>Not a PO request</button>}
+      </div>
+    </div>
+  )
+  return (
+    <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button style={btn(false)} onClick={onClose}>← Invoices</button>
+        <button style={btn(true)} onClick={check} disabled={list?.running}>{list?.running ? 'Checking email…' : 'Check email for supplier quotes'}</button>
+      </div>
+      <div style={{ ...muted, marginBottom: 10 }}>Supplier emails in brenton@ and admin@ with a quote attached or a PO asked for. Read one to turn it into a purchase order in Xero.</div>
+      {list?.error && <div style={{ ...card, color: '#b42318', fontSize: 13 }}>{list.error}</div>}
+      {list?.errors?.map(e => <div key={e.mailbox} style={{ ...card, color: '#b54708', fontSize: 13 }}>{e.mailbox} could not be read: {e.error}</div>)}
+      {list && !list.running && !list.error && waiting.length === 0 && <div style={muted}>Nothing waiting.</div>}
+      {waiting.map(row)}
+      {handled.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <button style={{ ...btn(false), width: '100%', textAlign: 'left' }} onClick={() => setShowDone(v => !v)}>{showDone ? '▾' : '▸'} Done ({handled.length})</button>
+          {showDone && <div style={{ marginTop: 8 }}>{handled.map(row)}</div>}
+        </div>
+      )}
     </div>
   )
 }

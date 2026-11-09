@@ -43,6 +43,9 @@ async function call(method, path, body) {
   return data
 }
 
+/** The same authenticated call, for the supplier-PO module (api/_supplierPos.js). */
+export const xeroCall = (method, path, body) => call(method, path, body)
+
 const quoted = s => String(s || '').replace(/["\\]/g, '')
 
 /** Customers whose name contains `search`: [{ id, name }]. */
