@@ -688,6 +688,12 @@ booking when the place (or day) changes, and on the list-order control: same
 day, same surgeon, same hospital, and the same session unless one has none —
 whoever holds the place goes down one, and on until the first gap
 (`makeRoomFor` in `listPlace.js`). Each move rewrites that booking's List line.
+**A case moving within its own list reorders it** (Brent, 9 Nov 2026: two
+cases, the 1st set to 2nd pushed the other to 3rd). When the case was already
+on that list (same day and session), `moveWithinList` moves only the cases
+between its old and new place one step towards the gap — so the other comes
+up to 1st. A new arrival, or a move from another day or session, still uses
+`makeRoomFor`.
 **ETBS on an RHH case** (Brent, 8 Nov 2026: "just extra information I want
 to show on the case tab like the list order arrows" — not a Brainlab choice,
 not billed). An "ETBS: Yes" line in the description (`etbs` label,

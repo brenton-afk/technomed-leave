@@ -66,7 +66,7 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
-import { cleanListPlace, withListPlace, bySession, makeRoomFor, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
+import { cleanListPlace, withListPlace, bySession, moveWithinList, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
 import { weekOf, cleanLeader, turnOf } from '../../src/clinicalPlan/teamLeader.js'
 import { leadersOn, turnLeader, leaderEmailOn } from '../_leaders.js'
 import { dropboxConfigured, searchUsage } from '../_dropbox.js'
@@ -676,7 +676,9 @@ async function handleSave(req, res) {
     const placeAfter = parseListPlace(parseLabelledDescription(saved.description || '').list || '')
     if (nowOn && placeAfter?.position && (placeAfter.position !== placeBefore?.position
       || placeAfter.session !== placeBefore?.session || nowOn !== wasOn)) {
-      await makeRoomOnList(nowOn, eventId).catch(() => {})
+      // The old place counts only on the same day and the same list.
+      const from = nowOn === wasOn && (placeAfter.session || '') === (placeBefore?.session || '') ? placeBefore?.position : undefined
+      await makeRoomOnList(nowOn, eventId, { from }).catch(() => {})
     }
     for (const day of [...new Set([wasOn, nowOn].filter(Boolean))]) {
       await tidyDay(day).catch(() => {})
@@ -1129,7 +1131,7 @@ async function bookingsOnCalendar(from, to) {
  * Same day, same hospital, same surgeon; see makeRoomFor for the rule. Each
  * move is written onto that booking's List line, as a person would.
  */
-export async function makeRoomOnList(date, eventId) {
+export async function makeRoomOnList(date, eventId, { from } = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) || !eventId) return { moved: [] }
   const token = await getGoogleToken(CALENDAR_SCOPE_WRITE)
   const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
@@ -1160,7 +1162,9 @@ export async function makeRoomOnList(date, eventId) {
   if (!target?.place?.position || !target.surgeon) return { moved: [] }
   const others = cases.filter(c => c.id !== eventId && c.surgeon === target.surgeon
     && (!target.site || !c.site || c.site === target.site))
-  const moves = makeRoomFor(target.place,
+  // A case moving within the same list takes the others with it towards the
+  // gap it leaves; a new arrival pushes whoever holds its place down.
+  const moves = moveWithinList(target.place, from,
     others.map(c => ({ id: c.id, position: c.place?.position, session: c.place?.session })))
 
   const moved = []
@@ -2039,7 +2043,10 @@ async function handleListPlace(req, res) {
     // after the rest of the list has made room for it.
     const day = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
     const before = parseListPlace(parseLabelledDescription(current.description || '').list || '')
-    if (day && safe?.position && safe.position !== before?.position) await makeRoomOnList(day, eventId).catch(() => {})
+    if (day && safe?.position && safe.position !== before?.position) {
+      const from = (safe.session || '') === (before?.session || '') ? before?.position : undefined
+      await makeRoomOnList(day, eventId, { from }).catch(() => {})
+    }
     if (day) await tidyDay(day).catch(() => {})
 
     return res.status(200).json({

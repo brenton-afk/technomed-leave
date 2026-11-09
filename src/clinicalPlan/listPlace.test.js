@@ -274,3 +274,28 @@ describe('making room on a list (Brent, 8 Nov 2026)', () => {
     expect(makeRoomFor({}, [{ id: 'a', position: 1 }])).toEqual([])
   })
 })
+
+// Brent, 9 Nov 2026: two cases, 1st and 2nd; setting the 1st to 2nd pushed
+// the other to 3rd. A case moving within its own list takes the others
+// with it towards the gap it leaves. Invented ids.
+describe('moving a case within its own list', async () => {
+  const { moveWithinList } = await import('./listPlace.js')
+  it('two cases swap: 1st to 2nd brings the 2nd up to 1st', () => {
+    expect(moveWithinList({ position: 2 }, 1, [{ id: 'b', position: 2 }])).toEqual([{ id: 'b', position: 1 }])
+  })
+  it('later: everyone between closes up; earlier: everyone between goes down one', () => {
+    const others = [{ id: 'b', position: 2 }, { id: 'c', position: 3 }, { id: 'd', position: 4 }]
+    expect(moveWithinList({ position: 3 }, 1, others)).toEqual([{ id: 'b', position: 1 }, { id: 'c', position: 2 }])
+    expect(moveWithinList({ position: 1 }, 4, [{ id: 'a', position: 1 }, { id: 'b', position: 2 }, { id: 'c', position: 3 }]))
+      .toEqual([{ id: 'a', position: 2 }, { id: 'b', position: 3 }, { id: 'c', position: 4 }])
+  })
+  it('a place held by a case not ours is left alone', () => {
+    // We are 1st and 4th; places 2 and 3 are someone else's. Moving ours from 1st to 3rd moves nobody of ours.
+    expect(moveWithinList({ position: 3 }, 1, [{ id: 'd', position: 4 }])).toEqual([])
+  })
+  it('another session is untouched, and no old place means a new arrival', () => {
+    expect(moveWithinList({ position: 2, session: 'morning' }, 1, [{ id: 'pm', position: 2, session: 'afternoon' }])).toEqual([])
+    expect(moveWithinList({ position: 1 }, undefined, [{ id: 'a', position: 1 }, { id: 'b', position: 2 }]))
+      .toEqual([{ id: 'a', position: 2 }, { id: 'b', position: 3 }])
+  })
+})

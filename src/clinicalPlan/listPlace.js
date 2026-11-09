@@ -311,6 +311,32 @@ export function casesAhead(text) {
  * more, stopping at the first gap. A morning place never moves an afternoon
  * case; a case with no session recorded is treated as on the same list.
  */
+/**
+ * A case already on the list moving from one place to another (Brent, 9 Nov
+ * 2026: two cases, 1st and 2nd; the 1st set to 2nd should bring the other up
+ * to 1st, not push it to 3rd). Only the cases between the old place and the
+ * new one move, each one place towards the gap the case left — so a place
+ * held by somebody else's case (a gap in our numbers) is never filled or
+ * taken. Without a usable old place it is a new arrival: makeRoomFor.
+ */
+export function moveWithinList(target, from, others = []) {
+  const to = Number(target?.position)
+  const was = Number(from)
+  if (!Number.isInteger(was) || was < 1) return makeRoomFor(target, others)
+  if (!Number.isInteger(to) || to < 1 || to === was) return []
+  const sameList = others
+    .filter(o => Number.isInteger(Number(o?.position)) && Number(o.position) >= 1)
+    .filter(o => !target.session || !o.session || o.session === target.session)
+  if (to > was) {
+    return sameList
+      .filter(o => o.position > was && o.position <= to)
+      .map(o => ({ id: o.id, position: o.position - 1 }))
+  }
+  return sameList
+    .filter(o => o.position >= to && o.position < was)
+    .map(o => ({ id: o.id, position: o.position + 1 }))
+}
+
 export function makeRoomFor(target, others = []) {
   const at = Number(target?.position)
   if (!Number.isInteger(at) || at < 1) return []
