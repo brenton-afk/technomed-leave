@@ -1101,7 +1101,11 @@ async function bookingsOnCalendar(from, to) {
         // The hour it occupies, for laying out a new case beside it. All-day
         // entries have no hour and are not part of the column.
         hour: e.start?.dateTime ? Number(e.start.dateTime.slice(11, 13)) : null,
-        cancelled: Boolean(read.cancelled)
+        // From the title (and a line of its own in the description), the way
+        // the week reads it. readBooking has no cancelled field, so this was
+        // always false: a CANCELLED booking counted as live, and a
+        // cancellation email for it was offered again (Brent, 9 Nov 2026).
+        cancelled: isCancelled(e.summary || '', e.description || '')
       }
     })
     .filter(Boolean)
@@ -1605,7 +1609,7 @@ export const CANCEL_WORDS = /\bcancel|\bpostpone|not (?:be )?proceeding|won'?t b
  * A cancellation read from an email, queued as a card that offers to cancel
  * the booking — never done by itself. Returns what happened.
  */
-export async function queueCancellation(candidate, { calendarFor, existing = [], queued = [], save = saveBookingCandidate, update = updateBookingCandidate }) {
+export async function queueCancellation(candidate, { calendarFor, existing = [], queued = [], save = saveBookingCandidate, update = updateBookingCandidate, today = todayInHobart() }) {
   const card = { ...candidate, id: `cancel-${candidate.id}`, kind: 'cancel' }
   delete card.moves
   // A booking card for the same case, not yet accepted, is now moot.
@@ -1616,6 +1620,12 @@ export async function queueCancellation(candidate, { calendarFor, existing = [],
     }
   }
   if (existing.some(c => c.id === card.id && c.status !== 'pending')) return 'settled'
+  // A day already gone needs no cancelling: the case did not happen, and a
+  // card for it is noise (Brent, 9 Nov 2026: cards for last week's cases).
+  if (candidate.date && candidate.date < today) {
+    await save({ ...card, status: 'onCalendar', dismissedBy: 'day passed' })
+    return 'settled'
+  }
   const days = candidate.date ? await calendarFor(candidate.date) : []
   // A live booking first; a matching one already called off only if there is no live one.
   const target = alreadyInCalendar(candidate, days.filter(e => !e.cancelled)) || alreadyInCalendar(candidate, days)
@@ -1635,6 +1645,13 @@ export async function queueCancellation(candidate, { calendarFor, existing = [],
 
 export async function reconcileQueue(queue, today, readCalendar = bookingsOnCalendar) {
   const out = { returned: 0, nowBooked: 0 }
+  // A cancellation card whose day has gone is settled: nothing is left to call off.
+  for (const c of queue) {
+    if (c.kind === 'cancel' && c.status === 'pending' && c.date && (c.cancels?.date || c.date) < today) {
+      await updateBookingCandidate(c.id, { status: 'onCalendar', dismissedBy: 'day passed' })
+      c.status = 'onCalendar'
+    }
+  }
   const upcoming = queue.filter(c => c.date && c.date >= today && (
     c.status === 'pending'
     || c.status === 'accepted'

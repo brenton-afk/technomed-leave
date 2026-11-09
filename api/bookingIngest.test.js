@@ -203,6 +203,16 @@ describe('every booking checked against the calendar as it is now', async () => 
     expect(read).not.toHaveBeenCalled()
   })
 
+  // Brent, 9 Nov 2026: cancellation cards for cases from last week.
+  it('settles a cancellation card whose day has already gone', async () => {
+    const queue = [
+      { id: 'cancel-a', kind: 'cancel', status: 'pending', patient: 'Allan', surgeon: 'Dubey', date: '2026-10-30', cancels: { eventId: 'evt-a', date: '2026-10-30' } },
+      { id: 'cancel-b', kind: 'cancel', status: 'pending', patient: 'Rossa', surgeon: 'Dubey', date: '2026-11-12', cancels: { eventId: 'evt-b', date: '2026-11-12' } }
+    ]
+    await reconcileQueue(queue, TODAY, async () => [onCal('evt-b', 'Rossa', '2026-11-12')])
+    expect(updates()).toEqual([{ id: 'cancel-a', status: 'onCalendar', dismissedBy: 'day passed' }])
+  })
+
   it('changes nothing when the calendar cannot be read', async () => {
     const queue = [{ id: 'q1', status: 'accepted', eventId: 'e', patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' }]
     const result = await reconcileQueue(queue, TODAY, async () => { throw new Error('down') })
@@ -254,6 +264,17 @@ describe('a cancellation email', () => {
     await call('ingest', {})
     expect(downloaded).toEqual(['cancel'])
     expect([...queue.values()].some(c => c.kind === 'cancel' && c.status === 'pending')).toBe(true)
+  })
+
+  // Brent, 9 Nov 2026: a booking already CANCELLED on the calendar read as
+  // live, so its cancellation email became a card all the same.
+  it('is not offered when the booking is already CANCELLED on the calendar', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [{ ...EVENT, summary: 'CANCELLED Testcase DAKOTA - Ibbett' }] }) })))
+    mailbox = { cancel: CANCEL }
+    const res = await call('ingest', {})
+    const card = [...queue.values()].find(c => c.kind === 'cancel')
+    expect(card.status).toBe('onCalendar')
+    expect(res.payload.pending.some(c => c.kind === 'cancel')).toBe(false)
   })
 
   it('Cancel the booking marks it CANCELLED on the calendar, as the Cancel button does', async () => {

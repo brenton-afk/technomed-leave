@@ -268,6 +268,12 @@ dismissed; a booking already off settles the card; `reconcileQueue` settles it
 once the booking is off however that happened. Seen records are `rule: 3`;
 older ones that found a booking are re-read once if subject or snippet match
 `CANCEL_WORDS`.
+**A CANCELLED booking is read as cancelled** (Brent, 9 Nov 2026: cards for
+last week's cases already CANCELLED). `bookingsOnCalendar` set `cancelled`
+from `readBooking`, which has no such field, so every booking read as live;
+it now uses `isCancelled`, as the week does. A cancellation card for a day
+already gone is never shown: `queueCancellation` files it as `day passed`,
+and `reconcileQueue` settles any still pending.
 
 **Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
 `action=search` in `api/calendar/today.js`): Google's own full-text search over
