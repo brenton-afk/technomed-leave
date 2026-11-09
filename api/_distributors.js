@@ -14,9 +14,13 @@ export const DISTRIBUTORS = {
     name: 'Device Technologies',
     to: ['dl_spine_marketing@device.com.au', 'ortho@device.com.au']
   },
+  // The Boost usage goes to Device's spine/ortho desk for resupply, labelled
+  // Boost. The Boost team at boost@ gets only the patient tracking form, on its
+  // own (BOOST_TRACKING below) — sending them the usage too is how Mulligan's
+  // graft came to be processed twice (Brent, 9 Nov 2026).
   device_boost: {
     name: 'Device Technologies Boost Allograft',
-    to: ['boost@device.com.au', 'dl_spine_marketing@device.com.au', 'ortho@device.com.au']
+    to: ['dl_spine_marketing@device.com.au', 'ortho@device.com.au']
   },
   e4: {
     name: 'E4 Surgical',
@@ -34,6 +38,15 @@ export const DISTRIBUTORS = {
     name: 'Donor Tissue Bank of Victoria',
     to: ['dtbv.utilization@vifm.org', 'kt@ktmedical.com.au', 'ben@ktmedical.com.au']
   }
+}
+
+// Not a distributor send: the Boost patient tracking form, alone, to the Boost
+// team, copied to admin@ — "tracking only", never a usage to resupply from.
+export const BOOST_TRACKING = {
+  key: 'boost_tracking',
+  name: 'Boost tracking form',
+  to: ['boost@device.com.au'],
+  cc: ['admin@technomed.com.au']
 }
 
 // ─── Booking notifications ────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ import {
   resupplyFileName, itemsFor
 } from '../_resupply.js'
 import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor } from '../_usageCase.js'
-import { DISTRIBUTORS, groupByDistributor, ccFor } from '../_distributors.js'
+import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
 import {
@@ -24,7 +24,7 @@ import {
 import { amendItems, changesByDistributor, amendGaps } from '../_usageAmend.js'
 import { earlierSends } from '../_usageRepeat.js'
 import { findDuplicate, freeFolderName } from '../_usageDuplicate.js'
-import { sendUsageEmail } from '../_email.js'
+import { sendUsageEmail, sendBoostTrackingEmail } from '../_email.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
 // reason as api/meetings/agent.js: Vercel's Hobby plan caps a deployment at 12
@@ -52,6 +52,8 @@ Return ONLY a JSON object (no markdown fences, no preamble, no trailing commenta
   "hospital": "CLV or RHH or empty string",
   "procedure": "",
   "repName": "",
+  "boostTrackingForm": false,
+  "boostTrackingPages": [],
   "items": [
     {
       "distributor": "manufacturer or distributor as printed, else empty",
@@ -69,7 +71,9 @@ Return ONLY a JSON object (no markdown fences, no preamble, no trailing commenta
     }
   ]
 }
-If the document contains no implant items, return an empty items array.`
+If the document contains no implant items, return an empty items array.
+
+"boostTrackingForm" is true when this image is a Boost (or other bone graft) patient tracking / implant registration form — a graft company's own form recording which graft went into which patient — rather than the hospital's Record of Implantable/Rebatable Items Used. "boostTrackingPages" lists the 1-based page numbers, in the order given, that are such a tracking form, when you are given several pages at once.`
 
 export default async function handler(req, res) {
   const action = req.query.action
@@ -206,7 +210,26 @@ export function mergeExtractions(readings) {
   for (const field of HEADER_FIELDS) {
     merged[field] = readings.map(r => r?.[field]).find(v => String(v || '').trim()) || ''
   }
-  for (const r of readings) merged.items.push(...(Array.isArray(r?.items) ? r.items : []))
+  // Which pages are a Boost tracking form (Brent, 9 Nov 2026: that form goes
+  // to the Boost team alone, marked tracking only — see boostTrackingEmail).
+  merged.boostTrackingPages = readings
+    .map((r, i) => (r?.boostTrackingForm === true || (Array.isArray(r?.boostTrackingPages) && r.boostTrackingPages.map(Number).includes(1)) ? i + 1 : null))
+    .filter(Boolean)
+  const tracking = new Set(merged.boostTrackingPages)
+  const key = it => `${String(it?.referenceCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '')}|${String(it?.lotNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '')}`
+  const onUsage = new Set()
+  readings.forEach((r, i) => {
+    if (!tracking.has(i + 1)) for (const it of (Array.isArray(r?.items) ? r.items : [])) onUsage.add(key(it))
+  })
+  readings.forEach((r, i) => {
+    for (const it of (Array.isArray(r?.items) ? r.items : [])) {
+      // The graft's sticker is on the tracking form as well as the usage
+      // record — one graft, not two (Mulligan, 9 Nov 2026). A line from the
+      // tracking form is kept only when the usage record does not have it.
+      if (tracking.has(i + 1) && key(it) !== '|' && onUsage.has(key(it))) continue
+      merged.items.push(it)
+    }
+  })
   return merged
 }
 
@@ -455,9 +478,20 @@ async function handleEmail(req, res, session) {
   // the form went when it did not.
   let scanPdf = null
   let scanError = ''
-  if (Array.isArray(pages) && pages.length) {
+  // The Boost tracking form's pages go to the Boost team alone, so they are
+  // left off every distributor's copy of the scan (Brent, 9 Nov 2026: the
+  // tracking form reached Device's usage desk with the usage, and Mulligan's
+  // graft was set to be processed twice).
+  const pageCount = Array.isArray(pages) ? pages.length : 0
+  const trackingPages = [...new Set((record.boostTrackingPages || []).map(Number))]
+    .filter(n => Number.isInteger(n) && n >= 1 && n <= pageCount)
+  let trackingPdf = null
+  if (pageCount) {
     try {
-      scanPdf = await buildScanPdf(validatePages(pages))
+      const all = validatePages(pages)
+      const usagePages = all.filter((_, i) => !trackingPages.includes(i + 1))
+      scanPdf = await buildScanPdf(usagePages.length ? usagePages : all)
+      if (trackingPages.length) trackingPdf = await buildScanPdf(all.filter((_, i) => trackingPages.includes(i + 1)))
     } catch (err) {
       scanError = err.message
     }
@@ -543,6 +577,12 @@ async function handleEmail(req, res, session) {
     if (!test) await releaseUsageSend(record.id, key)
   }
 
+  // The Boost tracking form: to boost@ alone, copied to admin@, tracking only.
+  const wantTracking = !only?.length || only.includes(BOOST_TRACKING.key)
+  if (wantTracking && (groups.has('device_boost') || trackingPages.length)) {
+    results.push(await boostTrackingResult({ record, session, test, trackingPdf, pageCount, done: alreadySent.get(BOOST_TRACKING.key) }))
+  }
+
   // A test is not recorded against the case. Otherwise it would show as sent, and
   // the distributor would never get the real one — a test that quietly satisfies
   // the thing it was testing is worse than no test.
@@ -553,7 +593,8 @@ async function handleEmail(req, res, session) {
   const updated = test
     ? record
     : (() => {
-      const recorded = results.filter(r => !(r.held && (fresh.emailsSent || []).some(e => e.key === r.key && e.ok)))
+      // A notice (no tracking form found) is not a send and is not recorded as one.
+      const recorded = results.filter(r => !r.notice).filter(r => !(r.held && (fresh.emailsSent || []).some(e => e.key === r.key && e.ok)))
       // Keep the latest outcome per distributor so a retry replaces the failure.
       const merged = [...(fresh.emailsSent || [])].filter(e => !recorded.some(r => r.key === e.key))
       return { ...fresh, emailsSent: [...merged, ...recorded], updatedAt: new Date().toISOString() }
@@ -574,6 +615,46 @@ async function handleEmail(req, res, session) {
     allSent: failed.length === 0,
     record: updated
   })
+}
+
+/**
+ * The Boost tracking form's send, as one more result line on the Done screen.
+ * Held (amber, nothing sent) when it already went, when the pages did not come
+ * with the request, or when no page of the scan was read as a tracking form —
+ * each says what to do instead.
+ */
+async function boostTrackingResult({ record, session, test, trackingPdf, pageCount, done }) {
+  const base = { key: BOOST_TRACKING.key, name: BOOST_TRACKING.name, to: [], itemCount: 0 }
+  if (done) {
+    return { ...base, ok: false, held: true, error: 'Not sent: the Boost team already had the tracking form for this case.' }
+  }
+  if (!pageCount) {
+    return { ...base, ok: false, held: true, notice: true, error: 'Boost tracking form not sent: the scanned pages were not sent with this request. Send it to boost@device.com.au by hand, marked tracking only.' }
+  }
+  if (!trackingPdf) {
+    return { ...base, ok: false, held: true, notice: true, error: 'No Boost tracking form was found in the scan. If there is one, send it to boost@device.com.au by hand, marked tracking only.' }
+  }
+  if (!test && !(await claimUsageSend(record.id, BOOST_TRACKING.key))) {
+    return { ...base, ok: false, held: true, error: 'Not sent: the tracking form is already being sent from another tap or phone.' }
+  }
+  const to = test ? [session.email] : BOOST_TRACKING.to
+  try {
+    const sent = await sendBoostTrackingEmail({
+      to,
+      cc: test ? [] : BOOST_TRACKING.cc,
+      subject: record.folderName,
+      pdf: trackingPdf,
+      pdfFilename: `${record.folderName}_Boost_Tracking_Form.pdf`,
+      caseId: record.id,
+      test: test ? { wouldSendTo: BOOST_TRACKING.to } : undefined,
+      sender: { name: session.name, email: session.email }
+    })
+    return { ...base, to, ok: true, test, from: sent?.from || session.email, scanAttached: true, sentAt: new Date().toISOString() }
+  } catch (err) {
+    return { ...base, to, ok: false, test, error: err.message }
+  } finally {
+    if (!test) await releaseUsageSend(record.id, BOOST_TRACKING.key)
+  }
 }
 
 // ─── record / amend: correcting a usage after it has gone ────

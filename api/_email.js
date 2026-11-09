@@ -542,6 +542,48 @@ export async function sendUsageEmail({
   })
 }
 
+// ─── BOOST TRACKING FORM ───────────────────────────────────
+// Brent, 9 Nov 2026 (Mulligan): the Boost team at boost@ gets the patient
+// tracking form alone, said plainly to be for tracking only. The usage itself
+// goes to Device's spine/ortho desk for resupply — two emails, two jobs, and
+// nothing for either team to process twice.
+export async function sendBoostTrackingEmail({ to, cc, subject, pdf, pdfFilename, test, sender, caseId }) {
+  const body = 'Please find the Boost patient tracking form attached, for tracking only. '
+    + 'This is not a usage: the usage has been sent separately to Device Technologies for resupply, '
+    + 'so please do not process or resupply from this email.'
+  const heading = `${test ? '[TEST] ' : ''}Boost tracking only – ${subject}`
+  const wouldHaveGone = test ? `Would have gone to: ${test.wouldSendTo.join(', ')}` : ''
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#042746;padding:24px 28px;">
+  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Boost tracking only</div>
+  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(heading)}</div>
+  </td></tr>
+  ${test ? `<tr><td style="padding:14px 28px;background:#fff3cd;color:#856404;font-size:13px;font-weight:700;line-height:1.5;">
+  TEST — not sent to the Boost team<div style="font-weight:400;margin-top:4px;">${escapeHtml(wouldHaveGone)}</div></td></tr>` : ''}
+  <tr><td style="padding:24px 28px;font-size:14px;color:#042746;line-height:1.6;">
+  <div style="font-weight:700;margin-bottom:10px;">For tracking only — not a usage. Please do not resupply from this email.</div>
+  ${escapeHtml(body)}<div style="margin-top:16px;color:#6b7a8d;font-size:13px;">Warm regards,<br>TechnoMed</div>
+  </td></tr>
+  <tr><td style="padding:0 28px 22px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed · technomed.com.au</td></tr>
+  </table></td></tr></table>
+  </body></html>`
+  return send({
+    to,
+    cc,
+    kind: 'usage',
+    caseId,
+    label: test ? 'Boost tracking form (test)' : 'Boost tracking form · tracking only',
+    subject: heading,
+    html,
+    text: `${test ? `TEST — not sent to the Boost team. ${wouldHaveGone}\n\n` : ''}For tracking only — not a usage. ${body}\n\nWarm regards,\nTechnoMed`,
+    attachments: [{ filename: pdfFilename || 'Boost_Tracking_Form.pdf', content: pdf.toString('base64') }],
+    sender,
+    replyTo: sender?.email
+  })
+}
+
 // ─── MEETING MINUTES / ACTION ITEMS ────────────────────────
 
 const PRIORITY_COLORS = { urgent: '#c0392b', normal: '#1a7a6e', low: '#6b7a8d' }

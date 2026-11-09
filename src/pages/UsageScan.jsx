@@ -696,8 +696,8 @@ export default function UsageScan({ user, switcher }) {
             </div>
           )}
           {history.map(h => {
-            const failed = (h.emailsSent || []).filter(e => !e.ok && !e.held).length
-            const heldBack = (h.emailsSent || []).filter(e => e.held).length
+            const failed = (h.emailsSent || []).filter(e => !e.ok && !e.held && !e.notice).length
+            const heldBack = (h.emailsSent || []).filter(e => e.held && !e.notice).length
             const sent = (h.emailsSent || []).filter(e => e.ok).length
             if (amending === h.id) {
               return <AmendUsage key={h.id} usageId={h.id} user={user}
@@ -967,8 +967,10 @@ export default function UsageScan({ user, switcher }) {
 
   // ── Done ─────────────────────────────────────────────────
   if (step === 'done' && result) {
-    const failed = result.emails.filter(e => !e.ok && !e.held)
-    const held = result.emails.filter(e => e.held)
+    // A notice (no Boost tracking form in the scan) is said, not offered as a
+    // send — there is nothing to send anyway.
+    const failed = result.emails.filter(e => !e.ok && !e.held && !e.notice)
+    const held = result.emails.filter(e => e.held && !e.notice)
     return (
       <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
         <Header
@@ -1062,13 +1064,13 @@ export default function UsageScan({ user, switcher }) {
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: NAVY }}>{e.name}</div>
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                    {e.itemCount} item{e.itemCount === 1 ? '' : 's'}
+                    {e.key === 'boost_tracking' ? 'Tracking form only' : `${e.itemCount} item${e.itemCount === 1 ? '' : 's'}`}
                     {e.ok ? (e.test ? ` · to you` : ` · ${e.to.length} recipient${e.to.length === 1 ? '' : 's'}`) : ''}
                   </div>
                   {!e.ok && <div style={{ fontSize: 11, color: e.held ? AMBER_TEXT : '#c0392b', marginTop: 3, lineHeight: 1.45 }}>{e.error}</div>}
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, color: e.ok ? TEAL : '#c0392b', whiteSpace: 'nowrap' }}>
-                  {e.ok ? (e.test ? '✓ Test sent' : '✓ Sent') : e.held ? 'Held' : '✕ Failed'}
+                  {e.ok ? (e.test ? '✓ Test sent' : '✓ Sent') : e.notice ? 'Not sent' : e.held ? 'Held' : '✕ Failed'}
                 </span>
               </div>
             ))}

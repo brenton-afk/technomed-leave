@@ -1146,6 +1146,22 @@ Invariants worth preserving:
   **Remove duplicate** (admins, or whoever scanned it) takes a case off history,
   Still owed and matching — `removeUsageRecord`, kept under `usage:removed`,
   never erased; Dropbox and the email log are untouched.
+- **The Boost tracking form goes to the Boost team alone** (Brent, 9 Nov 2026,
+  Mulligan: the tracking form reached Device's usage desk with the usage and
+  the graft was set to be processed twice). `device_boost` usage now goes to
+  `dl_spine_marketing` + `ortho` only, for resupply, labelled Boost.
+  `BOOST_TRACKING` (`api/_distributors.js`): the tracking form's pages, alone,
+  to `boost@device.com.au`, cc `admin@technomed.com.au`, subject "Boost
+  tracking only – …", body "for tracking only — not a usage … do not resupply"
+  (`sendBoostTrackingEmail`). The reader marks each page `boostTrackingForm`
+  (`mergeExtractions` → `boostTrackingPages` on the case, 1-based); those pages
+  are left off every distributor's copy of the scan (Dropbox keeps all pages),
+  and a graft line read off the tracking form that the usage record already
+  has (same code + lot) is dropped — one graft, not two. One more result line,
+  key `boost_tracking`, sent once like any distributor; when no page was read
+  as a tracking form it is a `notice` ("send it by hand, marked tracking
+  only"), not a failure, not offered as Send anyway and not recorded in
+  `emailsSent`.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
 - **The distributor email carries two attachments**: the 20-column sheet of their
   own items, and the scanned form with every page merged into one PDF

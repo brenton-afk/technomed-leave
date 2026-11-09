@@ -335,6 +335,10 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
     .filter(it => !isExcludedProduct(it.productName, it.description, it.referenceCode))
 
   const caseDetails = {
+    // Pages of the scan that are a Boost tracking form (1-based), sent to the
+    // Boost team on their own and left off every distributor's copy of the scan.
+    boostTrackingPages: (Array.isArray(extracted.boostTrackingPages) ? extracted.boostTrackingPages : [])
+      .map(Number).filter(n => Number.isInteger(n) && n >= 1 && n <= 20),
     patientSurname,
     // Surname only, deliberately. The first name and the UR number used to be
     // read off the label and kept here, which put a hospital MRN into Redis,

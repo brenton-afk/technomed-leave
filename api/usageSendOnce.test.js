@@ -18,7 +18,10 @@ vi.mock('./_redis.js', () => ({
 }))
 vi.mock('./_auth.js', () => ({ requireSession: vi.fn(async () => ({ email: 'rep@example.test', name: 'Rep Example' })) }))
 const sends = []
-vi.mock('./_email.js', () => ({ sendUsageEmail: vi.fn(async m => { sends.push(m.distributorLabel); return { from: 'rep@example.test' } }) }))
+vi.mock('./_email.js', () => ({
+  sendUsageEmail: vi.fn(async m => { sends.push(m.distributorLabel); return { from: 'rep@example.test' } }),
+  sendBoostTrackingEmail: vi.fn(async () => ({ from: 'rep@example.test' }))
+}))
 vi.mock('./_usageExcel.js', () => ({ buildUsageWorkbook: vi.fn(async () => Buffer.from('x')) }))
 vi.mock('./_usagePdf.js', () => ({ buildScanPdf: vi.fn(async () => Buffer.from('p')) }))
 vi.mock('./_googleCalendar.js', () => ({ markAttendance: vi.fn(async () => ({ updated: false })) }))
@@ -69,7 +72,7 @@ describe('sending a usage', () => {
     records.set(CASE.id, CASE)
     const [a, b] = await Promise.all([call('email', { usageId: CASE.id }), call('email', { usageId: CASE.id })])
     expect(sends).toHaveLength(1)
-    expect([a, b].flatMap(r => r.data.results).filter(r => r.held)).toHaveLength(1)
+    expect([a, b].flatMap(r => r.data.results).filter(r => r.held && r.key !== 'boost_tracking')).toHaveLength(1)
   })
 
   it('a re-save from a phone with an old copy keeps the record of what was sent', async () => {
