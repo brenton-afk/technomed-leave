@@ -1,4 +1,5 @@
 // ─── Usage case normalisation ─────────────────────────────────────────────────
+import { itemGaps } from '../src/usageItemCheck.js'
 import { surnameFromField } from '../src/clinicalPlan/parse.js'
 import { findSystems } from '../src/clinicalPlan/systems.js'
 // Turns whatever the vision extraction returned into a normalised case record:
@@ -256,6 +257,9 @@ export function normaliseItem(raw, index) {
   if (!productName) reasons.push('no product name read')
   if (!distributorKey && !excluded) reasons.push('distributor not identified')
   if (quantityUncertain) reasons.push('quantity unclear')
+  // A line a distributor cannot resupply from (Brent, 9 Nov 2026): no product
+  // code, or a rod or screw with no size. See src/usageItemCheck.js.
+  if (!excluded) reasons.push(...itemGaps({ productName, description, size, referenceCode }))
 
   return {
     id: `item-${index}`,

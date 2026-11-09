@@ -10,6 +10,7 @@
 // with the corrected sheet. The original stays on the record and in Dropbox.
 
 import { DISTRIBUTORS } from './_distributors.js'
+import { itemGaps, suggestedCode } from '../src/usageItemCheck.js'
 
 /** The fields a rep may change on an item that was already sent. */
 const EDITABLE = ['productName', 'description', 'size', 'quantity', 'referenceCode', 'lotNumber', 'excluded']
@@ -72,4 +73,18 @@ export function changesByDistributor(before = [], after = []) {
   }
   for (const [id, item] of was) if (!now.has(id)) note(item.distributorKey, `Removed: ${describe(item)}`)
   return [...out].map(([key, lines]) => ({ key, name: DISTRIBUTORS[key]?.name || key, lines }))
+}
+
+/**
+ * Lines added or changed in this amendment that a distributor could not
+ * resupply from (src/usageItemCheck.js). Lines the amendment did not touch are
+ * not held against it — they went in the original usage.
+ */
+export function amendGaps(before = [], after = []) {
+  const was = new Map(before.map(i => [i.id, i]))
+  return after
+    .filter(i => i && !i.excluded && i.distributorKey)
+    .filter(i => { const old = was.get(i.id); return !old || !sameItem(old, i) })
+    .map(i => ({ id: i.id, name: [i.productName || i.description, i.size].filter(Boolean).join(' '), gaps: itemGaps(i), suggestion: suggestedCode(i) }))
+    .filter(g => g.gaps.length)
 }

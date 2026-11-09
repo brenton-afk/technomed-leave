@@ -21,7 +21,7 @@ import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
   listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile, caseFoldersOnDay
 } from '../_dropbox.js'
-import { amendItems, changesByDistributor } from '../_usageAmend.js'
+import { amendItems, changesByDistributor, amendGaps } from '../_usageAmend.js'
 import { earlierSends } from '../_usageRepeat.js'
 import { findDuplicate, freeFolderName } from '../_usageDuplicate.js'
 import { sendUsageEmail } from '../_email.js'
@@ -595,7 +595,7 @@ async function handleRecord(req, res) {
 
 async function handleAmend(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const { usageId, items, preview, testOnly } = req.body || {}
+  const { usageId, items, preview, testOnly, confirmGaps } = req.body || {}
   const record = await getUsageRecord(String(usageId || ''))
   if (!record) return res.status(404).json({ error: 'Usage record not found' })
   if (!Array.isArray(items)) throw badRequest('No items supplied')
@@ -606,8 +606,16 @@ async function handleAmend(req, res, session) {
   // the usage it corrects, in a different folder.
   if (record.folderName) amended.folderName = record.folderName
   const changes = changesByDistributor(record.items || [], amended.items)
-  if (preview) return res.status(200).json({ changes })
+  // A line added or changed here that a distributor could not resupply from —
+  // no code, or a rod or screw with no size (Brent, 9 Nov 2026: Cloherty's
+  // rods went as "Diplomat curved rods · 105"). Said on the preview, and a
+  // send is held until the rep fixes it or says to send anyway.
+  const gaps = amendGaps(record.items || [], amended.items)
+  if (preview) return res.status(200).json({ changes, gaps })
   if (!changes.length) throw badRequest('Nothing has changed for any distributor')
+  if (gaps.length && !confirmGaps) {
+    return res.status(409).json({ error: 'Some lines are missing a product code or size', code: 'gaps', gaps, changes })
+  }
 
   const test = Boolean(testOnly)
   const now = new Date().toISOString()

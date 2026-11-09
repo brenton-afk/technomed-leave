@@ -8,6 +8,7 @@ import { releaseCamera } from '../scanner/cameraStream.js'
 import { partitionItems } from '../usageReview.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { Header as ShellHeader } from '../design/Shell.jsx'
+import { itemGaps, suggestedCode } from '../usageItemCheck.js'
 import { colour } from '../design/tokens.js'
 
 // Claude downsamples anything larger, and Vercel caps a function request body
@@ -887,6 +888,17 @@ export default function UsageScan({ user, switcher }) {
                         <div style={{ fontSize: 11, color: MUTED, whiteSpace: 'nowrap' }}>{n + 1} of {list.length}</div>
                       </div>
                     )}
+                    {needsWork && itemGaps(item).length > 0 && (
+                      <div data-item-gaps style={{ fontSize: 12, color: AMBER_TEXT, marginBottom: 8 }}>
+                        Still missing: {itemGaps(item).join(' · ')} — the distributor resupplies by code and size.
+                        {suggestedCode(item) && (
+                          <button type="button" data-use-code onClick={() => updateItem(item.id, 'referenceCode', suggestedCode(item))}
+                            style={{ marginLeft: 6, padding: '3px 8px', borderRadius: 6, border: `1px solid ${TEAL}`, background: 'white', color: TEAL, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                            Use {suggestedCode(item)}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <Field label="Product / system" value={item.productName} onChange={v => updateItem(item.id, 'productName', v)} />
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <Field label="Reference code" value={item.referenceCode} onChange={v => updateItem(item.id, 'referenceCode', v)} />
@@ -897,12 +909,18 @@ export default function UsageScan({ user, switcher }) {
                     </div>
                     <Field label="Distributor" value={item.distributorKey || ''} onChange={v => updateItem(item.id, 'distributorKey', v)} options={DISTRIBUTOR_OPTIONS} />
                     <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                      {needsWork && (
-                        <button onClick={() => resolveItem(item.id)} disabled={!item.distributorKey || !item.productName}
-                          style={{ flex: 1, padding: 10, background: (!item.distributorKey || !item.productName) ? '#d9cfae' : TEAL, color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: (!item.distributorKey || !item.productName) ? 'default' : 'pointer' }}>
-                          ✓ Mark resolved
-                        </button>
-                      )}
+                      {needsWork && (() => {
+                        // A rod or screw with no size cannot be resolved; a line
+                        // with no code can, but only by saying so (Brent, 9 Nov 2026).
+                        const gaps = itemGaps(item)
+                        const blocked = !item.distributorKey || !item.productName || gaps.some(g => g !== 'no product code')
+                        return (
+                          <button onClick={() => resolveItem(item.id)} disabled={blocked} data-resolve-item
+                            style={{ flex: 1, padding: 10, background: blocked ? '#d9cfae' : TEAL, color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: blocked ? 'default' : 'pointer' }}>
+                            {gaps.includes('no product code') ? '✓ Resolve without a code' : '✓ Mark resolved'}
+                          </button>
+                        )
+                      })()}
                       {done && (
                         <button onClick={() => unresolveItem(item.id)}
                           style={{ flex: 1, padding: 10, background: 'transparent', color: TEAL, border: `1px solid ${DONE_LINE}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>

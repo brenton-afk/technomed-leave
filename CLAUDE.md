@@ -585,6 +585,23 @@ booking says "fixation" for the plate; "+ Add screw levels" brings them back. Co
 only where known (`SURGEON_TITLES`). Still a draft for the phone's messaging
 app, never a send.
 
+### A usage line must carry its code and size (Brent, 9 Nov 2026)
+
+"The portal should have picked up the missing size of the rods before he sent
+it" — Cloherty's rods were added in Amend as "Diplomat curved rods · 105" with
+no code (Amend's add form had no code box), and Signus could not resupply from
+it. `itemGaps` in `src/usageItemCheck.js` (shared): **no product code**, a
+**rod with no length**, a pedicle/lateral-mass **screw with no code or size**
+(set screws are not sized). On a scan `normaliseItem` adds them to
+`reviewReasons`, so the line goes to review; the review card says "Still
+missing …", a rod/screw with no size cannot be resolved, and a line with no
+code resolves only as **"Resolve without a code"**. Amend has a **Product
+code** box; lines the amendment adds or changes are checked (`amendGaps`), the
+preview lists them, Send correction is disabled, and the server answers 409
+`gaps` unless `confirmGaps` ("Send without them"). `suggestedCode` offers the
+Signus Diplomat titanium rod code from shape and length — AB0955-00{len}
+curved, AB0855-00{len} straight — as a button, never filled in by itself.
+
 ### Amending a sent usage (Aimee and Brent, 4 Nov 2026)
 
 **Amend** on each past usage (`scan/AmendUsage.jsx`) edits the items — change a

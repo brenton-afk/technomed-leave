@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
+import { itemGaps, suggestedCode } from '../../usageItemCheck.js'
 
 // ─── Amend a usage that has already gone ─────────────────────────────────────
 // "I had forgotten to add the crosslink to my usage … how we could make an
@@ -11,7 +12,8 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
   const [record, setRecord] = useState(null)
   const [distributors, setDistributors] = useState([])
   const [items, setItems] = useState([])
-  const [draft, setDraft] = useState({ productName: '', size: '', quantity: 1, distributorKey: '' })
+  const [draft, setDraft] = useState({ productName: '', referenceCode: '', size: '', quantity: 1, distributorKey: '' })
+  const [sendAnyway, setSendAnyway] = useState(false)
   const [changes, setChanges] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -34,21 +36,28 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usageId])
 
-  const edit = (id, patch) => { setChanges(null); setItems(list => list.map(i => (i.id === id ? { ...i, ...patch } : i))) }
+  const edit = (id, patch) => { setChanges(null); setSendAnyway(false); setItems(list => list.map(i => (i.id === id ? { ...i, ...patch } : i))) }
+  const editNew = (item, patch) => { setChanges(null); setSendAnyway(false); setItems(list => list.map(i => (i === item ? { ...i, ...patch } : i))) }
   const add = () => {
     if (!draft.productName.trim()) return
-    setChanges(null)
-    setItems(list => [...list, { ...draft, productName: draft.productName.trim(), size: draft.size.trim(), quantity: Number(draft.quantity) || 1 }])
-    setDraft({ productName: '', size: '', quantity: 1, distributorKey: '' })
+    setChanges(null); setSendAnyway(false)
+    setItems(list => [...list, { ...draft, productName: draft.productName.trim(), referenceCode: draft.referenceCode.trim(), size: draft.size.trim(), quantity: Number(draft.quantity) || 1 }])
+    setDraft({ productName: '', referenceCode: '', size: '', quantity: 1, distributorKey: '' })
   }
+  // Lines new to this amendment that a distributor could not resupply from —
+  // no code, or a rod or screw with no size (Brent, 9 Nov 2026, Cloherty's
+  // rods). The server holds the send until they are fixed or sent anyway.
+  const gaps = items.filter(i => !i.id && !i.excluded).map(i => ({ item: i, gaps: itemGaps(i), suggestion: suggestedCode(i) })).filter(g => g.gaps.length)
+  const draftHint = suggestedCode(draft)
 
   async function post(body) {
     setBusy(true); setError('')
     try {
       const res = await fetch('/api/usage/agent?action=amend', {
-        method: 'POST', headers, body: JSON.stringify({ usageId, items, ...body })
+        method: 'POST', headers, body: JSON.stringify({ usageId, items, ...(sendAnyway ? { confirmGaps: true } : {}), ...body })
       })
       const data = await res.json()
+      if (data.code === 'gaps') throw new Error('Some lines are missing a product code or size — fix them, or tick “Send without them” below.')
       if (!res.ok && !data.results) throw new Error(data.error || 'That did not work')
       return data
     } catch (err) {
@@ -101,7 +110,7 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
                 <div style={{ ...text('caption'), fontWeight: 700, color: colour.ink, textDecoration: item.excluded ? 'line-through' : 'none' }}>
                   {item.productName || item.description} {item.size}
                 </div>
-                <div style={{ ...text('micro'), textTransform: 'none', color: colour.inkFaint }}>{item.distributor || (item.id ? 'Not sent' : 'New')}</div>
+                <div style={{ ...text('micro'), textTransform: 'none', color: colour.inkFaint }}>{item.distributor || (item.id ? 'Not sent' : 'New')}{item.referenceCode ? ` · ${item.referenceCode}` : ''}</div>
               </div>
               <input type="number" min="0" aria-label={`Quantity of ${item.productName}`} value={item.quantity ?? 1}
                 onChange={e => (item.id ? edit(item.id, { quantity: Number(e.target.value) }) : null)}
@@ -118,9 +127,11 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
 
           <div style={{ marginTop: space.md }}>
             <span style={label}>Add an item that was missed</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) 64px', gap: space.xs, marginBottom: space.xs }}>
-              <input aria-label="Item" placeholder="e.g. Diplomat cross link" value={draft.productName}
-                onChange={e => setDraft(d => ({ ...d, productName: e.target.value }))} style={input} />
+            <input aria-label="Item" placeholder="e.g. Diplomat curved rod" value={draft.productName}
+              onChange={e => setDraft(d => ({ ...d, productName: e.target.value }))} style={{ ...input, marginBottom: space.xs }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) 64px', gap: space.xs, marginBottom: space.xs }}>
+              <input aria-label="Product code" placeholder="Product code" value={draft.referenceCode}
+                onChange={e => setDraft(d => ({ ...d, referenceCode: e.target.value }))} style={input} />
               <input aria-label="Size" placeholder="Size" value={draft.size}
                 onChange={e => setDraft(d => ({ ...d, size: e.target.value }))} style={input} />
               <input aria-label="Quantity" type="number" min="1" value={draft.quantity}
@@ -134,7 +145,36 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
               </select>
               <button type="button" onClick={add} style={{ ...button(false), minHeight: 40 }}>Add</button>
             </div>
+            {draftHint && (
+              <button type="button" data-use-code onClick={() => setDraft(d => ({ ...d, referenceCode: draftHint }))}
+                style={{ ...button(false), flex: 'none', minHeight: 36, marginTop: space.xs, ...text('caption'), fontWeight: 700, padding: `0 ${space.sm}px` }}>
+                Use code {draftHint}
+              </button>
+            )}
           </div>
+
+          {gaps.length > 0 && (
+            <div data-amend-gaps style={{ marginTop: space.md, padding: space.sm, background: colour.warningSoft, borderRadius: radius.control, border: `1px solid ${colour.warning}` }}>
+              <div style={{ ...text('caption'), fontWeight: 700, color: colour.ink, marginBottom: 4 }}>
+                Before this goes — the distributor resupplies by code and size:
+              </div>
+              {gaps.map(g => (
+                <div key={g.item.productName + g.item.size} style={{ ...text('caption'), color: colour.ink, marginBottom: 4 }}>
+                  {g.item.productName} {g.item.size}: {g.gaps.join(' · ')}
+                  {g.suggestion && (
+                    <button type="button" onClick={() => editNew(g.item, { referenceCode: g.suggestion })}
+                      style={{ marginLeft: 6, background: 'none', border: `1px solid ${colour.accent}`, borderRadius: radius.control, color: colour.accent, cursor: 'pointer', ...text('caption'), fontWeight: 700, minHeight: 32 }}>
+                      Use {g.suggestion}
+                    </button>
+                  )}
+                </div>
+              ))}
+              <label style={{ display: 'flex', alignItems: 'center', gap: space.xs, ...text('caption'), color: colour.ink, marginTop: 4 }}>
+                <input type="checkbox" checked={sendAnyway} onChange={e => setSendAnyway(e.target.checked)} style={{ width: 20, height: 20, fontSize: 16 }} />
+                Send without them
+              </label>
+            </div>
+          )}
 
           {changes && (
             <div style={{ marginTop: space.md, padding: space.sm, background: colour.canvas, borderRadius: radius.control }}>
@@ -153,7 +193,8 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
             {!changes || !changes.length
               ? <button type="button" disabled={busy} onClick={check} style={button(true)}>Check changes</button>
               : <>
-                  <button type="button" disabled={busy} onClick={() => send(false)} style={button(true)}>Send correction</button>
+                  <button type="button" disabled={busy || (gaps.length > 0 && !sendAnyway)} onClick={() => send(false)} data-send-correction
+                    style={{ ...button(true), opacity: busy || (gaps.length > 0 && !sendAnyway) ? 0.5 : 1 }}>Send correction</button>
                   <button type="button" disabled={busy} onClick={() => send(true)} style={button(false)}>Test to me</button>
                 </>}
           </div>

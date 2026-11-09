@@ -33,3 +33,17 @@ describe('amending a sent usage', () => {
     expect(changesByDistributor(before, amendItems(before, before, normaliseItem))).toEqual([])
   })
 })
+
+// Brent, 9 Nov 2026: Cloherty's rods were added in Amend with no code.
+describe('lines an amendment adds without a code or size', () => {
+  it('are listed, and lines the amendment did not touch are not', async () => {
+    const { amendGaps } = await import('./_usageAmend.js')
+    const before = [{ id: 'a', productName: 'Old line', distributorKey: 'signus' }]
+    const after = [
+      { id: 'a', productName: 'Old line', distributorKey: 'signus' },
+      { id: 'n1', productName: 'Diplomat curved rods', size: '105', quantity: 2, distributorKey: 'signus' },
+      { id: 'n2', productName: 'Diplomat cross link', referenceCode: 'AB0155-41058', distributorKey: 'signus' }
+    ]
+    expect(amendGaps(before, after)).toEqual([{ id: 'n1', name: 'Diplomat curved rods 105', gaps: ['no product code'], suggestion: 'AB0955-00105' }])
+  })
+})
