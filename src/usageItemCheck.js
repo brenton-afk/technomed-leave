@@ -10,9 +10,41 @@
 // not send a correction with a gap unless the rep says so).
 
 const textOf = item => [item?.productName, item?.description].filter(Boolean).join(' ')
-const isRod = item => /\brods?\b/i.test(textOf(item))
-// A set screw or a locking cap is not sized like a pedicle screw.
-const isSizedScrew = item => /\bscrews?\b/i.test(textOf(item)) && !/\bset\s*screw|locking\s*(cap|screw\s*plate)|cap\b/i.test(textOf(item))
+
+// ─── The rules, one row per kind of item (Brent, 9 Nov 2026) ─────────────────
+// "We need to build a list of rules to check when usages are sent … there is
+// no size per se for a tulip, so I don't want the usage stopped for these."
+//
+// Every line wants a product code: that is how a distributor resupplies. A
+// missing code puts the line in review, but it can always go — "Resolve
+// without a code". Only the kinds marked `size` are *stopped* for a missing
+// size, and only when there is no code either, because a code already says
+// the size (AB0321-65050 is a 6.5 × 50 screw). First match wins, so the
+// specific rows come before the general ones — "Ped Scr w/o tulip" is a screw,
+// not a tulip, and a set screw is not a pedicle screw.
+export const LINE_RULES = [
+  { kind: 'Pedicle screw without its tulip', match: /w\/?o\s*(tlp|tul)|without\s*(a\s*)?tulip/i, size: 'screw size' },
+  { kind: 'Set screw, locking cap, nut or closure', match: /set\s*screw|locking\s*cap|\bnut\b|\bcap\b|closure|blocker/i, size: null },
+  { kind: 'Tulip or screw head', match: /tulip|screw\s*head|\bhead\b/i, size: null },
+  { kind: 'Cross connector or cross link', match: /cross\s*-?\s*(link|connector)|transverse\s*connector/i, size: null },
+  { kind: 'K-wire or guide wire', match: /k-?\s*wire|guide\s*wire|nitinol/i, size: null },
+  { kind: 'Bone graft, allograft or substitute', match: /graft|allograft|\bdbm\b|boost|\bcbm\b|putty|chips|granules/i, size: null },
+  { kind: 'Pedicle, lateral mass or bone screw', match: /screws?\b|\bscr\b/i, size: 'screw size' },
+  { kind: 'Rod', match: /\brods?\b/i, size: 'rod length' },
+  { kind: 'Plate', match: /plate/i, size: 'plate size' },
+  { kind: 'Cage, interbody, spacer or corpectomy body', match: /cage|interbody|spacer|\b(plif|tlif|alif)\b.*implant|end\s*body|main\s*body/i, size: 'cage size' }
+]
+
+/** The rule a line falls under, or null — anything else needs a code only. */
+export function ruleFor(item) {
+  const words = textOf(item)
+  return LINE_RULES.find(r => r.match.test(words)) || null
+}
+
+const hasCode = item => Boolean(String(item?.referenceCode || '').trim())
+const hasSize = item => Boolean(String(item?.size || '').trim()) || /\d/.test(String(item?.description || '').replace(/\b[A-Z]{2,}\d+[-\w]*/g, ''))
+
+const isRod = item => ruleFor(item)?.kind === 'Rod'
 
 /** A length in mm written anywhere on the line: "105", "105mm", "5.5 x 105". */
 export function lengthOf(item) {
@@ -41,8 +73,11 @@ export function suggestedCode(item) {
 export function itemGaps(item) {
   if (!item || item.excluded) return []
   const gaps = []
-  if (!String(item.referenceCode || '').trim()) gaps.push('no product code')
-  if (isRod(item) && !lengthOf(item)) gaps.push('rod length missing')
-  if (isSizedScrew(item) && !String(item.referenceCode || '').trim() && !String(item.size || '').trim()) gaps.push('screw size missing')
+  if (!hasCode(item)) gaps.push('no product code')
+  const rule = ruleFor(item)
+  if (rule?.size && !hasCode(item)) {
+    const sized = rule.kind === 'Rod' ? Boolean(lengthOf(item)) : hasSize(item)
+    if (!sized) gaps.push(`${rule.size} missing`)
+  }
   return gaps
 }

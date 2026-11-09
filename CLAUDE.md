@@ -590,9 +590,15 @@ app, never a send.
 "The portal should have picked up the missing size of the rods before he sent
 it" — Cloherty's rods were added in Amend as "Diplomat curved rods · 105" with
 no code (Amend's add form had no code box), and Signus could not resupply from
-it. `itemGaps` in `src/usageItemCheck.js` (shared): **no product code**, a
-**rod with no length**, a pedicle/lateral-mass **screw with no code or size**
-(set screws are not sized). On a scan `normaliseItem` adds them to
+it. `itemGaps` in `src/usageItemCheck.js` (shared) works from **`LINE_RULES`**,
+one row per kind of item, first match wins (Brent, same day: "there is no size
+per se for a tulip, so I don't want the usage stopped for these items"). Every
+line wants a **product code** (flagged, but always sendable — "Resolve without
+a code"). Only screws (incl. "w/o tulip"), rods, plates and cages are
+**stopped** for a size, and only when there is no code either — a code already
+says the size. Tulips, set screws/caps/nuts, cross links, K-wires and grafts
+never need a size; anything matching no row needs a code only. Add a kind by
+adding a row, specific before general. On a scan `normaliseItem` adds them to
 `reviewReasons`, so the line goes to review; the review card says "Still
 missing …", a rod/screw with no size cannot be resolved, and a line with no
 code resolves only as **"Resolve without a code"**. Amend has a **Product
