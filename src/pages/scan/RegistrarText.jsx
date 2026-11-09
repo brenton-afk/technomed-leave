@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { registrarDraft, registrarMessage, levelsFrom, smsLink } from '../../usageText.js'
+import { registrarDraft, registrarMessage, levelsFrom, isScrewFixation, smsLink } from '../../usageText.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { inventoryFor } from '../../clinicalPlan/inventory.js'
 
@@ -23,8 +23,11 @@ export default function RegistrarText({ caseRecord, booking }) {
   const [d, setD] = useState(start)
   const [levelText, setLevelText] = useState(booking?.procedure || caseRecord?.procedure || '')
   const [copied, setCopied] = useState(false)
+  // Screw levels are for pedicle / lateral mass fixation only — an ACDF or
+  // ALIF gets none unless the rep asks for them (Brent, 9 Nov 2026).
+  const [screwRows, setScrewRows] = useState(() => isScrewFixation(booking?.procedure || caseRecord?.procedure || ''))
   const set = (key, value) => { setCopied(false); setD(c => ({ ...c, [key]: value })) }
-  const levels = levelsFrom(levelText)
+  const levels = screwRows ? levelsFrom(levelText) : []
   const message = registrarMessage({ ...d, levels })
 
   const input = {
@@ -50,10 +53,18 @@ export default function RegistrarText({ caseRecord, booking }) {
       </div>
       {field('system', 'System', 'e.g. Signus Diplomat')}
 
+      {!screwRows && (
+        <button type="button" data-add-screw-levels onClick={() => { setCopied(false); setScrewRows(true) }} style={{
+          display: 'block', marginBottom: space.sm, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
+          ...text('caption'), color: colour.accent
+        }}>+ Add screw levels (fixation only)</button>
+      )}
+      {screwRows && (
       <label style={{ display: 'block', marginBottom: space.sm }}>
         <span style={label}>Levels</span>
         <input value={levelText} placeholder="e.g. T12-L2" onChange={e => { setCopied(false); setLevelText(e.target.value) }} style={input} />
       </label>
+      )}
       {levels.length > 0 && (
         <div style={{ marginBottom: space.sm }}>
           <span style={label}>Screws — leave a side blank if none</span>

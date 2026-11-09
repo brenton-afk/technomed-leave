@@ -54,6 +54,7 @@ export default function Invoices({ user }) {
   const [templates, setTemplates] = useState(null) // { running } | { templates } | { error }
   const [audit, setAudit] = useState(null) // the accounts@ check: { running } | result | { error }
   const [supplier, setSupplier] = useState(false) // supplier quotes → POs
+  const [salesCheck, setSalesCheck] = useState(false) // a distributor's sales report
 
   const headers = user?.token ? { Authorization: `Bearer ${user.token}` } : {}
   const api = useCallback(async (action, { query = '', body } = {}) => {
@@ -127,6 +128,7 @@ export default function Invoices({ user }) {
   if (draft) {
     return <Editor api={api} draft={draft} onClose={(made) => { setDraft(null); if (made) load() }} />
   }
+  if (salesCheck) return <SalesReportCheck user={user} onClose={() => setSalesCheck(false)} />
   if (supplier) return <SupplierPos api={api} onClose={() => setSupplier(false)} onPermission={() => setXero('permission')} />
 
   const muted = { fontSize: 13, color: '#5a6478' }
@@ -163,6 +165,7 @@ export default function Invoices({ user }) {
           so they never push the page wider than a phone. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6, marginBottom: 12 }}>
           <button style={btn(true)} onClick={() => setSupplier(true)}>Supplier quotes → PO</button>
+          <button style={btn(false)} onClick={() => setSalesCheck(true)}>Check a sales report</button>
           <button style={btn(false)} onClick={showRequests} disabled={requests?.running}>{requests?.running ? 'Looking…' : 'Quote requests'}</button>
           <button style={btn(false)} onClick={showTemplates} disabled={templates?.running}>{templates?.running ? 'Reading templates…' : 'Quote templates'}</button>
           <button style={btn(false)} onClick={checkAccounts} disabled={audit?.running}>{audit?.running ? 'Checking accounts@…' : 'Check accounts@'}</button>
@@ -524,6 +527,125 @@ function Editor({ api, draft, onClose }) {
         disabled={busy || !contactId} onClick={submit}>
         {busy ? 'Making the draft in Xero…' : isInvoice ? 'Create draft invoice in Xero' : 'Create draft quote in Xero'}
       </button>
+    </div>
+  )
+}
+
+// ─── Checking a distributor's sales report (Brent, 9 Nov 2026) ───────────────
+// "You need to be able to cross check with the portal." The monthly report a
+// distributor works our commission out from (Signus: one line per item, by
+// invoice) is uploaded here; the server finds the case behind each invoice in
+// the portal's usage records, then the bookings calendar, and hands the same
+// spreadsheet back with Surgery Date, Found in and Check added — plus a sheet
+// of the distributor's cases in those weeks that no invoice covers. Nothing
+// is saved: the report goes up with the request and comes back with it.
+const dmy = iso => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '')
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1] || '')
+    r.onerror = () => reject(new Error('That file could not be read'))
+    r.readAsDataURL(file)
+  })
+}
+
+export function SalesReportCheck({ user, onClose }) {
+  const [state, setState] = useState(null) // { running } | result | { error }
+  const [name, setName] = useState('')
+  const [showAll, setShowAll] = useState(false)
+
+  async function check(file) {
+    if (!file) return
+    setName(file.name); setState({ running: true }); setShowAll(false)
+    try {
+      const res = await fetch('/api/usage/agent?action=sales-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}) },
+        body: JSON.stringify({ file: await fileToBase64(file) })
+      })
+      const data = await res.json().catch(() => ({ error: `The server answered ${res.status}` }))
+      if (!res.ok || data.error) throw new Error(data.error || `The server answered ${res.status}`)
+      setState(data)
+    } catch (err) { setState({ error: err.message }) }
+  }
+
+  function download() {
+    const bytes = Uint8Array.from(atob(state.file), c => c.charCodeAt(0))
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${name.replace(/\.xlsx$/i, '') || 'Sales report'} - checked.xlsx`
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  const r = state && !state.running && !state.error ? state : null
+  const flagged = r ? r.invoices.filter(i => i.checks.length) : []
+  const shown = r ? (showAll ? r.invoices : flagged) : []
+
+  return (
+    <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+      <button style={{ ...btn(false), marginBottom: 10 }} onClick={onClose}>← Invoices</button>
+      <div style={card}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Check a sales report</div>
+        <div style={{ fontSize: 13, color: '#5a6478', marginBottom: 10 }}>
+          Upload a distributor's monthly sales report (.xlsx). Every invoice is matched to its case in the portal — or the
+          bookings calendar if there is no usage — and you get the same spreadsheet back with the surgery date and anything
+          worth checking on every line. Nothing is saved or sent.
+        </div>
+        <label style={{ ...btn(true), display: 'inline-block' }}>
+          {state?.running ? 'Checking…' : r ? 'Check another report' : 'Choose the report'}
+          <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-sales-file
+            style={{ display: 'none', fontSize: 16 }} disabled={state?.running} onChange={e => { check(e.target.files?.[0]); e.target.value = '' }} />
+        </label>
+        {state?.error && <div style={{ fontSize: 13, color: '#c0392b', marginTop: 8 }}>{state.error}</div>}
+      </div>
+
+      {r && (
+        <>
+          <div style={card} data-sales-summary>
+            <div style={{ fontSize: 14, fontWeight: 600, color: NAVY }}>
+              {r.distributor || 'Sales report'} · {r.totals.invoices} invoices · {money(r.totals.sales)}
+            </div>
+            <div style={{ fontSize: 13, color: '#5a6478', marginTop: 4 }}>
+              Surgery date found for {r.totals.dated} of {r.totals.invoices} invoices · {flagged.length} to check
+              · {r.notBilled.length} portal case{r.notBilled.length === 1 ? '' : 's'} not on the report
+            </div>
+            <button style={{ ...btn(true), marginTop: 10 }} onClick={download}>Download the checked spreadsheet</button>
+          </div>
+
+          {r.notBilled.length > 0 && (
+            <div style={{ ...card, background: '#fff8e6', border: '1px solid #f0d58a' }} data-not-billed>
+              <div style={{ fontSize: 14, fontWeight: 600, color: NAVY, marginBottom: 6 }}>In the portal, not on this report</div>
+              {r.notBilled.map((c, k) => (
+                <div key={k} style={{ fontSize: 13, color: NAVY, marginBottom: 4 }}>
+                  <b>{dmy(c.date)}</b> {c.patient} · {c.surgeon} · {c.hospital} — <span style={{ color: '#5a6478' }}>{c.note}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 6, margin: '4px 0 8px' }}>
+            <button style={btn(!showAll)} onClick={() => setShowAll(false)}>To check ({flagged.length})</button>
+            <button style={btn(showAll)} onClick={() => setShowAll(true)}>All invoices ({r.invoices.length})</button>
+          </div>
+          {shown.map(i => (
+            <div key={i.invoice} style={card} data-sales-invoice={i.invoice}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>{i.invoice}</div>
+                <div style={{ fontSize: 13, color: NAVY }}>{i.patient} · {i.surgeon} · {i.hospital || i.customer}</div>
+                <div style={{ fontSize: 13, color: '#5a6478', marginLeft: 'auto' }}>{money(i.sales)}</div>
+              </div>
+              <div style={{ fontSize: 13, color: '#5a6478', marginTop: 3 }}>
+                Invoiced {dmy(i.invoiceDate)} · Surgery {i.surgeryDate ? <b style={{ color: NAVY }}>{dmy(i.surgeryDate)}</b> : 'not found'}
+                {i.source ? ` (${i.source.toLowerCase()})` : ''}
+              </div>
+              {i.checks.map((c, k) => <div key={k} style={{ fontSize: 13, color: '#8a5a00', marginTop: 3 }}>• {c}</div>)}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   )
 }

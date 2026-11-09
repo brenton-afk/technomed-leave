@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { levelsFrom, registrarDraft, registrarMessage } from './usageText.js'
+import { levelsFrom, registrarDraft, registrarMessage, isScrewFixation } from './usageText.js'
 import { systemsInKit } from './clinicalPlan/systems.js'
 import { inventoryFor } from './clinicalPlan/inventory.js'
 
@@ -49,5 +49,27 @@ describe('the registrar text', () => {
       'Bone graft: Boost DBM Allograft (Australian Biotechnologies)'
     ].join('\n'))
     expect(registrarMessage(d)).not.toMatch(/DP-6545|L123|R-150/)
+  })
+})
+
+// Brent, 9 Nov 2026: "only … for fixation cases (… pedicles and lateral
+// masses) NOT for ACDF or ALIF."
+describe('which cases get screw levels', () => {
+  it('fixation into pedicles or lateral masses does', () => {
+    for (const p of ['T3-T6 pedicle screw fixation', 'L4/5 PLIF, fixation, decompression + graft', 'C2, C4-5 Lateral Mass fixation',
+      'T11-L3 PSF for L1 burst fracture', 'L2/3 PSF and posterolateral graft', 'Extension Fusion to L5/S1 and S2AI', 'L3/4 TLIF', 'T12-L2 posterior fixation'])
+      expect(isScrewFixation(p), p).toBe(true)
+  })
+  it('an ACDF, ALIF or corpectomy does not, even when the plate is called fixation', () => {
+    for (const p of ['C5/6 ACDF fixation decompression', 'C5/6, C6/7 ACDF', 'L5/S1 ALIF fixation and decompression', 'C6 corpectomy and fixation', 'C3 corpectomy', 'Lumbar decompression'])
+      expect(isScrewFixation(p), p).toBe(false)
+  })
+  it('an ALIF with posterior percutaneous screws does', () => {
+    expect(isScrewFixation('L4/5 ALIF + percutaneous pedicle screws')).toBe(true)
+  })
+  it('the draft leaves the levels empty for an ACDF', () => {
+    const d = registrarDraft({ patientSurname: 'Sample' }, [], { procedure: 'C5/6 ACDF', kit: 'CYLOX' }, { systemsInKit, inventoryFor })
+    expect(d.levels).toEqual([])
+    expect(d.fixation).toBe(false)
   })
 })

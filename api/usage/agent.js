@@ -1,5 +1,6 @@
 import { streamClaude } from '../_anthropic.js'
-import { requireSession } from '../_auth.js'
+import { requireSession, requireAdmin } from '../_auth.js'
+import { checkSalesReport } from '../_salesCheck.js'
 import { markAttendance } from '../_googleCalendar.js'
 import { STAFF, firstNameFor } from '../../src/staffConfig.js'
 import {
@@ -72,6 +73,10 @@ If the document contains no implant items, return an empty items array.`
 
 export default async function handler(req, res) {
   const action = req.query.action
+
+  // A distributor's sales report checked against the portal (Brent, 9 Nov
+  // 2026). Admins only: it reads every case in the window.
+  if (action === 'sales-check') return handleSalesCheck(req, res)
 
   // Every action touches patient or case data — authenticate first, always.
   const session = await requireSession(req, res)
@@ -823,6 +828,22 @@ async function handleOpen(req, res) {
 }
 
 // ─── list: history ─────────────────────────────────────────
+
+async function handleSalesCheck(req, res) {
+  const session = await requireAdmin(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST the report' })
+  const file = String(req.body?.file || '')
+  if (!file) return res.status(400).json({ error: 'Choose the sales report (.xlsx) first' })
+  try {
+    const result = await checkSalesReport(Buffer.from(file, 'base64'))
+    return res.status(200).json(result)
+  } catch (err) {
+    // Never the report's own contents in the message: it carries surnames.
+    console.error('sales-check failed', err.status || '', String(err.message || '').slice(0, 200))
+    return res.status(err.status || 500).json({ error: err.status ? err.message : 'The report could not be checked — please try again.' })
+  }
+}
 
 async function handleList(req, res) {
   const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 100)

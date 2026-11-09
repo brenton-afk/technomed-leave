@@ -21,4 +21,14 @@ describe('registrar text form', () => {
     expect(text).not.toContain('L1 Left')
     expect(text).not.toMatch(/R-150|LOT9/)
   })
+
+  // Brent, 9 Nov 2026: screw sizes and sides for pedicle / lateral mass
+  // fixation only, not for an ACDF or ALIF.
+  it('asks for no screw levels on an ACDF, unless the rep adds them', () => {
+    render(<RegistrarText caseRecord={caseRecord} booking={{ procedure: 'C5/6 ACDF, fixation + decompression', kit: 'CYLOX' }} />)
+    expect(screen.queryByLabelText('C5 Left')).toBeNull()
+    expect(screen.queryByPlaceholderText('e.g. T12-L2')).toBeNull()
+    fireEvent.click(document.querySelector('[data-add-screw-levels]'))
+    expect(screen.getByLabelText('C5 Left')).toBeInTheDocument()
+  })
 })

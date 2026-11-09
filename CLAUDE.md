@@ -576,7 +576,12 @@ Bone graft, Cages — and **never** reference codes or lot numbers
 from the booking: `markAttendance` now also returns the matched booking's
 procedure and kit (`booking`), and `levelsFrom` expands "T12-L2" to T12, L1,
 L2. A blank side is left out. Rods, graft, cages and a cross connector are
-pre-filled from the scanned items, sizes only. Consultant titles are guessed
+pre-filled from the scanned items, sizes only. **Screw lines are for screw
+fixation only** (Brent, 9 Nov 2026: pedicles and lateral masses, "NOT for ACDF
+or ALIF"): `isScrewFixation` — posterior screw words win (pedicle, lateral
+mass, PSF, PLIF, TLIF, posterior, S2AI, percutaneous, extension), an anterior
+operation alone (ACDF, ALIF, corpectomy…) gets no level rows even when its
+booking says "fixation" for the plate; "+ Add screw levels" brings them back. Consultant titles are guessed
 only where known (`SURGEON_TITLES`). Still a draft for the phone's messaging
 app, never a send.
 
@@ -979,6 +984,31 @@ admin-only; no new function).
   DRAFT PO**; quote number goes in the Reference. Nothing is sent to the
   supplier — that is done from Xero. Each email remembers what was done
   (`supplierpo:{messageId}`). Uses the invoices connection's Xero permission.
+- **Check a sales report** (Brent, 9 Nov 2026: "you need to be able to cross
+  check with the portal"). Admin → Invoices → **Check a sales report**
+  (`SalesReportCheck` in `Invoices.jsx`, `action=sales-check` on
+  `api/usage/agent.js`, admins only; logic in `api/_salesCheck.js`). Upload a
+  distributor's monthly report (.xlsx; Signus's layout: Invoice No, Carrier =
+  surgeon, Project Name = patient, Code, Qty, Sales — the header row is found by
+  its words). Each invoice is matched to its case: usage records first
+  (`usageCasesBetween`, same surname, up to `LOOKBACK_DAYS` 120 before the
+  invoice, scored by hospital, surgeon and codes in common), then the bookings
+  calendar. The same workbook comes back with **Surgery Date / Found in /
+  Check** added after the last column (never inserted — the report's own total
+  and 30% formulas must keep pointing at the same cells) and a **Not on this
+  report** sheet: the distributor's portal cases from the first case covered to
+  the last invoice that no invoice matches. Checks: no usage / not found,
+  calendar date ≠ usage date, surgeon or hospital ≠, code billed not on the
+  usage or more billed than used (`sameCode` lets "MACNIT18470 R/R" match
+  "MACNIT18470"), a unit price under that code's top price **at the same
+  hospital** (RHH and Calvary prices differ — not a discount), and the same case
+  on two invoices. Read-only; the report is never stored.
+- **Claude's read-only key** (`api/agent.js`, same day): `AGENT_READ_KEY` in
+  Vercel (32+ chars; unset or short = 404). `GET ?action=usage&from=&to=` (≤400
+  days; codes and quantities, never lot numbers or the rep) and `POST
+  ?action=sales-check {file}`. Nothing else, nothing writes; every call, refused
+  ones included, is logged to `agent:log` (last 500). The cloud environment
+  holds the same value as `TM_PORTAL_AGENT_KEY`.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

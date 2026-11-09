@@ -31,7 +31,11 @@ const EXEMPT = {
   // Xero redirects the browser here after consent, so there is no header of
   // ours on the request. Protected by the OAuth `state`: a one-off value that
   // only an admin's session can mint (connect.js), held ten minutes, used once.
-  'api/xero/callback.js': { why: 'OAuth redirect target, protected by a one-off state', wholly: true }
+  'api/xero/callback.js': { why: 'OAuth redirect target, protected by a one-off state', wholly: true },
+  // Claude's cloud sessions have no staff login and should not have one. A
+  // single read-only key (AGENT_READ_KEY, 32+ chars, 404 when unset), two
+  // read actions, every call logged — see api/salesCheck.test.js.
+  'api/agent.js': { why: 'read-only AGENT_READ_KEY, fails closed', wholly: true }
 }
 
 function routes(dir = 'api') {

@@ -144,6 +144,25 @@ export function levelsFrom(procedure) {
   return SPINE.filter(l => found.has(l))
 }
 
+// ─── Only screw fixation gets a line per screw (Brent, 9 Nov 2026) ──────────
+// "the request for the screw sizes and side should only be populated for
+// fixation cases (for example when we are putting screws into pedicles and
+// lateral masses) NOT for ACDF or ALIF. We use screws in those cases but the
+// location is not as relevant anatomically." Posterior screw words win; an
+// anterior operation alone (ACDF, ALIF, corpectomy …) does not get the rows,
+// even when its booking says "fixation" for the plate.
+const POSTERIOR_SCREWS = /pedicle|lateral\s*mass|\bpsf\b|\bplif\b|\btlif\b|posterior|s2ai|iliac|percutaneous|screw\s*fixation|\bextension\b|existing\s*(construct|hardware)/i
+const ANTERIOR_ONLY = /\b(acdf|alif|accf|olif|xlif|llif|anterior|corpectomy|discectomy|disc\s*replacement|arthroplasty)\b/i
+const FIXATION = /fixation|fusion|\bscrews?\b/i
+
+/** True when the operation puts screws into pedicles or lateral masses. */
+export function isScrewFixation(procedure) {
+  const text = String(procedure || '')
+  if (POSTERIOR_SCREWS.test(text)) return true
+  if (ANTERIOR_ONLY.test(text)) return false
+  return FIXATION.test(text)
+}
+
 const BRANDS = { signus: 'Signus', kt: 'Orthofix', device: 'SeaSpine', e4: 'E4' }
 // Titles the team has used; anything else is the surname alone, to be edited.
 const SURGEON_TITLES = { fowler: 'Mr' }
@@ -170,7 +189,8 @@ export function registrarDraft(record = {}, items = [], booking = null, { system
     patient: String(record.patientSurname || ''),
     consultant: [title, surgeon].filter(Boolean).join(' '),
     system,
-    levels: levelsFrom(procedure),
+    fixation: isScrewFixation(procedure),
+    levels: isScrewFixation(procedure) ? levelsFrom(procedure) : [],
     screws: {},
     rods: has(used, /\brods?\b/i).map(sized).join(', '),
     crossConnector: has(used, /cross|transverse connector/i).length > 0,
