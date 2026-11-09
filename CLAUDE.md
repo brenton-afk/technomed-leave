@@ -309,7 +309,13 @@ portal MUST be able to accept attachments"): any file type (`FILE_TYPES` /
 cannot draw is sent as it is, a screenshot can be **pasted** into the message
 box and files **dropped** on the conversation, and `uploadFile` tries Blob
 direct first and falls back to `action=upload` (through the function, ≤3 MB,
-`put` server-side) — a failure says why. **Names and UR numbers are allowed** (Brent:
+`put` server-side) — a failure says why. **Since 9 Nov 2026 files up to 3 MB
+go through the portal first and are kept in Dropbox** (`api/_chatFiles.js`:
+`/Admin/Chat Files/{YYYY-MM}/{uuid}-{name}`, served by `action=file`, a 302 to
+a temporary link, answered without a session — the random id is the guard, and
+only that path shape is opened). Toni's test picture had failed both ways
+because Blob storage itself was hanging; Blob is now only the second route,
+and for files over 3 MB. Every route has a time limit (`withTimeout`). **Names and UR numbers are allowed** (Brent:
 health data needed to run the business, stored safely); only a date of birth
 is queried (`chatWarning`). **Archived nightly** to Dropbox
 (`api/_chatArchive.js`, `job=nightly` cron at 15:27 UTC ≈ 2:30am Hobart):

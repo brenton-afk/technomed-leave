@@ -1,5 +1,6 @@
 import { channelIds, getMessages, knownChannels } from './_redis.js'
-import { dropboxConfigured, ensureFolder, uploadFile } from './_dropbox.js'
+import { dropboxConfigured, ensureFolder, uploadFile, downloadFile } from './_dropbox.js'
+import { chatFileKey, chatFilePath } from './_chatFiles.js'
 import { todayStr, TZ } from '../src/clinicalPlan/week.js'
 
 // ─── The chat archive (Brent, 6 Nov 2026) ────────────────────────────────────
@@ -55,9 +56,16 @@ export async function archiveChat(day, { fetcher = globalThis.fetch } = {}) {
       if (m.deleted) continue
       for (const f of [...(m.photo?.url ? [{ name: 'photo.jpg', url: m.photo.url }] : []), ...(m.files || [])]) {
         try {
-          const r = await fetcher(f.url)
-          if (!r.ok) continue
-          await uploadFile(`${folder}/files/${safe(`${hhmm(m.at).replace(':', '')} ${f.name}`)}`, Buffer.from(await r.arrayBuffer()))
+          // A file the portal keeps in Dropbox is copied from there.
+          const key = chatFileKey(f.url)
+          let data
+          if (key) data = await downloadFile(chatFilePath(key))
+          else {
+            const r = await fetcher(f.url)
+            if (!r.ok) continue
+            data = Buffer.from(await r.arrayBuffer())
+          }
+          await uploadFile(`${folder}/files/${safe(`${hhmm(m.at).replace(':', '')} ${f.name}`)}`, data)
           files += 1
         } catch { /* one file that will not copy does not stop the day */ }
       }

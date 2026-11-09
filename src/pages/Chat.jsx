@@ -324,36 +324,50 @@ function asBase64(blob) {
  * is kept, so a failure says what happened instead of "check the signal".
  */
 export async function uploadFile(f, token, { direct = upload, fetcher = fetch, onProgress, timeoutMs } = {}) {
-  // Never wait for ever (Toni, 9 Nov 2026: "still stalling when trying to
-  // upload attachments"). The direct upload had no limit, so on a poor
-  // connection it could sit there indefinitely and the second route was never
-  // tried. Now it is given a time that grows with the file, then abandoned.
-  const limit = timeoutMs ?? directTimeout(f.size)
-  let first = ''
-  try {
+  // Two routes, and neither may hang (Toni, 9 Nov 2026: "still stalling", then
+  // a test picture that failed both ways on a good desktop connection — the
+  // upload to Vercel Blob was hanging). Files up to 3 MB — every photo once
+  // shrunk, screenshots, most documents — now go through the portal's own
+  // server first, which keeps them in Dropbox. Bigger files, or if that
+  // fails, go straight to Blob storage. Each route has a time limit, and a
+  // failure names both reasons.
+  const viaPortal = async () => {
+    onProgress?.(null)
+    const body = JSON.stringify({ name: f.name, type: f.type, data: await asBase64(f.blob) })
+    const res = await withTimeout(signal => fetcher('/api/chat?action=upload', {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body
+    }), FALLBACK_TIMEOUT_MS, 'the portal took too long')
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.url) throw new Error(data.error || `the portal answered ${res.status}`)
+    return data.url
+  }
+  const viaBlob = async () => {
     const result = await withTimeout(signal => direct(`chat/${Date.now()}-${f.name}`, f.blob, {
       access: 'public', contentType: f.type, handleUploadUrl: '/api/chat?action=blob-upload',
       clientPayload: JSON.stringify({ token: token || null }),
       abortSignal: signal,
       onUploadProgress: e => onProgress?.(Math.round(e?.percentage ?? 0))
-    }), limit, 'it took too long')
+    }), timeoutMs ?? directTimeout(f.size), 'it took too long')
     return result.url
+  }
+
+  const small = f.size <= DIRECT_MAX
+  const [firstRoute, secondRoute] = small ? [viaPortal, viaBlob] : [viaBlob, null]
+  let first = ''
+  try {
+    return await firstRoute()
   } catch (err) {
     first = err?.message || 'upload refused'
   }
-  if (f.size > DIRECT_MAX) throw new Error(`${f.name} did not upload (${first}). Files over 3 MB need a better connection — try again on wifi.`)
-  onProgress?.(null)
-  const body = JSON.stringify({ name: f.name, type: f.type, data: await asBase64(f.blob) })
-  const res = await withTimeout(signal => fetcher('/api/chat?action=upload', {
-    method: 'POST',
-    signal,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body
-  }), FALLBACK_TIMEOUT_MS, 'the connection is too slow')
-    .catch(err => { throw new Error(`${f.name} did not upload (${first}; then ${err.message}). Try again on a better connection.`) })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok || !data.url) throw new Error(`${f.name} did not upload (${data.error || first}). Try again.`)
-  return data.url
+  if (!secondRoute) throw new Error(`${f.name} did not upload (${first}). Files over 3 MB need a better connection — try again on wifi.`)
+  try {
+    return await secondRoute()
+  } catch (err) {
+    throw new Error(`${f.name} did not upload (${first}; then ${err?.message || 'refused'}). Try again, and if it keeps happening send Brent a screenshot of this.`)
+  }
 }
 
 const FALLBACK_TIMEOUT_MS = 45000

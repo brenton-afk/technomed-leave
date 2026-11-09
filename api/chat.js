@@ -10,6 +10,8 @@ import { searchChat } from './_chatSearch.js'
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import { notify, preview } from './_push.js'
 import { FILE_TYPES } from '../src/chat/fileTypes.js'
+import { newChatFile, chatFileKey, chatFilePath } from './_chatFiles.js'
+import { uploadFile as dropboxUpload, temporaryLink, dropboxConfigured } from './_dropbox.js'
 
 // ─── The internal channels ───────────────────────────────────────────────────
 // What the WhatsApp group does, inside the app that already holds the bookings
@@ -45,7 +47,7 @@ export function readFiles(given) {
   const side = n => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : null)
   return list.slice(0, 10).map(f => {
     const url = String(f?.url || '').trim()
-    if (!BLOB_URL.test(url)) return null
+    if (!BLOB_URL.test(url) && !chatFileKey(url)) return null
     const type = FILE_TYPES.includes(String(f.type)) ? String(f.type) : 'application/octet-stream'
     return {
       url: url.slice(0, 500), type,
@@ -92,6 +94,9 @@ export default async function handler(req, res) {
   // session rides in clientPayload and is checked inside, before a write token
   // is issued. Guarding it here would refuse every upload.
   if (req.query.action === 'blob-upload') return photoUpload(req, res)
+  // A file kept in Dropbox, opened by an <img> or a link — no session header
+  // can come with those, so the random id in the address is the protection.
+  if (req.query.action === 'file') return openChatFile(req, res)
 
   const session = await requireSession(req, res)
   if (!session) return
@@ -185,11 +190,48 @@ async function directUpload(req, res, session) {
   const buf = Buffer.from(String(body.data || ''), 'base64')
   if (!buf.length) return res.status(400).json({ error: 'The file arrived empty' })
   if (buf.length > DIRECT_MAX_BYTES) return res.status(413).json({ error: 'That file is too big for this route' })
-  const blob = await put(`chat/${directUploadName(body.name)}`, buf, {
-    access: 'public', contentType: type, addRandomSuffix: true
-  })
-  console.log(`chat direct upload by ${session.email}: ${type}, ${buf.length} bytes`)
-  return res.status(200).json({ ok: true, url: blob.url })
+  // Dropbox first: Blob storage has been hanging (9 Nov 2026), and a hang here
+  // ran the function out of time and left the person with no reason.
+  if (dropboxConfigured()) {
+    try {
+      const file = newChatFile(body.name)
+      await withLimit(dropboxUpload(file.path, buf), 20000, 'Dropbox did not answer')
+      console.log(`chat upload by ${session.email} to Dropbox: ${type}, ${buf.length} bytes`)
+      return res.status(200).json({ ok: true, url: file.url })
+    } catch (err) {
+      console.error('chat upload to Dropbox failed:', err.message)
+    }
+  }
+  try {
+    const blob = await withLimit(put(`chat/${directUploadName(body.name)}`, buf, {
+      access: 'public', contentType: type, addRandomSuffix: true
+    }), 8000, 'file storage did not answer')
+    console.log(`chat direct upload by ${session.email}: ${type}, ${buf.length} bytes`)
+    return res.status(200).json({ ok: true, url: blob.url })
+  } catch (err) {
+    console.error('chat upload to Blob failed:', err.message)
+    return res.status(502).json({ error: `the portal could not store it (${err.message})` })
+  }
+}
+
+function withLimit(promise, ms, why) {
+  let timer
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(why)), ms) })])
+    .finally(() => clearTimeout(timer))
+}
+
+/** Redirects to a short-lived Dropbox link for one chat file. */
+async function openChatFile(req, res) {
+  const path = chatFilePath(String(req.query.f || ''))
+  if (!path) return res.status(404).json({ error: 'Not found' })
+  try {
+    const { url } = await temporaryLink(path)
+    res.setHeader('Cache-Control', 'private, max-age=3000')
+    res.setHeader('Location', url)
+    return res.status(302).end()
+  } catch (err) {
+    return res.status(404).json({ error: 'That file could not be opened' })
+  }
 }
 
 /** The channel list with how much is unread in each. */

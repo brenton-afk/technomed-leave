@@ -23,7 +23,8 @@
       "maxDuration": 120
     },
     "api/chat.js": {
-      "includeFiles": "node_modules/@vercel/blob/**"
+      "includeFiles": "node_modules/@vercel/blob/**",
+      "maxDuration": 60
     },
     "api/calendar/today.js": {
       "maxDuration": 120,
