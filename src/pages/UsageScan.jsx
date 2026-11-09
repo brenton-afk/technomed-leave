@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { reorder } from './scan/pageList.js'
 import RegistrarText from './scan/RegistrarText.jsx'
 import AmendUsage from './scan/AmendUsage.jsx'
+import BoostForm from './scan/BoostForm.jsx'
 import CameraSheet from './scan/CameraSheet.jsx'
 import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
@@ -345,6 +346,8 @@ export default function UsageScan({ user, switcher }) {
   const [duplicate, setDuplicate] = useState(null)
   // Which past usage is open for a correction (scan/AmendUsage.jsx).
   const [amending, setAmending] = useState(null)
+  // Which past usage has its Boost tracking form being scanned (scan/BoostForm.jsx).
+  const [boostFor, setBoostFor] = useState(null)
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [error, setError] = useState('')
@@ -703,6 +706,10 @@ export default function UsageScan({ user, switcher }) {
               return <AmendUsage key={h.id} usageId={h.id} user={user}
                 onClose={() => setAmending(null)} onDone={loadHistory} />
             }
+            if (boostFor === h.id) {
+              return <BoostForm key={h.id} usageId={h.id} user={user} toPage={fileToPage}
+                sentAt={h.boostFormSentAt} onClose={() => setBoostFor(null)} onSent={loadHistory} />
+            }
             return (
               <div key={h.id} style={{ background: 'white', borderRadius: 12, padding: '13px 15px', marginBottom: 10, border: `1px solid ${BORDER}` }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, wordBreak: 'break-all' }}>{h.folderName}</div>
@@ -722,6 +729,12 @@ export default function UsageScan({ user, switcher }) {
                     <button type="button" onClick={() => removeDuplicate(h)}
                       style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', minHeight: 32, borderRadius: 20, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: '#c0392b' }}>
                       Remove duplicate
+                    </button>
+                  )}
+                  {h.hasBoost && (
+                    <button type="button" onClick={() => setBoostFor(h.id)} data-boost-form-open
+                      style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', minHeight: 32, borderRadius: 20, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: NAVY }}>
+                      {h.boostFormSentAt ? 'Boost form ✓' : 'Boost form'}
                     </button>
                   )}
                   <button type="button" onClick={() => setAmending(h.id)}
@@ -851,6 +864,11 @@ export default function UsageScan({ user, switcher }) {
                 </div>
               )}
               <Field label="Surgeon surname" value={caseRecord.surgeonSurname} onChange={v => updateCase('surgeonSurname', v)} />
+              {caseRecord.namesSwapped && (
+                <div data-names-swapped style={{ fontSize: 12, color: AMBER_TEXT, lineHeight: 1.5, margin: '-4px 0 10px' }}>
+                  The form was read with the patient and surgeon the wrong way round — they have been swapped back. Check both.
+                </div>
+              )}
               <Field label="Procedure" value={caseRecord.procedure} onChange={v => updateCase('procedure', v)} />
               <Field label="Hospital" value={caseRecord.hospital} onChange={v => updateCase('hospital', v)}
                 options={[{ key: '', label: 'Select…' }, { key: 'CLV', label: 'CLV — Calvary' }, { key: 'RHH', label: 'Royal Hobart' }]} />
@@ -1018,6 +1036,11 @@ export default function UsageScan({ user, switcher }) {
               Copy as well as the link, because a rep standing in a corridor
               may want it in WhatsApp rather than a text, and the clipboard
               reaches both. */}
+          {/* A Boost case: its tracking form is scanned on its own and goes to
+              the Boost team only (Brent, 9 Nov 2026). */}
+          {!result.test && (result.record?.items || []).some(i => i.distributorKey === 'device_boost' && !i.excluded) && (
+            <BoostForm usageId={result.record.id} user={user} toPage={fileToPage} />
+          )}
           {caseRecord && (
             <RegistrarText key={caseRecord.id || caseRecord.folderName}
               caseRecord={caseRecord} booking={result.attendance?.booking || null} />

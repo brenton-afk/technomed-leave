@@ -1146,22 +1146,28 @@ Invariants worth preserving:
   **Remove duplicate** (admins, or whoever scanned it) takes a case off history,
   Still owed and matching — `removeUsageRecord`, kept under `usage:removed`,
   never erased; Dropbox and the email log are untouched.
-- **The Boost tracking form goes to the Boost team alone** (Brent, 9 Nov 2026,
-  Mulligan: the tracking form reached Device's usage desk with the usage and
-  the graft was set to be processed twice). `device_boost` usage now goes to
-  `dl_spine_marketing` + `ortho` only, for resupply, labelled Boost.
-  `BOOST_TRACKING` (`api/_distributors.js`): the tracking form's pages, alone,
-  to `boost@device.com.au`, cc `admin@technomed.com.au`, subject "Boost
-  tracking only – …", body "for tracking only — not a usage … do not resupply"
-  (`sendBoostTrackingEmail`). The reader marks each page `boostTrackingForm`
-  (`mergeExtractions` → `boostTrackingPages` on the case, 1-based); those pages
-  are left off every distributor's copy of the scan (Dropbox keeps all pages),
-  and a graft line read off the tracking form that the usage record already
-  has (same code + lot) is dropped — one graft, not two. One more result line,
-  key `boost_tracking`, sent once like any distributor; when no page was read
-  as a tracking form it is a `notice` ("send it by hand, marked tracking
-  only"), not a failure, not offered as Send anyway and not recorded in
-  `emailsSent`.
+- **The Boost tracking form is scanned on its own and goes to the Boost team
+  alone** (Brent, 9 Nov 2026, Mulligan: one email to boost@ + ortho + spine
+  marketing let the graft be processed twice). `device_boost` usage goes to
+  `dl_spine_marketing` + `ortho` only, for resupply, labelled Boost. The form
+  is a separate scan: **Boost tracking form** (`scan/BoostForm.jsx`) on the
+  Done screen of a Boost case and as **Boost form** on its row in Past scans
+  (`hasBoost` / `boostFormSentAt` from `action=list`) → `action=boost-form`:
+  those pages only, to `BOOST_TRACKING` (`boost@device.com.au`, cc
+  `admin@technomed.com.au`), "Boost tracking only – …", "for tracking only —
+  not a usage … do not resupply" (`sendBoostTrackingEmail`); filed beside the
+  usage as `{folder}_Boost_Tracking_Form.pdf` (`keep: true`); recorded as
+  `emailsSent` key `boost_tracking`, once (409 unless `confirmRepeat`); a test
+  goes to the rep only and is neither recorded nor filed.
+- **Patient and surgeon the wrong way round** (Brent, same day: Mulligan was
+  read as patient Thani, surgeon Mulligan, and filed under a new surgeon folder
+  "Mulligan"). `looksSwapped` in `api/_usageCase.js`: one of our surgeons
+  (`SURGEON_COLOUR_NAMES`) in the patient box and a name not on that list in
+  the surgeon box. `normaliseCase` swaps them back and sets `namesSwapped` (the
+  review says so); `action=save` refuses a case still that way round unless
+  `namesConfirmed`. A record already saved wrong is corrected on read by
+  `api/_usageFixes.js` — keyed by a SHA-256 of its old folder name, never the
+  name — and saved back; the Dropbox folder was moved by hand.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
 - **The distributor email carries two attachments**: the 20-column sheet of their
   own items, and the scanned form with every page merged into one PDF

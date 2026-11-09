@@ -125,7 +125,7 @@ describe('no screen is left out', () => {
     'cases/KitPicker.jsx',
     'cases/LoanTrail.jsx',
     // A section of the usage screen after filing.
-    'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx',
+    'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx', 'scan/BoostForm.jsx',
     // The Scan tab's wrapper and its Usage | Resupply switch: drawn inside
     // UsageScan's or ResupplyScan's header.
     'ScanTab.jsx', 'scan/ScanKind.jsx', 'scan/ScanPages.jsx',

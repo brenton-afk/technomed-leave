@@ -1,3 +1,4 @@
+import { applyUsageFix } from './_usageFixes.js'
 import { STAFF } from '../src/staffConfig.js'
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
@@ -283,7 +284,15 @@ export async function removeUsageRecord(id, removed) {
 
 export async function getUsageRecord(id) {
   const data = await redis('get', `usage:${id}`)
-  return data ? JSON.parse(data) : null
+  return data ? fixed(JSON.parse(data)) : null
+}
+
+// A record saved wrong and corrected since (api/_usageFixes.js) is put right
+// the first time it is read, and saved back so it stays right.
+async function fixed(record) {
+  const { record: out, changed } = applyUsageFix(record)
+  if (changed) await redisSetBody(`usage:${out.id}`, JSON.stringify(out)).catch(() => {})
+  return out
 }
 
 // ─── RESUPPLY ────────────────────────────────────────────────

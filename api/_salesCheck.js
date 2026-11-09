@@ -16,6 +16,7 @@
 
 import ExcelJS from 'exceljs'
 import { redis } from './_redis.js'
+import { applyUsageFix } from './_usageFixes.js'
 import { detectDistributor, distributorName } from './_distributors.js'
 import { siteCode } from '../src/clinicalPlan/inventory.js'
 import { readBooking, isCancelled } from '../src/clinicalPlan/parse.js'
@@ -142,7 +143,7 @@ export async function usageCasesBetween(from, to, { limit = 600 } = {}) {
     for (const json of raw) {
       if (!json) continue
       let r
-      try { r = JSON.parse(json) } catch { continue }
+      try { r = applyUsageFix(JSON.parse(json)).record } catch { continue }
       if (!r?.date || r.removed || r.date < from || r.date > to) continue
       out.push({
         id: r.id,

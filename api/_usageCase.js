@@ -1,5 +1,6 @@
 // ─── Usage case normalisation ─────────────────────────────────────────────────
 import { itemGaps } from '../src/usageItemCheck.js'
+import { SURGEON_COLOUR_NAMES } from '../src/clinicalPlan/colours.js'
 import { surnameFromField } from '../src/clinicalPlan/parse.js'
 import { findSystems } from '../src/clinicalPlan/systems.js'
 // Turns whatever the vision extraction returned into a normalised case record:
@@ -301,6 +302,17 @@ function plausibleScanDate(raw) {
   return date
 }
 
+// ─── Patient and surgeon the wrong way round (Brent, 9 Nov 2026) ─────────────
+// Mulligan was read as patient "Thani", surgeon "Mulligan", and filed under a
+// new surgeon folder called Mulligan. One of ours in the patient box and a
+// name we have never operated with in the surgeon box is the swap, not a
+// coincidence. Known surgeons are the booking guide's (colours.js).
+const KNOWN_SURGEONS = new Set(Object.keys(SURGEON_COLOUR_NAMES).map(s => s.toLowerCase()))
+export const isKnownSurgeon = name => KNOWN_SURGEONS.has(String(name || '').trim().toLowerCase())
+export function looksSwapped(patientSurname, surgeonSurname) {
+  return isKnownSurgeon(patientSurname) && Boolean(String(surgeonSurname || '').trim()) && !isKnownSurgeon(surgeonSurname)
+}
+
 /**
  * Builds the full case from the extraction payload plus the signed-in rep.
  *
@@ -318,9 +330,16 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
   // The whole surname. surnameOf keeps the *last* word, which is right for a
   // surgeon written "Dr Andrew Thani" and wrong for a patient: "Van der Berg"
   // was filed in Dropbox as "Berg". See surnameFromField.
-  const patientSurname = surnameFromField(extracted.patientSurname) ||
+  let patientSurname = surnameFromField(extracted.patientSurname) ||
     str(extracted.patientSurname)
-  const surgeonSurname = surnameOf(extracted.surgeonName)
+  let surgeonSurname = surnameOf(extracted.surgeonName)
+  let surgeonName = str(extracted.surgeonName)
+  const namesSwapped = looksSwapped(patientSurname, surgeonSurname)
+  if (namesSwapped) {
+    // Put back the right way round, and said on the review screen.
+    ;[patientSurname, surgeonSurname] = [surnameFromField(surgeonName) || surgeonSurname, patientSurname]
+    surgeonName = surgeonSurname
+  }
   const dateOnForm = normaliseDate(extracted.date)
   const scanned = plausibleScanDate(scanDate)
   const date = scanned || dateOnForm
@@ -335,18 +354,15 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
     .filter(it => !isExcludedProduct(it.productName, it.description, it.referenceCode))
 
   const caseDetails = {
-    // Pages of the scan that are a Boost tracking form (1-based), sent to the
-    // Boost team on their own and left off every distributor's copy of the scan.
-    boostTrackingPages: (Array.isArray(extracted.boostTrackingPages) ? extracted.boostTrackingPages : [])
-      .map(Number).filter(n => Number.isInteger(n) && n >= 1 && n <= 20),
     patientSurname,
     // Surname only, deliberately. The first name and the UR number used to be
     // read off the label and kept here, which put a hospital MRN into Redis,
     // onto the review screen and into the workbook emailed to distributors.
     // The app needs a surname — for the folder name, the email subject and the
     // review screen — and nothing else identifies a patient to us.
-    surgeonName: str(extracted.surgeonName),
+    surgeonName,
     surgeonSurname,
+    namesSwapped,
     date,
     // Where the date came from, and what the form said, so the review screen can
     // point out a disagreement rather than quietly overwriting one.

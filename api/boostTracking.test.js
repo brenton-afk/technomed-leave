@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Brent, 9 Nov 2026 (Mulligan): "the boost tracking form to ONLY be sent to the
-// boost email (and cc admin@technomed) … The standard usage can go to Device
-// for resupply … The tracking email … should say something about tracking
-// only." Invented case.
+// Brent, 9 Nov 2026 (Mulligan): "We will scan the boost form separately …
+// That form can then go to Boost email. And the standard usage goes to device
+// just for boost resupply." Invented case.
 
 const records = new Map()
 vi.mock('./_redis.js', () => ({
@@ -22,79 +21,73 @@ vi.mock('./_email.js', () => ({
   sendBoostTrackingEmail: vi.fn(async m => { tracking.push(m); return {} })
 }))
 vi.mock('./_usageExcel.js', () => ({ buildUsageWorkbook: vi.fn(async () => Buffer.from('x')) }))
-// The "PDF" is the page names, so the test can see which pages went where.
-vi.mock('./_usagePdf.js', () => ({ buildScanPdf: vi.fn(async pages => Buffer.from(pages.map(p => p.data).join(','))) }))
+vi.mock('./_usagePdf.js', () => ({ buildScanPdf: vi.fn(async pages => Buffer.from(`${pages.length} pages`)) }))
 vi.mock('./_googleCalendar.js', () => ({ markAttendance: vi.fn() }))
 vi.mock('./_anthropic.js', () => ({ streamClaude: vi.fn() }))
+const uploads = []
 vi.mock('./_dropbox.js', () => ({
-  caseFolderPath: vi.fn(), saveUsageFiles: vi.fn(), dropboxConfigured: () => false, listFolder: vi.fn(), temporaryLink: vi.fn(),
-  resourcesRoot: vi.fn(), usageRoot: vi.fn(), patientHistory: vi.fn(), uploadFile: vi.fn(), caseFoldersOnDay: vi.fn(async () => [])
+  caseFolderPath: vi.fn(), saveUsageFiles: vi.fn(), dropboxConfigured: () => true, listFolder: vi.fn(), temporaryLink: vi.fn(),
+  resourcesRoot: vi.fn(), usageRoot: vi.fn(), patientHistory: vi.fn(), caseFoldersOnDay: vi.fn(async () => []),
+  uploadFile: vi.fn(async (path, buf, opts) => { uploads.push({ path, opts }) })
 }))
 
-const { default: handler, mergeExtractions } = await import('./usage/agent.js')
-const call = body => new Promise(resolve => {
+const { default: handler } = await import('./usage/agent.js')
+const call = (action, body) => new Promise(resolve => {
   const res = { statusCode: 200, status(c) { this.statusCode = c; return this }, json(d) { resolve({ status: this.statusCode, data: d }) } }
-  handler({ method: 'POST', query: { action: 'email' }, body, headers: {} }, res)
+  handler({ method: 'POST', query: { action }, body, headers: {} }, res)
 })
-
-const page = name => ({ mediaType: 'image/jpeg', data: Buffer.from(name.padEnd(40, '.')).toString('base64') })
-const named = buf => buf.toString().split(',').map(b => Buffer.from(b, 'base64').toString().replace(/\.+$/, ''))
+const page = { mediaType: 'image/jpeg', data: 'x'.repeat(40) }
 const CASE = {
-  id: 'c1', patientSurname: 'Testcase', date: '2026-11-09', surgeonSurname: 'Sample', hospital: 'CLV',
-  folderName: 'Sample_09112026_Testcase_ALIF+Boost-UF_CLV', createdAt: '2026-11-09T01:00:00Z',
-  boostTrackingPages: [2],
-  items: [
-    { id: 'i1', referenceCode: 'B-1', productName: 'Boost DBM Allograft', distributorKey: 'device_boost', quantity: 1 },
-    { id: 'i2', referenceCode: 'E-1', productName: 'Global BMD ALIF cage', distributorKey: 'e4', quantity: 1 }
-  ]
+  id: 'c1', patientSurname: 'Testcase', date: '2026-11-09', surgeonSurname: 'Thani', hospital: 'CLV',
+  folderName: 'Testcase_09112026_Thani_ALIF+Boost-UF_CLV', createdAt: '2026-11-09T01:00:00Z',
+  dropboxPath: '/ALL SURGEON USAGE/SPINE/Thani/November 2026/Testcase_09112026_Thani_ALIF+Boost-UF_CLV',
+  items: [{ id: 'i1', referenceCode: 'B-1', productName: 'Boost DBM Allograft', distributorKey: 'device_boost', quantity: 1 }]
 }
 
-beforeEach(() => { records.clear(); usage.length = 0; tracking.length = 0 })
+beforeEach(() => { records.clear(); usage.length = 0; tracking.length = 0; uploads.length = 0 })
 
-describe('the Boost tracking form', () => {
-  it('goes alone to boost@, copied to admin@, and the usage goes to the spine/ortho desk without it', async () => {
+describe('the Boost usage', () => {
+  it('goes to Device\'s spine/ortho desk for resupply — not to boost@', async () => {
     records.set(CASE.id, CASE)
-    const { data } = await call({ usageId: CASE.id, pages: [page('usage'), page('tracking')] })
-    const boostUsage = usage.find(m => m.distributorLabel === 'Device Technologies Boost Allograft')
-    expect(boostUsage.to).toEqual(['dl_spine_marketing@device.com.au', 'ortho@device.com.au'])
-    expect(boostUsage.to).not.toContain('boost@device.com.au')
-    for (const m of usage) expect(named(m.scanPdf)).toEqual(['usage'])
-    expect(tracking).toHaveLength(1)
-    expect(tracking[0]).toMatchObject({ to: ['boost@device.com.au'], cc: ['admin@technomed.com.au'] })
-    expect(named(tracking[0].pdf)).toEqual(['tracking'])
-    expect(data.results.find(r => r.key === 'boost_tracking')).toMatchObject({ ok: true })
-    expect(records.get(CASE.id).emailsSent.find(e => e.key === 'boost_tracking').ok).toBe(true)
-  })
-
-  it('is said, not guessed, when no page was read as a tracking form', async () => {
-    records.set(CASE.id, { ...CASE, boostTrackingPages: [] })
-    const { data } = await call({ usageId: CASE.id, pages: [page('usage')] })
+    await call('email', { usageId: CASE.id, pages: [page] })
+    expect(usage).toHaveLength(1)
+    expect(usage[0].to).toEqual(['dl_spine_marketing@device.com.au', 'ortho@device.com.au'])
     expect(tracking).toHaveLength(0)
-    expect(data.results.find(r => r.key === 'boost_tracking')).toMatchObject({ held: true, error: expect.stringMatching(/No Boost tracking form was found/) })
-  })
-
-  it('goes once', async () => {
-    records.set(CASE.id, CASE)
-    await call({ usageId: CASE.id, pages: [page('usage'), page('tracking')] })
-    const again = await call({ usageId: CASE.id, only: ['boost_tracking'], pages: [page('usage'), page('tracking')] })
-    expect(tracking).toHaveLength(1)
-    expect(again.data.results.find(r => r.key === 'boost_tracking')).toMatchObject({ held: true })
-  })
-
-  it('a test sends the tracking form to the rep only', async () => {
-    records.set(CASE.id, CASE)
-    await call({ usageId: CASE.id, testOnly: true, pages: [page('usage'), page('tracking')] })
-    expect(tracking[0]).toMatchObject({ to: ['rep@example.test'], cc: [] })
   })
 })
 
-describe('reading a scan with a tracking form in it', () => {
-  it('knows which page is the form, and counts the graft once', () => {
-    const merged = mergeExtractions([
-      { patientSurname: 'Testcase', items: [{ referenceCode: 'B-1', lotNumber: 'L9', productName: 'Boost' }] },
-      { boostTrackingForm: true, items: [{ referenceCode: 'B 1', lotNumber: 'l9', productName: 'Boost' }, { referenceCode: 'X-2', productName: 'Other graft' }] }
-    ])
-    expect(merged.boostTrackingPages).toEqual([2])
-    expect(merged.items.map(i => i.referenceCode)).toEqual(['B-1', 'X-2'])
+describe('the Boost tracking form, scanned on its own', () => {
+  it('goes to boost@ only, copied to admin@, and is filed beside the usage', async () => {
+    records.set(CASE.id, CASE)
+    const { status, data } = await call('boost-form', { usageId: CASE.id, pages: [page] })
+    expect(status).toBe(200)
+    expect(tracking[0]).toMatchObject({ to: ['boost@device.com.au'], cc: ['admin@technomed.com.au'] })
+    expect(tracking[0].pdfFilename).toMatch(/_Boost_Tracking_Form\.pdf$/)
+    expect(uploads[0]).toMatchObject({ path: `${CASE.dropboxPath}/${CASE.folderName}_Boost_Tracking_Form.pdf`, opts: { keep: true } })
+    expect(data).toMatchObject({ ok: true, filed: `${CASE.folderName}_Boost_Tracking_Form.pdf` })
+    expect(records.get(CASE.id).emailsSent).toEqual([expect.objectContaining({ key: 'boost_tracking', ok: true })])
+  })
+
+  it('goes once, unless the rep says send again', async () => {
+    records.set(CASE.id, CASE)
+    await call('boost-form', { usageId: CASE.id, pages: [page] })
+    const again = await call('boost-form', { usageId: CASE.id, pages: [page] })
+    expect(again.status).toBe(409)
+    expect(tracking).toHaveLength(1)
+    await call('boost-form', { usageId: CASE.id, pages: [page], confirmRepeat: true })
+    expect(tracking).toHaveLength(2)
+  })
+
+  it('a test goes to the rep only and is not recorded or filed', async () => {
+    records.set(CASE.id, CASE)
+    await call('boost-form', { usageId: CASE.id, pages: [page], testOnly: true })
+    expect(tracking[0]).toMatchObject({ to: ['rep@example.test'], cc: [] })
+    expect(uploads).toHaveLength(0)
+    expect(records.get(CASE.id).emailsSent).toBeUndefined()
+  })
+
+  it('needs pages', async () => {
+    records.set(CASE.id, CASE)
+    expect((await call('boost-form', { usageId: CASE.id, pages: [] })).status).toBe(400)
   })
 })
