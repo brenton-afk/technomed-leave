@@ -3,6 +3,7 @@ import { reorder } from './scan/pageList.js'
 import RegistrarText from './scan/RegistrarText.jsx'
 import AmendUsage from './scan/AmendUsage.jsx'
 import BoostForm from './scan/BoostForm.jsx'
+import CaseFiles from './scan/CaseFiles.jsx'
 import CameraSheet from './scan/CameraSheet.jsx'
 import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
@@ -354,6 +355,8 @@ export default function UsageScan({ user, switcher }) {
   const [amending, setAmending] = useState(null)
   // Which past usage has its Boost tracking form being scanned (scan/BoostForm.jsx).
   const [boostFor, setBoostFor] = useState(null)
+  // Which past usage is open to show its filed files (scan/CaseFiles.jsx).
+  const [filesFor, setFilesFor] = useState(null)
   const [history, setHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [error, setError] = useState('')
@@ -720,10 +723,17 @@ export default function UsageScan({ user, switcher }) {
             }
             return (
               <div key={h.id} style={{ background: 'white', borderRadius: 12, padding: '13px 15px', marginBottom: 10, border: `1px solid ${BORDER}` }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, wordBreak: 'break-all' }}>{h.folderName}</div>
-                <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
-                  {h.itemCount} item{h.itemCount === 1 ? '' : 's'} · {h.repName || '—'}
-                </div>
+                {/* Tap the usage to see its files (Brent, 9 Nov 2026). */}
+                <button type="button" data-open-usage={h.id} onClick={() => setFilesFor(v => (v === h.id ? null : h.id))}
+                  aria-expanded={filesFor === h.id}
+                  style={{ display: 'block', width: '100%', padding: 0, background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, wordBreak: 'break-all' }}>{h.folderName}</div>
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+                    {h.itemCount} item{h.itemCount === 1 ? '' : 's'} · {h.repName || '—'}
+                    <span style={{ color: TEAL, fontWeight: 600 }}>{filesFor === h.id ? ' · Hide files' : ' · Files'}</span>
+                  </div>
+                </button>
+                {filesFor === h.id && <CaseFiles usage={h} user={user} />}
                 <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: '#e6f4f2', color: TEAL }}>
                     {h.filesSaved?.length || 0} file{(h.filesSaved?.length || 0) === 1 ? '' : 's'} in Dropbox

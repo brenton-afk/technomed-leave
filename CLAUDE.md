@@ -1176,6 +1176,15 @@ Invariants worth preserving:
   surgeon (it would make a new surgeon folder) unless `newSurgeonConfirmed`. A
   record already saved wrong is corrected on read by `api/_usageFixes.js` —
   keyed by a SHA-256 of its old folder name, never the name.
+- **Tap a past usage to see its files** (Brent, 9 Nov 2026: "tap the usage
+  from past scanned usages and see your scanned files"). In Past scans the
+  case's name is a button (`data-open-usage`) that opens `scan/CaseFiles.jsx`:
+  the record's `filesSaved` under its `dropboxPath` (scan, sheet, amended
+  sheets, Boost tracking form), each opened through `action=open`, which only
+  opens files the portal itself filed (`isPortalFiled`) — the rest of the usage
+  tree stays locked. A PDF or photo is fetched from the temporary link into a
+  blob and shown in Chat's `FileViewer`; a spreadsheet downloads; a link that
+  cannot be previewed opens in a new tab.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
 - **The distributor email carries two attachments**: the 20-column sheet of their
   own items, and the scanned form with every page merged into one PDF
