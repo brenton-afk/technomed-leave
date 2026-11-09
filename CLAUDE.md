@@ -711,6 +711,12 @@ a red boxed flag ("Check what is in situ — … team leader to find the previou
 usage in Dropbox"), and both cards an **In situ?** tag. Not for cancelled or
 not-required cases. The automatic lookup (`priorImplantsFor`) stays behind the
 usage-read lock.
+**Not when the booking already says what is in there** (Brent, 9 Nov 2026):
+`inSituNoted` — one line of the operation or notes that says it is already in
+(in situ, existing, old/previous construct …) *and* names a system or maker
+("Existing System - Diplomat as per …", "Stryker Tritanium cages in situ") —
+and there is no day flag and no tag. The kit line never counts: it is what we
+are bringing.
 **The list view names every case ahead of ours it knows** (`rowsFor` in
 `ListOrder.jsx`): from the List line's words, else a note starting "After …"
 (`aheadWords`). Fewer named than the gap: the named ones numbered, then "N

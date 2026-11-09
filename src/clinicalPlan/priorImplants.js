@@ -61,6 +61,28 @@ export function inSituReason(text) {
   return IN_SITU.find(([, re]) => re.test(t))?.[0] || null
 }
 
+// ── Already written on the booking (Brent, 9 Nov 2026) ──
+// "If a booking already has something listed for what's in situ then there's
+// no need for the reminder at the top of the page." A booking whose notes read
+// "Removal/Extending Existing System - Diplomat as per Sharon" or "Stryker
+// Tritanium cages in situ as per Hana" has had its answer found already. One
+// line has to say both things: that it is already in (in situ, existing, old,
+// previous …) and what it is (a system, or a maker's name). A line like
+// "extension of L5/S1 fixation" says neither, and the kit line is what we are
+// bringing, not what is in there.
+const ALREADY_IN = /\bin\s*-?\s*situ\b|\binsitu\b|\bexisting\b|\balready\s+in\b|\b(?:previous|prior|old)\s+(?:construct|fusion|instrumentation|hardware|system|screws?|rods?|plate|cages?|metalwork)\b/i
+const MAKERS = /\b(?:medtronic|synthes|depuy|zimmer|biomet|tritanium|solera|cd\s*horizon|xia|everest|expedium|viper|mesa|k2m|seaspine|alphatec|spineart|aesculap|ulrich|baui|medacta|ldr|mobi-?c|prestige|sintea|kls|signus|globus|nuvasive|stryker|orthofix|device)\b/i
+const OUR_KIT = /^(?:TM\b|Brainlab|AIRO|Curve)/i
+
+/** Whether the booking already says what is in situ, so nobody needs reminding to find it. */
+export function inSituNoted(lines) {
+  return (Array.isArray(lines) ? lines : [lines]).some(line => {
+    const t = String(line || '')
+    if (!ALREADY_IN.test(t)) return false
+    return MAKERS.test(t) || findSystems(t).some(s => !OUR_KIT.test(s.name))
+  })
+}
+
 /** Whether this booking needs the history looked up at all. */
 export function needsPriorImplants(text) {
   return ASKS_ABOUT_EXISTING.test(String(text || ''))

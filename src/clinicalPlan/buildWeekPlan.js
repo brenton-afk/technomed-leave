@@ -1,4 +1,4 @@
-import { inSituReason } from './priorImplants.js'
+import { inSituReason, inSituNoted } from './priorImplants.js'
 // ─── Derivation: calendar events → WeekPlan ───────────────────────────────────
 // Pure. No fetching, no React, no dates from the ambient clock except the
 // `generatedAt` that is passed in. This is what makes the same plan reusable by
@@ -619,7 +619,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         notes: (read.notes || []).map(text => ({ text, kind: 'booking' })),
         // An extension, a connection to an existing construct, a revision: the
         // team leader finds what is in situ (inSituReason in priorImplants.js).
-        inSitu: inSituReason([event.rawTitle, read.operation, ...(read.notes || [])].join(' \n ')) || undefined,
+        // Not when the booking already says what is in there (inSituNoted).
+        inSitu: (!inSituNoted([read.operation, ...(read.notes || [])])
+          && inSituReason([event.rawTitle, read.operation, ...(read.notes || [])].join(' \n '))) || undefined,
         dayDate,
         _event: event
       })

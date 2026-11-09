@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { inSituReason } from './priorImplants.js'
+import { inSituReason, inSituNoted } from './priorImplants.js'
 import { buildWeekPlan } from './buildWeekPlan.js'
 
 // Brent, 9 Nov 2026: "when you see the word extension or connection to
@@ -46,5 +46,26 @@ describe('what is in situ', () => {
       ev('a', 'CANCELLED Testcase MARINER - Fowler', 'Surgeon: Fowler\nPatient: Testcase\nProcedure: L3/4 extension of fusion')
     ], { startDate: DAYS[0], endDate: DAYS[6], days: DAYS })
     expect(plan.days.find(d => d.date === '2026-11-17').flags.some(f => f.kind === 'inSitu')).toBe(false)
+  })
+
+  // Brent, 9 Nov 2026: a booking that already says what is in situ needs no
+  // reminder at the top of the page.
+  it('knows when the booking already says what is in there', () => {
+    expect(inSituNoted(['Removal/Extending Existing System - Diplomat as per Sharon'])).toBe(true)
+    expect(inSituNoted(['Stryker Tritanium Posterior Lumbar Cages in situ as per Hana'])).toBe(true)
+    expect(inSituNoted(['Medtronic screws in situ'])).toBe(true)
+    expect(inSituNoted(['L4/5 PLIF / extension of L5/S1 fixation'])).toBe(false)
+    expect(inSituNoted(['Remove existing hardware'])).toBe(false)
+    expect(inSituNoted(['Check what is in situ'])).toBe(false)
+    expect(inSituNoted(['TM Screw Removal kit for existing screws'])).toBe(false)
+  })
+
+  it('does not flag a case whose booking names what is in situ', () => {
+    const plan = buildWeekPlan([
+      ev('a', 'Testcase DIPLOMAT / E4 BMD - Gupta', 'Surgeon: Gupta<br>Patient: Testcase<br>Hospital: CLV<br>Procedure: L4/5 PLIF / posterior decompression / <b>extension </b>of L5/S1 fixation<br>Kit: Diplomat (Consignment)<br><b><br><br>Removal/Extending Existing System - Diplomat as per Sharon</b><br><br><b>Stryker Tritanium Posterior Lumbar Cages in situ as per Hana</b>')
+    ], { startDate: DAYS[0], endDate: DAYS[6], days: DAYS })
+    const day = plan.days.find(d => d.date === '2026-11-17')
+    expect(day.flags.some(f => f.kind === 'inSitu')).toBe(false)
+    expect(day.casesByHospital.flatMap(g => g.cases)[0].inSitu).toBeUndefined()
   })
 })
