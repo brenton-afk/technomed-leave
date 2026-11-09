@@ -1,6 +1,6 @@
 // ─── What a usage line must say before it goes (Brent, 9 Nov 2026) ───────────
 // "The portal should have picked up the missing size of the rods before he
-// sent it." Cloherty: the rods went to Signus as "Diplomat curved rods · 105"
+// sent it." A case's rods went to Signus as "Diplomat curved rods · 105"
 // with no product code, so Signus could not resupply them from the sheet. A
 // distributor resupplies by code — a line without one, or a rod or screw
 // without its size, is not finished.

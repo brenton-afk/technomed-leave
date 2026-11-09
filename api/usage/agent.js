@@ -305,7 +305,7 @@ async function handleSave(req, res, session) {
   if (!caseRecord.surgeonSurname) blocking.push('surgeon')
   if (!caseRecord.hospital) blocking.push('hospital (CLV or RHH)')
   // A surgeon in the patient box and a stranger in the surgeon box files the
-  // case under a surgeon folder named after the patient (Mulligan, 9 Nov 2026).
+  // case under a surgeon folder named after the patient (Brent, 9 Nov 2026).
   if (!req.body?.namesConfirmed && looksSwapped(caseRecord.patientSurname, caseRecord.surgeonSurname)) {
     blocking.push(`the patient and surgeon the right way round — ${caseRecord.patientSurname} is one of our surgeons`)
   }
@@ -678,7 +678,7 @@ async function handleAmend(req, res, session) {
   if (record.folderName) amended.folderName = record.folderName
   const changes = changesByDistributor(record.items || [], amended.items)
   // A line added or changed here that a distributor could not resupply from —
-  // no code, or a rod or screw with no size (Brent, 9 Nov 2026: Cloherty's
+  // no code, or a rod or screw with no size (Brent, 9 Nov 2026: a case's
   // rods went as "Diplomat curved rods · 105"). Said on the preview, and a
   // send is held until the rep fixes it or says to send anyway.
   const gaps = amendGaps(record.items || [], amended.items)

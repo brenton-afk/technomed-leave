@@ -45,7 +45,7 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
     setDraft({ productName: '', referenceCode: '', size: '', quantity: 1, distributorKey: '' })
   }
   // Lines new to this amendment that a distributor could not resupply from —
-  // no code, or a rod or screw with no size (Brent, 9 Nov 2026, Cloherty's
+  // no code, or a rod or screw with no size (Brent, 9 Nov 2026, a case's
   // rods). The server holds the send until they are fixed or sent anyway.
   const gaps = items.filter(i => !i.id && !i.excluded).map(i => ({ item: i, gaps: itemGaps(i), suggestion: suggestedCode(i) })).filter(g => g.gaps.length)
   const draftHint = suggestedCode(draft)

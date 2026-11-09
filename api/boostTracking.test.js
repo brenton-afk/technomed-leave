@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Brent, 9 Nov 2026 (Mulligan): "We will scan the boost form separately …
+// Brent, 9 Nov 2026: "We will scan the boost form separately …
 // That form can then go to Boost email. And the standard usage goes to device
 // just for boost resupply." Invented case.
 

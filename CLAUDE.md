@@ -588,7 +588,7 @@ app, never a send.
 ### A usage line must carry its code and size (Brent, 9 Nov 2026)
 
 "The portal should have picked up the missing size of the rods before he sent
-it" — Cloherty's rods were added in Amend as "Diplomat curved rods · 105" with
+it" — a case's rods were added in Amend as "Diplomat curved rods · 105" with
 no code (Amend's add form had no code box), and Signus could not resupply from
 it. `itemGaps` in `src/usageItemCheck.js` (shared) works from **`LINE_RULES`**,
 one row per kind of item, first match wins (Brent, same day: "there is no size
@@ -1147,7 +1147,7 @@ Invariants worth preserving:
   Still owed and matching — `removeUsageRecord`, kept under `usage:removed`,
   never erased; Dropbox and the email log are untouched.
 - **The Boost tracking form is scanned on its own and goes to the Boost team
-  alone** (Brent, 9 Nov 2026, Mulligan: one email to boost@ + ortho + spine
+  alone** (Brent, 9 Nov 2026: one email to boost@ + ortho + spine
   marketing let the graft be processed twice). `device_boost` usage goes to
   `dl_spine_marketing` + `ortho` only, for resupply, labelled Boost. The form
   is a separate scan: **Boost tracking form** (`scan/BoostForm.jsx`) on the
@@ -1159,9 +1159,9 @@ Invariants worth preserving:
   usage as `{folder}_Boost_Tracking_Form.pdf` (`keep: true`); recorded as
   `emailsSent` key `boost_tracking`, once (409 unless `confirmRepeat`); a test
   goes to the rep only and is neither recorded nor filed.
-- **Patient and surgeon the wrong way round** (Brent, same day: Mulligan was
-  read as patient Thani, surgeon Mulligan, and filed under a new surgeon folder
-  "Mulligan"). `looksSwapped` in `api/_usageCase.js`: one of our surgeons
+- **Patient and surgeon the wrong way round** (Brent, same day: a case was
+  read with the surgeon as the patient and the patient as the surgeon, and filed
+  under a new surgeon folder named after the patient). `looksSwapped` in `api/_usageCase.js`: one of our surgeons
   (`SURGEON_COLOUR_NAMES`) in the patient box and a name not on that list in
   the surgeon box. `normaliseCase` swaps them back and sets `namesSwapped` (the
   review says so); `action=save` refuses a case still that way round unless

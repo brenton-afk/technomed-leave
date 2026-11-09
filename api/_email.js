@@ -543,7 +543,7 @@ export async function sendUsageEmail({
 }
 
 // ─── BOOST TRACKING FORM ───────────────────────────────────
-// Brent, 9 Nov 2026 (Mulligan): the Boost team at boost@ gets the patient
+// Brent, 9 Nov 2026: the Boost team at boost@ gets the patient
 // tracking form alone, said plainly to be for tracking only. The usage itself
 // goes to Device's spine/ortho desk for resupply — two emails, two jobs, and
 // nothing for either team to process twice.

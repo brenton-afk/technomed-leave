@@ -303,8 +303,9 @@ function plausibleScanDate(raw) {
 }
 
 // ─── Patient and surgeon the wrong way round (Brent, 9 Nov 2026) ─────────────
-// Mulligan was read as patient "Thani", surgeon "Mulligan", and filed under a
-// new surgeon folder called Mulligan. One of ours in the patient box and a
+// A case was read with our surgeon as the patient and the patient as the
+// surgeon, and filed under a new surgeon folder named after the patient. One of
+// ours in the patient box and a
 // name we have never operated with in the surgeon box is the swap, not a
 // coincidence. Known surgeons are the booking guide's (colours.js).
 const KNOWN_SURGEONS = new Set(Object.keys(SURGEON_COLOUR_NAMES).map(s => s.toLowerCase()))

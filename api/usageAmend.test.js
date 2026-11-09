@@ -34,7 +34,7 @@ describe('amending a sent usage', () => {
   })
 })
 
-// Brent, 9 Nov 2026: Cloherty's rods were added in Amend with no code.
+// Brent, 9 Nov 2026: a case's rods were added in Amend with no code.
 describe('lines an amendment adds without a code or size', () => {
   it('are listed, and lines the amendment did not touch are not', async () => {
     const { amendGaps } = await import('./_usageAmend.js')

@@ -16,7 +16,7 @@ export const DISTRIBUTORS = {
   },
   // The Boost usage goes to Device's spine/ortho desk for resupply, labelled
   // Boost. The Boost team at boost@ gets only the patient tracking form, on its
-  // own (BOOST_TRACKING below) — sending them the usage too is how Mulligan's
+  // own (BOOST_TRACKING below) — sending them the usage too is how a Boost case's
   // graft came to be processed twice (Brent, 9 Nov 2026).
   device_boost: {
     name: 'Device Technologies Boost Allograft',
