@@ -1,7 +1,6 @@
 // ─── Usage case normalisation ─────────────────────────────────────────────────
 import { itemGaps } from '../src/usageItemCheck.js'
-import { SURGEON_COLOUR_NAMES } from '../src/clinicalPlan/colours.js'
-import { surnameFromField } from '../src/clinicalPlan/parse.js'
+import { surnameFromField, normaliseSurgeon } from '../src/clinicalPlan/parse.js'
 import { findSystems } from '../src/clinicalPlan/systems.js'
 // Turns whatever the vision extraction returned into a normalised case record:
 // distributors resolved by our own rules, peripherals dropped, uncertain rows
@@ -302,16 +301,28 @@ function plausibleScanDate(raw) {
   return date
 }
 
-// ─── Patient and surgeon the wrong way round (Brent, 9 Nov 2026) ─────────────
-// A case was read with our surgeon as the patient and the patient as the
-// surgeon, and filed under a new surgeon folder named after the patient. One of
-// ours in the patient box and a
-// name we have never operated with in the surgeon box is the swap, not a
-// coincidence. Known surgeons are the booking guide's (colours.js).
-const KNOWN_SURGEONS = new Set(Object.keys(SURGEON_COLOUR_NAMES).map(s => s.toLowerCase()))
-export const isKnownSurgeon = name => KNOWN_SURGEONS.has(String(name || '').trim().toLowerCase())
+// ─── Who the surgeon is, from what the portal knows (Brent, 9 Nov 2026) ──────
+// "The portal needs to know that Mulligan is not a surgeon and should be able
+// to tell that Thani is a surgeon because he's known to the portal." A case
+// was read with our surgeon as the patient and the patient as the surgeon,
+// and filed under a new surgeon folder named after the patient. The portal
+// already knows every surgeon we work with — SURGEON_KEYS and their other
+// spellings in parse.js ("Nova" is Thani, "Peters-Willke" is JPW), the same
+// list the bookings are read with — so a usage is checked against it too.
+//
+// The usage tree's folder for each surgeon, where it is not the portal's key.
+const SURGEON_FOLDER = { JPW: 'Peters-Willke' }
+
+/** The surgeon as the usage tree files them, or null when not one of ours. */
+export function knownSurgeon(name, { near = true } = {}) {
+  const key = normaliseSurgeon(String(name || ''), { near })
+  return key ? (SURGEON_FOLDER[key] || key) : null
+}
+export const isKnownSurgeon = name => Boolean(knownSurgeon(name, { near: false }))
+
+/** One of ours in the patient box, and a name we do not know in the surgeon box. */
 export function looksSwapped(patientSurname, surgeonSurname) {
-  return isKnownSurgeon(patientSurname) && Boolean(String(surgeonSurname || '').trim()) && !isKnownSurgeon(surgeonSurname)
+  return isKnownSurgeon(patientSurname) && Boolean(String(surgeonSurname || '').trim()) && !knownSurgeon(surgeonSurname)
 }
 
 /**
@@ -333,14 +344,24 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
   // was filed in Dropbox as "Berg". See surnameFromField.
   let patientSurname = surnameFromField(extracted.patientSurname) ||
     str(extracted.patientSurname)
-  let surgeonSurname = surnameOf(extracted.surgeonName)
   let surgeonName = str(extracted.surgeonName)
-  const namesSwapped = looksSwapped(patientSurname, surgeonSurname)
+  let surgeonSurname = surnameOf(surgeonName)
+  // The surgeon is whoever the portal knows them as: "Dr Nova Thani", "Thanni"
+  // and "Nova" are all Thani, and the case files under his folder.
+  const surgeonKnown = knownSurgeon(surgeonName) || knownSurgeon(surgeonSurname)
+  const patientIsSurgeon = !surgeonKnown && knownSurgeon(patientSurname, { near: false })
+  const namesSwapped = Boolean(patientIsSurgeon && surgeonSurname)
   if (namesSwapped) {
     // Put back the right way round, and said on the review screen.
-    ;[patientSurname, surgeonSurname] = [surnameFromField(surgeonName) || surgeonSurname, patientSurname]
-    surgeonName = surgeonSurname
+    patientSurname = surnameFromField(surgeonName) || surgeonSurname
+    surgeonSurname = patientIsSurgeon
+    surgeonName = patientIsSurgeon
+  } else if (surgeonKnown) {
+    surgeonSurname = surgeonKnown
   }
+  // Not one of ours at all: the review asks, and saving waits for an answer,
+  // because filing it would make a new surgeon folder in Dropbox.
+  const surgeonUnknown = Boolean(surgeonSurname) && !knownSurgeon(surgeonSurname)
   const dateOnForm = normaliseDate(extracted.date)
   const scanned = plausibleScanDate(scanDate)
   const date = scanned || dateOnForm
@@ -364,6 +385,7 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
     surgeonName,
     surgeonSurname,
     namesSwapped,
+    surgeonUnknown,
     date,
     // Where the date came from, and what the form said, so the review screen can
     // point out a disagreement rather than quietly overwriting one.
@@ -402,7 +424,9 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
 // screen, so a corrected surname or product flows through to Dropbox and email.
 export function recomputeCase(caseRecord) {
   const patientSurname = str(caseRecord.patientSurname)
-  const surgeonSurname = str(caseRecord.surgeonSurname) || surnameOf(caseRecord.surgeonName)
+  const typedSurgeon = str(caseRecord.surgeonSurname) || surnameOf(caseRecord.surgeonName)
+  // Spelled as the portal knows them, so the case files under their folder.
+  const surgeonSurname = knownSurgeon(typedSurgeon) || typedSurgeon
   const date = normaliseDate(caseRecord.date)
   const hospital = normaliseHospital(caseRecord.hospital)
   const procedure = str(caseRecord.procedure)

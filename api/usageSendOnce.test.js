@@ -42,8 +42,8 @@ function call(action, body) {
 }
 
 const CASE = {
-  id: 'case-1', patientSurname: 'Testcase', date: '2026-11-06', surgeonSurname: 'Sample', hospital: 'CLV',
-  folderName: 'Testcase_06112026_Sample_PLIF_CLV', createdAt: '2026-11-06T01:00:00Z', createdByEmail: 'rep@example.test',
+  id: 'case-1', patientSurname: 'Testcase', date: '2026-11-06', surgeonSurname: 'Thani', hospital: 'CLV',
+  folderName: 'Testcase_06112026_Thani_PLIF_CLV', createdAt: '2026-11-06T01:00:00Z', createdByEmail: 'rep@example.test',
   items: [{ id: 'i1', referenceCode: 'AB-1', productName: 'Boost allograft', distributorKey: 'device_boost', quantity: 1 }]
 }
 

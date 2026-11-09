@@ -13,7 +13,7 @@ import {
   RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply,
   resupplyFileName, itemsFor
 } from '../_resupply.js'
-import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped } from '../_usageCase.js'
+import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped, knownSurgeon } from '../_usageCase.js'
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
@@ -304,10 +304,13 @@ async function handleSave(req, res, session) {
   if (!caseRecord.date) blocking.push('date')
   if (!caseRecord.surgeonSurname) blocking.push('surgeon')
   if (!caseRecord.hospital) blocking.push('hospital (CLV or RHH)')
-  // A surgeon in the patient box and a stranger in the surgeon box files the
-  // case under a surgeon folder named after the patient (Brent, 9 Nov 2026).
-  if (!req.body?.namesConfirmed && looksSwapped(caseRecord.patientSurname, caseRecord.surgeonSurname)) {
+  // The surgeon must be one the portal knows (Brent, 9 Nov 2026): anybody else
+  // would be filed under a new surgeon folder — which is how a patient came to
+  // have one. A surgeon who is genuinely new is confirmed on the review screen.
+  if (looksSwapped(caseRecord.patientSurname, caseRecord.surgeonSurname)) {
     blocking.push(`the patient and surgeon the right way round — ${caseRecord.patientSurname} is one of our surgeons`)
+  } else if (caseRecord.surgeonSurname && !knownSurgeon(caseRecord.surgeonSurname) && !req.body?.newSurgeonConfirmed) {
+    blocking.push(`a surgeon the portal knows — "${caseRecord.surgeonSurname}" is not one of ours (pick from the list, or confirm they are new)`)
   }
   if (blocking.length) {
     return res.status(400).json({ error: `Complete these before saving: ${blocking.join(', ')}` })

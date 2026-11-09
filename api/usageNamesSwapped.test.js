@@ -37,3 +37,28 @@ describe('patient and surgeon the wrong way round', () => {
     expect(applyUsageFix(record, { [folderHash(wrong.folderName)]: 'swapPatientSurgeon' }).changed).toBe(false)
   })
 })
+
+// "The portal needs to know that <the patient> is not a surgeon and should be
+// able to tell that Thani is a surgeon because he's known to the portal."
+describe('the surgeon is one the portal knows', async () => {
+  const { knownSurgeon, recomputeCase } = await import('./_usageCase.js')
+  it('from the same list the bookings are read with, under any of their names', () => {
+    expect(knownSurgeon('Dr Nova Thani')).toBe('Thani')
+    expect(knownSurgeon('Nova')).toBe('Thani')
+    expect(knownSurgeon('Thanni')).toBe('Thani')
+    expect(knownSurgeon('Jens Peters-Willke')).toBe('Peters-Willke')
+    expect(knownSurgeon('Sampleton')).toBeNull()
+  })
+  it('a form naming "Dr Nova Thani" files under Thani', () => {
+    const c = normaliseCase({ patientSurname: 'Sampleton', surgeonName: 'Dr Nova Thani', date: '09/11/2026', hospital: 'CLV', items: [] }, { scanDate: '' })
+    expect(c).toMatchObject({ surgeonSurname: 'Thani', surgeonUnknown: false, namesSwapped: false })
+  })
+  it('a stranger in the surgeon box, with no surgeon in the patient box, is asked about', () => {
+    const c = normaliseCase({ patientSurname: 'Sampleton', surgeonName: 'Otherby', date: '09/11/2026', hospital: 'CLV', items: [] }, { scanDate: '' })
+    expect(c).toMatchObject({ surgeonUnknown: true, namesSwapped: false })
+  })
+  it('a surgeon typed on review is filed as the portal spells them', () => {
+    expect(recomputeCase({ patientSurname: 'Sampleton', surgeonSurname: 'thani', date: '2026-11-09', hospital: 'CLV', items: [] }).folderName)
+      .toMatch(/^Sampleton_09112026_Thani_/)
+  })
+})

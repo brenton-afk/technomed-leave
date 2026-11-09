@@ -1159,15 +1159,23 @@ Invariants worth preserving:
   usage as `{folder}_Boost_Tracking_Form.pdf` (`keep: true`); recorded as
   `emailsSent` key `boost_tracking`, once (409 unless `confirmRepeat`); a test
   goes to the rep only and is neither recorded nor filed.
-- **Patient and surgeon the wrong way round** (Brent, same day: a case was
-  read with the surgeon as the patient and the patient as the surgeon, and filed
-  under a new surgeon folder named after the patient). `looksSwapped` in `api/_usageCase.js`: one of our surgeons
-  (`SURGEON_COLOUR_NAMES`) in the patient box and a name not on that list in
-  the surgeon box. `normaliseCase` swaps them back and sets `namesSwapped` (the
-  review says so); `action=save` refuses a case still that way round unless
-  `namesConfirmed`. A record already saved wrong is corrected on read by
-  `api/_usageFixes.js` — keyed by a SHA-256 of its old folder name, never the
-  name — and saved back; the Dropbox folder was moved by hand.
+- **The surgeon must be one the portal knows** (Brent, same day: a case was
+  read with the surgeon as the patient and the patient as the surgeon, and
+  filed under a new surgeon folder named after the patient — "the portal needs
+  to know that [the patient] is not a surgeon and should be able to tell that
+  Thani is a surgeon because he's known to the portal"). `knownSurgeon` in
+  `api/_usageCase.js` uses `normaliseSurgeon` from `parse.js` — the same
+  `SURGEON_KEYS` and aliases the bookings are read with ("Dr Nova Thani",
+  "Nova", "Thanni" → Thani; JPW files as `Peters-Willke`, its Dropbox folder,
+  via `SURGEON_FOLDER`). `normaliseCase`: a known surgeon is spelled the
+  portal's way; one of ours in the patient box with an unknown surgeon is
+  swapped back (`namesSwapped`, said on review); any other unknown surgeon is
+  `surgeonUnknown`. `recomputeCase` respells a typed surgeon. Review shows
+  "not one of our surgeons — pick the surgeon" with a button per known
+  surgeon, or a tick for a genuinely new one; `action=save` refuses an unknown
+  surgeon (it would make a new surgeon folder) unless `newSurgeonConfirmed`. A
+  record already saved wrong is corrected on read by `api/_usageFixes.js` —
+  keyed by a SHA-256 of its old folder name, never the name.
 - **Dropbox succeeds before any email goes out**, so a failed save is retryable without double-sending.
 - **The distributor email carries two attachments**: the 20-column sheet of their
   own items, and the scanned form with every page merged into one PDF

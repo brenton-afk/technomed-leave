@@ -10,7 +10,13 @@ import { partitionItems } from '../usageReview.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { Header as ShellHeader } from '../design/Shell.jsx'
 import { itemGaps, suggestedCode } from '../usageItemCheck.js'
+import { SURGEON_KEYS, normaliseSurgeon } from '../clinicalPlan/parse.js'
 import { colour } from '../design/tokens.js'
+
+// Every surgeon the portal knows, the same list the bookings are read with
+// (Brent, 9 Nov 2026: "the portal … should be able to tell that Thani is a
+// surgeon because he's known to the portal").
+const SURGEON_KNOWN = name => Boolean(normaliseSurgeon(String(name || '')))
 
 // Claude downsamples anything larger, and Vercel caps a function request body
 // at 4.5MB — a 3-page form at this size lands comfortably inside both.
@@ -557,7 +563,9 @@ export default function UsageScan({ user, switcher }) {
           case: caseRecord,
           pages: filingPages(pages),
           // Only from "It's a different operation" on the already-filed panel.
-          confirmSeparate: separate
+          confirmSeparate: separate,
+          // A surgeon the portal does not know, confirmed as new on review.
+          newSurgeonConfirmed: Boolean(caseRecord.newSurgeonConfirmed)
         })
       })
       const saved = await saveRes.json()
@@ -864,6 +872,24 @@ export default function UsageScan({ user, switcher }) {
                 </div>
               )}
               <Field label="Surgeon surname" value={caseRecord.surgeonSurname} onChange={v => updateCase('surgeonSurname', v)} />
+              {caseRecord.surgeonSurname && !SURGEON_KNOWN(caseRecord.surgeonSurname) && (
+                <div data-surgeon-unknown style={{ fontSize: 12, color: AMBER_TEXT, lineHeight: 1.5, margin: '-4px 0 10px' }}>
+                  "{caseRecord.surgeonSurname}" is not one of our surgeons. Pick the surgeon:
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '6px 0' }}>
+                    {SURGEON_KEYS.map(k => (
+                      <button key={k} type="button" onClick={() => updateCase('surgeonSurname', k === 'JPW' ? 'Peters-Willke' : k)}
+                        style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', minHeight: 32, borderRadius: 16, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: NAVY }}>
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: NAVY }}>
+                    <input type="checkbox" checked={Boolean(caseRecord.newSurgeonConfirmed)} onChange={e => updateCase('newSurgeonConfirmed', e.target.checked)}
+                      style={{ width: 18, height: 18, fontSize: 16 }} />
+                    No — this is a new surgeon, make them a folder
+                  </label>
+                </div>
+              )}
               {caseRecord.namesSwapped && (
                 <div data-names-swapped style={{ fontSize: 12, color: AMBER_TEXT, lineHeight: 1.5, margin: '-4px 0 10px' }}>
                   The form was read with the patient and surgeon the wrong way round — they have been swapped back. Check both.
