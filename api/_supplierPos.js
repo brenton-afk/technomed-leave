@@ -183,10 +183,23 @@ async function findSuppliers(name, email, xero) {
   return []
 }
 
-/** One of our purchase orders by number, with its lines, or null. */
+/**
+ * One of our purchase orders by number, with its lines, or null.
+ *
+ * Xero's purchase-order list does not take a where filter, so the PO is
+ * fetched by its number directly (GET /PurchaseOrders/{number}) — and the
+ * answer is used only if it really is that number. A lookup that quietly
+ * returned "the first PO" would have the save replace the wrong order's lines.
+ */
 export async function getPurchaseOrderByNumber(number, xero = xeroCall) {
-  const data = await xero('GET', `/PurchaseOrders?where=${encodeURIComponent(`PurchaseOrderNumber=="${String(number).replace(/["\\]/g, '')}"`)}`)
-  const po = (data.PurchaseOrders || [])[0]
+  const want = ourPoNumber(number)
+  if (!want) return null
+  let data
+  try { data = await xero('GET', `/PurchaseOrders/${encodeURIComponent(want)}`) } catch (err) {
+    if (/not ?found|404/i.test(err.message)) return null
+    throw err
+  }
+  const po = (data.PurchaseOrders || []).find(p => String(p.PurchaseOrderNumber).toUpperCase() === want)
   return po ? shapePo(po) : null
 }
 
@@ -242,7 +255,11 @@ export async function saveSupplierPo({ messageId, contactId, update, lines, frei
   let saved
   if (update) {
     const existing = await getPurchaseOrderByNumber(update, xero)
-    if (!existing) throw new Error(`${update} is not in Xero`)
+    if (!existing || existing.number !== ourPoNumber(update)) throw new Error(`${update} could not be found in Xero, so nothing was changed`)
+    // The PO being replaced must belong to the supplier the screen shows.
+    if (contactId && existing.contact.id && existing.contact.id !== contactId) {
+      throw new Error(`${update} is ${existing.contact.name}'s, not this supplier's, so it was not changed`)
+    }
     if (['BILLED', 'DELETED'].includes(existing.status)) {
       throw Object.assign(new Error(`${update} is ${existing.status.toLowerCase()} in Xero, so it was not changed. Draft a new PO instead.`), { code: 'billed' })
     }

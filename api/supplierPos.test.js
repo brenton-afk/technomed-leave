@@ -69,6 +69,25 @@ describe('saving the PO in Xero', () => {
     expect(xero.mock.calls.every(c => c[0] === 'GET')).toBe(true)
   })
 
+  it('looks the PO up by its number, and changes nothing when Xero returns a different one', async () => {
+    const other = { ...PO147, PurchaseOrderID: 'po-140', PurchaseOrderNumber: 'PO-0140' }
+    const xero = vi.fn(async () => ({ PurchaseOrders: [other] }))
+    await expect(S.saveSupplierPo({ messageId: 'msg123460', update: 'PO-0147', lines }, xero)).rejects.toThrow(/could not be found/)
+    expect(xero.mock.calls[0].slice(0, 2)).toEqual(['GET', '/PurchaseOrders/PO-0147'])
+    expect(xero.mock.calls.every(c => c[0] === 'GET')).toBe(true)
+  })
+
+  it('a PO Xero does not have is "not found", not an error page', async () => {
+    const xero = vi.fn(async () => { throw new Error('Xero 404 Not Found') })
+    expect(await S.getPurchaseOrderByNumber('PO-0999', xero)).toBeNull()
+  })
+
+  it('never replaces another supplier\'s PO', async () => {
+    const xero = vi.fn(async () => ({ PurchaseOrders: [PO147] }))
+    await expect(S.saveSupplierPo({ messageId: 'msg123461', contactId: 'someone-else', update: 'PO-0147', lines }, xero)).rejects.toThrow(/not this supplier/)
+    expect(xero.mock.calls.every(c => c[0] === 'GET')).toBe(true)
+  })
+
   it('a new PO is always a DRAFT, with freight as its own line', async () => {
     const xero = vi.fn(async (method, path, body) => ({ PurchaseOrders: [{ PurchaseOrderID: 'new', PurchaseOrderNumber: 'PO-0158', Status: 'DRAFT', Total: 2205.5, ...body.PurchaseOrders[0] }] }))
     const { po } = await S.saveSupplierPo({ messageId: 'msg123458', contactId: 'mac', lines, freight: 25, reference: 'K-Wires', quoteNumber: '00012501' }, xero)

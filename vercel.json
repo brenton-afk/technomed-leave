@@ -49,7 +49,7 @@
       "maxDuration": 60
     },
     "api/xero/info.js": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "api/decisions.js": {
       "maxDuration": 150
