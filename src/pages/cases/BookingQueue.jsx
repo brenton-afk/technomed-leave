@@ -250,6 +250,49 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
 
   const busy = status !== 'ready'
 
+  // A cancellation read from an email (Brent, 9 Nov 2026: "pt Nichols on
+  // 17/11/26 has been cancelled but the portal can't see it"). It offers to
+  // call the booking off — kept on the calendar, marked CANCELLED, suppliers
+  // offered the cancellation — and never does so by itself.
+  if (candidate.cancels) {
+    return (
+      <div data-cancel-card style={{
+        background: colour.surface, border: `1px solid ${colour.danger}`,
+        borderRadius: radius.card, padding: space.md, marginBottom: space.md
+      }}>
+        <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.danger, marginBottom: 4 }}>
+          Cancellation
+        </div>
+        <div style={{ ...text('heading'), color: colour.ink }}>
+          {candidate.patient || 'No surname read'}{candidate.surgeon ? ` · ${candidate.surgeon}` : ''}
+        </div>
+        <div style={{ ...text('bodyStrong'), color: colour.accentDeep, marginBottom: space.xs }}>
+          {prettyDate(candidate.cancels.date || candidate.date) || candidate.date}
+        </div>
+        <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
+          The email from {(candidate.sources || []).join(' + ').toUpperCase() || 'the hospital'} says this case is off.
+          On the calendar: {candidate.cancels.summary || 'the booking'}.
+        </div>
+        {noteWorthShowing(candidate.note) && (
+          <div style={{ ...text('caption'), color: colour.ink, marginBottom: space.sm }}>{candidate.note}</div>
+        )}
+        {error && <div style={{ ...text('caption'), color: colour.danger, marginBottom: space.xs }}>{error}</div>}
+        <div style={{ display: 'flex', gap: space.sm }}>
+          <button onClick={() => send('dismiss', {})} disabled={busy} style={{
+            flex: 1, padding: space.sm, cursor: busy ? 'default' : 'pointer', ...text('bodyStrong'),
+            background: 'transparent', color: colour.inkMuted,
+            border: `1px solid ${colour.line}`, borderRadius: radius.control
+          }}>{status === 'dismiss' ? 'Dismissing…' : 'Leave it booked'}</button>
+          <button onClick={() => send('accept', {})} disabled={busy} style={{
+            flex: 2, padding: space.sm, ...text('bodyStrong'), color: 'white', border: 'none',
+            borderRadius: radius.control, background: busy ? colour.inkFainter : colour.danger,
+            cursor: busy ? 'default' : 'pointer'
+          }}>{status === 'accept' ? 'Cancelling…' : 'Cancel the booking'}</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       background: colour.surface, border: `1px solid ${colour.line}`,
@@ -463,7 +506,7 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
 
 export default function BookingQueue({ user, onClose, onAccepted }) {
   const [pending, setPending] = useState(null)
-  const nths = useMemo(() => kitOrderOnDay(pending || []), [pending])
+  const nths = useMemo(() => kitOrderOnDay((pending || []).filter(c => !c.cancels)), [pending])
   const [error, setError] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)

@@ -1396,14 +1396,23 @@ async function ingestPass() {
     // those are looked at once more (see asksForCover). Anything that produced
     // a booking, or is mid-retry, is settled as it was.
     const recheck = r => r && !r.failed && !r.rule && !r.count
-    const unseen = messageIds.filter((_, i) => !records[i] || records[i].failed || recheck(records[i]))
+    // Read before cancellations were understood (rule < 3) and it found a
+    // booking: looked at once more, and read again only if it talks about a
+    // cancellation — that is how the Nichols email was missed.
+    const cancelCheck = r => r && !r.failed && r.count > 0 && (r.rule || 0) < 3
+    const unseen = messageIds.filter((_, i) => !records[i] || records[i].failed || recheck(records[i]) || cancelCheck(records[i]))
     const wasSeen = new Set(messageIds.filter((_, i) => recheck(records[i])))
+    const forCancel = new Map(messageIds.filter((_, i) => cancelCheck(records[i])).map(id => [id, records[messageIds.indexOf(id)]]))
     const heads = await inBatches(unseen, 8, id => headersOf(id).catch(() => ({ from: '', subject: '', snippet: '' })))
 
     const toRead = []
     for (let i = 0; i < unseen.length; i++) {
       const { from: rawFrom, subject, snippet } = heads[i]
       const from = addressOf(rawFrom)
+      if (forCancel.has(unseen[i]) && !CANCEL_WORDS.test(`${subject} ${snippet}`)) {
+        await markBookingEmailSeen(unseen[i], forCancel.get(unseen[i]).count)
+        continue
+      }
       let source = sourceOf(from)
       if (isDistributorEmail(from)) {
         if (asksForCover(subject, snippet)) {
@@ -1480,6 +1489,15 @@ async function ingestPass() {
           // A booking that came in as a photograph or a PDF has little or no
           // text, and "the email said nothing" should not read as a fault.
           attachments: (email.attachments || []).map(a => a.filename).filter(Boolean)
+        }
+
+        // The email calls the case off (Brent, 9 Nov 2026). Before this, a
+        // cancellation named the same patient and day as the booking, so it
+        // was taken for "already on the calendar" and filed away unseen.
+        if (booking.cancelled) {
+          const outcome = await queueCancellation(candidate, { calendarFor, existing, queued })
+          if (outcome === 'queued') queued.push(candidate)
+          continue
         }
 
         // Already on the calendar. This is the ordinary case, not the rare one:
@@ -1576,6 +1594,39 @@ async function ingestPass() {
 // not find it, often a surname spelt differently, and re-checking would bring
 // it back on every tap. A cancelled entry still counts as on the calendar: the
 // portal knows about that case, struck through.
+// Words an email uses to call a case off.
+export const CANCEL_WORDS = /\bcancel|\bpostpone|not (?:be )?proceeding|won'?t be proceeding|off (?:the|his|her) list|removed from (?:the )?list|\bwithdrawn\b|\bdeferred\b/i
+
+/**
+ * A cancellation read from an email, queued as a card that offers to cancel
+ * the booking — never done by itself. Returns what happened.
+ */
+export async function queueCancellation(candidate, { calendarFor, existing = [], queued = [], save = saveBookingCandidate, update = updateBookingCandidate }) {
+  const card = { ...candidate, id: `cancel-${candidate.id}`, kind: 'cancel' }
+  delete card.moves
+  // A booking card for the same case, not yet accepted, is now moot.
+  for (const c of [...existing, ...queued]) {
+    if (c.kind !== 'cancel' && c.status === 'pending' && isSameBooking(c, candidate)) {
+      await update(c.id, { status: 'dismissed', dismissedBy: 'cancellation email', dismissedAt: new Date().toISOString() })
+      c.status = 'dismissed'
+    }
+  }
+  if (existing.some(c => c.id === card.id && c.status !== 'pending')) return 'settled'
+  const days = candidate.date ? await calendarFor(candidate.date) : []
+  // A live booking first; a matching one already called off only if there is no live one.
+  const target = alreadyInCalendar(candidate, days.filter(e => !e.cancelled)) || alreadyInCalendar(candidate, days)
+  if (!target) {
+    await save({ ...card, status: 'nothingToCancel' })
+    return 'nothing'
+  }
+  if (target.cancelled) {
+    await save({ ...card, status: 'onCalendar', matchedEventId: target.id, matchedSummary: target.summary })
+    return 'already'
+  }
+  await save({ ...card, status: 'pending', cancels: { eventId: target.id, date: target.date || candidate.date, summary: target.summary } })
+  return 'queued'
+}
+
 export async function reconcileQueue(queue, today, readCalendar = bookingsOnCalendar) {
   const out = { returned: 0, nowBooked: 0 }
   const upcoming = queue.filter(c => c.date && c.date >= today && (
@@ -1597,6 +1648,18 @@ export async function reconcileQueue(queue, today, readCalendar = bookingsOnCale
   const live = events.filter(e => !e.cancelled)
 
   for (const c of upcoming) {
+    // A cancellation card settles once its booking is off — by Accept here,
+    // by the Cancel button, or by hand in Google — or gone.
+    if (c.cancels?.eventId) {
+      if (c.status === 'pending') {
+        const target = events.find(e => e.id === c.cancels.eventId)
+        if (!target || target.cancelled) {
+          await updateBookingCandidate(c.id, { status: 'onCalendar', matchedEventId: c.cancels.eventId })
+          out.nowBooked += 1
+        }
+      }
+      continue
+    }
     if (c.status === 'pending') {
       const twin = alreadyInCalendar(c, live) || loanLogisticsTwin(c, live)
       if (twin) {
@@ -1689,6 +1752,26 @@ async function handleAccept(req, res) {
     if (await redis('SET', claim, '1', 'NX', 'EX', '90') !== 'OK') {
       claim = null
       return res.status(409).json({ error: 'That booking is already being accepted — it will be on the calendar in a moment.', inProgress: true })
+    }
+
+    // A cancellation read from an email: the booking is called off, the way
+    // the Cancel button does it — kept, marked CANCELLED, suppliers offered
+    // the cancellation notice.
+    if (candidate.cancels?.eventId) {
+      const { saved, notices } = await cancelEvent(candidate.cancels.eventId, session, {
+        reason: 'cancellation email'
+      })
+      const accepted = await updateBookingCandidate(id, {
+        status: 'accepted',
+        acceptedBy: firstNameFor(session.email),
+        acceptedAt: new Date().toISOString(),
+        eventId: saved.id
+      })
+      return res.status(200).json({
+        ok: true, cancelledBooking: true, candidate: accepted,
+        event: { id: saved.id, summary: saved.summary || '', etag: saved.etag || null },
+        ...notices
+      })
     }
 
     // A booking that has moved: the existing entry is moved, not copied.
@@ -2072,41 +2155,7 @@ async function handleCancel(req, res) {
     // `off: false` reinstates. A case coming back on is ordinary — a theatre
     // list is rearranged twice before eight in the morning.
     const off = body.off !== false
-
-    const current = await getCalendarEvent(eventId)
-    const summary = String(current.summary || '')
-    const who = firstNameFor(session.email)
-    const day = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
-
-    // The reason, where somebody gave one. It is the first thing anybody asks.
-    const reason = stripIdentifiers(String(body.reason || '')).trim().slice(0, 200)
-    const note = off
-      ? `Cancelled by ${who}${reason ? ` — ${reason}` : ''}`
-      : `Reinstated by ${who}`
-
-    const description = `${stripCalledOffNote(current.description || '')}\n\n${note}`.trim()
-
-    const patch = {
-      summary: off ? markCancelled(summary) : stripCancellation(summary),
-      description,
-      // Grey while it is off, so it reads as called off at a glance in Google
-      // as well as in the app. Put back to the surgeon's colour on reinstating,
-      // which is where every other save gets it from.
-      colorId: off
-        ? '8'
-        : (guideColorIdFor(normaliseSurgeon(readBooking(summary, description)?.surgeon || '') || '') || null)
-    }
-
-    const saved = await updateCalendarEvent(eventId, patch, { etag: body.etag })
-    // The day closes up around it, and reopens when it comes back.
-    if (day) await tidyDay(day).catch(() => {})
-
-    // Called off is a cancellation to a supplier; put back on is the booking
-    // again, so it goes as new.
-    const notices = await prepareNotices({
-      kind: off ? 'cancelled' : 'new', beforeEvent: current, afterEvent: saved, eventId, session
-    })
-
+    const { saved, notices } = await cancelEvent(eventId, session, { off, reason: body.reason, etag: body.etag })
     return res.status(200).json({
       ok: true,
       cancelled: off,
@@ -2119,6 +2168,44 @@ async function handleCancel(req, res) {
     }
     return res.status(500).json({ error: err.message })
   }
+}
+
+/** Marks a booking off (or back on), tidies the day, and prepares the supplier notices. */
+async function cancelEvent(eventId, session, { off = true, reason = '', etag } = {}) {
+  const current = await getCalendarEvent(eventId)
+  const summary = String(current.summary || '')
+  const who = firstNameFor(session.email)
+  const day = (current.start?.dateTime || current.start?.date || '').slice(0, 10)
+
+  // The reason, where somebody gave one. It is the first thing anybody asks.
+  const why = stripIdentifiers(String(reason || '')).trim().slice(0, 200)
+  const note = off
+    ? `Cancelled by ${who}${why ? ` — ${why}` : ''}`
+    : `Reinstated by ${who}`
+
+  const description = `${stripCalledOffNote(current.description || '')}\n\n${note}`.trim()
+
+  const patch = {
+    summary: off ? markCancelled(summary) : stripCancellation(summary),
+    description,
+    // Grey while it is off, so it reads as called off at a glance in Google
+    // as well as in the app. Put back to the surgeon's colour on reinstating,
+    // which is where every other save gets it from.
+    colorId: off
+      ? '8'
+      : (guideColorIdFor(normaliseSurgeon(readBooking(summary, description)?.surgeon || '') || '') || null)
+  }
+
+  const saved = await updateCalendarEvent(eventId, patch, { etag })
+  // The day closes up around it, and reopens when it comes back.
+  if (day) await tidyDay(day).catch(() => {})
+
+  // Called off is a cancellation to a supplier; put back on is the booking
+  // again, so it goes as new.
+  const notices = await prepareNotices({
+    kind: off ? 'cancelled' : 'new', beforeEvent: current, afterEvent: saved, eventId, session
+  })
+  return { saved, notices }
 }
 
 /** Takes off a previous cancelled/reinstated line, so they do not stack up. */

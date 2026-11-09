@@ -48,6 +48,12 @@ For each case return:
   hospital    RHH for Royal Hobart, CLV for Calvary Lenah Valley, else ""
   theatre     theatre number if stated, else ""
   note        anything else that matters: a second surgeon, urgency, a request
+  cancelled   true if the email says this case is CANCELLED, called off,
+              postponed without a new date, not proceeding, or taken off the
+              list; otherwise false. A cancelled case is still returned, with
+              the date it was booked for, so it can be found and taken off.
+              If the email moves the case to a new date, it is not cancelled —
+              return the new date.
 
 Ignore the pre-operative workup entirely, and the hospital's own arrangements:
 admission ("admission day of surgery"), positioning, microscope, MBS item codes. ECG, blood tests, fasting, consent,
@@ -78,7 +84,7 @@ Dates: the year may be implied. These are Australian dates, so 9/10/26 is the
 9th of October 2026, not the 10th of September.
 
 Return ONLY JSON, no prose, of this shape:
-{"cases":[{"surname":"","surgeon":"","date":"","procedure":"","kit":"","hospital":"","theatre":"","note":""}]}`
+{"cases":[{"surname":"","surgeon":"","date":"","procedure":"","kit":"","hospital":"","theatre":"","note":"","cancelled":false}]}`
 
 /** Anything that is not a surname, removed on the way out regardless of the prompt. */
 function cleanCase(raw) {
@@ -113,7 +119,10 @@ function cleanCase(raw) {
     note: [withoutPreOpNoise(
       stripIdentifiers(String(raw?.note || '')).split(/\n|;\s*|(?<=\.)\s+(?=[A-Z])/)
     ).join(' ').trim(), brainlab.attendance ? 'No F2F required' : ''].filter(Boolean).join('\n'),
-    ...(brainlab.attendance ? { attendance: brainlab.attendance } : {})
+    ...(brainlab.attendance ? { attendance: brainlab.attendance } : {}),
+    // The email calls the case off (Brent, 9 Nov 2026: "pt Nichols on 17/11/26
+    // has been cancelled but the portal can't see it").
+    ...(raw?.cancelled === true || /^(true|yes)$/i.test(String(raw?.cancelled || '')) ? { cancelled: true } : {})
   }
 }
 

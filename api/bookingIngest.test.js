@@ -221,3 +221,55 @@ describe('two checks of bookings@ at once', () => {
     expect(r.found).toBe(0)
   })
 })
+
+// Brent, 9 Nov 2026: "pt Nichols on 17/11/26 has been cancelled but the portal
+// can't see it when I hit inbox." Invented patient.
+describe('a cancellation email', () => {
+  const EVENT = {
+    id: 'evt-t', summary: 'Testcase DAKOTA - Ibbett',
+    description: 'Surgeon: Ibbett\nPatient: Testcase\nHospital: CLV\nKit: Dakota (Consignment)',
+    location: 'CLV', start: { dateTime: '2026-11-17T08:00:00+11:00' }, end: { dateTime: '2026-11-17T09:00:00+11:00' }
+  }
+  const CANCEL = { from: 'bookings@cnstas.com.au', subject: 'Cancellation - Testcase 17/11', snippet: 'Please cancel', text: 'Please cancel Testcase on 17/11' }
+
+  beforeEach(async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [EVENT] }) })))
+    const reader = await import('./_readBookingDocument.js')
+    reader.readBookingDocument.mockResolvedValueOnce([{ patient: 'Testcase', surgeon: 'Ibbett', date: '2026-11-17', hospital: 'CLV', cancelled: true }])
+  })
+
+  it('becomes a card offering to cancel the booking, not "already on the calendar"', async () => {
+    mailbox = { cancel: CANCEL }
+    const res = await call('ingest', {})
+    const card = [...queue.values()].find(c => c.kind === 'cancel')
+    expect(card).toMatchObject({ status: 'pending', cancels: { eventId: 'evt-t' } })
+    expect(res.payload.pending.map(c => c.id)).toContain(card.id)
+    expect(res.payload.already).toBe(0)
+  })
+
+  it('is read again when it was filed before cancellations were understood', async () => {
+    mailbox = { cancel: CANCEL, other: { from: 'bookings@cnstas.com.au', subject: 'Booking - Other 18/11', snippet: 'Please book' } }
+    seen.add('cancel'); records.set('cancel', { count: 1, rule: 2 })
+    seen.add('other'); records.set('other', { count: 1, rule: 2 })
+    await call('ingest', {})
+    expect(downloaded).toEqual(['cancel'])
+    expect([...queue.values()].some(c => c.kind === 'cancel' && c.status === 'pending')).toBe(true)
+  })
+
+  it('Cancel the booking marks it CANCELLED on the calendar, as the Cancel button does', async () => {
+    mailbox = { cancel: CANCEL }
+    await call('ingest', {})
+    const card = [...queue.values()].find(c => c.kind === 'cancel')
+    const cal = await import('./_googleCalendar.js')
+    cal.getCalendarEvent.mockResolvedValue(EVENT)
+    cal.updateCalendarEvent.mockImplementation(async (id, patch) => ({ ...EVENT, ...patch, id }))
+    const res = await call('accept', { id: card.id })
+    expect(res.statusCode).toBe(200)
+    expect(res.payload.cancelledBooking).toBe(true)
+    const [id, patch] = cal.updateCalendarEvent.mock.calls.at(-1)
+    expect(id).toBe('evt-t')
+    expect(patch.summary).toMatch(/^CANCELLED/i)
+    expect(patch.description).toMatch(/Cancelled by Toni — cancellation email/)
+    expect(created).toBeNull()
+  })
+})

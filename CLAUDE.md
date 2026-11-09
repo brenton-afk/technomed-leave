@@ -257,6 +257,17 @@ daily cron jobs, and in the background whenever a signed-in person opens the
 app (`action=ingest&background=1`, skipped if any check ran in the last ten
 minutes — `bookings:ingest:recent`). Cards only; nothing reaches the calendar
 without Accept.
+**Cancellations are read too** (Brent, 9 Nov 2026: "pt Nichols on 17/11/26 has
+been cancelled but the portal can't see it"). The reader returns `cancelled`
+per case; `queueCancellation` turns it into a red **Cancellation** card
+(`kind: 'cancel'`, id `cancel-…`, `cancels: {eventId, date, summary}`) instead
+of "already on the calendar". **Cancel the booking** runs `cancelEvent` — the
+same as the Cancel button: kept, CANCELLED, grey, supplier notices offered;
+**Leave it booked** dismisses. A pending booking card for the same case is
+dismissed; a booking already off settles the card; `reconcileQueue` settles it
+once the booking is off however that happened. Seen records are `rule: 3`;
+older ones that found a booking are re-read once if subject or snippet match
+`CANCEL_WORDS`.
 
 **Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
 `action=search` in `api/calendar/today.js`): Google's own full-text search over
