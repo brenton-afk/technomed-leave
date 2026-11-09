@@ -16,7 +16,7 @@ import { sendBookingNotice, escapeHtml } from '../_email.js'
 import { cachedLoanTrail, attachmentFor } from '../_loanTrail.js'
 import { markNoUsage, isMarkedNoUsage } from '../_usageReminders.js'
 import {
-  taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX, readTask
+  taskSummary, taskDescription, kindFor, isTask, doneLine, TASK_PREFIX, readTask, carriedTasks, CARRY_DAYS
 } from '../../src/clinicalPlan/tasks.js'
 
 /**
@@ -163,6 +163,8 @@ export default async function handler(req, res) {
   // and the part of a week that actually goes wrong.
   if (req.query.action === 'task') return handleTask(req, res)
   if (req.query.action === 'taskdone') return handleTaskDone(req, res)
+  // Day jobs left unticked on earlier days, brought forward to today.
+  if (req.query.action === 'opentasks') return handleOpenTasks(req, res)
   if (req.query.action === 'delete') return handleDelete(req, res)
   // The booking review queue. Bookings read out of bookings@ wait here for a
   // person before they reach the calendar — see api/_redis.js for why.
@@ -963,6 +965,32 @@ async function handleTask(req, res) {
  * "did anybody actually fetch that tray" — which is the question the task was
  * written to prevent in the first place.
  */
+/**
+ * Day jobs from the last CARRY_DAYS days that nobody ticked (Brent, 10 Nov
+ * 2026: "they should carry over if not completed"). Read-only. Google's own
+ * text search narrows it to TASK: events; readTask decides what is one and
+ * whether it is done, exactly as the week does.
+ */
+async function handleOpenTasks(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  const today = todayInHobart()
+  const from = toDateStr(addCivilDays(parseDateStr(today), -CARRY_DAYS))
+  try {
+    const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
+      + `?timeMin=${encodeURIComponent(`${from}T00:00:00+11:00`)}&timeMax=${encodeURIComponent(`${today}T00:00:00+11:00`)}`
+      + `&q=${encodeURIComponent('TASK')}&singleEvents=true&orderBy=startTime&maxResults=500`
+      + `&timeZone=${encodeURIComponent(QUERY_TZ)}`
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const data = await r.json()
+    if (data.error) return res.status(502).json({ error: 'The calendar could not be read just now.' })
+    return res.status(200).json({ today, tasks: carriedTasks(data.items || [], today) })
+  } catch {
+    return res.status(502).json({ error: 'The calendar could not be read just now.' })
+  }
+}
+
 async function handleTaskDone(req, res) {
   const session = await requireSession(req, res)
   if (!session) return

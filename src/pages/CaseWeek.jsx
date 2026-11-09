@@ -38,6 +38,7 @@ import { preferencesFor } from '../clinicalPlan/preferences.js'
 import { GuideView } from './TheatreGuides.jsx'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
 import TaskSheet from './cases/TaskSheet.jsx'
+import { withCarried } from '../clinicalPlan/tasks.js'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
 // One view of the bookings calendar, replacing the two that overlapped.
@@ -203,6 +204,12 @@ const KIND_TONE = {
 export const openTasks = tasks => (tasks || []).filter(t => t.suggested || !t.done)
 export const undoneDue = due => (due || []).filter(t => t.status !== 'done')
 
+/** "Mon 3 Nov", for a job carried over from that day. */
+function carriedDay(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return 'earlier'
+  return `${weekdayName(date).slice(0, 3)} ${dayNum(date)} ${monthOf(date).slice(0, 3)}`
+}
+
 function TaskRow({ task, onDone, compact }) {
   const done = Boolean(task.done)
   // Worked out from the bookings, not yet a task anyone has added (dispatch.js):
@@ -245,6 +252,10 @@ function TaskRow({ task, onDone, compact }) {
       {task.what}
       {task.who && !done && (
         <span style={{ fontWeight: 400, color: colour.inkMuted }}> · {task.who}</span>
+      )}
+      {/* Carried over from an earlier day and still not done. */}
+      {task.carried && !done && (
+        <span data-carried style={{ fontWeight: 700, color: colour.danger }}> · overdue, was {carriedDay(task.date)}</span>
       )}
       {done && task.doneBy && (
         <span style={{ fontWeight: 400 }}> · {task.doneBy}</span>
@@ -1459,10 +1470,29 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   // week's plan until the new one arrived — on hospital 5G, seconds of every
   // day reading "Nothing booked", and for good if the fetch failed. The saved
   // copy of the new week stands in while it loads; with none, it says Loading.
-  const weekPlan = useMemo(() => {
+  const basePlan = useMemo(() => {
     if (fullPlan?.weekStart === window_.startDate) return fullPlan
     return readCachedPlan(window_.startDate)?.plan || null
   }, [fullPlan, window_])
+  // Day jobs nobody ticked on an earlier day, shown again on today (Brent,
+  // 10 Nov 2026: "they should carry over if not completed"). Read from the
+  // calendar every minute like the week; only today's column gets them.
+  const [carried, setCarried] = useState([])
+  const loadCarried = useCallback(async () => {
+    try {
+      const res = await fetch('/api/calendar/today?action=opentasks', {
+        headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      setCarried(Array.isArray(data.tasks) ? data.tasks : [])
+    } catch { /* offline: today shows its own jobs, as before */ }
+  }, [user])
+  useLiveRefresh(loadCarried, [loadCarried])
+  const weekPlan = useMemo(() => {
+    if (!basePlan || !carried.length || !(basePlan.days || []).some(d => d.date === today)) return basePlan
+    return { ...basePlan, days: basePlan.days.map(d => d.date === today ? { ...d, tasks: withCarried(d.tasks, carried) } : d) }
+  }, [basePlan, carried, today])
   // "Mine" came off the header (Brent, 6 Nov 2026: "I don't think it helps").
   const plan = weekPlan
   const [status, setStatus] = useState('loading')
@@ -1888,14 +1918,14 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
       })
       if (!res.ok) return null
       const data = await res.json()
-      await load(window_, { quiet: true })
+      await Promise.all([load(window_, { quiet: true }), loadCarried()])
       return data
     } catch {
       // A tick that did not save leaves the task where it was, which is the
       // safe direction: somebody sees it still outstanding and taps again.
       return null
     }
-  }, [user, load, window_])
+  }, [user, load, window_, loadCarried])
   // A suggested dispatch opens Add a task, filled in; a real task, its sheet.
   const [taskPreset, setTaskPreset] = useState(null)
   const openTaskSheet = useCallback(task => {

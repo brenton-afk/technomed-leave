@@ -1,8 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { loanRequestsFor, describeBooking, DEFAULT_CONTACTS, DEFAULT_RULES, DEFAULT_LOAN_REQUESTS } from './_bookingNotices.js'
 
 // ─── Task 8: loan-set requests to E4 and Globus ─────────────────────────────
 // Fake patients. Nothing here sends.
+
+// The bookings below are dated mid-November 2026. Without a fixed clock the
+// "needed by" line turned into "as soon as possible" once real time came within
+// 48 hours of them, and the test went red on its own.
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-01T09:00:00+11:00')) })
+afterAll(() => { vi.useRealTimers() })
 
 const settings = { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES, loanRequests: DEFAULT_LOAN_REQUESTS }
 const booking = ({ kit = 'Dakota (Distributor Loan)', hospital = 'CLV', date = '2026-11-12' } = {}) => describeBooking({

@@ -775,6 +775,13 @@ project item ticked on the Projects page ticks its calendar copies the same way.
 `settleCopies` in `tasks.js` also shows a copy as done in the week view when a
 twin is done. Exact words for calendar copies: the same trip written on two
 days may be two trips.
+**Unticked day jobs carry over** (Brent and Toni, 10 Nov 2026: "they should
+carry over if not completed"). `action=opentasks` in `api/calendar/today.js`
+reads TASK: events from the last `CARRY_DAYS` (60) days before today that are
+not done (`carriedTasks` in `tasks.js`); `CaseWeek` polls it with
+`useLiveRefresh` and puts them in front of today's jobs (`withCarried`), red,
+"overdue, was Mon 3 Nov". They stay on their own day in Google; ticking one
+from today ticks that event and both lists reload.
 
 ### Review fixes (6 Nov 2026)
 

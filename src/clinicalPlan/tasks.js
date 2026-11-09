@@ -268,3 +268,36 @@ export function casesUsingKit(days = [], thing, from = '', limit = 8) {
   }
   return out.sort((a, b) => String(a.date + a.start).localeCompare(String(b.date + b.start))).slice(0, limit)
 }
+
+// ─── Jobs that were not done carry over (Toni and Brent, 10 Nov 2026) ─────────
+// "If tasks are assigned to a particular day and they don't get ticked off, do
+// they carry over to next day?" They do now: a day job left unticked on an
+// earlier day is shown again on today, marked overdue with the day it was for,
+// until somebody ticks it. It stays written on its own day in Google, and
+// ticking it from today ticks that same event.
+
+/** How far back an unticked job is still brought forward. */
+export const CARRY_DAYS = 60
+
+/**
+ * The unticked day jobs from before `today`, oldest first, ready to draw on today.
+ * `events` are raw calendar events ({ id, summary, description, start }).
+ */
+export function carriedTasks(events = [], today = '') {
+  return (events || [])
+    .map(e => {
+      const date = String(e?.start?.date || e?.start?.dateTime || e?.date || '').slice(0, 10)
+      const task = readTask(e?.summary || e?.title || '', e?.description || '')
+      return task && date && (!today || date < today) && !task.done
+        ? { ...task, id: e.id, date, carried: true }
+        : null
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** Today's tasks with the carried ones in front, each once. */
+export function withCarried(dayTasks = [], carried = []) {
+  const here = new Set((dayTasks || []).map(t => t.id))
+  return [...(carried || []).filter(t => !here.has(t.id)), ...(dayTasks || [])]
+}
