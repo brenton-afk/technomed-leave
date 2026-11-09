@@ -6,7 +6,8 @@ const dropbox = { configured: true, upload: vi.fn() }
 vi.mock('./_dropbox.js', () => ({
   dropboxConfigured: () => dropbox.configured,
   uploadFile: (...a) => dropbox.upload(...a),
-  temporaryLink: vi.fn(async () => ({ url: 'https://dl.dropboxusercontent.com/x' }))
+  temporaryLink: vi.fn(async () => ({ url: 'https://dl.dropboxusercontent.com/x' })),
+  downloadFile: vi.fn(async () => Buffer.from('bytes'))
 }))
 const put = vi.fn()
 vi.mock('@vercel/blob', () => ({ put: (...a) => put(...a) }))
@@ -24,6 +25,7 @@ function call(query, body) {
       setHeader(k, v) { this.headers[k] = v },
       status(c) { this.statusCode = c; return this },
       json(b) { resolve({ status: this.statusCode, body: b, headers: this.headers }) },
+      send(b) { resolve({ status: this.statusCode, sent: b, headers: this.headers }) },
       end() { resolve({ status: this.statusCode, headers: this.headers }) }
     }
     handler({ method: body ? 'POST' : 'GET', query, body, headers: {} }, res)
@@ -60,5 +62,22 @@ describe('the portal upload route', () => {
     expect(ok.status).toBe(302)
     expect(ok.headers.Location).toMatch(/dropboxusercontent/)
     expect((await call({ action: 'file', f: '../secret' })).status).toBe(404)
+  })
+})
+
+describe('the preview of a kept file (9 Nov 2026)', () => {
+  const key = name => `2026-11/12345678-1234-1234-1234-123456789abc-${name}`
+  it('sends a photo or PDF inline, named without the random id', async () => {
+    const r = await call({ action: 'file', f: key('beach.jpg'), view: '1' })
+    expect(r.status).toBe(200)
+    expect(r.headers['Content-Type']).toBe('image/jpeg')
+    expect(r.headers['Content-Disposition']).toBe('inline; filename="beach.jpg"')
+    expect((await call({ action: 'file', f: key('form.pdf'), view: '1' })).headers['Content-Type']).toBe('application/pdf')
+  })
+  it('never shows an SVG or a Word file inline', async () => {
+    const svg = await call({ action: 'file', f: key('x.svg'), view: '1' })
+    expect(svg.headers['Content-Type']).toBe('application/octet-stream')
+    expect(svg.headers['Content-Disposition']).toMatch(/^attachment/)
+    expect((await call({ action: 'file', f: key('notes.docx'), view: '1' })).headers['Content-Disposition']).toMatch(/^attachment/)
   })
 })

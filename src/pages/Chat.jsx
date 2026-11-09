@@ -5,7 +5,7 @@ import { chatWarning } from '../chat/identifiers.js'
 import { usePush, installHint, installed } from '../push.js'
 import { upload } from '@vercel/blob/client'
 import { shrink } from '../chat/photo.js'
-import { fileTypeOf } from '../chat/fileTypes.js'
+import { fileTypeOf, previewable } from '../chat/fileTypes.js'
 
 // ─── The team's messages (Brent, 6 Nov 2026) ─────────────────────────────────
 // "It needs to run faultlessly and seamlessly like WhatsApp … share photos,
@@ -149,19 +149,81 @@ function IconSheet({ channel, user, onClose, onSaved }) {
   )
 }
 
-/** One attached file, drawn as what it is. */
+/**
+ * The address a file is shown from in the viewer. A file the portal keeps in
+ * Dropbox is sent inline with &view=1 (Dropbox's own links always download).
+ */
+export function viewUrl(file) {
+  const url = String(file?.url || '')
+  return url.startsWith('/api/chat?action=file') ? `${url}&view=1` : url
+}
+
+/** The address that saves the file to the device. */
+export function downloadUrl(file) {
+  const url = String(file?.url || '')
+  if (/\.public\.blob\.vercel-storage\.com\//.test(url)) return `${url}${url.includes('?') ? '&' : '?'}download=1`
+  return url
+}
+
+/**
+ * The file, full screen, in the portal (Brent, 9 Nov 2026: "it would be great
+ * if clicking on the image enlarges the image, rather than instantly
+ * downloading it … You need to be able to preview them"). A photo fills the
+ * screen and can be pinched (data-zoomable — see lockZoom.js); a PDF or text
+ * file opens in a frame. Download is its own button. Tap outside, ✕ or Esc
+ * closes it.
+ */
+export function FileViewer({ file, onClose }) {
+  useEffect(() => {
+    const key = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [onClose])
+  const image = String(file.type || '').startsWith('image/')
+  const bar = { ...text('bodyStrong'), color: 'white', textDecoration: 'none', padding: '8px 14px', borderRadius: radius.pill, background: 'rgba(255,255,255,0.16)', border: 'none', cursor: 'pointer' }
+  return (
+    <Overlay>
+      <div data-file-viewer role="dialog" aria-label={file.name || 'Attachment'} onClick={onClose} style={{
+        position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(4,16,30,0.94)',
+        display: 'flex', flexDirection: 'column',
+        paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+      }}>
+        <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: space.sm }}>
+          <span style={{ ...text('caption'), color: 'white', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+          <a href={downloadUrl(file)} download={file.name || true} style={bar}>Download</a>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ ...bar, padding: '8px 12px' }}>✕</button>
+        </div>
+        <div data-zoomable style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: space.sm, overflow: 'auto' }}>
+          {image
+            ? <img src={viewUrl(file)} alt={file.name || 'Photo'} onClick={e => e.stopPropagation()}
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6, background: 'white' }} />
+            : <iframe src={viewUrl(file)} title={file.name || 'Attachment'} onClick={e => e.stopPropagation()}
+              style={{ width: '100%', height: '100%', maxWidth: 900, border: 'none', borderRadius: 6, background: 'white' }} />}
+        </div>
+      </div>
+    </Overlay>
+  )
+}
+
+/** One attached file, drawn as what it is. Photos, PDFs and text open in the viewer. */
 export function Attachment({ file }) {
+  const [open, setOpen] = useState(false)
   const type = String(file.type || '')
+  const viewer = open && <FileViewer file={file} onClose={() => setOpen(false)} />
   if (type.startsWith('image/')) {
     return (
-      <a href={file.url} target="_blank" rel="noreferrer" style={{ display: 'block', maxWidth: 260, marginTop: 4 }}>
-        <img src={file.url} alt={file.name || 'Photo'} loading="lazy"
-          width={file.width || undefined} height={file.height || undefined}
-          style={{
-            display: 'block', width: '100%', height: 'auto', maxWidth: 260,
-            borderRadius: radius.control, border: `1px solid ${colour.line}`, background: colour.lineSoft
-          }} />
-      </a>
+      <>
+        <button type="button" onClick={() => setOpen(true)} aria-label={`View ${file.name || 'photo'}`} data-attachment-image
+          style={{ display: 'block', maxWidth: 260, marginTop: 4, padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}>
+          <img src={file.url} alt={file.name || 'Photo'} loading="lazy"
+            width={file.width || undefined} height={file.height || undefined}
+            style={{
+              display: 'block', width: '100%', height: 'auto', maxWidth: 260,
+              borderRadius: radius.control, border: `1px solid ${colour.line}`, background: colour.lineSoft
+            }} />
+        </button>
+        {viewer}
+      </>
     )
   }
   if (type.startsWith('video/')) {
@@ -171,13 +233,13 @@ export function Attachment({ file }) {
     )
   }
   const ext = (String(file.name || '').split('.').pop() || 'file').slice(0, 4).toUpperCase()
-  return (
-    <a href={file.url} target="_blank" rel="noreferrer" data-file-card
-      style={{
-        display: 'flex', alignItems: 'center', gap: space.sm, marginTop: 4, maxWidth: 280,
-        padding: space.sm, borderRadius: radius.control, border: `1px solid ${colour.line}`,
-        background: colour.surface, textDecoration: 'none'
-      }}>
+  const card = {
+    display: 'flex', alignItems: 'center', gap: space.sm, marginTop: 4, maxWidth: 280, width: '100%',
+    padding: space.sm, borderRadius: radius.control, border: `1px solid ${colour.line}`,
+    background: colour.surface, textDecoration: 'none', textAlign: 'left', cursor: 'pointer'
+  }
+  const inner = (
+    <>
       <span style={{
         ...text('micro'), fontWeight: 700, color: 'white', background: colour.navy,
         borderRadius: 6, padding: '6px 6px', minWidth: 36, textAlign: 'center'
@@ -186,8 +248,19 @@ export function Attachment({ file }) {
         <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block', overflowWrap: 'anywhere' }}>{file.name}</span>
         <span style={{ ...text('caption'), color: colour.inkFaint }}>{sizeOf(file.size) || 'Open'}</span>
       </span>
-    </a>
+    </>
   )
+  // A PDF or text file opens in the viewer; Word, Excel and the rest cannot be
+  // shown in a browser, so they still download.
+  if (previewable(type)) {
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)} data-file-card style={{ ...card, font: 'inherit' }}>{inner}</button>
+        {viewer}
+      </>
+    )
+  }
+  return <a href={downloadUrl(file)} download={file.name || true} data-file-card style={card}>{inner}</a>
 }
 
 /** Text with @mentions picked out. */

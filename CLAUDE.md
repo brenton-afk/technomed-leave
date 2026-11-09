@@ -326,7 +326,13 @@ go through the portal first and are kept in Dropbox** (`api/_chatFiles.js`:
 a temporary link, answered without a session — the random id is the guard, and
 only that path shape is opened). Toni's test picture had failed both ways
 because Blob storage itself was hanging; Blob is now only the second route,
-and for files over 3 MB. Every route has a time limit (`withTimeout`). **Names and UR numbers are allowed** (Brent:
+and for files over 3 MB. Every route has a time limit (`withTimeout`). **Attachments preview in the portal** (Brent, 9 Nov 2026: "clicking on the
+image enlarges the image, rather than instantly downloading it"): a photo, PDF
+or text file opens `FileViewer` (full screen, photo pinchable via
+`data-zoomable`, Download its own button, ✕/Esc/tap outside closes); Word,
+Excel and the rest still download. Kept files are shown from `action=file&view=1`,
+streamed with `Content-Disposition: inline` only for `previewable` types —
+never HTML or SVG — because Dropbox's temporary links always download. **Names and UR numbers are allowed** (Brent:
 health data needed to run the business, stored safely); only a date of birth
 is queried (`chatWarning`). **Archived nightly** to Dropbox
 (`api/_chatArchive.js`, `job=nightly` cron at 15:27 UTC ≈ 2:30am Hobart):

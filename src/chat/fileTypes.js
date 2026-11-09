@@ -37,3 +37,11 @@ export function fileTypeOf(file) {
   const ext = String(file?.name || '').split('.').pop().toLowerCase()
   return BY_EXTENSION[ext] || 'application/octet-stream'
 }
+
+// What the in-portal viewer shows (Brent, 9 Nov 2026: "you need to be able to
+// preview them"): photos, PDFs and plain text. Never HTML or SVG — a file shown
+// inline from the portal's own address could run script there.
+const PREVIEW = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'application/pdf', 'text/plain', 'text/csv']
+export function previewable(type) {
+  return PREVIEW.includes(String(type || '').toLowerCase())
+}

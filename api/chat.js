@@ -9,9 +9,9 @@ import {
 import { searchChat } from './_chatSearch.js'
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import { notify, preview } from './_push.js'
-import { FILE_TYPES } from '../src/chat/fileTypes.js'
+import { FILE_TYPES, fileTypeOf, previewable } from '../src/chat/fileTypes.js'
 import { newChatFile, chatFileKey, chatFilePath } from './_chatFiles.js'
-import { uploadFile as dropboxUpload, temporaryLink, dropboxConfigured } from './_dropbox.js'
+import { uploadFile as dropboxUpload, temporaryLink, dropboxConfigured, downloadFile } from './_dropbox.js'
 
 // ─── The internal channels ───────────────────────────────────────────────────
 // What the WhatsApp group does, inside the app that already holds the bookings
@@ -220,11 +220,28 @@ function withLimit(promise, ms, why) {
     .finally(() => clearTimeout(timer))
 }
 
-/** Redirects to a short-lived Dropbox link for one chat file. */
+/**
+ * One chat file: a redirect to a short-lived Dropbox link, or — with &view=1,
+ * for the preview (Brent, 9 Nov 2026: "clicking on the image enlarges the
+ * image, rather than instantly downloading it") — the file itself, sent to
+ * show in the page. Dropbox's links always download, so a PDF in the viewer
+ * has to come through here. Only kinds a browser shows safely are sent inline
+ * (previewable); anything else, and HTML/SVG never, is still a download.
+ */
 async function openChatFile(req, res) {
   const path = chatFilePath(String(req.query.f || ''))
   if (!path) return res.status(404).json({ error: 'Not found' })
   try {
+    if (req.query.view) {
+      const type = fileTypeOf({ name: path.split('/').pop() })
+      const inline = previewable(type)
+      const data = await downloadFile(path)
+      res.setHeader('Content-Type', inline ? type : 'application/octet-stream')
+      res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${path.split('/').pop().replace(/^[0-9a-f-]{37}/, '').replace(/"/g, '')}"`)
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('Cache-Control', 'private, max-age=3000')
+      return res.status(200).send(data)
+    }
     const { url } = await temporaryLink(path)
     res.setHeader('Cache-Control', 'private, max-age=3000')
     res.setHeader('Location', url)
