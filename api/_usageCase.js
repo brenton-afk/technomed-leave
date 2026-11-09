@@ -302,7 +302,7 @@ function plausibleScanDate(raw) {
 }
 
 // ─── Who the surgeon is, from what the portal knows (Brent, 9 Nov 2026) ──────
-// "The portal needs to know that Mulligan is not a surgeon and should be able
+// "The portal needs to know that [the patient] is not a surgeon and should be able
 // to tell that Thani is a surgeon because he's known to the portal." A case
 // was read with our surgeon as the patient and the patient as the surgeon,
 // and filed under a new surgeon folder named after the patient. The portal
