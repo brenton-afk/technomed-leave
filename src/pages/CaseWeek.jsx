@@ -59,6 +59,11 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
   'Saturday', 'Sunday']
 
 /** 5 → 5th, 22 → 22nd. The way the date is said out loud. */
+
+// The In situ? chip carries its own white ground, so its red reads on any
+// surgeon's colour (Brent, 9 Nov 2026).
+const IN_SITU_CHIP = { color: colour.danger, background: colour.surface }
+
 function ordinal(n) {
   const teen = n % 100
   if (teen >= 11 && teen <= 13) return `${n}th`
@@ -645,7 +650,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             of the information should be patient/surgeon, then the operation
             description, then the system and loan/consignment, then the
             information about where it is on the list". */}
-        {(place || surgicalCase.etbs) && !off && (
+        {(place || surgicalCase.etbs || surgicalCase.inSitu) && !off && (
           <span style={{ display: 'block', marginTop: 6 }}>
             {place && <span style={{
               ...text('caption'), fontWeight: 700, color: ink.ink,
@@ -660,6 +665,13 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
               padding: '2px 9px', borderRadius: radius.pill, marginLeft: place ? 6 : 0,
               border: `1.5px solid ${ink.ink}`
             }}>ETBS</span>}
+            {/* What is in situ to be checked (Brent, 9 Nov 2026). */}
+            {surgicalCase.inSitu && <span data-in-situ style={{
+              ...text('caption'), fontWeight: 700, ...IN_SITU_CHIP,
+              display: 'inline-flex', alignItems: 'center',
+              padding: '2px 9px', borderRadius: radius.pill, marginLeft: (place || surgicalCase.etbs) ? 6 : 0,
+              border: `1.5px solid ${IN_SITU_CHIP.color}`
+            }}>In situ?</span>}
             {place?.ahead && (
               <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
                 {place.ahead}
@@ -1015,11 +1027,11 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
             kind of drift the parity rule exists to stop and did not, because
             that rule asked whether both cards carried a thing and never
             whether they carried it in the same order. */}
-        {(place?.headline || surgicalCase.etbs) && (
+        {(place?.headline || surgicalCase.etbs || surgicalCase.inSitu) && (
           <span style={{
             ...text('micro'), display: 'block', textTransform: 'none',
             fontWeight: 700, color: ink.ink
-          }}>{[place?.headline, surgicalCase.etbs ? 'ETBS' : ''].filter(Boolean).join(' · ')}</span>
+          }}>{[place?.headline, surgicalCase.etbs ? 'ETBS' : '', surgicalCase.inSitu ? 'In situ?' : ''].filter(Boolean).join(' · ')}</span>
         )}
 
         {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} compact />}
@@ -1134,7 +1146,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
         // appointment was at the top of a phone's Wednesday and missing from
         // the desktop's — the two must never differ).
         const alerts = day.flags || []
-        const danger = f => ['clinicalAlert', 'kitTask'].includes(f.kind)
+        const danger = f => ['clinicalAlert', 'kitTask', 'inSitu'].includes(f.kind)
 
   return (
           // Named so a test can count seven of them. The grid is a grid by its

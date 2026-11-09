@@ -61,7 +61,7 @@ export function planSignature(plan) {
         // reached Google and the app then threw the answer away as unchanged.
         parts.push([c.id, c.patient, c.surgeon, c.operation, c.system, c.supply, c.kit,
           c.rep || '', (c.planned || []).join('/'), c.unread || '', c.cancelled ? 'off' : '',
-          formatListPlace(c.listPlace), c.etbs ? 'etbs' : '',
+          formatListPlace(c.listPlace), c.etbs ? 'etbs' : '', c.inSitu || '',
           (c.notes || []).map(n => n.text).join('~')].join('\u0001'))
       }
     }

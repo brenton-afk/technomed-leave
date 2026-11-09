@@ -1,3 +1,4 @@
+import { inSituReason } from './priorImplants.js'
 // ─── Derivation: calendar events → WeekPlan ───────────────────────────────────
 // Pure. No fetching, no React, no dates from the ambient clock except the
 // `generatedAt` that is passed in. This is what makes the same plan reusable by
@@ -616,6 +617,9 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // a case moved, who called it in, what still has to be ordered. The plan
         // used to show a tidy case while the calendar held the reason it moved.
         notes: (read.notes || []).map(text => ({ text, kind: 'booking' })),
+        // An extension, a connection to an existing construct, a revision: the
+        // team leader finds what is in situ (inSituReason in priorImplants.js).
+        inSitu: inSituReason([event.rawTitle, read.operation, ...(read.notes || [])].join(' \n ')) || undefined,
         dayDate,
         _event: event
       })
@@ -759,6 +763,18 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         ...shared,
         title,
         text: event.allDay ? `${title} (all day)` : (timeRange ? `${title} ${timeRange}` : title)
+      })
+    }
+
+    // What is in situ (Brent, 9 Nov 2026): one flag per case, for the team
+    // leader, until the Dropbox usage files are redacted and it can be looked
+    // up automatically.
+    for (const c of cases) {
+      if (!c.inSitu || c.cancelled || c.notRequired) continue
+      const who = [c.patient, c.surgeon].filter(Boolean).join(' · ')
+      flags.push({
+        kind: 'inSitu', boxed: true,
+        text: `Check what is in situ — ${who} (${c.inSitu}): team leader to find the previous usage in Dropbox.`
       })
     }
 

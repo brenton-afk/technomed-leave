@@ -36,6 +36,31 @@ const ASKS_ABOUT_EXISTING = new RegExp([
   // reads "R/O C5/6 ACDF plate" and nothing else in it says removal at all.
   + '|\\bR\\s*/\\s*O\\b', 'i')
 
+// ── Flagged for the team leader (Brent, 9 Nov 2026) ──
+// "When you see the word extension or connection to existing construct in the
+// booking you need to flag this so that the team leader searches for the
+// previous booking in Dropbox and identifies what is in situ. This will be
+// automated once the Dropbox files are fully redacted."
+//
+// Narrower than ASKS_ABOUT_EXISTING: that one also catches "previous" and
+// "prior", which a booking's notes use about days and lists ("moved from the
+// previous Tuesday"), and a flag that cries wolf on the week gets ignored.
+const IN_SITU = [
+  ['extension', /\bextension\b|\bextend(?:ing|ed)?\s+(?:the\s+)?(?:fusion|construct|instrumentation)/i],
+  ['connection to existing construct', /\b(?:connect(?:ion|ing|s)?|join(?:ing)?|link(?:ing)?)\s+(?:in)?to\s+(?:the\s+)?(?:existing|previous|old|prior)\b/i],
+  ['existing construct', /\b(?:existing|previous|old|prior)\s+(?:construct|fusion|instrumentation|hardware|screws?|rods?|plate|metalwork)\b/i],
+  ['revision', /\brevision\b|\bredo\b|\bre-do\b/i],
+  ['removal', /\bremoval\b|\bremove\b|\bexplant\b|\bR\s*\/\s*O\b/i],
+  ['adjacent segment', /\badjacent\s+segment/i],
+  ['in situ', /\bin\s*-?\s*situ\b|\binsitu\b/i]
+]
+
+/** Why this case needs what is in situ checked ("extension", "revision"…), or null. */
+export function inSituReason(text) {
+  const t = String(text || '')
+  return IN_SITU.find(([, re]) => re.test(t))?.[0] || null
+}
+
 /** Whether this booking needs the history looked up at all. */
 export function needsPriorImplants(text) {
   return ASKS_ABOUT_EXISTING.test(String(text || ''))

@@ -660,6 +660,17 @@ not billed). An "ETBS: Yes" line in the description (`etbs` label,
 `src/clinicalPlan/etbs.js`), set by an ETBS button on New booking and Edit
 booking when the hospital is RHH, read by `readBooking` as `etbs`, in
 `planSignature`, and drawn beside the list place on both cards.
+**What is in situ is flagged** (Brent, 9 Nov 2026: "extension or connection
+to existing construct … flag this so that the team leader searches for the
+previous booking in Dropbox … will be automated once the Dropbox files are
+fully redacted"). `inSituReason` in `priorImplants.js` (extension, connection
+to existing, existing construct/hardware, revision, removal / R/O, adjacent
+segment, in situ — not "previous"/"prior" alone, which notes use about days)
+reads the title, operation and notes; the case carries `inSitu`, the day gets
+a red boxed flag ("Check what is in situ — … team leader to find the previous
+usage in Dropbox"), and both cards an **In situ?** tag. Not for cancelled or
+not-required cases. The automatic lookup (`priorImplantsFor`) stays behind the
+usage-read lock.
 **The list view names every case ahead of ours it knows** (`rowsFor` in
 `ListOrder.jsx`): from the List line's words, else a note starting "After …"
 (`aheadWords`). Fewer named than the gap: the named ones numbered, then "N
