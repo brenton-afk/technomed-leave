@@ -383,7 +383,7 @@ function ListOrderIcon({ size = 18 }) {
 
 const iconButton = ink => ({
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-  minWidth: 44, minHeight: 40, padding: '0 8px', cursor: 'pointer',
+  minWidth: 40, minHeight: 34, padding: '0 8px', cursor: 'pointer',
   border: 'none', borderRadius: radius.pill, background: 'none', color: ink.ink
 })
 
@@ -418,10 +418,14 @@ function CopyCase({ surgicalCase, date, ink, style, label = 'Copy details', icon
 
 // The case card's finish (Brent, 6 Nov 2026). The sheen is white light over
 // the surgeon's colour, never a second colour, so the colour still means whose.
-const CARD_RADIUS = 18
+const CARD_RADIUS = 14
 const CARD_SHEEN = 'linear-gradient(155deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.06) 38%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.05) 100%)'
 const CARD_SHADOW = '0 1px 2px rgba(4,39,70,0.10), 0 6px 18px rgba(4,39,70,0.12)'
 /** A chip on the card: lighter than the fill on a dark ink, a veil of the ink on a white one. */
+/** "Consignment" is the long word on most cards; the rest are short already. */
+const cardSupply = supply => String(supply || '').replace(/\bConsignment\b/i, 'Cons')
+/** "1st on the list · morning" → "1st · morning" on the card; the sheet says it in full. */
+const shortPlace = headline => String(headline || '').replace(/ on the list\b/, '')
 const chipOn = ink => ink.ink === '#ffffff' ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.42)'
 
 const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy, onSetPlace }) {
@@ -471,7 +475,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
         // that lifts it off the page.
         backgroundImage: off ? 'none' : CARD_SHEEN,
         boxShadow: off ? 'none' : CARD_SHADOW,
-        borderRadius: CARD_RADIUS, marginBottom: 10, overflow: 'hidden',
+        borderRadius: CARD_RADIUS, marginBottom: 6, overflow: 'hidden',
         opacity: busy ? 0.55 : spare ? 0.72 : 1, transition: 'opacity 120ms'
       }}>
 
@@ -484,7 +488,9 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
           and a real browser hit-tests first. */}
       <span style={{
         flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'flex-start', padding: `${space.sm}px ${space.md}px ${space.xs}px`
+        // Compact (Brent, 9 Nov 2026: "still pretty busy … could the tiles be
+        // any smaller?" — approved from a before/after mock-up).
+        alignItems: 'flex-start', padding: `7px ${space.md}px 2px`
       }}>
       <button type="button" onClick={() => onOpen?.(surgicalCase)}
         style={{
@@ -495,7 +501,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
         {/* The patient leads, large; the surgeon is a tag beside it. */}
         <span style={{ display: 'flex', alignItems: 'center', gap: space.sm, width: '100%' }}>
           <span style={{
-            ...text('title'), color: ink.ink, flex: 1, minWidth: 0,
+            ...text('heading'), color: ink.ink, flex: 1, minWidth: 0,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             ...(off ? { textDecoration: 'line-through' } : {})
           }}>
@@ -571,7 +577,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             implant system does. */}
         {surgicalCase.operation && (
           <span style={{
-            ...text('body'), fontWeight: 600, color: ink.ink, marginTop: 2,
+            ...text('body'), fontWeight: 600, color: ink.ink, lineHeight: 1.4,
             // One line. It is the thing that tells two of a surgeon's cases
             // apart at a glance, and the glance is all this tile is for —
             // the whole of it is a tap away inside the booking.
@@ -589,11 +595,11 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             per system, because a case is often two systems with different
             answers and one line for both said the wrong thing about one. */}
         {supplies && (
-          <span style={{ ...text('caption'), display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6, color: ink.muted }}>
+          <span style={{ ...text('caption'), display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, color: ink.muted }}>
             {supplies.map(entry => (
               <span key={entry.system} style={{
                 display: 'inline-block',
-                padding: '2px 9px', borderRadius: 8, background: chipOn(ink)
+                padding: '1px 8px', borderRadius: 7, background: chipOn(ink)
               }}>
                 {/* "The name of the system should be what is in bold, rather
                     than the Loan/Consignment word." The system is what somebody
@@ -605,7 +611,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
                     fontWeight: 400,
                     color: entry.inferred ? ink.faint : ink.muted
                   }}>
-                    {' '}({entry.supply}{entry.inferred ? '?' : ''})
+                    {' · '}{cardSupply(entry.supply)}{entry.inferred ? '?' : ''}
                   </span>
                 ) : (
                   <span style={{ color: ink.ink, fontWeight: 700 }}> (supply?)</span>
@@ -650,33 +656,11 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             of the information should be patient/surgeon, then the operation
             description, then the system and loan/consignment, then the
             information about where it is on the list". */}
-        {(place || surgicalCase.etbs || surgicalCase.inSitu) && !off && (
-          <span style={{ display: 'block', marginTop: 6 }}>
-            {place && <span style={{
-              ...text('caption'), fontWeight: 700, color: ink.ink,
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '2px 9px', borderRadius: radius.pill,
-              border: `1.5px solid ${ink.ink}`
-            }}>{place.headline}</span>}
-            {/* ETBS beside the list place (Brent, 8 Nov 2026). */}
-            {surgicalCase.etbs && <span data-etbs style={{
-              ...text('caption'), fontWeight: 700, color: ink.ink,
-              display: 'inline-flex', alignItems: 'center',
-              padding: '2px 9px', borderRadius: radius.pill, marginLeft: place ? 6 : 0,
-              border: `1.5px solid ${ink.ink}`
-            }}>ETBS</span>}
-            {/* What is in situ to be checked (Brent, 9 Nov 2026). */}
-            {surgicalCase.inSitu && <span data-in-situ style={{
-              ...text('caption'), fontWeight: 700, ...IN_SITU_CHIP,
-              display: 'inline-flex', alignItems: 'center',
-              padding: '2px 9px', borderRadius: radius.pill, marginLeft: (place || surgicalCase.etbs) ? 6 : 0,
-              border: `1.5px solid ${IN_SITU_CHIP.color}`
-            }}>In situ?</span>}
-            {place?.ahead && (
-              <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>
-                {place.ahead}
-              </span>
-            )}
+        {/* Who is ahead of us, where known. The place itself is a pill on the
+            footer row (compact card, Brent 9 Nov 2026). */}
+        {place?.ahead && !off && (
+          <span style={{ ...text('caption'), display: 'block', color: ink.muted, marginTop: 2 }}>
+            {place.ahead}
           </span>
         )}
 
@@ -727,12 +711,32 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             set, still reads as words beside its icon. */}
         {/* One footer row: who went (or is planned) on the left, the card's
             two actions on the right. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 6, width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 3, width: '100%' }}>
           <span style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {/* The list place, ETBS and In situ?, on the footer row rather than a
+              row of their own (compact card, Brent 9 Nov 2026). */}
+          {place?.headline && !off && <span style={{
+            ...text('caption'), fontWeight: 700, color: ink.ink,
+            display: 'inline-flex', alignItems: 'center',
+            padding: '0 8px', borderRadius: radius.pill,
+            border: `1.5px solid ${ink.ink}`
+          }}>{shortPlace(place.headline)}</span>}
+          {surgicalCase.etbs && !off && <span data-etbs style={{
+            ...text('caption'), fontWeight: 700, color: ink.ink,
+            display: 'inline-flex', alignItems: 'center',
+            padding: '0 8px', borderRadius: radius.pill,
+            border: `1.5px solid ${ink.ink}`
+          }}>ETBS</span>}
+          {surgicalCase.inSitu && !off && <span data-in-situ style={{
+            ...text('caption'), fontWeight: 700, ...IN_SITU_CHIP,
+            display: 'inline-flex', alignItems: 'center',
+            padding: '0 8px', borderRadius: radius.pill,
+            border: `1.5px solid ${IN_SITU_CHIP.color}`
+          }}>In situ?</span>}
           {surgicalCase.rep && (
             <span style={{
               ...text('caption'), display: 'inline-block',
-              padding: '2px 9px', borderRadius: radius.pill,
+              padding: '1px 8px', borderRadius: radius.pill,
               background: chipOn(ink), color: ink.ink, fontWeight: 700
             }}>
               {/* The name in its own element, so it can be read — and found —
@@ -745,7 +749,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
           {!surgicalCase.rep && surgicalCase.planned?.length > 0 && (
             <span style={{
               ...text('caption'), display: 'inline-block',
-              padding: '1px 9px', borderRadius: radius.pill,
+              padding: '0 8px', borderRadius: radius.pill,
               border: `1px solid ${ink.line}`, color: ink.ink
             }}>
               Planned: <strong style={{ fontWeight: 700, }}>{surgicalCase.planned.join(' + ')}</strong>

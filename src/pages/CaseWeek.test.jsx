@@ -97,7 +97,7 @@ describe('a case, in full', () => {
     // Bracketed and attached to its system now, because a booking can name
     // two systems supplied differently and one trailing word said the wrong
     // thing about one of them.
-    expect(screen.getByText('(Consignment)')).toBeInTheDocument()
+    expect(screen.getByText('· Cons')).toBeInTheDocument()
     // The rep the old calendar view dropped on the floor.
     expect(screen.getByText('Mat')).toBeInTheDocument()
   })
@@ -150,7 +150,7 @@ describe('however the booking is written', () => {
     expect(screen.getByText('Ibbett')).toBeInTheDocument()
     expect(screen.getByText('L4/5 TLIF')).toBeInTheDocument()
     expect(screen.getByText(/MARINER/i)).toBeInTheDocument()
-    expect(screen.getByText('(Loan)')).toBeInTheDocument()
+    expect(screen.getByText('· Loan')).toBeInTheDocument()
   })
 
   it('shows no label text and no raw line', async () => {
@@ -586,8 +586,8 @@ describe('where we are on the hospital\'s list', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Week' }))
 
     await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
-    expect(screen.getByText('1st on the list · PM')).toBeInTheDocument()
-    expect(screen.getByText('2nd on the list · PM · from 1pm')).toBeInTheDocument()
+    expect(screen.getByText('1st · PM')).toBeInTheDocument()
+    expect(screen.getByText('2nd · PM · from 1pm')).toBeInTheDocument()
     expect(screen.getByText('after a PLIF — KT Medical, not ours')).toBeInTheDocument()
   })
 
@@ -764,7 +764,7 @@ describe('saving a list order and seeing it', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'List order' })).not.toBeInTheDocument())
     await waitFor(() =>
-      expect(screen.getByText('2nd on the list · PM · from 1pm')).toBeInTheDocument())
+      expect(screen.getByText('2nd · PM · from 1pm')).toBeInTheDocument())
   })
 
   it('offers to change it rather than set it, once there is one', async () => {
@@ -776,7 +776,7 @@ describe('saving a list order and seeing it', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save list order/ }))
 
     // The card says where it is; the control stays the same icon.
-    await waitFor(() => expect(screen.getByText(/^2nd on the list/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/^2nd · PM/)).toBeInTheDocument())
     expect(screen.getByLabelText('Set where Pennant is on the list')).toBeInTheDocument()
   })
 })
@@ -1231,8 +1231,8 @@ describe('a booking with two systems supplied differently', () => {
     show()
     await waitFor(() => expect(screen.getByText('Loane')).toBeInTheDocument())
     const card = screen.getByText('Loane').closest('div')
-    expect(card.textContent).toMatch(/Mariner \(Distributor Loan\)/)
-    expect(card.textContent).toMatch(/E4 Global PLIF \(Consignment\)/)
+    expect(card.textContent).toMatch(/Mariner · Distributor Loan/)
+    expect(card.textContent).toMatch(/E4 Global PLIF · Cons/)
   })
 
   it('says when the kit is one of ours off the office shelf', async () => {
@@ -1250,7 +1250,7 @@ describe('a booking with two systems supplied differently', () => {
     show()
     await waitFor(() => expect(screen.getByText('Quintrell')).toBeInTheDocument())
     const card = screen.getByText('Quintrell').closest('div')
-    expect(card.textContent).toMatch(/Shoreline \(TM Loan\)/)
+    expect(card.textContent).toMatch(/Shoreline · TM Loan/)
   })
 
   it('does not read as though both are on loan', async () => {
@@ -1276,7 +1276,7 @@ describe('a booking with two systems supplied differently', () => {
     const card = screen.getByText('Hollis').closest('div')
     // One system, one answer — still one line, and the answer is bracketed
     // and attached to the system it belongs to like everywhere else.
-    expect(card.textContent).toMatch(/Diplomat \(Consignment\)/i)
+    expect(card.textContent).toMatch(/Diplomat · Cons/i)
   })
 })
 
@@ -1307,7 +1307,7 @@ describe('a supply on every booking', () => {
   it('works out a supply nobody recorded', async () => {
     // Lonestar is consigned at RHH, so it is on the shelf.
     events = [booking('KT Lonestar')]
-    expect(await cardFor('Bannister')).toMatch(/\(Consignment\?\)/)
+    expect(await cardFor('Bannister')).toMatch(/· Cons\?/)
   })
 
   it('marks a worked-out answer as one', async () => {
@@ -1316,25 +1316,25 @@ describe('a supply on every booking', () => {
     events = [booking('KT Lonestar')]
     const card = await cardFor('Bannister')
     expect(card).toContain('?')
-    expect(card).not.toMatch(/\(Consignment\)/)
+    expect(card).not.toMatch(/· Cons(?!\?)/)
   })
 
   it('leaves a recorded answer unmarked', async () => {
     events = [booking('KT Lonestar (Consignment)')]
     const card = await cardFor('Bannister')
-    expect(card).toMatch(/\(Consignment\)/)
+    expect(card).toMatch(/· Cons(?!\?)/)
     expect(card).not.toMatch(/Consignment\?/)
   })
 
   it('knows a Calvary Mariner case needs a distributor set', async () => {
     // Which is what Loane and O'Brien both actually have.
     events = [booking('Mariner', 'CLV', 'Loane')]
-    expect(await cardFor('Loane')).toMatch(/\(Distributor Loan\?\)/)
+    expect(await cardFor('Loane')).toMatch(/· Distributor Loan\?/)
   })
 
   it('knows the Athlet kit is one we move ourselves', async () => {
     events = [booking('Athlet', 'CLV', 'Quintrell')]
-    expect(await cardFor('Quintrell')).toMatch(/\(RHH Loan\?\)/)
+    expect(await cardFor('Quintrell')).toMatch(/· RHH Loan\?/)
   })
 
   it('asks outright where it cannot work it out', async () => {

@@ -508,6 +508,13 @@ that once, escaped the frame, made the document taller than the screen, and
 iOS scrolled the page itself, pushing the tab bar's labels off the bottom
 ("the options on the tab are hidden"). `wash.test.js` guards it; check
 `document.documentElement.scrollHeight === innerHeight` in a real render.
+**Compact cards** (Brent, 9 Nov 2026: "still pretty busy … could the tiles
+be any smaller?", approved from a before/after mock-up): about 110px a case
+instead of 160–190. The patient is `heading` size; the list place
+(`shortPlace`: "2nd · AM"), ETBS and In situ? are pills on the footer row
+with the rep and the icons, not a row of their own; supplies read
+"Diplomat · Cons" (`cardSupply` shortens only Consignment); radius 14,
+6px between cards, icon buttons 40×34. The week column is unchanged.
 
 ### Cases layout (Brent, 4 Nov 2026)
 

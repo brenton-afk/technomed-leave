@@ -59,11 +59,11 @@ describe('the order of a booking card', () => {
     expect(at('Whiteley')).toBeGreaterThanOrEqual(0)
     expect(at('Whiteley')).toBeLessThan(at('ACDF'))
     expect(at('ACDF')).toBeLessThan(at('CYLOX'))
-    expect(at('CYLOX')).toBeLessThan(at('on the list'))
+    expect(at('CYLOX')).toBeLessThan(at('2nd'))
     // "Rep:", not the name — the attribution note reads "Entered by Brent
     // (Aimee)", so looking for the name alone finds that instead and the
     // assertion passes with the rep anywhere on the card.
-    expect(at('on the list')).toBeLessThan(at('Rep:'))
+    expect(at('2nd')).toBeLessThan(at('Rep:'))
   })
 
   it('puts the rep last of all', async () => {
@@ -88,7 +88,7 @@ describe('which half of the kit line is bold', () => {
     const system = screen.getByText('CYLOX')
     expect(system.style.fontWeight).toBe('700')
 
-    const supply = screen.getByText(/\(Distributor Loan\)/)
+    const supply = screen.getByText(/· Distributor Loan/)
     expect(supply.style.fontWeight).toBe('400')
   })
 
@@ -139,7 +139,7 @@ describe('the slimmed phone tile', () => {
     expect(text).toMatch(/PLIF/)                // what
     expect(text).toContain('Mariner')           // what is going in
     expect(text).toMatch(/Distributor Loan/)    // and where from
-    expect(text).toMatch(/on the list/)         // where we are on the day
+    expect(text).toMatch(/2nd/)                 // where we are on the day
   })
 
   it('no longer carries the prose', async () => {

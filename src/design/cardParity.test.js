@@ -156,10 +156,11 @@ describe('what the column is allowed to do differently', () => {
     expect(phone).not.toMatch(/shortSupply/)
   })
 
-  it('shortens nothing on the phone, which has the width for the words', () => {
-    // The column abbreviates the supply because 200px is 200px; the tile does
-    // not, having the full width of the glass.
-    expect(phone).not.toMatch(/shortSupply/)
+  // Brent, 9 Nov 2026, approved from a mock-up: the phone card says "Cons"
+  // for Consignment and nothing else is shortened.
+  it('on the phone, shortens only Consignment', () => {
+    expect(phone).toMatch(/cardSupply\(entry\.supply\)/)
+    expect(SOURCE).toMatch(/const cardSupply = supply => String\(supply \|\| ''\)\.replace\(\/\\bConsignment\\b\/i, 'Cons'\)/)
   })
 })
 
