@@ -254,7 +254,8 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
   // 17/11/26 has been cancelled but the portal can't see it"). It offers to
   // call the booking off — kept on the calendar, marked CANCELLED, suppliers
   // offered the cancellation — and never does so by itself.
-  if (candidate.cancels) {
+  if (candidate.kind === 'cancel' || candidate.cancels) {
+    const target = candidate.cancels
     return (
       <div data-cancel-card style={{
         background: colour.surface, border: `1px solid ${colour.danger}`,
@@ -267,11 +268,13 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
           {candidate.patient || 'No surname read'}{candidate.surgeon ? ` · ${candidate.surgeon}` : ''}
         </div>
         <div style={{ ...text('bodyStrong'), color: colour.accentDeep, marginBottom: space.xs }}>
-          {prettyDate(candidate.cancels.date || candidate.date) || candidate.date}
+          {prettyDate(target?.date || candidate.date) || candidate.date || 'No date read'}
         </div>
         <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
-          The email from {(candidate.sources || []).join(' + ').toUpperCase() || 'the hospital'} says this case is off.
-          On the calendar: {candidate.cancels.summary || 'the booking'}.
+          The email from {(candidate.sources || []).join(' + ').toUpperCase() || 'the hospital'} says this case is off.{' '}
+          {target
+            ? `On the calendar: ${target.summary || 'the booking'}.`
+            : 'Nothing on the calendar matches it — check whether it was entered under another spelling or day.'}
         </div>
         {noteWorthShowing(candidate.note) && (
           <div style={{ ...text('caption'), color: colour.ink, marginBottom: space.sm }}>{candidate.note}</div>
@@ -282,12 +285,12 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
             flex: 1, padding: space.sm, cursor: busy ? 'default' : 'pointer', ...text('bodyStrong'),
             background: 'transparent', color: colour.inkMuted,
             border: `1px solid ${colour.line}`, borderRadius: radius.control
-          }}>{status === 'dismiss' ? 'Dismissing…' : 'Leave it booked'}</button>
-          <button onClick={() => send('accept', {})} disabled={busy} style={{
+          }}>{status === 'dismiss' ? 'Dismissing…' : target ? 'Leave it booked' : 'Noted'}</button>
+          {target && <button onClick={() => send('accept', {})} disabled={busy} style={{
             flex: 2, padding: space.sm, ...text('bodyStrong'), color: 'white', border: 'none',
             borderRadius: radius.control, background: busy ? colour.inkFainter : colour.danger,
             cursor: busy ? 'default' : 'pointer'
-          }}>{status === 'accept' ? 'Cancelling…' : 'Cancel the booking'}</button>
+          }}>{status === 'accept' ? 'Cancelling…' : 'Cancel the booking'}</button>}
         </div>
       </div>
     )

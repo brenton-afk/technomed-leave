@@ -1616,8 +1616,10 @@ export async function queueCancellation(candidate, { calendarFor, existing = [],
   // A live booking first; a matching one already called off only if there is no live one.
   const target = alreadyInCalendar(candidate, days.filter(e => !e.cancelled)) || alreadyInCalendar(candidate, days)
   if (!target) {
-    await save({ ...card, status: 'nothingToCancel' })
-    return 'nothing'
+    // Shown anyway, so a cancellation is never silent: the case may have been
+    // entered under another spelling or day, or taken off by hand already.
+    await save({ ...card, status: 'pending', nothingOnCalendar: true })
+    return 'queued'
   }
   if (target.cancelled) {
     await save({ ...card, status: 'onCalendar', matchedEventId: target.id, matchedSummary: target.summary })
@@ -1650,6 +1652,7 @@ export async function reconcileQueue(queue, today, readCalendar = bookingsOnCale
   for (const c of upcoming) {
     // A cancellation card settles once its booking is off — by Accept here,
     // by the Cancel button, or by hand in Google — or gone.
+    if (c.kind === 'cancel' && !c.cancels?.eventId) continue
     if (c.cancels?.eventId) {
       if (c.status === 'pending') {
         const target = events.find(e => e.id === c.cancels.eventId)
@@ -1757,6 +1760,12 @@ async function handleAccept(req, res) {
     // A cancellation read from an email: the booking is called off, the way
     // the Cancel button does it — kept, marked CANCELLED, suppliers offered
     // the cancellation notice.
+    // A cancellation with nothing to call off is never a booking.
+    if (candidate.kind === 'cancel' && !candidate.cancels?.eventId) {
+      await redis('DEL', claim).catch(() => {})
+      claim = null
+      return res.status(400).json({ error: 'Nothing on the calendar matches this cancellation — there is nothing to cancel.' })
+    }
     if (candidate.cancels?.eventId) {
       const { saved, notices } = await cancelEvent(candidate.cancels.eventId, session, {
         reason: 'cancellation email'

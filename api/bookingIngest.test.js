@@ -273,3 +273,17 @@ describe('a cancellation email', () => {
     expect(created).toBeNull()
   })
 })
+
+describe('a cancellation with nothing on the calendar to match', () => {
+  it('still shows in the Inbox, saying nothing matches', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [] }) })))
+    const reader = await import('./_readBookingDocument.js')
+    reader.readBookingDocument.mockResolvedValueOnce([{ patient: 'Testcase', surgeon: 'Ibbett', date: '2026-11-17', cancelled: true }])
+    mailbox = { cancel: { from: 'bookings@cnstas.com.au', subject: 'Cancellation', text: 'cancel' } }
+    const res = await call('ingest', {})
+    expect(res.payload.pending.find(c => c.kind === 'cancel')).toMatchObject({ nothingOnCalendar: true })
+    const accept = await call('accept', { id: res.payload.pending.find(c => c.kind === 'cancel').id })
+    expect(created).toBeNull()
+    expect(accept.payload.cancelledBooking).toBeFalsy()
+  })
+})
