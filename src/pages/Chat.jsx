@@ -443,7 +443,7 @@ function Composer({ onSend, onTyping, sending, user, replyTo, onCancelReply, inc
           const label = files.length > 1 ? `Sending ${n + 1} of ${files.length}` : 'Sending'
           setProgress(`${label}…`)
           const url = await uploadFile(f, user?.token, {
-            onProgress: pct => setProgress(pct == null ? `${label} — trying another way…` : `${label} · ${pct}%`)
+            onProgress: pct => setProgress(pct == null ? `${label}…` : `${label} · ${pct}%`)
           })
           uploaded.push({ url, type: f.type, name: f.name, size: f.size, width: f.width, height: f.height })
         }
