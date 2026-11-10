@@ -378,8 +378,9 @@ message is from outside, from a person (`isAutomated`), 20h+ old
 (`waitingOnUs`), judged by Claude with an owner, an ask, urgency and a draft
 reply; verdicts cached per last message (`decisions:triage:*`), so a thread
 is judged once until someone writes again. Plus **usage not sent** (last three
-working days), **resupply owed** 7+ days, and **bookings waiting in the
-Inbox**. Read-only throughout: a draft is copied, never sent. Done / Later (3
+working days) and **bookings waiting in the
+Inbox** (resupply owed was a source until 10 Nov 2026; removed with the
+Still owed list). Read-only throughout: a draft is copied, never sent. Done / Later (3
 days) / Not needed / Wrong person per person (`decisions:state:{email}`),
 logged (`decisions:log`); "Not needed" on an email becomes a lesson
 (`decisions:lessons`) given to the next review — the start of the learned
@@ -1269,10 +1270,16 @@ field rewritten on the usage record, so two people cannot overwrite each other
 — and claimed by the client's id (`claimResupply`, SET NX) so a double tap or a
 retry saves once. The pages are filed **in the usage case's own Dropbox folder,
 the way the team already names them**: `{Surname} {Distributor} resupply.pdf`,
-`{Surname} partial {Distributor} resupply {n}.pdf` (`resupplyFileName`). The
-Scan tab's Resupply side opens on **Still owed** (`action=resupply-owing`),
-per case and distributor, for cases since `RESUPPLY_TRACK_FROM` (default
-2026-11-06 — earlier cases were resupplied on paper and would all read owed).
+`{Surname} partial {Distributor} resupply {n}.pdf` (`resupplyFileName`; the
+second and later are "partial … n").
+**Matching to usage only** (Brent, 10 Nov 2026: "remove the owed items … the
+previous system is in place … at this stage let's just match it to usage").
+The **Still owed** list, `action=resupply-owing` and the Decisions "Resupply
+owed" source are gone; the review and Done screens show **Matched to the
+usage** — each used line "N on this paper ✓" or "not on this paper", and lines
+on the paper that the usage did not have. `compareResupply` still computes
+`owing` internally (stored as `owingAfter`); nothing shows it. The stock
+review process is in the bookings doc — read it before building any more here.
 **Matching was too strict** (Erin and Mat, 10 Nov 2026). Lines pair with used
 items by `codeMatch` (identical, or a code read short or with/without the
 maker's prefix, or the same digits) and, only where a code is missing, by

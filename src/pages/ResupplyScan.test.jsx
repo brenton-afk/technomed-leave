@@ -27,7 +27,6 @@ beforeEach(() => {
     const action = new URL(url, 'http://x').searchParams.get('action')
     calls.push({ action, body: init?.body ? JSON.parse(init.body) : null })
     const body = {
-      'resupply-owing': { rows: [{ ...CASE, distributorKey: 'signus', distributor: 'Signus', used: 2, resupplied: 0, owing: 2, days: 4 }], trackingFrom: '2026-11-06' },
       'resupply-read': { resupply: RESUPPLY, candidates: [{ ...CASE, why: ['surname'] }], matchedId: 'u1', comparison: COMPARISON },
       'resupply-save': { entry: { id: 'x', distributor: 'E4 Surgical', filed: 'Testa partial E4 resupply 1.pdf' }, comparison: COMPARISON, case: CASE }
     }[action] || { records: [] }
@@ -39,18 +38,23 @@ afterEach(() => vi.restoreAllMocks())
 const pdf = () => new File(['%PDF-1.4 invented'], 'docket.pdf', { type: 'application/pdf' })
 
 describe('the resupply scanner', () => {
-  it('opens on what is still owed', async () => {
+  // Brent, 10 Nov 2026: matching to usage only; what is owed is followed in
+  // the existing process, so there is no Still owed list.
+  it('opens on the scan card, with no owed list', async () => {
     render(<ScanTab user={{ token: 't', name: 'Test Person' }} />)
-    await waitFor(() => expect(screen.getByText(/2 of 2 still owed/)).toBeInTheDocument())
     expect(screen.getByRole('tab', { name: 'Resupply' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText(/still owed/i)).not.toBeInTheDocument()
+    expect(calls.some(c => c.action === 'resupply-owing')).toBe(false)
   })
 
-  it('reads a docket, matches the case and says what is still owed', async () => {
+  it('reads a docket and matches it to the usage, line by line', async () => {
     const { container } = render(<ScanTab user={{ token: 't' }} />)
     const input = container.querySelector('input[type=file]')
     fireEvent.change(input, { target: { files: [pdf()] } })
     fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
-    await waitFor(() => expect(screen.getByText('1 still owed')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Matched to the usage')).toBeInTheDocument())
+    expect(screen.getByText('2 of 2 usage lines on this paper')).toBeInTheDocument()
+    expect(screen.queryByText(/owed/)).not.toBeInTheDocument()
     expect(screen.getAllByText('Reform polyaxial screw').length).toBeGreaterThan(0)
     expect(screen.getByRole('radio', { checked: true })).toBeInTheDocument()
   })

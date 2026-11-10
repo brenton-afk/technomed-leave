@@ -99,7 +99,6 @@ export default async function handler(req, res) {
     if (action === 'resupply-compare') return await handleResupplyCompare(req, res)
     if (action === 'resupply-find') return await handleResupplyFind(req, res)
     if (action === 'resupply-save') return await handleResupplySave(req, res, session)
-    if (action === 'resupply-owing') return await handleResupplyOwing(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     // err.message here is ours or the provider's; extracted content is never
@@ -1093,7 +1092,7 @@ async function saveClaimedResupply(req, res, session, { id, usageId, resupply })
       const name = resupplyFileName({
         patientSurname: record.patientSurname,
         distributorKey: resupply.distributorKey,
-        partial: comparison.totals.owing > 0 || earlier.length > 0,
+        partial: earlier.length > 0,
         n: earlier.length + 1
       })
       // Kept, never overwritten: a second document of the same name (a
@@ -1123,42 +1122,6 @@ async function saveClaimedResupply(req, res, session, { id, usageId, resupply })
   }
   await saveResupply(entry)
   return res.status(200).json({ entry, comparison, fileError, case: record ? caseSummary(record) : null })
-}
-
-// Tracking starts the day it went live: every case before it would otherwise
-// read as wholly owed, because nobody scanned its resupply.
-const TRACK_FROM = process.env.RESUPPLY_TRACK_FROM || '2026-11-06'
-
-/** Every recent case with something still owed, per distributor, oldest first. */
-async function handleResupplyOwing(req, res) {
-  const records = (await getUsageHistory(RESUPPLY_LOOKBACK))
-    .filter(r => (r.date || '') >= TRACK_FROM || (r.createdAt || '').slice(0, 10) >= TRACK_FROM)
-  const today = new Date().toISOString().slice(0, 10)
-  const rows = []
-  for (const record of records) {
-    const sent = new Set((record.emailsSent || []).filter(e => e && !e.testOnly && (e.ok !== false)).map(e => e.key || e.distributorKey))
-    const keys = [...new Set(itemsFor(record).map(i => i.distributorKey).filter(Boolean))]
-    if (!keys.length) continue
-    const resupplies = await getCaseResupplies(record.id)
-    for (const key of keys) {
-      const earlier = resupplies.filter(e => e.distributorKey === key
-        || (key === 'device_boost' && e.distributorKey === 'device') || (key === 'device' && e.distributorKey === 'device_boost'))
-      const { totals } = compareResupply(record, key, [], earlier)
-      if (totals.owing <= 0) continue
-      rows.push({
-        ...caseSummary(record),
-        distributorKey: key,
-        distributor: DISTRIBUTORS[key]?.name || key,
-        used: totals.used,
-        resupplied: totals.before,
-        owing: totals.owing,
-        usageSent: sent.size ? sent.has(key) : null,
-        days: record.date ? Math.round((Date.parse(today) - Date.parse(record.date)) / 86400000) : null
-      })
-    }
-  }
-  rows.sort((a, b) => (b.days || 0) - (a.days || 0))
-  return res.status(200).json({ rows, trackingFrom: TRACK_FROM })
 }
 
 // ─── Removing a duplicate case (Brent, 6 Nov 2026) ─────────────────────────

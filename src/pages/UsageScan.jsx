@@ -626,7 +626,7 @@ export default function UsageScan({ user, switcher }) {
   // handleRemoveDuplicate). Never touches Dropbox or what was emailed.
   async function removeDuplicate(h) {
     const sure = window.confirm(`Remove ${h.folderName} as a duplicate?\n\n`
-      + 'It comes off the usage history and Still owed. Its Dropbox folder and any emails already sent are not changed.')
+      + 'It comes off the usage history and resupply matching. Its Dropbox folder and any emails already sent are not changed.')
     if (!sure) return
     try {
       const res = await fetch('/api/usage/agent?action=remove-duplicate', {

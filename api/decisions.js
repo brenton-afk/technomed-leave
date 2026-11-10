@@ -4,7 +4,7 @@ import { leaderEmailOn } from './_leaders.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
 import {
   mayUseDecisions, decisionMailboxes, readInboxReviews, refreshInboxes, STALE_MINUTES, mergeDuplicateEmails, openMerged,
-  usageItems, resupplyItems, bookingInboxItems, readStates, markItem, openItems, ranked, OWNERS, ownersFor
+  usageItems, bookingInboxItems, readStates, markItem, openItems, ranked, OWNERS, ownersFor
 } from './_decisions.js'
 
 // ─── Decisions (trial) ───────────────────────────────────────────────────────
@@ -20,7 +20,6 @@ async function build(session) {
   const mailboxes = decisionMailboxes()
   const sources = [
     ['usage', 'Usage not sent', () => usageItems()],
-    ['resupply', 'Resupply owed', () => resupplyItems()],
     ['bookings', 'Bookings Inbox', () => bookingInboxItems()]
   ]
   const [reviews, states, leaderEmail, ...results] = await Promise.all([

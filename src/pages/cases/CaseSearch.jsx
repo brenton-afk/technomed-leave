@@ -38,7 +38,7 @@ export const SCREENS = [
   { label: 'Apply for leave', words: 'leave annual sick personal holiday toil', to: { tab: 'me', sub: 'leave' } },
   { label: 'Payslips', words: 'payslip pay', to: { tab: 'me', sub: 'payslips' } },
   { label: 'Scan a usage form', words: 'scan usage form camera past scans amend', to: { tab: 'scan' }, kind: 'usage' },
-  { label: 'Scan a resupply', words: 'resupply docket packing slip still owed scan', to: { tab: 'scan' }, kind: 'resupply' },
+  { label: 'Scan a resupply', words: 'resupply docket packing slip scan', to: { tab: 'scan' }, kind: 'resupply' },
   { label: 'Filed usage sheets', words: 'filed usage sheets dropbox files', to: { tab: 'me', sub: 'usagefiles' } },
   { label: 'Patient history', words: 'patient history previous implants revision', to: { tab: 'me', sub: 'patient' } },
   { label: 'Kit Room', words: 'kit kits room tray trays move loan where', to: { tab: 'kit', sub: 'kitroom' } },

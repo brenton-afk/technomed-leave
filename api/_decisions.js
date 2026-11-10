@@ -1,10 +1,8 @@
-import { redis, redisSetBody, getUsageHistory, getCaseResupplies, getBookingQueue } from './_redis.js'
+import { redis, redisSetBody, getUsageHistory, getBookingQueue } from './_redis.js'
 import { listThreadsOf, threadMetaOf, readMessageHeadline, addressOf } from './_gmail.js'
 import { askClaude } from './_anthropic.js'
 import { withoutFences, completeObjects } from './_actionItems.js'
 import { owingFor, caseLine } from './_usageReminders.js'
-import { itemsFor, compareResupply } from './_resupply.js'
-import { DISTRIBUTORS } from './_distributors.js'
 import { todayStr } from '../src/clinicalPlan/week.js'
 
 // ─── Decisions — trial on one login (Brent, 7 Nov 2026) ──────────────────────
@@ -13,7 +11,7 @@ import { todayStr } from '../src/clinicalPlan/week.js'
 //
 // One list of what is waiting on somebody, each item with the person it
 // belongs to: emails nobody has answered (read from the shared inboxes), usage
-// not sent, resupply still owed, bookings waiting in the Inbox. Read-only from
+// not sent, bookings waiting in the Inbox. Read-only from
 // end to end — nothing is sent, labelled or marked. A suggested reply is text
 // to copy into Gmail, never a send.
 //
@@ -309,38 +307,6 @@ export async function usageItems(today = todayStr()) {
         detail: `${day} · ${c.who.join(', ')}`,
         ask: `${c.who.join(' or ')} to scan and send the usage, or mark it No usage.`,
         urgency: waited >= 2 ? 'today' : 'week', waitingDays: waited
-      })
-    }
-  }
-  return out
-}
-
-export const RESUPPLY_FROM = process.env.RESUPPLY_TRACK_FROM || '2026-11-06'
-export const RESUPPLY_CHASE_DAYS = 7
-
-/** Resupply still owed a week or more after the case — Toni's to chase. */
-export async function resupplyItems(today = todayStr()) {
-  const records = (await getUsageHistory(150))
-    .filter(r => !r.removed && (r.date || '') >= RESUPPLY_FROM)
-  const out = []
-  for (const record of records) {
-    const days = Math.round((Date.parse(today) - Date.parse(record.date)) / 86400000)
-    if (!(days >= RESUPPLY_CHASE_DAYS)) continue
-    const keys = [...new Set(itemsFor(record).map(i => i.distributorKey).filter(Boolean))]
-    if (!keys.length) continue
-    const resupplies = await getCaseResupplies(record.id)
-    for (const key of keys) {
-      const earlier = resupplies.filter(e => e.distributorKey === key
-        || (key === 'device_boost' && e.distributorKey === 'device') || (key === 'device' && e.distributorKey === 'device_boost'))
-      const { totals } = compareResupply(record, key, [], earlier)
-      if (totals.owing <= 0) continue
-      const name = DISTRIBUTORS[key]?.name || key
-      out.push({
-        id: `resupply:${record.id}:${key}`, source: 'resupply', owner: 'toni',
-        title: `Resupply owed — ${name}`,
-        detail: `${record.folderName || record.patientSurname || 'Case'} · ${totals.owing} of ${totals.used} still owed`,
-        ask: `Chase ${name} for the outstanding resupply.`,
-        urgency: days >= 14 ? 'today' : 'week', waitingDays: days
       })
     }
   }

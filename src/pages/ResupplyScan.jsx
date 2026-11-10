@@ -45,18 +45,21 @@ function CaseLine({ c, why }) {
   )
 }
 
-/** Used, back already, on this paper, still owed — one row a product. */
+/**
+ * The usage it was matched to, line by line: which used items this paper
+ * resupplies, and anything on it the usage did not have. Matching only — what
+ * is owed is followed in the existing process (Brent, 10 Nov 2026).
+ */
 function Comparison({ comparison }) {
   if (!comparison) return null
-  const { rows, extras, totals } = comparison
+  const { rows, extras } = comparison
+  const onPaper = rows.filter(r => r.now > 0).length
   return (
     <div style={panel}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, marginBottom: space.sm }}>
-        <span style={{ ...text('heading'), color: totals.owing ? colour.warning : colour.accentDeep }}>
-          {totals.owing ? `${totals.owing} still owed` : 'Everything used has come back'}
-        </span>
+        <span style={{ ...text('heading'), color: colour.ink }}>Matched to the usage</span>
         <span style={{ ...text('caption'), color: colour.inkFaint }}>
-          used {totals.used} · back before {totals.before} · this paper {totals.now}
+          {onPaper} of {rows.length} usage line{rows.length === 1 ? '' : 's'} on this paper
         </span>
       </div>
       {rows.map(r => (
@@ -68,16 +71,15 @@ function Comparison({ comparison }) {
             <span style={{ ...text('caption'), fontWeight: 700, color: colour.ink, display: 'block' }}>{r.product}</span>
             <span style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, color: colour.inkFaint }}>{r.referenceCode || 'no code'}</span>
           </span>
-          <span style={{ ...text('caption'), color: colour.inkFaint, whiteSpace: 'nowrap' }}>{r.used} used</span>
-          <span style={{ ...text('caption'), fontWeight: 700, whiteSpace: 'nowrap', color: r.owing ? colour.warning : colour.accentDeep }}>
-            {r.owing ? `${r.owing} owed` : '✓'}
+          <span style={{ ...text('caption'), whiteSpace: 'nowrap', color: r.now ? colour.accentDeep : colour.inkFaint, fontWeight: r.now ? 700 : 400 }}>
+            {r.now ? `${r.now} on this paper ✓` : 'not on this paper'}
           </span>
         </div>
       ))}
       {extras.length > 0 && (
         <div style={{ marginTop: space.sm }}>
           <div style={{ ...text('caption'), fontWeight: 700, color: colour.ink }}>
-            Not on this usage — a consignment top-up or a substitute?
+            On this paper but not on the usage
           </div>
           {extras.map((l, i) => (
             <div key={i} style={{ ...text('caption'), color: colour.inkFaint }}>
@@ -142,25 +144,11 @@ export default function ResupplyScan({ user, kind, onKind }) {
   const [usageId, setUsageId] = useState(null)
   const [comparison, setComparison] = useState(null)
   const [saved, setSaved] = useState(null)
-  const [owing, setOwing] = useState(null)
   const scanId = useRef(newId())
   const uploadRef = useRef(null)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${user?.token || ''}` }
 
-  const loadOwing = useCallback(async () => {
-    try {
-      const res = await fetch('/api/usage/agent?action=resupply-owing', { headers })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setOwing(data)
-    } catch (err) {
-      setOwing({ rows: [], error: err.message })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.token])
-
-  useEffect(() => { loadOwing() }, [loadOwing])
   useEffect(() => () => releaseCamera(), [])
 
   const addPages = useCallback(added => {
@@ -247,7 +235,6 @@ export default function ResupplyScan({ user, kind, onKind }) {
       if (data.error) throw new Error(data.error)
       setSaved(data)
       setStep('done')
-      loadOwing()
     } catch (err) { setError(err.message) }
     setBusy(false)
   }
@@ -296,8 +283,8 @@ export default function ResupplyScan({ user, kind, onKind }) {
           <div style={label}>For the case</div>
           {candidates.length === 0 && (
             <Banner tone="warning">
-              No scanned usage matches this. It can still be recorded, but not filed in a case folder or counted
-              against what is owed — file it by hand if the usage was never scanned.
+              No scanned usage matches this. Find the case below, or record it without one — it will not be
+              filed in a case folder, so file it by hand if the usage was never scanned.
             </Banner>
           )}
           {candidates.map(c => (
@@ -344,7 +331,6 @@ export default function ResupplyScan({ user, kind, onKind }) {
 
   // ── Done ──
   if (step === 'done' && saved) {
-    const owed = saved.comparison?.totals.owing
     return (
       <Page>
         {header(saved.alreadySaved ? 'Already recorded' : 'Resupply recorded',
@@ -352,15 +338,9 @@ export default function ResupplyScan({ user, kind, onKind }) {
         <div style={{ padding: space.md }}>
           {saved.entry?.filed && <Banner>Filed in the case folder as “{saved.entry.filed}”.</Banner>}
           {saved.fileError && <Banner tone="warning">Recorded, but not filed in Dropbox ({saved.fileError}). File the paper by hand.</Banner>}
-          {saved.comparison && (
-            <Banner tone={owed ? 'warning' : 'info'}>
-              {owed ? `${owed} still owed by ${saved.entry.distributor} on this case.` : `Everything ${saved.entry.distributor} supplied on this case has come back.`}
-            </Banner>
-          )}
           <Comparison comparison={saved.comparison} />
           <NewScanButton label="Scan another resupply" onClick={startNew} />
-          <div style={{ height: space.sm }} />
-          <Button variant="quiet" onClick={() => setStep('home')}>Still owed</Button>
+
         </div>
       </Page>
     )
@@ -385,7 +365,7 @@ export default function ResupplyScan({ user, kind, onKind }) {
             onRead={readIt} />
           <button type="button" onClick={() => setStep('home')}
             style={{ width: '100%', minHeight: 44, background: 'transparent', border: 'none', ...text('bodyStrong'), color: colour.inkFaint, cursor: 'pointer' }}>
-            Still owed
+            Back
           </button>
         </div>
         {showCamera && (
@@ -401,8 +381,7 @@ export default function ResupplyScan({ user, kind, onKind }) {
     )
   }
 
-  // ── Home: what is still owed ──
-  const rows = owing?.rows || []
+  // ── Home: the scan card ──
   return (
     <Page>
       {header('Add pages', 'Photograph or upload every page of the resupply')}
@@ -410,35 +389,15 @@ export default function ResupplyScan({ user, kind, onKind }) {
         {error && <Banner tone="danger">{error}</Banner>}
         <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple style={{ display: 'none', fontSize: 16 }}
           onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
-        {/* The same first screen as the Usage side: the scan card, then what
-            is still owed underneath (Brent, 6 Nov 2026: "the resupply scan
-            page looks different to the usage scan page"). */}
+        {/* The same first screen as the Usage side (Brent, 6 Nov 2026). The
+            Still owed list that sat under it is gone (Brent, 10 Nov 2026: the
+            existing process follows what is owed; this only matches to usage). */}
         <ScanPages pages={[]} busy={false}
           scanLabel="Scan the resupply"
           hint="The docket, packing slip or the photo that came with the stock — hold the phone over it."
           onScan={startNew}
           onUpload={() => uploadRef.current?.click()} />
 
-        <div style={label}>Still owed{rows.length ? ` · ${rows.length}` : ''}</div>
-        {!owing && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}
-        {owing?.error && <Banner tone="warning">Could not load what is owed: {owing.error}</Banner>}
-        {owing && !owing.error && rows.length === 0 && (
-          <div style={{ ...panel, ...text('caption'), color: colour.inkFaint }}>
-            Nothing owed on cases scanned since {formatDay(owing.trackingFrom)}.
-          </div>
-        )}
-        {rows.map(r => (
-          <div key={`${r.id}-${r.distributorKey}`} data-owing-row style={panel}>
-            <div><CaseLine c={r} /></div>
-            <div style={{ ...text('caption'), color: colour.ink, marginTop: 2 }}>
-              <strong>{r.distributor}</strong>: {r.owing} of {r.used} still owed
-              <span style={{ color: r.days > 14 ? colour.danger : colour.inkFaint }}>
-                {r.days != null ? ` · ${r.days} day${r.days === 1 ? '' : 's'} since the case` : ''}
-              </span>
-              {r.usageSent === false && <span style={{ color: colour.danger }}> · usage not sent to them</span>}
-            </div>
-          </div>
-        ))}
       </div>
     </Page>
   )
