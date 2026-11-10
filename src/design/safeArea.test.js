@@ -150,6 +150,8 @@ describe('no screen is left out', () => {
     'treasury/ui.jsx',
     // Suggested to-dos, drawn in the body of the Projects page under its Header.
     'projects/Suggested.jsx',
+    // The microphone in the quick-add, inside the Projects page.
+    'projects/VoiceTask.jsx',
   ])
 
   it('accounts for every screen that does not use the shared header', () => {

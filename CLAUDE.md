@@ -682,6 +682,12 @@ Projects tab beside it is the workspace as before. On a desktop the List view
 is the **Table** (Desktop A): a column header per project group, the status
 as a full coloured cell, priority, notes count, and the group's done/under-way
 bar.
+**Add a to-do by voice** (Brent, 11 Nov 2026): a microphone at the front
+of the quick-add (`projects/VoiceTask.jsx`, shown only where `MediaRecorder`
+exists). Tap, speak, tap again (30s cap); the recording goes to the existing
+`action=voice` reader, and a `todo` reply (else the words said, `voiceDraft`)
+fills the box, who and due date, with "Heard: …" beneath. Nothing is added
+until Add is tapped.
 **A phone's Projects page, de-cluttered** (Brent, 6 Nov 2026: "way too
 busy"): a compact band (no eyebrow or subtitle); one row of three tabs in
 `Projects.jsx` — My To Do · Projects · Meeting — replacing the two nested rows

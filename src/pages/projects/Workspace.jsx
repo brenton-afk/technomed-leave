@@ -7,6 +7,7 @@ import {
 import { tintOf, dueState, DUE_TONES, formatShort, PROJECT_TINTS } from './shared.js'
 import { NewProject } from './ProjectList.jsx'
 import MyToDo from './MyToDo.jsx'
+import VoiceTask from './VoiceTask.jsx'
 import { commentCount } from '../../projects/model.js'
 
 // ─── Projects, as one workspace (Brent, 4 Nov 2026) ──────────────────────────
@@ -123,6 +124,15 @@ export default function Workspace({
   const [draft, setDraft] = useState('')
   const [draftWho, setDraftWho] = useState('')
   const [draftDue, setDraftDue] = useState('')
+  const [heard, setHeard] = useState('')
+
+  /** A to-do said aloud fills the box, who and when; Add still confirms it. */
+  const fromVoice = ({ task, assignee, due, transcript }) => {
+    setDraft(task)
+    setDraftWho(!assignee || assignee === 'Unassigned' || (me && assignee === me.name) ? '' : assignee)
+    setDraftDue(due || '')
+    setHeard(transcript)
+  }
 
   const remember = patch => savePrefs({ view, division, onlyMine, phoneTab, ...patch })
   const setPhoneTab = v => { setPhoneTabRaw(v); remember({ phoneTab: v }) }
@@ -211,7 +221,7 @@ export default function Workspace({
       assignee: who || me?.name || 'Unassigned',
       due_date: draftDue,
       projectId: projectId && projectId !== GENERAL.id ? projectId : ''
-    }, () => { setDraft(''); setDraftDue('') })
+    }, () => { setDraft(''); setDraftDue(''); setDraftWho(''); setHeard('') })
   }
 
   // ── Pieces ──
@@ -243,11 +253,12 @@ export default function Workspace({
 
   const quickAdd = (
     <div style={{
-      display: 'flex', gap: space.xs, flexWrap: wide ? 'nowrap' : 'wrap', alignItems: 'center',
+      display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center',
       background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card,
       padding: space.xs, marginBottom: space.md
     }}>
-      <input value={draft} onChange={e => setDraft(e.target.value)}
+      <VoiceTask user={user} onHeard={fromVoice} />
+      <input value={draft} onChange={e => { setDraft(e.target.value); if (!e.target.value) setHeard('') }}
         onKeyDown={e => { if (e.key === 'Enter') add() }}
         aria-label="New task"
         placeholder={projectId && projectId !== GENERAL.id
@@ -273,6 +284,11 @@ export default function Workspace({
           background: draft.trim() ? colour.accent : colour.line, color: draft.trim() ? 'white' : colour.inkFainter
         }}>{adding ? 'Adding…' : 'Add'}</button>
       </>}
+      {heard && draft.trim() && (
+        <span data-voice-heard style={{ ...text('caption'), color: colour.inkFaint, flexBasis: '100%', padding: `0 ${space.sm}px ${space.xs}px` }}>
+          Heard: “{heard}” — check it, then tap Add.
+        </span>
+      )}
     </div>
   )
 
