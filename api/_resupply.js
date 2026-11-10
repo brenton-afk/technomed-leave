@@ -122,7 +122,11 @@ export function itemsFor(record, distributorKey) {
  * distributor's items is never offered.
  */
 export function candidateCases(resupply, records, { limit = 5 } = {}) {
-  const codes = new Set(resupply.lines.map(l => codeKey(l.referenceCode)).filter(Boolean))
+  const lines = resupply.lines || []
+  // Device's Boost dockets name no patient (Erin, 10 Nov 2026: the case was
+  // never offered). With no name on the paper, the distributor's cases from
+  // the weeks before the docket are offered by date, nearest first.
+  const unnamed = !resupply.caseReference && !resupply.patientSurname
   const scored = records.map(record => {
     const items = itemsFor(record, resupply.distributorKey)
     if (!items.length) return null
@@ -135,19 +139,87 @@ export function candidateCases(resupply, records, { limit = 5 } = {}) {
     if (resupply.surgeryDate && record.date === resupply.surgeryDate) { score += 3; why.push('date') }
     if (resupply.surgeon && same(record.surgeonSurname, resupply.surgeon)) { score += 1; why.push('surgeon') }
     if (resupply.hospital && record.hospital === resupply.hospital) score += 1
-    const shared = items.filter(i => codes.has(codeKey(i.referenceCode))).length
+    const shared = pairLines(items, lines).size
     if (shared) { score += Math.min(4, shared); why.push(`${shared} code${shared === 1 ? '' : 's'}`) }
-    // A resupply comes after the case; one dated weeks before it is not this.
+    // A resupply comes after the case, usually within a few weeks.
+    let near = false
     if (resupply.documentDate && record.date) {
       const gap = daysBetween(record.date, resupply.documentDate)
       if (gap < -2) score -= 5
-      else if (gap <= 30) score += 1
+      else if (gap <= 21) { score += 2; near = true }
+      else if (gap > 45) score -= 3
     }
+    if (near && unnamed && !why.includes('date')) why.push('recent case')
     const named = why.includes('reference') || why.includes('surname')
-    if (!named && !shared) return null
+    if (!named && !shared && !(unnamed && near)) return null
     return { record, score, why }
   }).filter(Boolean)
-  return scored.sort((a, b) => b.score - a.score).slice(0, limit)
+  return scored.sort((a, b) => b.score - a.score || String(b.record.date).localeCompare(String(a.record.date))).slice(0, limit)
+}
+
+/** Usage cases whose surname, surgeon or folder name contains what was typed. */
+export function findCases(query, records, { limit = 8 } = {}) {
+  const q = str(query).toLowerCase()
+  if (q.length < 2) return []
+  return records
+    .filter(r => [r.patientSurname, r.surgeonSurname, r.folderName].some(v => str(v).toLowerCase().includes(q)))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, limit)
+}
+
+// ─── Codes that are the same product written differently (10 Nov 2026) ─────
+// Mat's Shoreline resupply read "2 still owed" when everything had come back:
+// the usage held "85-6509" and "SEA-85-09" (as read off the stickers) and the
+// docket printed the full catalogue codes. An exact match missed both. A code
+// read short, or with or without the maker's prefix, is still the same product.
+
+const digitsOf = k => k.replace(/[^0-9]/g, '')
+
+/** How closely two product codes agree: 0 (not the same) up to 3 (identical). */
+export function codeMatch(a, b) {
+  const x = codeKey(a), y = codeKey(b)
+  if (!x || !y) return 0
+  if (x === y) return 3
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x]
+  if (short.length >= 5 && (long.startsWith(short) || long.endsWith(short))) return 2
+  const dx = digitsOf(x), dy = digitsOf(y)
+  if (dx.length >= 5 && dx === dy) return 2
+  if (short.length >= 6 && long.includes(short)) return 1
+  const [ds, dl] = dx.length <= dy.length ? [dx, dy] : [dy, dx]
+  if (ds.length >= 5 && dl.startsWith(ds)) return 1
+  return 0
+}
+
+const WORD = /[a-z0-9.]+/g
+const STOP = new Set(['the', 'and', 'with', 'for', 'x', 'mm', 'of', 'set', 'kit'])
+const wordsOf = t => new Set((str(t).toLowerCase().match(WORD) || []).filter(w => w.length > 1 && !STOP.has(w)))
+
+/** Same product by description, for a line or item with no usable code. */
+function describedAlike(a, b) {
+  const x = wordsOf(a), y = wordsOf(b)
+  if (!x.size || !y.size) return false
+  let shared = 0
+  for (const w of x) if (y.has(w)) shared++
+  return shared >= 2 && shared / Math.min(x.size, y.size) >= 0.6
+}
+
+/**
+ * Pairs each document line with the used item it resupplies, best match first:
+ * identical codes, then a code read short or with a prefix, then (only where a
+ * code is missing) the description. Each line goes to one item.
+ */
+export function pairLines(items, lines) {
+  const pairs = new Map()           // line index -> item index
+  const scored = []
+  lines.forEach((l, li) => items.forEach((it, ii) => {
+    let score = codeMatch(it.referenceCode, l.referenceCode) * 10
+    if (!score && (!codeKey(it.referenceCode) || !codeKey(l.referenceCode))
+      && describedAlike(it.productName || it.description, l.description)) score = 5
+    if (score) scored.push({ li, ii, score })
+  }))
+  scored.sort((a, b) => b.score - a.score)
+  for (const { li, ii } of scored) if (!pairs.has(li)) pairs.set(li, ii)
+  return pairs
 }
 
 /**
@@ -157,42 +229,40 @@ export function candidateCases(resupply, records, { limit = 5 } = {}) {
  */
 export function compareResupply(record, distributorKey, lines, earlier = []) {
   const items = itemsFor(record, distributorKey)
-  const before = new Map()
-  for (const entry of earlier) {
-    for (const l of entry.lines || []) {
-      const k = codeKey(l.referenceCode)
-      if (k) before.set(k, (before.get(k) || 0) + (Number(l.quantity) || 0))
-    }
-  }
-  const now = new Map()
-  for (const l of lines) {
-    const k = codeKey(l.referenceCode)
-    if (k) now.set(k, (now.get(k) || 0) + (Number(l.quantity) || 0))
-  }
 
+  // One row a product: the same code used twice is one row with both counted.
   const rows = []
-  const seen = new Set()
-  for (const item of items) {
+  const rowOf = []
+  items.forEach((item, i) => {
     const k = codeKey(item.referenceCode)
-    const key = k || `item:${item.id}`
-    const existing = rows.find(r => r.key === key)
-    if (existing) { existing.used += Number(item.quantity) || 1; continue }
-    seen.add(k)
-    rows.push({
-      key,
+    const existing = k && rows.find(r => r.codeKey === k)
+    if (existing) { existing.used += Number(item.quantity) || 1; rowOf[i] = existing; return }
+    const row = {
+      key: k || `item:${item.id || i}`,
+      codeKey: k,
       referenceCode: item.referenceCode,
       product: item.productName || item.description || item.referenceCode,
       used: Number(item.quantity) || 1,
-      before: k ? before.get(k) || 0 : 0,
-      now: k ? now.get(k) || 0 : 0
-    })
-  }
-  for (const r of rows) r.owing = Math.max(0, r.used - r.before - r.now)
-
-  const extras = lines.filter(l => {
-    const k = codeKey(l.referenceCode)
-    return !k || !seen.has(k)
+      before: 0,
+      now: 0
+    }
+    rows.push(row); rowOf[i] = row
   })
+
+  const tally = (docLines, field) => {
+    const pairs = pairLines(items, docLines)
+    const unmatched = []
+    docLines.forEach((l, li) => {
+      const ii = pairs.get(li)
+      if (ii === undefined) { unmatched.push(l); return }
+      rowOf[ii][field] += Number(l.quantity) || 0
+    })
+    return unmatched
+  }
+  tally(earlier.flatMap(e => e.lines || []), 'before')
+  const extras = tally(lines, 'now')
+
+  for (const r of rows) { r.owing = Math.max(0, r.used - r.before - r.now); delete r.codeKey }
   const sum = f => rows.reduce((n, r) => n + r[f], 0)
   return {
     rows,

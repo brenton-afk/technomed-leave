@@ -90,6 +90,46 @@ function Comparison({ comparison }) {
   )
 }
 
+/** Search every scanned usage by surname, surgeon or folder name. */
+function FindCase({ headers, exclude = [], onPick }) {
+  const [q, setQ] = useState('')
+  const [found, setFound] = useState([])
+  const [busy, setBusy] = useState(false)
+  async function search(e) {
+    e?.preventDefault()
+    if (q.trim().length < 2) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/usage/agent?action=resupply-find&q=${encodeURIComponent(q.trim())}`, { headers })
+      const data = await res.json()
+      setFound((data.cases || []).filter(c => !exclude.includes(c.id)))
+    } catch { setFound([]) }
+    setBusy(false)
+  }
+  return (
+    <form onSubmit={search} style={{ ...panel, display: 'grid', gap: space.xs }}>
+      <span style={{ ...text('caption'), color: colour.inkFaint }}>Not listed? Find the case by surname, surgeon or folder name</span>
+      <span style={{ display: 'flex', gap: space.xs }}>
+        <input id="resupply-find" value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. Ware"
+          aria-label="Find a usage case"
+          style={{ ...text('body'), fontSize: 16, flex: 1, minWidth: 0, minHeight: 40, padding: '0 10px',
+            border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink }} />
+        <button type="submit" disabled={busy} style={{ ...text('bodyStrong'), minHeight: 40, padding: '0 14px', borderRadius: radius.control,
+          border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink, cursor: 'pointer' }}>
+          {busy ? 'Finding…' : 'Find'}
+        </button>
+      </span>
+      {found.map(c => (
+        <button key={c.id} type="button" onClick={() => { onPick(c); setFound([]); setQ('') }}
+          style={{ textAlign: 'left', background: 'none', border: 'none', borderTop: `1px solid ${colour.lineSoft}`, padding: '8px 0', cursor: 'pointer' }}>
+          <CaseLine c={c} />
+        </button>
+      ))}
+      {!busy && q && found.length === 0 && <span style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, color: colour.inkFaint }}>Press Find to search every scanned usage.</span>}
+    </form>
+  )
+}
+
 export default function ResupplyScan({ user, kind, onKind }) {
   const [step, setStep] = useState('home')
   const [pages, setPages] = useState([])
@@ -273,6 +313,11 @@ export default function ResupplyScan({ user, kind, onKind }) {
               <span style={{ ...text('caption'), color: colour.inkFaint }}>None of these</span>
             </label>
           )}
+          {/* Not offered? Find it by name (Erin, 10 Nov 2026). */}
+          <FindCase headers={headers} exclude={candidates.map(c => c.id)} onPick={c => {
+            setRead(r => ({ ...r, candidates: [...r.candidates.filter(x => x.id !== c.id), { ...c, why: ['found by name'] }] }))
+            compareWith(c.id)
+          }} />
 
           {usageId && !comparison && <div style={{ ...text('caption'), color: colour.inkFaint }}>Comparing…</div>}
           {chosen && <Comparison comparison={comparison} />}

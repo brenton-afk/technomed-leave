@@ -10,7 +10,7 @@ import {
   claimUsageSend, releaseUsageSend, releaseResupply
 } from '../_redis.js'
 import {
-  RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply,
+  RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply, findCases,
   resupplyFileName, itemsFor
 } from '../_resupply.js'
 import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped, knownSurgeon } from '../_usageCase.js'
@@ -97,6 +97,7 @@ export default async function handler(req, res) {
     if (action === 'remove-duplicate') return await handleRemoveDuplicate(req, res, session)
     if (action === 'resupply-read') return await handleResupplyRead(req, res)
     if (action === 'resupply-compare') return await handleResupplyCompare(req, res)
+    if (action === 'resupply-find') return await handleResupplyFind(req, res)
     if (action === 'resupply-save') return await handleResupplySave(req, res, session)
     if (action === 'resupply-owing') return await handleResupplyOwing(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
@@ -1018,6 +1019,19 @@ async function handleResupplyRead(req, res) {
     earlierCount: matched?.earlier.length || 0
   })
 }
+
+/**
+ * Any scanned usage case, found by surname, surgeon or folder name (Erin,
+ * 10 Nov 2026: the right case was never offered and there was no way to pick
+ * it). Names only, as the candidates show them.
+ */
+async function handleResupplyFind(req, res) {
+  const q = String(req.query.q || req.body?.q || '').trim()
+  if (q.length < 2) return res.status(200).json({ cases: [] })
+  const records = await getUsageHistory(RESUPPLY_FIND_LIMIT)
+  return res.status(200).json({ cases: findCases(q, records).map(caseSummary) })
+}
+const RESUPPLY_FIND_LIMIT = 600
 
 /** The comparison against a case the person chose (or a corrected document). */
 async function handleResupplyCompare(req, res) {

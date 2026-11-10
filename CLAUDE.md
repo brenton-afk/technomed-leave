@@ -1273,6 +1273,14 @@ the way the team already names them**: `{Surname} {Distributor} resupply.pdf`,
 Scan tab's Resupply side opens on **Still owed** (`action=resupply-owing`),
 per case and distributor, for cases since `RESUPPLY_TRACK_FROM` (default
 2026-11-06 — earlier cases were resupplied on paper and would all read owed).
+**Matching was too strict** (Erin and Mat, 10 Nov 2026). Lines pair with used
+items by `codeMatch` (identical, or a code read short or with/without the
+maker's prefix, or the same digits) and, only where a code is missing, by
+description (`pairLines`); each line to one item. A docket naming no patient
+offers the distributor's cases from the three weeks before it (`recent case`)
+and pushes cases over 45 days old down. **Find the case** on the review
+(`action=resupply-find`, `findCases`: surname, surgeon or folder name over
+the last 600 records) picks any case the scan did not offer.
 
 ### The scanner
 
