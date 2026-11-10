@@ -29,9 +29,14 @@ export const LOOKBACK_DAYS = 120
 // ─── Reading the report ──────────────────────────────────────────────────────
 
 const HEADERS = {
-  invoice: /^invoice\s*(no|number|#|num)/i,
-  invoiceDate: /invoice\s*date|^date$/i,
-  customer: /^customer$|customer\s*name|^hospital$/i,
+  // Signus: Invoice No / Invoice Date / Customer. Device (10 Nov 2026):
+  // Billing Doc / Billing Date / Bill-To-Party, plus the procedure's own date
+  // and hospital, which say more about the case than the billing ones.
+  invoice: /^invoice\s*(no|number|#|num)|^billing\s*doc/i,
+  invoiceDate: /invoice\s*date|billing\s*date|^date$/i,
+  procedureDate: /(procedure|surgery|operation|op)\s*date/i,
+  site: /(procedure|surgery)\s*hospital/i,
+  customer: /^customer$|customer\s*name|^hospital$|bill.?to/i,
   surgeon: /carrier|surgeon|doctor|consultant/i,
   patient: /project|patient/i,
   code: /^code$|product\s*code|item\s*code|^ref/i,
@@ -110,8 +115,9 @@ export function readReport(ws) {
       row: r,
       invoice: invoice.replace(/\.0+$/, ''),
       invoiceDate: isoDate(get('invoiceDate')),
+      procedureDate: isoDate(get('procedureDate')),
       customer: text(get('customer')),
-      hospital: siteCode(text(get('customer'))) || '',
+      hospital: siteCode(text(get('site'))) || siteCode(text(get('customer'))) || '',
       surgeon: text(get('surgeon')),
       patient: text(get('patient')),
       code: text(get('code')),
@@ -194,16 +200,41 @@ export async function bookingsBetween(from, to, { fetchImpl = fetch } = {}) {
     .filter(Boolean)
 }
 
+// Device and its Boost desk are one company on a sales report.
+const family = k => (k === 'device_boost' ? 'device' : k)
+
 // ─── Matching ────────────────────────────────────────────────────────────────
 
-const sameSurgeon = (a, b) => {
-  const x = surnameKey(a); const y = String(b || '').toLowerCase()
-  return Boolean(x) && y.split(/[^a-z]+/).some(w => w && (w === x || x.startsWith(w) || w.startsWith(x)))
+const TITLES = new Set(['dr', 'mr', 'mrs', 'ms', 'miss', 'prof', 'assoc', 'a'])
+const nameWords = s => String(s || '').replace(/&#\d+;/g, ' ').toLowerCase()
+  .split(/[^a-z']+/).map(w => w.replace(/'/g, '')).filter(w => w.length > 1 && !TITLES.has(w))
+
+/**
+ * Signus writes the surgeon's surname ("Thani"); Device writes the whole name
+ * with a title ("MR JENS PETERS-WILKE", "DR IMOGEN IBBET"). Any word of one
+ * that is the other's word, or starts it, is the same surgeon — which also
+ * carries Device's own spellings (Wilke, Ibbet) onto ours.
+ */
+export const sameSurgeon = (a, b) => {
+  const xs = nameWords(a); const ys = nameWords(b)
+  const close = (x, y) => x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x)))
+  return xs.some(x => ys.some(y => close(x, y)))
 }
 
-const samePatient = (a, b) => {
-  const x = surnameKey(a); const y = surnameKey(b)
-  return Boolean(x && y) && (x === y || (x.length > 4 && y.length > 4 && (x.startsWith(y) || y.startsWith(x))))
+/**
+ * The report's patient field against the portal's surname. Signus gives the
+ * surname; Device gives whatever the hospital typed — surname and UR number,
+ * first name and surname, either order. So the portal's surname is looked for
+ * among the field's words (two-word surnames as a pair), not compared whole.
+ */
+export const samePatient = (a, b) => {
+  const y = surnameKey(b)
+  if (!y) return false
+  const x = surnameKey(a)
+  if (x && (x === y || (x.length > 4 && y.length > 4 && (x.startsWith(y) || y.startsWith(x))))) return true
+  const words = nameWords(a)
+  const runs = words.concat(words.slice(1).map((w, i) => words[i] + w))
+  return runs.some(w => w === y || (w.length > 4 && y.length > 4 && (w.startsWith(y) || y.startsWith(w))))
 }
 
 function score(inv, c, codes) {
@@ -216,13 +247,15 @@ function score(inv, c, codes) {
     if (overlap) s += 5 + overlap
   }
   // Nearer the invoice is likelier, all else equal.
-  s -= Math.max(0, daysBetween(c.date, inv.invoiceDate)) / 100
+  if (inv.procedureDate) s -= Math.abs(daysBetween(c.date, inv.procedureDate)) / 2
+  else s -= Math.max(0, daysBetween(c.date, inv.invoiceDate)) / 100
   return s
 }
 
 function best(inv, list, codes) {
-  const from = addDays(inv.invoiceDate, -LOOKBACK_DAYS)
-  const to = addDays(inv.invoiceDate, 3)
+  // A report that names the procedure date narrows the search to that week.
+  const from = inv.procedureDate ? addDays(inv.procedureDate, -7) : addDays(inv.invoiceDate, -LOOKBACK_DAYS)
+  const to = inv.procedureDate ? addDays(inv.procedureDate, 7) : addDays(inv.invoiceDate, 3)
   const ranked = list
     .filter(c => samePatient(inv.patient, c.patient) && c.date >= from && c.date <= to)
     .map(c => ({ c, s: score(inv, c, codes) }))
@@ -260,10 +293,11 @@ export function checkReport(lines, { cases = [], bookings = [] } = {}) {
   // Whose report this is: the distributor most of its lines belong to.
   const votes = {}
   for (const l of lines) {
-    const k = detectDistributor(l.type, l.product)
+    const k = family(detectDistributor(l.type, l.product) || detectDistributor(l.product, l.code) || (/^SEA-/i.test(l.code) ? 'device' : null))
     if (k) votes[k] = (votes[k] || 0) + 1
   }
   const distributorKey = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]?.[0] || null
+  const ours = k => family(k) === distributorKey
 
   // The usual price of each code at each hospital, to point out a discount.
   // Per hospital: RHH and Calvary pay different prices for the same item
@@ -280,7 +314,7 @@ export function checkReport(lines, { cases = [], bookings = [] } = {}) {
   const invoices = []
   for (const [invoice, group] of byInvoice) {
     const first = group[0]
-    const inv = { ...first, invoice }
+    const inv = { ...first, invoice, procedureDate: group.map(l => l.procedureDate).find(Boolean) || '' }
     const codes = group.map(l => codeKey(l.code)).filter(Boolean)
     const fromUsage = best(inv, cases, codes)
     const fromCalendar = best(inv, live, [])
@@ -293,6 +327,7 @@ export function checkReport(lines, { cases = [], bookings = [] } = {}) {
     if (!usage && !booking) checks.push('Not found in the portal or on the bookings calendar')
     else if (!usage) checks.push('No usage record in the portal — date from the bookings calendar')
     if (usage && booking && booking.date !== usage.date) checks.push(`Bookings calendar says ${dmy(booking.date)}`)
+    if (inv.procedureDate && surgeryDate && surgeryDate !== inv.procedureDate) checks.push(`Report says the procedure was ${dmy(inv.procedureDate)}`)
     if (fromUsage.others.length) checks.push(`Also a usage for this surname on ${fromUsage.others.map(c => dmy(c.date)).join(', ')} — check which case this is`)
 
     const caseFound = usage || booking
@@ -362,12 +397,12 @@ export function checkReport(lines, { cases = [], bookings = [] } = {}) {
   const notBilled = !distributorKey || !dates.length ? [] : cases
     .filter(c => c.date >= dates[0] && c.date <= (lastInvoice || lastCovered))
     .filter(c => !matchedIds.has(c.id))
-    .filter(c => c.items.some(it => it.distributorKey === distributorKey))
+    .filter(c => c.items.some(it => ours(it.distributorKey)))
     .filter(c => !invoices.some(i => samePatient(i.patient, c.patient) && i.surgeryDate === c.date))
     .map(c => ({
       date: c.date, patient: c.patient, surgeon: c.surgeon, hospital: c.hospital, procedure: c.procedure,
-      items: c.items.filter(it => it.distributorKey === distributorKey).length,
-      sent: c.sentTo.includes(distributorKey),
+      items: c.items.filter(it => ours(it.distributorKey)).length,
+      sent: c.sentTo.some(ours),
       note: c.date > lastCovered ? 'After the last case on this report — probably next month' : 'Missing from this report'
     }))
     .sort((a, b) => (a.date < b.date ? -1 : 1))

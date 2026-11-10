@@ -177,3 +177,56 @@ describe('the read-only key', () => {
     expect((await call({ action: 'usage', from: '2025-01-01', to: '2026-09-30' }, { authorization: `Bearer ${KEY}` })).code).toBe(400)
   })
 })
+
+// Device's report (10 Nov 2026): a title block, columns from B, Billing Doc
+// for the invoice, the procedure's own date, the surgeon's full name with a
+// title, and the patient as the hospital typed it (surname and UR, first name
+// and surname). Invented values throughout.
+describe("Device's layout", () => {
+  async function deviceReport(rows) {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Report')
+    ws.getCell('C2').value = 'Agent'
+    ws.getCell('L2').value = 'Total Sales'
+    ws.getRow(4).values = [null, null, 'Billing Doc', 'Billing Date', 'Bill-To-Party', 'Sales Channel', 'Procedure Date', 'Procedure',
+      'Procedure Hospital', 'Surgeon', 'Patient', 'Product Code', 'Product', 'Quantity', 'Value', 'Commisson', 'Commisson Rate']
+    rows.forEach((r, i) => {
+      ws.getRow(5 + i).values = [null, null, r.invoice, r.date, r.customer, 'Consignment Issue', r.procedureDate || null, '', '',
+        r.surgeon, r.patient, r.code, r.product, r.qty, r.sales, r.sales * 0.2, 0.2]
+    })
+    return Buffer.from(await wb.xlsx.writeBuffer())
+  }
+
+  it('reads it and matches whole names and UR-suffixed patients to the usage', async () => {
+    const buf = await deviceReport([
+      { invoice: '94000001', date: '26.10.2026', customer: 'CALVARY HOSPITAL - LENAH VALLEY', procedureDate: new Date('2026-09-22T00:00:00Z'),
+        surgeon: 'DR IMOGEN IBBET', patient: 'SAMPLEA 123456', code: 'SEA-85-0506', product: '6MM 2-HOLE ANTERIOR PLATE', qty: 1, sales: 1000 },
+      { invoice: '94000002', date: '26.10.2026', customer: 'ROYAL HOBART HOSPITAL',
+        surgeon: 'DR  ADAM FOWLER', patient: 'JANE SAMPLEC', code: 'ABT-AB-DT401', product: '2.5G BOOST ULTRAFIBRES', qty: 1, sales: 2750 }
+    ])
+    const out = await S.checkSalesReport(buf, { loadBookings: async () => [] })
+    expect(out.distributorKey).toBe('device')
+    const [a, c] = out.invoices
+    expect(a.surgeryDate).toBe('2026-09-22')
+    expect(a.checks.join(' ')).not.toMatch(/Surgeon on the report/)
+    expect(c.surgeryDate).toBe('2026-09-28')
+  })
+
+  it('says so when the report and the portal disagree on the date', async () => {
+    const buf = await deviceReport([
+      { invoice: '94000003', date: '26.10.2026', customer: 'CALVARY HOSPITAL - LENAH VALLEY', procedureDate: new Date('2026-09-24T00:00:00Z'),
+        surgeon: 'DR IMOGEN IBBET', patient: 'SAMPLEA', code: 'SEA-1', product: 'plate', qty: 1, sales: 10 }
+    ])
+    const out = await S.checkSalesReport(buf, { loadBookings: async () => [] })
+    expect(out.invoices[0].checks.join(' ')).toMatch(/Report says the procedure was 24\/09\/2026/)
+  })
+
+  it('matches surgeons by any word of the name', () => {
+    expect(S.sameSurgeon('MR JENS PETERS-WILKE', 'Peters-Willke')).toBe(true)
+    expect(S.sameSurgeon('MR NOVA THANI', 'Thani')).toBe(true)
+    expect(S.sameSurgeon('DR ADAM FOWLER', 'Thani')).toBe(false)
+    expect(S.samePatient('JOHN&#9;SAMPLEQ', 'Sampleq')).toBe(true)
+    expect(S.samePatient('SAMPLEQ 107000001', 'Sampleq')).toBe(true)
+    expect(S.samePatient('SAMPLER', 'Sampleq')).toBe(false)
+  })
+})

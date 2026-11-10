@@ -1059,6 +1059,12 @@ admin-only; no new function).
   "MACNIT18470"), a unit price under that code's top price **at the same
   hospital** (RHH and Calvary prices differ — not a discount), and the same case
   on two invoices. Read-only; the report is never stored.
+  **Device's layout too** (Brent, 10 Nov 2026): Billing Doc / Billing Date /
+  Bill-To-Party, surgeon as a full name with a title, patient as the hospital
+  typed it (surname + UR, or first name + surname). `samePatient` looks for the
+  portal surname among the field's words; `sameSurgeon` matches any word. A
+  **Procedure Date** column narrows matching to ±7 days and flags a
+  disagreement; Device and Boost are one distributor there (`family`).
 - **Claude's read-only key** (`api/agent.js`, same day): `AGENT_READ_KEY` in
   Vercel (32+ chars; unset or short = 404). `GET ?action=usage&from=&to=` (≤400
   days; codes and quantities, never lot numbers or the rep) and `POST
