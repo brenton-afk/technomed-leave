@@ -63,3 +63,22 @@ describe('finding the case for a docket with no patient on it', () => {
     expect(findCases('r', records)).toEqual([])
   })
 })
+
+// Mat, 10 Nov 2026 (second report): the plate's code was read "SEA-85-09"
+// off an obscured sticker; the docket says "SEA-85-0509".
+describe('a code with characters lost from the middle', () => {
+  it('matches when the descriptions agree too', async () => {
+    const { codesRelated } = await import('./_resupply.js')
+    expect(codesRelated('SEA-85-09', 'SEA-85-0509')).toBe(true)
+    expect(codesRelated('SEA-85-0511', 'SEA-85-0509')).toBe(false)
+    const record = { items: [{ id: 'p', referenceCode: 'SEA-85-09', productName: 'SHORELINE ACS Anterior Plate - 2 Hole', quantity: 1, distributorKey: 'device' }] }
+    const { totals, extras } = compareResupply(record, 'device', [{ referenceCode: 'SEA-85-0509', description: '9MM 2-HOLE ANTERIOR PLATE', quantity: 1 }])
+    expect(totals.owing).toBe(0)
+    expect(extras).toEqual([])
+  })
+  it('does not match a related code for a different product', () => {
+    const record = { items: [{ id: 'p', referenceCode: 'SEA-85-09', productName: 'SHORELINE ACS Anterior Plate - 2 Hole', quantity: 1, distributorKey: 'device' }] }
+    const { totals } = compareResupply(record, 'device', [{ referenceCode: 'SEA-85-0509', description: 'Locking cover', quantity: 1 }])
+    expect(totals.owing).toBe(1)
+  })
+})

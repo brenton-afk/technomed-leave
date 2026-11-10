@@ -190,6 +190,17 @@ export function codeMatch(a, b) {
   return 0
 }
 
+/** One code is the other with characters missing (in order), sharing its start. */
+export function codesRelated(a, b) {
+  const x = codeKey(a), y = codeKey(b)
+  if (!x || !y || x === y) return false
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x]
+  if (short.length < 5 || long.length - short.length > 4 || short.slice(0, 3) !== long.slice(0, 3)) return false
+  let i = 0
+  for (const ch of long) if (ch === short[i]) i++
+  return i === short.length
+}
+
 const WORD = /[a-z0-9.]+/g
 const STOP = new Set(['the', 'and', 'with', 'for', 'x', 'mm', 'of', 'set', 'kit'])
 const wordsOf = t => new Set((str(t).toLowerCase().match(WORD) || []).filter(w => w.length > 1 && !STOP.has(w)))
@@ -213,8 +224,12 @@ export function pairLines(items, lines) {
   const scored = []
   lines.forEach((l, li) => items.forEach((it, ii) => {
     let score = codeMatch(it.referenceCode, l.referenceCode) * 10
-    if (!score && (!codeKey(it.referenceCode) || !codeKey(l.referenceCode))
-      && describedAlike(it.productName || it.description, l.description)) score = 5
+    const alike = describedAlike(it.productName || it.description, l.description)
+    // A code with characters lost from the middle ("SEA-85-09" for
+    // "SEA-85-0509", Mat 10 Nov 2026: the sticker was obscured) counts only
+    // when the descriptions agree as well.
+    if (!score && alike && codesRelated(it.referenceCode, l.referenceCode)) score = 6
+    if (!score && (!codeKey(it.referenceCode) || !codeKey(l.referenceCode)) && alike) score = 5
     if (score) scored.push({ li, ii, score })
   }))
   scored.sort((a, b) => b.score - a.score)

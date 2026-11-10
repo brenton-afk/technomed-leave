@@ -1281,6 +1281,11 @@ offers the distributor's cases from the three weeks before it (`recent case`)
 and pushes cases over 45 days old down. **Find the case** on the review
 (`action=resupply-find`, `findCases`: surname, surgeon or folder name over
 the last 600 records) picks any case the scan did not offer.
+A code with characters lost from the middle (`codesRelated`: same start, the
+shorter's characters in order within the longer, at most four missing) pairs
+**only when the descriptions agree too** (Mat, same day: "SEA-85-09" off an
+obscured sticker for "SEA-85-0509"). **Amend can now correct the code of an
+existing line** (`data-amend-code`); it was only quantities and new lines.
 
 ### The scanner
 

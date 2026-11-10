@@ -110,7 +110,16 @@ export default function AmendUsage({ usageId, user, onClose, onDone }) {
                 <div style={{ ...text('caption'), fontWeight: 700, color: colour.ink, textDecoration: item.excluded ? 'line-through' : 'none' }}>
                   {item.productName || item.description} {item.size}
                 </div>
-                <div style={{ ...text('micro'), textTransform: 'none', color: colour.inkFaint }}>{item.distributor || (item.id ? 'Not sent' : 'New')}{item.referenceCode ? ` · ${item.referenceCode}` : ''}</div>
+                <div style={{ ...text('micro'), textTransform: 'none', color: colour.inkFaint }}>{item.distributor || (item.id ? 'Not sent' : 'New')}{!item.id && item.referenceCode ? ` · ${item.referenceCode}` : ''}</div>
+                {/* The code can be corrected too (Mat, 10 Nov 2026: a sticker was
+                    obscured and the code read short), so resupply can match it. */}
+                {item.id && (
+                  <input aria-label={`Product code of ${item.productName || item.description}`} data-amend-code
+                    value={item.referenceCode || ''} placeholder="Product code"
+                    onChange={e => edit(item.id, { referenceCode: e.target.value })}
+                    disabled={item.excluded}
+                    style={{ ...input, marginTop: 4, minHeight: 34, padding: '0 8px', width: '100%' }} />
+                )}
               </div>
               <input type="number" min="0" aria-label={`Quantity of ${item.productName}`} value={item.quantity ?? 1}
                 onChange={e => (item.id ? edit(item.id, { quantity: Number(e.target.value) }) : null)}
