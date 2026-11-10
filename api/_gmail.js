@@ -94,9 +94,18 @@ function walk(part, out) {
 
 /** Message ids in the mailbox matching a Gmail search. */
 export async function searchMailbox(query, { max = 25 } = {}) {
-  const data = await gmail(
-    `/messages?q=${encodeURIComponent(query)}&maxResults=${Math.min(max, 100)}`)
-  return (data.messages || []).map(m => m.id)
+  // Paged: a busy fortnight in bookings@ is more than one page, and a cap that
+  // silently drops the oldest emails is how a booking goes unseen.
+  const ids = []
+  let pageToken = ''
+  do {
+    const data = await gmail(
+      `/messages?q=${encodeURIComponent(query)}&maxResults=${Math.min(max - ids.length, 100)}`
+      + (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''))
+    ids.push(...(data.messages || []).map(m => m.id))
+    pageToken = data.nextPageToken || ''
+  } while (pageToken && ids.length < max)
+  return ids
 }
 
 /** One message, with its attachments fetched. */
@@ -187,7 +196,11 @@ export async function headersOf(id) {
   const message = await gmail(
     `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`)
   const header = name => (message.payload?.headers || []).find(h => h.name.toLowerCase() === name)?.value || ''
-  return { from: header('from'), subject: header('subject'), snippet: message.snippet || '' }
+  const received = Number(message.internalDate)
+  return {
+    from: header('from'), subject: header('subject'), snippet: message.snippet || '',
+    receivedAt: Number.isFinite(received) && received > 0 ? new Date(received).toISOString() : ''
+  }
 }
 
 // ─── Reading a loan set's email trail ─────────────────────────────────────────

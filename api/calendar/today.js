@@ -59,7 +59,7 @@ import { readDictatedBooking } from '../_readDictatedBooking.js'
 import { readVoiceCommand } from '../_voiceCommand.js'
 import {
   sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar, asksForCover, DISTRIBUTOR_REQUEST,
-  movedOnCalendar, loanLogisticsTwin
+  movedOnCalendar, loanLogisticsTwin, looksLikeBooking, OTHER_SENDER
 } from '../../src/clinicalPlan/bookingSources.js'
 import { systemsInKit, resolveKit } from '../../src/clinicalPlan/systems.js'
 import {
@@ -170,6 +170,7 @@ export default async function handler(req, res) {
   // person before they reach the calendar — see api/_redis.js for why.
   if (req.query.action === 'queue') return handleQueue(req, res)
   if (req.query.action === 'ingest') return handleIngest(req, res)
+  if (req.query.action === 'setaside') return handleSetAside(req, res)
   if (req.query.action === 'accept') return handleAccept(req, res)
   if (req.query.action === 'dismiss') return handleDismiss(req, res)
   // A booking spoken into the phone. Fills the form; does not make the booking.
@@ -1318,6 +1319,8 @@ async function handleQueue(req, res) {
 // at a time finishes well inside it; the response says how many are left so the
 // team can tap again rather than wonder.
 const PER_RUN = 8
+// How far down a fortnight of bookings@ one pass looks.
+const INBOX_SPAN_MAX = 300
 // How many of those are read at once. Reading one email is mostly waiting on
 // the model; four at a time takes a run from about a minute and a half to
 // about twenty seconds without asking the API for more than it will give.
@@ -1348,10 +1351,86 @@ async function handleIngest(req, res) {
     }
   }
   try {
-    return res.status(200).json(await ingestBookings())
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const force = Array.isArray(body.force) ? body.force : []
+    return res.status(200).json(await ingestBookings({ force }))
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
+}
+
+// ─── Every bookings@ email accounted for (Brent, 11 Nov 2026) ────────────────
+// "Pt Bal is in the bookings email untouched and unbooked. When I check the
+// portal tells me nothing outstanding. These mistakes cannot happen." The
+// Inbox now lists every email of the fortnight that did not become a card —
+// set aside for its sender, read with nothing found, unreadable, or not yet
+// reached — each with Read it as a booking and Not a booking. And the cases
+// matched to the calendar, with what they matched, so a wrong match shows.
+//
+// GET: the list. POST {messageId, review: true}: "Not a booking", off it.
+async function handleSetAside(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  try {
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+      const id = String(body.messageId || '')
+      if (!/^[A-Za-z0-9_-]{6,64}$/.test(id)) return res.status(400).json({ error: 'Which email?' })
+      const record = await bookingEmailRecord(id) || {}
+      await markBookingEmailSeen(id, record.count || 0, {
+        ...record, reviewed: Boolean(body.review), reviewedBy: session.email || '', reviewedAt: new Date().toISOString()
+      })
+      return res.status(200).json({ ok: true })
+    }
+    const ids = await searchMailbox('newer_than:14d -in:spam', { max: INBOX_SPAN_MAX })
+    const records = await Promise.all(ids.map(id => bookingEmailRecord(id).catch(() => null)))
+    const listed = []
+    ids.forEach((id, i) => {
+      const why = setAsideReason(records[i])
+      if (why) listed.push({ messageId: id, record: records[i] || {}, why })
+    })
+    const missing = listed.filter(x => !x.record.subject && !x.record.from)
+    const heads = await inBatches(missing, 8, x => headersOf(x.messageId).catch(() => null))
+    missing.forEach((x, i) => {
+      if (!heads[i]) return
+      x.record = { ...x.record, from: addressOf(heads[i].from), subject: heads[i].subject, receivedAt: heads[i].receivedAt, snippet: heads[i].snippet }
+    })
+    const emails = listed.map(({ messageId, record, why }) => ({
+      messageId,
+      from: record.from || '',
+      subject: String(record.subject || '').slice(0, 200),
+      receivedAt: record.receivedAt || '',
+      why,
+      looksLikeBooking: looksLikeBooking(record.subject || '', record.snippet || '')
+        || why === 'nothing-found' || why === 'unreadable'
+    }))
+    const since = new Date(Date.now() - 14 * 86400000).toISOString()
+    const matched = (await getBookingQueue())
+      .filter(c => c.status === 'onCalendar' && (c.receivedAt || c.createdAt || '') >= since)
+      .slice(0, 60)
+      .map(c => ({
+        id: c.id, patient: c.patient || '', surgeon: c.surgeon || '', date: c.date || '', hospital: c.hospital || '',
+        procedure: c.procedure || '', matchedSummary: c.matchedSummary || '', messageId: c.messageId || ''
+      }))
+    return res.status(200).json({ ok: true, emails, matched })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * Why an email of the fortnight is not a card, or null when it is accounted
+ * for (it produced a card, or a person said it is not a booking).
+ */
+export function setAsideReason(record) {
+  if (!record) return 'not-read-yet'
+  if (record.reviewed) return null
+  if (record.count > 0) return null
+  if (record.failed || record.attempts) return 'unreadable'
+  if (record.echo || record.reason === 'distributor') return 'distributor'
+  if (record.reason === 'not-a-booking-sender') return 'not-a-booking-sender'
+  if (record.reason === 'nothing-found' || record.read) return 'nothing-found'
+  return 'not-a-booking-sender'
 }
 
 const INGEST_RECENT = 'bookings:ingest:recent'
@@ -1364,7 +1443,7 @@ const INGEST_RECENT = 'bookings:ingest:recent'
  */
 const INGEST_LOCK = 'bookings:ingest:lock'
 
-export async function ingestBookings() {
+export async function ingestBookings({ force = [] } = {}) {
   // One pass at a time. The two crons, the Inbox and the background check on
   // opening can all start one, and two passes over the same new email both
   // found it unseen and queued it twice — two cards for one case. A second
@@ -1374,17 +1453,20 @@ export async function ingestBookings() {
     return { ok: true, skipped: 'another check is running', found: 0, count: pending.length, pending }
   }
   try {
-    return await ingestPass()
+    return await ingestPass({ force })
   } finally {
     await redis('DEL', INGEST_LOCK).catch(() => {})
   }
 }
 
-async function ingestPass() {
+async function ingestPass({ force = [] } = {}) {
   {
     // A fortnight back is enough to catch up after a quiet week without trawling
-    // the whole mailbox on every run.
-    const messageIds = await searchMailbox('newer_than:14d -in:spam', { max: 60 })
+    // the whole mailbox on every run. Every page of it: the cap used to be 60,
+    // and a busy fortnight's oldest emails were never looked at at all.
+    const forced = new Set((force || []).filter(id => typeof id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(id)).slice(0, 5))
+    const found14 = await searchMailbox('newer_than:14d -in:spam', { max: INBOX_SPAN_MAX })
+    const messageIds = [...new Set([...found14, ...forced])]
     const existing = await getBookingQueue()
 
     let read = 0
@@ -1436,41 +1518,58 @@ async function ingestPass() {
     // booking: looked at once more, and read again only if it talks about a
     // cancellation — that is how the Nichols email was missed.
     const cancelCheck = r => r && !r.failed && r.count > 0 && (r.rule || 0) < 3
-    const unseen = messageIds.filter((_, i) => !records[i] || records[i].failed || recheck(records[i]) || cancelCheck(records[i]))
+    // A record written before set-aside emails were judged on their words
+    // (no `rule`, or rule < 4) that read nothing and was set aside for its
+    // sender is looked at once more — that is where Pt Bal was.
+    const setAsideBefore = r => r && !r.failed && !r.count && !r.reviewed && (r.rule || 0) < 4 && !r.read
+    const unseen = messageIds.filter((id, i) => forced.has(id) || !records[i] || records[i].failed
+      || recheck(records[i]) || cancelCheck(records[i]) || setAsideBefore(records[i]))
     const wasSeen = new Set(messageIds.filter((_, i) => recheck(records[i])))
     const forCancel = new Map(messageIds.filter((_, i) => cancelCheck(records[i])).map(id => [id, records[messageIds.indexOf(id)]]))
     const heads = await inBatches(unseen, 8, id => headersOf(id).catch(() => ({ from: '', subject: '', snippet: '' })))
+    // What an email was, kept on its record so the Inbox can list anything set
+    // aside by sender and subject without opening the mailbox again.
+    const about = new Map()
+    const outcomes = {}
 
     const toRead = []
     for (let i = 0; i < unseen.length; i++) {
-      const { from: rawFrom, subject, snippet } = heads[i]
+      const { from: rawFrom, subject, snippet, receivedAt } = heads[i]
       const from = addressOf(rawFrom)
-      if (forCancel.has(unseen[i]) && !CANCEL_WORDS.test(`${subject} ${snippet}`)) {
-        await markBookingEmailSeen(unseen[i], forCancel.get(unseen[i]).count)
+      const header = { from, subject: String(subject || '').slice(0, 200), receivedAt: receivedAt || '' }
+      about.set(unseen[i], header)
+      const isForced = forced.has(unseen[i])
+      if (!isForced && forCancel.has(unseen[i]) && !CANCEL_WORDS.test(`${subject} ${snippet}`)) {
+        await markBookingEmailSeen(unseen[i], forCancel.get(unseen[i]).count, header)
         continue
       }
       let source = sourceOf(from)
+      const looks = looksLikeBooking(subject, snippet)
       if (isDistributorEmail(from)) {
-        if (asksForCover(subject, snippet)) {
+        if (isForced || asksForCover(subject, snippet) || looks) {
           source = DISTRIBUTOR_REQUEST
         } else {
           echoes += 1
-          await markBookingEmailSeen(unseen[i], 0, { echo: true })
+          await markBookingEmailSeen(unseen[i], 0, { echo: true, reason: 'distributor', ...header })
           continue
         }
       }
       if (!source) {
-        if (!wasSeen.has(unseen[i])) skipped += 1
-        await markBookingEmailSeen(unseen[i], 0)
-        continue
+        if (isForced || looks) {
+          source = OTHER_SENDER
+        } else {
+          if (!wasSeen.has(unseen[i])) skipped += 1
+          await markBookingEmailSeen(unseen[i], 0, { reason: 'not-a-booking-sender', ...header })
+          continue
+        }
       }
       // Read once already, from a booking source, and nothing in it: only the
       // record is brought up to date — it is not read a second time.
-      if (wasSeen.has(unseen[i]) && source !== DISTRIBUTOR_REQUEST) {
-        await markBookingEmailSeen(unseen[i], 0)
+      if (!isForced && wasSeen.has(unseen[i]) && source !== DISTRIBUTOR_REQUEST && source !== OTHER_SENDER) {
+        await markBookingEmailSeen(unseen[i], 0, { reason: 'nothing-found', read: true, ...header })
         continue
       }
-      if (toRead.length >= PER_RUN) { remaining += 1; continue }
+      if (!isForced && toRead.length >= PER_RUN) { remaining += 1; continue }
       toRead.push({ messageId: unseen[i], source })
     }
 
@@ -1488,15 +1587,20 @@ async function ingestPass() {
 
     for (const reading of readings) {
       const { messageId, source } = reading
+      const outcome = outcomes[messageId] = { found: 0, queued: 0, already: [], merged: 0 }
       if (reading.error) {
         unreadable += 1
+        outcome.error = 'Could not be read'
         await markBookingEmailFailed(messageId, reading.error.message)
         continue
       }
       read += 1
       const { email, found } = reading
+      const queuedBefore = queued.length
+      let kept = 0
       for (const booking of found) {
         if (!booking.patient && !booking.surgeon) continue
+        kept += 1
 
         const candidate = {
           ...booking,
@@ -1557,6 +1661,7 @@ async function ingestPass() {
           const twinOnCalendar = alreadyInCalendar(candidate, onDays) || loanLogisticsTwin(candidate, onDays)
           if (twinOnCalendar) {
             already += 1
+            outcome.already.push(twinOnCalendar.summary || '')
             await saveBookingCandidate({
               ...candidate,
               status: 'onCalendar',
@@ -1586,26 +1691,31 @@ async function ingestPass() {
           const merged = mergeBookings(twin, candidate)
           await saveBookingCandidate(merged)
           Object.assign(twin, merged)
+          outcome.merged += 1
           continue
         }
 
         // A case already dismissed stays dismissed: re-reading the email that
         // carried it must not resurrect it.
         const buried = existing.find(c => c.status === 'dismissed' && isSameBooking(c, candidate))
-        if (buried) continue
+        if (buried) { outcome.dismissed = (outcome.dismissed || 0) + 1; continue }
 
         await saveBookingCandidate(candidate)
         queued.push(candidate)
       }
 
-      await markBookingEmailSeen(messageId, found.length)
+      outcome.found = kept
+      outcome.queued = queued.length - queuedBefore
+      await markBookingEmailSeen(messageId, kept, {
+        ...(about.get(messageId) || {}), read: true, ...(kept ? {} : { reason: 'nothing-found' })
+      })
     }
 
     const settled = await reconcileQueue(await getBookingQueue(), todayInHobart())
     const pending = (await getBookingQueue()).filter(c => c.status === 'pending')
     return {
       ok: true, read, skipped, remaining, unreadable, echoes, already,
-      returned: settled.returned, nowBooked: settled.nowBooked,
+      returned: settled.returned, nowBooked: settled.nowBooked, outcomes,
       found: queued.length, count: pending.length, pending
     }
   }

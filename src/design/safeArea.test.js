@@ -123,6 +123,8 @@ describe('no screen is left out', () => {
     'kit/TrayList.jsx', 'kit/EditableTray.jsx',
     // Part of the auto-add card and the booking sheets.
     'cases/KitPicker.jsx',
+    // The set-aside list inside the bookings Inbox sheet.
+    'cases/SetAsideEmails.jsx',
     'cases/LoanTrail.jsx',
     // A section of the usage screen after filing.
     'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx', 'scan/BoostForm.jsx', 'scan/CaseFiles.jsx',

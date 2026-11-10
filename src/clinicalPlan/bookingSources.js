@@ -133,6 +133,31 @@ export const DISTRIBUTOR_DOMAINS = [
 const ECHO_SUBJECT = /^\s*(?:(?:updated\s+)?invitation|accepted|declined|tentative(?:ly accepted)?|cancell?ed(?:\s+event)?)\b/i
 const ASKS_FOR_COVER = /\b(?:case\s*(?:coverage|cover|support)|cover(?:age)?\s+(?:request|for)|support\s+(?:request|for)|(?:can|could)\s+(?:you|tm|technomed|team\s*tm)\s+(?:please\s+)?(?:cover|support|attend)|reps?\s+(?:required|needed|request)|need\s+(?:a\s+)?rep|clinical\s+support)\b/i
 
+// ─── Reading what might be a booking, whoever sent it ────────────────────────
+// Brent, 11 Nov 2026: "Pt Bal is in the bookings email untouched and unbooked.
+// When I check the portal tells me nothing outstanding. These mistakes cannot
+// happen." An email from a sender that was not a known booking source, or a
+// distributor not asking for cover in so many words, was set aside unread and
+// the Inbox said nothing was waiting. Now anything whose subject or opening
+// words look like a case is read whoever sent it, and everything else is
+// listed on the Inbox as set aside — never dropped without a trace.
+const BOOKING_HINT = /\b(?:book(?:ing|ed)?|theatre|theater|list|surgery|operation|procedure|admission|admit|pt|patient|case|acdf|alif|plif|tlif|xlif|olif|fusion|laminectomy|laminotomy|discectomy|decompression|fixation|craniotomy|kyphoplasty|vertebroplasty|biopsy|revision|removal|arthroplasty|loan\s*(?:set|kit)|implant)\b/i
+
+/** Whether an email's subject or opening words look like a case. */
+export function looksLikeBooking(subject = '', snippet = '') {
+  if (ECHO_SUBJECT.test(String(subject || ''))) return false
+  return BOOKING_HINT.test(`${subject || ''}\n${snippet || ''}`)
+}
+
+/** The source an email from an unknown sender is read as. The email says where. */
+export const OTHER_SENDER = {
+  id: 'other',
+  label: 'Another sender',
+  hospital: null,
+  from: [],
+  shape: 'single'
+}
+
 /** Whether a distributor's email asks TechnoMed to cover or support a case. */
 export function asksForCover(subject, snippet = '') {
   if (ECHO_SUBJECT.test(String(subject || ''))) return false

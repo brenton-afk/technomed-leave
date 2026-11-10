@@ -11,6 +11,7 @@ import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { distributorNameOf } from '../../clinicalPlan/bookingSources.js'
 import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
 import { offerNotices } from '../../notices.js'
+import SetAsideEmails from './SetAsideEmails.jsx'
 
 // ─── Bookings waiting to be confirmed ────────────────────────────────────────
 // Everything read out of bookings@technomed.com.au stops here first.
@@ -513,6 +514,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
   const [error, setError] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState(null)
+  const [scans, setScans] = useState(0)
 
   const headers = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -560,6 +562,7 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
       setError(err.message)
     }
     setScanning(false)
+    setScans(n => n + 1)
   }, [headers])
 
   useEffect(() => {
@@ -670,14 +673,19 @@ export default function BookingQueue({ user, onClose, onAccepted }) {
 
             {pending?.length === 0 && !error && !scanning && (
               <div style={{ ...text('body'), color: colour.inkMuted }}>
-                Nothing waiting. Bookings emailed to bookings@technomed.com.au
-                turn up here before they reach the calendar.
+                No bookings waiting to confirm. Anything in bookings@ that did not
+                become one is listed below.
               </div>
             )}
 
             {(pending || []).map(candidate => (
               <Candidate key={candidate.id} candidate={candidate} user={user} onDone={done} nth={nths[candidate.id] || 1} />
             ))}
+
+            {scans > 0 && (
+              <SetAsideEmails headers={headers} refreshKey={scans}
+                onRead={body => { if (Array.isArray(body.pending)) setPending(body.pending) }} />
+            )}
           </div>
 
           <div style={{

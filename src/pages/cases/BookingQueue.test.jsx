@@ -162,9 +162,9 @@ describe('reading the mailbox', () => {
     })
     show()
     await waitFor(() => expect(screen.getByText(/Checking the bookings inbox for anything/)).toBeInTheDocument())
-    expect(screen.queryByText(/Nothing waiting/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/No bookings waiting/)).not.toBeInTheDocument()
     finish()
-    await waitFor(() => expect(screen.getByText(/Nothing waiting/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/No bookings waiting/)).toBeInTheDocument())
   })
 
   it('carries on by itself while there are emails left, and stops', async () => {

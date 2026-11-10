@@ -275,6 +275,22 @@ it now uses `isCancelled`, as the week does. A cancellation card for a day
 already gone is never shown: `queueCancellation` files it as `day passed`,
 and `reconcileQueue` settles any still pending.
 
+**Every bookings@ email is accounted for** (Brent, 11 Nov 2026: "Pt Bal is
+in the bookings email untouched and unbooked … the portal tells me nothing
+outstanding. These mistakes cannot happen"). The check reads the whole
+fortnight (paged, `INBOX_SPAN_MAX` 300; it was capped at 60), and an email
+from an unknown sender or a distributor is read whenever its subject or
+opening words look like a case (`looksLikeBooking`, read as `OTHER_SENDER` /
+`DISTRIBUTOR_REQUEST`); records set aside before this (`rule` < 4) are looked
+at once more. Seen records now keep from, subject, receivedAt and a `reason`.
+Under the cards, `cases/SetAsideEmails.jsx` (`action=setaside`,
+`setAsideReason`) lists every email of the fortnight that did not become a
+card — not read yet, unreadable, read with nothing found, distributor, not a
+booking sender — likely bookings first, the rest folded, each with **Read it
+as a booking** (`action=ingest` with `force: [id]`, `outcomes` says what came
+of it), **Not a booking** (POST `setaside`, `reviewed`) and Open in Gmail;
+then "Already on the calendar (N)" with the entry each case matched, so a
+wrong match shows.
 **Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
 `action=search` in `api/calendar/today.js`): Google's own full-text search over
 2020 to a year ahead, each hit read through `readBooking`, cases only.

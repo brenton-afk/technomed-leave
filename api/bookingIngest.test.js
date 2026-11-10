@@ -308,3 +308,75 @@ describe('a cancellation with nothing on the calendar to match', () => {
     expect(accept.payload.cancelledBooking).toBeFalsy()
   })
 })
+
+// Brent, 11 Nov 2026: "Pt Bal is in the bookings email untouched and unbooked.
+// When I check the portal tells me nothing outstanding. These mistakes cannot
+// happen." Invented patients throughout.
+describe('nothing in bookings@ is left without a trace', () => {
+  it('reads a booking from a sender that is not a known booking source', async () => {
+    mailbox = {
+      rooms: { from: 'Reception <reception@somesurgeonsrooms.com.au>', subject: 'Theatre booking – Pt Testb', snippet: 'Please book' },
+      news: { from: 'newsletter@example.com', subject: 'Our November specials' }
+    }
+    const res = await call('ingest', {})
+    expect(downloaded).toEqual(['rooms'])
+    expect(res.payload.found).toBe(1)
+    expect(records.get('news')).toMatchObject({ reason: 'not-a-booking-sender', subject: 'Our November specials' })
+  })
+
+  it('reads a distributor email that is plainly about a booking', async () => {
+    mailbox = { dev: { from: 'loans@device.com.au', subject: 'Booking Pt Testb ACDF Friday', snippet: '' } }
+    await call('ingest', {})
+    expect(downloaded).toEqual(['dev'])
+  })
+
+  it('looks again at an email set aside before this change', async () => {
+    mailbox = { rooms: { from: 'reception@somesurgeonsrooms.com.au', subject: 'Pt Testb surgery', snippet: '' } }
+    seen.add('rooms'); records.set('rooms', { count: 0, rule: 3 })
+    await call('ingest', {})
+    expect(downloaded).toEqual(['rooms'])
+  })
+
+  it('reads any email on request and says what came of it', async () => {
+    mailbox = { oddmsg1: { from: 'someone@example.com', subject: 'Fwd: FYI' } }
+    await call('ingest', {})
+    expect(downloaded).toEqual([])
+    const res = await call('ingest', { force: ['oddmsg1'] })
+    expect(downloaded).toEqual(['oddmsg1'])
+    expect(res.payload.outcomes.oddmsg1).toMatchObject({ found: 1, queued: 1 })
+  })
+
+  it('lists every email that did not become a card, until someone says it is not a booking', async () => {
+    const list = async () => {
+      const res = { statusCode: 0, payload: null, status(c) { this.statusCode = c; return this }, json(d) { this.payload = d; return this }, setHeader() {} }
+      await handler({ method: 'GET', query: { action: 'setaside' }, headers: {} }, res)
+      return res.payload
+    }
+    mailbox = {
+      cnsmsg1: { from: 'bookings@cnstas.com.au', subject: 'Booking' },
+      newsmsg1: { from: 'newsletter@example.com', subject: 'Our November specials' }
+    }
+    await call('ingest', {})
+    mailbox.freshmsg1 = { from: 'x@example.com', subject: 'Pt Testc list' }
+    const listed = await list()
+    expect(listed.emails.map(e => e.messageId).sort()).toEqual(['freshmsg1', 'newsmsg1'])
+    expect(listed.emails.find(e => e.messageId === 'freshmsg1')).toMatchObject({ why: 'not-read-yet', subject: 'Pt Testc list', looksLikeBooking: true })
+    expect(listed.emails.find(e => e.messageId === 'newsmsg1')).toMatchObject({ why: 'not-a-booking-sender', looksLikeBooking: false })
+
+    expect((await call('setaside', { messageId: 'newsmsg1', review: true })).statusCode).toBe(200)
+    expect((await list()).emails.map(e => e.messageId)).toEqual(['freshmsg1'])
+  })
+})
+
+describe('setAsideReason', async () => {
+  const { setAsideReason } = await import('./calendar/today.js')
+  it('accounts for each kind of record', () => {
+    expect(setAsideReason(null)).toBe('not-read-yet')
+    expect(setAsideReason({ count: 2 })).toBe(null)
+    expect(setAsideReason({ count: 0, reviewed: true })).toBe(null)
+    expect(setAsideReason({ count: 0, attempts: 3 })).toBe('unreadable')
+    expect(setAsideReason({ count: 0, echo: true })).toBe('distributor')
+    expect(setAsideReason({ count: 0, read: true })).toBe('nothing-found')
+    expect(setAsideReason({ count: 0 })).toBe('not-a-booking-sender')
+  })
+})

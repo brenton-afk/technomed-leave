@@ -517,7 +517,7 @@ export async function markBookingEmailSeen(messageId, count = 0, extra = {}) {
   // read (see asksForCover). Older records with nothing found are looked at
   // again once, because some of them were cover requests set aside unread.
   await redis('set', `bookingQueue:seen:${messageId}`, JSON.stringify({
-    at: new Date().toISOString(), count, rule: 3, ...extra
+    at: new Date().toISOString(), count, rule: 4, ...extra
   }))
 }
 
