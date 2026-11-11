@@ -61,7 +61,9 @@ export default async function handler(req, res) {
   let hours = null
   // Required for part-time staff; for TOIL, taken whenever it is sent, since
   // TOIL is held in hours and a part day is the usual case.
-  if (workPatternFor(email) || (leaveType === 'TOIL' && Array.isArray(req.body?.hours))) {
+  // And for anybody's part days (Brent, 11 Nov 2026): a full-time person may
+  // now give hours for any leave type, checked the same way.
+  if (workPatternFor(email) || Array.isArray(req.body?.hours)) {
     try {
       hours = cleanLeaveHours(req.body?.hours, { startDate, endDate })
     } catch (err) {

@@ -257,6 +257,63 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
   throw new Error(lastError?.message || 'Google Calendar error')
 }
 
+/**
+ * Moves an approved leave's calendar entry to its amended dates (Brent, 11 Nov
+ * 2026). The entry is found by the id kept at approval, or — for leave
+ * approved before ids were kept — by its title on its old first day, on the
+ * Staff Leave calendar and then the bookings one. Edited in place, never a
+ * second entry: two entries for one leave is the duplicate this calendar has
+ * already been through. Returns { updated, eventId } or { updated: false }.
+ */
+export async function updateLeaveEvent(before, after) {
+  const leaveCalendar = (process.env.GOOGLE_LEAVE_CALENDAR_ID || STAFF_LEAVE_CALENDAR_ID).trim()
+  const sa = await getGoogleToken(CALENDAR_SCOPE_WRITE)
+  const ways = [
+    async () => getGoogleToken(CALENDAR_SCOPE_EVENTS, { impersonate: CALENDAR_OWNER }),
+    async () => sa
+  ]
+  const label = LEAVE_LABELS[after.leaveType] || after.leaveType
+  const dayAfter = d => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10) }
+  const patch = {
+    summary: `${after.name} — ${label}`,
+    start: { date: after.startDate },
+    end: { date: dayAfter(after.endDate) },
+    description: [`Employee: ${after.name}`, `Division: ${after.division || ''}`, `Leave type: ${label}`,
+      ...(after.totalHours ? [`Hours: ${after.totalHours}`] : []), `Reason: ${after.reason || ''}`, '',
+      'Submitted via TechnoMed Leave Portal (amended)'].join('\n')
+  }
+
+  const candidates = before.calendar?.eventId
+    ? [{ calendarId: before.calendar.calendarId || leaveCalendar, eventId: before.calendar.eventId }]
+    : []
+  for (const calendarId of [leaveCalendar, GOOGLE_CALENDAR_ID]) {
+    if (candidates.length) break
+    for (const way of ways) {
+      let bearer
+      try { bearer = await way() } catch { continue }
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`
+        + `?timeMin=${encodeURIComponent(`${before.startDate}T00:00:00Z`)}&timeMax=${encodeURIComponent(`${dayAfter(before.startDate)}T23:59:59Z`)}`
+        + `&singleEvents=true&q=${encodeURIComponent(before.name)}`
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${bearer}` } })
+      const data = await res.json().catch(() => ({}))
+      if (data.error) continue
+      const hit = (data.items || []).find(e => String(e.summary || '').startsWith(`${before.name} — `) && e.start?.date === before.startDate)
+      if (hit) { candidates.push({ calendarId, eventId: hit.id }); break }
+    }
+  }
+  for (const { calendarId, eventId } of candidates) {
+    for (const way of ways) {
+      let bearer
+      try { bearer = await way() } catch { continue }
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
+      })
+      if (res.ok) return { updated: true, eventId, calendarId }
+    }
+  }
+  return { updated: false }
+}
+
 // ─── Marking who attended a case ──────────────────────────────────────────────
 
 /** `(Brent)` — the form the team already writes by hand. */

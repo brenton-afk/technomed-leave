@@ -16,6 +16,12 @@ const VARIANTS = {
     badgeText: '#1a7a6e',
     banner: { bg: '#e6f4f2', text: '#1a7a6e', label: '✅ This leave has been approved.' }
   },
+  amended: {
+    heading: 'Leave Amended',
+    badge: '#e6f4f2',
+    badgeText: '#1a7a6e',
+    banner: { bg: '#fff4e5', text: '#8a5200', label: '✏️ This leave has been changed — the details below replace the earlier ones.' }
+  },
   declined: {
     heading: 'Leave Declined',
     badge: '#fdecea',
@@ -93,6 +99,8 @@ function buildEmailHtml(application, variant, declineReason) {
     ['Reason', reason]
   ]
   if (variant === 'declined' && declineReason) rows.push(['Decline reason', declineReason])
+  // For an amendment, `declineReason` carries what changed and who changed it.
+  if (variant === 'amended' && declineReason) rows.push(['Changed', declineReason])
 
   const rowHtml = rows.map(([label, value], i) => `
   <tr${i % 2 === 0 ? ' style="background:#f8f9fc;"' : ''}><td style="padding:11px 14px;font-size:12px;color:#6b7a8d;width:140px;">${escapeHtml(label)}</td><td style="padding:11px 14px;font-size:13px;color:#1a2b4a;font-weight:500;">${escapeHtml(value)}</td></tr>`).join('')
@@ -329,6 +337,20 @@ export async function sendDeclineEmail(application, declineReason = '') {
       `Leave declined for ${application.name}`,
       declineReason ? `\nDecline reason: ${declineReason}` : ''
     )
+  })
+}
+
+// Sent to the employee (cc approvers) when an admin amends their leave
+// (Brent, 11 Nov 2026: "Aimee wants to amend her annual leave … to 10.5 hours").
+export async function sendLeaveAmendedEmail(application, change = '') {
+  const leaveLabel = LEAVE_LABELS[application.leaveType] || application.leaveType
+  return send({
+    kind: 'leave',
+    to: [employeeEmail(application), ...adminRecipients()],
+    subject: `Leave Amended — ${application.name} (${leaveLabel})`,
+    html: buildEmailHtml(application, 'amended', change),
+    text: summaryText(application, `Leave amended for ${application.name}`,
+      `${application.totalHours ? `\nHours: ${application.totalHours}` : ''}${change ? `\nChanged: ${change}` : ''}`)
   })
 }
 

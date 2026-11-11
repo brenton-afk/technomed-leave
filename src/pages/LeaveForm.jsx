@@ -187,6 +187,10 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
   // date range, which Xero already gets right for a standard week.
   const ownPattern = workPatternFor(user?.email)
   const [hours, setHours] = useState([])
+  // A full-time person's part days (Brent, 11 Nov 2026: Aimee's 10.5 hours of
+  // annual leave). Off by default — most leave is whole days — and when on,
+  // every day is listed at 7.6 to change.
+  const [partDays, setPartDays] = useState(false)
   const [form, setForm] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -211,7 +215,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
   // is the common case. A standard 7.6 Mon–Fri for anybody without a pattern
   // of their own, every day of it editable.
   const pattern = ownPattern
-    || (form.leaveType === 'TOIL' ? { kind: 'fixed', days: [STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, 0, 0] } : null)
+    || (form.leaveType === 'TOIL' || partDays ? { kind: 'fixed', days: [STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, STANDARD_DAY, 0, 0] } : null)
 
   // Re-laid when the dates change, keeping anything already typed for a day
   // that is still in the range.
@@ -249,7 +253,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
       if (!form.returnDate) return 'Pick the day you are back at work'
       if (form.endDate < form.startDate) return 'The last day cannot be before the first'
       if (form.returnDate <= form.endDate) return 'You come back after your last day of leave'
-      if (ownPattern) {
+      if (ownPattern || partDays) {
         if (hours.some(d => !(Number(d.hours) >= 0 && Number(d.hours) <= 12))) {
           return 'Each day must be between 0 and 12 hours'
         }
@@ -257,7 +261,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
       }
     }
     if (step === 1 && !form.leaveType) return 'Choose a type of leave'
-    if (step === 1 && pattern && !ownPattern) {
+    if (step === 1 && pattern && !ownPattern && !partDays) {
       if (hours.some(d => !(Number(d.hours) >= 0 && Number(d.hours) <= 12))) {
         return 'Each day must be between 0 and 12 hours'
       }
@@ -362,6 +366,25 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
                   d => (d.date === date ? { ...d, hours: value } : d)))} />
             )}
 
+            {/* Part days for anybody on a standard week (Brent, 11 Nov 2026). */}
+            {!ownPattern && form.endDate && (
+              <Card>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: NAVY, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={partDays} data-part-days
+                    onChange={e => setPartDays(e.target.checked)} style={{ width: 20, height: 20, fontSize: 16 }} />
+                  <span>
+                    <strong>Any part days?</strong>
+                    <span style={{ display: 'block', fontSize: 12.5, color: MUTED }}>Set the hours for each day instead of whole days</span>
+                  </span>
+                </label>
+              </Card>
+            )}
+            {!ownPattern && partDays && form.endDate && (
+              <HoursCard pattern={pattern} days={hours}
+                onChange={(date, value) => setHours(list => list.map(
+                  d => (d.date === date ? { ...d, hours: value } : d)))} />
+            )}
+
             {form.endDate && (
               <Card>
                 <Field label="Back at work" hint="Filled in for you — change it if you are back later.">
@@ -413,7 +436,7 @@ export default function LeaveForm({ user, onSuccess, onBack }) {
             {/* TOIL in hours for somebody on a standard week: here, once
                 they have said it is TOIL. Part-time staff already set their
                 hours on the first step. */}
-            {form.leaveType === 'TOIL' && !ownPattern && form.endDate && (
+            {form.leaveType === 'TOIL' && !ownPattern && !partDays && form.endDate && (
               <HoursCard pattern={pattern} days={hours}
                 onChange={(date, value) => setHours(list => list.map(
                   d => (d.date === date ? { ...d, hours: value } : d)))} />

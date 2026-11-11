@@ -1098,6 +1098,21 @@ what the team already writes by hand. Notably, **`api/auth/pin.js` imports it ac
 3. `AdminPortal.jsx` → `api/admin/action.js` — approve or decline. Re-acting on a non-pending application returns 409, so a double-tap cannot submit to Xero twice.
 4. On approve: `updateApplicationStatus` moves the id from `leave:pending` to `leave:approved`/`leave:declined`, then **three side effects run independently, each in its own try/catch** — Xero leave application, Google Calendar event, notification email. Any of them can fail without blocking approval; each result and error is returned in the response body (`xeroError`, `calendarError`, `emailError`) and surfaced in the admin UI banner, so a silent integration failure cannot look like a clean approval.
 
+5. **Amend** (Brent, 11 Nov 2026: Aimee's annual leave to 10.5 hours): admins
+   amend pending or approved leave from Admin → Leave (`admin/AmendLeave.jsx`,
+   `action: 'amend'` in `api/admin/action.js`) — dates, type and the hours of
+   every day (0 = not leave). Always in hours. Pending: the record changes and
+   the person is emailed. Approved: also the **same** Xero application is
+   changed (`amendXeroLeave`, LeaveApplicationID sent back, LeavePeriods per
+   pay period, other overlapping leave stops it) and the calendar entry moved
+   (`updateLeaveEvent`: the `calendar.eventId` kept at approval since this
+   change, else found by title on its old first day) — each step on its own,
+   failures shown. `amendments` keeps who, when and what it was. TOIL follows
+   because `leaveOnDays` reads the record's hours. **Part days for everyone**:
+   the leave form's "Any part days?" gives anybody on a standard week the
+   hours card (7.6 a day, editable), and `api/submit.js` takes hours whenever
+   sent.
+
 Redis keys: `leave:{id}` (JSON blob), `leave:pending` / `leave:approved` / `leave:declined` (id lists), `pin:{email}` (4-digit PIN, plaintext), `session:{token}` (JSON, 1h TTL), `xero_at` / `xero_rt` / `xero_tid` / `xero_exp`.
 
 All Redis access goes through the single exported `redis()` helper in `api/_redis.js`; don't re-implement it per route (it used to be duplicated in `api/auth/pin.js` and `_xeroClient.js`, which is how the token-encoding mismatch went unnoticed).

@@ -6,6 +6,7 @@ import EmailLog from './EmailLog.jsx'
 import ToilLedger from './ToilLedger.jsx'
 import NoticeSettings from './NoticeSettings.jsx'
 import Invoices from './Invoices.jsx'
+import AmendLeave from './AmendLeave.jsx'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -108,6 +109,8 @@ export default function AdminPortal({ user }) {
   const [actionLoading, setActionLoading] = useState(null)
   const [declineModal, setDeclineModal] = useState(null)
   const [declineReason, setDeclineReason] = useState('')
+  const [amending, setAmending] = useState(null)
+  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   // Back from connecting Dropbox (or Xero): open on System, where it says how
   // that went.
@@ -254,6 +257,7 @@ export default function AdminPortal({ user }) {
         {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
         {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{error}</div>}
+        {notice && <div role="status" style={{ background:'#e6f4f2', color:'#1a7a6e', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{notice}</div>}
 
         {!loading && currentApps.length === 0 && (
           <div style={{ background:'white', borderRadius:12, padding:40, textAlign:'center', color:'#6b7a8d', fontSize:14 }}>
@@ -284,6 +288,17 @@ export default function AdminPortal({ user }) {
               {/* What Xero says they have left, beside the application rather
                   than in another tab. Approving leave somebody does not have
                   is the mistake this is here to stop. */}
+              {app.totalHours ? (
+                <div style={{ fontSize:12.5, color:'#042746', marginBottom:8 }}>
+                  <strong>{app.totalHours}h</strong>
+                  <span style={{ color:'#6b7a8d' }}> — {(app.hours || []).map(d => `${formatDate(d.date).replace(/ \d{4}$/, '')} ${d.hours}h`).join(', ')}</span>
+                </div>
+              ) : null}
+              {app.amendments?.length ? (
+                <div style={{ fontSize:12, color:'#8a5200', marginBottom:8 }}>
+                  ✏️ Amended {app.amendments.length === 1 ? '' : `${app.amendments.length} times, last `}by {app.amendments[app.amendments.length - 1].by} on {new Date(app.amendments[app.amendments.length - 1].at).toLocaleDateString('en-AU')}
+                </div>
+              ) : null}
               <LeaveBalances who={app} balances={balances} />
               {app.reason && <div style={{ background:'#f8f9fc', borderRadius:8, padding:'10px 12px', fontSize:13, color:'#042746' }}><span style={{ color:'#6b7a8d', fontSize:11 }}>Reason: </span>{app.reason}</div>}
             </div>
@@ -303,8 +318,19 @@ export default function AdminPortal({ user }) {
                 </button>
               </div>
             )}
+            {app.status === 'approved' && (
+              <div style={{ padding:'10px 16px', borderTop:'1px solid rgba(26,43,74,0.06)', display:'flex', justifyContent:'flex-end' }}>
+                <button onClick={() => setAmending(app)} data-amend={app.id}
+                  style={{ padding:'8px 14px', background:'white', color:'#042746', border:'1px solid rgba(26,43,74,0.25)', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                  ✏️ Amend
+                </button>
+              </div>
+            )}
             {app.status === 'pending' && (
               <div style={{ padding:'12px 16px', borderTop:'1px solid rgba(26,43,74,0.06)', display:'flex', gap:10 }}>
+                <button onClick={() => setAmending(app)} data-amend={app.id} style={{ flex:1, padding:12, background:'white', color:'#042746', border:'1px solid rgba(26,43,74,0.25)', borderRadius:8, fontSize:14, fontWeight:600, cursor:'pointer' }}>
+                  ✏️ Amend
+                </button>
                 <button onClick={() => handleAction(app.id, 'approve')} disabled={actionLoading === app.id+'approve'}
                   style={{ flex:2, padding:12, background:'#1a7a6e', color:'white', border:'none', borderRadius:8, fontSize:14, fontWeight:600, cursor:'pointer', opacity: actionLoading===app.id+'approve'?0.7:1 }}>
                   {actionLoading === app.id+'approve' ? 'Approving…' : '✅ Approve'}
@@ -322,6 +348,17 @@ export default function AdminPortal({ user }) {
         </button>
         </>}
       </div>
+
+      {amending && (
+        <AmendLeave app={amending} authHeaders={authHeaders} onClose={() => setAmending(null)}
+          onDone={async data => {
+            setAmending(null)
+            await fetchApplications()
+            const problems = [data.xeroError && `Xero: ${data.xeroError}`, data.calendarError && `Calendar: ${data.calendarError}`, data.emailError && `Email: ${data.emailError}`].filter(Boolean)
+            if (problems.length) setError(`Amended, but some steps failed — ${problems.join(' · ')}`)
+            setNotice(`Amended — ${data.change}.${data.xeroResult ? ' Xero updated.' : ''}${data.calendarResult?.updated ? ' Calendar moved.' : ''}${!data.emailError ? ' Emailed.' : ''}`)
+          }} />
+      )}
 
       {declineModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:20, zIndex:1000 }}>

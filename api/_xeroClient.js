@@ -410,3 +410,52 @@ export async function submitToXero({ name, startDate, endDate, leaveType, reason
     employeeName: `${employee.FirstName} ${employee.LastName}`
   }
 }
+
+/**
+ * Changes leave already in Xero to new dates and hours (Brent, 11 Nov 2026:
+ * amending an approved application). The same LeaveApplicationID is sent back
+ * with the new dates and, always, the hours per pay period — an amendment is
+ * made in hours, so Xero is never left to spread them. Leave Xero holds on
+ * those dates other than this application stops it, as for a new one.
+ */
+export async function amendXeroLeave({ leaveApplicationID, name, leaveType, reason, hours }) {
+  if (!leaveApplicationID) throw new Error('This leave has no Xero record to change — send it to Xero instead')
+  if (!Array.isArray(hours) || !hours.length) throw new Error('An amendment needs the hours for each day')
+  const { token, tenantId } = await getXeroToken()
+  const employee = await findEmployee(token, tenantId, name)
+  const leaveTypeId = await getLeaveTypeId(token, tenantId, leaveType)
+  const periods = hoursByPayPeriod(hours)
+  const from = hours[0].date
+  const to = hours[hours.length - 1].date
+
+  let existing
+  try {
+    existing = (await overlappingXeroLeave(token, tenantId, employee.EmployeeID, from, to))
+      .filter(e => e.id !== leaveApplicationID)
+  } catch (err) {
+    throw Object.assign(new Error(`Not changed in Xero — could not check it for other leave on these dates (${err.message}).`), { code: 'unchecked' })
+  }
+  if (existing.length) throw new XeroLeaveExists(existing, `${employee.FirstName} ${employee.LastName}`)
+
+  const res = await fetch(`${XERO_API_BASE}/LeaveApplications`, {
+    method: 'POST',
+    headers: { ...xeroHeaders(token, tenantId), 'Content-Type': 'application/json' },
+    body: JSON.stringify([{
+      LeaveApplicationID: leaveApplicationID,
+      EmployeeID: employee.EmployeeID,
+      LeaveTypeID: leaveTypeId,
+      StartDate: xeroDate(from),
+      EndDate: xeroDate(to),
+      Title: `${name} - ${leaveType}`,
+      Description: reason || '',
+      LeavePeriods: periods.map(p => ({
+        PayPeriodStartDate: xeroDate(p.start),
+        PayPeriodEndDate: xeroDate(p.end),
+        NumberOfUnits: p.hours
+      }))
+    }])
+  })
+  const { ok, error } = await readXero(res, 'Xero leave amendment')
+  if (!ok) throw new Error(error)
+  return { leaveApplicationID, employeeName: `${employee.FirstName} ${employee.LastName}` }
+}
