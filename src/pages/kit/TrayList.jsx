@@ -1,3 +1,4 @@
+import { uniqueTrayNames } from '../../trayNames.js'
 import React, { useState, useEffect, useRef } from 'react'
 import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
@@ -285,7 +286,9 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
       // carries where each one went.
       const trays = []
       const photoMissed = []
-      for (const t of review.trays) {
+      // Names made unique first: the photo is filed under the tray's name.
+      const named = uniqueTrayNames(review.trays, replaceAll ? [] : (list?.trays || []))
+      for (const t of named) {
         let photo = null
         if (t.photoData) {
           // A photo that cannot be kept (Dropbox not connected) must not cost
@@ -364,7 +367,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             <input type="checkbox" checked={replaceAll} onChange={e => setReplaceAll(e.target.checked)} style={{ fontSize: 16, width: 20, height: 20 }} />
             {replaceAll
               ? `Replace all ${list.trays.length} trays this kit has now`
-              : `Adds to the ${list.trays.length} tray${list.trays.length === 1 ? '' : 's'} this kit has — a tray with the same name is updated. Tick to start the list again instead.`}
+              : `Adds to the ${list.trays.length} tray${list.trays.length === 1 ? '' : 's'} this kit has. Uploading the same document again updates its trays; a tray from another document with a name already used is kept beside it, numbered. Tick to start the list again instead.`}
           </label>
         )}
       </div>

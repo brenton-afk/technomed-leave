@@ -888,6 +888,13 @@ in turn into one review, each tray remembers its `file`. Saving **adds** by
 default (`mode: 'add'` on `savelist`): a tray of the same name is replaced,
 every other tray is kept — because a kit like Diplomat comes as one document
 per tray. A tickbox starts the list again (`mode: 'replace'`).
+**Every tray keeps its own name** (Aimee, 11 Nov 2026: "it overrides them if
+you try to upload a second pdf and saves over"). Trays were matched by name,
+so two documents whose trays read the same ("Tray 1") kept only the last, and
+its photo was filed over the first's. `uniqueTrayNames` (`src/trayNames.js`,
+used by `kit/TrayList.jsx` before photos are filed and by `saveTrayList`)
+replaces a tray only when it comes from the **same document**; any other clash,
+including two in one upload, gets a number — "Tray 1 (2)".
 
 **A saved tray list is live, not read-only.** Anyone signed in can edit a tray
 (`kit/EditableTray.jsx`): quantity steppers, code, description, implant or

@@ -89,11 +89,19 @@ describe('saving a tray list onto a kit', () => {
     let list = await getTrayList(kit.id)
     expect(list.trays.map(t => t.name)).toEqual(['Torque', 'Navigated'])
     expect(list.source.file).toBe('torque.pdf, navigated.pdf')
-    // The same tray again replaces only that tray.
-    await saveTrayList(kit.id, { trays: [tray('torque', 'A-2')], source: { file: 'torque v2.pdf' }, mode: 'add' }, 'Aimee')
+    // The same document again replaces only its own tray.
+    await saveTrayList(kit.id, { trays: [{ ...tray('torque', 'A-2'), file: 'torque.pdf' }], source: { file: 'torque.pdf' }, mode: 'add' }, 'Aimee')
     list = await getTrayList(kit.id)
     expect(list.trays.map(t => [t.name, t.lines[0].code])).toEqual([['Navigated', 'B-1'], ['torque', 'A-2']])
     expect((await listKits()).find(k => k.id === kit.id).trays).toEqual(['Navigated', 'torque'])
+    // Aimee, 11 Nov 2026: a different document whose tray reads the same name
+    // is kept beside it, numbered — never saved over it.
+    await saveTrayList(kit.id, { trays: [{ ...tray('Torque', 'A-3'), file: 'second.pdf' }], source: { file: 'second.pdf' }, mode: 'add' }, 'Aimee')
+    list = await getTrayList(kit.id)
+    expect(list.trays.map(t => [t.name, t.lines[0].code])).toEqual([['Navigated', 'B-1'], ['torque', 'A-2'], ['Torque (2)', 'A-3']])
+    // And two trays of one name in one upload are both kept.
+    await saveTrayList(kit.id, { trays: [{ ...tray('Tray 1', 'D-1'), file: 'x.pdf' }, { ...tray('Tray 1', 'D-2'), file: 'y.pdf' }], mode: 'add' }, 'Aimee')
+    expect((await getTrayList(kit.id)).trays.map(t => t.name).slice(-2)).toEqual(['Tray 1', 'Tray 1 (2)'])
     // Replace still starts again.
     await saveTrayList(kit.id, { trays: [tray('Only', 'C-1')], source: { file: 'c.pdf' } }, 'Aimee')
     expect((await getTrayList(kit.id)).trays.map(t => t.name)).toEqual(['Only'])

@@ -1,3 +1,4 @@
+import { uniqueTrayNames } from '../src/trayNames.js'
 import { redis, redisSetBody } from './_redis.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
 import { STAFF } from '../src/staffConfig.js'
@@ -471,7 +472,9 @@ export async function saveTrayList(kitId, { trays, source, mode = 'replace' }, b
 
   const before = mode === 'add' ? await getTrayList(kitId) : null
   const key = name => name.toLowerCase()
-  const fresh = new Map(incoming.map(t => [key(t.name), t]))
+  // A tray replaces a kept one only when it is from the same document; any
+  // other clash gets a number (Aimee, 11 Nov 2026 — see trayNames.js).
+  const fresh = new Map(uniqueTrayNames(incoming, before?.trays || []).map(t => [key(t.name), t]))
   const kept = (before?.trays || []).filter(t => !fresh.has(key(t.name)))
   const clean = [...kept, ...fresh.values()].slice(0, 60)
   const files = [...new Set(clean.map(t => t.file).filter(Boolean))]
