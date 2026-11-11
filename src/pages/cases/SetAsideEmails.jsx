@@ -16,7 +16,26 @@ export const WHY = {
   unreadable: 'Could not be read',
   'nothing-found': 'Read — no booking found in it',
   distributor: 'From a distributor — not read',
-  'not-a-booking-sender': 'Not from a hospital or surgeon’s rooms — not read'
+  'not-a-booking-sender': 'Not from a hospital or surgeon’s rooms — not read',
+  'dismissed-before': 'Read — but it matches a case someone marked “Not a booking”',
+  accounted: 'Read'
+}
+
+const CARD_STATUS = {
+  pending: 'waiting above to confirm',
+  onCalendar: 'matched to the calendar',
+  accepted: 'accepted onto the calendar',
+  dismissed: 'dismissed'
+}
+
+/** What became of a searched email, in a sentence. */
+export function cardsLine(cards = []) {
+  if (!cards.length) return ''
+  return cards.map(c => {
+    const who = [c.patient, c.surgeon, c.date].filter(Boolean).join(' · ') || 'A booking'
+    const what = CARD_STATUS[c.status] || c.status
+    return `${who} — ${what}${c.status === 'onCalendar' && c.matchedSummary ? ` (“${c.matchedSummary}”)` : ''}`
+  }).join('; ')
 }
 
 const gmailLink = id => `https://mail.google.com/mail/?authuser=bookings@technomed.com.au#all/${encodeURIComponent(id)}`
@@ -51,7 +70,9 @@ function Row({ email, busy, result, onRead, onReview }) {
       <div style={{ ...text('caption'), color: colour.inkFaint, overflowWrap: 'anywhere' }}>
         {[email.from, shortDate(email.receivedAt)].filter(Boolean).join(' · ')}
       </div>
-      <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: 2 }}>{WHY[email.why] || email.why}</div>
+      <div style={{ ...text('caption'), color: colour.inkMuted, marginTop: 2 }}>
+        {email.why === 'accounted' && email.cards?.length ? cardsLine(email.cards) : (WHY[email.why] || email.why)}
+      </div>
       {result && <div role="status" style={{ ...text('caption'), color: colour.ink, marginTop: space.xs }}>{result}</div>}
       <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', marginTop: space.xs }}>
         <button type="button" onClick={onRead} disabled={busy} style={{
@@ -77,6 +98,25 @@ export default function SetAsideEmails({ headers, refreshKey, onRead }) {
   const [results, setResults] = useState({})
   const [showOther, setShowOther] = useState(false)
   const [showMatched, setShowMatched] = useState(false)
+  const [query, setQuery] = useState('')
+  const [found, setFound] = useState(null)
+  const [searching, setSearching] = useState(false)
+
+  async function search(e) {
+    e?.preventDefault()
+    const q = query.trim()
+    if (!q) { setFound(null); return }
+    setSearching(true)
+    try {
+      const res = await fetch(`/api/calendar/today?action=setaside&q=${encodeURIComponent(q)}`, { headers: headers() })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Could not search bookings@')
+      setFound({ q, emails: body.emails || [] })
+    } catch (err) {
+      setFound({ q, emails: [], error: err.message })
+    }
+    setSearching(false)
+  }
 
   const load = useCallback(async () => {
     try {
@@ -143,8 +183,35 @@ export default function SetAsideEmails({ headers, refreshKey, onRead }) {
     }}>{open ? '▾' : '▸'} {label}</button>
   )
 
+  const finder = (
+    <form onSubmit={search} style={{ display: 'flex', gap: space.xs, margin: `${space.sm}px 0` }}>
+      <input value={query} onChange={e => setQuery(e.target.value)} aria-label="Find an email in bookings@"
+        placeholder="Find an email in bookings@ — a surname, surgeon or subject"
+        style={{
+          ...text('field'), flex: 1, minWidth: 0, padding: `${space.xs}px ${space.sm}px`,
+          border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink
+        }} />
+      <button type="submit" disabled={searching} style={{
+        ...text('caption'), fontWeight: 700, minHeight: 40, padding: `0 ${space.md}px`, border: 'none',
+        borderRadius: radius.control, background: colour.navy, color: 'white', cursor: 'pointer'
+      }}>{searching ? 'Finding…' : 'Find'}</button>
+    </form>
+  )
+  const foundList = found && (
+    <div data-found-emails style={{ marginBottom: space.md }}>
+      <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>
+        {found.error ? found.error
+          : found.emails.length ? `${found.emails.length} email${found.emails.length === 1 ? '' : 's'} in bookings@ matching “${found.q}” (last four months):`
+            : `Nothing in bookings@ matches “${found.q}” in the last four months.`}
+      </div>
+      {found.emails.map(row)}
+    </div>
+  )
+
   return (
     <div data-set-aside-list style={{ marginTop: space.lg }}>
+      {finder}
+      {foundList}
       <div style={{ ...text('heading'), color: colour.ink }}>
         {data.emails.length ? `Set aside — ${data.emails.length} email${data.emails.length === 1 ? '' : 's'} to look at` : 'Every email accounted for'}
       </div>

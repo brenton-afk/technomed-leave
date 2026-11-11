@@ -6,7 +6,15 @@
 // This is a key, not a login, and it opens two things only:
 //   GET  ?action=usage&from=YYYY-MM-DD&to=YYYY-MM-DD   usage cases in a window
 //   POST ?action=sales-check  { file: <base64 .xlsx> }  the sales-report check
-// Both only read. No action here writes to Redis (except the log below), the
+//   GET  ?action=bookings-find&q=…     emails in bookings@ and what the portal
+//                                      made of each (no q: everything set aside)
+//   GET  ?action=bookings-email&id=…   one bookings@ email: headers, text,
+//                                      attachment names, its record and cards
+//   GET  ?action=bookings-read&id=…    what the reader finds in it, as a dry
+//                                      run — nothing queued, nothing marked
+// (Brent, 11 Nov 2026: "you must be able to access the bookings email from
+// here so we can work through a resolution".)
+// All only read. No action here writes to Redis (except the log below), the
 // calendar, Dropbox, Xero or anyone's inbox.
 //
 // The key is AGENT_READ_KEY in Vercel. Unset or short, this route does not
@@ -16,6 +24,12 @@
 import { timingSafeEqual, createHash } from 'node:crypto'
 import { redis } from './_redis.js'
 import { usageCasesBetween, checkSalesReport } from './_salesCheck.js'
+import { listBookingEmails } from './calendar/today.js'
+import { readMessage, addressOf } from './_gmail.js'
+import { bookingEmailRecord, getBookingQueue } from './_redis.js'
+import { readBookingDocument } from './_readBookingDocument.js'
+import { parseTheatreList } from '../src/clinicalPlan/parseTheatreList.js'
+import { sourceOf } from '../src/clinicalPlan/bookingSources.js'
 
 const MIN_KEY_LENGTH = 32
 const MAX_WINDOW_DAYS = 400
@@ -66,8 +80,38 @@ export default async function handler(req, res) {
       await log({ action, ok: true, invoices: result.totals?.invoices, ip })
       return res.status(200).json(result)
     }
+    const id = String(req.query.id || '')
+    const goodId = /^[A-Za-z0-9_-]{6,64}$/.test(id)
+    if (action === 'bookings-find' && req.method === 'GET') {
+      const result = await listBookingEmails({ q: String(req.query.q || '') })
+      await log({ action, ok: true, count: result.emails.length, ip })
+      return res.status(200).json(result)
+    }
+    if (action === 'bookings-email' && req.method === 'GET') {
+      if (!goodId) return res.status(400).json({ error: 'id=<Gmail message id>' })
+      const email = await readMessage(id, { withAttachments: false })
+      const record = await bookingEmailRecord(id)
+      const cards = (await getBookingQueue()).filter(c => c.messageId === id)
+      await log({ action, ok: true, ip })
+      return res.status(200).json({
+        id, from: email.from, subject: email.subject, date: email.date, receivedAt: email.receivedAt,
+        source: sourceOf(addressOf(email.from))?.id || null,
+        text: String(email.text || '').slice(0, 20000),
+        html: email.text ? '' : String(email.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 20000),
+        attachments: (email.attachments || []).map(a => ({ filename: a.filename, mediaType: a.mediaType })),
+        record, cards
+      })
+    }
+    if (action === 'bookings-read' && req.method === 'GET') {
+      if (!goodId) return res.status(400).json({ error: 'id=<Gmail message id>' })
+      const email = await readMessage(id)
+      let found = sourceOf(addressOf(email.from))?.id === 'rhh' ? parseTheatreList(email) : []
+      if (!found.length) found = await readBookingDocument(email)
+      await log({ action, ok: true, found: found.length, ip })
+      return res.status(200).json({ id, found })
+    }
     await log({ action, ok: false, reason: 'unknown action', ip })
-    return res.status(400).json({ error: 'Unknown action. GET ?action=usage&from=&to= or POST ?action=sales-check' })
+    return res.status(400).json({ error: 'Unknown action. GET usage | bookings-find | bookings-email | bookings-read, or POST sales-check' })
   } catch (err) {
     await log({ action, ok: false, reason: 'failed', ip })
     return res.status(err.status || 500).json({ error: err.status ? err.message : 'That could not be read just now.' })

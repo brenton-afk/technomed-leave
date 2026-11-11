@@ -291,6 +291,15 @@ as a booking** (`action=ingest` with `force: [id]`, `outcomes` says what came
 of it), **Not a booking** (POST `setaside`, `reviewed`) and Open in Gmail;
 then "Already on the calendar (N)" with the entry each case matched, so a
 wrong match shows.
+**Find an email in bookings@** (Brent, same day, Pt Bal still missing): a
+search box at the top of that list (`listBookingEmails({ q })`, four months)
+shows every matching email with what became of it (cards and their status) or
+why it was set aside. The span is `INBOX_SPAN_DAYS` (35); a booking that
+matches a case someone dismissed is no longer counted as dealt with
+(`dismissed-before`). Claude's read key (`api/agent.js`) gains
+`bookings-find`, `bookings-email` and `bookings-read` (a dry run of the
+reader) — read-only, logged — once `TM_PORTAL_AGENT_KEY` is in the cloud
+environment.
 **Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
 `action=search` in `api/calendar/today.js`): Google's own full-text search over
 2020 to a year ahead, each hit read through `readBooking`, cases only.

@@ -380,3 +380,29 @@ describe('setAsideReason', async () => {
     expect(setAsideReason({ count: 0 })).toBe('not-a-booking-sender')
   })
 })
+
+describe('finding an email in bookings@ (Brent, 11 Nov 2026)', () => {
+  const list = async q => {
+    const res = { statusCode: 0, payload: null, status(c) { this.statusCode = c; return this }, json(d) { this.payload = d; return this }, setHeader() {} }
+    await handler({ method: 'GET', query: { action: 'setaside', q }, headers: {} }, res)
+    return res.payload
+  }
+
+  it('shows a searched email with what became of it, even when it is dealt with', async () => {
+    mailbox = { cnsmsg1: { from: 'bookings@cnstas.com.au', subject: 'Booking Testb' } }
+    await call('ingest', {})
+    const found = await list('Testb')
+    expect(found.emails).toHaveLength(1)
+    expect(found.emails[0]).toMatchObject({ messageId: 'cnsmsg1', why: 'accounted' })
+    expect(found.emails[0].cards[0]).toMatchObject({ status: 'pending', patient: 'Rossa' })
+  })
+
+  it('a booking matching a dismissed card is listed as set aside, not counted as dealt with', async () => {
+    mailbox = { cnsmsg2: { from: 'bookings@cnstas.com.au', subject: 'Booking' } }
+    queue.set('old', { id: 'old', status: 'dismissed', patient: 'Rossa', surgeon: 'Ibbett', date: '2026-11-09' })
+    const res = await call('ingest', {})
+    expect(res.payload.outcomes.cnsmsg2).toMatchObject({ dismissed: 1 })
+    expect(records.get('cnsmsg2')).toMatchObject({ count: 0, reason: 'dismissed-before' })
+    expect((await list('')).emails.map(e => [e.messageId, e.why])).toEqual([['cnsmsg2', 'dismissed-before']])
+  })
+})

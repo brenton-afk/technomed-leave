@@ -1320,7 +1320,10 @@ async function handleQueue(req, res) {
 // team can tap again rather than wonder.
 const PER_RUN = 8
 // How far down a fortnight of bookings@ one pass looks.
-const INBOX_SPAN_MAX = 300
+const INBOX_SPAN_MAX = 400
+// How far back. Bookings arrive weeks ahead of the case, and an email older
+// than a fortnight was never looked at again however untouched it sat.
+const INBOX_SPAN_DAYS = 35
 // How many of those are read at once. Reading one email is mostly waiting on
 // the model; four at a time takes a run from about a minute and a half to
 // about twenty seconds without asking the API for more than it will give.
@@ -1382,12 +1385,30 @@ async function handleSetAside(req, res) {
       })
       return res.status(200).json({ ok: true })
     }
-    const ids = await searchMailbox('newer_than:14d -in:spam', { max: INBOX_SPAN_MAX })
+    return res.status(200).json({ ok: true, ...await listBookingEmails({ q: req.query.q }) })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * The fortnight's emails that did not become a card — or, with `q`, every
+ * email in bookings@ matching a search over four months, each with what the
+ * portal made of it. Read-only. Shared by the Inbox and Claude's read key.
+ */
+export async function listBookingEmails({ q = '' } = {}) {
+  {
+    const words = String(q || '').replace(/["(){}]/g, ' ').trim().slice(0, 80)
+    const ids = words
+      ? await searchMailbox(`${words} newer_than:120d`, { max: 40 })
+      : await searchMailbox(`newer_than:${INBOX_SPAN_DAYS}d -in:spam`, { max: INBOX_SPAN_MAX })
     const records = await Promise.all(ids.map(id => bookingEmailRecord(id).catch(() => null)))
+    const queue = await getBookingQueue()
+    const cardsOf = id => queue.filter(c => c.messageId === id)
     const listed = []
     ids.forEach((id, i) => {
       const why = setAsideReason(records[i])
-      if (why) listed.push({ messageId: id, record: records[i] || {}, why })
+      if (why || words) listed.push({ messageId: id, record: records[i] || {}, why: why || 'accounted' })
     })
     const missing = listed.filter(x => !x.record.subject && !x.record.from)
     const heads = await inBatches(missing, 8, x => headersOf(x.messageId).catch(() => null))
@@ -1401,20 +1422,23 @@ async function handleSetAside(req, res) {
       subject: String(record.subject || '').slice(0, 200),
       receivedAt: record.receivedAt || '',
       why,
+      // What became of it, for a searched email that did become something.
+      cards: cardsOf(messageId).map(c => ({
+        status: c.status, patient: c.patient || '', date: c.date || '', surgeon: c.surgeon || '',
+        matchedSummary: c.matchedSummary || '', dismissReason: c.dismissReason || c.reason || ''
+      })),
       looksLikeBooking: looksLikeBooking(record.subject || '', record.snippet || '')
-        || why === 'nothing-found' || why === 'unreadable'
+        || ['nothing-found', 'unreadable', 'dismissed-before', 'accounted'].includes(why)
     }))
-    const since = new Date(Date.now() - 14 * 86400000).toISOString()
-    const matched = (await getBookingQueue())
+    const since = new Date(Date.now() - INBOX_SPAN_DAYS * 86400000).toISOString()
+    const matched = queue
       .filter(c => c.status === 'onCalendar' && (c.receivedAt || c.createdAt || '') >= since)
       .slice(0, 60)
       .map(c => ({
         id: c.id, patient: c.patient || '', surgeon: c.surgeon || '', date: c.date || '', hospital: c.hospital || '',
         procedure: c.procedure || '', matchedSummary: c.matchedSummary || '', messageId: c.messageId || ''
       }))
-    return res.status(200).json({ ok: true, emails, matched })
-  } catch (err) {
-    return res.status(500).json({ error: err.message })
+    return { emails, matched: words ? [] : matched }
   }
 }
 
@@ -1429,6 +1453,7 @@ export function setAsideReason(record) {
   if (record.failed || record.attempts) return 'unreadable'
   if (record.echo || record.reason === 'distributor') return 'distributor'
   if (record.reason === 'not-a-booking-sender') return 'not-a-booking-sender'
+  if (record.reason === 'dismissed-before') return 'dismissed-before'
   if (record.reason === 'nothing-found' || record.read) return 'nothing-found'
   return 'not-a-booking-sender'
 }
@@ -1465,7 +1490,7 @@ async function ingestPass({ force = [] } = {}) {
     // the whole mailbox on every run. Every page of it: the cap used to be 60,
     // and a busy fortnight's oldest emails were never looked at at all.
     const forced = new Set((force || []).filter(id => typeof id === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(id)).slice(0, 5))
-    const found14 = await searchMailbox('newer_than:14d -in:spam', { max: INBOX_SPAN_MAX })
+    const found14 = await searchMailbox(`newer_than:${INBOX_SPAN_DAYS}d -in:spam`, { max: INBOX_SPAN_MAX })
     const messageIds = [...new Set([...found14, ...forced])]
     const existing = await getBookingQueue()
 
@@ -1698,7 +1723,9 @@ async function ingestPass({ force = [] } = {}) {
         // A case already dismissed stays dismissed: re-reading the email that
         // carried it must not resurrect it.
         const buried = existing.find(c => c.status === 'dismissed' && isSameBooking(c, candidate))
-        if (buried) { outcome.dismissed = (outcome.dismissed || 0) + 1; continue }
+        // Not counted as dealt with: the email is listed as set aside, saying
+        // so, because "someone dismissed a case like it" is not "dealt with".
+        if (buried) { outcome.dismissed = (outcome.dismissed || 0) + 1; kept -= 1; continue }
 
         await saveBookingCandidate(candidate)
         queued.push(candidate)
@@ -1707,7 +1734,8 @@ async function ingestPass({ force = [] } = {}) {
       outcome.found = kept
       outcome.queued = queued.length - queuedBefore
       await markBookingEmailSeen(messageId, kept, {
-        ...(about.get(messageId) || {}), read: true, ...(kept ? {} : { reason: 'nothing-found' })
+        ...(about.get(messageId) || {}), read: true,
+        ...(kept ? {} : { reason: outcome.dismissed ? 'dismissed-before' : 'nothing-found' })
       })
     }
 
