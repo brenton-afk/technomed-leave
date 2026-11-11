@@ -1,5 +1,6 @@
 import { uniqueTrayNames } from '../../trayNames.js'
 import { shareFiles, shareText, trayListText, shareReady } from '../../kit/share.js'
+import DocViewer from '../../kit/DocViewer.jsx'
 import React, { useState, useEffect, useRef } from 'react'
 import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
@@ -121,6 +122,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
   const [editingTray, setEditingTray] = useState('')
   const [editError, setEditError] = useState('')
   const [shareMsg, setShareMsg] = useState('')
+  const [viewing, setViewing] = useState(null)
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
   // Live: somebody else's changes appear within a minute, and at once when the
@@ -349,6 +351,18 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     } catch (err) { setShareMsg(err.message) }
   }
 
+  // The hospital's own document, in the portal's viewer.
+  async function viewOriginal() {
+    setShareMsg('Opening the original…')
+    try {
+      const res = await fetch(`/api/guides?kits=tray-file&id=${encodeURIComponent(kit.id)}`, { headers: { Authorization: `Bearer ${user?.token || ''}` } })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Could not open it')
+      setViewing({ url: body.url, name: body.name })
+      setShareMsg('')
+    } catch (err) { setShareMsg(err.message) }
+  }
+
   const label = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }
 
   if (review) {
@@ -429,6 +443,13 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
                 borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer' }}>
               Share tray list
             </button>
+            {(list?.trays || []).some(t => t.dropboxPath) && (
+              <button type="button" onClick={viewOriginal} data-view-tray-original
+                style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: colour.accentSoft, border: 'none',
+                  borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer' }}>
+                View original
+              </button>
+            )}
             <button type="button" onClick={() => printTrayList(kit, list, { printedBy: user?.firstName || user?.name || '', token: user?.token })}
               style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: colour.accentSoft, border: 'none',
                 borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer' }}>
@@ -482,6 +503,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginTop: space.sm }}>{error}</div>}
         </div>
       )}
+      {viewing && <DocViewer name={viewing.name} url={viewing.url} onClose={() => setViewing(null)} onShare={() => { setViewing(null); shareList() }} />}
     </div>
   )
 }

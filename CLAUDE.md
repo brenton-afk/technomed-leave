@@ -950,6 +950,14 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   the rest offered with Skip chosen — and attaches only what was ticked
   (`doc-dbx` with `picks`). On the real folder (11 Nov): 10 clear, 14 to
   choose (signed vs updated copies), 7 KT kits with none.
+- **Read in the portal** (Brent, same day: "a viewer built in so you don't
+  need to download the consignment agreement"): tapping a kit document (and
+  **View original** on a tray list) opens `src/kit/DocViewer.jsx` — a PDF
+  drawn page by page with pdf.js (a PDF in a frame shows an iPhone only page
+  one; up to 60 pages), a .docx as text through mammoth in a `sandbox=""`
+  frame (no script), photos and text as they are, pinchable
+  (`data-zoomable`); an old .doc or Excel says so with Download. Share and
+  Download in the bar. Checked in an iPhone-sized render: two-page PDF, Word.
 
 ### Surgeon preference cards (Task 18)
 

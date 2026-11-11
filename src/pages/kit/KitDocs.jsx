@@ -3,6 +3,7 @@ import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { shareFile, typeOfName, shareReady } from '../../kit/share.js'
 import FromDropbox from './FromDropbox.jsx'
+import DocViewer, { viewKind } from '../../kit/DocViewer.jsx'
 
 // ─── A kit's documents (Brent, 11 Nov 2026) ──────────────────────────────────
 // Consignment agreements and anything else that belongs to a kit, added from
@@ -34,6 +35,7 @@ export default function KitDocs({ kit, user, post, onChanged }) {
   const [busy, setBusy] = useState('')
   const [over, setOver] = useState(false)
   const [fromDropbox, setFromDropbox] = useState(false)
+  const [viewing, setViewing] = useState(null)
   const pick = useRef(null)
   const kindFor = useRef('consignment')
   const auth = { Authorization: `Bearer ${user?.token || ''}` }
@@ -85,14 +87,15 @@ export default function KitDocs({ kit, user, post, onChanged }) {
     return body
   }
 
+  // Opened in the portal's own viewer (Brent, 11 Nov 2026: "you should be
+  // able to view it in the portal") — PDFs page by page, Word as text.
   async function open(doc) {
-    // The window is opened inside the tap, or a phone blocks it.
-    const win = window.open('', '_blank')
+    setError(''); setBusy(`Opening ${doc.name}…`)
     try {
-      const { url } = await linkFor(doc)
-      if (win) win.location.href = url
-      else window.location.href = url
-    } catch (err) { win?.close(); setError(err.message) }
+      const { url, name } = await linkFor(doc)
+      setViewing({ doc, url, name: name || doc.name })
+    } catch (err) { setError(err.message) }
+    setBusy('')
   }
 
   async function share(doc) {
@@ -137,6 +140,11 @@ export default function KitDocs({ kit, user, post, onChanged }) {
     </div>
   )
 
+  const viewer = viewing && (
+    <DocViewer name={viewing.name} url={viewing.url} onClose={() => setViewing(null)}
+      onShare={() => { const d = viewing.doc; setViewing(null); share(d) }} />
+  )
+
   return (
     <div data-kit-docs
       onDragOver={e => { e.preventDefault(); setOver(true) }}
@@ -179,6 +187,7 @@ export default function KitDocs({ kit, user, post, onChanged }) {
       )}
       {status && status !== 'ready' && !busy && <div role="status" style={{ ...text('caption'), color: colour.accentDeep, marginTop: space.xs }}>{status}</div>}
       {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginTop: space.xs }}>{error}</div>}
+      {viewer}
     </div>
   )
 }
