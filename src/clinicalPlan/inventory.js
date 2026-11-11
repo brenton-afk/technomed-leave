@@ -53,10 +53,11 @@ export const INVENTORY = [
   },
   {
     system: 'CYLOX', distributor: 'signus',
-    consigned: {},
-    loanSets: 2,
-    note: 'Two loan sets. Close to being consigned to Calvary, but not yet — '
-      + 'so a CYLOX case still needs a set organised.'
+    // Consigned to Calvary in October 2026 (agreement sent 14 Oct; Calvary
+    // CSSD stores the two trays at SG13.1). Brent, 11 Nov 2026: "we consigned
+    // two sets" — a CYLOX case at Calvary no longer needs a set organised.
+    consigned: { CLV: 2 },
+    note: 'Two sets consigned to Calvary (one tray each), stored in CSSD at SG13.1.'
   },
   {
     system: 'MOBIS', distributor: 'signus',

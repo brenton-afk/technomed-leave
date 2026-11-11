@@ -33,11 +33,11 @@ describe('where the sets are', () => {
     expect(loanNeed(system, hospital).need).toBe(expected)
   })
 
-  it('knows CYLOX is not consigned yet', () => {
-    // Two loan sets, close to being consigned to Calvary but not yet — so a
-    // CYLOX case still needs a set organised either way.
-    expect(loanNeed('CYLOX', 'CLV').need).toBe('order')
-    expect(loanNeed('CYLOX', 'RHH').need).toBe('order')
+  it('knows CYLOX is consigned at Calvary — two sets (Brent, 11 Nov 2026)', () => {
+    expect(loanNeed('CYLOX', 'CLV')).toMatchObject({ need: 'none', reason: '2 consigned at CLV.' })
+    expect(loanNeed('CYLOX', 'Calvary Lenah Valley').need).toBe('none')
+    // Nothing kept at RHH, so a case there still needs a set organised.
+    expect(loanNeed('CYLOX', 'RHH').need).not.toBe('none')
   })
 
   it('says "check where it is" for a kit that travels', () => {
