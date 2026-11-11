@@ -439,6 +439,42 @@ function loanLogWhen(iso) {
   return d.toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Hobart' })
 }
 
+// ─── Opening a booking without the wait (Brent, 11 Nov 2026: speed) ─────────
+// The booking is fetched the moment a finger touches its card (`prefetchBooking`,
+// from CaseWeek), and whatever this phone last read for it is drawn at once
+// while the fresh copy comes. The fresh copy replaces it unless the person has
+// already started typing; then it is left for Save to settle — the version
+// check refuses a save over a booking changed meanwhile, and says so.
+const recentBookings = new Map()
+const inFlight = new Map()
+// Off in the tests (every test reuses the same booking id with its own data)
+// unless one asks for it.
+const keepOn = () => import.meta.env?.MODE !== 'test' || globalThis.__keepBookings === true
+
+function fetchBooking(eventId, token) {
+  if (!keepOn()) {
+    return fetch(`/api/calendar/today?action=booking&id=${encodeURIComponent(eventId)}`,
+      { headers: { Authorization: `Bearer ${token || ''}` } }).then(res => res.json())
+  }
+  if (inFlight.has(eventId)) return inFlight.get(eventId)
+  const p = fetch(`/api/calendar/today?action=booking&id=${encodeURIComponent(eventId)}`,
+    { headers: { Authorization: `Bearer ${token || ''}` } })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.error && data.fields) recentBookings.set(eventId, data)
+      return data
+    })
+    .finally(() => setTimeout(() => inFlight.delete(eventId), 3000))
+  inFlight.set(eventId, p)
+  return p
+}
+
+/** Starts reading a booking before its sheet opens. Best effort. */
+export function prefetchBooking(eventId, token) {
+  if (!eventId || !token) return
+  fetchBooking(eventId, token).catch(() => {})
+}
+
 export default function EditBooking({
   eventId, user, onClose, onSaved, onPreferences, hasPreferences
 }) {
@@ -518,7 +554,7 @@ export default function EditBooking({
       offerNotices(data)
       setConfirmCancel(false)
       setReason('')
-      onSaved?.()
+      recentBookings.delete(eventId); onSaved?.()
       onClose?.()
     } catch (err) {
       setError(err.message)
@@ -526,12 +562,28 @@ export default function EditBooking({
     }
   }
 
+  const typedRef = React.useRef(false)
+  const apply = data => {
+    setLoaded(data)
+    setFields({ ...data.fields })
+    setNotes(data.notes || '')
+    const from = civilParts(data.start)
+    const to = civilParts(data.end)
+    setWhen({ date: from?.date || '', start: from?.time || '', end: to?.time || '' })
+    setColorId(data.colorId || null)
+    setColourChosen(false)
+    setReps(data.reps || [])
+    setPlanned(data.planned || [])
+    setNoUsage(Boolean(data.noUsage))
+  }
+
   const load = useCallback(async () => {
-    setStatus('loading'); setError('')
+    setError('')
+    typedRef.current = false
+    const shown = keepOn() ? recentBookings.get(eventId) : null
+    if (shown) { apply(shown); setStatus('ready') } else setStatus('loading')
     try {
-      const res = await fetch(`/api/calendar/today?action=booking&id=${encodeURIComponent(eventId)}`,
-        { headers: auth })
-      const data = await res.json()
+      const data = await fetchBooking(eventId, user?.token)
       if (data.error) throw new Error(data.error)
       // A 200 carrying something that is not a booking — the app shell served
       // mid-deploy, an auth redirect followed quietly — used to get as far as
@@ -540,25 +592,15 @@ export default function EditBooking({
       // one thing this app is not allowed to do. Caught here instead, where
       // there is already a message and a Close button.
       if (!data.fields) throw new Error('That booking could not be read. Try again.')
-      setLoaded(data)
-      setFields({ ...data.fields })
-      setNotes(data.notes || '')
-      const from = civilParts(data.start)
-      const to = civilParts(data.end)
-      setWhen({ date: from?.date || '', start: from?.time || '', end: to?.time || '' })
-      setColorId(data.colorId || null)
-      setColourChosen(false)
-      setReps(data.reps || [])
-      setPlanned(data.planned || [])
-      setNoUsage(Boolean(data.noUsage))
+      if (!shown || !typedRef.current) apply(data)
       setStatus('ready')
     } catch (err) {
+      if (shown) return // what was drawn stays; Save re-checks the version
       setError(err.message)
       setStatus('error')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, user?.token])
-
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
@@ -742,13 +784,13 @@ export default function EditBooking({
       // calendar's word, not the form's.
       const landed = String(data.event?.start || '').slice(0, 10)
       if (movedTime && landed) {
-        onSaved?.()
+        recentBookings.delete(eventId); onSaved?.()
         setMovedTo(landed)
         setStatus('moved')
         return
       }
 
-      onSaved?.()
+      recentBookings.delete(eventId); onSaved?.()
       onClose?.()
     } catch (err) {
       setError(err.message)
@@ -772,7 +814,7 @@ export default function EditBooking({
       }
       if (data.error) throw new Error(data.error)
       offerNotices(data)
-      onSaved?.()
+      recentBookings.delete(eventId); onSaved?.()
       onClose?.()
     } catch (err) {
       setError(err.message)
@@ -849,6 +891,9 @@ export default function EditBooking({
             }}>
         <div
           onClick={e => e.stopPropagation()}
+          // Anything typed or chosen means the fresh copy must not land over it.
+          onInputCapture={() => { typedRef.current = true }}
+          onChangeCapture={() => { typedRef.current = true }}
           role="dialog"
           aria-label="Edit booking"
           className={wide ? undefined : 'tm-sheet'}

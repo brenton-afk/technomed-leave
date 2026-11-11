@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto'
 import { hiddenProjectIdsFor } from '../_privateBoard.js'
+import { CAL_VERSION_KEY } from '../_googleCalendar.js'
 import { settleTask } from '../_taskDone.js'
 import {
   TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr, parseDateStr
@@ -275,9 +277,31 @@ export default async function handler(req, res) {
 // ─── Clinical Plan: one week, both calendars ─────────────────
 // Read-only. Returns raw events and lets the client derive the plan, so the
 // view, the text copy and the .docx all come from one pure function.
+// ─── One shared copy of the week (Brent, 11 Nov 2026: speed) ─────────────────
+// Every open portal asks for the week every minute. The answer is kept in this
+// instance's memory for WEEK_SHARE_MS and handed to everyone who asks for the
+// same days, as long as the calendar's version (bumped by every write the
+// portal makes — calendarChanged in _googleCalendar.js) has not moved: so an
+// edit in the portal is seen at once, and an edit made in Google itself within
+// twenty seconds. `seen` (the copy's hash the phone already holds) gets back
+// `unchanged` instead of the whole week again.
+const WEEK_SHARE_MS = 20 * 1000
+const weekCopies = new Map()
+const weekShareOn = () => !process.env.VITEST || process.env.WEEK_SHARE === 'on'
+
 async function handleWeek(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
+
+  const key = `${req.query.start}|${req.query.end}`
+  let version = null
+  if (weekShareOn()) {
+    version = await redis('get', CAL_VERSION_KEY).catch(() => undefined)
+    const held = weekCopies.get(key)
+    if (version !== undefined && held && held.version === version && Date.now() - held.at < WEEK_SHARE_MS) {
+      return sendWeek(res, held.body, req.query.seen)
+    }
+  }
 
   const { start, end } = req.query
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) {
@@ -346,19 +370,31 @@ async function handleWeek(req, res) {
       source: r.source, error: r.error, calendarId: r.calendarId, shareWith: r.shareWith
     }))
 
-    return res.status(200).json({
+    const body = {
       events,
       window: { start, end, timeMin, timeMax },
       syncedAt: new Date().toISOString(),
       sourceErrors,
       truncated: results.some(r => r.truncated)
-    })
+    }
+    body.hash = createHash('sha1').update(JSON.stringify([events, sourceErrors])).digest('hex').slice(0, 16)
+    if (weekShareOn() && version !== undefined) {
+      if (weekCopies.size > 40) weekCopies.clear()
+      weekCopies.set(key, { version, at: Date.now(), body })
+    }
+    return sendWeek(res, body, req.query.seen)
   } catch (err) {
     console.error('calendar/week failed:', err.message)
     return res.status(500).json({ error: err.message })
   }
 }
 
+
+/** The week, or only "unchanged" when the phone already holds this copy. */
+function sendWeek(res, body, seen) {
+  if (seen && seen === body.hash) return res.status(200).json({ unchanged: true, hash: body.hash, syncedAt: body.syncedAt })
+  return res.status(200).json(body)
+}
 
 // ─── The team leader's run-sheet ──────────────────────────────────────────────
 // Shared rather than private. The role runs on a weekly duty rotation and the

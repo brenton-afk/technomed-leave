@@ -907,3 +907,17 @@ describe('a reply that is not a booking', () => {
       expect(screen.getByDisplayValue('Marsh')).toBeInTheDocument())
   })
 })
+
+describe('opening a booking without the wait (Brent, 11 Nov 2026)', () => {
+  afterEach(() => { globalThis.__keepBookings = false })
+  it('draws the last copy at once while the fresh one comes', async () => {
+    globalThis.__keepBookings = true
+    const first = show()
+    await ready()
+    first.unmount()
+    // The second read never answers: what is drawn comes from the last copy.
+    global.fetch = vi.fn(() => new Promise(() => {}))
+    render(<EditBooking eventId="evt-1" user={USER} onClose={() => {}} />)
+    expect(screen.getByDisplayValue('L5/S1 PLIF')).toBeInTheDocument()
+  })
+})

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { onLiveTick } from '../liveRefresh.js'
 
 // ─── How many messages are waiting ───────────────────────────────────────────
 // The number on the Messages tab. Without it the only way to know something has
@@ -11,7 +12,6 @@ import { useState, useEffect, useCallback } from 'react'
 // Nothing here runs while the tab is hidden — a phone in a pocket overnight
 // should not be asking anything.
 
-const EVERY = 60 * 1000
 
 /**
  * Total unread across every standing channel.
@@ -40,11 +40,12 @@ export function useUnread(token) {
 
   useEffect(() => {
     read()
-    const timer = setInterval(read, EVERY)
+    // On the portal's shared minute, with everything else (liveRefresh.js).
+    const stop = onLiveTick(read)
     // Checked again the moment somebody comes back to the app, which is when
     // the number is actually being looked at.
     document.addEventListener('visibilitychange', read)
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', read) }
+    return () => { stop(); document.removeEventListener('visibilitychange', read) }
   }, [read])
 
   return { count, refresh: read }

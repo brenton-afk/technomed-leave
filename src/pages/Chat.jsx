@@ -18,7 +18,10 @@ import { fileTypeOf, previewable } from '../chat/fileTypes.js'
 // Names and UR numbers are allowed in chat (Brent: needed to run the
 // business, stored safely and archived); only a date of birth is queried.
 
-const POLL_MS = 2500
+// An open channel rechecks every eight seconds (Brent, 11 Nov 2026: it was
+// 2.5s, the heaviest battery use in the portal). Your own messages show at
+// once; other people's within eight seconds.
+const POLL_MS = 8000
 const TYPING_EVERY_MS = 3000
 export const REACTIONS = ['👍', '❤️', '😂', '😮', '🙏', '✅']
 

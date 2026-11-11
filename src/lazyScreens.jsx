@@ -35,9 +35,33 @@ export const Screens = Object.fromEntries(
   Object.entries(loaders).map(([name, load]) => [name, lazy(load)]))
 
 /** Fetches every screen in the background, once, when the browser is idle. */
+/**
+ * Whether background downloads should wait (Brent, 11 Nov 2026: Wi-Fi only).
+ * Mobile data, or the phone's data saver, says wait. Pure, for the tests.
+ * An iPhone does not say what it is connected to, so there it goes ahead as
+ * before — once per new build, after which the files come from the phone.
+ */
+export function onMobileData(connection) {
+  if (!connection) return false
+  if (connection.saveData) return true
+  if (connection.type) return connection.type === 'cellular'
+  return false
+}
+
 export function prefetchScreens() {
   const run = () => Object.values(loaders).forEach(load => load().catch(() => {}))
   if (typeof window === 'undefined') return
+  const connection = navigator.connection
+  if (onMobileData(connection)) {
+    // Waits for Wi-Fi rather than giving up: fetched the moment it changes.
+    const later = () => {
+      if (onMobileData(connection)) return
+      connection.removeEventListener?.('change', later)
+      run()
+    }
+    connection.addEventListener?.('change', later)
+    return
+  }
   if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 8000 })
   else setTimeout(run, 3000)
 }

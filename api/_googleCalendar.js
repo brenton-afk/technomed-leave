@@ -77,6 +77,16 @@ const tokenKey = (scope, impersonate) => `google:token:${impersonate || 'sa'}:${
 /** Forget kept tokens — for the tests, and after Google refuses one. */
 export function forgetGoogleTokens() { memoryTokens.clear() }
 
+// ─── The calendar's version (Brent, 11 Nov 2026: speed) ──────────────────────
+// Bumped after every write the portal makes to Google, so the shared copy of
+// the week (`handleWeek` in api/calendar/today.js) is never served after the
+// portal itself has changed a booking. Fire and forget: a failed bump costs at
+// most the twenty seconds the copy lives.
+export const CAL_VERSION_KEY = 'cal:version'
+export function calendarChanged() {
+  redis('incr', CAL_VERSION_KEY).catch(() => {})
+}
+
 export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE, { impersonate } = {}) {
   if (!tokenCacheOn()) return signGoogleToken(scope, { impersonate })
   const key = tokenKey(scope, impersonate)
@@ -238,6 +248,7 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
 
     const result = await res.json()
     if (!result.error) {
+      calendarChanged()
       return {
         eventId: result.id,
         eventLink: result.htmlLink,
@@ -308,7 +319,7 @@ export async function updateLeaveEvent(before, after) {
       const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
       })
-      if (res.ok) return { updated: true, eventId, calendarId }
+      if (res.ok) { calendarChanged(); return { updated: true, eventId, calendarId } }
     }
   }
   return { updated: false }
@@ -395,6 +406,7 @@ export async function markAttendance({ date, patientSurname, firstName }) {
     const detail = await patched.text()
     return { updated: false, reason: `could not update the booking (${patched.status}): ${detail.slice(0, 160)}`, booking }
   }
+  calendarChanged()
   return { updated: true, title, booking }
 }
 
@@ -461,6 +473,7 @@ export async function updateCalendarEvent(eventId, patch, { etag } = {}) {
   if (!res.ok) {
     throw new Error(`Calendar update failed (${res.status}): ${await res.text()}`)
   }
+  calendarChanged()
   return res.json()
 }
 
@@ -544,6 +557,7 @@ export async function createTaskEvent({ summary, description, date, colorId, ext
     })
 
   if (!res.ok) throw new Error(`Could not add the task (${res.status}): ${await res.text()}`)
+  calendarChanged()
   return res.json()
 }
 
@@ -574,6 +588,7 @@ export async function createBookingEvent({
     })
 
   if (!res.ok) throw new Error(`Could not create the booking (${res.status}): ${await res.text()}`)
+  calendarChanged()
   return res.json()
 }
 
@@ -603,5 +618,6 @@ export async function deleteCalendarEvent(eventId, { etag } = {}) {
   if (!res.ok && res.status !== 410) {
     throw new Error(`Could not delete the booking (${res.status}): ${await res.text()}`)
   }
+  calendarChanged()
   return { ok: true }
 }

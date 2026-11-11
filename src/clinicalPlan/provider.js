@@ -213,6 +213,11 @@ export async function fetchDayCases(date, { token } = {}) {
     .filter(c => c && !c.cancelled)
 }
 
+// The hash of the week this phone last drew, per window (Brent, 11 Nov 2026:
+// battery). Sent as `seen`; when nothing has changed the server answers
+// "unchanged" and the week is not downloaded or rebuilt.
+const lastHash = new Map()
+
 export async function fetchWeekPlan(window, { token, force = false, useFixture = false } = {}) {
   if (useFixture) {
     return { plan: FIXTURE_WEEK, fromCache: false, fixture: true }
@@ -224,14 +229,20 @@ export async function fetchWeekPlan(window, { token, force = false, useFixture =
   }
 
   try {
+    const seen = cached && lastHash.get(window.startDate)
     const res = await fetch(
       // Four days past the week: a TM loan kit for next Monday or Tuesday has
       // to leave this Friday, so those bookings are read too (see dispatch.js).
-      `/api/calendar/today?action=week&start=${window.startDate}&end=${aheadOf(window.endDate)}`,
+      `/api/calendar/today?action=week&start=${window.startDate}&end=${aheadOf(window.endDate)}${seen ? `&seen=${seen}` : ''}`,
       { headers: token ? { Authorization: `Bearer ${token}` } : {} }
     )
     const data = await res.json()
     if (data.error) throw new Error(data.error)
+    if (data.unchanged && cached) {
+      writeCachedPlan(window.startDate, cached.plan)
+      return { plan: cached.plan, fromCache: false, unchanged: true, sourceErrors: [] }
+    }
+    if (data.hash) lastHash.set(window.startDate, data.hash)
 
     // Derivation happens client-side from raw events, so the same pure function
     // backs the view, the text copy and the .docx.

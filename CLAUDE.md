@@ -229,6 +229,25 @@ device never reached another that had the week open. Phone and desktop read
 the same `action=leader` (`byDay`) and the same plan; layout is the only
 difference allowed between them.
 
+### Speed and battery (Brent, 11 Nov 2026)
+
+- **One shared copy of the week**: `handleWeek` keeps the answer per window in
+  the instance's memory for 20s (`WEEK_SHARE_MS`) while `cal:version` is
+  unchanged; every portal write to Google bumps it (`calendarChanged` in
+  `_googleCalendar.js` — add it to any new write). An edit made in Google
+  itself shows within 20s. The phone sends `seen` (the `hash` it holds) and
+  gets `{unchanged}` instead of the week (`fetchWeekPlan`). Off under vitest
+  unless `WEEK_SHARE=on`.
+- **Edit booking opens at once**: `prefetchBooking` starts the read on
+  `pointerdown` over any `[data-case-id]`; the sheet draws the phone's last
+  copy and replaces it with the fresh one unless something has been typed
+  (then Save's version check settles it). Off in tests unless
+  `globalThis.__keepBookings`.
+- **One minute tick**: `useLiveRefresh` and the unread badge share one timer
+  (`onLiveTick` in `liveRefresh.js`), so the radio wakes once a minute.
+- **Background downloads wait for Wi-Fi** where the phone says
+  (`onMobileData`: cellular or data saver); an iPhone does not say.
+
 ### Weak signal and offline
 
 `public/sw.js` now has a fetch handler, under narrow rules written at the top of
@@ -345,7 +364,7 @@ agreement. Never go back to "first word" (or, for usage forms, "last word").
 
 `api/chat.js` + `src/pages/Chat.jsx`. Channels (General, Spine, Logistics,
 Theatre lists, **Portal feedback** — read by the overnight improvement agent)
-and a thread per booking. A channel refreshes every 2.5s while open (push
+and a thread per booking. A channel refreshes every 8s while open (was 2.5s — battery, Brent 11 Nov 2026; push
 notifications otherwise). Messages carry `files` (photos — shrunk, GIFs kept
 as GIFs — video, PDF, Office, text; `FILE_TYPES`, 100 MB, only this app's blob
 URLs accepted by `readFiles`), `replyTo` (a snapshot), `reactions`

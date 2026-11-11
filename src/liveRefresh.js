@@ -36,16 +36,36 @@ export function useLiveRefresh(refresh, deps = []) {
     const whenVisible = () => {
       if (document.visibilityState === 'visible') refresh()
     }
-    const timer = setInterval(whenVisible, LIVE_POLL_MS)
+    const stop = onLiveTick(whenVisible)
     document.addEventListener('visibilitychange', whenVisible)
     window.addEventListener('focus', whenVisible)
     return () => {
-      clearInterval(timer)
+      stop()
       document.removeEventListener('visibilitychange', whenVisible)
       window.removeEventListener('focus', whenVisible)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
+}
+
+// ─── One tick for everything (Brent, 11 Nov 2026: battery) ──────────────────
+// Each screen and badge used to keep its own minute timer, so an open portal
+// woke the phone's radio at five different moments a minute — the week, the
+// leader, carried-over jobs, unread messages. Every check now runs on one
+// shared timer, together, so the radio wakes once a minute and the requests
+// go out side by side on one connection. The timer exists only while
+// something is listening.
+const listeners = new Set()
+let sharedTimer = null
+
+/** Calls `fn` on the shared minute tick. Returns the way to stop. */
+export function onLiveTick(fn) {
+  listeners.add(fn)
+  if (!sharedTimer) sharedTimer = setInterval(() => listeners.forEach(f => f()), LIVE_POLL_MS)
+  return () => {
+    listeners.delete(fn)
+    if (!listeners.size && sharedTimer) { clearInterval(sharedTimer); sharedTimer = null }
+  }
 }
 
 // ─── A clock that ticks ──────────────────────────────────────────────────────

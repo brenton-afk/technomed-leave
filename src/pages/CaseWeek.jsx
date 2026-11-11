@@ -21,7 +21,7 @@ import { implantQuestion } from '../clinicalPlan/deduceKit.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { IconCopy } from '../design/icons.jsx'
 import { caseSummaryText, copyText } from '../clinicalPlan/caseSummary.js'
-import EditBooking from './cases/EditBooking.jsx'
+import EditBooking, { prefetchBooking } from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
 import ListOrder from './cases/ListOrder.jsx'
@@ -476,7 +476,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
   const question = useMemo(() => implantQuestion(surgicalCase), [surgicalCase])
 
   return (
-    <div data-case-card
+    <div data-case-card data-case-id={surgicalCase.id}
       style={{
         display: 'flex', width: '100%', gap: 0, padding: 0, alignItems: 'stretch',
         backgroundColor: fill, border: `1px solid ${off ? colour.line : 'transparent'}`,
@@ -952,7 +952,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
     // right, and a button inside a button is invalid HTML that browsers
     // resolve by dropping one — which is how a control looks perfectly fine
     // and does nothing at all.
-    <div data-week-case={surgicalCase.id} style={{
+    <div data-week-case={surgicalCase.id} data-case-id={surgicalCase.id} style={{
       marginBottom: 4, borderRadius: radius.control, overflow: 'hidden',
       border: `1px solid ${off ? colour.line : 'transparent'}`,
       background: fill,
@@ -1410,6 +1410,16 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   // The booking being edited, if any. Tapping a case opens the sheet; the sheet
   // loads it fresh from the calendar rather than editing what is on screen.
   const [editing, setEditing] = useState(null)
+  // A booking starts loading as a finger lands on its card, so the sheet has
+  // it by the time the tap ends (Brent, 11 Nov 2026: speed).
+  useEffect(() => {
+    const early = e => {
+      const card = e.target?.closest?.('[data-case-id]')
+      if (card?.dataset.caseId) prefetchBooking(card.dataset.caseId, user?.token)
+    }
+    document.addEventListener('pointerdown', early, true)
+    return () => document.removeEventListener('pointerdown', early, true)
+  }, [user?.token])
   // The search sheet. A result opens the same edit sheet a card does.
   const [searching, setSearching] = useState(false)
   // The day whose team leader sheet is open from the band's "leading" tile.
