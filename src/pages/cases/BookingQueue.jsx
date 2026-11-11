@@ -443,6 +443,17 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
           now (reconcileQueue); a booking not on it is simply one to add, and
           the card reads like any other. */}
 
+      {candidate.returned?.why && candidate.returned?.by && (
+        <div role="note" data-checked-back style={{
+          ...text('caption'), color: colour.ink, marginTop: space.sm,
+          background: colour.warningSoft, border: `1px solid ${colour.warningLine}`,
+          borderRadius: radius.control, padding: space.sm
+        }}>
+          Back on the list: {candidate.returned.by} marked it
+          {candidate.returned.was === 'dismissed' ? ' “Not a booking”' : ' “Already in the calendar”'},
+          but {candidate.surgeon || 'the surgeon'} has nothing on the calendar that day.
+        </div>
+      )}
       {moves && (
         <div role="note" style={{
           ...text('caption'), color: colour.ink, marginTop: space.sm,

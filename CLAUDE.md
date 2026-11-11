@@ -300,6 +300,19 @@ matches a case someone dismissed is no longer counted as dealt with
 `bookings-find`, `bookings-email` and `bookings-read` (a dry run of the
 reader) — read-only, logged — once `TM_PORTAL_AGENT_KEY` is in the cloud
 environment.
+**A person's "already on the calendar" is re-checked** (Pt Bal, same day:
+Calvary's email for Gupta on 2 Dec, nothing on the calendar that day, never
+shown again). `reconcileQueue` now brings such a card back (`returned.was:
+'onCalendar'`, `by`) when the surgeon has **nothing at all** on that day —
+while the surgeon has any case that day it is left alone, since a misspelt
+surname is why people say it. An email whose cards were all dismissed is
+listed as `dismissed-card`, and **Read it as a booking** on it revives the
+dismissed card. Find shows who marked a card and how.
+Then (Brent: "always check … whether that case is already booked by back
+checking with the portal itself"): a card marked **Not a booking** that is a
+whole case (patient, surgeon, day ahead) is checked the same way. Either kind
+comes back **once** (`checkedBack`) with a note on the card saying who marked
+it and that the surgeon has nothing that day; dismissed again, it stays.
 **Search** is the magnifying glass in the Cases header (`cases/CaseSearch.jsx`,
 `action=search` in `api/calendar/today.js`): Google's own full-text search over
 2020 to a year ahead, each hit read through `readBooking`, cases only.

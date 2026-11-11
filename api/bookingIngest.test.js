@@ -193,14 +193,39 @@ describe('every booking checked against the calendar as it is now', async () => 
 
   it('never resurrects what a person settled, nor anything already past', async () => {
     const queue = [
-      { id: 'q1', status: 'dismissed', patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' },
-      { id: 'q2', status: 'onCalendar', dismissedBy: 'Toni', patient: 'Alan', surgeon: 'Dubey', date: '2026-11-12' },
+      { id: 'q1', status: 'dismissed', checkedBack: true, patient: 'Allan', surgeon: 'Dubey', date: '2026-11-12' },
       { id: 'q3', status: 'accepted', eventId: 'evt-old', patient: 'Rossa', surgeon: 'Dubey', date: '2026-10-20' }
     ]
     const read = vi.fn(async () => [])
     const result = await reconcileQueue(queue, TODAY, read)
     expect(result).toEqual({ returned: 0, nowBooked: 0 })
     expect(read).not.toHaveBeenCalled()
+  })
+
+  // Pt Bal, 11 Nov 2026: marked "already on the calendar" by a person, with
+  // nothing for that surgeon on that day. Invented patients.
+  it('brings back a case a person called "already on the calendar" when the surgeon has nothing that day', async () => {
+    const queue = [{ id: 'q2', status: 'onCalendar', dismissedBy: 'Toni', patient: 'Testb', surgeon: 'Gupta', date: '2026-12-02' }]
+    const result = await reconcileQueue(queue, TODAY, async () => [onCal('evt-1', 'Allan', '2026-12-02')])
+    expect(result.returned).toBe(1)
+    expect(updates()[0]).toMatchObject({ id: 'q2', status: 'pending', returned: { was: 'onCalendar', by: 'Toni' } })
+  })
+
+  it('brings back a case marked "Not a booking" once, when it is nowhere on the calendar', async () => {
+    const queue = [
+      { id: 'd1', status: 'dismissed', dismissedBy: 'Mat', patient: 'Testc', surgeon: 'Gupta', date: '2026-12-02' },
+      { id: 'd2', status: 'dismissed', dismissedBy: 'Mat', checkedBack: true, patient: 'Testd', surgeon: 'Gupta', date: '2026-12-03' }
+    ]
+    const result = await reconcileQueue(queue, TODAY, async () => [])
+    expect(result.returned).toBe(1)
+    expect(updates()).toEqual([expect.objectContaining({ id: 'd1', status: 'pending', checkedBack: true, returned: expect.objectContaining({ was: 'dismissed', by: 'Mat' }) })])
+  })
+
+  it('leaves it alone while that surgeon has a case that day — a surname spelt differently', async () => {
+    const queue = [{ id: 'q2', status: 'onCalendar', dismissedBy: 'Toni', patient: 'Testb', surgeon: 'Dubey', date: '2026-12-02' }]
+    const result = await reconcileQueue(queue, TODAY, async () => [onCal('evt-1', 'Tesbt', '2026-12-02')])
+    expect(result.returned).toBe(0)
+    expect(updates()).toEqual([])
   })
 
   // Brent, 9 Nov 2026: cancellation cards for cases from last week.
@@ -365,6 +390,16 @@ describe('nothing in bookings@ is left without a trace', () => {
 
     expect((await call('setaside', { messageId: 'newsmsg1', review: true })).statusCode).toBe(200)
     expect((await list()).emails.map(e => e.messageId)).toEqual(['freshmsg1'])
+  })
+})
+
+describe('reading a dismissed booking again on request', () => {
+  it('brings the card back', async () => {
+    mailbox = { cnsmsg3: { from: 'bookings@cnstas.com.au', subject: 'Booking' } }
+    queue.set('old', { id: 'old', status: 'dismissed', dismissedBy: 'Toni', patient: 'Rossa', surgeon: 'Ibbett', date: '2026-11-09' })
+    await call('ingest', {})
+    const res = await call('ingest', { force: ['cnsmsg3'] })
+    expect(res.payload.outcomes.cnsmsg3).toMatchObject({ queued: 1 })
   })
 })
 

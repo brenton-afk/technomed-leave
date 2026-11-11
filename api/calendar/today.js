@@ -1405,9 +1405,12 @@ export async function listBookingEmails({ q = '' } = {}) {
     const records = await Promise.all(ids.map(id => bookingEmailRecord(id).catch(() => null)))
     const queue = await getBookingQueue()
     const cardsOf = id => queue.filter(c => c.messageId === id)
+    const today = todayInHobart()
     const listed = []
     ids.forEach((id, i) => {
-      const why = setAsideReason(records[i])
+      let why = setAsideReason(records[i])
+      const cards = cardsOf(id)
+      if (!why && cards.length && cards.every(c => c.status === 'dismissed' && (c.date || '') >= today)) why = 'dismissed-card'
       if (why || words) listed.push({ messageId: id, record: records[i] || {}, why: why || 'accounted' })
     })
     const missing = listed.filter(x => !x.record.subject && !x.record.from)
@@ -1425,10 +1428,11 @@ export async function listBookingEmails({ q = '' } = {}) {
       // What became of it, for a searched email that did become something.
       cards: cardsOf(messageId).map(c => ({
         status: c.status, patient: c.patient || '', date: c.date || '', surgeon: c.surgeon || '',
-        matchedSummary: c.matchedSummary || '', dismissReason: c.dismissReason || c.reason || ''
+        matchedSummary: c.matchedSummary || '', dismissReason: c.dismissReason || c.reason || '',
+        dismissedBy: c.dismissedBy || ''
       })),
       looksLikeBooking: looksLikeBooking(record.subject || '', record.snippet || '')
-        || ['nothing-found', 'unreadable', 'dismissed-before', 'accounted'].includes(why)
+        || ['nothing-found', 'unreadable', 'dismissed-before', 'dismissed-card', 'accounted'].includes(why)
     }))
     const since = new Date(Date.now() - INBOX_SPAN_DAYS * 86400000).toISOString()
     const matched = queue
@@ -1723,6 +1727,16 @@ async function ingestPass({ force = [] } = {}) {
         // A case already dismissed stays dismissed: re-reading the email that
         // carried it must not resurrect it.
         const buried = existing.find(c => c.status === 'dismissed' && isSameBooking(c, candidate))
+        // Unless a person has just asked for this email to be read as a
+        // booking: then the case comes back, saying who had dismissed it.
+        if (buried && forced.has(messageId)) {
+          await updateBookingCandidate(buried.id, {
+            status: 'pending', returned: { was: 'dismissed', by: buried.dismissedBy || null, at: new Date().toISOString() }
+          })
+          buried.status = 'pending'
+          queued.push(buried)
+          continue
+        }
         // Not counted as dealt with: the email is listed as set aside, saying
         // so, because "someone dismissed a case like it" is not "dealt with".
         if (buried) { outcome.dismissed = (outcome.dismissed || 0) + 1; kept -= 1; continue }
@@ -1818,10 +1832,23 @@ export async function reconcileQueue(queue, today, readCalendar = bookingsOnCale
       c.status = 'onCalendar'
     }
   }
+  // "Already in the calendar", said by a person (Pt Bal, 11 Nov 2026): left
+  // alone while the surgeon has anything on that day — a surname spelt
+  // differently is why people say it — but when the surgeon has nothing at
+  // all on the day, it cannot be on the calendar, and the card comes back.
+  // Brent, same day: "the portal should always check … whether that case is
+  // already booked by back checking with the portal itself". A card a person
+  // marked "Not a booking" is checked the same way when it is a whole case
+  // (patient, surgeon, day). Each is brought back once: dismissed again after
+  // that, it stays dismissed (`checkedBack`), so nobody is nagged twice.
+  const saidOnCalendar = c => !c.checkedBack && c.kind !== 'cancel' && c.surgeon && (
+    (c.status === 'onCalendar' && c.dismissedBy && c.dismissedBy !== 'day passed')
+    || (c.status === 'dismissed' && c.patient))
   const upcoming = queue.filter(c => c.date && c.date >= today && (
     c.status === 'pending'
     || c.status === 'accepted'
-    || (c.status === 'onCalendar' && !c.dismissedBy)))
+    || (c.status === 'onCalendar' && !c.dismissedBy)
+    || saidOnCalendar(c)))
   if (!upcoming.length) return out
 
   const dates = upcoming.map(c => c.date).sort()
@@ -1856,6 +1883,19 @@ export async function reconcileQueue(queue, today, readCalendar = bookingsOnCale
         await updateBookingCandidate(c.id, { status: 'onCalendar', matchedEventId: twin.id, matchedSummary: twin.summary })
         out.nowBooked += 1
       }
+      continue
+    }
+    if (saidOnCalendar(c)) {
+      const key = normaliseSurgeon(c.surgeon)
+      const surgeonThatDay = events.some(e => e.date === c.date && (
+        !key || !e.surgeon || normaliseSurgeon(e.surgeon) === key))
+      if (surgeonThatDay || alreadyInCalendar(c, events)) continue
+      await updateBookingCandidate(c.id, {
+        status: 'pending', checkedBack: true,
+        returned: { was: c.status, by: c.dismissedBy, at: new Date().toISOString(), why: 'nothing on the calendar for that surgeon that day' },
+        dismissedBy: null, matchedEventId: null
+      })
+      out.returned += 1
       continue
     }
     const eventId = c.eventId || c.matchedEventId

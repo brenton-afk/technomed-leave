@@ -18,6 +18,7 @@ export const WHY = {
   distributor: 'From a distributor — not read',
   'not-a-booking-sender': 'Not from a hospital or surgeon’s rooms — not read',
   'dismissed-before': 'Read — but it matches a case someone marked “Not a booking”',
+  'dismissed-card': 'Read — its booking was marked “Not a booking”. Read it again to bring it back',
   accounted: 'Read'
 }
 
@@ -34,7 +35,9 @@ export function cardsLine(cards = []) {
   return cards.map(c => {
     const who = [c.patient, c.surgeon, c.date].filter(Boolean).join(' · ') || 'A booking'
     const what = CARD_STATUS[c.status] || c.status
-    return `${who} — ${what}${c.status === 'onCalendar' && c.matchedSummary ? ` (“${c.matchedSummary}”)` : ''}`
+    const by = c.dismissedBy ? ` by ${c.dismissedBy}` : ''
+    const said = c.status === 'onCalendar' && c.dismissedBy ? `marked “already on the calendar”${by}` : `${what}${c.status === 'dismissed' ? by : ''}`
+    return `${who} — ${said}${c.status === 'onCalendar' && c.matchedSummary ? ` (“${c.matchedSummary}”)` : ''}`
   }).join('; ')
 }
 
