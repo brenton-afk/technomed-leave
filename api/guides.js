@@ -14,7 +14,8 @@ import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus }
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
-import { listKitDocs, docCounts, keepKitDoc, removeKitDoc, setKitDocKind, kitDocLink, DOC_KINDS } from './_kitDocs.js'
+import { listKitDocs, docCounts, keepKitDoc, removeKitDoc, setKitDocKind, kitDocLink, DOC_KINDS,
+  dropboxCatalogue, suggestFor, searchCatalogue, linkKitDoc, proposeAgreements } from './_kitDocs.js'
 
 // ─── Theatre guides ──────────────────────────────────────────────────────────
 // Eleven field references for the systems the team carries, plus Surgeon
@@ -265,6 +266,27 @@ async function handleKits(req, res, session) {
     if (what === 'doc-link' && req.method === 'GET') {
       return res.status(200).json(await kitDocLink(String(req.query.id || ''), String(req.query.doc || '')))
     }
+    // Add from Dropbox: what looks like this kit's, or a search.
+    if (what === 'dbx-suggest' && req.method === 'GET') {
+      const kit = await kitById(req.query.id)
+      if (!kit) return res.status(404).json({ error: 'No such kit' })
+      const kind = ['consignment', 'traylist', 'other'].includes(String(req.query.kind)) ? String(req.query.kind) : 'consignment'
+      const taken = (await listKitDocs(kit.id)).map(d => d.path)
+      const catalogue = await dropboxCatalogue({ fresh: req.query.fresh === '1' })
+      return res.status(200).json({ suggested: suggestFor(kit, catalogue, { kind, taken }) })
+    }
+    if (what === 'dbx-search' && req.method === 'GET') {
+      return res.status(200).json({ files: searchCatalogue(await dropboxCatalogue(), String(req.query.q || '')) })
+    }
+    // Every kit at once, for an admin or the clinical team: a dry run first
+    // (what it would attach, what it is unsure of), then only what was ticked.
+    if (what === 'dbx-autolink' && req.method === 'GET') {
+      if (!canRemove) return res.status(403).json({ error: 'Admins and the clinical team only' })
+      const kits = await listKits()
+      const lists = await Promise.all(kits.map(k => listKitDocs(k.id)))
+      const docsByKit = Object.fromEntries(kits.map((k, i) => [k.id, lists[i]]))
+      return res.status(200).json(proposeAgreements(kits, await dropboxCatalogue({ fresh: true }), docsByKit))
+    }
     // The original document a tray list was read from — only a path the
     // kit's own list holds.
     if (what === 'tray-file' && req.method === 'GET') {
@@ -336,6 +358,24 @@ async function handleKits(req, res, session) {
       const doc = await keepKitDoc(kit, { buffer, filename: body.filename, kind: body.kind }, who)
       await logKitEvent({ kind: 'doc', kitId: kit.id, kitName: kit.name, by: who, text: `${DOC_KINDS[doc.kind].label} added: ${doc.name}` })
       return res.status(200).json({ doc })
+    }
+    if (what === 'doc-dbx') {
+      const picks = Array.isArray(body.picks) ? body.picks.slice(0, 80) : [{ kitId: body.kitId, path: body.path, kind: body.kind }]
+      if (picks.length > 1 && !canRemove) return res.status(403).json({ error: 'Admins and the clinical team only' })
+      const kits = await listKits()
+      const linked = []
+      const failed = []
+      for (const pick of picks) {
+        const kit = kits.find(k => k.id === String(pick.kitId || ''))
+        if (!kit) { failed.push({ ...pick, error: 'No such kit' }); continue }
+        try {
+          const doc = await linkKitDoc(kit, { path: String(pick.path || ''), kind: pick.kind }, who)
+          await logKitEvent({ kind: 'doc', kitId: kit.id, kitName: kit.name, by: who, text: `${DOC_KINDS[doc.kind]?.label || 'Document'} attached from Dropbox: ${doc.name}` })
+          linked.push({ kitId: kit.id, doc })
+        } catch (err) { failed.push({ kitId: pick.kitId, path: pick.path, error: err.message }) }
+      }
+      if (picks.length === 1 && failed.length) return res.status(400).json({ error: failed[0].error })
+      return res.status(200).json({ linked, failed, doc: linked[0]?.doc })
     }
     if (what === 'doc-remove') {
       const kit = await kitById(body.kitId)

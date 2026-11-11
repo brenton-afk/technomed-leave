@@ -928,6 +928,22 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   reorder (`kits:order`, shared, `saveKitOrder`), onto another place to open
   the move sheet with that place chosen (`MoveSheet initialTo`; a move still
   goes through its email step).
+- **Add from Dropbox** (Brent, same day: "Build option 2"): **+ From Dropbox**
+  on a kit (`kit/FromDropbox.jsx`) attaches a file already in Dropbox **by its
+  path — no copy** (`linked: true`), so the kit opens the current version.
+  Only `LINK_ROOTS` are offered or accepted (`/Admin/Consignment Agreements`,
+  `/Tray Lists`, `/Kit Room`; `linkablePath`, never the usage tree); the list
+  of them is `dropboxCatalogue` (`listFilesUnder`, cached 15 min in
+  `kits:dbx:catalogue`). `suggestFor` ranks by the kit's system words in the
+  name or folder, its hospital named (another hospital counts against), the
+  word "consignment agreement", "signed", PDF, then year; a PDF and Word copy
+  of the same name are one. **Attach agreements from Dropbox** (Kit room,
+  admins and the clinical team; `kit/AttachAgreements.jsx`, `dbx-autolink`)
+  proposes every kit without an agreement at once — clear matches ticked
+  (`proposeAgreements`: hospital named and a point clear, or level and newer),
+  the rest offered with Skip chosen — and attaches only what was ticked
+  (`doc-dbx` with `picks`). On the real folder (11 Nov): 10 clear, 14 to
+  choose (signed vs updated copies), 7 KT kits with none.
 
 ### Surgeon preference cards (Task 18)
 

@@ -62,3 +62,65 @@ describe('the tile order', () => {
     expect(await kits.getKitOrder()).toEqual([ids[1], ids[0]])
   })
 })
+
+describe('adding from Dropbox (Brent, 11 Nov 2026: "Build option 2")', () => {
+  const f = (path, extra = {}) => ({ name: path.split('/').pop(), path, size: 1, kind: docs.kindForPath(path), ...extra })
+  const CA = '/Admin/Consignment Agreements'
+  const catalogue = [
+    f(`${CA}/RHH Consignment Agreements/Signus Diplomat Consignment Agreement TM-RHH 2023.docx`),
+    f(`${CA}/RHH Consignment Agreements/PDF format Consignment Agreements/Signus Diplomat Consignment Agreement TM-RHH 2023.pdf`),
+    f(`${CA}/Calvary Lenah Valley Consignmnet Agreements/CONSIGNMENT AGREEMENT CLV - Signus Diplomat 2023.pdf`),
+    f(`${CA}/Calvary Lenah Valley Consignmnet Agreements/CONSIGNMENT AGREEMENT CLV - Signus Diplomat 2024 update.pdf`),
+    f(`${CA}/RHH Consignment Agreements/E4 Dakota Consignment Agreement TM-RHH 2025.pdf`)
+  ]
+
+  it('offers only files in the agreement, tray list and kit room folders', () => {
+    expect(docs.linkablePath(`${CA}/RHH/x.pdf`)).toBe(true)
+    expect(docs.linkablePath('/Tray Lists/Hospital Copies/RHH/x.pdf')).toBe(true)
+    expect(docs.linkablePath('/ALL SURGEON USAGE/SPINE/x.pdf')).toBe(false)
+    expect(docs.linkablePath('/Admin/Accounts/prices.xlsx')).toBe(false)
+    expect(docs.linkablePath(`${CA}/../Accounts/x.pdf`)).toBe(false)
+  })
+
+  it("suggests the kit's own hospital first, and a PDF and Word copy as one", () => {
+    const out = docs.suggestFor({ id: 'k', name: 'Diplomat', system: 'Diplomat', home: 'RHH' }, catalogue)
+    expect(out[0].name).toBe('Signus Diplomat Consignment Agreement TM-RHH 2023.pdf')
+    expect(out.filter(o => /TM-RHH 2023/.test(o.name))).toHaveLength(1)
+    expect(out.some(o => /Dakota/.test(o.name))).toBe(false)
+  })
+
+  it('attaches only a clear match by itself, and lists the rest for a person', () => {
+    const kits = [
+      { id: 'a', name: 'Diplomat', system: 'Diplomat', home: 'RHH' },
+      { id: 'b', name: 'Diplomat 1', system: 'Diplomat', home: 'CLV' },
+      { id: 'c', name: 'Lonestar', system: 'Lonestar', home: 'RHH' },
+      { id: 'd', name: 'Dakota', system: 'Dakota', home: 'RHH' }
+    ]
+    const { sure, unsure } = docs.proposeAgreements(kits, catalogue, { d: [{ kind: 'consignment', path: 'x' }] })
+    // b: two versions of the same agreement — the newer year wins outright.
+    expect(sure.map(s => s.kitId)).toEqual(['a', 'b'])
+    expect(sure[1].name).toMatch(/2024 update/)
+    expect(unsure).toEqual([])
+    // A signed copy against a newer unsigned one is a person's call.
+    const signed = [...catalogue, f(`${CA}/Calvary Lenah Valley Consignmnet Agreements/CONSIGNMENT AGREEMENT CLV - Signus Diplomat (SIGNED).pdf`)]
+    expect(docs.proposeAgreements([kits[1]], signed, {}).unsure.map(u => u.kitId)).toEqual(['b'])
+  })
+
+  it('links by path — no copy — and refuses anything outside those folders', async () => {
+    const open = vi.fn(async p => ({ url: 'u', name: p.split('/').pop() }))
+    const doc = await docs.linkKitDoc(kit, { path: catalogue[1].path }, 'Brent', { open })
+    expect(doc).toMatchObject({ linked: true, kind: 'consignment', name: 'Signus Diplomat Consignment Agreement TM-RHH 2023.pdf' })
+    expect(uploads).toEqual([])
+    expect((await docs.linkKitDoc(kit, { path: catalogue[1].path }, 'Brent', { open })).id).toBe(doc.id)
+    await expect(docs.linkKitDoc(kit, { path: '/ALL SURGEON USAGE/x.pdf' }, 'Brent', { open })).rejects.toThrow(/Only files/)
+  })
+
+  it('builds the catalogue from those folders only, leaving tray photos out', async () => {
+    const list = vi.fn(async root => (root === '/Tray Lists'
+      ? [{ name: 'Tray 1.jpg', path: '/Tray Lists/Tray Photos/Kit/Tray 1.jpg' }, { name: 'RHH.pdf', path: '/Tray Lists/Hospital Copies/RHH.pdf' }]
+      : []))
+    const out = await docs.dropboxCatalogue({ fresh: true, list })
+    expect(list.mock.calls.map(c => c[0])).toEqual(docs.LINK_ROOTS)
+    expect(out.map(f => [f.name, f.kind])).toEqual([['RHH.pdf', 'traylist']])
+  })
+})

@@ -359,6 +359,30 @@ export async function listFolder(path) {
 }
 
 /**
+ * Every file under a folder, all the way down (the kit room's "Add from
+ * Dropbox", 11 Nov 2026). Never the usage tree — the lock applies here too.
+ * Capped, so a mistaken root cannot walk the whole account.
+ */
+export async function listFilesUnder(path, { max = 3000 } = {}) {
+  assertUsageReadable(path)
+  const files = []
+  let res = await rpc('files/list_folder', { path, recursive: true, include_deleted: false, limit: 2000 })
+  for (;;) {
+    if (!res.ok) {
+      const summary = res.data?.error_summary || res.text || ''
+      if (String(summary).includes('not_found')) return files
+      throw dropboxFault('list a folder', res.status, summary)
+    }
+    for (const e of res.data.entries || []) {
+      if (e['.tag'] !== 'file') continue
+      files.push({ name: e.name, path: e.path_display, size: e.size ?? 0, modified: e.server_modified || null })
+    }
+    if (!res.data.has_more || files.length >= max) return files.slice(0, max)
+    res = await rpc('files/list_folder/continue', { cursor: res.data.cursor })
+  }
+}
+
+/**
  * A short-lived direct link to one file. Dropbox expires these after ~4 hours,
  * so they are fetched on demand and never stored — a persisted link would be a
  * public URL to patient data long after anyone remembered it existed.

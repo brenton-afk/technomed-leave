@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { shareFile, typeOfName, shareReady } from '../../kit/share.js'
+import FromDropbox from './FromDropbox.jsx'
 
 // ─── A kit's documents (Brent, 11 Nov 2026) ──────────────────────────────────
 // Consignment agreements and anything else that belongs to a kit, added from
@@ -32,6 +33,7 @@ export default function KitDocs({ kit, user, post, onChanged }) {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState('')
   const [over, setOver] = useState(false)
+  const [fromDropbox, setFromDropbox] = useState(false)
   const pick = useRef(null)
   const kindFor = useRef('consignment')
   const auth = { Authorization: `Bearer ${user?.token || ''}` }
@@ -127,7 +129,7 @@ export default function KitDocs({ kit, user, post, onChanged }) {
       <button onClick={() => open(doc)} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
         <div style={{ ...text('bodyStrong'), color: colour.ink, overflowWrap: 'anywhere' }}>{doc.name}</div>
         <div style={{ ...text('caption'), color: colour.inkFaint }}>
-          {[sizeText(doc.size || 0), doc.by && `added by ${doc.by}`, when(doc.at)].filter(Boolean).join(' · ')}
+          {[doc.linked ? 'linked from Dropbox' : sizeText(doc.size || 0), doc.by && `added by ${doc.by}`, when(doc.at)].filter(Boolean).join(' · ')}
         </div>
       </button>
       <button onClick={() => share(doc)} aria-label={`Share ${doc.name}`} style={small(true)}>Share</button>
@@ -158,10 +160,15 @@ export default function KitDocs({ kit, user, post, onChanged }) {
       <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', marginTop: space.sm }}>
         <button onClick={() => choose('consignment')} disabled={Boolean(busy)} style={small(false)}>+ Consignment agreement</button>
         <button onClick={() => choose('other')} disabled={Boolean(busy)} style={small(false)}>+ Other document</button>
+        <button onClick={() => setFromDropbox(v => !v)} data-open-from-dropbox style={small(fromDropbox)}>+ From Dropbox</button>
       </div>
       <div style={{ ...text('caption'), color: colour.inkFainter, marginTop: 4 }}>
         PDF, Word, Excel or a photo. On a computer, drop files here.
       </div>
+      {fromDropbox && (
+        <FromDropbox kit={kit} user={user} post={post} onClose={() => setFromDropbox(false)}
+          onDone={async file => { setStatus(`Attached ${file.name}.`); await load(); onChanged?.() }} />
+      )}
       {busy && <div role="status" style={{ ...text('caption'), color: colour.inkMuted, marginTop: space.xs }}>{busy}</div>}
       {status === 'ready' && !busy && (
         <button type="button" onClick={async () => { setStatus(''); try { await shareReady() } catch (err) { setError(err.message) } }}

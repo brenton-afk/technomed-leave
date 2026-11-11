@@ -4,6 +4,7 @@ import { colour, text, space, radius, border, card, site } from '../design/token
 import { IconKit, IconSearch } from '../design/icons.jsx'
 import MoveSheet from './kit/MoveSheet.jsx'
 import KitDetail from './kit/KitDetail.jsx'
+import AttachAgreements from './kit/AttachAgreements.jsx'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
 import { systemsInKit } from '../clinicalPlan/systems.js'
 
@@ -91,6 +92,7 @@ export default function KitRoom({ user, onBack }) {
   const [moveTo, setMoveTo] = useState('')
   const [dragging, setDragging] = useState(null)   // { kit, x, y, over }
   const [order, setOrder] = useState(null)
+  const [attaching, setAttaching] = useState(false)
   const [busy, setBusy] = useState('')
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
@@ -314,13 +316,19 @@ export default function KitRoom({ user, onBack }) {
           }}>{dragging.kit.name}</div>
         )}
 
-        {data?.canEdit && (
-          <button onClick={() => setOpen({ id: '', name: '', trays: [] })} style={{ ...pill(false), marginTop: space.lg }}>+ Add a kit</button>
-        )}
+        <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.lg }}>
+          {data?.canEdit && (
+            <button onClick={() => setOpen({ id: '', name: '', trays: [] })} style={pill(false)}>+ Add a kit</button>
+          )}
+          {data?.canRemove && (
+            <button onClick={() => setAttaching(true)} data-attach-agreements style={pill(false)}>Attach agreements from Dropbox</button>
+          )}
+        </div>
 
         {data && <HistoryLink user={user} />}
       </div>
 
+      {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
       {moving && (
         <MoveSheet kit={moving} initialTo={moveTo} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
           post={post} onClose={() => setMoving(null)} onDone={() => { setMoving(null); load() }} />
