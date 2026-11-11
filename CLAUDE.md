@@ -22,7 +22,7 @@ calendar events.
 
 ## Architecture
 
-A mobile-first PWA staff portal for TechnoMed (a Tasmanian surgical device distributor). React 18 + Vite SPA, with Vercel serverless functions under `api/`. No database — **Upstash Redis (REST API) is the only persistence layer**, accessed by hand-rolled `fetch` calls to the REST endpoint rather than a client library.
+A mobile-first PWA staff portal for TechnoMed (a Tasmanian surgical device distributor). React 18 + Vite SPA, with Vercel serverless functions under `api/`. **Functions run in Sydney** (`"regions": ["syd1"]` in `vercel.json`, Brent 11 Nov 2026 — they had defaulted to Washington, so every tap crossed the Pacific); Upstash is in Sydney too (ap-southeast-2, Global). It was on the **free tier, 500K commands/month, 425K used by 11 Nov** — over the limit Upstash refuses every request, so keep Redis calls per request low. No database — **Upstash Redis (REST API) is the only persistence layer**, accessed by hand-rolled `fetch` calls to the REST endpoint rather than a client library.
 
 ### Navigation is state, not routes
 
