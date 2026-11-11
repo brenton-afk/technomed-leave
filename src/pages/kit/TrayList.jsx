@@ -1,4 +1,5 @@
 import { uniqueTrayNames } from '../../trayNames.js'
+import { shareFiles, shareText, trayListText, shareReady } from '../../kit/share.js'
 import React, { useState, useEffect, useRef } from 'react'
 import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
@@ -119,6 +120,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
   const [error, setError] = useState('')
   const [editingTray, setEditingTray] = useState('')
   const [editError, setEditError] = useState('')
+  const [shareMsg, setShareMsg] = useState('')
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
   // Live: somebody else's changes appear within a minute, and at once when the
@@ -318,6 +320,35 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     setStage('')
   }
 
+  // "Share the consignment agreement or tray list from the kit room page with
+  // a simple share button" (Brent, 11 Nov 2026): the original document(s) the
+  // list was read from, through the phone's share sheet; the list as text
+  // where no original was kept.
+  async function shareList() {
+    setShareMsg('Getting the tray list ready…')
+    try {
+      const paths = [...new Set((list?.trays || []).map(t => t.dropboxPath).filter(Boolean))]
+      const title = `${kit.name} — tray list`
+      let how
+      if (paths.length) {
+        const links = []
+        for (const path of paths) {
+          const res = await fetch(`/api/guides?kits=tray-file&id=${encodeURIComponent(kit.id)}&path=${encodeURIComponent(path)}`,
+            { headers: { Authorization: `Bearer ${user?.token || ''}` } })
+          const body = await res.json()
+          if (!res.ok) throw new Error(body.error || 'Could not get the tray list')
+          links.push({ url: body.url, name: body.name })
+        }
+        how = await shareFiles(links, { title })
+      } else {
+        how = await shareText({ title, text: trayListText(kit.name, list) })
+      }
+      setShareMsg(how === 'downloaded' ? 'Downloaded — attach it to an email or message.'
+        : how === 'copied' ? 'Copied — paste it into an email or message.'
+          : how === 'needs-tap' ? 'ready' : '')
+    } catch (err) { setShareMsg(err.message) }
+  }
+
   const label = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }
 
   if (review) {
@@ -392,11 +423,26 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             {list.source?.dropboxPath ? ` Original in Dropbox: ${list.source.dropboxPath}` : ''}
           </div>
           {/* "Ability to print tray lists from portal" — Brent, 3 Nov 2026. */}
-          <button type="button" onClick={() => printTrayList(kit, list, { printedBy: user?.firstName || user?.name || '', token: user?.token })}
-            style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: colour.accentSoft, border: 'none',
-              borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer', marginBottom: space.sm }}>
-            Print tray list
-          </button>
+          <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', marginBottom: space.sm }}>
+            <button type="button" onClick={shareList} disabled={Boolean(shareMsg && shareMsg.endsWith('…'))} data-share-tray-list
+              style={{ ...text('caption'), fontWeight: 600, color: 'white', background: colour.navy, border: 'none',
+                borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer' }}>
+              Share tray list
+            </button>
+            <button type="button" onClick={() => printTrayList(kit, list, { printedBy: user?.firstName || user?.name || '', token: user?.token })}
+              style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: colour.accentSoft, border: 'none',
+                borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer' }}>
+              Print tray list
+            </button>
+          </div>
+          {shareMsg === 'ready' && (
+            <button type="button" onClick={async () => { setShareMsg(''); try { await shareReady() } catch (err) { setShareMsg(err.message) } }}
+              style={{ ...text('bodyStrong'), width: '100%', padding: space.sm, marginBottom: space.sm, borderRadius: radius.control,
+                border: 'none', background: colour.accent, color: 'white', cursor: 'pointer' }}>
+              Ready — tap to share
+            </button>
+          )}
+          {shareMsg && shareMsg !== 'ready' && <div role="status" style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>{shareMsg}</div>}
           {editError && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{editError}</div>}
           {list.trays.map(t => (
             <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}

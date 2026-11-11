@@ -7,13 +7,14 @@ import {
 } from './_preferences.js'
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import {
-  listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit,
+  listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit, getKitOrder, saveKitOrder, logKitEvent,
   saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
 import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus } from './_dropbox.js'
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
+import { listKitDocs, docCounts, keepKitDoc, removeKitDoc, setKitDocKind, kitDocLink, DOC_KINDS } from './_kitDocs.js'
 
 // ─── Theatre guides ──────────────────────────────────────────────────────────
 // Eleven field references for the systems the team carries, plus Surgeon
@@ -238,13 +239,40 @@ function hobartToday() {
 async function handleKits(req, res, session) {
   const staff = STAFF.find(s => s.email === session.email) || {}
   const sender = { name: staff.name || session.name || '', email: staff.email || session.email, firstName: staff.firstName }
-  const canEdit = Boolean(staff.isAdmin || staff.isClinicalTeam)
+  // Brent, 11 Nov 2026: "They don't want to rely on me to fix things for them
+  // or make things available." Every member of staff can add and change kits,
+  // tray lists and documents; every change is logged with who made it. Only
+  // taking a kit off the list altogether, and the hospital-email switch, stay
+  // with admins and the clinical team.
+  const canEdit = Boolean(staff.email)
+  const canRemove = Boolean(staff.isAdmin || staff.isClinicalTeam)
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   const what = String(req.query.kits)
+  const who = sender.firstName || sender.email
+  const kitById = async id => (await listKits()).find(k => k.id === String(id || ''))
   try {
     if (what === 'list') {
-      const [kits, settings] = await Promise.all([listKits(), getKitSettings()])
-      return res.status(200).json({ kits, settings, canEdit, isAdmin: Boolean(staff.isAdmin), today: hobartToday() })
+      const [kits, settings, order] = await Promise.all([listKits(), getKitSettings(), getKitOrder()])
+      const counts = await docCounts(kits.map(k => k.id))
+      return res.status(200).json({
+        kits: kits.map(k => ({ ...k, docs: counts[k.id] || { docs: 0, consignment: 0 } })),
+        order, settings, canEdit, canRemove, isAdmin: Boolean(staff.isAdmin), today: hobartToday()
+      })
+    }
+    if (what === 'docs' && req.method === 'GET') {
+      return res.status(200).json({ docs: await listKitDocs(String(req.query.id || '')) })
+    }
+    if (what === 'doc-link' && req.method === 'GET') {
+      return res.status(200).json(await kitDocLink(String(req.query.id || ''), String(req.query.doc || '')))
+    }
+    // The original document a tray list was read from — only a path the
+    // kit's own list holds.
+    if (what === 'tray-file' && req.method === 'GET') {
+      const list = await getTrayList(String(req.query.id || ''))
+      const paths = [...new Set((list?.trays || []).map(t => t.dropboxPath).filter(Boolean))]
+      const path = paths.includes(String(req.query.path || '')) ? String(req.query.path) : paths[0]
+      if (!path) return res.status(404).json({ error: 'The original of this tray list was not kept — upload it again to share it' })
+      return res.status(200).json({ ...(await temporaryLink(path)), paths })
     }
     if (what === 'history') return res.status(200).json({ history: await kitHistory(150) })
     if (what === 'photo' && req.method === 'GET') {
@@ -284,12 +312,52 @@ async function handleKits(req, res, session) {
         throw err
       }
     }
+    if (what === 'doc-keep') {
+      const kit = await kitById(body.kitId)
+      if (!kit) return res.status(404).json({ error: 'No such kit' })
+      const ours = /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/kitdocs\//i.test(String(body.url || ''))
+      let buffer
+      if (typeof body.data === 'string' && body.data) buffer = Buffer.from(body.data, 'base64')
+      else if (ours) {
+        const got = await fetch(body.url)
+        if (!got.ok) return res.status(502).json({ error: 'The upload could not be fetched — try again' })
+        buffer = Buffer.from(await got.arrayBuffer())
+        // The temporary copy in the upload store, deleted once it is in
+        // Dropbox — by the store's own API, so this function carries no
+        // package the bundler cannot trace.
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          fetch('https://blob.vercel-storage.com/delete', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`, 'Content-Type': 'application/json', 'x-api-version': '7' },
+            body: JSON.stringify({ urls: [body.url] })
+          }).catch(() => {})
+        }
+      } else return res.status(400).json({ error: 'Upload the file again' })
+      const doc = await keepKitDoc(kit, { buffer, filename: body.filename, kind: body.kind }, who)
+      await logKitEvent({ kind: 'doc', kitId: kit.id, kitName: kit.name, by: who, text: `${DOC_KINDS[doc.kind].label} added: ${doc.name}` })
+      return res.status(200).json({ doc })
+    }
+    if (what === 'doc-remove') {
+      const kit = await kitById(body.kitId)
+      if (!kit) return res.status(404).json({ error: 'No such kit' })
+      const doc = await removeKitDoc(kit.id, String(body.docId || ''))
+      await logKitEvent({ kind: 'doc', kitId: kit.id, kitName: kit.name, by: who, text: `${DOC_KINDS[doc.kind]?.label || 'Document'} taken off: ${doc.name} (still in Dropbox)` })
+      return res.status(200).json({ ok: true })
+    }
+    if (what === 'doc-kind') {
+      const doc = await setKitDocKind(String(body.kitId || ''), String(body.docId || ''), String(body.kind || ''))
+      return res.status(200).json({ doc })
+    }
+    if (what === 'order') {
+      return res.status(200).json({ order: await saveKitOrder(body.ids, who) })
+    }
     if (what === 'savelist') {
-      if (!canEdit) return res.status(403).json({ error: 'Only admins and the clinical team can change tray lists' })
+      if (!canEdit) return res.status(403).json({ error: 'Sign in to change tray lists' })
       return res.status(200).json({ list: await saveTrayList(String(body.kitId || ''), body, sender.firstName) })
     }
     if (what === 'save' || what === 'remove') {
-      if (!canEdit) return res.status(403).json({ error: 'Only admins and the clinical team can change the kit list' })
+      if (!canEdit) return res.status(403).json({ error: 'Sign in to change the kit list' })
+      if (what === 'remove' && !canRemove) return res.status(403).json({ error: 'Only admins and the clinical team can take a kit off the list' })
       if (what === 'save') return res.status(200).json({ kit: await saveKitDef(body.kit, sender.firstName, body.renames) })
       await removeKitDef(body.kitId, sender.firstName)
       return res.status(200).json({ ok: true })

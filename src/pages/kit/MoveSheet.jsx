@@ -17,8 +17,9 @@ function shortDay(dateStr) {
   return d.toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone }) {
-  const [to, setTo] = useState(kit.at === kit.home ? '' : kit.home)
+export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone, initialTo = '' }) {
+  // A tile dragged onto a place arrives with that place already chosen.
+  const [to, setTo] = useState(initialTo && initialTo !== kit.at ? initialTo : (kit.at === kit.home ? '' : kit.home))
   const [trays, setTrays] = useState(kit.trays || [])
   const [date, setDate] = useState(today || '')
   const [caseChoice, setCaseChoice] = useState('')

@@ -904,6 +904,31 @@ with the line it was made against; if that line has changed meanwhile it is a
 409 with the current list. Every change is in `kits:history` with who made it,
 and the open list refreshes through `useLiveRefresh` (not while editing).
 
+### The kit room is everyone's (Brent, 11 Nov 2026)
+
+"Fully interactive and live … staff … don't want to rely on me … a live
+ecosystem a bit like Dropbox." **Every member of staff** can add and edit
+kits, upload and edit tray lists and add documents (`canEdit` = signed-in
+staff in `handleKits`; tray-read/keep/photo in `api/meetings/agent.js` too);
+only taking a kit off the list (`canRemove`) and the hospital-email switch
+stay with admins and the clinical team. Everything is in `kits:history`.
+- **Documents per kit** (`api/_kitDocs.js`, `kit/KitDocs.jsx`): consignment
+  agreements and other documents, Redis `kits:docs:{id}`, filed in Dropbox at
+  `/Kit Room/{kit}/{Consignment Agreements|Documents}/` (`keep`, never over
+  a file), ≤2.8 MB through the request, larger through the Blob handshake
+  (`kitdocs/` prefix). Opened by `doc-link` (a path the kit lists, only);
+  taking one off leaves it in Dropbox. Dropped files land on a desktop.
+- **Share** (`src/kit/share.js`): the file itself through the phone's share
+  sheet (`navigator.share` with files), else downloaded. An iPhone refuses a
+  share that comes too long after the tap — `needs-tap` keeps the files ready
+  and the screen shows "Ready — tap to share". A tray list shares its original
+  document(s) (`tray-file`, only paths its own trays hold), else its text.
+- **Tiles**: a "Tray list" and "Agreement" chip on each opens the kit at that
+  part (`KitDetail focus`); the ⋮⋮ grip drags a tile — onto another kit to
+  reorder (`kits:order`, shared, `saveKitOrder`), onto another place to open
+  the move sheet with that place chosen (`MoveSheet initialTo`; a move still
+  goes through its email step).
+
 ### Surgeon preference cards (Task 18)
 
 Editable data, not a page. `api/_preferences.js` keeps them in Redis

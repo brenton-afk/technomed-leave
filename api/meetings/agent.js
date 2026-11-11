@@ -96,6 +96,18 @@ async function handleBlobUpload(req, res) {
 
         // Tray lists for the kit room ride the same handshake: a hospital's
         // PDF runs to 7MB, past what a request body can carry.
+        // Kit room documents (consignment agreements and the rest) too.
+        if (String(pathname).startsWith('kitdocs/')) {
+          return {
+            allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic',
+              'application/msword', 'application/vnd.ms-excel', 'text/plain', 'text/csv',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'application/octet-stream'],
+            addRandomSuffix: true,
+            tokenPayload: JSON.stringify({ by: session.email })
+          }
+        }
         if (String(pathname).startsWith('traylists/')) {
           return {
             allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp',
@@ -764,9 +776,7 @@ async function handleTask(req, res, session) {
 async function handleTrayRead(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const staff = STAFF.find(s => s.email === session?.email)
-  if (!staff?.isAdmin && !staff?.isClinicalTeam) {
-    return res.status(403).json({ error: 'Only admins and the clinical team can upload tray lists' })
-  }
+  if (!staff) return res.status(403).json({ error: 'Sign in to upload tray lists' })
   const { url, text, images, data, filename, mediaType, hospital, kitName } = req.body || {}
   const fromOurStore = u => /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/traylists\//i.test(String(u || ''))
   // Only our own upload store, never an address from anywhere else.
@@ -828,7 +838,8 @@ async function keepTrayListOriginal(buffer, { url, filename, hospital, kitName }
 async function handleTrayKeep(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const staff = STAFF.find(s => s.email === session?.email)
-  if (!staff?.isAdmin && !staff?.isClinicalTeam) return res.status(403).json({ error: 'Not allowed' })
+  // Any member of staff (Brent, 11 Nov 2026: the kit room is everyone's).
+  if (!staff) return res.status(403).json({ error: 'Not allowed' })
   const { url, data, filename, hospital, kitName } = req.body || {}
   const ours = /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/traylists\//i.test(String(url || ''))
   if (!ours && typeof data !== 'string') return res.status(400).json({ error: 'Upload the file again' })
@@ -854,7 +865,8 @@ async function handleTrayKeep(req, res, session) {
 async function handleTrayPhoto(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const staff = STAFF.find(s => s.email === session?.email)
-  if (!staff?.isAdmin && !staff?.isClinicalTeam) return res.status(403).json({ error: 'Not allowed' })
+  // Any member of staff (Brent, 11 Nov 2026: the kit room is everyone's).
+  if (!staff) return res.status(403).json({ error: 'Not allowed' })
   const { data, kitName, trayName } = req.body || {}
   if (typeof data !== 'string' || !data) return res.status(400).json({ error: 'No photo came through' })
   if (!dropboxConfigured()) return res.status(400).json({ error: 'Dropbox is not connected, so the photo cannot be kept' })

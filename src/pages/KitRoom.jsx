@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Page, Header, Banner, EmptyState, Skeleton } from '../design/Shell.jsx'
 import { colour, text, space, radius, border, card, site } from '../design/tokens.js'
 import { IconKit, IconSearch } from '../design/icons.jsx'
@@ -87,6 +87,10 @@ export default function KitRoom({ user, onBack }) {
   const [distributor, setDistributor] = useState('')
   const [moving, setMoving] = useState(null)
   const [open, setOpen] = useState(null)
+  const [openFocus, setOpenFocus] = useState('')
+  const [moveTo, setMoveTo] = useState('')
+  const [dragging, setDragging] = useState(null)   // { kit, x, y, over }
+  const [order, setOrder] = useState(null)
   const [busy, setBusy] = useState('')
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
@@ -95,7 +99,7 @@ export default function KitRoom({ user, onBack }) {
       const res = await fetch('/api/guides?kits=list', { headers })
       const json = await res.json()
       if (!res.ok || json.error) throw new Error(json.error || 'Could not load the kit room')
-      setData(json); setError('')
+      setData(json); setError(''); setOrder(json.order || [])
     } catch (err) { setError(err.message) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token])
@@ -125,8 +129,70 @@ export default function KitRoom({ user, onBack }) {
     && (!distributor || distributorOf(k) === distributor)
     && (!query || `${k.name} ${k.system} ${(k.trays || []).join(' ')} ${DISTRIBUTORS[k.distributor]?.name || ''}`
       .toLowerCase().includes(query.toLowerCase())))
+  // The shared order a person dragged, where there is one; anything not in it
+  // keeps its place by distributor after the ordered ones.
+  const arrange = list => {
+    const sorted = byDistributor(list)
+    const at = new Map((order || []).map((id, i) => [id, i]))
+    return [...sorted].sort((a, b) => (at.has(a.id) ? at.get(a.id) : 1e6 + sorted.indexOf(a)) - (at.has(b.id) ? at.get(b.id) : 1e6 + sorted.indexOf(b)))
+  }
   const away = shown.filter(k => k.away)
   const home = shown.filter(k => !k.away)
+
+  // ─── Dragging a tile (Brent, 11 Nov 2026: "the tiles … need to be able to be
+  // moved easily") ── hold the ⋮⋮ grip and drag: onto another kit to put it
+  // there in the order, onto another place to move it there (the move sheet
+  // opens with that place chosen — a move still sends its email). Pointer
+  // events, so a finger and a mouse work the same.
+  function startDrag(kit, e) {
+    e.preventDefault()
+    setDragging({ kit, x: e.clientX, y: e.clientY, over: null })
+    const target = (x, y) => {
+      const el = document.elementFromPoint(x, y)
+      const tile = el?.closest?.('[data-kit-tile]')
+      if (tile && tile.dataset.kitTile !== kit.id) return { tile: tile.dataset.kitTile, place: tile.dataset.place }
+      const place = el?.closest?.('[data-drop-place]')
+      return place ? { place: place.dataset.dropPlace } : null
+    }
+    const move = ev => setDragging(d => d && { ...d, x: ev.clientX, y: ev.clientY, over: target(ev.clientX, ev.clientY) })
+    const up = ev => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      setDragging(null)
+      const over = target(ev.clientX, ev.clientY)
+      if (!over) return
+      if (over.place && over.place !== kit.at) { setMoveTo(over.place); setMoving(kit); return }
+      if (over.tile) reorder(kit.id, over.tile)
+    }
+    const cancel = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      setDragging(null)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+  }
+
+  async function reorder(id, beforeId) {
+    // The whole room's order as it is drawn now, with the one tile moved.
+    const drawn = [...arrange(kits.filter(k => k.away)), ...PLACE_ORDER.flatMap(p => arrange(kits.filter(k => !k.away && k.at === p)))].map(k => k.id)
+    const without = drawn.filter(x => x !== id)
+    const at = without.indexOf(beforeId)
+    const next = [...without.slice(0, at), id, ...without.slice(at)]
+    const was = order
+    setOrder(next)
+    try { await post('order', { ids: next }) } catch (err) { setOrder(was); setError(err.message) }
+  }
+
+  const tile = (k, extra) => (
+    <KitTile key={k.id} kit={k} onOpen={(focus = '') => { setOpenFocus(focus); setOpen(k) }}
+      onMove={() => { setMoveTo(''); setMoving(k) }} busy={busy === k.id}
+      onGrab={e => startDrag(k, e)} lifted={dragging?.kit.id === k.id} target={dragging?.over?.tile === k.id}
+      {...extra} />
+  )
   const presentDistributors = [...new Set(kits.map(distributorOf).filter(Boolean))]
 
   return (
@@ -219,26 +285,34 @@ export default function KitRoom({ user, onBack }) {
           <>
             <SectionTitle>Away from home · {away.length}</SectionTitle>
             <TileGrid>
-              {byDistributor(away).map(k => (
-                <KitTile key={k.id} kit={k} onOpen={() => setOpen(k)}
-                  onMove={() => setMoving(k)} busy={busy === k.id}
-                  onReturn={() => act(k.id, () => post('return', { kitId: k.id }))} />
-              ))}
+              {arrange(away).map(k => tile(k, { onReturn: () => act(k.id, () => post('return', { kitId: k.id })) }))}
             </TileGrid>
           </>
         )}
 
-        {PLACE_ORDER.filter(p => home.some(k => k.at === p)).map(p => (
-          <div key={p}>
+        {PLACE_ORDER.filter(p => home.some(k => k.at === p) || dragging).map(p => (
+          <div key={p} data-drop-place={p} style={{
+            borderRadius: radius.card,
+            outline: dragging && dragging.over?.place === p && !dragging.over?.tile && p !== dragging.kit.at ? `2px dashed ${colour.accent}` : 'none',
+            outlineOffset: 4
+          }}>
             <PlaceHeading place={p} count={home.filter(k => k.at === p).length} />
+            {dragging && p !== dragging.kit.at && (
+              <div style={{ ...text('caption'), color: colour.accentDeep, marginBottom: space.xs }}>Drop here to move {dragging.kit.name} to {PLACE_NAMES[p]}</div>
+            )}
             <TileGrid>
-              {byDistributor(home.filter(k => k.at === p)).map(k => (
-                <KitTile key={k.id} kit={k} onOpen={() => setOpen(k)} onMove={() => setMoving(k)} busy={busy === k.id}
-                  onCheck={() => act(k.id, () => post('check', { kitId: k.id, at: k.at }))} />
-              ))}
+              {arrange(home.filter(k => k.at === p)).map(k => tile(k, { onCheck: () => act(k.id, () => post('check', { kitId: k.id, at: k.at })) }))}
             </TileGrid>
           </div>
         ))}
+
+        {dragging && (
+          <div aria-hidden="true" style={{
+            position: 'fixed', left: dragging.x - 70, top: dragging.y - 24, width: 140, zIndex: 4000, pointerEvents: 'none',
+            ...card(), padding: space.sm, background: colour.surface, boxShadow: '0 8px 24px rgba(4,39,70,0.25)', transform: 'rotate(-2deg)',
+            ...text('bodyStrong'), color: colour.ink
+          }}>{dragging.kit.name}</div>
+        )}
 
         {data?.canEdit && (
           <button onClick={() => setOpen({ id: '', name: '', trays: [] })} style={{ ...pill(false), marginTop: space.lg }}>+ Add a kit</button>
@@ -248,13 +322,14 @@ export default function KitRoom({ user, onBack }) {
       </div>
 
       {moving && (
-        <MoveSheet kit={moving} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
+        <MoveSheet kit={moving} initialTo={moveTo} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
           post={post} onClose={() => setMoving(null)} onDone={() => { setMoving(null); load() }} />
       )}
       {open && (
-        <KitDetail key={open.id || 'new'} kit={(open.id && kits.find(k => k.id === open.id)) || open} canEdit={Boolean(data?.canEdit)} user={user} post={post}
+        <KitDetail key={open.id || 'new'} kit={(open.id && kits.find(k => k.id === open.id)) || open} canEdit={Boolean(data?.canEdit)}
+          canRemove={Boolean(data?.canRemove)} focus={openFocus} user={user} post={post}
           onClose={() => setOpen(null)} onChanged={load}
-          onMove={() => { setMoving(kits.find(k => k.id === open.id) || open); setOpen(null) }} />
+          onMove={() => { setMoveTo(''); setMoving(kits.find(k => k.id === open.id) || open); setOpen(null) }} />
       )}
     </Page>
   )
@@ -312,7 +387,7 @@ function TileGrid({ children }) {
   )
 }
 
-function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
+function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy, onGrab, lifted, target }) {
   const dist = DISTRIBUTORS[distributorOf(kit)]
   const logo = logoFor(kit)
   const trayCount = (kit.trays || []).length
@@ -325,14 +400,23 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
   const small = { ...pill(false), padding: '5px 8px', flex: 1, textAlign: 'center' }
 
   return (
-    <div style={{
-      ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
+    <div data-kit-tile={kit.id} data-place={kit.at} style={{
+      ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative',
+      opacity: lifted ? 0.4 : 1,
+      boxShadow: target ? `0 0 0 2px ${colour.accent}` : undefined,
       // Tinted by where it is now, so a Calvary set reads as Calvary wherever
       // it is listed; the top edge carries its state.
       background: tint.soft, borderColor: tint.line,
       borderTop: `3px solid ${kit.away ? colour.warning : checked ? colour.accent : tint.line}`
     }}>
-      <button onClick={onOpen} aria-label={`Open ${kit.name}`} style={{
+      {onGrab && (
+        <span role="button" aria-label={`Drag ${kit.name}`} title="Drag to move or reorder" onPointerDown={onGrab}
+          style={{
+            position: 'absolute', top: 4, right: 4, zIndex: 1, width: 32, height: 32, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', touchAction: 'none', cursor: 'grab', color: colour.inkFainter, ...text('bodyStrong'), userSelect: 'none'
+          }}>⋮⋮</span>
+      )}
+      <button onClick={() => onOpen()} aria-label={`Open ${kit.name}`} style={{
         background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer',
         padding: `${space.sm}px ${space.sm}px 6px`, flex: 1, minWidth: 0,
         // A button centres its content; a tile beside a taller one must not
@@ -362,6 +446,13 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy }) {
           </div>
         )}
       </button>
+      {/* The tray list and the agreement, one tap from the tile. */}
+      <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px 6px`, flexWrap: 'wrap' }}>
+        <button onClick={() => onOpen('trays')} data-tile-trays style={chip}>{trayCount ? 'Tray list' : '+ Tray list'}</button>
+        <button onClick={() => onOpen('docs')} data-tile-docs style={chip}>
+          {kit.docs?.consignment ? 'Agreement ✓' : '+ Agreement'}{kit.docs?.docs > kit.docs?.consignment ? ` · ${kit.docs.docs - kit.docs.consignment} doc${kit.docs.docs - kit.docs.consignment === 1 ? '' : 's'}` : ''}
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px ${space.sm}px` }}>
         {kit.away && onReturn && (
           <button onClick={onReturn} disabled={busy} style={small}>{busy ? '…' : 'Returned'}</button>
@@ -413,6 +504,11 @@ export function pill(on) {
     border: on ? 'none' : border.hairline, background: on ? colour.navy : colour.surface,
     color: on ? 'white' : colour.ink, cursor: 'pointer'
   }
+}
+
+const chip = {
+  ...text('caption'), fontWeight: 600, padding: '3px 8px', borderRadius: radius.pill, cursor: 'pointer',
+  border: `1px solid ${colour.line}`, background: colour.surface, color: colour.accentDeep, whiteSpace: 'nowrap'
 }
 
 const linkButton = { background: 'none', border: 'none', padding: 0, color: colour.accentDeep, cursor: 'pointer', ...text('caption'), fontWeight: 600 }

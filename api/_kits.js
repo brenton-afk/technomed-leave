@@ -193,6 +193,27 @@ async function addHistory(entry) {
   await redis('ltrim', HISTORY, 0, 499)
 }
 
+/** For other kit modules (documents) to write to the same log. */
+export const logKitEvent = entry => addHistory(entry)
+
+// ─── The order of the tiles (Brent, 11 Nov 2026: "the tiles … need to be able
+// to be moved easily") ── one shared order, dragged on any phone, seen by all.
+const ORDER = 'kits:order'
+
+export async function getKitOrder() {
+  const raw = await redis('get', ORDER)
+  try { return raw ? JSON.parse(raw) : [] } catch { return [] }
+}
+
+export async function saveKitOrder(ids, by) {
+  const defs = await getDefs()
+  const known = new Set(defs.map(k => k.id))
+  const clean = [...new Set((ids || []).map(String).filter(id => known.has(id)))]
+  await redisSetBody(ORDER, JSON.stringify(clean))
+  await addHistory({ kind: 'order', by, text: 'Kit room tiles rearranged' })
+  return clean
+}
+
 export async function kitHistory(limit = 100) {
   const raw = await redis('lrange', HISTORY, 0, limit - 1)
   return (raw || []).map(r => { try { return JSON.parse(r) } catch { return null } }).filter(Boolean)

@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import TrayList from './TrayList.jsx'
+import KitDocs from './KitDocs.jsx'
 
 // ─── One kit: its trays, the stock-take, and editing ─────────────────────────
 // The stock-take lives here because it is done standing in front of the kit:
@@ -10,7 +11,14 @@ import TrayList from './TrayList.jsx'
 const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 const KINDS = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
 
-export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged, onMove }) {
+export default function KitDetail({ kit, canEdit, canRemove = canEdit, user, post, onClose, onChanged, onMove, focus = '' }) {
+  // A tile's "Tray list" or "Agreement" chip opens the kit at that part.
+  const trayRef = useRef(null)
+  const docsRef = useRef(null)
+  useEffect(() => {
+    const el = focus === 'trays' ? trayRef.current : focus === 'docs' ? docsRef.current : null
+    if (el) setTimeout(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120)
+  }, [focus])
   const isNew = !kit.id
   const [editing, setEditing] = useState(isNew)
   const [draft, setDraft] = useState(isNew ? { name: '', system: '', distributor: '', kind: 'consignment', home: 'office', trays: [] } : null)
@@ -128,7 +136,16 @@ export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged
                   )
                 })}
 
-                {!isNew && <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} />}
+                {!isNew && (
+                  <div ref={docsRef} style={{ scrollMarginTop: 8 }}>
+                    <KitDocs kit={kit} user={user} post={post} onChanged={onChanged} />
+                  </div>
+                )}
+                {!isNew && (
+                  <div ref={trayRef} style={{ scrollMarginTop: 8 }}>
+                    <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} />
+                  </div>
+                )}
               </>
             )}
 
@@ -187,7 +204,7 @@ export default function KitDetail({ kit, canEdit, user, post, onClose, onChanged
                   {busy ? 'Saving…' : 'Save'}
                 </button>
                 <button onClick={() => (isNew ? onClose() : setEditing(false))} style={{ ...btn(false), flex: 1 }}>Cancel</button>
-                {!isNew && <button disabled={busy} onClick={() => { if (window.confirm(`Remove ${kit.name} from the kit room?`)) run(async () => { await post('remove', { kitId: kit.id }); onClose() }) }}
+                {!isNew && canRemove && <button disabled={busy} onClick={() => { if (window.confirm(`Remove ${kit.name} from the kit room?`)) run(async () => { await post('remove', { kitId: kit.id }); onClose() }) }}
                   style={{ ...btn(false), flex: '1 0 100%', color: colour.danger }}>Remove this kit</button>}
               </>
             )}
