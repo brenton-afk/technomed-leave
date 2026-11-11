@@ -1,3 +1,4 @@
+import { hiddenProjectIdsFor } from '../_privateBoard.js'
 import { settleTask } from '../_taskDone.js'
 import {
   TZ, zonedCivil, addCivilDays, zonedToInstant, toDateStr, parseDateStr
@@ -2565,7 +2566,10 @@ async function handleSearch(req, res) {
     let projectItems = []
     try {
       const { items } = await getWorklist()
+      // The private board is nobody else's search result (_privateBoard.js).
+      const hidden = await hiddenProjectIdsFor(session?.email)
       projectItems = items
+        .filter(it => !hidden.has(String(it.projectId || '')))
         .filter(it => [it.task, it.notes, it.assignee].filter(Boolean).join(' ').toLowerCase().includes(needle))
         .map(it => ({
           type: 'project', id: it.id, what: it.task, who: it.assignee !== 'Unassigned' ? it.assignee : null,

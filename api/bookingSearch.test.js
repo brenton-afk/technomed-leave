@@ -18,7 +18,7 @@ vi.mock('./_googleCalendar.js', () => ({
   createTaskEvent: vi.fn(), deleteCalendarEvent: vi.fn()
 }))
 let worklist = []
-vi.mock('./_redis.js', () => ({ getWorklist: vi.fn(async () => ({ items: worklist, unreadable: [] })) }))
+vi.mock('./_redis.js', () => ({ getWorklist: vi.fn(async () => ({ items: worklist, unreadable: [] })), getProjects: vi.fn(async () => []) }))
 vi.mock('./_gmail.js', () => ({}))
 vi.mock('./_dropbox.js', () => ({ dropboxConfigured: () => false, searchUsage: vi.fn() }))
 vi.mock('./_readBookingDocument.js', () => ({ readBookingDocument: vi.fn() }))

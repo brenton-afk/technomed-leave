@@ -187,6 +187,9 @@ export function normaliseProject(raw) {
       ? columns
       : columns.map((c, i) => ({ ...c, done: i === columns.length - 1 })),
     archived: Boolean(raw.archived),
+    // Seen only by the private-board people (Brent and Erin) — enforced by
+    // the server, api/_privateBoard.js, never only by hiding it here.
+    private: Boolean(raw.private),
     createdAt: raw.createdAt || '',
     createdBy: raw.createdBy || '',
     updatedAt: raw.updatedAt || ''
@@ -194,10 +197,11 @@ export function normaliseProject(raw) {
 }
 
 /** A new project, from whatever a person typed into the form. */
-export function newProject({ name, owner, due, colour, division, notes, by, at }) {
+export function newProject({ name, owner, due, colour, division, notes, by, at, private: isPrivate }) {
   return normaliseProject({
     id: `prj-${at ? Date.parse(at) : 0}-${slug()}`,
     name,
+    private: Boolean(isPrivate),
     division,
     owner: owner || 'Unassigned',
     due: due || '',

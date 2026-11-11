@@ -1,3 +1,4 @@
+import { hiddenProjectIdsFor } from './_privateBoard.js'
 import { getGoogleToken, CALENDAR_SCOPE_READONLY, getCalendarId, updateCalendarEvent } from './_googleCalendar.js'
 import { isTask, readTask, doneLine, taskKey } from '../src/clinicalPlan/tasks.js'
 
@@ -115,7 +116,9 @@ export async function settleTask({ event, done, who, when, taskColour }) {
     const key = `taskdone:worklist:${event.id}`
     if (done) {
       const { items } = await getWorklist()
-      const matches = matchingWorklistItems(items, task)
+      // A tick on the shared calendar never closes a task on the private board.
+      const hidden = await hiddenProjectIdsFor('')
+      const matches = matchingWorklistItems(items.filter(t => !hidden.has(String(t.projectId || ''))), task)
       for (const item of matches) {
         await updateWorklistItem(item.id, { status: 'done', doneBy: who, doneVia: 'calendar', doneAt: new Date().toISOString() })
         result.projectItems.push(item.task)

@@ -100,7 +100,7 @@ const TABLE_COLUMNS = '28px minmax(0, 1fr) 150px 150px 120px 90px 64px'
 
 export default function Workspace({
   projects = [], items = [], user, today, wide,
-  onOpenProject, onOpenTask, onMove, onCreateProject, busyProject, onAdd, adding,
+  onOpenProject, onOpenTask, onMove, onCreateProject, busyProject, onAdd, adding, canPrivate,
   // Given by Projects.jsx, whose one row of tabs chooses it on a phone.
   phoneTab: phoneTabGiven
 }) {
@@ -352,7 +352,7 @@ export default function Workspace({
           <span style={{ minWidth: 0, flex: 1 }}>
             <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: p.archived ? 0.6 : 1 }}>{p.name}</span>
             <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {p.fixed ? 'Anything without a project' : (p.division || 'Whole business')}
+              {p.private ? '🔒 Private · ' : ''}{p.fixed ? 'Anything without a project' : (p.division || 'Whole business')}
               {!p.fixed && p.owner && p.owner !== 'Unassigned' ? ` · ${me && p.owner === me.name ? 'you lead' : firstOf(p.owner)}` : ''}
               {mineHere ? <span style={{ color: colour.accentDeep, fontWeight: 600 }}>{` · ${mineHere} yours`}</span> : null}
             </span>
@@ -386,7 +386,7 @@ export default function Workspace({
       </div>
       {making
         ? <div style={{ padding: space.xs }}>
-            <NewProject busy={busyProject} division={division === 'All' ? '' : division}
+            <NewProject busy={busyProject} division={division === 'All' ? '' : division} canPrivate={canPrivate}
               onCancel={() => setMaking(false)}
               onCreate={fields => { onCreateProject(fields); setMaking(false) }} />
           </div>

@@ -80,7 +80,8 @@ function Row({ project, items, today, onOpen }) {
 }
 
 /** The form for a new project, which is four questions and no more. */
-export function NewProject({ onCreate, onCancel, busy, division: startDivision = '' }) {
+export function NewProject({ onCreate, onCancel, busy, division: startDivision = '', canPrivate = false }) {
+  const [isPrivate, setPrivate] = useState(false)
   const [name, setName] = useState('')
   const [owner, setOwner] = useState('Unassigned')
   const [due, setDue] = useState('')
@@ -104,7 +105,7 @@ export function NewProject({ onCreate, onCancel, busy, division: startDivision =
       <input autoFocus value={name} onChange={e => setName(e.target.value)}
         placeholder="e.g. Globus onboarding"
         onKeyDown={e => {
-          if (e.key === 'Enter' && name.trim()) onCreate({ name, owner, due, colour: tone, division })
+          if (e.key === 'Enter' && name.trim()) onCreate({ name, owner, due, colour: tone, division, private: isPrivate })
         }}
         style={{ ...text('field'), ...control, marginBottom: space.sm }} />
 
@@ -126,6 +127,15 @@ export function NewProject({ onCreate, onCancel, busy, division: startDivision =
         <option value="">No division (whole business)</option>
         {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
+
+      {/* Brent and Erin only (Brent, 11 Nov 2026). The server hides it from
+          everyone else; this box is only offered to the two of them. */}
+      {canPrivate && (
+        <label style={{ ...text('body'), display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.md, color: colour.ink }}>
+          <input type="checkbox" checked={isPrivate} onChange={e => setPrivate(e.target.checked)} data-private-project style={{ fontSize: 16 }} />
+          🔒 Private — only Brent and Erin can see it
+        </label>
+      )}
 
       {/* Six colours, not a picker. "The teal one" has to mean something to
           everybody, and a free picker produces nine shades of blue. */}
@@ -150,7 +160,7 @@ export function NewProject({ onCreate, onCancel, busy, division: startDivision =
             background: colour.surface, color: colour.inkMuted, cursor: 'pointer'
           }}>Cancel</button>
         <button type="button" disabled={!name.trim() || busy}
-          onClick={() => onCreate({ name, owner, due, colour: tone, division })}
+          onClick={() => onCreate({ name, owner, due, colour: tone, division, private: isPrivate })}
           style={{
             ...text('bodyStrong'), flex: 1, minHeight: 42, border: 'none',
             borderRadius: radius.control,

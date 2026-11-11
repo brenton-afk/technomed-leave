@@ -12,6 +12,7 @@ import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
 import { flagRepeats } from '../_worklistMatch.js'
 import { settleWorklistItem } from '../_taskDone.js'
+import { visibleTo, hiddenProjectIdsFor, canSeePrivate } from '../_privateBoard.js'
 import { readActionList } from '../_actionItems.js'
 import { askClaude } from '../_anthropic.js'
 import {
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
 
   if (action === 'start-transcription') return handleStartTranscription(req, res)
   if (action === 'status') return handleStatus(req, res)
-  if (action === 'analyze') return handleAnalyze(req, res)
+  if (action === 'analyze') return handleAnalyze(req, res, session)
   if (action === 'finalize') return handleFinalize(req, res)
   if (action === 'worklist') return handleWorklist(req, res, session)
   // "Could she dump a transcript from a meeting into that section and have the
@@ -57,7 +58,7 @@ export default async function handler(req, res) {
   // into text and hands it to the same analyse step.
   if (action === 'read-file') return handleReadFile(req, res)
   // And a task that came from nobody's meeting — the thing agreed in the car.
-  if (action === 'add-task') return handleAddTask(req, res)
+  if (action === 'add-task') return handleAddTask(req, res, session)
   // The kit room's tray lists: read here because this function already takes
   // big uploads and has the time a long PDF needs. See api/_trayLists.js.
   if (action === 'tray-read') return handleTrayRead(req, res, session)
@@ -69,7 +70,7 @@ export default async function handler(req, res) {
   // its tasks, names its own columns and knows how far through it is. Routed
   // here rather than in a function of its own because this file already owns
   // the worklist, and a project is what the worklist grew into.
-  if (action === 'board') return handleBoard(req, res, session)
+  if (action === 'board') { req.session = session; return handleBoard(req, res, session) }
   if (action === 'project') return handleProject(req, res, session)
   if (action === 'column') return handleColumn(req, res, session)
   if (action === 'task') return handleTask(req, res, session)
@@ -214,7 +215,7 @@ async function handleStatus(req, res) {
 
 // ─── Claude analysis: summary + action items ───────────────
 
-async function handleAnalyze(req, res) {
+async function handleAnalyze(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { transcript, meetingTitle, meetingDate, recordedByEmail } = req.body
   if (!transcript || !transcript.trim()) {
@@ -298,7 +299,8 @@ ${transcript}
     // somebody asked for.
     let flagged = actionItems
     try {
-      flagged = flagRepeats(actionItems, (await getWorklist()).items)
+      const hidden = await hiddenProjectIdsFor(session?.email)
+      flagged = flagRepeats(actionItems, (await getWorklist()).items.filter(t => !hidden.has(String(t.projectId || ''))))
     } catch (err) {
       console.error('repeat check skipped:', err.message)
     }
@@ -432,10 +434,13 @@ async function handleReadFile(req, res) {
 // not need a model's help to write down. Straight to the worklist, because
 // there is nothing to review: whoever typed it is the review.
 
-async function handleAddTask(req, res) {
+async function handleAddTask(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { task, assignee, priority, due_date: dueDate, notes, addedByEmail, projectId } = req.body || {}
   if (!String(task || '').trim()) return res.status(400).json({ error: 'Say what the task is' })
+  if (projectId && (await hiddenProjectIdsFor(session?.email)).has(String(projectId))) {
+    return res.status(404).json({ error: 'That project is not there' })
+  }
 
   const validNames = new Set(STAFF.map(s => s.name))
   const item = {
@@ -529,7 +534,16 @@ async function handleFinalize(req, res) {
 async function handleWorklist(req, res, session) {
   if (req.method === 'GET') {
     const { items } = await getWorklist()
-    return res.status(200).json({ items })
+    const hidden = await hiddenProjectIdsFor(session?.email)
+    return res.status(200).json({ items: items.filter(t => !hidden.has(String(t.projectId || ''))) })
+  }
+  // A task on the private board is not there for anyone else.
+  if (req.method === 'PATCH' || req.method === 'DELETE') {
+    const id = req.method === 'DELETE' ? req.query.id : req.body?.id
+    const item = id ? await getWorklistItem(id).catch(() => null) : null
+    if (item && (await hiddenProjectIdsFor(session?.email)).has(String(item.projectId || ''))) {
+      return res.status(404).json({ error: 'That task is not there' })
+    }
   }
   if (req.method === 'PATCH') {
     const { id, status } = req.body
@@ -577,16 +591,19 @@ async function handleBoard(req, res) {
   // all need the tasks and the projects together, and two round trips from a
   // phone on hospital wifi is the difference between instant and visibly slow.
   const [worklist, stored] = await Promise.all([getWorklist(), getProjects()])
-  const projects = stored.map(normaliseProject).filter(Boolean)
+  // The private board is left out for everyone but Brent and Erin.
+  const seen = visibleTo(req.session?.email, { projects: stored.map(normaliseProject).filter(Boolean), items: worklist.items })
+  const projects = seen.projects
   // `unreadable` travels with the board rather than being swallowed. A row
   // that cannot be read is somebody's task, and a board that quietly drops it
   // is worse than one that says so — it is also the only way anybody learns a
   // row needs repairing.
   return res.status(200).json({
-    items: worklist.items,
+    items: seen.items,
     unreadable: worklist.unreadable,
     projects,
-    general: GENERAL
+    general: GENERAL,
+    canPrivate: canSeePrivate(req.session?.email)
   })
 }
 
@@ -595,8 +612,9 @@ async function handleProject(req, res, session) {
   const by = session?.name || session?.email || ''
 
   if (req.method === 'POST') {
-    const { name, owner, due, colour, division, notes } = req.body || {}
+    const { name, owner, due, colour, division, notes, private: wantPrivate } = req.body || {}
     if (!String(name || '').trim()) return res.status(400).json({ error: 'Give the project a name' })
+    if (wantPrivate && !canSeePrivate(session?.email)) return res.status(403).json({ error: 'Only Brent and Erin can make a private project' })
     const validNames = new Set(STAFF.map(s => s.name))
     const project = newProject({
       name: String(name).trim().slice(0, 120),
@@ -605,6 +623,7 @@ async function handleProject(req, res, session) {
       colour,
       division,
       notes: String(notes || '').trim().slice(0, 1000),
+      private: Boolean(wantPrivate),
       by,
       at: nowStamp()
     })
@@ -618,8 +637,9 @@ async function handleProject(req, res, session) {
     if (id === GENERAL.id) return res.status(400).json({ error: 'The General list cannot be changed' })
 
     const stored = await getProject(id)
-    if (!stored) return res.status(404).json({ error: 'That project is not there' })
+    if (!stored || (stored.private && !canSeePrivate(session?.email))) return res.status(404).json({ error: 'That project is not there' })
     let project = normaliseProject(stored)
+    if (req.body?.private !== undefined && canSeePrivate(session?.email)) project.private = Boolean(req.body.private)
 
     if (archive === true) {
       // Checked here and not only in the app: the warning on screen is a
@@ -651,13 +671,13 @@ async function handleProject(req, res, session) {
 }
 
 /** A column added, renamed or removed — and whatever that did to the tasks. */
-async function handleColumn(req, res) {
+async function handleColumn(req, res, session) {
   const { id, key, label } = req.body || {}
   if (!id) return res.status(400).json({ error: 'id is required' })
   if (id === GENERAL.id) return res.status(400).json({ error: 'The General list keeps its columns' })
 
   const stored = await getProject(id)
-  if (!stored) return res.status(404).json({ error: 'That project is not there' })
+  if (!stored || (stored.private && !canSeePrivate(session?.email))) return res.status(404).json({ error: 'That project is not there' })
   const project = normaliseProject(stored)
 
   try {
@@ -701,7 +721,9 @@ async function handleTask(req, res, session) {
     const { id, text } = req.body || {}
     if (!id) return res.status(400).json({ error: 'id is required' })
     const item = await getWorklistItem(id)
-    if (!item) return res.status(404).json({ error: 'That task is not there' })
+    if (!item || (await hiddenProjectIdsFor(session?.email)).has(String(item.projectId || ''))) {
+      return res.status(404).json({ error: 'That task is not there' })
+    }
     try {
       const updated = withComment(item, { text, by, at: nowStamp() })
       await saveWorklistItem(updated)
@@ -716,7 +738,10 @@ async function handleTask(req, res, session) {
     let { column } = req.body || {}
     if (!id) return res.status(400).json({ error: 'id is required' })
     const item = await getWorklistItem(id)
-    if (!item) return res.status(404).json({ error: 'That task is not there' })
+    const hidden = await hiddenProjectIdsFor(session?.email)
+    if (!item || hidden.has(String(item.projectId || ''))) return res.status(404).json({ error: 'That task is not there' })
+    // Nor can a task be moved onto it by anyone else.
+    if (projectId && hidden.has(String(projectId))) return res.status(404).json({ error: 'That project is not there' })
     // "Done" or "not done" from the day view, which knows nothing of a
     // project's own column names. Not done goes back where it was.
     if (done !== undefined) {
@@ -786,6 +811,10 @@ async function handleTask(req, res, session) {
     // the one somebody genuinely wants gone, and the app asks twice first.
     const { id } = req.query
     if (!id) return res.status(400).json({ error: 'id is required' })
+    const gone = await getWorklistItem(id).catch(() => null)
+    if (gone && (await hiddenProjectIdsFor(session?.email)).has(String(gone.projectId || ''))) {
+      return res.status(404).json({ error: 'That task is not there' })
+    }
     await deleteWorklistItem(id)
     return res.status(200).json({ success: true })
   }

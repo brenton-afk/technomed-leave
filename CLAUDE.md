@@ -734,6 +734,16 @@ exists). Tap, speak, tap again (30s cap); the recording goes to the existing
 `action=voice` reader, and a `todo` reply (else the words said, `voiceDraft`)
 fills the box, who and due date, with "Heard: …" beneath. Nothing is added
 until Add is tapped.
+**A private board for Brent and Erin** (Brent, 11 Nov 2026: "cannot be
+viewed by other staff"). A project with `private: true` (a tick on New
+project, or Make private on its board, offered only to them) and every task
+on it are served only to `PRIVATE_BOARD_USERS` (default brenton@, erin@) —
+`api/_privateBoard.js` (`visibleTo`, `hiddenProjectIdsFor`), applied to
+`action=board`, `action=worklist`, every task/project/column read and edit
+(404, as if not there), add-task, the meeting repeat check and Cases search;
+calendar ticks never close a private task. If the projects cannot be read,
+every task on a project is held back (fail closed).
+
 **Meeting report** (Brent, 11 Nov 2026: Erin "needs to be able to produce
 a report of all of the items that were completed and all of the items that
 are still outstanding"): a card at the top of the Meeting tab opens

@@ -76,6 +76,7 @@ export default function Projects({ user, onBack }) {
   const [projects, setProjects] = useState([])
   const [view, setView] = useState('projects')
   const [showReport, setShowReport] = useState(false)
+  const [canPrivate, setCanPrivate] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [openTaskId, setOpenTaskId] = useState(null)
   const [savingProject, setSavingProject] = useState(false)
@@ -116,6 +117,7 @@ export default function Projects({ user, onBack }) {
       setWorklist(data.items || [])
       setProjects((data.projects || []).map(normaliseProject).filter(Boolean))
       setUnreadable(data.unreadable || [])
+      setCanPrivate(Boolean(data.canPrivate))
     } catch (err) {
       console.error(err)
     }
@@ -845,8 +847,19 @@ export default function Projects({ user, onBack }) {
                 background: tintOf(board.colour).solid, flexShrink: 0
               }} />
               <span style={{ ...text('title'), color: colour.ink, flex: 1, minWidth: 0 }}>
-                {board.name}
+                {board.private ? '🔒 ' : ''}{board.name}
               </span>
+              {!board.fixed && canPrivate && (
+                <button type="button" onClick={() => patchProject(board.id, { private: !board.private })}
+                  aria-pressed={board.private}
+                  title={board.private ? 'Only Brent and Erin see this project' : 'Everyone sees this project'}
+                  style={{
+                    ...text('caption'), background: 'none', border: `1px solid ${colour.line}`,
+                    borderRadius: radius.control, padding: '6px 10px', color: colour.inkFaint, cursor: 'pointer'
+                  }}>
+                  {board.private ? 'Private' : 'Make private'}
+                </button>
+              )}
               {!board.fixed && (
                 <select value={board.division || ''} aria-label="Division"
                   onChange={e => patchProject(board.id, { division: e.target.value })}
@@ -948,7 +961,7 @@ export default function Projects({ user, onBack }) {
             busyProject={savingProject}
             onAdd={addFromWorkspace}
             adding={addingTask}
-            phoneTab={phoneTab} />
+            phoneTab={phoneTab} canPrivate={canPrivate} />
         )}
       </div>
 
