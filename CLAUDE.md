@@ -453,6 +453,14 @@ minutes `meeting:finalizing:{id}` — each let go only if the action failed
 before writing. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
+**An edit offers a booking notice only when the case moves** (Brent, 11 Nov
+2026: "the portal will automatically draft emails at the drop of a hat … the
+only reasons … moves dates, is cancelled, or … a change of set … that
+involves a loan set"). `noticesFor` returns nothing for a changed/moved
+booking unless its date or hospital changed; a new booking and a
+cancellation still offer as before, and loan-set emails keep their own rules
+(new set, set changed, date/hospital changed, no longer needed).
+
 **A supplier is judged on the booking as it now stands** (the hospital, before
 or after): a case switched from Diplomat to Mariner offers Signus nothing — Brent
 does not want them told about a case that is no longer theirs — and Device gets

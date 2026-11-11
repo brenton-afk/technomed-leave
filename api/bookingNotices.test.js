@@ -257,3 +257,18 @@ dL('sent-email log label', () => {
     eL(signus.label).not.toMatch(/Testperson/)
   })
 })
+
+describe('only a real change offers an email (Brent, 11 Nov 2026)', () => {
+  // "The only reasons for an email to send is really if the booking moves
+  // dates, is cancelled, or if there is a change of set … that involves a loan set."
+  it('offers nothing for an edit on the same day', async () => {
+    const { noticesFor } = await import('./_bookingNotices.js')
+    const base = { date: '2026-12-01', hospital: 'CLV', surgeon: 'Ibbett', procedure: 'L4/5 PLIF', kit: 'Diplomat (Consignment)', distributors: ['signus'] }
+    const settings = { contacts: [{ id: 'c', name: 'Signus', to: ['x@example.com'] }],
+      rules: [{ id: 'r', contactId: 'c', distributor: 'signus', events: ['new', 'changed', 'moved', 'cancelled'], enabled: true }] }
+    for (const after of [{ ...base, procedure: 'L4/5 PLIF + decompression' }, { ...base, surgeon: 'IBBETT' }, { ...base, kit: 'Diplomat (Consignment), CYLOX' }]) {
+      expect(noticesFor({ kind: 'changed', before: base, after, eventId: 'e', settings })).toEqual([])
+    }
+  })
+})
+

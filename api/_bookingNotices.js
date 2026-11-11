@@ -315,6 +315,15 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
   // A save that changed nothing a supplier cares about — notes, the rep, the
   // colour — is not news to them.
   if ((kind === 'changed' || kind === 'moved') && !changes.length) return []
+  // Nor is any edit that leaves the case on the same day (Brent, 11 Nov 2026:
+  // "the only reasons for an email to send is really if the booking moves
+  // dates, is cancelled, or if there is a change of set … that involves a
+  // loan set"). A case moved to another hospital is moved too — KT cover RHH
+  // only, and a case leaving it is news to them. A new procedure line, surgeon
+  // spelling, list order, time on the same day or a kit edit offers no
+  // booking notice; a change of loan set is the loan emails' business
+  // (loanRequestsFor, hospitalLoanNoticesFor), which follow their own rules.
+  if ((kind === 'changed' || kind === 'moved') && !changes.some(c => c.key === 'date' || c.key === 'hospital')) return []
 
   const contacts = new Map(settings.contacts.map(c => [c.id, c]))
   const out = []
