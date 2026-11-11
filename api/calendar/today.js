@@ -69,6 +69,7 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
+import { kitWithAutoAiro } from '../../src/clinicalPlan/brainlab.js'
 import { cleanListPlace, withListPlace, bySession, moveWithinList, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
 import { weekOf, cleanLeader, turnOf } from '../../src/clinicalPlan/teamLeader.js'
 import { leadersOn, turnLeader, leaderEmailOn } from '../_leaders.js'
@@ -607,6 +608,17 @@ async function handleSave(req, res) {
           : value)
     }
 
+    // AIRO on an RHH pedicle-screw / lateral-mass case (Brent, 11 Nov 2026),
+    // checked whenever an edit touches the hospital, operation or kit — so a
+    // case moved to RHH, or retyped as a fixation, picks it up. "No AIRO" in
+    // the notes leaves it off.
+    if (['hospital', 'procedure', 'kit'].some(f => Object.prototype.hasOwnProperty.call(body.fields || {}, f))) {
+      const now = parseLabelledDescription(description)
+      const kit = kitWithAutoAiro({ hospital: now.hospital || current.location, procedure: now.procedure, kit: now.kit,
+        notes: typeof body.notes === 'string' ? body.notes : [].concat(descriptionNotes(description)).join('\n') })
+      if (kit !== String(now.kit || '')) description = setLabelledValue(description, 'kit', kit)
+    }
+
     // Who is allocated (Task 10). Only the week's team leader, or an admin.
     if (Object.prototype.hasOwnProperty.call(body.fields || {}, 'planned')) {
       if (!(await canAllocate(session, current.start?.dateTime || current.start?.date))) {
@@ -832,6 +844,12 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
   // written from a stale candidate or from a route that never drew a card, and
   // what lands in Google has to name a system somebody can bring.
   if (fields.kit) fields = { ...fields, kit: resolveKit(fields.kit, fields.procedure || '') }
+  // AIRO on every RHH pedicle-screw / lateral-mass case, without a tap (Brent,
+  // 11 Nov 2026) — see kitWithAutoAiro in src/clinicalPlan/brainlab.js.
+  {
+    const kit = kitWithAutoAiro({ hospital: fields.hospital, procedure: fields.procedure, kit: fields.kit, notes })
+    if (kit !== String(fields.kit || '')) fields = { ...fields, kit }
+  }
 
   // Built through the same writer the edit sheet uses, so a booking created
   // here reads back exactly like one the team typed.

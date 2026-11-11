@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { BRAINLAB, BRAINLAB_KIT } from '../../clinicalPlan/brainlab.js'
+import { BRAINLAB, BRAINLAB_KIT, needsAutoAiro } from '../../clinicalPlan/brainlab.js'
 import { isRhh } from '../../clinicalPlan/etbs.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggestions.js'
@@ -207,6 +207,17 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const [brainlab, setBrainlab] = useState('')
   const [attendance, setAttendance] = useState('')
   const [etbs, setEtbs] = useState(false)
+  // AIRO pressed by itself on an RHH pedicle-screw / lateral-mass case (Brent,
+  // 11 Nov 2026), until somebody touches the Brainlab choice themselves.
+  const brainlabTouched = useRef(false)
+  const [autoAiro, setAutoAiro] = useState(false)
+  useEffect(() => {
+    if (brainlabTouched.current) return
+    const due = needsAutoAiro({ hospital, procedure, notes })
+    if (due && !brainlab) { setBrainlab('AIRO + Curve'); setAttendance('Attendance required'); setAutoAiro(true) }
+    if (!due && autoAiro) { setBrainlab(''); setAttendance(''); setAutoAiro(false) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hospital, procedure, notes])
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
   const [dictating, setDictating] = useState(false)
@@ -585,7 +596,12 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
             <div style={{ marginBottom: space.md }}>
               <Label>Brainlab navigation</Label>
               <Choice options={BRAINLAB} value={brainlab}
-                onChange={v => { setBrainlab(v); if (!v) setAttendance('') }} />
+                onChange={v => { brainlabTouched.current = true; setAutoAiro(false); setBrainlab(v); if (!v) setAttendance('') }} />
+              {autoAiro && (
+                <div data-auto-airo style={{ ...text('caption'), color: colour.inkMuted, marginTop: 4 }}>
+                  AIRO added automatically — pedicle screw / lateral mass case at RHH
+                </div>
+              )}
               {brainlab && (
                 <div style={{ marginTop: space.sm }}>
                   <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: 4 }}>

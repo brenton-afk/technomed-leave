@@ -467,3 +467,30 @@ describe('a grey Add to calendar says why (Brent, 8 Nov 2026)', () => {
     expect(missingForBooking({ patient: ' ', surgeon: '', date: '2026-11-10' })).toEqual(['the surgeon', 'the patient surname'])
   })
 })
+
+// Brent, 11 Nov 2026: "All Pedicle screw and lateral mass cases at RHH should
+// have auto AIRO booked and not rely on someone tapping it."
+describe('AIRO at RHH without a tap', () => {
+  it('presses AIRO + Curve for an RHH pedicle-screw case and writes it to the kit', async () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
+    fireEvent.change(screen.getByLabelText(/Surgeon/), { target: { value: 'Ibbett' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
+    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'T10-L2 pedicle screw fixation' } })
+    fireEvent.change(screen.getByLabelText(/Patient surname/), { target: { value: 'Marsh' } })
+    expect(await screen.findByText(/AIRO added automatically/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
+    await waitFor(() => expect(posted).not.toBeNull())
+    expect(posted.fields.kit).toMatch(/BRAINLAB AIRO & CURVE/)
+    expect(posted.attendance).toBeUndefined()
+  })
+  it('does not press it at Calvary or for an ACDF', () => {
+    show()
+    fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
+    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'L4/5 PLIF' } })
+    expect(screen.queryByText(/AIRO added automatically/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
+    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'C4/5 ACDF' } })
+    expect(screen.queryByText(/AIRO added automatically/)).toBeNull()
+  })
+})

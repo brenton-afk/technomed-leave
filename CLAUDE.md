@@ -540,6 +540,20 @@ cranial). At **Calvary** we do not support navigation and do not bill. Bookings
 are meant to become the single source of truth on the front end (e.g. to
 populate the Brainlab invoice) and usages on the back end (resupply).
 
+**AIRO is booked by itself on RHH pedicle-screw and lateral-mass cases**
+(Brent, 11 Nov 2026: "should have auto AIRO booked and not rely on someone
+tapping it" — October's invoice had five such cases with nothing on the
+booking). `kitWithAutoAiro` / `needsAutoAiro` / `isPedicleOrLateralMass` in
+`src/clinicalPlan/brainlab.js`: pedicle, lateral mass, PSF, PLIF, TLIF, S2AI,
+posterior … fixation/fusion/screws, or a level range with fixation/screws when
+nothing says anterior — never an SIJ screw, posterior fossa crani, ACDF,
+corpectomy or a removal alone. Applied in `writeBooking` (Add booking and
+Inbox Accept) and in `handleSave` whenever an edit touches hospital, procedure
+or kit; Add booking shows the AIRO + Curve button pressed (attendance
+required) with "AIRO added automatically" until someone changes it. Kit gains
+`BRAINLAB AIRO & CURVE` once; any navigation already there is kept. "No AIRO"
+/ "Brainlab not required" in the notes leaves it off.
+
 ### The top band (Brent, 6 Nov 2026)
 
 "The big blue band is pretty empty." From the mock-ups he picked: `Header`
