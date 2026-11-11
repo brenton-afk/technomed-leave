@@ -13,6 +13,11 @@ import { requireSession, getSession } from '../_auth.js'
 import { flagRepeats } from '../_worklistMatch.js'
 import { settleWorklistItem } from '../_taskDone.js'
 import { visibleTo, hiddenProjectIdsFor, canSeePrivate } from '../_privateBoard.js'
+import {
+  getAgenda, saveAgenda, cleanAgenda, canEditAgenda, pastAgendas, keepPastAgenda, isAgendaFile, draftMaterial
+} from '../_agenda.js'
+import { searchMailboxOf, readMessageHeadline, readAttachment } from '../_gmail.js'
+import { meetingReport } from '../../src/projects/report.js'
 import { readActionList } from '../_actionItems.js'
 import { askClaude } from '../_anthropic.js'
 import {
@@ -76,6 +81,10 @@ export default async function handler(req, res) {
   if (action === 'task') return handleTask(req, res, session)
   // The meetings whose action items went to the team, for the meeting report.
   if (action === 'meetings') return handleMeetings(req, res)
+  // The next meeting's agenda: everyone reads it, Erin writes it.
+  if (action === 'agenda') return handleAgenda(req, res, session)
+  if (action === 'agenda-import') return handleAgendaImport(req, res, session)
+  if (action === 'agenda-draft') return handleAgendaDraft(req, res, session)
 
   return res.status(400).json({ error: 'Unknown or missing action' })
 }
@@ -94,6 +103,117 @@ async function handleMeetings(req, res) {
       items: Array.isArray(m.actionItems) ? m.actionItems.length : 0 }))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
   return res.status(200).json({ meetings })
+}
+
+// ─── The agenda (Brent, 11 Nov 2026) ───────────────────────────────────────────
+// See api/_agenda.js. Read by everyone signed in; only Erin saves, imports or
+// drafts. Tasks on the private board never reach it — it is read by all.
+
+const AGENDA_MAILBOX = process.env.AGENDA_MAILBOX || 'brenton@technomed.com.au'
+const AGENDA_QUERY = process.env.AGENDA_QUERY
+  || 'from:erin@technomed.com.au subject:agenda has:attachment filename:docx'
+
+async function handleAgenda(req, res, session) {
+  const canEdit = canEditAgenda(session?.email)
+  if (req.method === 'GET') {
+    const [agenda, past] = await Promise.all([getAgenda(), pastAgendas(60).catch(() => [])])
+    return res.status(200).json({ agenda, canEdit, past: past.map(p => ({ id: p.id, date: p.date, subject: p.subject })) })
+  }
+  if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' })
+  if (!canEdit) return res.status(403).json({ error: 'Only Erin edits the agenda' })
+  try {
+    const by = STAFF.find(s => s.email === session?.email)?.firstName || ''
+    const agenda = await saveAgenda(req.body?.agenda, { version: req.body?.version, by })
+    return res.status(200).json({ agenda })
+  } catch (err) {
+    if (err.code === 'conflict') return res.status(409).json({ error: err.message, agenda: err.current })
+    return res.status(err.code === 'busy' ? 409 : 500).json({ error: err.message })
+  }
+}
+
+/** Erin's earlier agendas, read from the Word documents she emailed Brent. */
+async function handleAgendaImport(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!canEditAgenda(session?.email)) return res.status(403).json({ error: 'Only Erin imports agendas' })
+  try {
+    const ids = await searchMailboxOf(AGENDA_MAILBOX, AGENDA_QUERY, { max: 50 })
+    const { default: mammoth } = await import('mammoth')
+    let added = 0, read = 0
+    const failed = []
+    for (const id of ids) {
+      const msg = await readMessageHeadline(AGENDA_MAILBOX, id)
+      for (const att of (msg.attachments || []).filter(a => isAgendaFile(a.filename))) {
+        try {
+          const { data } = await readAttachment(AGENDA_MAILBOX, id, att.attachmentId)
+          const { value } = await mammoth.extractRawText({ buffer: Buffer.from(data, 'base64') })
+          read += 1
+          if (await keepPastAgenda({
+            id: `${id}-${String(att.filename).replace(/[^\w]+/g, '').slice(0, 40)}`,
+            date: String(msg.receivedAt || '').slice(0, 10), subject: msg.subject, filename: att.filename,
+            text: value.replace(/\n{2,}/g, '\n')
+          })) added += 1
+        } catch (err) {
+          failed.push(att.filename)
+        }
+      }
+    }
+    return res.status(200).json({ found: ids.length, read, added, failed })
+  } catch (err) {
+    return res.status(500).json({ error: `Could not read the agendas from email: ${err.message}` })
+  }
+}
+
+/** A draft for Erin to edit — never saved by itself. */
+async function handleAgendaDraft(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!canEditAgenda(session?.email)) return res.status(403).json({ error: 'Only Erin drafts the agenda' })
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+  const nextDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.date || '')) ? req.body.date : ''
+
+  const [past, meetings, worklist, projects] = await Promise.all([
+    pastAgendas(12).catch(() => []), getAllMeetings(60).catch(() => []), getWorklist(), getProjects().catch(() => [])
+  ])
+  // Read by everyone, so the private board is left out whoever drafts it.
+  const hidden = new Set(projects.filter(p => p?.private).map(p => String(p.id)))
+  const items = worklist.items.filter(t => !hidden.has(String(t.projectId || '')))
+  const last = meetings.filter(m => m.status === 'sent' && (m.date || '') <= today)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+  const report = last ? meetingReport(items, last, { to: today, today }) : null
+  const { recent, work } = draftMaterial({ past, report, nextDate })
+  const people = STAFF.map(s => s.name).join(', ')
+
+  const prompt = `You are helping Erin Smallbon, General Manager of TechnoMed (a Tasmanian surgical device distributor), prepare the agenda for the next staff meeting${nextDate ? ` on ${nextDate}` : ''}.
+
+Use her earlier agendas below for the structure, the standing items she always includes, their order, her wording and who usually leads each. Then bring it up to date from the work since the last meeting: what was done is worth a line under "Recent wins" or the item it belongs to; what is still outstanding or overdue is worth discussing under the item it belongs to. Do not invent topics, decisions, dates or people that appear in neither. Staff: ${people}.
+
+Return ONLY JSON:
+{"title":"TechnoMed Staff Meeting","date":"YYYY-MM-DD or empty","time":"","location":"","chair":"","attendees":"","apologies":"","items":[{"title":"","points":["",""],"lead":""}],"notes":"one or two sentences for Erin on what you changed from last time and why"}
+
+Earlier agendas, newest first:
+${recent || '(none imported yet)'}
+
+Work since the last meeting:
+${work}`
+
+  try {
+    const reply = await askClaude({
+      feature: 'agenda-draft',
+      whenUnavailable: 'The agenda could not be drafted right now — try again shortly, or edit it by hand.',
+      timeoutMs: 60000,
+      request: {
+        model: process.env.AGENDA_MODEL || 'claude-sonnet-4-6',
+        max_tokens: 6000,
+        messages: [{ role: 'user', content: prompt }]
+      }
+    })
+    const txt = (reply.content || []).find(b => b.type === 'text')?.text || ''
+    const json = txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)
+    const draft = cleanAgenda(JSON.parse(json))
+    if (nextDate) draft.date = nextDate
+    return res.status(200).json({ draft, basedOn: { past: Math.min(past.length, 6), meeting: last ? { title: last.title, date: last.date } : null } })
+  } catch (err) {
+    return res.status(502).json({ error: err.message || 'The agenda could not be drafted.' })
+  }
 }
 
 // ─── Direct-to-Blob upload token handshake ─────────────────

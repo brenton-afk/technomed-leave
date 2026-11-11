@@ -9,6 +9,7 @@ import {
 import Workspace from './projects/Workspace.jsx'
 import ProjectBoard from './projects/ProjectBoard.jsx'
 import MeetingReport from './projects/MeetingReport.jsx'
+import Agenda from './projects/Agenda.jsx'
 import TaskSheet from './projects/TaskSheet.jsx'
 import { DIVISIONS } from '../projects/model.js'
 import { useIsDesktop } from '../design/viewport.js'
@@ -76,6 +77,7 @@ export default function Projects({ user, onBack }) {
   const [projects, setProjects] = useState([])
   const [view, setView] = useState('projects')
   const [showReport, setShowReport] = useState(false)
+  const [showAgenda, setShowAgenda] = useState(false)
   const [canPrivate, setCanPrivate] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [openTaskId, setOpenTaskId] = useState(null)
@@ -539,6 +541,22 @@ export default function Projects({ user, onBack }) {
         )}
 
         {at === 'capture' && (<>
+        {/* The next meeting's agenda — live, read by everyone, written by
+            Erin (Brent, 11 Nov 2026). See projects/Agenda.jsx. */}
+        <button type="button" data-open-agenda onClick={() => setShowAgenda(true)}
+          style={{
+            ...text('bodyStrong'), width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: space.sm,
+            background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card,
+            padding: space.md, marginBottom: space.sm, cursor: 'pointer', color: colour.ink
+          }}>
+          <span style={{ flex: 1 }}>
+            Next meeting agenda
+            <span style={{ ...text('caption'), display: 'block', color: colour.inkFaint, fontWeight: 400 }}>
+              The live agenda — everyone can see it, Erin keeps it up to date
+            </span>
+          </span>
+          <span aria-hidden="true" style={{ color: colour.inkFaint }}>›</span>
+        </button>
         {/* Before the next meeting: what was done since the last one (Brent,
             11 Nov 2026). See projects/MeetingReport.jsx. */}
         <button type="button" data-open-meeting-report onClick={() => setShowReport(true)}
@@ -965,6 +983,7 @@ export default function Projects({ user, onBack }) {
         )}
       </div>
 
+      {showAgenda && <Agenda user={user} today={today} onClose={() => setShowAgenda(false)} />}
       {showReport && <MeetingReport user={user} items={worklist} today={today} onClose={() => setShowReport(false)} />}
 
       {/* One task, opened. Over the top rather than pushed, because you come

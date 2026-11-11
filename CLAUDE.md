@@ -734,6 +734,22 @@ exists). Tap, speak, tap again (30s cap); the recording goes to the existing
 `action=voice` reader, and a `todo` reply (else the words said, `voiceDraft`)
 fills the box, who and due date, with "Heard: …" beneath. Nothing is added
 until Add is tapped.
+**The next meeting's agenda** (Brent, 11 Nov 2026: "a live document that
+anyone can see at any moment … in the projects page"; "Just Erin to edit").
+A card on the Meeting tab opens `projects/Agenda.jsx`: everyone reads it,
+refreshed every minute; only `AGENDA_EDITORS` (default erin@) edit, save
+(`action=agenda` PUT, version-checked — 409 with the current one), import
+and draft. Shape follows Erin's own Word agenda (header — date, time,
+location, chair, attendees, apologies — over numbered items with discussion
+points and a lead; `cleanAgenda` in `api/_agenda.js`). **Import past
+agendas** (`agenda-import`) reads the `.docx` agendas Erin emailed Brent
+(`AGENDA_MAILBOX` brenton@, `AGENDA_QUERY`, read-only Gmail grant) into
+`agenda:past:{id}` as text. **Draft it for me** (`agenda-draft`) gives Claude
+the six newest past agendas and `meetingReport` since the last sent meeting
+(private-board tasks left out — the agenda is read by all) and returns a
+draft into the editor; nothing is saved until Erin taps Save. Copy and
+Download Word for everyone.
+
 **Group by distributor** (Brent, 11 Nov 2026: "separated by distributor …
 use the information you already know about product names"): the List/Table
 view has Group by Project | Distributor (remembered in `tm_projects_view`).
