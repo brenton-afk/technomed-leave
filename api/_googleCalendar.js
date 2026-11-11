@@ -4,6 +4,7 @@
 // googleapis dependency is not needed.
 
 import { readBooking, plainDescription } from '../src/clinicalPlan/parse.js'
+import { redis } from './_redis.js'
 
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
 
@@ -61,7 +62,40 @@ export function serviceAccountEmail() {
   }
 }
 
+// ─── Google sign-in, kept for its hour (Brent, 11 Nov 2026: "loading times in
+// the booking … phone battery being drained") ───────────────────────────────
+// Every request used to sign a fresh token and wait on Google's token server
+// before it could ask for a single event — a few hundred milliseconds on every
+// week load, every booking opened, every save. A token lasts an hour; it is
+// now kept in the instance's memory and in Redis (so a cold instance does not
+// have to sign again) until five minutes before it runs out.
+const TOKEN_MARGIN_S = 300
+const memoryTokens = new Map()
+const tokenCacheOn = () => !process.env.VITEST || process.env.GOOGLE_TOKEN_CACHE === 'on'
+const tokenKey = (scope, impersonate) => `google:token:${impersonate || 'sa'}:${scope}`
+
+/** Forget kept tokens — for the tests, and after Google refuses one. */
+export function forgetGoogleTokens() { memoryTokens.clear() }
+
 export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE, { impersonate } = {}) {
+  if (!tokenCacheOn()) return signGoogleToken(scope, { impersonate })
+  const key = tokenKey(scope, impersonate)
+  const now = Math.floor(Date.now() / 1000)
+  const held = memoryTokens.get(key)
+  if (held && held.exp - TOKEN_MARGIN_S > now) return held.token
+  try {
+    const raw = await redis('get', key)
+    const kept = raw ? JSON.parse(raw) : null
+    if (kept?.token && kept.exp - TOKEN_MARGIN_S > now) { memoryTokens.set(key, kept); return kept.token }
+  } catch { /* Redis unavailable: sign as before */ }
+  const { token, expiresIn } = await signGoogleToken(scope, { impersonate, withExpiry: true })
+  const entry = { token, exp: now + (Number(expiresIn) || 3600) }
+  memoryTokens.set(key, entry)
+  redis('set', key, JSON.stringify(entry), 'EX', String(Math.max(60, entry.exp - now - TOKEN_MARGIN_S))).catch(() => {})
+  return token
+}
+
+async function signGoogleToken(scope, { impersonate, withExpiry = false } = {}) {
   const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
   if (!serviceAccountJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not configured')
 
@@ -121,7 +155,7 @@ export async function getGoogleToken(scope = CALENDAR_SCOPE_WRITE, { impersonate
     }
     throw new Error(`Google auth failed: ${tokenData.error_description || tokenData.error || 'unknown error'}`)
   }
-  return tokenData.access_token
+  return withExpiry ? { token: tokenData.access_token, expiresIn: tokenData.expires_in } : tokenData.access_token
 }
 
 export async function addCalendarEvent({ name, division, startDate, endDate, leaveType, reason }) {

@@ -462,7 +462,13 @@ async function handleBooking(req, res) {
     const eventId = String(req.query.id || '').trim()
     if (!eventId) return res.status(400).json({ error: 'id is required' })
 
-    const event = await getCalendarEvent(eventId)
+    // The booking and what is kept beside it, read side by side rather than
+    // one after another (Brent, 11 Nov 2026: loading times opening a booking).
+    const [event, noUsage, loanLog] = await Promise.all([
+      getCalendarEvent(eventId),
+      isMarkedNoUsage(eventId),
+      loanLogFor(eventId).catch(() => [])
+    ])
     const description = event.description || ''
     const labelled = parseLabelledDescription(description)
 
@@ -494,10 +500,10 @@ async function handleBooking(req, res) {
       // Task 10: who is allocated, and whether this person may change it.
       planned: parseRepNames(labelled.planned),
       // Marked as having no usage, which stops the 6pm reminder (Task 11).
-      noUsage: await isMarkedNoUsage(event.id),
+      noUsage,
       // Every loan set requested, changed or called off for this case, and who
       // sent it when — shown in the booking.
-      loanLog: await loanLogFor(event.id).catch(() => []),
+      loanLog,
       canAllocate: await canAllocate(session, event.start?.dateTime || event.start?.date)
     })
   } catch (err) {

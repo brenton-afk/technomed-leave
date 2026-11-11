@@ -1215,7 +1215,7 @@ admin-only; no new function).
 
 ### Google Calendar
 
-Service-account JWT signed inline with `node:crypto` `createSign` — no `googleapis` dependency. `getGoogleToken(scope)` in `api/_googleCalendar.js` is the single signer; `api/calendar/today.js` imports it with `CALENDAR_SCOPE_READONLY` and the write path uses `CALENDAR_SCOPE_WRITE`. Approved leave becomes an all-day event on `bookings@technomed.com.au` in Grape (`colorId` 3), with `end` shifted +1 day per Google's exclusive-end convention. `TodayView.jsx` reads that same calendar back and distinguishes leave from bookings by `colorId`.
+Service-account JWT signed inline with `node:crypto` `createSign` — no `googleapis` dependency. **The token is kept for its hour** (Brent, 11 Nov 2026: slow bookings, flat batteries): `getGoogleToken` holds it in memory and in Redis (`google:token:{who}:{scope}`) until five minutes before expiry, so a request no longer signs and waits on Google's token server first; off under vitest unless `GOOGLE_TOKEN_CACHE=on`. `handleBooking` reads the event, the no-usage mark and the loan log side by side. `getGoogleToken(scope)` in `api/_googleCalendar.js` is the single signer; `api/calendar/today.js` imports it with `CALENDAR_SCOPE_READONLY` and the write path uses `CALENDAR_SCOPE_WRITE`. Approved leave becomes an all-day event on `bookings@technomed.com.au` in Grape (`colorId` 3), with `end` shifted +1 day per Google's exclusive-end convention. `TodayView.jsx` reads that same calendar back and distinguishes leave from bookings by `colorId`.
 
 **Every calendar day in the app is a `YYYY-MM-DD` string in Australia/Hobart,
 produced by `src/clinicalPlan/week.js`.** Not a `Date`, and never the device's
