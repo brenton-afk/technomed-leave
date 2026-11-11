@@ -1126,6 +1126,8 @@ One mechanism, in two parts:
 - **Staff PIN** — `api/auth/pin.js`, one handler multiplexing on an `action` field (`check` | `verify` | `set` | `reset` | `logout`). PINs are self-service on first login only; `set` returns 409 if a PIN already exists, so changing one requires an admin `reset`. PINs are stored as plaintext in Redis.
 - **Sessions** — `api/_auth.js`. A successful `verify`/`set` mints a `crypto.randomUUID()` token stored at `session:{token}` with a 1-hour TTL. The client keeps it in `sessionStorage` and sends it as `Authorization: Bearer <token>`; `requireAdmin(req, res)` guards `api/admin/*` and the debug action of `api/xero/info.js`, writing the 401/403 itself and returning `null` so handlers just `if (!session) return`.
 
+**Sessions are remembered for a minute** (Brent, 11 Nov 2026, speed and the Upstash limit): `getSession` keeps a read in the instance's memory for 60s and pushes the sliding TTL at most hourly — it was GET + EXPIRE on every request. Sign-out (`destroySession`) and a PIN reset (`endAllSessions`) clear it on that instance; elsewhere it lapses within a minute. Off under vitest unless `SESSION_MEMO=on`.
+
 `isAdmin` is re-read from `staffConfig.js` on every request rather than trusted from the stored session, so revoking admin takes effect immediately. There is no shared admin password — the previous `ADMIN_PASSWORD` secret (and its `'Technoadmin2026'` fallback, which was shipped in the client bundle) is gone; do not reintroduce a secret into `src/`.
 
 ### Xero integration (the fragile part)

@@ -128,6 +128,8 @@ export async function trackSession(email, token) {
 export async function endAllSessions(email) {
   const tokens = (await redis('smembers', sessionsKey(email))) || []
   for (const t of tokens) await redis('del', `session:${t}`)
+  // And out of this instance's memory at once (see getSession in _auth.js).
+  try { const { forgetSessions } = await import('./_auth.js'); tokens.forEach(t => forgetSessions(t)) } catch { /* the minute runs out */ }
   await redis('del', sessionsKey(email))
   return tokens.length
 }

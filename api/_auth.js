@@ -43,26 +43,53 @@ export async function createSession(email) {
   return { token, session }
 }
 
+// ─── Sessions, remembered for a minute (Brent, 11 Nov 2026) ─────────────────
+// Every request used to ask Redis for the session and then push its expiry out
+// — two commands before any work, on every poll of every open portal, which is
+// most of how the free tier's 500,000 a month went in eleven days. A session
+// read is now kept in this instance's memory for a minute, and the sliding
+// expiry is pushed at most once an hour per instance (a month-long TTL loses
+// nothing by being refreshed hourly). Signing out clears it here at once; a
+// reset or sign-out handled by another instance is honoured within a minute.
+const SESSION_MEMO_MS = 60 * 1000
+const EXTEND_EVERY_MS = 60 * 60 * 1000
+const memo = new Map()      // token → { session, until }
+const extended = new Map()  // token → when its TTL was last pushed out
+const memoOn = () => !process.env.VITEST || process.env.SESSION_MEMO === 'on'
+
+/** Forget remembered sessions — for the tests, and after a reset. */
+export function forgetSessions(token) {
+  if (token) { memo.delete(token); extended.delete(token) } else { memo.clear(); extended.clear() }
+}
+
 export async function getSession(token) {
   if (!token) return null
+  const now = Date.now()
+  if (memoOn()) {
+    const held = memo.get(token)
+    if (held && held.until > now) return held.session
+  }
   const data = await redis('get', `session:${token}`)
-  if (!data) return null
+  if (!data) { memo.delete(token); return null }
   try {
     const session = JSON.parse(data)
     // Sliding, not fixed. A month of inactivity ends it; a month of daily use
-    // does not. Without this the old hour expired mid-afternoon on somebody
-    // halfway through a timesheet, and thirty days would only have moved that
-    // to a worse surprise once a month.
-    //
-    // Deliberately not awaited: extending a session is housekeeping, and no
-    // request should get slower because of it. A refresh that fails leaves the
-    // original TTL, which is the safe direction.
-    redis('expire', `session:${token}`, String(SESSION_TTL_SECONDS)).catch(() => {})
+    // does not. Not awaited: extending a session is housekeeping, and no
+    // request should get slower because of it.
+    if (!memoOn() || !(extended.get(token) > now - EXTEND_EVERY_MS)) {
+      extended.set(token, now)
+      redis('expire', `session:${token}`, String(SESSION_TTL_SECONDS)).catch(() => {})
+    }
+    if (memoOn()) {
+      if (memo.size > 500) memo.clear()
+      memo.set(token, { session, until: now + SESSION_MEMO_MS })
+    }
     return session
   } catch { return null }
 }
 
 export async function destroySession(token) {
+  forgetSessions(token)
   if (token) await redis('del', `session:${token}`)
 }
 
