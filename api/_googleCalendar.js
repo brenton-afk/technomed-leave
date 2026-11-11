@@ -3,7 +3,7 @@
 // calendar. Service-account JWTs are signed inline with node:crypto so the
 // googleapis dependency is not needed.
 
-import { readBooking } from '../src/clinicalPlan/parse.js'
+import { readBooking, plainDescription } from '../src/clinicalPlan/parse.js'
 
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
 
@@ -382,7 +382,14 @@ export async function getCalendarEvent(eventId) {
     + `/events/${encodeURIComponent(eventId)}`,
     { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) throw new Error(`Could not read the booking (${res.status})`)
-  return res.json()
+  const event = await res.json()
+  // Notes Google stored as HTML (touched in its web page, Outlook, a forwarded
+  // invitation) come back as plain lines. Edit booking read them raw and every
+  // field ran together — "Gupta<br>Patient: Brandall<br>Date: …" in the
+  // surgeon box and the rest blank (Brent, 11 Nov 2026). Every edit path reads
+  // the booking through here, so a save writes plain lines back.
+  if (event.description) event.description = plainDescription(event.description)
+  return event
 }
 
 

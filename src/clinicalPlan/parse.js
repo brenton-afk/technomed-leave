@@ -1420,6 +1420,10 @@ export function plainDescription(description) {
   const text = String(description || '')
   if (!/[<&]/.test(text)) return text          // the common case, untouched
   return text
+    // A link keeps where it went: the portal writes this text back to the
+    // calendar when a booking is edited, and a bare word would lose the URL.
+    .replace(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
+      (_, href, label) => { const t = label.replace(/<[^>]*>/g, '').trim(); return !t || t === href ? href : `${t} (${href})` })
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:div|p|li|tr|h[1-6])>/gi, '\n')
     .replace(/<[^>]*>/g, '')

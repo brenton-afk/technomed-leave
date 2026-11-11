@@ -163,6 +163,14 @@ the title is often a placeholder like "Booking" — and both sides are tokenised
 the same function, because splitting them differently reported `C4/5` as unread
 while it was on screen, and a check that cries wolf gets ignored.
 
+**Every edit path reads plain notes** (Brent, 11 Nov 2026: Edit booking
+opened with "Gupta<br>Patient: …<br>Date: …" in the surgeon box and the rest
+blank). Google stores a description as HTML once it is touched in its web
+page or Outlook; the cards read it through `plainDescription`, but Edit
+booking's fields came from the raw text. `getCalendarEvent` now returns the
+description through `plainDescription` (links kept as `text (url)`), so the
+form fills and a save writes plain lines back.
+
 **The patient's surname is stored on the event, not only inferred.** The
 portal writes it to `extendedProperties.private.tmPatient` on create and on any
 save that edits the surname, and `readBooking(..., { knownPatient })` uses it to
