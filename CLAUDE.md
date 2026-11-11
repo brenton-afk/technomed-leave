@@ -777,6 +777,21 @@ the six newest past agendas and `meetingReport` since the last sent meeting
 draft into the editor; nothing is saved until Erin taps Save. Copy and
 Download Word for everyone.
 
+**The live meeting** (Brent, 11 Nov 2026: "a real time live meeting, where
+you automatically update the projects page"). Meeting tab → **Live meeting**
+(`projects/LiveMeeting.jsx`). One phone records; every 40s the stretch goes to
+`action=live-say` (AssemblyAI via `transcribe`, then Claude with the open
+tasks — `src/projects/liveMeeting.js`, `api/_liveMeeting.js`) and comes back
+as cards — **new task / mark done / change who or date** — on every phone with
+the panel open (polled every 5s). A typed note does the same. **Nothing
+reaches the board until Accept** (`action=live-act`, claimed once per
+suggestion); a done is ticked like any other (doneAt, calendar copies). One
+meeting at a time in `meeting:live`, changed under `meeting:live:lock`; audio
+is never stored. Private-board tasks are never in the open-task list (the panel
+is seen by all). **End** files it as a `sent` meeting (`live: true`, accepted
+new tasks as its action items) so the meeting report counts it; **no email is
+sent**. Anyone signed in can start, accept or end.
+
 **Group by distributor** (Brent, 11 Nov 2026: "separated by distributor …
 use the information you already know about product names"): the List/Table
 view has Group by Project | Distributor (remembered in `tm_projects_view`).

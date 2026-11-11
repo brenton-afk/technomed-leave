@@ -20,6 +20,10 @@ import { searchMailboxOf, readMessageHeadline, readAttachment } from '../_gmail.
 import { meetingReport } from '../../src/projects/report.js'
 import { readActionList } from '../_actionItems.js'
 import { askClaude } from '../_anthropic.js'
+import { transcribe } from '../_readDictatedBooking.js'
+import {
+  getLive, startLive, addStretch, settleSuggestion, claimSuggestion, releaseSuggestion, endLive, forScreen
+} from '../_liveMeeting.js'
 import {
   GENERAL, newProject, normaliseProject, movedTo, withComment,
   archived, restored, blockedFromArchiving,
@@ -85,6 +89,10 @@ export default async function handler(req, res) {
   if (action === 'agenda') return handleAgenda(req, res, session)
   if (action === 'agenda-import') return handleAgendaImport(req, res, session)
   if (action === 'agenda-draft') return handleAgendaDraft(req, res, session)
+  // The live meeting: what is said becomes suggestions; a tap puts one on the board.
+  if (action === 'live') return handleLive(req, res, session)
+  if (action === 'live-say') return handleLiveSay(req, res, session)
+  if (action === 'live-act') return handleLiveAct(req, res, session)
 
   return res.status(400).json({ error: 'Unknown or missing action' })
 }
@@ -103,6 +111,132 @@ async function handleMeetings(req, res) {
       items: Array.isArray(m.actionItems) ? m.actionItems.length : 0 }))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
   return res.status(200).json({ meetings })
+}
+
+// ─── The live meeting (Brent, 11 Nov 2026) ────────────────────────────────────
+// See src/projects/liveMeeting.js and api/_liveMeeting.js. Anyone signed in
+// can open the panel, start or end the meeting, add a note and accept a
+// suggestion — it is the room's screen. Ending files it as a meeting, so the
+// meeting report counts what was agreed in it. No email is sent from here.
+
+const firstNameOf = session => STAFF.find(s => s.email === session?.email)?.firstName || session?.name || ''
+
+async function handleLive(req, res, session) {
+  try {
+    if (req.method === 'GET') return res.status(200).json({ live: forScreen(await getLive()) })
+    if (req.method === 'POST') {
+      let agenda = []
+      try { agenda = ((await getAgenda())?.items || []).map(i => i.title).filter(Boolean) } catch { agenda = [] }
+      const live = await startLive({ title: req.body?.title, by: firstNameOf(session), byEmail: session?.email, agenda })
+      return res.status(200).json({ live: forScreen(live) })
+    }
+    if (req.method === 'DELETE') {
+      const ended = await endLive()
+      if (!ended) return res.status(404).json({ error: 'No meeting is live' })
+      const accepted = (ended.suggestions || []).filter(s => s.status === 'accepted')
+      const actionItems = accepted.filter(s => s.kind === 'new' && s.itemId).map(s => ({
+        id: s.itemId, task: s.task, assignee: s.assignee, priority: s.priority || 'normal', due_date: s.due_date || '', notes: s.why || ''
+      }))
+      const meeting = {
+        id: ended.id, title: ended.title, date: ended.date, recordedByEmail: ended.startedByEmail || null,
+        summary: `Live meeting: ${actionItems.length} new task${actionItems.length === 1 ? '' : 's'}, `
+          + `${accepted.filter(s => s.kind === 'done').length} marked done, ${accepted.filter(s => s.kind === 'update').length} changed.`,
+        transcript: (ended.lines || []).map(l => `${l.typed ? `${l.by} (typed)` : 'Room'}: ${l.text}`).join('\n'),
+        actionItems, changes: accepted.filter(s => s.kind !== 'new'),
+        status: 'sent', live: true, createdAt: ended.startedAt, endedAt: ended.endedAt
+      }
+      await saveMeeting(ended.id, meeting)
+      return res.status(200).json({ ended: { id: ended.id, title: ended.title, summary: meeting.summary,
+        waiting: (ended.suggestions || []).filter(s => s.status === 'waiting').length } })
+    }
+    return res.status(405).json({ error: 'Method not allowed' })
+  } catch (err) {
+    return res.status(err.code === 'busy' ? 409 : 500).json({ error: err.message })
+  }
+}
+
+async function handleLiveSay(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { audio, contentType, text: typed } = req.body || {}
+  const by = firstNameOf(session)
+  try {
+    let words = String(typed || '')
+    if (audio) words = await transcribe(audio, contentType, STAFF.map(s => s.firstName).filter(Boolean))
+    const result = await addStretch({ textIn: words, by, recording: Boolean(audio) })
+    return res.status(200).json({ ...result, heard: words })
+  } catch (err) {
+    const status = err.code === 'none' ? 404 : err.code === 'busy' ? 409 : 400
+    return res.status(status).json({ error: err.message })
+  }
+}
+
+async function handleLiveAct(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { id, decision, edits = {} } = req.body || {}
+  const live = await getLive()
+  if (!live || live.status !== 'live') return res.status(404).json({ error: 'No meeting is live' })
+  const s = (live.suggestions || []).find(x => x.id === id)
+  if (!s) return res.status(404).json({ error: 'That suggestion is not there' })
+  if (s.status !== 'waiting') return res.status(409).json({ error: `Already ${s.status === 'accepted' ? 'accepted' : 'skipped'} by ${s.decidedBy || 'someone'}` })
+  if (!(await claimSuggestion(id))) return res.status(409).json({ error: 'Someone has just acted on this one' })
+  const by = firstNameOf(session)
+
+  try {
+    if (decision === 'skip') {
+      const settled = await settleSuggestion(id, { status: 'skipped', decidedBy: by, decidedAt: nowStamp() })
+      return res.status(200).json({ suggestion: settled })
+    }
+    if (decision !== 'accept') { await releaseSuggestion(id); return res.status(400).json({ error: 'Accept or skip' }) }
+
+    const validNames = new Set(STAFF.map(x => x.name))
+    const assignee = edits.assignee !== undefined ? (validNames.has(edits.assignee) ? edits.assignee : 'Unassigned') : s.assignee
+    const dueDate = edits.due_date !== undefined ? (/^\d{4}-\d{2}-\d{2}$/.test(edits.due_date) ? edits.due_date : '') : (s.due_date || '')
+    const taskText = String(edits.task ?? s.task ?? '').trim().slice(0, 300)
+    let patch = { status: 'accepted', decidedBy: by, decidedAt: nowStamp() }
+
+    if (s.kind === 'new') {
+      if (!taskText) { await releaseSuggestion(id); return res.status(400).json({ error: 'Say what the task is' }) }
+      const item = {
+        id: `${live.id}-${id}`, task: taskText, assignee: assignee || 'Unassigned',
+        priority: ['urgent', 'normal', 'low'].includes(s.priority) ? s.priority : 'normal',
+        due_date: dueDate, notes: s.why || '', status: 'open', source: 'live',
+        sourceMeetingId: live.id, sourceMeetingTitle: live.title, sourceMeetingDate: live.date,
+        addedByEmail: session?.email || null, createdAt: nowStamp()
+      }
+      await saveWorklistItem(item)
+      patch = { ...patch, itemId: item.id, task: item.task, assignee: item.assignee, due_date: item.due_date }
+    } else {
+      const item = await getWorklistItem(s.taskId)
+      const hidden = await hiddenProjectIdsFor(session?.email)
+      if (!item || hidden.has(String(item.projectId || ''))) {
+        await settleSuggestion(id, { status: 'skipped', decidedBy: by, decidedAt: nowStamp(), note: 'That task is no longer there' })
+        return res.status(404).json({ error: 'That task is no longer there' })
+      }
+      let next = { ...item }
+      if (s.kind === 'done' && item.status !== 'done') {
+        const board = item.projectId ? normaliseProject(await getProject(item.projectId)) : GENERAL
+        const cols = board?.columns?.length ? board.columns : GENERAL.columns
+        next = movedTo(next, (cols.find(c => c.done) || cols[cols.length - 1]).key, board || GENERAL, nowStamp())
+        next = { ...next, doneAt: nowStamp(), doneBy: by, reopenTo: item.column || '' }
+      }
+      if (s.kind === 'update') {
+        if (assignee) next.assignee = assignee
+        if (dueDate) next.due_date = dueDate
+        patch = { ...patch, assignee: next.assignee, due_date: next.due_date }
+      }
+      next = withComment({ ...next, updatedAt: nowStamp() }, { text: `From the live meeting: ${s.kind === 'done' ? 'reported done' : 'changed'}${s.why ? ` — ${s.why}` : ''}`, by, at: nowStamp() })
+      await saveWorklistItem(next)
+      if (s.kind === 'done' && item.status !== 'done') {
+        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+        await settleWorklistItem(next, by, today).catch(() => [])
+      }
+    }
+    const settled = await settleSuggestion(id, patch)
+    return res.status(200).json({ suggestion: settled })
+  } catch (err) {
+    await releaseSuggestion(id)
+    return res.status(err.code === 'busy' ? 409 : 500).json({ error: err.message })
+  }
 }
 
 // ─── The agenda (Brent, 11 Nov 2026) ───────────────────────────────────────────

@@ -10,6 +10,7 @@ import Workspace from './projects/Workspace.jsx'
 import ProjectBoard from './projects/ProjectBoard.jsx'
 import MeetingReport from './projects/MeetingReport.jsx'
 import Agenda from './projects/Agenda.jsx'
+import LiveMeeting from './projects/LiveMeeting.jsx'
 import TaskSheet from './projects/TaskSheet.jsx'
 import { DIVISIONS } from '../projects/model.js'
 import { useIsDesktop } from '../design/viewport.js'
@@ -78,6 +79,7 @@ export default function Projects({ user, onBack }) {
   const [view, setView] = useState('projects')
   const [showReport, setShowReport] = useState(false)
   const [showAgenda, setShowAgenda] = useState(false)
+  const [showLive, setShowLive] = useState(false)
   const [canPrivate, setCanPrivate] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [openTaskId, setOpenTaskId] = useState(null)
@@ -541,6 +543,23 @@ export default function Projects({ user, onBack }) {
         )}
 
         {at === 'capture' && (<>
+        {/* The live meeting — suggestions from what is said, accepted with a
+            tap (Brent, 11 Nov 2026). See projects/LiveMeeting.jsx. */}
+        <button type="button" data-open-live-meeting onClick={() => setShowLive(true)}
+          style={{
+            ...text('bodyStrong'), width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: space.sm,
+            background: colour.navy, border: 'none', borderRadius: radius.card,
+            padding: space.md, marginBottom: space.sm, cursor: 'pointer', color: colour.surface
+          }}>
+          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: radius.pill, background: colour.danger, flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>
+            Live meeting
+            <span style={{ ...text('caption'), display: 'block', color: colour.accentSoft, fontWeight: 400 }}>
+              Record the room — new tasks, done and changed appear for everyone to accept
+            </span>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
         {/* The next meeting's agenda — live, read by everyone, written by
             Erin (Brent, 11 Nov 2026). See projects/Agenda.jsx. */}
         <button type="button" data-open-agenda onClick={() => setShowAgenda(true)}
@@ -983,6 +1002,7 @@ export default function Projects({ user, onBack }) {
         )}
       </div>
 
+      {showLive && <LiveMeeting user={user} onClose={() => { setShowLive(false); loadWorklist() }} onChanged={loadWorklist} />}
       {showAgenda && <Agenda user={user} today={today} onClose={() => setShowAgenda(false)} />}
       {showReport && <MeetingReport user={user} items={worklist} today={today} onClose={() => setShowReport(false)} />}
 
