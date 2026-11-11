@@ -215,6 +215,16 @@ describe('navigation on a kit line', () => {
     }
   })
 
+  // Brent, 11 Nov 2026: "'Spinal' is not a system" — Edit booking offered
+  // supply buttons for it, left over from "Spinal Brainlab".
+  it('does not take a bare "Spinal" for a system', () => {
+    expect(isNavigationOnly('Spinal')).toBe(true)
+    expect(isNavigationOnly('Cranial')).toBe(true)
+    expect(systemsToSupply({ kit: 'Diplomat (Consignment) + Cascadia (Consignment) + Spinal + BRAINLAB AIRO & CURVE' }))
+      .toEqual(['Diplomat', 'Cascadia'])
+    expect(isNavigationOnly('Reform Cervical')).toBe(false)
+  })
+
   it('keeps a system that merely happens to use navigation', () => {
     // AIRO_SIGNALS matches Mariner on purpose — a Mariner case needs a badge —
     // so testing for navigation alone would throw the system away with it.

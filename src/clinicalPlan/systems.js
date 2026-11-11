@@ -332,6 +332,8 @@ export const NAVIGATION = [
 const NAVIGATION_WORDS =
   /\b(?:airo|brain\s*lab|curve|vario\s*guide|navigation|nav|stealth|o-?arm)\b/gi
 
+const LEFTOVER_ONLY = /^(?:(?:spinal|spine|cranial)\s*)+$/i
+
 /** Words that describe navigation without naming anything of ours. */
 const NAVIGATION_FILLER =
   /\b(?:spinal|spine|cranial|cervical|lumbar|system|platform|scanner|support|required|req|and|with|the|for|only|case)\b/gi
@@ -346,6 +348,11 @@ const NAVIGATION_FILLER =
 export function isNavigationOnly(name) {
   const text = String(name || '').trim()
   if (!text) return false
+
+  // "Spinal" or "Cranial" left on its own — what is left of "Spinal Brainlab"
+  // once the navigation has become the AIRO / Curve button. It is not a
+  // system (Brent, 11 Nov 2026: Edit booking offered supply buttons for it).
+  if (LEFTOVER_ONLY.test(text)) return true
 
   NAVIGATION_WORDS.lastIndex = 0
   if (!NAVIGATION_WORDS.test(text)) return false
