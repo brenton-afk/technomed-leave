@@ -4,7 +4,7 @@ import { readTrayList } from '../_trayLists.js'
 import { dropboxConfigured, ensureFolder, uploadFile } from '../_dropbox.js'
 import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
-  saveMeeting, getMeeting, updateMeetingStatus,
+  saveMeeting, getMeeting, getAllMeetings, updateMeetingStatus,
   saveWorklistItem, getWorklist, getWorklistItem, updateWorklistItem, deleteWorklistItem,
   saveProject, getProject, getProjects, redis
 } from '../_redis.js'
@@ -73,8 +73,26 @@ export default async function handler(req, res) {
   if (action === 'project') return handleProject(req, res, session)
   if (action === 'column') return handleColumn(req, res, session)
   if (action === 'task') return handleTask(req, res, session)
+  // The meetings whose action items went to the team, for the meeting report.
+  if (action === 'meetings') return handleMeetings(req, res)
 
   return res.status(400).json({ error: 'Unknown or missing action' })
+}
+
+// ─── Meetings, for the report (Brent, 11 Nov 2026) ─────────────────────────────
+// "Erin … needs to be able to produce a report of all of the items that were
+// completed and all of the items that are still outstanding." Only the
+// meetings whose minutes were sent: those are the ones whose action items are
+// on the worklist. The report itself is worked out on the phone from the
+// worklist it already has (src/projects/report.js).
+async function handleMeetings(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  const meetings = (await getAllMeetings(60))
+    .filter(m => m.status === 'sent')
+    .map(m => ({ id: m.id, title: m.title || 'Meeting', date: m.date || String(m.createdAt || '').slice(0, 10),
+      items: Array.isArray(m.actionItems) ? m.actionItems.length : 0 }))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  return res.status(200).json({ meetings })
 }
 
 // ─── Direct-to-Blob upload token handshake ─────────────────
@@ -516,7 +534,12 @@ async function handleWorklist(req, res, session) {
   if (req.method === 'PATCH') {
     const { id, status } = req.body
     if (!id || !status) return res.status(400).json({ error: 'id and status are required' })
-    const updated = await updateWorklistItem(id, { status })
+    // When it was finished, for the meeting report (Brent, 11 Nov 2026).
+    const was = await getWorklistItem(id).catch(() => null)
+    const stamp = status === 'done' && was?.status !== 'done'
+      ? { doneAt: new Date().toISOString(), doneBy: STAFF.find(s => s.email === session?.email)?.firstName || '' }
+      : status !== 'done' && was?.status === 'done' ? { doneAt: null, doneBy: null } : {}
+    const updated = await updateWorklistItem(id, { status, ...stamp })
     // Ticked off on the project list: any copy of it on the calendar follows,
     // so the day view stops listing it. Best effort; the tick is saved.
     let calendar = []

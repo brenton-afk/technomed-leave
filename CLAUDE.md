@@ -734,6 +734,18 @@ exists). Tap, speak, tap again (30s cap); the recording goes to the existing
 `action=voice` reader, and a `todo` reply (else the words said, `voiceDraft`)
 fills the box, who and due date, with "Heard: …" beneath. Nothing is added
 until Add is tapped.
+**Meeting report** (Brent, 11 Nov 2026: Erin "needs to be able to produce
+a report of all of the items that were completed and all of the items that
+are still outstanding"): a card at the top of the Meeting tab opens
+`projects/MeetingReport.jsx`. Pick the meeting (sent minutes only,
+`action=meetings` on `api/meetings/agent.js`) and a To day; `meetingReport`
+in `src/projects/report.js` (pure, tested) splits that meeting's action items
+(`sourceMeetingId`) into done (`doneAt`, `doneBy`) and outstanding (overdue
+marked), plus earlier meetings' still-open items, other tasks finished in the
+period and items archived undone. Copy (text, `reportText`), Download Word
+(`docx`) and Print (the overlay prints alone — `@media print` in index.css).
+Every way of ticking a task now stamps `doneAt`: the old worklist PATCH and
+calendar ticks (`settleTask`) did not.
 **A phone's Projects page, de-cluttered** (Brent, 6 Nov 2026: "way too
 busy"): a compact band (no eyebrow or subtitle); one row of three tabs in
 `Projects.jsx` — My To Do · Projects · Meeting — replacing the two nested rows

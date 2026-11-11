@@ -117,7 +117,7 @@ export async function settleTask({ event, done, who, when, taskColour }) {
       const { items } = await getWorklist()
       const matches = matchingWorklistItems(items, task)
       for (const item of matches) {
-        await updateWorklistItem(item.id, { status: 'done', doneBy: who, doneVia: 'calendar' })
+        await updateWorklistItem(item.id, { status: 'done', doneBy: who, doneVia: 'calendar', doneAt: new Date().toISOString() })
         result.projectItems.push(item.task)
       }
       if (matches.length) {
@@ -127,7 +127,7 @@ export async function settleTask({ event, done, who, when, taskColour }) {
       // Undone: put back exactly what this tick closed, and nothing else.
       const raw = await redis('get', key)
       for (const { id, status } of raw ? JSON.parse(raw) : []) {
-        const item = await updateWorklistItem(id, { status: status || 'open', doneBy: null, doneVia: null }).catch(() => null)
+        const item = await updateWorklistItem(id, { status: status || 'open', doneBy: null, doneVia: null, doneAt: null }).catch(() => null)
         if (item) result.projectItems.push(item.task)
       }
       if (raw) await redis('del', key)

@@ -8,6 +8,7 @@ import {
 } from '../projects/model.js'
 import Workspace from './projects/Workspace.jsx'
 import ProjectBoard from './projects/ProjectBoard.jsx'
+import MeetingReport from './projects/MeetingReport.jsx'
 import TaskSheet from './projects/TaskSheet.jsx'
 import { DIVISIONS } from '../projects/model.js'
 import { useIsDesktop } from '../design/viewport.js'
@@ -74,6 +75,7 @@ export default function Projects({ user, onBack }) {
   // the only arrangement that fits a phone.
   const [projects, setProjects] = useState([])
   const [view, setView] = useState('projects')
+  const [showReport, setShowReport] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [openTaskId, setOpenTaskId] = useState(null)
   const [savingProject, setSavingProject] = useState(false)
@@ -535,6 +537,22 @@ export default function Projects({ user, onBack }) {
         )}
 
         {at === 'capture' && (<>
+        {/* Before the next meeting: what was done since the last one (Brent,
+            11 Nov 2026). See projects/MeetingReport.jsx. */}
+        <button type="button" data-open-meeting-report onClick={() => setShowReport(true)}
+          style={{
+            ...text('bodyStrong'), width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: space.sm,
+            background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card,
+            padding: space.md, marginBottom: space.md, cursor: 'pointer', color: colour.ink
+          }}>
+          <span style={{ flex: 1 }}>
+            Meeting report
+            <span style={{ ...text('caption'), display: 'block', color: colour.inkFaint, fontWeight: 400 }}>
+              Action items done and still outstanding since a meeting
+            </span>
+          </span>
+          <span aria-hidden="true" style={{ color: colour.inkFaint }}>›</span>
+        </button>
         {/* Recording panel */}
         {(phase === 'idle' || phase === 'recording') && (
           <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(26,43,74,0.08)' }}>
@@ -933,6 +951,8 @@ export default function Projects({ user, onBack }) {
             phoneTab={phoneTab} />
         )}
       </div>
+
+      {showReport && <MeetingReport user={user} items={worklist} today={today} onClose={() => setShowReport(false)} />}
 
       {/* One task, opened. Over the top rather than pushed, because you come
           back to the same place on the same board every time. */}

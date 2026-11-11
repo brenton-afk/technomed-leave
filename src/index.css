@@ -327,6 +327,11 @@ a {
     overflow: visible;
     height: auto;
   }
+
+  /* The meeting report prints on its own, every page of it. */
+  body:has([data-meeting-report]) #root { display: none; }
+  [data-meeting-report] { position: static !important; overflow: visible !important; }
+  [data-meeting-report] button { display: none !important; }
 }
 
 
