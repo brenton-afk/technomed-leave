@@ -5,6 +5,7 @@ import { IconKit, IconSearch } from '../design/icons.jsx'
 import MoveSheet from './kit/MoveSheet.jsx'
 import KitDetail from './kit/KitDetail.jsx'
 import AttachAgreements from './kit/AttachAgreements.jsx'
+import { needsAgreement } from '../kit/agreements.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
 import { systemsInKit } from '../clinicalPlan/systems.js'
 
@@ -511,12 +512,13 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy, onGrab, lifted,
       {/* The tray list and the agreement, one tap from the tile. */}
       {/* One row, never wrapping: a tile is as short as it can be. */}
       <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px 6px` }}>
-        <button onClick={() => onOpen('trays')} data-tile-trays style={{ ...chip, flex: '0 0 auto' }}>Trays</button>
-        <button onClick={() => onOpen('docs')} data-tile-docs
+        <button onClick={() => onOpen('trays')} data-tile-trays
+          style={needsAgreement(kit) ? { ...chip, flex: '0 0 auto' } : chip}>{needsAgreement(kit) ? 'Trays' : 'Tray list'}</button>
+        {needsAgreement(kit) && <button onClick={() => onOpen('docs')} data-tile-docs
           aria-label={kit.docs?.consignment ? 'Agreement on file' : 'Add an agreement'}
           style={{ ...chip, ...(kit.docs?.consignment ? {} : { color: colour.inkFaint, borderStyle: 'dashed' }) }}>
           {kit.docs?.consignment ? 'Agreement ✓' : 'Agreement'}
-        </button>
+        </button>}
       </div>
       <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px ${space.sm}px` }}>
         {kit.away && onReturn && (

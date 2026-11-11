@@ -10,7 +10,7 @@ import { colour, text, space, radius, border } from '../../design/tokens.js'
 
 const where = path => path.split('/').slice(1, -1).slice(-2).join(' › ')
 
-export default function FromDropbox({ kit, user, post, onDone, onClose }) {
+export default function FromDropbox({ kit, kind = 'consignment', user, post, onDone, onClose }) {
   const [suggested, setSuggested] = useState(null)
   const [q, setQ] = useState('')
   const [found, setFound] = useState(null)
@@ -20,7 +20,7 @@ export default function FromDropbox({ kit, user, post, onDone, onClose }) {
 
   useEffect(() => {
     let live = true
-    fetch(`/api/guides?kits=dbx-suggest&id=${encodeURIComponent(kit.id)}`, { headers: auth })
+    fetch(`/api/guides?kits=dbx-suggest&id=${encodeURIComponent(kit.id)}&kind=${kind}`, { headers: auth })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => { if (!live) return; if (!ok) throw new Error(b.error || 'Dropbox could not be read'); setSuggested(b.suggested || []) })
       .catch(err => { if (live) { setError(err.message); setSuggested([]) } })
@@ -72,13 +72,13 @@ export default function FromDropbox({ kit, user, post, onDone, onClose }) {
       <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.xs }}>
         Linked, not copied — the kit always opens the file as it is in Dropbox.
       </div>
-      {suggested === null && <div style={{ ...text('caption'), color: colour.inkFaint }}>Looking for {kit.name}'s agreements…</div>}
+      {suggested === null && <div style={{ ...text('caption'), color: colour.inkFaint }}>Looking for {kit.name}'s {kind === 'traylist' ? 'tray lists' : 'agreements'}…</div>}
       {suggested && suggested.length > 0 && <>
         <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.xs}px 0` }}>Looks like this kit's</div>
         {suggested.map(row)}
       </>}
       {suggested && suggested.length === 0 && !error && (
-        <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing in Admin › Consignment Agreements names this kit — search below.</div>
+        <div style={{ ...text('caption'), color: colour.inkFaint }}>Nothing in Dropbox's {kind === 'traylist' ? 'Tray Lists' : 'Consignment Agreements'} folder names this kit — search below.</div>
       )}
       <form onSubmit={search} style={{ display: 'flex', gap: space.xs, marginTop: space.sm }}>
         <input value={q} onChange={e => setQ(e.target.value)} aria-label="Search Dropbox" placeholder="Search — e.g. Diplomat CLV"

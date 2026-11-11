@@ -124,3 +124,19 @@ describe('adding from Dropbox (Brent, 11 Nov 2026: "Build option 2")', () => {
     expect(out.map(f => [f.name, f.kind])).toEqual([['RHH.pdf', 'traylist']])
   })
 })
+
+describe('TM loan kits (Brent, 11 Nov 2026: "don\'t require consignment agreements")', () => {
+  it('are never offered an agreement in the one-pass attach', async () => {
+    const { needsAgreement } = await import('../src/kit/agreements.js')
+    expect(needsAgreement({ kind: 'floating' })).toBe(false)
+    expect(needsAgreement({ kind: 'consignment' })).toBe(true)
+    expect(needsAgreement({})).toBe(true)
+    const cat = [{ name: 'CONSIGNMENT AGREEMENT RHH - Dakota 2025.pdf', path: '/Admin/Consignment Agreements/RHH Consignment Agreements/CONSIGNMENT AGREEMENT RHH - Dakota 2025.pdf', kind: 'consignment' }]
+    const kits = [
+      { id: 'loan', name: 'Dakota (TM loan)', system: 'Dakota', home: 'RHH', kind: 'floating' },
+      { id: 'cons', name: 'Dakota', system: 'Dakota', home: 'RHH', kind: 'consignment' }
+    ]
+    const { sure, unsure } = docs.proposeAgreements(kits, cat, {})
+    expect([...sure, ...unsure].map(x => x.kitId)).toEqual(['cons'])
+  })
+})

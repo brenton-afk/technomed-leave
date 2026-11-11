@@ -3,6 +3,7 @@ import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { shareFile, typeOfName, shareReady } from '../../kit/share.js'
 import FromDropbox from './FromDropbox.jsx'
+import { needsAgreement } from '../../kit/agreements.js'
 import DocViewer, { viewKind } from '../../kit/DocViewer.jsx'
 
 // ─── A kit's documents (Brent, 11 Nov 2026) ──────────────────────────────────
@@ -120,6 +121,7 @@ export default function KitDocs({ kit, user, post, onChanged }) {
   const label = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }
   const small = on => ({ ...text('caption'), fontWeight: 600, minHeight: 34, padding: '0 12px', borderRadius: radius.pill, cursor: 'pointer',
     border: on ? 'none' : border.hairline, background: on ? colour.navy : colour.surface, color: on ? 'white' : colour.ink })
+  const loan = !needsAgreement(kit)
   const consignment = (docs || []).filter(d => d.kind === 'consignment')
   const others = (docs || []).filter(d => d.kind !== 'consignment')
 
@@ -149,24 +151,32 @@ export default function KitDocs({ kit, user, post, onChanged }) {
     <div data-kit-docs
       onDragOver={e => { e.preventDefault(); setOver(true) }}
       onDragLeave={() => setOver(false)}
-      onDrop={e => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer?.files, 'consignment') }}
+      onDrop={e => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer?.files, loan ? 'other' : 'consignment') }}
       style={{ outline: over ? `2px dashed ${colour.accent}` : 'none', borderRadius: radius.control }}>
       <input ref={pick} type="file" multiple accept={ACCEPT} hidden style={{ fontSize: 16 }}
         onChange={e => { const f = e.target.files; e.target.value = ''; addFiles(f, kindFor.current) }} />
 
-      <div style={label}>Consignment agreement{consignment.length === 1 ? '' : 's'} · {consignment.length}</div>
-      {docs === null && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}
-      {docs && consignment.length === 0 && (
-        <div style={{ ...text('caption'), color: colour.inkFaint }}>None on file yet.</div>
-      )}
-      {consignment.map(row)}
+      {loan ? (
+        <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: space.md }}>
+          A TM loan kit — no consignment agreement needed. Its tray list is below.
+        </div>
+      ) : <>
+        <div style={label}>Consignment agreement{consignment.length === 1 ? '' : 's'} · {consignment.length}</div>
+        {docs === null && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}
+        {docs && consignment.length === 0 && (
+          <div style={{ ...text('caption'), color: colour.inkFaint }}>None on file yet.</div>
+        )}
+        {consignment.map(row)}
+      </>}
+      {/* A loan kit that was given an agreement before keeps it in view. */}
+      {loan && consignment.map(row)}
 
-      <div style={label}>Other documents · {others.length}</div>
+      <div style={label}>{loan ? 'Documents' : 'Other documents'} · {others.length}</div>
       {docs && others.length === 0 && <div style={{ ...text('caption'), color: colour.inkFaint }}>None yet.</div>}
       {others.map(row)}
 
       <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', marginTop: space.sm }}>
-        <button onClick={() => choose('consignment')} disabled={Boolean(busy)} style={small(false)}>+ Consignment agreement</button>
+        {!loan && <button onClick={() => choose('consignment')} disabled={Boolean(busy)} style={small(false)}>+ Consignment agreement</button>}
         <button onClick={() => choose('other')} disabled={Boolean(busy)} style={small(false)}>+ Other document</button>
         <button onClick={() => setFromDropbox(v => !v)} data-open-from-dropbox style={small(fromDropbox)}>+ From Dropbox</button>
       </div>
@@ -174,7 +184,7 @@ export default function KitDocs({ kit, user, post, onChanged }) {
         PDF, Word, Excel or a photo. On a computer, drop files here.
       </div>
       {fromDropbox && (
-        <FromDropbox kit={kit} user={user} post={post} onClose={() => setFromDropbox(false)}
+        <FromDropbox kit={kit} kind={loan ? 'traylist' : 'consignment'} user={user} post={post} onClose={() => setFromDropbox(false)}
           onDone={async file => { setStatus(`Attached ${file.name}.`); await load(); onChanged?.() }} />
       )}
       {busy && <div role="status" style={{ ...text('caption'), color: colour.inkMuted, marginTop: space.xs }}>{busy}</div>}

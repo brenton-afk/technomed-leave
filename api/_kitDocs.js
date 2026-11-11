@@ -13,6 +13,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { redis, redisSetBody } from './_redis.js'
+import { needsAgreement } from '../src/kit/agreements.js'
 import { ensureFolder, uploadFile, temporaryLink, dropboxConfigured, listFilesUnder } from './_dropbox.js'
 
 const DOCS = id => `kits:docs:${id}`
@@ -218,6 +219,8 @@ export function proposeAgreements(kits = [], catalogue = [], docsByKit = {}) {
   const sure = []
   const unsure = []
   for (const kit of kits) {
+    // A TM loan kit has no agreement to find.
+    if (!needsAgreement(kit)) continue
     if ((docsByKit[kit.id] || []).some(d => d.kind === 'consignment')) continue
     const options = suggestFor(kit, catalogue, { taken: (docsByKit[kit.id] || []).map(d => d.path) })
     if (!options.length) continue

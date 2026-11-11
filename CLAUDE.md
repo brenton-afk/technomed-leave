@@ -958,6 +958,12 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   frame (no script), photos and text as they are, pinchable
   (`data-zoomable`); an old .doc or Excel says so with Download. Share and
   Download in the bar. Checked in an iPhone-sized render: two-page PDF, Word.
+- **TM loan kits have no consignment agreement** (Brent, same day: "Just tray
+  lists for these kits"): `needsAgreement` (`src/kit/agreements.js`, kind
+  `floating` → false) hides the tile's Agreement chip (its Tray list chip
+  takes the row), drops the agreement section and button from the kit (other
+  documents stay; Add from Dropbox suggests tray lists instead), and keeps
+  loan kits out of **Attach agreements from Dropbox**.
 
 ### Surgeon preference cards (Task 18)
 
