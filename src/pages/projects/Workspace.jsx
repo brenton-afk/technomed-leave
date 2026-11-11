@@ -1,3 +1,4 @@
+import { byDistributor } from '../../projects/distributors.js'
 import React, { useMemo, useState } from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { STAFF, isSameStaff } from '../../staffConfig.js'
@@ -109,6 +110,9 @@ export default function Workspace({
 
   const saved = useMemo(loadPrefs, [])
   const [view, setViewRaw] = useState(saved.view || 'list')
+  // The table grouped by project, or by distributor from what each task names
+  // (Brent, 11 Nov 2026 — src/projects/distributors.js).
+  const [groupBy, setGroupByRaw] = useState(saved.groupBy || 'project')
   // On a phone the page opens on your own to-do list (Brent, 6 Nov 2026).
   const [phoneTabOwn, setPhoneTabRaw] = useState(saved.phoneTab || 'todo')
   const phoneTab = phoneTabGiven || phoneTabOwn
@@ -134,7 +138,8 @@ export default function Workspace({
     setHeard(transcript)
   }
 
-  const remember = patch => savePrefs({ view, division, onlyMine, phoneTab, ...patch })
+  const remember = patch => savePrefs({ view, division, onlyMine, phoneTab, groupBy, ...patch })
+  const setGroupBy = v => { setGroupByRaw(v); remember({ groupBy: v }) }
   const setPhoneTab = v => { setPhoneTabRaw(v); remember({ phoneTab: v }) }
   const setView = v => { setViewRaw(v); remember({ view: v }) }
   const setDivision = d => { setDivisionRaw(d); setProjectId(''); remember({ division: d }) }
@@ -432,6 +437,9 @@ export default function Workspace({
             textDecoration: finished ? 'line-through' : 'none', overflowWrap: 'anywhere'
           }}>{task.task}</span>
           {task.priority === 'urgent' && !finished && <span style={{ ...text('caption'), color: colour.danger, fontWeight: 700 }}>Urgent</span>}
+          {groupBy === 'distributor' && view === 'list' && (
+            <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block' }}>{projectFor(task).name}</span>
+          )}
         </button>
         {wide
           ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -494,7 +502,45 @@ export default function Workspace({
     )
   }
 
+  const groupPicker = (
+    <div role="tablist" aria-label="Group by" style={{ display: 'flex', alignItems: 'center', gap: space.xs, marginBottom: space.sm, flexWrap: 'wrap' }}>
+      <span style={{ ...text('caption'), color: colour.inkFaint }}>Group by</span>
+      {[['project', 'Project'], ['distributor', 'Distributor']].map(([key, label]) => (
+        <button key={key} type="button" role="tab" aria-selected={groupBy === key} data-group-by={key} onClick={() => setGroupBy(key)}
+          style={{
+            ...text('caption'), fontWeight: groupBy === key ? 700 : 400, minHeight: 30, padding: `0 ${space.md}px`, cursor: 'pointer',
+            borderRadius: radius.pill, border: groupBy === key ? 'none' : `1px solid ${colour.line}`,
+            background: groupBy === key ? colour.navy : colour.surface, color: groupBy === key ? 'white' : colour.inkMuted
+          }}>{label}</button>
+      ))}
+    </div>
+  )
+
+  const distributorView = () => {
+    const groups = byDistributor(shownOpen.slice().sort(order))
+    if (!groups.length) return empty()
+    return groups.map(g => (
+      <section key={g.key} data-distributor-group={g.key} style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden', marginBottom: space.md }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px`, borderBottom: `1px solid ${colour.line}`,
+          boxShadow: `inset 4px 0 0 ${g.key === 'none' ? colour.line : colour.navy}` }}>
+          <span style={{ ...text('heading'), color: colour.ink }}>{g.name}</span>
+          <span style={{ ...text('caption'), color: colour.inkFaint, flex: 1, minWidth: 0 }}>
+            {g.tasks.filter(t => t.status !== 'done').length} open
+          </span>
+          {wide && groupBar(g.tasks)}
+        </div>
+        {wide && tableHead}
+        {g.tasks.map(row)}
+      </section>
+    ))
+  }
+
   const listView = () => {
+    if (groupBy === 'distributor') return <>{groupPicker}{distributorView()}</>
+    return <>{groupPicker}{projectListView()}</>
+  }
+
+  const projectListView = () => {
     const groups = orderedProjects(all, items)
       .map(p => [p, shownOpen.filter(t => projectIdOf(t) === p.id).sort(order)])
       .filter(([, rows]) => rows.length)

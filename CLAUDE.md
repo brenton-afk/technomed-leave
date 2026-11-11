@@ -734,6 +734,15 @@ exists). Tap, speak, tap again (30s cap); the recording goes to the existing
 `action=voice` reader, and a `todo` reply (else the words said, `voiceDraft`)
 fills the box, who and due date, with "Heard: …" beneath. Nothing is added
 until Add is tapped.
+**Group by distributor** (Brent, 11 Nov 2026: "separated by distributor …
+use the information you already know about product names"): the List/Table
+view has Group by Project | Distributor (remembered in `tm_projects_view`).
+`src/projects/distributors.js` reads each task's words for a distributor or
+one of its products — every `INVENTORY` system under its distributor, plus
+the usage reader's names (Boost, CBM, BMD, Orthofix …) and Stryker, KLS,
+Arthrex, Brainlab, TM kits; two named → "More than one distributor", none →
+"No distributor". Each row then shows its project.
+
 **A private board for Brent and Erin** (Brent, 11 Nov 2026: "cannot be
 viewed by other staff"). A project with `private: true` (a tick on New
 project, or Make private on its board, offered only to them) and every task
