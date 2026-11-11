@@ -147,8 +147,31 @@ export default function KitRoom({ user, onBack }) {
   // opens with that place chosen — a move still sends its email). Pointer
   // events, so a finger and a mouse work the same.
   function startDrag(kit, e) {
-    e.preventDefault()
+    e.preventDefault?.()
+    // A phone gets a small buzz when the tile comes up, as on a home screen.
+    try { navigator.vibrate?.(15) } catch { /* not every phone */ }
     setDragging({ kit, x: e.clientX, y: e.clientY, over: null })
+    let lastY = e.clientY
+    // While a tile is held the page must not scroll under the finger —
+    // and near the top or bottom edge it scrolls on purpose, so a tile can be
+    // carried further than one screen.
+    const noScroll = ev => ev.preventDefault()
+    window.addEventListener('touchmove', noScroll, { passive: false })
+    const scroller = document.querySelector('.tm-scroll')
+    const edge = setInterval(() => {
+      if (!scroller) return
+      const box = scroller.getBoundingClientRect()
+      if (lastY < box.top + 70) scroller.scrollTop -= 14
+      else if (lastY > box.bottom - 90) scroller.scrollTop += 14
+    }, 16)
+    const stop = () => {
+      clearInterval(edge)
+      window.removeEventListener('touchmove', noScroll)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      setDragging(null)
+    }
     const target = (x, y) => {
       const el = document.elementFromPoint(x, y)
       const tile = el?.closest?.('[data-kit-tile]')
@@ -156,23 +179,15 @@ export default function KitRoom({ user, onBack }) {
       const place = el?.closest?.('[data-drop-place]')
       return place ? { place: place.dataset.dropPlace } : null
     }
-    const move = ev => setDragging(d => d && { ...d, x: ev.clientX, y: ev.clientY, over: target(ev.clientX, ev.clientY) })
+    const move = ev => { lastY = ev.clientY; setDragging(d => d && { ...d, x: ev.clientX, y: ev.clientY, over: target(ev.clientX, ev.clientY) }) }
     const up = ev => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', cancel)
-      setDragging(null)
+      stop()
       const over = target(ev.clientX, ev.clientY)
       if (!over) return
       if (over.place && over.place !== kit.at) { setMoveTo(over.place); setMoving(kit); return }
       if (over.tile) reorder(kit.id, over.tile)
     }
-    const cancel = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', cancel)
-      setDragging(null)
-    }
+    const cancel = () => stop()
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', cancel)
@@ -184,6 +199,7 @@ export default function KitRoom({ user, onBack }) {
     const without = drawn.filter(x => x !== id)
     const at = without.indexOf(beforeId)
     const next = [...without.slice(0, at), id, ...without.slice(at)]
+    if (next.join() === drawn.join()) return
     const was = order
     setOrder(next)
     try { await post('order', { ids: next }) } catch (err) { setOrder(was); setError(err.message) }
@@ -274,6 +290,12 @@ export default function KitRoom({ user, onBack }) {
             </button>
           ))}
         </div>
+
+        {data && kits.length > 1 && (
+          <div style={{ ...text('caption'), color: colour.inkFaint, margin: `-${space.sm}px 0 ${space.md}px` }}>
+            Press and hold a tile to pick it up — drop it on another kit to change the order, or on Calvary, RHH or the office to move it there.
+          </div>
+        )}
 
         {!data && !error && (
           <TileGrid>{[0, 1, 2, 3, 4, 5].map(i => <Skeleton key={i} height={132} style={{ borderRadius: radius.card }} />)}</TileGrid>
@@ -395,7 +417,37 @@ function TileGrid({ children }) {
   )
 }
 
+// Press and hold anywhere on a tile to pick it up (Brent, 11 Nov 2026: "I
+// thought I'd be able to move the kit room tiles around on the page"). A tap
+// still opens the kit; moving before the hold is up is a scroll, not a drag.
+const HOLD_MS = 380
+function useHold(onGrab) {
+  const timer = React.useRef(null)
+  const start = React.useRef(null)
+  const fired = React.useRef(false)
+  const clear = () => { clearTimeout(timer.current); timer.current = null }
+  return {
+    onPointerDown: e => {
+      if (!onGrab || e.button > 0) return
+      fired.current = false
+      start.current = { x: e.clientX, y: e.clientY }
+      const ev = { clientX: e.clientX, clientY: e.clientY }
+      clear()
+      timer.current = setTimeout(() => { fired.current = true; onGrab(ev) }, HOLD_MS)
+    },
+    onPointerMove: e => {
+      if (timer.current && start.current && Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 8) clear()
+    },
+    onPointerUp: clear,
+    onPointerCancel: clear,
+    // The tap that ends a hold is not a tap on whatever was under it.
+    onClickCapture: e => { if (fired.current) { e.preventDefault(); e.stopPropagation(); fired.current = false } },
+    onContextMenu: e => { if (onGrab) e.preventDefault() }
+  }
+}
+
 function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy, onGrab, lifted, target }) {
+  const hold = useHold(onGrab)
   const dist = DISTRIBUTORS[distributorOf(kit)]
   const logo = logoFor(kit)
   const trayCount = (kit.trays || []).length
@@ -408,9 +460,9 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy, onGrab, lifted,
   const small = { ...pill(false), padding: '5px 8px', flex: 1, textAlign: 'center' }
 
   return (
-    <div data-kit-tile={kit.id} data-place={kit.at} style={{
+    <div data-kit-tile={kit.id} data-place={kit.at} {...hold} style={{
       ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative',
-      opacity: lifted ? 0.4 : 1,
+      opacity: lifted ? 0.4 : 1, WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none',
       boxShadow: target ? `0 0 0 2px ${colour.accent}` : undefined,
       // Tinted by where it is now, so a Calvary set reads as Calvary wherever
       // it is listed; the top edge carries its state.
@@ -418,10 +470,12 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy, onGrab, lifted,
       borderTop: `3px solid ${kit.away ? colour.warning : checked ? colour.accent : tint.line}`
     }}>
       {onGrab && (
-        <span role="button" aria-label={`Drag ${kit.name}`} title="Drag to move or reorder" onPointerDown={onGrab}
+        <span role="button" aria-label={`Drag ${kit.name}`} title="Drag to move or reorder"
+          onPointerDown={e => { e.stopPropagation(); onGrab(e) }}
           style={{
-            position: 'absolute', top: 4, right: 4, zIndex: 1, width: 32, height: 32, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', touchAction: 'none', cursor: 'grab', color: colour.inkFainter, ...text('bodyStrong'), userSelect: 'none'
+            position: 'absolute', top: 4, right: 4, zIndex: 1, width: 36, height: 36, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', touchAction: 'none', cursor: 'grab', color: colour.inkMuted, ...text('bodyStrong'), userSelect: 'none',
+            borderRadius: radius.control, background: 'rgba(255,255,255,0.7)'
           }}>⋮⋮</span>
       )}
       <button onClick={() => onOpen()} aria-label={`Open ${kit.name}`} style={{
@@ -455,10 +509,13 @@ function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy, onGrab, lifted,
         )}
       </button>
       {/* The tray list and the agreement, one tap from the tile. */}
-      <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px 6px`, flexWrap: 'wrap' }}>
-        <button onClick={() => onOpen('trays')} data-tile-trays style={chip}>{trayCount ? 'Tray list' : '+ Tray list'}</button>
-        <button onClick={() => onOpen('docs')} data-tile-docs style={chip}>
-          {kit.docs?.consignment ? 'Agreement ✓' : '+ Agreement'}{kit.docs?.docs > kit.docs?.consignment ? ` · ${kit.docs.docs - kit.docs.consignment} doc${kit.docs.docs - kit.docs.consignment === 1 ? '' : 's'}` : ''}
+      {/* One row, never wrapping: a tile is as short as it can be. */}
+      <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px 6px` }}>
+        <button onClick={() => onOpen('trays')} data-tile-trays style={{ ...chip, flex: '0 0 auto' }}>Trays</button>
+        <button onClick={() => onOpen('docs')} data-tile-docs
+          aria-label={kit.docs?.consignment ? 'Agreement on file' : 'Add an agreement'}
+          style={{ ...chip, ...(kit.docs?.consignment ? {} : { color: colour.inkFaint, borderStyle: 'dashed' }) }}>
+          {kit.docs?.consignment ? 'Agreement ✓' : 'Agreement'}
         </button>
       </div>
       <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px ${space.sm}px` }}>
@@ -515,8 +572,9 @@ export function pill(on) {
 }
 
 const chip = {
-  ...text('caption'), fontWeight: 600, padding: '3px 8px', borderRadius: radius.pill, cursor: 'pointer',
-  border: `1px solid ${colour.line}`, background: colour.surface, color: colour.accentDeep, whiteSpace: 'nowrap'
+  ...text('caption'), fontWeight: 600, padding: '3px 6px', borderRadius: radius.pill, cursor: 'pointer',
+  border: `1px solid ${colour.line}`, background: colour.surface, color: colour.accentDeep, whiteSpace: 'nowrap',
+  flex: '1 1 0', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center'
 }
 
 const linkButton = { background: 'none', border: 'none', padding: 0, color: colour.accentDeep, cursor: 'pointer', ...text('caption'), fontWeight: 600 }

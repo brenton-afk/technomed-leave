@@ -924,7 +924,13 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   and the screen shows "Ready — tap to share". A tray list shares its original
   document(s) (`tray-file`, only paths its own trays hold), else its text.
 - **Tiles**: a "Tray list" and "Agreement" chip on each opens the kit at that
-  part (`KitDetail focus`); the ⋮⋮ grip drags a tile — onto another kit to
+  part (`KitDetail focus`); **press and hold anywhere on a tile** (`useHold`,
+  380 ms, cancelled by 8 px of movement so a scroll stays a scroll; the click
+  that ends a hold is swallowed) or the ⋮⋮ grip drags it — the page cannot
+  scroll under a held tile (non-passive `touchmove`) and scrolls by itself
+  near the top or bottom edge (Brent, 11 Nov 2026: "I thought I'd be able to
+  move the kit room tiles around"; checked in a real iPhone-sized render) —
+  a tile — onto another kit to
   reorder (`kits:order`, shared, `saveKitOrder`), onto another place to open
   the move sheet with that place chosen (`MoveSheet initialTo`; a move still
   goes through its email step).
