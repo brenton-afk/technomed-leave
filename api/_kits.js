@@ -486,7 +486,9 @@ export async function saveTrayList(kitId, { trays, source, mode = 'replace' }, b
       code: String(l?.code || '').trim().slice(0, 40),
       description: String(l?.description || '').trim().slice(0, 120),
       qty: Math.max(0, Math.round(Number(l?.qty) || 0)),
-      kind: l?.kind === 'implant' ? 'implant' : 'instrument'
+      kind: l?.kind === 'implant' ? 'implant' : 'instrument',
+      // The item's own picture, under the same folder rule as the tray's.
+      ...(isTrayPhotoPath(l?.photo) ? { photo: String(l.photo).slice(0, 300) } : {})
     })).filter(l => l.code || l.description)
   })).filter(t => t.name && t.lines.length)
   if (!incoming.length) throw new Error('There is nothing in that tray list to save')
@@ -594,6 +596,8 @@ async function editTrayListNow(kitId, { op, tray, index, line, expect, name }, b
     const next = cleanLine(line)
     if (!next.code && !next.description) throw new Error('A line needs a code or a description')
     const was = t.lines[at]
+    // An edit to the words keeps the item's picture.
+    if (was.photo) next.photo = was.photo
     t.lines[at] = next
     const what = next.description || next.code
     note = was.qty !== next.qty && was.code === next.code && was.description === next.description && was.kind === next.kind

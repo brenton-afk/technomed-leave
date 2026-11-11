@@ -34,6 +34,13 @@ describe('reading a tray list', () => {
     ])
   })
 
+  it('carries each item\'s own picture, never the tray\'s photo and never twice', () => {
+    const out = cleanTrays({ trays: [{ name: 'CYLOX INST', photo: 1, lines: [
+      ['Q-1', 'INSERTER', 1, 'm', 2], ['Q-2', 'MALLET', 1, 'm'], ['Q-3', 'GUIDE', 1, 'm', 1], ['Q-4', 'TAMP', 1, 'm', 2], ['Q-5', 'RASP', 1, 'm', 3]
+    ] }] })
+    expect(out.trays[0].lines.map(l => l.photo)).toEqual([2, undefined, undefined, undefined, 3])
+  })
+
   it('carries which photo shows each tray — "the photo of the tray MUST come across"', () => {
     const out = cleanTrays({ trays: [
       { name: 'Tray 1', photo: 2, lines: [['X-1', 'AWL', 1, 'm']] },
@@ -118,6 +125,21 @@ describe('saving a tray list onto a kit', () => {
     expect(isTrayPhotoPath('/Tray Lists/Tray Photos/Kit/A.jpg')).toBe(true)
     expect(isTrayPhotoPath('/Tray Lists/Tray Photos/../ALL SURGEON USAGE/x.jpg')).toBe(false)
     expect(isTrayPhotoPath('/ALL SURGEON USAGE/x.jpg')).toBe(false)
+  })
+
+  it('keeps each item\'s picture, only from the photos folder, through an edit — "we need the photos"', async () => {
+    const { listKits, saveTrayList, getTrayList, editTrayList } = await import('./_kits.js')
+    const kit = (await listKits())[0]
+    await saveTrayList(kit.id, { trays: [{ name: 'Inst', lines: [
+      { code: 'Q-1', description: 'INSERTER', qty: 1, photo: '/Tray Lists/Tray Photos/Kit/Inst/1 Q-1.jpg' },
+      { code: 'Q-2', description: 'MALLET', qty: 1, photo: '/ALL SURGEON USAGE/x.jpg' },
+      { code: 'Q-3', description: 'GUIDE', qty: 1 }
+    ] }] }, 'Aimee')
+    const lines = (await getTrayList(kit.id)).trays[0].lines
+    expect(lines.map(l => l.photo)).toEqual(['/Tray Lists/Tray Photos/Kit/Inst/1 Q-1.jpg', undefined, undefined])
+    const after = await editTrayList(kit.id, { op: 'set', tray: 'Inst', index: 0, expect: { code: 'Q-1', description: 'INSERTER' },
+      line: { code: 'Q-1', description: 'INSERTER CAGE', qty: 2 } }, 'Mat')
+    expect(after.trays[0].lines[0]).toMatchObject({ description: 'INSERTER CAGE', qty: 2, photo: '/Tray Lists/Tray Photos/Kit/Inst/1 Q-1.jpg' })
   })
 
   it('renames a tray everywhere — "edit the tray name from an existing kit"', async () => {

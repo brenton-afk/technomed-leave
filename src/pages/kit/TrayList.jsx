@@ -36,6 +36,39 @@ function SavedPhoto({ path, user, alt }) {
   return <img src={url} alt={alt} style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: radius.control, background: colour.canvas, marginBottom: space.sm }} />
 }
 
+/**
+ * Links for a tray's item pictures, fetched in one request once the tray is
+ * open (and never stored — a Dropbox link is fetched per view).
+ */
+function useItemPhotos(lines, open, user) {
+  const [urls, setUrls] = useState({})
+  const paths = open ? [...new Set(lines.map(l => l.photo).filter(Boolean))] : []
+  const key = paths.join('|')
+  useEffect(() => {
+    if (!key) return
+    let live = true
+    fetch('/api/guides?kits=photos', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${user?.token || ''}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: key.split('|') })
+    }).then(r => r.json()).then(d => live && setUrls(d.urls || {})).catch(() => {})
+    return () => { live = false }
+  }, [key, user?.token])
+  return urls
+}
+
+/** An item's picture in its row; tapped, it opens full size. */
+function ItemThumb({ src, alt, onOpen }) {
+  if (!src) return <span aria-hidden="true" style={{ display: 'block', width: 44, height: 44, borderRadius: 6, background: colour.lineSoft }} />
+  return (
+    <button type="button" onClick={onOpen} aria-label={`Picture of ${alt}`} data-item-photo
+      style={{ display: 'block', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}>
+      <img src={src} alt={alt} loading="lazy"
+        style={{ display: 'block', width: 44, height: 44, objectFit: 'cover', borderRadius: 6, background: colour.canvas }} />
+    </button>
+  )
+}
+
 // "It would be better in a table with the instrument description and the qty
 // next to it. Nice and neat." Code, description, quantity — one row per line,
 // ruled, the quantity right-aligned so a column of numbers reads down.
@@ -44,6 +77,13 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
   const cell = { ...text('caption'), padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairlineSoft, verticalAlign: 'top' }
   const head = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairline, textAlign: 'left', background: colour.canvas }
   const hasPhoto = Boolean(photoData || tray.photo)
+  // Item pictures (Brent, 11 Nov 2026): on the phone while checking, from
+  // Dropbox once saved.
+  const urls = useItemPhotos(tray.lines, open && !editing, user)
+  const itemSrc = l => (l.photoData ? `data:image/jpeg;base64,${l.photoData}` : (l.photo ? urls[l.photo] : ''))
+  const withPictures = tray.lines.some(l => l.photoData || l.photo)
+  const pictured = tray.lines.filter(l => l.photoData || l.photo).length
+  const [zoom, setZoom] = useState(null)
   return (
     <div style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control, marginBottom: space.sm, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px` }}>
@@ -51,6 +91,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
           <div style={{ ...text('bodyStrong'), color: colour.ink }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
             {tray.lines.length} items · {implants} implant{implants === 1 ? '' : 's'}{hasPhoto ? ' · photo' : ' · no photo'}
+            {pictured ? ` · ${pictured} item picture${pictured === 1 ? '' : 's'}` : ''}
             {tray.updatedBy ? ` · updated by ${tray.updatedBy}${tray.updatedAt ? ` ${new Date(tray.updatedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}` : ''}` : ''}
           </div>
         </button>
@@ -82,14 +123,23 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
           {!photoData && tray.photo && <SavedPhoto path={tray.photo} user={user} alt={tray.name} />}
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
+              {withPictures && <col style={{ width: 56 }} />}
               <col style={{ width: '30%' }} /><col /><col style={{ width: 48 }} />{onRemoveLine && <col style={{ width: 28 }} />}
             </colgroup>
             <thead>
-              <tr><th style={head}>Code</th><th style={head}>Description</th><th style={{ ...head, textAlign: 'right' }}>Qty</th>{onRemoveLine && <th style={head} />}</tr>
+              <tr>{withPictures && <th style={head} aria-label="Picture" />}<th style={head}>Code</th><th style={head}>Description</th><th style={{ ...head, textAlign: 'right' }}>Qty</th>{onRemoveLine && <th style={head} />}</tr>
             </thead>
             <tbody>
               {tray.lines.map((l, i) => (
                 <tr key={`${l.code}-${i}`} style={{ background: i % 2 ? colour.canvas : colour.surface }}>
+                  {withPictures && (
+                    <td style={{ ...cell, padding: 4 }}>
+                      {(l.photoData || l.photo) && (
+                        <ItemThumb src={itemSrc(l)} alt={l.description || l.code}
+                          onOpen={() => setZoom({ url: itemSrc(l), name: `${l.description || l.code || 'Item'}.jpg` })} />
+                      )}
+                    </td>
+                  )}
                   <td style={{ ...cell, color: colour.inkMuted, overflowWrap: 'anywhere' }}>{l.code || '—'}</td>
                   <td style={{ ...cell, color: colour.ink }}>
                     {l.description}
@@ -106,6 +156,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
               ))}
             </tbody>
           </table>
+          {zoom && <DocViewer name={zoom.name} url={zoom.url} onClose={() => setZoom(null)} />}
         </div>
       )}
     </div>
@@ -272,9 +323,16 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     // A one-tray list whose reading named no photo still has one if the file
     // does: the first picture in it is the tray (a check sheet puts the tray
     // photo first and the item pictures after).
+    const onLines = new Set(data.trays.flatMap(t => t.lines.map(l => l.photo).filter(Boolean)))
     const named = data.trays.map(t => (t.photo && byN.has(t.photo) ? t.photo : null))
-    if (data.trays.length === 1 && !named[0] && photos.length) named[0] = photos[0].n
-    const trays = data.trays.map((t, i) => ({ ...t, file: file.name, photoData: named[i] ? byN.get(named[i]) : null, photo: null }))
+    const spare = photos.find(p => !onLines.has(p.n))
+    if (data.trays.length === 1 && !named[0] && spare) named[0] = spare.n
+    // Each item's own picture, from its row (Brent, 11 Nov 2026: "We need the
+    // photos") — a check sheet has one beside every item.
+    const trays = data.trays.map((t, i) => ({
+      ...t, file: file.name, photoData: named[i] ? byN.get(named[i]) : null, photo: null,
+      lines: t.lines.map(({ photo, ...l }) => (photo && byN.has(photo) ? { ...l, photoData: byN.get(photo) } : l))
+    }))
     return { file: file.name, original: file, trays, note, photoCount: photos.length }
   }
 
@@ -304,9 +362,29 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
             photoMissed.push(t.name)
           }
         }
+        // The items' pictures, four at a time, each beside its tray's.
+        const lines = [...t.lines]
+        const waiting = lines.map((l, i) => i).filter(i => lines[i].photoData)
+        let lost = 0
+        const worker = async () => {
+          for (let i = waiting.shift(); i !== undefined; i = waiting.shift()) {
+            const { photoData, ...l } = lines[i]
+            setProgress(`photos for ${t.name}`)
+            try {
+              const kept = await call('tray-photo', { data: photoData, trayName: t.name, itemName: `${i + 1} ${l.code || l.description}` }, 60000)
+              lines[i] = { ...l, photo: kept.path }
+            } catch {
+              lines[i] = l
+              lost += 1
+            }
+          }
+        }
+        await Promise.all([worker(), worker(), worker(), worker()])
+        if (lost) photoMissed.push(`${lost} item${lost === 1 ? '' : 's'} on ${t.name}`)
         const { photoData, ...rest } = t
-        trays.push({ ...rest, photo, dropboxPath: review.originals?.[t.file]?.dropboxPath || '' })
+        trays.push({ ...rest, lines, photo, dropboxPath: review.originals?.[t.file]?.dropboxPath || '' })
       }
+      setProgress('')
       const first = review.files[0]?.file
       const { list: saved } = await post('savelist', {
         kitId: kit.id, trays, mode: replaceAll ? 'replace' : 'add',
@@ -315,7 +393,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
       setReplaceAll(false)
       setList(saved); setReview(null)
       if (photoMissed.length) {
-        setError(`Saved — but the photo for ${photoMissed.join(', ')} could not be kept, as Dropbox is not connected yet. Upload the list again once it is.`)
+        setError(`Saved — but the photo for ${photoMissed.join(', ')} could not be kept (Dropbox did not take it). Upload that list again to bring the photos across.`)
       }
       await onSaved?.()
     } catch (err) { setError(err.message) }
@@ -369,6 +447,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     const lines = review.trays.reduce((n, t) => n + t.lines.length, 0)
     const originals = Object.values(review.originals || {})
     const photos = review.trays.filter(t => t.photoData).length
+    const itemPictures = review.trays.reduce((n, t) => n + t.lines.filter(l => l.photoData).length, 0)
     return (
       <div>
         <div style={label}>Check the tray list before saving</div>
@@ -376,7 +455,9 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           Read from {review.files.length === 1 ? review.files[0].file : `${review.files.length} files`}: {review.trays.length} trays, {lines} lines.
           {review.files.map(f => f.note).filter(Boolean).map(n => ` ${n}`).join('')} Open each tray and check the codes and quantities
           against the paper. Leave out anything that is not part of this kit.
-          {photos ? ` ${photos} of ${review.trays.length} trays have a photo.` : ' No photos were found.'}
+          {photos ? ` ${photos} of ${review.trays.length} trays have a photo.` : ' No tray photo was found.'}
+          {itemPictures ? ` ${itemPictures} items have their own picture.` : ''}
+          {!photos && !itemPictures ? ' This document has no photos in it.' : ''}
           {originals.some(o => o.keeping) ? ' Saving the originals to Dropbox…'
             : originals.some(o => o.dropboxPath) ? ' Originals saved in Dropbox under Tray Lists.' : ''}
           {originals.some(o => o.dropboxError) ? ' (Some originals were not saved to Dropbox — add them there by hand.)' : ''}
@@ -400,7 +481,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           <button disabled={Boolean(stage) || !review.trays.length} onClick={save} style={{
             flex: 2, ...text('bodyStrong'), padding: space.md, borderRadius: radius.control, border: 'none',
             background: colour.accent, color: 'white', cursor: 'pointer', opacity: stage === 'saving' ? 0.6 : 1
-          }}>{stage === 'saving' ? 'Saving the list and photos…' : `Save to ${kit.name}`}</button>
+          }}>{stage === 'saving' ? (progress ? `Saving the ${progress}…` : 'Saving the list and photos…') : `Save to ${kit.name}`}</button>
           <button onClick={() => setReview(null)} style={{
             flex: 1, ...text('bodyStrong'), padding: space.md, borderRadius: radius.control, border: border.hairline,
             background: colour.surface, color: colour.ink, cursor: 'pointer'

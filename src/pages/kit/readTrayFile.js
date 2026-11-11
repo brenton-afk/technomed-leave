@@ -46,7 +46,7 @@ async function shrinkImage(file, longSide = 2000) {
 // to, and the picture itself stays on the phone (shrunk) until the list is
 // saved. Logos and icons are left out by size.
 
-const MIN_PHOTO_SIDE = 220
+const MIN_PHOTO_SIDE = 160
 
 async function blobToPhoto(blob) {
   const bitmap = await createImageBitmap(blob)
@@ -104,7 +104,7 @@ async function docxPayload(file) {
 export function looksLikePhoto(width, height) {
   const long = Math.max(width, height)
   const short = Math.min(width, height)
-  return long >= MIN_PHOTO_SIDE && short >= 120 && long / short <= 2.6
+  return long >= MIN_PHOTO_SIDE && short >= 100 && long / short <= 2.6
 }
 
 /**
@@ -125,8 +125,22 @@ function imageObject(page, name) {
   })
 }
 
+const mul = (m, n) => [
+  m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
+  m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+  m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]
+]
+
 /**
- * The pictures embedded on one PDF page, drawn out as photos. Best effort.
+ * The pictures embedded on one PDF page, drawn out as photos, each with where
+ * its top edge sits and how tall it is drawn (PDF units; larger y is higher).
+ * Best effort.
+ *
+ * Every picture is kept (Brent, 11 Nov 2026: "The photos from Aimee's uploads
+ * didn't come across. We need the photos"): a hospital check sheet has the
+ * tray's photograph and then a picture of every item in its Image column, and
+ * the item pictures are how a tray is checked. Where each sits lets its
+ * marker go into the text beside the row it belongs to.
  *
  * Each named image is looked at once. A Calvary check sheet paints the same
  * tick-box icon about a hundred times a page, and waiting on each of those in
@@ -137,14 +151,28 @@ async function pdfPagePhotos(pdfjs, page, deadline) {
   try {
     const ops = await page.getOperatorList()
     const seen = new Set()
+    let ctm = [1, 0, 0, 1, 0, 0]
+    const stack = []
     for (let i = 0; i < ops.fnArray.length; i += 1) {
-      // Two a page: the tray photograph comes first, and a check sheet's
-      // twenty-odd item pictures after it are not needed and cost seconds.
-      if (Date.now() > deadline || out.length >= 2) break
-      if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue
-      const name = ops.argsArray[i][0]
+      if (Date.now() > deadline) break
+      const fn = ops.fnArray[i]
+      const args = ops.argsArray[i]
+      if (fn === pdfjs.OPS.save) { stack.push(ctm); continue }
+      if (fn === pdfjs.OPS.restore) { ctm = stack.pop() || ctm; continue }
+      if (fn === pdfjs.OPS.transform && args?.length === 6) { ctm = mul(ctm, args); continue }
+      if (fn === pdfjs.OPS.paintFormXObjectBegin) {
+        stack.push(ctm)
+        if (Array.isArray(args?.[0]) && args[0].length === 6) ctm = mul(ctm, args[0])
+        continue
+      }
+      if (fn === pdfjs.OPS.paintFormXObjectEnd) { ctm = stack.pop() || ctm; continue }
+      if (fn !== pdfjs.OPS.paintImageXObject) continue
+      const name = args[0]
       if (seen.has(name)) continue
       seen.add(name)
+      // The image fills the unit square: its top edge and height, on the page.
+      const height = Math.abs(ctm[3]) || Math.abs(ctm[1])
+      const top = Math.max(ctm[5], ctm[5] + ctm[3] + ctm[1])
       const img = await imageObject(page, name)
       if (!img || !looksLikePhoto(img.width, img.height)) continue
       const canvas = document.createElement('canvas')
@@ -164,11 +192,34 @@ async function pdfPagePhotos(pdfjs, page, deadline) {
       } else continue
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85))
       const data = blob && await blobToPhoto(blob)
-      if (data) out.push(data)
+      if (data) out.push({ data, top, height })
     }
   } catch { /* no photos from this page; the text still reads */ }
   return out
 }
+
+/**
+ * A page's text lines with its photo markers put in among them, so an item's
+ * picture is read beside its row. Pure, for the tests.
+ *
+ * `lines` are `{ y, text }` in reading order; `photos` are `{ top, text }`
+ * (PDF units, larger is higher). A check sheet prints a row's words at the
+ * top of the row with the picture beside and below them, so a picture goes
+ * straight after the first line that starts at or below its top edge.
+ */
+export function interleaveByHeight(lines, photos) {
+  const out = []
+  const left = [...photos].sort((a, b) => b.top - a.top)
+  for (const line of lines) {
+    out.push(line.text)
+    while (left.length && Number.isFinite(line.y) && line.y <= left[0].top + 1) out.push(left.shift().text)
+  }
+  for (const p of left) out.push(p.text)
+  return out
+}
+
+/** A photo's marker. A picture drawn large is a tray, small is an item. */
+export const photoMarker = (n, height) => `[PHOTO ${n}${height >= 150 ? ' — large' : ''}]`
 
 async function pdfPayload(file) {
   const pdfjs = await import('pdfjs-dist')
@@ -180,28 +231,31 @@ async function pdfPayload(file) {
   // few KB however many photographs sit around it.
   const pages = []
   const photos = []
-  // However the PDF is built, looking for photos gets 15 seconds in all.
-  const deadline = Date.now() + 15000
+  // However the PDF is built, looking for photos gets 40 seconds in all —
+  // a five-page check sheet has a picture of every item.
+  const deadline = Date.now() + 40000
   for (let n = 1; n <= doc.numPages; n += 1) {
     const page = await doc.getPage(n)
     const markers = []
-    for (const data of await pdfPagePhotos(pdfjs, page, deadline)) {
+    for (const { data, top, height } of await pdfPagePhotos(pdfjs, page, deadline)) {
       photos.push({ n: photos.length + 1, data })
-      markers.push(`[PHOTO ${photos.length}]`)
+      markers.push({ top, text: photoMarker(photos.length, height) })
     }
     const content = await page.getTextContent()
     // Keep line breaks where the PDF has them, so table rows stay rows.
     let line = ''
+    let lineY = null
     const lines = []
     for (const item of content.items) {
+      if (lineY === null && item.str?.trim()) lineY = item.transform?.[5] ?? null
       line += `${item.str}${item.hasEOL ? '' : ' '}`
-      if (item.hasEOL) { lines.push(line.trim()); line = '' }
+      if (item.hasEOL) { if (line.trim()) lines.push({ y: lineY, text: line.trim() }); line = ''; lineY = null }
     }
-    if (line.trim()) lines.push(line.trim())
-    pages.push([`[PAGE ${n}]`, ...markers, ...lines].join('\n'))
+    if (line.trim()) lines.push({ y: lineY, text: line.trim() })
+    pages.push([`[PAGE ${n}]`, ...interleaveByHeight(lines, markers)].join('\n'))
   }
   const text = pages.join('\n\n')
-  if (text.replace(/\[(PAGE|PHOTO) \d+\]/g, '').replace(/\s+/g, '').length > 200) return { text, photos }
+  if (text.replace(/\[(PAGE|PHOTO) \d+[^\]]*\]/g, '').replace(/\s+/g, '').length > 200) return { text, photos }
 
   // A scan: pictures of pages. Drawn at a size that reads well, and smaller
   // still if the whole set would not fit in one request.

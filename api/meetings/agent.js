@@ -867,14 +867,19 @@ async function handleTrayPhoto(req, res, session) {
   const staff = STAFF.find(s => s.email === session?.email)
   // Any member of staff (Brent, 11 Nov 2026: the kit room is everyone's).
   if (!staff) return res.status(403).json({ error: 'Not allowed' })
-  const { data, kitName, trayName } = req.body || {}
+  // `itemName` for one item's picture (Brent, 11 Nov 2026: the check sheets'
+  // item photos), filed in a folder per tray: {kit}/{tray}/{n code}.jpg.
+  const { data, kitName, trayName, itemName } = req.body || {}
   if (typeof data !== 'string' || !data) return res.status(400).json({ error: 'No photo came through' })
   if (!dropboxConfigured()) return res.status(400).json({ error: 'Dropbox is not connected, so the photo cannot be kept' })
   const safe = v => String(v || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
   try {
-    const folder = `/Tray Lists/Tray Photos/${safe(kitName) || 'Kit'}`
-    await ensureFolder(folder)
-    const path = `${folder}/${safe(trayName) || 'Tray'}.jpg`
+    const kitFolder = `/Tray Lists/Tray Photos/${safe(kitName) || 'Kit'}`
+    const folder = itemName ? `${kitFolder}/${safe(trayName) || 'Tray'}` : kitFolder
+    // Dropbox makes a missing parent on upload; the kit's folder is made
+    // once by its tray photo, not forty times over.
+    if (!itemName) await ensureFolder(folder)
+    const path = itemName ? `${folder}/${safe(itemName) || 'Item'}.jpg` : `${folder}/${safe(trayName) || 'Tray'}.jpg`
     const saved = await uploadFile(path, Buffer.from(data, 'base64'))
     return res.status(200).json({ path, shown: saved?.path_display || path })
   } catch (err) {

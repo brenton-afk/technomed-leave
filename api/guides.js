@@ -303,6 +303,19 @@ async function handleKits(req, res, session) {
       if (!isTrayPhotoPath(path)) return res.status(400).json({ error: 'Not a tray photo' })
       return res.status(200).json({ url: (await temporaryLink(path)).url })
     }
+    // A tray's item pictures, all in one go when it is opened — a check sheet
+    // has one beside every item, and forty requests for forty thumbnails is
+    // a slow tray on hospital wifi.
+    if (what === 'photos' && req.method === 'POST') {
+      const paths = [...new Set((Array.isArray(body?.paths) ? body.paths : []).map(String).filter(isTrayPhotoPath))].slice(0, 400)
+      const urls = {}
+      for (let i = 0; i < paths.length; i += 8) {
+        await Promise.all(paths.slice(i, i + 8).map(async p => {
+          try { urls[p] = (await temporaryLink(p)).url } catch { /* that one shows no picture */ }
+        }))
+      }
+      return res.status(200).json({ urls })
+    }
     if (what === 'traylist' && req.method === 'GET') {
       return res.status(200).json({ list: await getTrayList(String(req.query.id || '')) })
     }

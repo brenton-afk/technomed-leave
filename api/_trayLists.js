@@ -40,10 +40,12 @@ Ignore columns for lot numbers, "TM Out", "Hosp In", "Hosp Out", signatures, pag
 
 A tray heading looks like "TRAY 1 - INSTRUMENTS", "Tray 4 - 10 Degree Trials", "DNO TRAY", or a caddy name. If the document has no headings, it is one tray: name it after the document's title.
 
-Photographs of the trays appear in the text as markers like [PHOTO 3] (or, when you are given images, as the images themselves, numbered 1, 2, 3 in the order given). For each tray set "photo" to the number of the photograph that shows the WHOLE tray — usually the first photograph on the page where the tray starts, just under or beside its heading. Hospital check sheets (e.g. "CSSD Check Sheet") also have a small picture of each item in an "Image" column: those are item pictures, never the tray photograph. Use null only if there is no whole-tray photograph at all. Never give two trays the same photo unless the document clearly shows one picture for both.
+Photographs appear in the text as markers like [PHOTO 3] (or, when you are given images, as the images themselves, numbered 1, 2, 3 in the order given). A marker marked "— large" is drawn big on the page. There are two kinds:
+  - the tray photograph, showing the WHOLE tray — usually large, the first photograph where the tray starts, just under or beside its heading. Set the tray's "photo" to its number, or null if there is none. Never give two trays the same photo unless the document clearly shows one picture for both.
+  - item pictures: hospital check sheets (e.g. "CSSD Check Sheet") and some of our lists show a small picture of an item in its row (an "Image" column). An item picture's marker comes straight after the line of its row. Give that line the picture's number as a fifth value. A row with no picture has no fifth value. Never use the tray photograph as an item picture, and never give two lines the same picture.
 
-Return ONLY JSON, with each line as a short array [code, description, qty, kind] where kind is "i" for implant or "m" for instrument — the list is long, so keep it compact:
-{"title":"","trays":[{"name":"","photo":1,"lines":[["2SEA-86-0052","ANGLED AWL 10MM",1,"m"]]}]}`
+Return ONLY JSON, with each line as a short array [code, description, qty, kind] — or [code, description, qty, kind, photo] when the row has its own picture — where kind is "i" for implant or "m" for instrument; the list is long, so keep it compact:
+{"title":"","trays":[{"name":"","photo":1,"lines":[["2SEA-86-0052","ANGLED AWL 10MM",1,"m"],["CZ0001","INSERTER CAGE",2,"m",4]]}]}`
 
 /** What kind of file this is, from its name and type. */
 export function fileKind(filename, mediaType = '') {
@@ -86,14 +88,26 @@ export function cleanTrays(parsed) {
     name: clip(t?.name, 80) || `Tray ${i + 1}`,
     photo: Number.isInteger(Number(t?.photo)) && Number(t.photo) > 0 ? Number(t.photo) : null,
     lines: (t?.lines || []).slice(0, MAX_LINES).map(l => (Array.isArray(l)
-      ? { code: l[0], description: l[1], qty: l[2], kind: l[3] }
+      ? { code: l[0], description: l[1], qty: l[2], kind: l[3], photo: l[4] }
       : l)).map(l => ({
       code: clip(l?.code, 40),
       description: clip(l?.description, 120),
       qty: num(l?.qty),
-      kind: l?.kind === 'implant' || l?.kind === 'i' ? 'implant' : 'instrument'
+      kind: l?.kind === 'implant' || l?.kind === 'i' ? 'implant' : 'instrument',
+      // The item's own picture, from the row it was printed in.
+      ...(Number.isInteger(Number(l?.photo)) && Number(l.photo) > 0 ? { photo: Number(l.photo) } : {})
     })).filter(l => l.code || l.description)
   })).filter(t => t.lines.length)
+  // An item picture is never a tray's photograph, and is one row's only.
+  const trayPhotos = new Set(trays.map(t => t.photo).filter(Boolean))
+  const used = new Set()
+  for (const t of trays) {
+    for (const l of t.lines) {
+      if (!l.photo) continue
+      if (trayPhotos.has(l.photo) || used.has(l.photo)) delete l.photo
+      else used.add(l.photo)
+    }
+  }
   // Two trays printed with the same heading would collide as names.
   const seen = new Map()
   for (const t of trays) {

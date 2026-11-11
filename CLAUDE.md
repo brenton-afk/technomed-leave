@@ -881,6 +881,22 @@ photo shows each tray, and on save each photo goes to Dropbox at
 `/Tray Lists/Tray Photos/{kit}/{tray}.jpg`; the list stores that path (only
 paths under that folder are accepted) and the screen shows it by a temporary
 link fetched per view.
+**Every item's picture comes across too** (Brent, 11 Nov 2026: "The photos
+from Aimee's uploads didn't come across. We need the photos"). A Calvary CSSD
+check sheet has the tray photo and then a picture beside each item; only two
+a page were kept. Now every picture on a PDF page is drawn out with where it
+sits (`pdfPagePhotos` tracks the transform), and `interleaveByHeight` puts its
+marker straight after the first line at or below its top edge — its own row;
+one drawn large is marked `— large` (`photoMarker`), the tray. The reading
+gives a line a fifth value, its picture (`cleanTrays` drops one that is a
+tray's photo or used twice); on save each goes to
+`/Tray Lists/Tray Photos/{kit}/{tray}/{n code}.jpg` (`tray-photo` with
+`itemName`, four at a time), the line keeps `photo` (photos folder only), an
+edit keeps it, and an open tray fetches all its links in one call
+(`kits=photos`) and shows a thumbnail per row, tapped to full size. RHH's MaQS
+check sheets carry no photos at all (only the MaQS logo) — say so rather than
+look for them. A list saved before this has no item pictures until its
+document is uploaded again.
 
 **Several documents make one list** (Aimee, 4 Nov 2026). The upload takes
 several files at once (and "Add another file" during the check); each is read

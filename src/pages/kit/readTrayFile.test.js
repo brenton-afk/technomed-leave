@@ -52,3 +52,37 @@ describe('which pictures count as a tray photo', () => {
     expect(looksLikePhoto(100, 100)).toBe(false)  // the tick-box icon
   })
 })
+
+describe('item pictures beside their rows', () => {
+  // Heights as a real check sheet prints them: a row's words at the top of
+  // its row, the picture beside and below (Brent, 11 Nov 2026).
+  it('puts each picture straight after its own row', async () => {
+    const { interleaveByHeight, photoMarker } = await import('./readTrayFile.js')
+    const lines = [
+      { y: 705.8, text: 'PREVIEW' },
+      { y: 688.8, text: '22 INSERTER DEPTH STOP 1' },
+      { y: 607.7, text: '23 INSERTER CAGE 2' },
+      { y: 526.7, text: 'INSTRUMENTS 33' },
+      { y: 513.0, text: '24 DRILL GUIDE 5 1' },
+      { y: 431.9, text: '25 DRILL GUIDE 6 1' },
+      { y: 384.7, text: '28 DRILL GUIDE 2 HOLE 1' }
+    ]
+    const photos = [
+      { top: 696.3, text: photoMarker(1, 76) },
+      { top: 615.3, text: photoMarker(2, 76) },
+      { top: 520.5, text: photoMarker(3, 76) },
+      { top: 392.2, text: photoMarker(4, 76) }
+    ]
+    expect(interleaveByHeight(lines, photos)).toEqual([
+      'PREVIEW', '22 INSERTER DEPTH STOP 1', '[PHOTO 1]', '23 INSERTER CAGE 2', '[PHOTO 2]', 'INSTRUMENTS 33',
+      '24 DRILL GUIDE 5 1', '[PHOTO 3]', '25 DRILL GUIDE 6 1', '28 DRILL GUIDE 2 HOLE 1', '[PHOTO 4]'
+    ])
+  })
+
+  it('marks a picture drawn large as the tray, and keeps a stray one at the end', async () => {
+    const { interleaveByHeight, photoMarker } = await import('./readTrayFile.js')
+    expect(photoMarker(1, 182)).toBe('[PHOTO 1 — large]')
+    expect(interleaveByHeight([{ y: 500, text: 'A' }], [{ top: 100, text: '[PHOTO 1]' }])).toEqual(['A', '[PHOTO 1]'])
+  })
+})
+
