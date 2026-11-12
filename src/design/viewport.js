@@ -14,7 +14,13 @@ import { useState, useEffect } from 'react'
 // squeeze, and because it is the width at which an iPad in landscape becomes
 // worth treating as a desktop.
 export const DESKTOP_MIN = 1024
-export const DESKTOP_QUERY = `(min-width: ${DESKTOP_MIN}px)`
+// A computer with a mouse or trackpad gets the sidebar from 760px (Brent,
+// 12 Nov 2026: Erin's desktop had the tabs along the bottom — a laptop with
+// display scaling at 125–150%, or a window not full screen, is under 1024 CSS
+// pixels). A touch screen (an iPad upright) still needs 1024. Keep in step with
+// the same query in src/index.css.
+export const DESKTOP_POINTER_MIN = 760
+export const DESKTOP_QUERY = `(min-width: ${DESKTOP_MIN}px), (min-width: ${DESKTOP_POINTER_MIN}px) and (hover: hover) and (pointer: fine)`
 
 /**
  * Whether there is room for the desktop layout.

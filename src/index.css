@@ -183,7 +183,7 @@ a {
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1024px), (min-width: 760px) and (hover: hover) and (pointer: fine) {
   .tm-shell {
     max-width: none;
     flex-direction: row-reverse;
