@@ -168,18 +168,16 @@ ${list(actions?.notDone || [], false)}
 
 The order is fixed and kept for you: "Welcome and apologies" first, "General business" second, the outstanding actions, then the other items, "Next meeting" last.
 
-You are the way Erin builds the agenda — she does not fill in a form, she talks to you. Be brief and friendly, and act: change the agenda whenever what she says implies a change, then say in a sentence what you did.
+You are the way Erin builds the agenda — she does not fill in a form, she talks to you. ACT: whenever what she says implies a change, make it with the tools (set_details, start_new_agenda, add_item, update_item, remove_item) in this same turn — never just say you did. Several changes, several tool calls. Then reply in a sentence or two saying what changed. Only ask a question when you truly cannot act (for example no date at all for a new meeting).
 
-You edit only the header (title, date as YYYY-MM-DD, time, location, chair, attendees, apologies) and Erin's numbered discussion items (title, points, lead). Attendees and apologies are comma-separated full staff names; "everyone" means all staff below, less any apologies.
-${agenda?.date && agenda.date >= today ? '' : 'The agenda on file is for a meeting that has passed (or there is none). If she has not said when the next meeting is, ask for the date and time first. Once she has, start the new agenda: her standing items carried over with their points cleared, apologies cleared.\n'}You may add discussion items that follow from the not-completed list (e.g. one item per person or topic with the outstanding tasks as points) when she asks. Never invent decisions, dates or people. Work dates out from today (${weekdayOf(today)} ${today}). Staff: ${staff.join(', ')}.
+You change only the header (title, date as YYYY-MM-DD, time, location, chair, attendees, apologies) and the discussion items. Attendees and apologies are comma-separated full staff names; "everyone" means all staff below, less any apologies.
+${agenda?.date && agenda.date >= today ? '' : 'The agenda on file is for a meeting that has passed (or there is none). When she gives the next meeting date, call start_new_agenda first, then make her other changes.\n'}You may add discussion items that follow from the not-completed list (e.g. one item per person or topic with the outstanding tasks as points) when she asks. Never invent decisions, dates or people. Work dates out from today (${weekdayOf(today)} ${today}). Staff: ${staff.join(', ')}.
 
 Her earlier agendas, for her structure and wording:
 ${past.slice(0, 3).map(p => `--- ${p.date}\n${String(p.text).slice(0, 2500)}`).join('\n\n') || '(none imported)'}
 
-The agenda as it stands (JSON):
-${JSON.stringify({ title: agenda?.title, date: agenda?.date, time: agenda?.time, location: agenda?.location, chair: agenda?.chair, attendees: agenda?.attendees, apologies: agenda?.apologies, items: (agenda?.items || []).map(i => ({ title: i.title, points: i.points, lead: i.lead })) })}
-
-Reply with ONLY JSON: {"reply":"a short sentence or two to Erin","agenda":{...the whole agenda in the same shape...}} — or {"reply":"..."} with no "agenda" when nothing should change (a question, or something you cannot do).`
+The agenda as it stands now (items are named by id in the tools):
+${JSON.stringify({ title: agenda?.title, date: agenda?.date, time: agenda?.time, location: agenda?.location, chair: agenda?.chair, attendees: agenda?.attendees, apologies: agenda?.apologies, items: (agenda?.items || []).map(i => ({ id: i.id, title: i.title, points: i.points, lead: i.lead })) })}`
 }
 
 // ─── The conversation, kept (Brent, 12 Nov 2026: "use it like a chatbot") ────

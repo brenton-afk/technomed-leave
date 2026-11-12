@@ -814,6 +814,17 @@ staff buttons (tap: attending → apology → clear, `cycleAttendance`), Everyon
 and a box for a guest. Word, Print (`[data-no-print]` hidden) and Copy for
 everyone; only `AGENDA_EDITORS` (erin@) chat or change it.
 
+**The chat changes the agenda through tools, not by writing JSON** (Brent,
+12 Nov 2026: "The bot isn't working … it's not making any changes"). It had
+been asked to reply with the whole agenda as JSON; after one turn it saw its
+earlier replies as prose and answered "Done" in prose, with nothing applied.
+Now `api/_agendaTools.js`: `AGENDA_TOOLS` (set_details, start_new_agenda,
+add_item, update_item, remove_item — items named by id) and `applyAgendaTool`
+(pure) carry out each call; `runAgendaChat` loops (≤6 rounds, `claude-opus-5-5`
+at low effort, `AGENDA_MODEL` overrides) and returns `changes` — what the
+portal actually did. The agenda is saved once; each Claude bubble lists those
+changes (`data-chat-changes`) or says "No change made".
+
 **The live meeting** (Brent, 11 Nov 2026: "a real time live meeting, where
 you automatically update the projects page"). Meeting tab → **Live meeting**
 (`projects/LiveMeeting.jsx`). One phone records; every 40s the stretch goes to

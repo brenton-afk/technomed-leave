@@ -319,7 +319,12 @@ export default function Agenda({ user, onClose, today }) {
             background: m.role === 'user' ? colour.accentSoft : m.failed ? colour.dangerSoft : colour.canvas, color: colour.ink,
             borderRadius: radius.card, padding: `${space.xs}px ${space.sm}px`, whiteSpace: 'pre-wrap' }}>
             {m.text}
-            {m.changed && <div style={{ ...text('caption'), color: colour.accentDeep, marginTop: 2 }}>✓ Agenda updated</div>}
+            {m.changed && (m.changes?.length
+              ? <ul data-chat-changes style={{ ...text('caption'), color: colour.accentDeep, margin: '4px 0 0', paddingLeft: 0, listStyle: 'none' }}>
+                  {m.changes.map((c, j) => <li key={j}>✓ {c}</li>)}
+                </ul>
+              : <div style={{ ...text('caption'), color: colour.accentDeep, marginTop: 2 }}>✓ Agenda updated</div>)}
+            {m.role === 'assistant' && !m.changed && !m.failed && <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>No change made</div>}
           </div>
         ))}
         {busy === 'chat' && <div style={{ ...text('caption'), color: colour.inkFaint }}>Claude is working on it…</div>}

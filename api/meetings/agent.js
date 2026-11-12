@@ -2,6 +2,7 @@ import { handleUpload } from '@vercel/blob/client'
 import { del } from '@vercel/blob'
 import { readTrayList } from '../_trayLists.js'
 import { dropboxConfigured, ensureFolder, uploadFile } from '../_dropbox.js'
+import { runAgendaChat } from '../_agendaTools.js'
 import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
   saveMeeting, getMeeting, getAllMeetings, updateMeetingStatus,
@@ -321,30 +322,19 @@ async function handleAgendaChat(req, res, session) {
   const messages = chat.slice(-16).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }))
   while (messages.length && messages[0].role !== 'user') messages.shift()
   try {
-    const answer = await askClaude({
-      feature: 'agenda-chat',
-      whenUnavailable: 'Claude cannot help with the agenda right now — try again in a minute.',
-      timeoutMs: 60000,
-      request: { model: process.env.AGENDA_MODEL || 'claude-sonnet-4-6', max_tokens: 6000, system, messages }
-    })
-    const txt = (answer.content || []).find(b => b.type === 'text')?.text || ''
-    let parsed = null
-    try { parsed = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)) } catch { parsed = null }
-    const reply = String(parsed?.reply || (parsed ? 'Done.' : txt.trim()) || 'Sorry — I could not work that out.').slice(0, 1500)
+    const { reply, agenda: worked, changes, newMeeting } = await runAgendaChat({ system, messages, agenda })
     let saved = agenda
-    let changed = false
-    if (parsed?.agenda) {
+    const changed = changes.length > 0
+    if (changed) {
       const by = STAFF.find(s => s.email === session?.email)?.firstName || ''
-      const next = cleanAgenda({ ...parsed.agenda, date: parsed.agenda.date || agenda?.date || '' })
       // A new meeting: the old agenda is kept, once.
-      if (agenda?.date && next.date && next.date !== agenda.date) await redisSetBody('agenda:previous', JSON.stringify(agenda)).catch(() => {})
-      saved = await saveAgenda(next, { version: agenda?.version || 0, by: by ? `${by} with Claude` : 'Claude' })
-      changed = true
+      if (agenda?.date && newMeeting) await redisSetBody('agenda:previous', JSON.stringify(agenda)).catch(() => {})
+      saved = await saveAgenda(worked, { version: agenda?.version || 0, by: by ? `${by} with Claude` : 'Claude' })
     }
-    const kept = [...chat, { role: 'assistant', text: reply, at: new Date().toISOString(), changed }]
+    const kept = [...chat, { role: 'assistant', text: reply, at: new Date().toISOString(), changed, changes }]
     await saveAgendaChat(kept)
     return res.status(200).json({
-      reply, chat: kept.slice(-40), agenda: saved, changed, previous: changed ? agenda : undefined,
+      reply, chat: kept.slice(-40), agenda: saved, changed, changes, previous: changed ? agenda : undefined,
       actions: changed ? await actionsForAgenda(saved).catch(() => actions) : actions
     })
   } catch (err) {
