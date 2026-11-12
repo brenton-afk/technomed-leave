@@ -436,7 +436,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
       const res = await fetch(`/api/guides?kits=tray-file&id=${encodeURIComponent(kit.id)}`, { headers: { Authorization: `Bearer ${user?.token || ''}` } })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || 'Could not open it')
-      setViewing({ url: body.url, name: body.name })
+      setViewing({ url: body.url, name: body.name, path: body.path, rev: body.rev })
       setShareMsg('')
     } catch (err) { setShareMsg(err.message) }
   }
@@ -584,7 +584,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginTop: space.sm }}>{error}</div>}
         </div>
       )}
-      {viewing && <DocViewer name={viewing.name} url={viewing.url} onClose={() => setViewing(null)} onShare={() => { setViewing(null); shareList() }} />}
+      {viewing && <DocViewer name={viewing.name} url={viewing.url} path={viewing.path} rev={viewing.rev} onClose={() => setViewing(null)} onShare={() => { setViewing(null); shareList() }} />}
     </div>
   )
 }

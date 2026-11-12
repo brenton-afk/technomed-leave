@@ -24,7 +24,7 @@ describe('the document viewer', () => {
   })
 
   it('shows a text file inside the portal', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: async () => 'Term: 12 months' })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Term: 12 months')))
     render(<DocViewer name="notes.txt" url="u" onClose={() => {}} onShare={() => {}} />)
     await waitFor(() => expect(screen.getByText('Term: 12 months')).toBeInTheDocument())
     expect(screen.getByText('Share')).toBeInTheDocument()

@@ -1216,6 +1216,18 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   frame (no script), photos and text as they are, pinchable
   (`data-zoomable`); an old .doc or Excel says so with Download. Share and
   Download in the bar. Checked in an iPhone-sized render: two-page PDF, Word.
+- **Fast documents** (Brent, 12 Nov 2026: "We can't be waiting 5 minutes …
+  stuck on 'drawing pages' … We have to have a fast app"). `DocViewer` lays out
+  a blank sheet per page at once, draws page 1 straight away and the rest only
+  as they scroll near (`IntersectionObserver`, 1200px ahead), at no more than
+  1.5× sharpness, up to 400 pages. **Every document opened is kept on the
+  phone** (`src/kit/docCache.js`: Cache Storage `tm-docs-v1`, keyed by Dropbox
+  path + `rev`, so a changed file is fetched again; 40 docs / 400 MB, oldest
+  dropped); the first download shows a progress bar. `temporaryLink` returns
+  `rev`; the Resources catalogue carries each file's `rev`, so a kept document
+  opens with **no network trip** (`hasDoc`). **Open in Dropbox**
+  (`dropboxAppLink`, `dropbox.com/preview/TECHNOMED/…?role=work`) hands it to
+  the Dropbox app. Measured: a 120-page PDF, first page in ~1.4s, 0.2s kept.
 - **TM loan kits have no consignment agreement** (Brent, same day: "Just tray
   lists for these kits"): `needsAgreement` (`src/kit/agreements.js`, kind
   `floating` → false) hides the tile's Agreement chip (its Tray list chip

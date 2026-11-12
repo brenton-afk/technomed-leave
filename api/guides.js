@@ -262,7 +262,7 @@ async function handleResources(req, res, session) {
     if (what === 'open' && req.method === 'GET') {
       const path = String(req.query.path || '')
       if (!openablePath(path, await resourceCatalogue())) return res.status(404).json({ error: 'That file is not in the reference folders' })
-      return res.status(200).json(await temporaryLink(path))
+      return res.status(200).json({ ...(await temporaryLink(path)), path })
     }
     if (what === 'pick' && req.method === 'POST') {
       const { system, slot, path } = req.body || {}
@@ -332,7 +332,7 @@ async function handleKits(req, res, session) {
       const paths = [...new Set((list?.trays || []).map(t => t.dropboxPath).filter(Boolean))]
       const path = paths.includes(String(req.query.path || '')) ? String(req.query.path) : paths[0]
       if (!path) return res.status(404).json({ error: 'The original of this tray list was not kept — upload it again to share it' })
-      return res.status(200).json({ ...(await temporaryLink(path)), paths })
+      return res.status(200).json({ ...(await temporaryLink(path)), path, paths })
     }
     if (what === 'history') return res.status(200).json({ history: await kitHistory(150) })
     if (what === 'photo' && req.method === 'GET') {

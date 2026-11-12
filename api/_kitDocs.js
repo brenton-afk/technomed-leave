@@ -92,8 +92,8 @@ export async function setKitDocKind(kitId, docId, kind) {
 export async function kitDocLink(kitId, docId) {
   const doc = (await listKitDocs(kitId)).find(d => d.id === docId)
   if (!doc) throw Object.assign(new Error('That document is no longer on this kit'), { status: 404 })
-  const { url } = await temporaryLink(doc.path)
-  return { url, name: doc.name }
+  const { url, rev, size } = await temporaryLink(doc.path)
+  return { url, name: doc.name, path: doc.path, rev, size }
 }
 
 // ─── Add from Dropbox (Brent, 11 Nov 2026: "Build option 2") ─────────────────

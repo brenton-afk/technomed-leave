@@ -375,7 +375,7 @@ export async function listFilesUnder(path, { max = 3000 } = {}) {
     }
     for (const e of res.data.entries || []) {
       if (e['.tag'] !== 'file') continue
-      files.push({ name: e.name, path: e.path_display, size: e.size ?? 0, modified: e.server_modified || null })
+      files.push({ name: e.name, path: e.path_display, size: e.size ?? 0, modified: e.server_modified || null, rev: e.rev || '' })
     }
     if (!res.data.has_more || files.length >= max) return files.slice(0, max)
     res = await rpc('files/list_folder/continue', { cursor: res.data.cursor })
@@ -401,7 +401,9 @@ export async function temporaryLink(path, { portalFiled = false } = {}) {
   if (!ok) {
     throw dropboxFault('open that file', status, data?.error_summary)
   }
-  return { url: data.link, name: data.metadata?.name || path.split('/').pop() }
+  // `rev` changes whenever the file does, so a phone that kept a copy knows
+  // whether it is still the current one (src/kit/docCache.js).
+  return { url: data.link, name: data.metadata?.name || path.split('/').pop(), rev: data.metadata?.rev || '', size: data.metadata?.size || 0 }
 }
 
 /**

@@ -89,7 +89,7 @@ export async function resourceCatalogue({ fresh = false, list = listFilesUnder }
     for (const root of roots) {
       for (const f of await list(root).catch(() => [])) {
         const slot = DOC_FILE.test(f.name) ? slotOf(f.name) : ''
-        if (slot) out.push({ name: f.name, path: f.path, modified: f.modified || null, slot, distributor })
+        if (slot) out.push({ name: f.name, path: f.path, modified: f.modified || null, rev: f.rev || '', slot, distributor })
       }
     }
   }
@@ -143,7 +143,7 @@ export function resourcesBySystem({ catalogue = [], picks = {}, kits = [], syste
       const pick = picks[s.system]?.[slot]
       const chosen = pick === 'none' ? null : (pick && catalogue.find(f => f.path === pick)) || found[0] || null
       slots[slot] = {
-        file: chosen ? { name: chosen.name, path: chosen.path } : null,
+        file: chosen ? { name: chosen.name, path: chosen.path, rev: chosen.rev || '' } : null,
         picked: Boolean(pick), none: pick === 'none',
         others: found.filter(f => f.path !== chosen?.path).slice(0, 12).map(f => ({ name: f.name, path: f.path }))
       }

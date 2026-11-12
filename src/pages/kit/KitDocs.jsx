@@ -93,8 +93,8 @@ export default function KitDocs({ kit, user, post, onChanged }) {
   async function open(doc) {
     setError(''); setBusy(`Opening ${doc.name}…`)
     try {
-      const { url, name } = await linkFor(doc)
-      setViewing({ doc, url, name: name || doc.name })
+      const { url, name, path, rev } = await linkFor(doc)
+      setViewing({ doc, url, name: name || doc.name, path: path || doc.path, rev })
     } catch (err) { setError(err.message) }
     setBusy('')
   }
@@ -143,7 +143,7 @@ export default function KitDocs({ kit, user, post, onChanged }) {
   )
 
   const viewer = viewing && (
-    <DocViewer name={viewing.name} url={viewing.url} onClose={() => setViewing(null)}
+    <DocViewer name={viewing.name} url={viewing.url} path={viewing.path} rev={viewing.rev} onClose={() => setViewing(null)}
       onShare={() => { const d = viewing.doc; setViewing(null); share(d) }} />
   )
 

@@ -3,6 +3,7 @@ import { Page, Header, Body, Banner, EmptyState, Skeleton, Overlay } from '../de
 import { colour, text, space, radius, border } from '../design/tokens.js'
 import { IconFolder } from '../design/icons.jsx'
 import DocViewer from '../kit/DocViewer.jsx'
+import { hasDoc } from '../kit/docCache.js'
 
 // ─── Resources (Brent, 12 Nov 2026) ──────────────────────────────────────────
 // "The items I want in there are the ARTG certificates, the full surgical
@@ -38,11 +39,18 @@ export default function Resources({ user, onOpenKit }) {
 
   async function open(file) {
     setOpening(file.path); setNote('')
+    // Already on this phone (and still the current version): open it with no
+    // trip to Dropbox at all (Brent, 12 Nov 2026: "super quick").
+    if (file.rev && await hasDoc(file.path, file.rev)) {
+      setViewing({ name: file.name, url: '', path: file.path, rev: file.rev })
+      setOpening('')
+      return
+    }
     try {
       const res = await fetch(`/api/guides?resources=open&path=${encodeURIComponent(file.path)}`, { headers })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Could not open that file')
-      setViewing({ name: file.name, url: json.url })
+      setViewing({ name: file.name, url: json.url, path: json.path || file.path, rev: json.rev || '' })
     } catch (err) { setNote(err.message) }
     setOpening('')
   }
@@ -165,7 +173,7 @@ export default function Resources({ user, onOpenKit }) {
           </div>
         </div>
       </Overlay>)}
-      {viewing && <DocViewer name={viewing.name} url={viewing.url} onClose={() => setViewing(null)} />}
+      {viewing && <DocViewer name={viewing.name} url={viewing.url} path={viewing.path} rev={viewing.rev} onClose={() => setViewing(null)} />}
     </Page>
   )
 }
