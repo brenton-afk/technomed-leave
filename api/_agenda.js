@@ -106,3 +106,71 @@ export function draftMaterial({ past = [], report = null, nextDate = '' }) {
   ].filter(Boolean).join('\n\n') : 'No earlier meeting with action items on record.'
   return { recent, work, nextDate }
 }
+
+// ─── Built from the projects report (Brent, 12 Nov 2026) ─────────────────────
+// "The agendas [should] be written based off the projects completed report …
+// and the agenda should have a section for the items that are not completed,
+// so we don't waste time asking staff to tell us about the things we thought
+// weren't done. Ideally, Erin would tell the portal the date and time of the
+// meeting and the agenda would build as an exportable and printable file and
+// Erin could add items … a Claude chat … to build the agenda."
+//
+// The two action lists are worked out from the projects every time the agenda
+// is read — never typed, never by the model — so they are always as true as
+// the projects page. Erin's own items sit after them, and the chat edits only
+// those and the header.
+
+const brief = t => ({ task: t.task, assignee: t.assignee, due_date: t.due_date || '', doneOn: t.doneOn || '', overdue: Boolean(t.overdue) })
+
+/** The report as the agenda's two lists. Pure. */
+export function agendaActions(report) {
+  if (!report) return null
+  return {
+    since: { title: report.meeting?.title || 'Last meeting', date: report.from, to: report.to },
+    done: [...(report.done || []), ...(report.earlierDone || [])].map(brief),
+    alsoDone: (report.other || []).map(brief),
+    notDone: [...(report.open || []), ...(report.earlier || [])].map(brief)
+      .sort((a, b) => Number(b.overdue) - Number(a.overdue) || String(a.assignee).localeCompare(String(b.assignee)))
+  }
+}
+
+/** A new agenda for the next meeting, carrying the standing items over. Pure. */
+export function newAgendaFor({ date, time, location, chair, previous = null }) {
+  const standing = (previous?.items || []).map(it => ({ title: it.title, points: [], lead: it.lead || '' }))
+  return cleanAgenda({
+    title: previous?.title || 'TechnoMed Staff Meeting',
+    date, time,
+    location: location ?? previous?.location ?? '',
+    chair: chair ?? previous?.chair ?? 'Erin Smallbon',
+    attendees: previous?.attendees || '',
+    apologies: '',
+    items: standing.length ? standing : [
+      { title: 'Welcome and apologies', lead: 'Erin' },
+      { title: 'General business' },
+      { title: 'Next meeting' }
+    ]
+  })
+}
+
+/** The prompt for one turn of the agenda chat. Pure, for the tests. */
+export function agendaChatPrompt({ agenda, actions, past = [], staff = [], today }) {
+  const list = (rows, done) => rows.map(t => `- ${t.task} (${t.assignee}${done ? `, done ${t.doneOn}` : t.due_date ? `, due ${t.due_date}${t.overdue ? ', OVERDUE' : ''}` : ''})`).join('\n') || '(none)'
+  return `You help Erin Smallbon, General Manager of TechnoMed (a Tasmanian surgical device distributor), build the agenda for the next staff meeting by chatting with her. Today is ${today}.
+
+The printed agenda always shows, automatically and before the items, the actions since the last meeting worked out from the projects page — do NOT copy these into items:
+Completed since ${actions?.since?.date || 'the last meeting'}:
+${list(actions?.done || [], true)}
+Also completed: ${(actions?.alsoDone || []).length} other tasks.
+NOT completed (to be discussed, not asked about):
+${list(actions?.notDone || [], false)}
+
+You edit only the header and Erin's numbered discussion items. You may add discussion items that follow from the not-completed list (e.g. one item per person or topic with the outstanding tasks as points) when she asks. Never invent decisions, dates or people. Staff: ${staff.join(', ')}.
+
+Her earlier agendas, for her structure and wording:
+${past.slice(0, 3).map(p => `--- ${p.date}\n${String(p.text).slice(0, 2500)}`).join('\n\n') || '(none imported)'}
+
+The agenda as it stands (JSON):
+${JSON.stringify({ title: agenda?.title, date: agenda?.date, time: agenda?.time, location: agenda?.location, chair: agenda?.chair, attendees: agenda?.attendees, apologies: agenda?.apologies, items: (agenda?.items || []).map(i => ({ title: i.title, points: i.points, lead: i.lead })) })}
+
+Reply with ONLY JSON: {"reply":"a short sentence or two to Erin","agenda":{...the whole agenda in the same shape...}} — or {"reply":"..."} with no "agenda" when nothing should change (a question, or something you cannot do).`
+}

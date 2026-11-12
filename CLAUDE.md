@@ -791,6 +791,24 @@ the six newest past agendas and `meetingReport` since the last sent meeting
 draft into the editor; nothing is saved until Erin taps Save. Copy and
 Download Word for everyone.
 
+**The agenda is built from the projects report** (Brent, 12 Nov 2026: "the
+agendas [should] be written based off the projects completed report … a
+section for the items that are not completed … Erin would tell the portal the
+date and time … a Claude chat … to build the agenda"). `projects/Agenda.jsx`
+is the document as it prints: header, then **Actions since {last meeting}** —
+Completed / Not completed (overdue first), `agendaActions` over `meetingReport`
+from the last sent meeting to the agenda's date (`actionsForAgenda` in
+`api/meetings/agent.js`, recomputed on every read, private board left out,
+never typed or written by the model) — then Erin's numbered items (edit ✎,
+↑↓, ✕, Add an item). **Set up the next meeting** (`action=agenda-setup`:
+date, time, location) makes a fresh agenda carrying the standing items over
+empty (`newAgendaFor`; the old one kept at `agenda:previous`). **Ask Claude**
+(`action=agenda-chat`, `agendaChatPrompt`: the two lists, the agenda, her last
+three past agendas) edits only the header and items and saves at once; Undo
+puts the previous version back. Word (with both lists as tables), Print (the
+overlay prints alone; `[data-no-print]` hidden) and Copy for everyone; only
+`AGENDA_EDITORS` (erin@) set up, edit or chat.
+
 **The live meeting** (Brent, 11 Nov 2026: "a real time live meeting, where
 you automatically update the projects page"). Meeting tab → **Live meeting**
 (`projects/LiveMeeting.jsx`). One phone records; every 40s the stretch goes to

@@ -6,7 +6,7 @@ import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
   saveMeeting, getMeeting, getAllMeetings, updateMeetingStatus,
   saveWorklistItem, getWorklist, getWorklistItem, updateWorklistItem, deleteWorklistItem,
-  saveProject, getProject, getProjects, redis
+  saveProject, getProject, getProjects, redis, redisSetBody
 } from '../_redis.js'
 import { sendMeetingSummaryEmail } from '../_email.js'
 import { requireSession, getSession } from '../_auth.js'
@@ -14,7 +14,8 @@ import { flagRepeats } from '../_worklistMatch.js'
 import { settleWorklistItem } from '../_taskDone.js'
 import { visibleTo, hiddenProjectIdsFor, canSeePrivate } from '../_privateBoard.js'
 import {
-  getAgenda, saveAgenda, cleanAgenda, canEditAgenda, pastAgendas, keepPastAgenda, isAgendaFile, draftMaterial
+  getAgenda, saveAgenda, cleanAgenda, canEditAgenda, pastAgendas, keepPastAgenda, isAgendaFile, draftMaterial,
+  agendaActions, newAgendaFor, agendaChatPrompt
 } from '../_agenda.js'
 import { searchMailboxOf, readMessageHeadline, readAttachment } from '../_gmail.js'
 import { meetingReport } from '../../src/projects/report.js'
@@ -89,6 +90,8 @@ export default async function handler(req, res) {
   if (action === 'agenda') return handleAgenda(req, res, session)
   if (action === 'agenda-import') return handleAgendaImport(req, res, session)
   if (action === 'agenda-draft') return handleAgendaDraft(req, res, session)
+  if (action === 'agenda-setup') return handleAgendaSetup(req, res, session)
+  if (action === 'agenda-chat') return handleAgendaChat(req, res, session)
   // The live meeting: what is said becomes suggestions; a tap puts one on the board.
   if (action === 'live') return handleLive(req, res, session)
   if (action === 'live-say') return handleLiveSay(req, res, session)
@@ -247,11 +250,30 @@ const AGENDA_MAILBOX = process.env.AGENDA_MAILBOX || 'brenton@technomed.com.au'
 const AGENDA_QUERY = process.env.AGENDA_QUERY
   || 'from:erin@technomed.com.au subject:agenda has:attachment filename:docx'
 
+/**
+ * The actions since the last meeting, for the agenda: the report from the
+ * last meeting whose minutes went out before the agenda's date, to that date
+ * (or today, if sooner). The private board is left out — the agenda is read by all.
+ */
+async function actionsForAgenda(agenda) {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+  const until = agenda?.date && agenda.date < today ? agenda.date : today
+  const [meetings, worklist, projects] = await Promise.all([
+    getAllMeetings(60).catch(() => []), getWorklist(), getProjects().catch(() => null)
+  ])
+  const hidden = projects ? new Set(projects.filter(p => p?.private).map(p => String(p.id))) : null
+  const items = worklist.items.filter(t => (hidden ? !hidden.has(String(t.projectId || '')) : !t.projectId))
+  const last = meetings.filter(m => m.status === 'sent' && (m.date || '') <= until)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+  return last ? agendaActions(meetingReport(items, last, { to: until, today })) : null
+}
+
 async function handleAgenda(req, res, session) {
   const canEdit = canEditAgenda(session?.email)
   if (req.method === 'GET') {
     const [agenda, past] = await Promise.all([getAgenda(), pastAgendas(60).catch(() => [])])
-    return res.status(200).json({ agenda, canEdit, past: past.map(p => ({ id: p.id, date: p.date, subject: p.subject })) })
+    const actions = await actionsForAgenda(agenda).catch(() => null)
+    return res.status(200).json({ agenda, actions, canEdit, past: past.map(p => ({ id: p.id, date: p.date, subject: p.subject })) })
   }
   if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' })
   if (!canEdit) return res.status(403).json({ error: 'Only Erin edits the agenda' })
@@ -262,6 +284,62 @@ async function handleAgenda(req, res, session) {
   } catch (err) {
     if (err.code === 'conflict') return res.status(409).json({ error: err.message, agenda: err.current })
     return res.status(err.code === 'busy' ? 409 : 500).json({ error: err.message })
+  }
+}
+
+/** Erin sets the next meeting's date and time; the agenda is made for it. */
+async function handleAgendaSetup(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!canEditAgenda(session?.email)) return res.status(403).json({ error: 'Only Erin sets up the agenda' })
+  const { date, time, location, chair } = req.body || {}
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return res.status(400).json({ error: 'Choose the date of the meeting' })
+  try {
+    const previous = await getAgenda()
+    const by = STAFF.find(s => s.email === session?.email)?.firstName || ''
+    const fresh = newAgendaFor({ date, time, location, chair, previous })
+    const agenda = await saveAgenda(fresh, { version: previous?.version || 0, by })
+    if (previous) await redisSetBody('agenda:previous', JSON.stringify(previous)).catch(() => {})
+    return res.status(200).json({ agenda, actions: await actionsForAgenda(agenda).catch(() => null) })
+  } catch (err) {
+    return res.status(err.code === 'busy' || err.code === 'conflict' ? 409 : 500).json({ error: err.message })
+  }
+}
+
+/** One turn of Erin's chat with Claude about the agenda. Saves what it changes. */
+async function handleAgendaChat(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!canEditAgenda(session?.email)) return res.status(403).json({ error: 'Only Erin builds the agenda' })
+  const said = (Array.isArray(req.body?.messages) ? req.body.messages : [])
+    .slice(-12).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.text || '').slice(0, 2000) }))
+    .filter(m => m.content)
+  if (!said.length || said[said.length - 1].role !== 'user') return res.status(400).json({ error: 'Say what you would like' })
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+  const [agenda, past] = await Promise.all([getAgenda(), pastAgendas(6).catch(() => [])])
+  const actions = await actionsForAgenda(agenda).catch(() => null)
+  const system = agendaChatPrompt({ agenda, actions, past, staff: STAFF.map(s => s.name), today })
+  try {
+    const answer = await askClaude({
+      feature: 'agenda-chat',
+      whenUnavailable: 'Claude cannot help with the agenda right now — try again shortly, or add items by hand.',
+      timeoutMs: 60000,
+      request: {
+        model: process.env.AGENDA_MODEL || 'claude-sonnet-4-6',
+        max_tokens: 6000,
+        system,
+        messages: said
+      }
+    })
+    const txt = (answer.content || []).find(b => b.type === 'text')?.text || ''
+    let parsed = null
+    try { parsed = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)) } catch { parsed = null }
+    if (!parsed) return res.status(200).json({ reply: txt.trim().slice(0, 1500) || 'Sorry — I could not work that out.', agenda, actions, changed: false })
+    if (!parsed.agenda) return res.status(200).json({ reply: String(parsed.reply || '').slice(0, 1500), agenda, actions, changed: false })
+    const by = STAFF.find(s => s.email === session?.email)?.firstName || ''
+    const next = cleanAgenda({ ...parsed.agenda, date: parsed.agenda.date || agenda?.date || '' })
+    const saved = await saveAgenda(next, { version: agenda?.version || 0, by: by ? `${by} with Claude` : 'Claude' })
+    return res.status(200).json({ reply: String(parsed.reply || 'Done.').slice(0, 1500), agenda: saved, actions, changed: true, previous: agenda })
+  } catch (err) {
+    return res.status(err.code === 'conflict' || err.code === 'busy' ? 409 : 502).json({ error: err.message || 'That did not work' })
   }
 }
 
