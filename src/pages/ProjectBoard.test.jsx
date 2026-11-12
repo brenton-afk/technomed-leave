@@ -59,7 +59,7 @@ const reply = (url, init) => {
   if (at.includes('action=task')) {
     const body = init?.body ? JSON.parse(init.body) : {}
     const row = ITEMS.find(i => i.id === body.id)
-    return { ok: true, json: async () => ({ item: { ...row, ...body } }) }
+    return { ok: true, json: async () => ({ item: { ...row, ...body, ...(body.column === 'done' ? { status: 'done' } : {}) } }) }
   }
   if (at.includes('action=project') || at.includes('action=column')) {
     return { ok: true, json: async () => ({ project: PROJECT }) }
@@ -469,5 +469,32 @@ describe('the board on a desktop', () => {
     fireEvent.click(screen.getByLabelText(/Move Book the first case on to In progress/))
     await waitFor(() => expect(
       sent.some(c => c.url.includes('action=task') && c.body?.column === 'in_progress')).toBe(true))
+  })
+})
+
+// Brent, 12 Nov 2026: "filter the projects page by staff member as well as
+// distributor", and a ticked task no longer vanishes on the spot.
+describe('filters and ticking on the projects page', () => {
+  const wideScreen = async () => {
+    const was = window.matchMedia
+    window.matchMedia = q => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })
+    await show()
+    window.matchMedia = was
+  }
+  it('shows only one person\'s tasks, and only one distributor\'s', async () => {
+    await wideScreen()
+    expect(screen.getAllByText('Get the Athlet tray back from RHH').length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText('Staff member'), { target: { value: 'Toni Hoppitt' } })
+    expect(screen.queryByText('Get the Athlet tray back from RHH')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Staff member'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Distributor'), { target: { value: 'signus' } })
+    expect(screen.getAllByText('Get the Athlet tray back from RHH').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Book the first case')).toBeNull()
+  })
+  it('keeps a ticked task on screen, ticked, so a wrong tap can be undone', async () => {
+    await wideScreen()
+    fireEvent.click(screen.getAllByLabelText('Tick off Book the first case')[0])
+    await waitFor(() => expect(screen.getAllByLabelText('Reopen Book the first case').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('Book the first case').length).toBeGreaterThan(0)
   })
 })

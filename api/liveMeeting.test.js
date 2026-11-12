@@ -34,7 +34,7 @@ vi.mock('./_auth.js', () => ({
   getSession: vi.fn()
 }))
 vi.mock('./_anthropic.js', () => ({ askClaude: vi.fn(async () => ({ content: [{ type: 'text', text: modelAnswer }] })) }))
-vi.mock('./_readDictatedBooking.js', () => ({ transcribe: vi.fn(async () => 'Mat said the plates are ordered') }))
+vi.mock('./_readDictatedBooking.js', () => ({ transcribe: vi.fn(async () => 'Mat said the plates are ordered'), VOCABULARY: ['Signus'] }))
 vi.mock('./_taskDone.js', () => ({ settleWorklistItem: vi.fn(async () => []) }))
 vi.mock('./_agenda.js', () => ({
   getAgenda: vi.fn(async () => ({ items: [{ title: 'Stock-take' }] })), saveAgenda: vi.fn(), cleanAgenda: vi.fn(),
@@ -43,6 +43,8 @@ vi.mock('./_agenda.js', () => ({
 }))
 vi.mock('./_email.js', () => ({ sendMeetingSummaryEmail: vi.fn() }))
 vi.mock('@vercel/blob/client', () => ({ handleUpload: vi.fn() }))
+const blobDel = vi.fn(async () => {})
+vi.mock('@vercel/blob', () => ({ del: (...a) => blobDel(...a) }))
 
 const { default: handler } = await import('./meetings/agent.js')
 
@@ -158,5 +160,65 @@ describe('a live meeting, over the wire', () => {
 
   it('refuses to listen when no meeting is live', async () => {
     expect((await call('live-say', 'POST', { text: 'hello' })).statusCode).toBe(404)
+  })
+})
+
+// Brent, 12 Nov 2026: "record the transcript and then have the transcript and
+// discussion feed back into the projects page" — the whole meeting read at the
+// end, a transcript from Jamie read the same way.
+describe('the whole meeting, read at the end', () => {
+  const review = JSON.stringify({ summary: 'Plates are ordered; the roster is Erin\'s.', suggestions: [
+    { kind: 'note', taskId: 't1', note: 'Signus confirmed the plates ship Friday', why: 'Mat on the plates' },
+    { kind: 'new', task: 'Draft the Christmas roster', assignee: 'Erin Smallbon', why: 'Erin offered' },
+    { kind: 'note', taskId: 'nope', note: 'invented task' }
+  ] })
+
+  it('a pasted Jamie transcript starts a meeting, and gives one list including progress notes', async () => {
+    store.items.set('t1', { id: 't1', task: 'Order the plates', assignee: 'Mat Usher', status: 'open', comments: [] })
+    modelAnswer = review
+    const out = await call('live-final', 'POST', { transcript: 'Mat: Signus confirmed the plates ship Friday.\nErin: I will draft the Christmas roster.', title: 'Staff meeting' })
+    expect(out.statusCode).toBe(200)
+    expect(out.payload.live).toMatchObject({ status: 'review', final: { status: 'ready', source: 'import', summary: expect.stringMatching(/Plates are ordered/) } })
+    const items = out.payload.live.suggestions
+    expect(items.map(i => i.kind)).toEqual(['note', 'new'])
+    expect(items.every(i => i.phase === 'review')).toBe(true)
+
+    // Accepting the note writes it onto the task, nothing else changes.
+    const note = items.find(i => i.kind === 'note')
+    await call('live-act', 'POST', { id: note.id, decision: 'accept', edits: { note: 'Signus ship the plates Friday' } })
+    const t1 = store.items.get('t1')
+    expect(t1.status).toBe('open')
+    expect(JSON.stringify(t1.comments)).toMatch(/Signus ship the plates Friday/)
+
+    const filed = await call('live', 'DELETE')
+    const meeting = store.meetings.get(out.payload.live.id)
+    expect(filed.statusCode).toBe(200)
+    expect(meeting.summary).toMatch(/Plates are ordered[\s\S]*1 progress note/)
+    expect(meeting.transcript).toMatch(/Christmas roster/)
+  })
+
+  it('a recording is transcribed with speakers, read once, and its audio deleted', async () => {
+    await call('live', 'POST', {})
+    const url = 'https://abc123.public.blob.vercel-storage.com/meetings/live-x.webm'
+    expect((await call('live-final', 'POST', { audioUrl: 'https://evil.example/a.webm' })).statusCode).toBe(400)
+    process.env.ASSEMBLYAI_API_KEY = 'k'
+    const fetchMock = vi.fn(async (u, init = {}) => ({ ok: true, json: async () => (init.method === 'POST'
+      ? { id: 'tr1' }
+      : { status: 'completed', utterances: [{ speaker: 'A', text: 'I will draft the Christmas roster.' }] }) }))
+    global.fetch = fetchMock
+    const started = await call('live-final', 'POST', { audioUrl: url })
+    expect(started.payload.live).toMatchObject({ status: 'finishing', final: { status: 'transcribing' } })
+    expect(started.payload.live.final.audioUrl).toBeUndefined()
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ audio_url: url, speaker_labels: true })
+
+    modelAnswer = JSON.stringify({ summary: 'Roster agreed.', suggestions: [{ kind: 'new', task: 'Draft the Christmas roster', assignee: 'Erin Smallbon' }] })
+    const got = await call('live', 'GET')
+    expect(got.payload.live).toMatchObject({ status: 'review', final: { status: 'ready', transcript: 'Speaker A: I will draft the Christmas roster.' } })
+    expect(blobDel).toHaveBeenCalledWith(url)
+  })
+
+  it('with nothing recorded or typed there is nothing to read', async () => {
+    await call('live', 'POST', {})
+    expect((await call('live-final', 'POST', {})).statusCode).toBe(400)
   })
 })

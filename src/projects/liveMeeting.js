@@ -11,7 +11,7 @@
 // The rules are pure and live here, shared by the server (api/_liveMeeting.js)
 // and the screen (pages/projects/LiveMeeting.jsx).
 
-export const KINDS = ['new', 'done', 'update']
+export const KINDS = ['new', 'done', 'update', 'note']
 const PRIORITIES = ['urgent', 'normal', 'low']
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
@@ -43,6 +43,7 @@ function sameSuggestion(a, b) {
   if (a.kind !== b.kind) return false
   if (a.kind === 'new') return words(a.task) === words(b.task)
   if (a.kind === 'done') return a.taskId === b.taskId
+  if (a.kind === 'note') return a.taskId === b.taskId && words(a.note) === words(b.note)
   return a.taskId === b.taskId && (a.assignee || '') === (b.assignee || '') && (a.due_date || '') === (b.due_date || '')
 }
 
@@ -52,7 +53,7 @@ function sameSuggestion(a, b) {
  * date. Anything already on the panel (waiting, accepted or skipped) is not
  * offered twice — the same thing is often said three times in a meeting.
  */
-export function cleanSuggestions(raw, { openTasks = [], staffNames = [], existing = [], at = '', stamp = () => Math.random().toString(36).slice(2, 10) } = {}) {
+export function cleanSuggestions(raw, { openTasks = [], staffNames = [], existing = [], at = '', stamp = () => Math.random().toString(36).slice(2, 10), max = 8, phase = '' } = {}) {
   const list = Array.isArray(raw?.suggestions) ? raw.suggestions : Array.isArray(raw) ? raw : []
   const byId = new Map(openTasks.map(t => [String(t.id), t]))
   const names = new Set(staffNames)
@@ -72,7 +73,11 @@ export function cleanSuggestions(raw, { openTasks = [], staffNames = [], existin
       const t = byId.get(String(s.taskId || ''))
       if (!t) continue
       if (s.kind === 'done') next = { kind: 'done', taskId: t.id, task: t.task, assignee: t.assignee }
-      else {
+      else if (s.kind === 'note') {
+        const note = String(s.note || '').trim().slice(0, 400)
+        if (!note) continue
+        next = { kind: 'note', taskId: t.id, task: t.task, assignee: t.assignee, note }
+      } else {
         const assignee = person(s.assignee)
         const due = date(s.due_date)
         if ((!assignee || assignee === t.assignee) && (!due || due === t.due_date)) continue
@@ -81,9 +86,9 @@ export function cleanSuggestions(raw, { openTasks = [], staffNames = [], existin
       }
     }
     if ([...existing, ...out].some(e => sameSuggestion(e, next))) continue
-    out.push({ id: `s-${stamp()}`, ...next, why, status: 'waiting', at })
+    out.push({ id: `s-${stamp()}`, ...next, why, status: 'waiting', at, ...(phase ? { phase } : {}) })
   }
-  return out.slice(0, 8)
+  return out.slice(0, max)
 }
 
 /** The prompt for one stretch of the meeting. */
@@ -115,11 +120,43 @@ Return ONLY JSON: {"suggestions":[{"kind":"new","task":"…","assignee":"…","d
 If nothing qualifies, return {"suggestions":[]}.`
 }
 
+/**
+ * The whole meeting read at once, after it ends (Brent, 12 Nov 2026: "record
+ * the transcript and then have the transcript and discussion feed back into
+ * the projects page"). Unlike the forty-second stretches it sees every
+ * discussion whole, so it can also write where each task discussed is up to.
+ */
+export function reviewPrompt({ transcript, openTasks = [], staffNames = [], today = '', agenda = [], title = '' }) {
+  return `You are reading the full transcript of a staff meeting at TechnoMed, a Tasmanian surgical implant distributor${title ? ` ("${title}")` : ''}, to bring its project task list up to date. Today is ${today}.
+
+Staff (the only names allowed as an assignee): ${staffNames.join(', ')}.
+${agenda.length ? `\nThe agenda: ${agenda.join(' | ')}\n` : ''}
+Open tasks (id — task — who — due):
+${openTasks.map(t => `${t.id} — ${t.task} — ${t.assignee} — ${t.due_date || 'no date'}`).join('\n') || '(none)'}
+
+The transcript (speakers may be labelled A, B, C… — work out who is who from how they are addressed where you can):
+"""
+${String(transcript).slice(0, 150000)}
+"""
+
+Work through the whole meeting and return:
+- "summary": 3–6 plain sentences on what the meeting covered and decided, in your own words.
+- "suggestions": every change it implies to the task list. Only what was clearly agreed or reported, never a passing idea:
+  - "new": a job someone agreed to do that is not already an open task (task, assignee, due_date, priority)
+  - "done": an open task reported as finished (taskId)
+  - "update": an open task handed to someone else, or given a new date (taskId, assignee and/or due_date)
+  - "note": where an open task that was discussed is up to — one short factual sentence of progress, blockers or next step (taskId, note)
+Dates as YYYY-MM-DD, worked out from today. "why" is a few words on what was said, paraphrased. Use task ids exactly as listed.
+
+Return ONLY JSON: {"summary":"…","suggestions":[{"kind":"new","task":"…","assignee":"…","due_date":"","priority":"normal","why":"…"},{"kind":"done","taskId":"…","why":"…"},{"kind":"update","taskId":"…","assignee":"…","due_date":"","why":"…"},{"kind":"note","taskId":"…","note":"…","why":"…"}]}`
+}
+
 /** A suggestion as a person would say it. */
 export function describe(s) {
   if (!s) return ''
   if (s.kind === 'new') return `New task: ${s.task}${s.assignee && s.assignee !== 'Unassigned' ? ` — ${s.assignee.split(' ')[0]}` : ''}`
   if (s.kind === 'done') return `Done: ${s.task}`
+  if (s.kind === 'note') return `Note on ${s.task}: ${s.note}`
   const bits = []
   if (s.assignee) bits.push(`to ${s.assignee.split(' ')[0]}`)
   if (s.due_date) bits.push(`due ${s.due_date}`)

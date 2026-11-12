@@ -19,6 +19,7 @@ const OPEN_ON_TREASURY = 'tm_open_treasury'
 import { rememberUser } from './lastUser.js'
 import { KitHub, MeHub, ComingSoonSection } from './pages/Hubs.jsx'
 import PromptBanner from './pages/PromptBanner.jsx'
+import RecordingBar from './pages/projects/RecordingBar.jsx'
 import { colour, text, font, radius } from './design/tokens.js'
 import { useIsDesktop } from './design/viewport.js'
 import {
@@ -607,6 +608,8 @@ export default function App() {
         </div>
       )}
       {user && <NoticeSheet user={user} />}
+      {/* The meeting recorder keeps going on every page (Brent, 12 Nov 2026). */}
+      {user && <RecordingBar user={user} />}
       <div className="tm-scroll">
         <LazyScreen screenKey={`${nav.tab}/${nav.sub || ''}`}>{renderContent()}</LazyScreen>
       </div>

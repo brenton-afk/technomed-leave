@@ -31,7 +31,7 @@ const MODEL = process.env.BOOKING_VISION_MODEL || 'claude-opus-5'
 // AssemblyAI is told the words it is most likely to mishear. Surgeon surnames
 // and implant systems are exactly the vocabulary a general model has never
 // seen, and this is the difference between "Ibbett" and "it bet".
-const VOCABULARY = [
+export const VOCABULARY = [
   ...Object.keys(SURGEON_COLOUR_NAMES),
   'Peters-Willke',
   ...INVENTORY.map(i => i.system),

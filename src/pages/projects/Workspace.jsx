@@ -1,4 +1,4 @@
-import { byDistributor } from '../../projects/distributors.js'
+import { byDistributor, distributorsIn, DISTRIBUTORS, NO_DISTRIBUTOR } from '../../projects/distributors.js'
 import React, { useMemo, useState } from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { STAFF, isSameStaff } from '../../staffConfig.js'
@@ -120,7 +120,14 @@ export default function Workspace({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [division, setDivisionRaw] = useState(saved.division || 'All')
   const [onlyMine, setOnlyMineRaw] = useState(Boolean(saved.onlyMine))
+  // Brent, 12 Nov 2026: "filter the projects page by staff member as well as distributor".
+  const [person, setPersonRaw] = useState(saved.person || '')
+  const [dist, setDistRaw] = useState(saved.dist || '')
   const [showDone, setShowDone] = useState(false)
+  // A task ticked here stays on screen, struck through, until the page is
+  // left (Brent, 12 Nov 2026: "the item seems to disappear?!") — so a tap that
+  // was a mistake can be seen and undone with another tap.
+  const [justTicked, setJustTicked] = useState(() => new Set())
   const [stat, setStat] = useState('')
   const [projectId, setProjectId] = useState('')
   const [making, setMaking] = useState(false)
@@ -138,12 +145,24 @@ export default function Workspace({
     setHeard(transcript)
   }
 
-  const remember = patch => savePrefs({ view, division, onlyMine, phoneTab, groupBy, ...patch })
+  const remember = patch => savePrefs({ view, division, onlyMine, phoneTab, groupBy, person, dist, ...patch })
   const setGroupBy = v => { setGroupByRaw(v); remember({ groupBy: v }) }
   const setPhoneTab = v => { setPhoneTabRaw(v); remember({ phoneTab: v }) }
   const setView = v => { setViewRaw(v); remember({ view: v }) }
   const setDivision = d => { setDivisionRaw(d); setProjectId(''); remember({ division: d }) }
   const setOnlyMine = v => { setOnlyMineRaw(v); remember({ onlyMine: v }) }
+  const setPerson = v => { setPersonRaw(v); remember({ person: v }) }
+  const setDist = v => { setDistRaw(v); remember({ dist: v }) }
+  /** Whose task: a staff name, or 'Unassigned'. */
+  const forPerson = t => !person || (person === 'Unassigned'
+    ? (!t.assignee || t.assignee === 'Unassigned')
+    : String(t.assignee || '').toLowerCase() === person.toLowerCase())
+  /** Which distributor: any one the task names (a task naming two shows under both). */
+  const forDist = t => {
+    if (!dist) return true
+    const named = distributorsIn(t.task, t.notes)
+    return dist === NO_DISTRIBUTOR.key ? named.length === 0 : named.some(d => d.key === dist)
+  }
 
   const all = useMemo(() => [...projects, GENERAL], [projects])
   const projectFor = task => all.find(p => p.id === projectIdOf(task)) || GENERAL
@@ -166,6 +185,7 @@ export default function Workspace({
   const shown = live.filter(t => {
     if (!inDivision(t)) return false
     if (onlyMine && !isMine(t)) return false
+    if (!forPerson(t) || !forDist(t)) return false
     if (projectId && projectIdOf(t) !== projectId) return false
     if (stat === 'mine' && !isMine(t)) return false
     if (stat === 'overdue' && !isOverdue(t)) return false
@@ -174,7 +194,7 @@ export default function Workspace({
     if (stat && t.status === 'done') return false
     return true
   })
-  const shownOpen = showDone ? shown : shown.filter(t => t.status !== 'done')
+  const shownOpen = showDone ? shown : shown.filter(t => t.status !== 'done' || justTicked.has(t.id))
 
   // Mine first, then the soonest due, then the rest.
   const order = (a, b) =>
@@ -189,6 +209,7 @@ export default function Workspace({
   const archivedCount = all.filter(p => p.archived).length
 
   const tick = task => {
+    if (task.status !== 'done') setJustTicked(s => new Set(s).add(task.id))
     const project = projectFor(task)
     const finished = task.status === 'done'
     onMove(task, finished ? project.columns[0].key
@@ -295,8 +316,22 @@ export default function Workspace({
     </div>
   )
 
-  const filtering = onlyMine || showDone || stat
   const select = { ...text('caption'), fontSize: 16, minHeight: 34, padding: '0 8px', border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink }
+  const filtering = onlyMine || showDone || stat || person || dist
+  const personSelect = (
+    <select value={person} onChange={e => setPerson(e.target.value)} aria-label="Staff member" data-filter-person style={select}>
+      <option value="">Everyone</option>
+      {STAFF.map(p => <option key={p.email} value={p.name}>{p.firstName || p.name}</option>)}
+      <option value="Unassigned">Nobody yet</option>
+    </select>
+  )
+  const distSelect = (
+    <select value={dist} onChange={e => setDist(e.target.value)} aria-label="Distributor" data-filter-distributor style={select}>
+      <option value="">All distributors</option>
+      {DISTRIBUTORS.map(d => <option key={d.key} value={d.key}>{d.name}</option>)}
+      <option value={NO_DISTRIBUTOR.key}>No distributor</option>
+    </select>
+  )
   const viewTabs = (
     <div role="tablist" aria-label="View" style={{ display: 'inline-flex', background: colour.lineSoft, borderRadius: radius.control, padding: 3 }}>
       {[['list', 'List'], ...(wide ? [['division', 'By division']] : []), ['board', 'Board'], ['people', 'People']].map(([key, label]) => (
@@ -325,6 +360,8 @@ export default function Workspace({
         <option value="All">All divisions</option>
         {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
+      {personSelect}
+      {distSelect}
       {view === 'list' && (
         <select value={groupBy} onChange={e => setGroupBy(e.target.value)} aria-label="Group by" style={select}>
           <option value="project">Group: Project</option>
@@ -353,6 +390,7 @@ export default function Workspace({
       {filtersOpen && (
         <div style={{ marginTop: space.sm }}>
           {statTiles}
+          <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', marginBottom: space.xs }}>{personSelect}{distSelect}</div>
           <label style={{ ...text('caption'), color: colour.inkMuted, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 34, marginRight: space.md }}>
             <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} style={{ width: 18, height: 18, fontSize: 16 }} />
             Only my tasks
@@ -732,6 +770,7 @@ export default function Workspace({
   const peopleView = () => {
     const people = STAFF.filter(s => division === 'All' || s.division === division)
       .filter(s => !onlyMine || (me && s.email === me.email))
+      .filter(s => !person || s.name === person)
       .sort((a, b) => (me && b.email === me.email) - (me && a.email === me.email))
     const most = Math.max(4, ...people.map(s => shown.filter(t => t.status !== 'done' && isSameStaff(t.assignee, s)).length))
     return (
@@ -780,7 +819,7 @@ export default function Workspace({
   function empty() {
     return (
       <div style={{ ...text('body'), color: colour.inkFaint, textAlign: 'center', padding: space.xxl, background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card }}>
-        {stat || onlyMine || projectId || division !== 'All'
+        {stat || onlyMine || projectId || person || dist || division !== 'All'
           ? 'Nothing matches. Try another division, or turn the filters off.'
           : 'Nothing on the list yet. Add the first task above.'}
       </div>

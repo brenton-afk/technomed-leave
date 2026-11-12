@@ -856,6 +856,47 @@ is seen by all). **End** files it as a `sent` meeting (`live: true`, accepted
 new tasks as its action items) so the meeting report counts it; **no email is
 sent**. Anyone signed in can start, accept or end.
 
+**The whole meeting, read at the end** (Brent, 12 Nov 2026: "record the
+transcript and then have the transcript and discussion feed back into the
+projects page … put the recorder on and still navigate the pages"; built 1–4).
+- **The recorder lives above every screen**: `src/projects/meetingRecorder.js`
+  (module-level; `startRecorder`/`stopRecorder`/`onRecorder`). Two
+  MediaRecorders on one microphone — 40s pieces for the live cards, and one
+  running the whole meeting (10s slices joined at the end). Screen Wake Lock
+  on a phone; `warning` when the microphone stops (screen locked, app left);
+  a leave-page warning. Closing the panel no longer stops it.
+  `pages/projects/RecordingBar.jsx` (in `App.jsx`, above `.tm-scroll`): a strip
+  on a phone, a pill top right on a computer (the shell is a row there),
+  "Recording the meeting · 12:34 · Open meeting".
+- **End the meeting and read it** uploads the whole recording once (Blob,
+  `meetings/…`, `isOurBlob`) → `action=live-final` → AssemblyAI with
+  `speaker_labels` and the vocabulary (`VOCABULARY` + staff) → any screen's
+  `action=live` GET moves it on (`advanceFinal`, one reader at a time under
+  `meeting:live:reviewing`; the audio is deleted once it is words) → Claude
+  reads the whole transcript against every open task (`reviewPrompt`,
+  `MEETING_REVIEW_MODEL`, default `claude-opus-5-5` at medium effort) →
+  `status: 'review'` with a summary and one list (`phase: 'review'`): new,
+  done, change, and **note** (a progress note written onto the task as a
+  comment). **Accept all** or one by one, then **File the meeting** (its
+  summary and the full transcript go on the filed meeting, so the report
+  counts it). A failed transcription falls back to what the live pieces heard;
+  a failed read keeps the transcript with Try again.
+- **Recorded somewhere else** (Jamie, a Word/PDF/.txt file through
+  `read-file`): pasted on the panel → `live-final {transcript}` — the same
+  review. A meeting being read or reviewed is never overwritten by a new one.
+
+**Suggested emails have "✓ Already done"** (Brent, 12 Nov 2026: "we need a
+'done' option or already sorted") — `done`, reason "already sorted", and
+**done is shared** (`decisions:state:shared` in `api/_decisions.js`): an email
+dealt with comes off everyone's list. The other choices stay per person.
+
+**Filter by staff member and distributor** (Brent, 12 Nov 2026): Workspace
+`person` (a name, or Unassigned) and `dist` (a `DISTRIBUTORS` key, or none —
+a task naming two shows under both), remembered in `tm_projects_view`; in the
+desktop toolbar and the phone's Filter. **A ticked task stays on screen**,
+ticked, until the page is left (`justTicked`; Brent: "the item seems to
+disappear?!"), so a wrong tap is undone by tapping again.
+
 **Group by distributor** (Brent, 11 Nov 2026: "separated by distributor …
 use the information you already know about product names"): the List/Table
 view has Group by Project | Distributor (remembered in `tm_projects_view`).

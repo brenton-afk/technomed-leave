@@ -335,8 +335,18 @@ const stateKey = email => `decisions:state:${email}`
 const LESSONS = 'decisions:lessons'
 const LOG = 'decisions:log'
 
+// "Done" is for everyone (Brent, 12 Nov 2026: an "already sorted" choice):
+// an email someone has dealt with is off every list, not only theirs. The
+// other choices stay per person.
+const SHARED = 'decisions:state:shared'
+
 export async function readStates(email) {
-  const flat = (await redis('hgetall', stateKey(email))) || []
+  const [own, shared] = await Promise.all([readHash(stateKey(email)), readHash(SHARED).catch(() => ({}))])
+  return { ...shared, ...own }
+}
+
+async function readHash(key) {
+  const flat = (await redis('hgetall', key)) || []
   const out = {}
   if (Array.isArray(flat)) {
     for (let i = 0; i < flat.length; i += 2) {
@@ -352,6 +362,7 @@ export async function markItem(email, name, { id, state, reason = '', item = {} 
   if (!STATES.includes(state) && state !== 'open') throw Object.assign(new Error('Unknown choice'), { status: 400 })
   if (state === 'open') {
     await redis('hdel', stateKey(email), id)
+    await redis('hdel', SHARED, id).catch(() => {})
     return null
   }
   const entry = {
@@ -359,6 +370,7 @@ export async function markItem(email, name, { id, state, reason = '', item = {} 
     until: state === 'later' ? new Date(now + 3 * 86400000).toISOString() : null
   }
   await redis('hset', stateKey(email), id, JSON.stringify(entry))
+  if (state === 'done') await redis('hset', SHARED, id, JSON.stringify({ ...entry, by: name })).catch(() => {})
   const logged = {
     by: name, at: entry.at, state, reason: entry.reason, source: item.source || String(id).split(':')[0],
     owner: item.owner || '', from: item.from || '', subject: String(item.subject || '').slice(0, 120)

@@ -3,6 +3,8 @@ import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
 import { describe, recorderActive } from '../../projects/liveMeeting.js'
+import { upload } from '@vercel/blob/client'
+import { startRecorder, stopRecorder, recorderState, onRecorder, STRETCH_MS } from '../../projects/meetingRecorder.js'
 
 // ─── The live meeting (Brent, 11 Nov 2026) ───────────────────────────────────
 // "A real time live meeting, where you automatically update the projects page
@@ -11,8 +13,16 @@ import { describe, recorderActive } from '../../projects/liveMeeting.js'
 // it implies appears here, on every phone with the panel open, as a card.
 // Nothing reaches the projects page until someone taps Accept. Typing a note
 // does the same as speaking, for a noisy room or a meeting nobody records.
+//
+// Since 12 Nov 2026 (Brent: "record the transcript and then have the
+// transcript and discussion feed back into the projects page"): the recorder
+// lives in projects/meetingRecorder.js and keeps going when this panel closes
+// or the person moves around the portal (RecordingBar shows it). Ending the
+// meeting uploads the whole recording once and reads it whole
+// (action=live-final): one review list — new, done, changed, and a progress
+// note per task discussed — with Accept all, then File the meeting. A
+// transcript from Jamie or a Word/PDF file goes through the same review.
 
-const STRETCH_MS = 40000
 const POLL_MS = 5000
 
 const btn = primary => ({
@@ -37,12 +47,13 @@ function SuggestionCard({ s, onAct, busy }) {
   const [task, setTask] = useState(s.task || '')
   const [assignee, setAssignee] = useState(s.assignee || 'Unassigned')
   const [due, setDue] = useState(s.due_date || '')
+  const [noteText, setNoteText] = useState(s.note || '')
   const editable = s.kind === 'new' || s.kind === 'update'
-  const tint = s.kind === 'done' ? colour.accent : s.kind === 'new' ? colour.navy : colour.warning
+  const tint = s.kind === 'done' ? colour.accent : s.kind === 'new' ? colour.navy : s.kind === 'note' ? colour.inkMuted : colour.warning
   return (
     <div data-live-suggestion={s.kind} style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderLeft: `4px solid ${tint}`, borderRadius: radius.card, padding: space.md, display: 'flex', flexDirection: 'column', gap: space.sm }}>
       <div style={{ ...text('caption'), color: tint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        {s.kind === 'new' ? 'New task' : s.kind === 'done' ? 'Mark done' : 'Change a task'}
+        {s.kind === 'new' ? 'New task' : s.kind === 'done' ? 'Mark done' : s.kind === 'note' ? 'Progress note' : 'Change a task'}
       </div>
       {s.kind === 'new'
         ? <input aria-label="Task" value={task} onChange={e => setTask(e.target.value)} style={{ ...input, width: '100%' }} />
@@ -59,10 +70,14 @@ function SuggestionCard({ s, onAct, busy }) {
           <input aria-label="Due" type="date" value={due} onChange={e => setDue(e.target.value)} style={input} />
         </div>
       )}
+      {s.kind === 'note' && (
+        <textarea aria-label="Note" value={noteText} onChange={e => setNoteText(e.target.value)} rows={2}
+          style={{ ...input, width: '100%', minHeight: 64, padding: space.sm, resize: 'vertical' }} />
+      )}
       {s.why && <div style={{ ...text('caption'), color: colour.inkFaint }}>Heard: {s.why}</div>}
       <div style={{ display: 'flex', gap: space.xs }}>
         <button type="button" disabled={busy} style={{ ...btn(true), flex: 1 }}
-          onClick={() => onAct(s.id, 'accept', s.kind === 'new' ? { task, assignee, due_date: due } : s.kind === 'update' ? { assignee, due_date: due } : {})}>
+          onClick={() => onAct(s.id, 'accept', s.kind === 'new' ? { task, assignee, due_date: due } : s.kind === 'update' ? { assignee, due_date: due } : s.kind === 'note' ? { note: noteText } : {})}>
           {busy ? 'Saving…' : 'Accept'}
         </button>
         <button type="button" disabled={busy} style={btn(false)} onClick={() => onAct(s.id, 'skip')}>Skip</button>
@@ -78,11 +93,13 @@ export default function LiveMeeting({ user, onClose, onChanged }) {
   const [note, setNote] = useState('')
   const [title, setTitle] = useState('Staff meeting')
   const [busy, setBusy] = useState('')
-  const [recording, setRecording] = useState(false)
-  const [sending, setSending] = useState(0)
+  const [rec, setRec] = useState(recorderState())
   const [ended, setEnded] = useState(null)
   const [showWords, setShowWords] = useState(false)
-  const rec = useRef({ stream: null, recorder: null, timer: null, queue: Promise.resolve(), on: false })
+  const [pasted, setPasted] = useState('')
+  const [importing, setImporting] = useState(false)
+  useEffect(() => onRecorder(setRec), [])
+  const recording = rec.on
 
   const load = useCallback(async () => {
     try {
@@ -117,57 +134,20 @@ export default function LiveMeeting({ user, onClose, onChanged }) {
     setBusy('')
   }
 
-  const sendStretch = blob => {
-    rec.current.queue = rec.current.queue.then(async () => {
-      if (!blob || blob.size < 2000) return
-      setSending(n => n + 1)
-      try {
-        const audio = await toBase64(blob)
-        await call('live-say', 'POST', { audio, contentType: (blob.type || 'audio/webm').split(';')[0] })
-        await load()
-      } catch (err) { setError(err.message) }
-      setSending(n => n - 1)
-    })
-  }
-
-  // MediaRecorder is stopped and started again each stretch, so every piece
-  // sent is a whole file a transcriber can open on its own.
-  const nextRecorder = () => {
-    const r = rec.current
-    if (!r.on || !r.stream) return
-    const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => window.MediaRecorder?.isTypeSupported?.(t)) || ''
-    const recorder = new MediaRecorder(r.stream, type ? { mimeType: type } : undefined)
-    const parts = []
-    recorder.ondataavailable = e => { if (e.data?.size) parts.push(e.data) }
-    recorder.onstop = () => { sendStretch(new Blob(parts, { type: recorder.mimeType || type })); nextRecorder() }
-    recorder.start()
-    r.recorder = recorder
-    r.timer = setTimeout(() => { if (recorder.state === 'recording') recorder.stop() }, STRETCH_MS)
-  }
-
   const startRecording = async () => {
     setError('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      rec.current = { ...rec.current, stream, on: true }
-      setRecording(true)
-      nextRecorder()
+      await startRecorder({
+        onStretch: async blob => {
+          const audio = await toBase64(blob)
+          await call('live-say', 'POST', { audio, contentType: (blob.type || 'audio/webm').split(';')[0] })
+          load()
+        }
+      })
     } catch {
       setError('The microphone could not be opened — allow it for this site, or type notes below.')
     }
   }
-
-  const stopRecording = () => {
-    const r = rec.current
-    r.on = false
-    clearTimeout(r.timer)
-    if (r.recorder?.state === 'recording') r.recorder.stop()
-    r.stream?.getTracks().forEach(t => t.stop())
-    r.stream = null
-    setRecording(false)
-  }
-
-  useEffect(() => () => stopRecording(), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addNote = async () => {
     const said = note.trim()
@@ -183,19 +163,78 @@ export default function LiveMeeting({ user, onClose, onChanged }) {
     await load()
     setBusy('')
   }
+  const acceptAll = async list => {
+    setBusy('all'); setError('')
+    let failed = 0
+    for (const s of list) {
+      try { await call('live-act', 'POST', { id: s.id, decision: 'accept', edits: {} }) } catch { failed++ }
+    }
+    if (failed) setError(`${failed} could not be added — they are still on the list.`)
+    onChanged?.(); await load(); setBusy('')
+  }
 
-  const end = async () => {
-    if (!window.confirm('End the meeting for everyone? Accepted items stay on the projects page.')) return
-    stopRecording()
+  /** Stops the recording, sends the whole meeting to be read, and waits for the review. */
+  const finish = async () => {
+    if (!window.confirm('End the meeting and read the whole of it? You will get one list of changes to accept.')) return
+    setBusy('finish'); setError('')
+    try {
+      const blob = await stopRecorder()
+      let audioUrl = ''
+      if (blob && blob.size > 20000) {
+        const ext = /mp4/.test(blob.type) ? 'm4a' : 'webm'
+        const uploaded = await upload(`meetings/${live?.id || 'live'}.${ext}`, blob, {
+          access: 'public', handleUploadUrl: '/api/meetings/agent?action=blob-upload',
+          clientPayload: JSON.stringify({ token: user?.token || null })
+        })
+        audioUrl = uploaded.url
+      }
+      setLive((await call('live-final', 'POST', audioUrl ? { audioUrl } : {})).live)
+    } catch (err) { setError(`${err.message} — what the live stretches heard can still be read: tap “Read what was heard”.`) }
+    setBusy('')
+  }
+  const readHeard = async () => {
+    setBusy('finish'); setError('')
+    try { setLive((await call('live-final', 'POST', {})).live) } catch (err) { setError(err.message) }
+    setBusy('')
+  }
+  const retry = async () => {
+    setBusy('finish'); setError('')
+    try { setLive((await call('live-final', 'POST', { retry: true })).live) } catch (err) { setError(err.message) }
+    setBusy('')
+  }
+
+  const fileMeeting = async () => {
+    const left = (live?.suggestions || []).filter(s => s.status === 'waiting').length
+    if (!window.confirm(left ? `File the meeting? ${left} item${left === 1 ? ' is' : 's are'} not accepted and will not be added.` : 'File the meeting? Accepted items stay on the projects page.')) return
+    if (recording) await stopRecorder()
     setBusy('end'); setError('')
-    try { await rec.current.queue } catch { /* already reported */ }
     try { setEnded((await call('live', 'DELETE')).ended); setLive(null); onChanged?.() } catch (err) { setError(err.message) }
     setBusy('')
   }
 
+  async function readFile(file) {
+    setImporting(true); setError('')
+    try {
+      if (/\.txt$/i.test(file.name) || file.type === 'text/plain') { setPasted(await file.text()); return }
+      const data = await toBase64(file)
+      const out = await call('read-file', 'POST', { filename: file.name, mediaType: file.type, data })
+      setPasted(out.text || '')
+    } catch (err) { setError(err.message) } finally { setImporting(false) }
+  }
+  const importTranscript = async () => {
+    if (!pasted.trim()) return
+    setBusy('finish'); setError('')
+    try { setLive((await call('live-final', 'POST', { transcript: pasted, title })).live); setPasted('') } catch (err) { setError(err.message) }
+    setBusy('')
+  }
+
+  const final = live?.final
+  const reading = final && ['transcribing', 'reading'].includes(final.status)
+  const inReview = live?.status === 'review'
   const waiting = (live?.suggestions || []).filter(s => s.status === 'waiting').reverse()
   const accepted = (live?.suggestions || []).filter(s => s.status === 'accepted').reverse()
   const someoneElse = live && !recording && recorderActive(live) ? live.recorder.name : ''
+  const card = { background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, padding: space.md, display: 'flex', flexDirection: 'column', gap: space.sm }
 
   return (
     <Overlay>
@@ -209,8 +248,8 @@ export default function LiveMeeting({ user, onClose, onChanged }) {
               <div style={{ ...text('title'), color: colour.ink }}>{live ? live.title : 'Live meeting'}</div>
               {live && <div style={{ ...text('caption'), color: colour.inkFaint }}>Started {timeOf(live.startedAt)} by {live.startedBy || 'someone'}</div>}
             </div>
-            {live && <span style={{ ...text('caption'), fontWeight: 700, color: colour.surface, background: colour.danger, borderRadius: radius.pill, padding: `2px ${space.sm}px` }}>LIVE</span>}
-            <button type="button" onClick={() => { stopRecording(); onClose() }} aria-label="Close" style={btn(false)}>✕</button>
+            {live?.status === 'live' && <span style={{ ...text('caption'), fontWeight: 700, color: colour.surface, background: colour.danger, borderRadius: radius.pill, padding: `2px ${space.sm}px` }}>LIVE</span>}
+            <button type="button" onClick={onClose} aria-label="Close" style={btn(false)}>✕</button>
           </div>
 
           {error && <div role="alert" style={{ ...text('caption'), color: colour.danger }}>{error}</div>}
@@ -232,30 +271,79 @@ export default function LiveMeeting({ user, onClose, onChanged }) {
               </div>
               <input aria-label="Meeting name" value={title} onChange={e => setTitle(e.target.value)} style={{ ...input, width: '100%' }} />
               <button type="button" onClick={start} disabled={Boolean(busy)} style={btn(true)}>{busy === 'start' ? 'Starting…' : 'Start the live meeting'}</button>
+              <div style={{ ...text('caption'), color: colour.inkFaint }}>
+                Best on a phone in the middle of the table, plugged in, with this screen left open. On a computer it keeps recording while you use the rest of the portal.
+              </div>
+            </div>
+          )}
+
+          {live === null && (
+            <div data-live-import style={card}>
+              <div style={{ ...text('heading'), color: colour.ink }}>Recorded somewhere else?</div>
+              <div style={{ ...text('body'), color: colour.inkMuted }}>Paste a transcript from Jamie (or any notes), or choose a .txt, Word or PDF file. It is read the same way: one list of changes to accept.</div>
+              <textarea aria-label="Transcript" value={pasted} onChange={e => setPasted(e.target.value)} rows={5} placeholder="Paste the transcript here"
+                style={{ ...input, width: '100%', minHeight: 120, padding: space.sm, resize: 'vertical' }} />
+              <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap' }}>
+                <label style={{ ...btn(false), display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+                  {importing ? 'Reading…' : 'Choose a file'}
+                  <input type="file" accept=".txt,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readFile(f) }} style={{ display: 'none', fontSize: 16 }} />
+                </label>
+                <button type="button" onClick={importTranscript} disabled={!pasted.trim() || Boolean(busy)} style={btn(true)}>{busy === 'finish' ? 'Reading the meeting…' : 'Read it'}</button>
+              </div>
+            </div>
+          )}
+
+          {live && reading && (
+            <div data-live-reading style={{ ...card, background: colour.accentSoft, border: 'none' }}>
+              <div style={{ ...text('bodyStrong'), color: colour.ink }}>{final.status === 'transcribing' ? 'Writing out the whole meeting…' : 'Reading the meeting against the projects…'}</div>
+              <div style={{ ...text('caption'), color: colour.inkMuted }}>A minute or two for an hour's meeting. You can close this and come back — it carries on.</div>
+            </div>
+          )}
+          {live && final && ['unread', 'failed'].includes(final.status) && (
+            <div role="alert" style={{ ...card, borderColor: colour.dangerLine }}>
+              <div style={{ ...text('body'), color: colour.danger }}>{final.error || 'The meeting could not be read.'}</div>
+              {final.status === 'unread' ? <button type="button" onClick={retry} disabled={Boolean(busy)} style={btn(true)}>Try reading it again</button>
+                : <button type="button" onClick={readHeard} disabled={Boolean(busy)} style={btn(true)}>Read what was heard</button>}
+            </div>
+          )}
+          {live && inReview && (
+            <div data-live-summary style={card}>
+              <div style={{ ...text('heading'), color: colour.ink }}>The meeting</div>
+              {final?.summary && <div style={{ ...text('body'), color: colour.ink, whiteSpace: 'pre-wrap' }}>{final.summary}</div>}
+              {final?.error && <div style={{ ...text('caption'), color: colour.warning }}>{final.error}</div>}
+              <div style={{ ...text('caption'), color: colour.inkFaint }}>Accept what is right below, then File the meeting — the meeting report then comes from the updated projects page.</div>
             </div>
           )}
 
           {live && (<>
-            <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center' }}>
-              {recording
-                ? <button type="button" onClick={stopRecording} style={{ ...btn(false), borderColor: colour.danger, color: colour.danger }}>● Stop recording</button>
-                : <button type="button" onClick={startRecording} disabled={typeof window !== 'undefined' && !window.MediaRecorder} style={btn(true)}>Record on this phone</button>}
-              <span style={{ ...text('caption'), color: colour.inkFaint }}>
-                {recording ? (sending ? 'Listening · reading the last stretch…' : 'Listening — suggestions every 40 seconds')
-                  : someoneElse ? `${someoneElse}’s phone is recording` : 'Not recording — type notes below'}
-              </span>
-            </div>
+            {live.status === 'live' && (
+              <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center' }}>
+                {!recording && (
+                  <button type="button" onClick={startRecording} disabled={typeof window !== 'undefined' && !window.MediaRecorder} style={btn(true)}>● Record</button>
+                )}
+                <span style={{ ...text('caption'), color: rec.warning ? colour.danger : colour.inkFaint }}>
+                  {rec.warning || (recording ? (rec.sending ? 'Recording · reading the last stretch…' : `Recording — live suggestions every ${STRETCH_MS / 1000} seconds. You can close this; it keeps recording.`)
+                    : someoneElse ? `${someoneElse} is recording` : 'Not recording — type notes below')}
+                </span>
+              </div>
+            )}
 
+            {live.status === 'live' && (
             <div style={{ display: 'flex', gap: space.xs }}>
               <input aria-label="Add a note" placeholder="Type what was agreed…" value={note}
                 onChange={e => setNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addNote() }}
                 style={{ ...input, flex: 1, minWidth: 0 }} />
               <button type="button" onClick={addNote} disabled={busy === 'note' || !note.trim()} style={btn(false)}>{busy === 'note' ? '…' : 'Add'}</button>
             </div>
+            )}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
-              <div style={{ ...text('heading'), color: colour.ink }}>To accept · {waiting.length}</div>
-              {!waiting.length && <div style={{ ...text('caption'), color: colour.inkFaint }}>Suggestions appear here as the meeting goes.</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+                <div style={{ ...text('heading'), color: colour.ink, flex: 1 }}>To accept · {waiting.length}</div>
+                {waiting.length > 1 && <button type="button" onClick={() => acceptAll(waiting)} disabled={Boolean(busy)} style={btn(true)}>{busy === 'all' ? 'Adding…' : `Accept all ${waiting.length}`}</button>}
+              </div>
+              {!waiting.length && <div style={{ ...text('caption'), color: colour.inkFaint }}>{inReview ? 'Nothing left to accept.' : 'Suggestions appear here as the meeting goes.'}</div>}
               {waiting.map(s => <SuggestionCard key={s.id} s={s} onAct={act} busy={busy === s.id} />)}
             </section>
 
@@ -284,9 +372,16 @@ export default function LiveMeeting({ user, onClose, onChanged }) {
               </div>
             )}
 
-            <button type="button" onClick={end} disabled={Boolean(busy)} style={{ ...btn(false), color: colour.danger }}>
-              {busy === 'end' ? 'Ending…' : 'End the meeting'}
-            </button>
+            {live.status === 'live' && (
+              <button type="button" onClick={finish} disabled={Boolean(busy)} style={{ ...btn(true), background: colour.danger }}>
+                {busy === 'finish' ? 'Sending the recording…' : 'End the meeting and read it'}
+              </button>
+            )}
+            {(inReview || live.status === 'live') && (
+              <button type="button" onClick={fileMeeting} disabled={Boolean(busy) || reading} style={{ ...btn(inReview), ...(inReview ? {} : { color: colour.inkMuted }) }}>
+                {busy === 'end' ? 'Filing…' : inReview ? 'File the meeting' : 'End without reading it'}
+              </button>
+            )}
           </>)}
         </div>
       </div>

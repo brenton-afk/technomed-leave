@@ -20,9 +20,10 @@ import {
 import { meetingReport } from '../../src/projects/report.js'
 import { readActionList } from '../_actionItems.js'
 import { askClaude } from '../_anthropic.js'
-import { transcribe } from '../_readDictatedBooking.js'
+import { transcribe, VOCABULARY } from '../_readDictatedBooking.js'
 import {
-  getLive, startLive, addStretch, settleSuggestion, claimSuggestion, releaseSuggestion, endLive, forScreen
+  getLive, startLive, addStretch, settleSuggestion, claimSuggestion, releaseSuggestion, endLive, forScreen,
+  startFinal, advanceFinal, retryReview
 } from '../_liveMeeting.js'
 import {
   GENERAL, newProject, normaliseProject, movedTo, withComment,
@@ -92,6 +93,8 @@ export default async function handler(req, res) {
   if (action === 'live') return handleLive(req, res, session)
   if (action === 'live-say') return handleLiveSay(req, res, session)
   if (action === 'live-act') return handleLiveAct(req, res, session)
+  // The end of the meeting: the whole recording (or a pasted transcript) read at once.
+  if (action === 'live-final') return handleLiveFinal(req, res, session)
 
   return res.status(400).json({ error: 'Unknown or missing action' })
 }
@@ -122,7 +125,11 @@ const firstNameOf = session => STAFF.find(s => s.email === session?.email)?.firs
 
 async function handleLive(req, res, session) {
   try {
-    if (req.method === 'GET') return res.status(200).json({ live: forScreen(await getLive()) })
+    if (req.method === 'GET') {
+      // Moves the end-of-meeting read on whenever any screen looks.
+      const live = await advanceFinal({ removeAudio: url => (isOurBlob(url) ? del(url) : Promise.resolve()) }).catch(() => null) || await getLive()
+      return res.status(200).json({ live: forScreen(live) })
+    }
     if (req.method === 'POST') {
       let agenda = []
       try { agenda = ((await getAgenda())?.items || []).map(i => i.title).filter(Boolean) } catch { agenda = [] }
@@ -136,11 +143,14 @@ async function handleLive(req, res, session) {
       const actionItems = accepted.filter(s => s.kind === 'new' && s.itemId).map(s => ({
         id: s.itemId, task: s.task, assignee: s.assignee, priority: s.priority || 'normal', due_date: s.due_date || '', notes: s.why || ''
       }))
+      if (ended.final?.audioUrl && isOurBlob(ended.final.audioUrl)) await del(ended.final.audioUrl).catch(() => {})
+      const counts = `${actionItems.length} new task${actionItems.length === 1 ? '' : 's'}, `
+        + `${accepted.filter(s => s.kind === 'done').length} marked done, ${accepted.filter(s => s.kind === 'update').length} changed, `
+        + `${accepted.filter(s => s.kind === 'note').length} progress note${accepted.filter(s => s.kind === 'note').length === 1 ? '' : 's'}.`
       const meeting = {
         id: ended.id, title: ended.title, date: ended.date, recordedByEmail: ended.startedByEmail || null,
-        summary: `Live meeting: ${actionItems.length} new task${actionItems.length === 1 ? '' : 's'}, `
-          + `${accepted.filter(s => s.kind === 'done').length} marked done, ${accepted.filter(s => s.kind === 'update').length} changed.`,
-        transcript: (ended.lines || []).map(l => `${l.typed ? `${l.by} (typed)` : 'Room'}: ${l.text}`).join('\n'),
+        summary: ended.final?.summary ? `${ended.final.summary}\n\nOn the projects page: ${counts}` : `Live meeting: ${counts}`,
+        transcript: ended.final?.transcript || (ended.lines || []).map(l => `${l.typed ? `${l.by} (typed)` : 'Room'}: ${l.text}`).join('\n'),
         actionItems, changes: accepted.filter(s => s.kind !== 'new'),
         status: 'sent', live: true, createdAt: ended.startedAt, endedAt: ended.endedAt
       }
@@ -169,11 +179,33 @@ async function handleLiveSay(req, res, session) {
   }
 }
 
+const isOurBlob = url => /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/meetings\//i.test(String(url || ''))
+
+/** End of the meeting: read the whole recording, a pasted transcript, or what the stretches heard. */
+async function handleLiveFinal(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { audioUrl, transcript, title, retry } = req.body || {}
+  if (audioUrl && !isOurBlob(audioUrl)) return res.status(400).json({ error: 'That recording is not one of ours' })
+  try {
+    const live = retry
+      ? await retryReview()
+      : await startFinal({
+        audioUrl: audioUrl || '', transcript: String(transcript || '').slice(0, 300000), title: String(title || '').slice(0, 120),
+        by: firstNameOf(session), byEmail: session?.email,
+        vocabulary: [...VOCABULARY, ...STAFF.map(x => x.firstName).filter(Boolean), ...STAFF.map(x => x.name)]
+      })
+    return res.status(200).json({ live: forScreen(live) })
+  } catch (err) {
+    const status = err.code === 'none' ? 404 : err.code === 'empty' ? 400 : err.code === 'busy' ? 409 : 502
+    return res.status(status).json({ error: err.message })
+  }
+}
+
 async function handleLiveAct(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { id, decision, edits = {} } = req.body || {}
   const live = await getLive()
-  if (!live || live.status !== 'live') return res.status(404).json({ error: 'No meeting is live' })
+  if (!live) return res.status(404).json({ error: 'No meeting is live' })
   const s = (live.suggestions || []).find(x => x.id === id)
   if (!s) return res.status(404).json({ error: 'That suggestion is not there' })
   if (s.status !== 'waiting') return res.status(409).json({ error: `Already ${s.status === 'accepted' ? 'accepted' : 'skipped'} by ${s.decidedBy || 'someone'}` })
@@ -223,7 +255,11 @@ async function handleLiveAct(req, res, session) {
         if (dueDate) next.due_date = dueDate
         patch = { ...patch, assignee: next.assignee, due_date: next.due_date }
       }
-      next = withComment({ ...next, updatedAt: nowStamp() }, { text: `From the live meeting: ${s.kind === 'done' ? 'reported done' : 'changed'}${s.why ? ` — ${s.why}` : ''}`, by, at: nowStamp() })
+      const noteText = s.kind === 'note' ? String(edits.note ?? s.note ?? '').trim().slice(0, 400) : ''
+      if (s.kind === 'note' && !noteText) { await releaseSuggestion(id); return res.status(400).json({ error: 'Write the note' }) }
+      if (s.kind === 'note') patch = { ...patch, note: noteText }
+      const said = s.kind === 'note' ? noteText : `${s.kind === 'done' ? 'reported done' : 'changed'}${s.why ? ` — ${s.why}` : ''}`
+      next = withComment({ ...next, updatedAt: nowStamp() }, { text: `From the meeting (${live.date}): ${said}`, by, at: nowStamp() })
       await saveWorklistItem(next)
       if (s.kind === 'done' && item.status !== 'done') {
         const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())

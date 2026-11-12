@@ -160,6 +160,9 @@ export default function Suggested({ user, today, onAdded }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.xs, marginTop: space.sm }}>
         {!theirs && <button type="button" onClick={() => add(item)} style={chip(true)}>Add to my To Do</button>}
         {item.link && <a href={item.link} target="_blank" rel="noreferrer" style={chip(false)}>Open email</a>}
+        {/* Brent, 12 Nov 2026: "we need a 'done' option or already sorted" —
+            handled already, so it comes off without becoming a to-do. */}
+        <button type="button" data-suggestion-done onClick={() => settle(item, 'done', 'already sorted')} style={chip(false)}>✓ Already done</button>
         {!theirs && <button type="button" onClick={() => settle(item, 'later')} style={chip(false)}>Later</button>}
         {!theirs && <button type="button" onClick={() => notNeeded(item)} style={chip(false)}>Not needed</button>}
         <button type="button" onClick={() => settle(item, 'wrong-person')} style={chip(false)}>Not mine</button>
