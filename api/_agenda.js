@@ -36,15 +36,18 @@ export function cleanAgenda(raw = {}) {
     chair: clip(raw.chair, 80),
     attendees: clip(raw.attendees, 400),
     apologies: clip(raw.apologies, 300),
-    items: (Array.isArray(raw.items) ? raw.items : []).slice(0, 40).map((it, i) => ({
+    items: orderedItems((Array.isArray(raw.items) ? raw.items : []).slice(0, 40).map((it, i) => ({
       id: clip(it?.id, 40) || `i${i + 1}-${Math.random().toString(36).slice(2, 7)}`,
       title: clip(it?.title, 160),
       points: lines(it?.points, 20, 240),
       lead: clip(it?.lead, 80)
-    })).filter(it => it.title),
+    })).filter(it => it.title)),
     notes: clip(raw.notes, 2000)
   }
 }
+
+export { orderedItems, isWelcome, isGeneral, isNextMeeting } from '../src/projects/agendaOrder.js'
+import { orderedItems } from '../src/projects/agendaOrder.js'
 
 export async function getAgenda() {
   const raw = await redis('get', AGENDA_KEY)
@@ -125,25 +128,25 @@ const brief = t => ({ task: t.task, assignee: t.assignee, due_date: t.due_date |
 /** The report as the agenda's two lists. Pure. */
 export function agendaActions(report) {
   if (!report) return null
+  // Only what is NOT done goes on the agenda (Brent, 12 Nov 2026: "Completed
+  // actions should not be on the agenda, that's the point").
   return {
     since: { title: report.meeting?.title || 'Last meeting', date: report.from, to: report.to },
-    done: [...(report.done || []), ...(report.earlierDone || [])].map(brief),
-    alsoDone: (report.other || []).map(brief),
     notDone: [...(report.open || []), ...(report.earlier || [])].map(brief)
       .sort((a, b) => Number(b.overdue) - Number(a.overdue) || String(a.assignee).localeCompare(String(b.assignee)))
   }
 }
 
 /** A new agenda for the next meeting, carrying the standing items over. Pure. */
-export function newAgendaFor({ date, time, location, chair, previous = null }) {
+export function newAgendaFor({ date, time, location, chair, attendees, apologies, previous = null }) {
   const standing = (previous?.items || []).map(it => ({ title: it.title, points: [], lead: it.lead || '' }))
   return cleanAgenda({
     title: previous?.title || 'TechnoMed Staff Meeting',
     date, time,
     location: location ?? previous?.location ?? '',
     chair: chair ?? previous?.chair ?? 'Erin Smallbon',
-    attendees: previous?.attendees || '',
-    apologies: '',
+    attendees: attendees ?? previous?.attendees ?? '',
+    apologies: apologies ?? '',
     items: standing.length ? standing : [
       { title: 'Welcome and apologies', lead: 'Erin' },
       { title: 'General business' },
@@ -152,19 +155,23 @@ export function newAgendaFor({ date, time, location, chair, previous = null }) {
   })
 }
 
+const weekdayOf = d => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${d}T12:00:00Z`).getUTCDay()] || ''
+
 /** The prompt for one turn of the agenda chat. Pure, for the tests. */
 export function agendaChatPrompt({ agenda, actions, past = [], staff = [], today }) {
   const list = (rows, done) => rows.map(t => `- ${t.task} (${t.assignee}${done ? `, done ${t.doneOn}` : t.due_date ? `, due ${t.due_date}${t.overdue ? ', OVERDUE' : ''}` : ''})`).join('\n') || '(none)'
   return `You help Erin Smallbon, General Manager of TechnoMed (a Tasmanian surgical device distributor), build the agenda for the next staff meeting by chatting with her. Today is ${today}.
 
-The printed agenda always shows, automatically and before the items, the actions since the last meeting worked out from the projects page — do NOT copy these into items:
-Completed since ${actions?.since?.date || 'the last meeting'}:
-${list(actions?.done || [], true)}
-Also completed: ${(actions?.alsoDone || []).length} other tasks.
+The printed agenda always shows, automatically after "General business", the actions from earlier meetings that are NOT completed, worked out from the projects page — do NOT copy these into items. Completed work never goes on the agenda.
 NOT completed (to be discussed, not asked about):
 ${list(actions?.notDone || [], false)}
 
-You edit only the header and Erin's numbered discussion items. You may add discussion items that follow from the not-completed list (e.g. one item per person or topic with the outstanding tasks as points) when she asks. Never invent decisions, dates or people. Staff: ${staff.join(', ')}.
+The order is fixed and kept for you: "Welcome and apologies" first, "General business" second, the outstanding actions, then the other items, "Next meeting" last.
+
+You are the way Erin builds the agenda — she does not fill in a form, she talks to you. Be brief and friendly, and act: change the agenda whenever what she says implies a change, then say in a sentence what you did.
+
+You edit only the header (title, date as YYYY-MM-DD, time, location, chair, attendees, apologies) and Erin's numbered discussion items (title, points, lead). Attendees and apologies are comma-separated full staff names; "everyone" means all staff below, less any apologies.
+${agenda?.date && agenda.date >= today ? '' : 'The agenda on file is for a meeting that has passed (or there is none). If she has not said when the next meeting is, ask for the date and time first. Once she has, start the new agenda: her standing items carried over with their points cleared, apologies cleared.\n'}You may add discussion items that follow from the not-completed list (e.g. one item per person or topic with the outstanding tasks as points) when she asks. Never invent decisions, dates or people. Work dates out from today (${weekdayOf(today)} ${today}). Staff: ${staff.join(', ')}.
 
 Her earlier agendas, for her structure and wording:
 ${past.slice(0, 3).map(p => `--- ${p.date}\n${String(p.text).slice(0, 2500)}`).join('\n\n') || '(none imported)'}
@@ -173,4 +180,13 @@ The agenda as it stands (JSON):
 ${JSON.stringify({ title: agenda?.title, date: agenda?.date, time: agenda?.time, location: agenda?.location, chair: agenda?.chair, attendees: agenda?.attendees, apologies: agenda?.apologies, items: (agenda?.items || []).map(i => ({ title: i.title, points: i.points, lead: i.lead })) })}
 
 Reply with ONLY JSON: {"reply":"a short sentence or two to Erin","agenda":{...the whole agenda in the same shape...}} — or {"reply":"..."} with no "agenda" when nothing should change (a question, or something you cannot do).`
+}
+
+// ─── The conversation, kept (Brent, 12 Nov 2026: "use it like a chatbot") ────
+export const AGENDA_CHAT_KEY = 'agenda:chat'
+export async function getAgendaChat() {
+  try { return JSON.parse(await redis('get', AGENDA_CHAT_KEY) || '[]') || [] } catch { return [] }
+}
+export async function saveAgendaChat(messages) {
+  await redisSetBody(AGENDA_CHAT_KEY, JSON.stringify(messages.slice(-40)))
 }

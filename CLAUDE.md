@@ -791,23 +791,28 @@ the six newest past agendas and `meetingReport` since the last sent meeting
 draft into the editor; nothing is saved until Erin taps Save. Copy and
 Download Word for everyone.
 
-**The agenda is built from the projects report** (Brent, 12 Nov 2026: "the
-agendas [should] be written based off the projects completed report … a
-section for the items that are not completed … Erin would tell the portal the
-date and time … a Claude chat … to build the agenda"). `projects/Agenda.jsx`
-is the document as it prints: header, then **Actions since {last meeting}** —
-Completed / Not completed (overdue first), `agendaActions` over `meetingReport`
-from the last sent meeting to the agenda's date (`actionsForAgenda` in
-`api/meetings/agent.js`, recomputed on every read, private board left out,
-never typed or written by the model) — then Erin's numbered items (edit ✎,
-↑↓, ✕, Add an item). **Set up the next meeting** (`action=agenda-setup`:
-date, time, location) makes a fresh agenda carrying the standing items over
-empty (`newAgendaFor`; the old one kept at `agenda:previous`). **Ask Claude**
-(`action=agenda-chat`, `agendaChatPrompt`: the two lists, the agenda, her last
-three past agendas) edits only the header and items and saves at once; Undo
-puts the previous version back. Word (with both lists as tables), Print (the
-overlay prints alone; `[data-no-print]` hidden) and Copy for everyone; only
-`AGENDA_EDITORS` (erin@) set up, edit or chat.
+**The agenda is a chat with Claude, built from the projects report** (Brent,
+12 Nov 2026: "written based off the projects … a section for the items that
+are not completed"; "use it like a chatbot"; "Completed actions should not be
+on the agenda, that's the point"; "Welcome and apologies, general business at
+the top, next meeting at the bottom"). `projects/Agenda.jsx`: on a desktop the
+conversation on the left and the agenda building live on the right; on a phone
+Chat | Agenda tabs. Erin says when the meeting is, who is coming and what to
+add (`action=agenda-chat`, POST `{text}`; the conversation is kept in Redis
+`agenda:chat`, last 40, DELETE for a new one; `agendaChatPrompt` gets the
+not-completed list, the agenda and her last three past agendas, asks for the
+date first when the agenda on file has passed, edits only header and items,
+saves at once; a new date keeps the old agenda at `agenda:previous`; Undo puts
+the previous version back). **Only what is not done goes on it**:
+`agendaActions` → `notDone` (overdue first) from `meetingReport`, recomputed on
+every read (`actionsForAgenda`, private board left out), shown as item 3,
+**Actions not yet completed**. **Order is fixed** by `orderedItems`
+(`src/projects/agendaOrder.js`, used by `cleanAgenda` and the screen):
+Welcome and apologies, General business, the actions, Erin's items, Next
+meeting last — the three standing items are always there. **Who is coming**:
+staff buttons (tap: attending → apology → clear, `cycleAttendance`), Everyone,
+and a box for a guest. Word, Print (`[data-no-print]` hidden) and Copy for
+everyone; only `AGENDA_EDITORS` (erin@) chat or change it.
 
 **The live meeting** (Brent, 11 Nov 2026: "a real time live meeting, where
 you automatically update the projects page"). Meeting tab → **Live meeting**
