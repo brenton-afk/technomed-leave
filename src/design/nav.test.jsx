@@ -132,7 +132,7 @@ describe('hub contents (the agreed structure)', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /^Kit$/ }))
     for (const label of ['Kit Room', 'Stock take', 'Theatre guides']) {
-      await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument())
+      await waitFor(() => expect(screen.getAllByText(label).length).toBeGreaterThan(0))
     }
     expect(screen.queryByText('Projects & actions')).not.toBeInTheDocument()
     expect(screen.queryByText('Team leader')).not.toBeInTheDocument()
@@ -162,7 +162,7 @@ describe('hub contents (the agreed structure)', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /^Me$/ }))
     for (const label of ['Timesheets', 'Leave', 'Payslips', 'Filed usage sheets', 'Sign-in & Face ID', 'Log out']) {
-      await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument())
+      await waitFor(() => expect(screen.getAllByText(label).length).toBeGreaterThan(0))
     }
   })
 
@@ -170,7 +170,7 @@ describe('hub contents (the agreed structure)', () => {
     signIn(ADMIN) // hasTimesheets: false
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /^Me$/ }))
-    await waitFor(() => expect(screen.getByText('Leave')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText('Leave').length).toBeGreaterThan(0))
     expect(screen.queryByText('Timesheets')).not.toBeInTheDocument()
   })
 

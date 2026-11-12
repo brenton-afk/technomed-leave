@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { colour, text, space, radius } from '../../design/tokens.js'
+import { colour, text, space, radius, face } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
 
 // ─── Suggested to-dos (Brent, 8 Nov 2026) ────────────────────────────────────
@@ -221,6 +221,5 @@ export default function Suggested({ user, today, onAdded }) {
 
 const chip = primary => ({
   ...text('caption'), fontWeight: 700, padding: '6px 12px', borderRadius: radius.pill, cursor: 'pointer', textDecoration: 'none',
-  border: `1px solid ${primary ? colour.accent : colour.line}`,
-  background: primary ? colour.accent : colour.surface, color: primary ? 'white' : colour.navy
+  ...(primary ? face.primary : face.secondary)
 })

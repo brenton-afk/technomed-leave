@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
-import { colour, text, space, radius, border } from '../../design/tokens.js'
+import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import { useLiveRefresh } from '../../liveRefresh.js'
 import { useIsDesktop } from '../../design/viewport.js'
 import { STAFF } from '../../staffConfig.js'
@@ -371,7 +371,7 @@ export default function Agenda({ user, onClose, today }) {
   }
 
   const btn = on => ({ ...text('caption'), fontWeight: 700, minHeight: 38, padding: `0 ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer',
-    border: on ? 'none' : border.hairline, background: on ? colour.navy : colour.surface, color: on ? colour.surface : colour.ink })
+    ...(on ? face.navy : face.secondary) })
   const field = { ...text('body'), fontSize: 16, width: '100%', boxSizing: 'border-box', padding: `${space.xs}px ${space.sm}px`, border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink }
   const small = { ...text('caption'), fontWeight: 700, minWidth: 36, height: 36, borderRadius: radius.control, border: border.hairline, background: colour.surface, color: colour.inkMuted, cursor: 'pointer', flexShrink: 0 }
   const chip = state => ({

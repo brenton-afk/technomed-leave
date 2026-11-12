@@ -1,6 +1,6 @@
 import { byDistributor, distributorsIn, DISTRIBUTORS, NO_DISTRIBUTOR } from '../../projects/distributors.js'
 import React, { useMemo, useState } from 'react'
-import { colour, text, space, radius } from '../../design/tokens.js'
+import { colour, text, space, radius, face } from '../../design/tokens.js'
 import { STAFF, isSameStaff } from '../../staffConfig.js'
 import {
   GENERAL, DIVISIONS, divisionOf, projectIdOf, columnOf, progressOf, tasksOf, orderedProjects
@@ -255,8 +255,7 @@ export default function Workspace({
   const chip = (on, extra = {}) => ({
     ...text('caption'), fontWeight: on ? 700 : 400, minHeight: 34, padding: `0 ${space.md}px`,
     borderRadius: radius.pill, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-    border: `1px solid ${on ? colour.navy : colour.line}`,
-    background: on ? colour.navy : colour.surface, color: on ? 'white' : colour.inkMuted, ...extra
+    ...(on ? face.navy : { ...face.secondary, color: colour.inkMuted }), ...extra
   })
 
   // The four numbers, small (Brent, 12 Nov 2026: "the massive boxes at the top

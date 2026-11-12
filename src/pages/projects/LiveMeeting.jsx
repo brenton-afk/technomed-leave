@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
-import { colour, text, space, radius, border } from '../../design/tokens.js'
+import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
 import { describe, recorderActive } from '../../projects/liveMeeting.js'
 import { upload } from '@vercel/blob/client'
@@ -27,8 +27,7 @@ const POLL_MS = 5000
 
 const btn = primary => ({
   ...text('bodyStrong'), minHeight: 44, padding: `0 ${space.md}px`, borderRadius: radius.control,
-  border: primary ? 'none' : `1px solid ${colour.line}`, background: primary ? colour.accent : colour.surface,
-  color: primary ? colour.surface : colour.ink, cursor: 'pointer'
+  ...(primary ? face.primary : face.secondary), cursor: 'pointer'
 })
 const input = { ...text('body'), fontSize: 16, minHeight: 44, padding: `0 ${space.sm}px`, borderRadius: radius.control, border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink, boxSizing: 'border-box', maxWidth: '100%' }
 

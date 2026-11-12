@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
-import { colour, text, space, radius, border } from '../../design/tokens.js'
+import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import { meetingReport, reportText } from '../../projects/report.js'
 
 // ─── Meeting report (Brent, 11 Nov 2026) ─────────────────────────────────────
@@ -101,7 +101,7 @@ export default function MeetingReport({ user, items, today, onClose }) {
   }
 
   const btn = on => ({ ...text('caption'), fontWeight: 700, minHeight: 38, padding: `0 ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer',
-    border: on ? 'none' : border.hairline, background: on ? colour.navy : colour.surface, color: on ? 'white' : colour.ink })
+    ...(on ? face.navy : face.secondary) })
   const field = { ...text('field'), padding: `${space.xs}px ${space.sm}px`, border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink, minWidth: 0 }
 
   return (

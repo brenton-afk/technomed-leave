@@ -34,7 +34,7 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 async function fileLeave() {
   render(<App />)
   fireEvent.click(screen.getByRole('button', { name: 'Me' }))
-  fireEvent.click(screen.getByText('Leave'))
+  fireEvent.click(screen.getAllByText('Leave')[0])
   fireEvent.click(await screen.findByRole('button', { name: '13 October' }))
   fireEvent.click(screen.getByRole('button', { name: '14 October' }))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))

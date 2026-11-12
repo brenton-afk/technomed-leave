@@ -567,6 +567,27 @@ required) with "AIRO added automatically" until someone changes it. Kit gains
 `BRAINLAB AIRO & CURVE` once; any navigation already there is kept. "No AIRO"
 / "Brainlab not required" in the notes leaves it off.
 
+### The portal face lift, direction A (Brent, 12 Nov 2026)
+
+"Overhaul the look … the buttons are all pretty basic … build some style into
+the whole portal, like we did with the front cases page." Five directions were
+mocked up (`claude.ai/artifact/48Cz2d3MqybeQKP9PnSAq1`); Brent chose **A**:
+- **Every `Header`** is the Cases band: `BAND_GRADIENT` (navySoft → navy →
+  navyDeep) with the logo tiles pressed into the top-right corner — `art`
+  now defaults to `'subtle'`; `art={false}` keeps one plain. The back button is
+  raised (`BAND_RAISED`). `lead` puts something before the title (Me's avatar).
+- **Hubs are settings-style groups**: `NavGroup` (one card, rows divided by a
+  hairline) holding `NavCard`s, each with an `IconTile` — a gradient square in
+  one of `ICON_TINTS` (teal, navy, sky, ocean, grape, amber, rose, slate).
+  Outside a group a NavCard is its own card, softly raised.
+- **Me**: avatar (initials) + name + role · division on the band, three quick
+  tiles (Messages with the unread badge, Leave, then Timesheets / Admin /
+  Patient history), then Administration, Pay and time, Your files, Account.
+- **Buttons**: `face.primary` / `face.secondary` / `face.navy` in `tokens.js`
+  — spread into a button's style; `Button` uses the same. Global CSS gives
+  every button an eased transition, a press and hover response, and a teal
+  focus ring; every `<select>` gets the portal's chevron and a rounded face.
+
 ### The top band (Brent, 6 Nov 2026)
 
 "The big blue band is pretty empty." From the mock-ups he picked: `Header`

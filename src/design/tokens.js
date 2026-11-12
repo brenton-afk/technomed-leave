@@ -115,3 +115,25 @@ export function card(extra = {}) {
     ...extra
   }
 }
+
+// ─── Button faces, direction A (Brent, 12 Nov 2026: "Go with A") ────────────
+// The one look for a button across the portal: primary a teal with a soft
+// light on top and a shadow under it; secondary white, raised a hair; navy
+// for a chosen chip or the main action on a dark-on-light control. Spread
+// into a button's style after its size and type.
+export const face = {
+  primary: {
+    background: `linear-gradient(180deg, #1fae97 0%, ${colour.accent} 55%, ${colour.accentDeep} 100%)`,
+    color: '#ffffff', border: '1px solid transparent',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), 0 2px 8px rgba(15,117,102,0.28)'
+  },
+  secondary: {
+    background: colour.surface, color: colour.navy, border: `1px solid ${colour.line}`,
+    boxShadow: '0 1px 2px rgba(4,39,70,0.06)'
+  },
+  navy: {
+    background: `linear-gradient(180deg, ${colour.navySoft} 0%, ${colour.navy} 100%)`,
+    color: '#ffffff', border: '1px solid transparent',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 6px rgba(4,39,70,0.22)'
+  }
+}

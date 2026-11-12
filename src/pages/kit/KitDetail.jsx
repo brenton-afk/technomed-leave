@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
-import { colour, text, space, radius, border } from '../../design/tokens.js'
+import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
 
@@ -61,7 +61,7 @@ export default function KitDetail({ kit, canEdit, canRemove = canEdit, user, pos
   const field = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', ...text('field'), border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink }
   const label = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }
   const btn = (on) => ({ ...text('bodyStrong'), padding: `${space.sm + 2}px ${space.md}px`, borderRadius: radius.control, cursor: 'pointer',
-    border: on ? 'none' : border.hairline, background: on ? colour.accent : colour.surface, color: on ? 'white' : colour.ink })
+    ...(on ? face.primary : face.secondary) })
 
   return (
     <Overlay>
