@@ -171,10 +171,14 @@ export default function Suggested({ user, today, onAdded }) {
   const label = { ...text('micro'), textTransform: 'uppercase', color: colour.accentDeep, flex: 1 }
   const toggle = { display: 'flex', alignItems: 'center', gap: space.sm, width: '100%', background: 'none', border: 'none', padding: `0 ${space.xs}px`, marginBottom: space.xs, cursor: 'pointer', textAlign: 'left' }
 
+  // Nothing waiting: nothing drawn (Brent, 12 Nov 2026 — the empty box at the
+  // top of the page was one of the "massive boxes").
+  if (!error && ours.length === 0 && othersCount === 0) return null
+
   return (
-    <section data-suggested style={{ marginBottom: space.lg }}>
+    <section data-suggested style={{ marginBottom: space.md }}>
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} style={toggle}>
-        <span style={label}>For you, from email and the portal · {ours.length}{reading ? ' · checking inboxes…' : ''}</span>
+        <span style={label}>{ours.length} suggested from email and the portal{reading ? ' · checking inboxes…' : ''}</span>
         <span aria-hidden="true" style={{ ...text('caption'), color: colour.inkFaint }}>{open ? 'Hide' : 'Show'}</span>
       </button>
       {error && <div style={{ ...text('caption'), color: colour.danger, padding: `0 ${space.xs}px ${space.xs}px` }}>{error}</div>}

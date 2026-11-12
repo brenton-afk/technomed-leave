@@ -868,6 +868,25 @@ four counts, the division chips, Only mine and Show done fold behind one
 **Filter** button, and the quick-add shows its who/when/Add only once
 something is typed. Tests open the filter with `openFilters()`.
 
+**Projects overhaul from the 12 Nov mock-ups** (Brent: "the massive boxes at
+the top are unnecessary"; "proceed with your project layout"). No big tiles
+anywhere. The header is one slim band: a summary line (open · overdue · due
+this week · yours) and, on a desktop, a **Tasks | Meeting** switch on the
+right. A phone's three tabs are underline tabs. **Desktop**: a left rail —
+Views (All tasks, Mine, Overdue, Due this week, Unassigned, with counts) and
+Projects (dot, open count, › opens its board, + New project) — then the
+quick-add and **one toolbar** (Division, Group, Show done, views List · By
+division · Board · People). **By division** is new: one lane per division.
+**Phone**: division chips always shown, the projects listed by division with
+a ring and done/total (tap opens the board), the counts behind Filter. The
+Meeting tab is one compact list (Live meeting, Next meeting agenda, Report
+since a meeting — `data-meeting-links`). The Suggested box draws nothing when
+nothing is waiting.
+
+**Timesheets on Me only for people who file one** (Brent, 12 Nov 2026: "I
+don't need it") — `hasTimesheets` in `staffConfig.js`; admins approve them in
+Admin as before.
+
 **Cases page, less in the way** (Brent, 6 Nov 2026): a ticked task or a done
 project item is no longer drawn on the Cases page at all (`openTasks` /
 `undoneDue` in `CaseWeek.jsx`) — "done and gone"; the record stays on the

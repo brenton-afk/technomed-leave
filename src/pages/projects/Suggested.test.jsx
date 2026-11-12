@@ -69,7 +69,7 @@ describe('on the Projects page', () => {
     })
     render(<Suggested user={USER} today="2026-11-09" />)
     await waitFor(() => expect(screen.getByText(/In other people's inboxes · Toni 1/)).toBeInTheDocument())
-    expect(screen.getByText(/For you, from email and the portal · 0/)).toBeInTheDocument()
+    expect(screen.getByText(/0 suggested from email and the portal/)).toBeInTheDocument()
     expect(screen.queryByText(/Check the report/)).toBeNull()
     fireEvent.click(screen.getByText(/In other people's inboxes/))
     expect(screen.getByText(/Check the report/)).toBeInTheDocument()

@@ -336,8 +336,11 @@ describe('yours against everybody else’s (Brent, 4 Nov 2026)', () => {
     })
   })
 
-  it('adds to the project chosen on the rail', async () => {
+  it('adds to the project chosen on the rail (desktop sidebar)', async () => {
+    const was = window.matchMedia
+    window.matchMedia = q => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })
     await show()
+    window.matchMedia = was
     const globus = screen.getAllByTitle("Show only this project's tasks")
       .find(b => within(b).queryByText('Globus onboarding'))
     fireEvent.click(globus)

@@ -238,19 +238,17 @@ export default function Workspace({
     background: on ? colour.navy : colour.surface, color: on ? 'white' : colour.inkMuted, ...extra
   })
 
+  // The four numbers, small (Brent, 12 Nov 2026: "the massive boxes at the top
+  // are unnecessary"). Views down the side on a desktop; chips in the Filter
+  // on a phone. Still filters.
   const statTiles = (
-    <div style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(4, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))', gap: space.sm, marginBottom: space.md }}>
+    <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', marginBottom: space.sm }}>
       {stats.map(([key, n, label, tone]) => (
         <button key={key} type="button" aria-pressed={stat === key}
           onClick={() => setStat(stat === key ? '' : key)}
-          style={{
-            textAlign: 'left', cursor: 'pointer', padding: `${space.sm}px ${space.md}px`,
-            background: colour.surface, borderRadius: radius.card,
-            border: `1px solid ${stat === key ? colour.accent : colour.line}`,
-            boxShadow: stat === key ? `inset 0 0 0 1px ${colour.accent}` : 'none'
-          }}>
-          <span style={{ ...text('display'), color: n ? tone : colour.inkFainter, display: 'block', fontVariantNumeric: 'tabular-nums' }}>{n}</span>
-          <span style={{ ...text('caption'), color: colour.inkFaint }}>{label}</span>
+          style={chip(stat === key)}>
+          <span style={{ fontWeight: 700, color: stat === key ? 'white' : n ? tone : colour.inkFainter, fontVariantNumeric: 'tabular-nums' }}>{n}</span>
+          <span>{label}</span>
         </button>
       ))}
     </div>
@@ -297,115 +295,177 @@ export default function Workspace({
     </div>
   )
 
-  const filtering = division !== 'All' || onlyMine || showDone || stat
-  const filters = (
-    <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center', marginBottom: space.md }}>
-      {!wide && (
-        <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(v => !v)} style={chip(filtersOpen || filtering)}>
-          Filter{filtering ? ' · on' : ''}
-        </button>
-      )}
-      {(wide || filtersOpen) && <>
+  const filtering = onlyMine || showDone || stat
+  const select = { ...text('caption'), fontSize: 16, minHeight: 34, padding: '0 8px', border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink }
+  const viewTabs = (
+    <div role="tablist" aria-label="View" style={{ display: 'inline-flex', background: colour.lineSoft, borderRadius: radius.control, padding: 3 }}>
+      {[['list', 'List'], ...(wide ? [['division', 'By division']] : []), ['board', 'Board'], ['people', 'People']].map(([key, label]) => (
+        <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
+          style={{
+            ...text('caption'), fontWeight: view === key ? 700 : 400, minHeight: 30, padding: `0 ${space.md}px`,
+            border: 'none', borderRadius: radius.control - 2, cursor: 'pointer',
+            background: view === key ? colour.surface : 'transparent', color: view === key ? colour.ink : colour.inkFaint
+          }}>{label}</button>
+      ))}
+    </div>
+  )
+  const divisionChips = (
+    <div style={{ display: 'flex', gap: space.xs, overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2, marginBottom: space.sm }}>
       {['All', ...DIVISIONS].map(d => (
-        <button key={d} type="button" aria-pressed={division === d} onClick={() => setDivision(d)} style={chip(division === d)}>
+        <button key={d} type="button" aria-pressed={division === d} onClick={() => setDivision(d)} style={{ ...chip(division === d), flexShrink: 0 }}>
           {d !== 'All' && <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: radius.pill, background: tintOfDivision(d).solid }} />}
           {d === 'All' ? 'All divisions' : d}
         </button>
       ))}
-      <span style={{ flex: '1 0 8px' }} />
-      <label style={{ ...text('caption'), color: colour.inkMuted, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 34 }}>
-        <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} style={{ width: 18, height: 18, fontSize: 16 }} />
-        Only my tasks
-      </label>
+    </div>
+  )
+  const filters = wide ? (
+    <div data-toolbar style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center', marginBottom: space.md }}>
+      <select value={division} onChange={e => setDivision(e.target.value)} aria-label="Division" style={select}>
+        <option value="All">All divisions</option>
+        {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+      </select>
+      {view === 'list' && (
+        <select value={groupBy} onChange={e => setGroupBy(e.target.value)} aria-label="Group by" style={select}>
+          <option value="project">Group: Project</option>
+          <option value="distributor">Group: Distributor</option>
+        </select>
+      )}
       {view !== 'board' && (
         <label style={{ ...text('caption'), color: colour.inkMuted, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 34 }}>
           <input type="checkbox" checked={showDone} onChange={e => setShowDone(e.target.checked)} style={{ width: 18, height: 18, fontSize: 16 }} />
           Show done
         </label>
       )}
-      </>}
-      {!wide && <span style={{ flex: '1 0 8px' }} />}
-      <div role="tablist" aria-label="View" style={{ display: 'inline-flex', background: colour.lineSoft, borderRadius: radius.control, padding: 3 }}>
-        {[['list', wide ? 'Table' : 'List'], ['board', 'Board'], ['people', 'People']].map(([key, label]) => (
-          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
-            style={{
-              ...text('caption'), fontWeight: view === key ? 700 : 400, minHeight: 30, padding: `0 ${space.md}px`,
-              border: 'none', borderRadius: radius.control - 2, cursor: 'pointer',
-              background: view === key ? colour.surface : 'transparent', color: view === key ? colour.ink : colour.inkFaint
-            }}>{label}</button>
-        ))}
+      <span style={{ flex: '1 0 8px' }} />
+      {viewTabs}
+    </div>
+  ) : (
+    <div style={{ marginBottom: space.md }}>
+      {divisionChips}
+      <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(v => !v)} style={chip(filtersOpen || filtering)}>
+          Filter{filtering ? ' · on' : ''}
+        </button>
+        <span style={{ flex: '1 0 8px' }} />
+        {viewTabs}
       </div>
+      {filtersOpen && (
+        <div style={{ marginTop: space.sm }}>
+          {statTiles}
+          <label style={{ ...text('caption'), color: colour.inkMuted, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 34, marginRight: space.md }}>
+            <input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} style={{ width: 18, height: 18, fontSize: 16 }} />
+            Only my tasks
+          </label>
+          {view !== 'board' && (
+            <label style={{ ...text('caption'), color: colour.inkMuted, display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 34 }}>
+              <input type="checkbox" checked={showDone} onChange={e => setShowDone(e.target.checked)} style={{ width: 18, height: 18, fontSize: 16 }} />
+              Show done
+            </label>
+          )}
+        </div>
+      )}
     </div>
   )
 
-  const railRow = p => {
-    const progress = progressOf(p, items)
-    const openHere = tasksOf(p.id, live).filter(t => t.status !== 'done')
-    const mineHere = openHere.filter(isMine).length
-    const on = projectId === p.id
-    const tint = p.division ? tintOfDivision(p.division).solid : tintOf(p.colour).solid
-    return (
-      <div key={p.id} style={{
-        display: 'flex', alignItems: 'center', gap: space.sm, borderRadius: radius.control,
-        background: on ? colour.lineSoft : 'transparent', padding: `6px ${space.sm}px`,
-        minWidth: wide ? 0 : 220, flexShrink: 0
-      }}>
-        <button type="button" aria-pressed={on} onClick={() => setProjectId(on ? '' : p.id)}
-          title="Show only this project's tasks"
-          style={{ display: 'flex', alignItems: 'center', gap: space.sm, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-          <Ring fraction={progress.fraction} tint={tint} />
-          <span style={{ minWidth: 0, flex: 1 }}>
-            <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: p.archived ? 0.6 : 1 }}>{p.name}</span>
-            <span style={{ ...text('caption'), color: colour.inkFaint, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {p.private ? '🔒 Private · ' : ''}{p.fixed ? 'Anything without a project' : (p.division || 'Whole business')}
-              {!p.fixed && p.owner && p.owner !== 'Unassigned' ? ` · ${me && p.owner === me.name ? 'you lead' : firstOf(p.owner)}` : ''}
-              {mineHere ? <span style={{ color: colour.accentDeep, fontWeight: 600 }}>{` · ${mineHere} yours`}</span> : null}
-            </span>
-          </span>
-          <span style={{ ...text('caption'), color: colour.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{progress.done}/{progress.total}</span>
-        </button>
-        <button type="button" onClick={() => onOpenProject(p)} aria-label={`Open the ${p.name} board`}
-          style={{ ...text('caption'), color: colour.inkFaint, background: 'none', border: `1px solid ${colour.line}`, borderRadius: radius.control, minHeight: 30, padding: `0 ${space.sm}px`, cursor: 'pointer', flexShrink: 0 }}>
-          Board
-        </button>
-      </div>
-    )
-  }
+  const lateIn = id => tasksOf(id, live).filter(isOverdue).length
+  const openIn = id => tasksOf(id, live).filter(t => t.status !== 'done').length
+
+  // ── Desktop: a slim sidebar — views, then projects (Brent, 12 Nov 2026) ──
+  const sideBtn = on => ({
+    ...text('body'), display: 'flex', alignItems: 'center', gap: space.sm, width: '100%', textAlign: 'left',
+    padding: `6px ${space.sm}px`, borderRadius: radius.control, border: 'none', cursor: 'pointer',
+    background: on ? colour.lineSoft : 'transparent', color: colour.ink, fontWeight: on ? 700 : 400
+  })
+  const count = (n, tone) => <span style={{ ...text('caption'), marginLeft: 'auto', color: tone || colour.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{n}</span>
+  const sideHead = label => <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFainter, padding: `${space.sm}px ${space.sm}px 2px` }}>{label}</div>
 
   const rail = (
-    <nav aria-label="Projects" style={wide
-      ? { background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, padding: space.xs, position: 'sticky', top: 72, alignSelf: 'start' }
-      : { marginBottom: space.md }}>
-      {wide && <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFainter, padding: `${space.sm}px ${space.sm}px ${space.xs}px` }}>Projects</div>}
-      <div style={wide ? {} : { display: 'flex', gap: space.xs, overflowX: 'auto', overflowY: 'hidden', paddingBottom: 4 }}>
-        <button type="button" aria-pressed={!projectId} onClick={() => setProjectId('')}
-          style={{
-            ...text('bodyStrong'), display: 'flex', alignItems: 'center', gap: space.sm, width: wide ? '100%' : 'auto', flexShrink: 0,
-            padding: `8px ${space.sm}px`, borderRadius: radius.control, border: 'none', cursor: 'pointer', textAlign: 'left',
-            background: !projectId ? colour.lineSoft : 'transparent', color: colour.ink
-          }}>
-          Everything
-          <span style={{ ...text('caption'), color: colour.inkFaint, marginLeft: 'auto' }}>{open.length}</span>
+    <nav aria-label="Projects" style={{ position: 'sticky', top: 72, alignSelf: 'start' }}>
+      {sideHead('Views')}
+      <button type="button" aria-pressed={!stat && !projectId} onClick={() => { setStat(''); setProjectId('') }} style={sideBtn(!stat && !projectId)}>
+        All tasks{count(open.length)}
+      </button>
+      {stats.map(([key, n, label, tone]) => (
+        <button key={key} type="button" aria-pressed={stat === key} onClick={() => setStat(stat === key ? '' : key)} style={sideBtn(stat === key)}>
+          {label === 'My open tasks' ? 'Mine' : label === 'Due in the next 7 days' ? 'Due this week' : label === 'Nobody has it yet' ? 'Unassigned' : label}
+          {count(n, key === 'overdue' && n ? colour.danger : undefined)}
         </button>
-        {railProjects.map(railRow)}
-      </div>
+      ))}
+      {sideHead('Projects')}
+      {railProjects.map(p => {
+        const on = projectId === p.id
+        const tint = p.division ? tintOfDivision(p.division).solid : tintOf(p.colour).solid
+        return (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center' }}>
+            <button type="button" aria-pressed={on} onClick={() => setProjectId(on ? '' : p.id)} title="Show only this project's tasks"
+              style={{ ...sideBtn(on), flex: 1, minWidth: 0, opacity: p.archived ? 0.6 : 1 }}>
+              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: radius.pill, background: tint, flexShrink: 0 }} />
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.private ? '🔒 ' : ''}{p.name}</span>
+              {count(openIn(p.id), lateIn(p.id) ? colour.danger : undefined)}
+            </button>
+            <button type="button" onClick={() => onOpenProject(p)} aria-label={`Open the ${p.name} board`} title="Open its board"
+              style={{ ...text('caption'), color: colour.inkFaint, background: 'none', border: 'none', minHeight: 30, padding: `0 6px`, cursor: 'pointer' }}>›</button>
+          </div>
+        )
+      })}
       {making
         ? <div style={{ padding: space.xs }}>
             <NewProject busy={busyProject} division={division === 'All' ? '' : division} canPrivate={canPrivate}
               onCancel={() => setMaking(false)}
               onCreate={fields => { onCreateProject(fields); setMaking(false) }} />
           </div>
-        : <button type="button" onClick={() => setMaking(true)}
-            style={{
-              ...text('bodyStrong'), width: '100%', minHeight: 40, marginTop: space.xs, cursor: 'pointer',
-              border: `1px dashed ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.inkMuted
-            }}>+ New project</button>}
+        : <button type="button" onClick={() => setMaking(true)} style={{ ...sideBtn(false), color: colour.accentDeep }}>+ New project</button>}
       {archivedCount > 0 && (
-        <button type="button" onClick={() => setShowArchived(v => !v)}
-          style={{ ...text('caption'), width: '100%', padding: space.sm, cursor: 'pointer', background: 'none', border: 'none', color: colour.inkFaint }}>
+        <button type="button" onClick={() => setShowArchived(v => !v)} style={{ ...sideBtn(false), ...text('caption'), color: colour.inkFaint }}>
           {showArchived ? 'Hide archived' : `Show ${archivedCount} archived`}
         </button>
       )}
+    </nav>
+  )
+
+  // ── Phone: the projects by division, each a row with its ring (mock-up D) ──
+  const phoneProjects = (
+    <nav aria-label="Projects" style={{ marginBottom: space.md }}>
+      {(division === 'All' ? [...DIVISIONS, ''] : [division]).map(d => {
+        const here = railProjects.filter(p => (d ? p.division === d : !p.division))
+        if (!here.length) return null
+        return (
+          <section key={d || 'none'} data-division-group={d || 'none'} style={{ marginBottom: space.sm }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.xs, padding: `${space.xs}px ${space.xs}px` }}>
+              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: radius.pill, background: d ? tintOfDivision(d).solid : colour.inkFainter }} />
+              <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1 }}>{d || 'Whole business'}</span>
+              <span style={{ ...text('caption'), color: colour.inkFaint }}>{here.reduce((n, p) => n + openIn(p.id), 0)} open</span>
+            </div>
+            <div style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden' }}>
+              {here.map((p, i) => {
+                const progress = progressOf(p, items)
+                const tint = p.division ? tintOfDivision(p.division).solid : tintOf(p.colour).solid
+                return (
+                  <button key={p.id} type="button" onClick={() => onOpenProject(p)} aria-label={`Open the ${p.name} board`}
+                    style={{ display: 'flex', alignItems: 'center', gap: space.sm, width: '100%', textAlign: 'left', cursor: 'pointer', background: 'none', border: 'none',
+                      borderTop: i ? `1px solid ${colour.lineSoft}` : 'none', padding: `${space.sm}px ${space.md}px`, minHeight: 56 }}>
+                    <Ring fraction={progress.fraction} tint={tint} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block' }}>{p.private ? '🔒 ' : ''}{p.name}</span>
+                      <span style={{ ...text('caption'), color: colour.inkFaint }}>
+                        {openIn(p.id)} open{lateIn(p.id) ? <span style={{ color: colour.danger }}> · {lateIn(p.id)} late</span> : null}
+                        {!p.fixed && p.owner && p.owner !== 'Unassigned' ? ` · ${firstOf(p.owner)}` : ''}
+                      </span>
+                    </span>
+                    <span style={{ ...text('caption'), color: colour.inkFaint, fontVariantNumeric: 'tabular-nums' }}>{progress.done}/{progress.total}</span>
+                    <span aria-hidden="true" style={{ color: colour.inkFaint }}>›</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
+      {making
+        ? <NewProject busy={busyProject} division={division === 'All' ? '' : division} canPrivate={canPrivate}
+            onCancel={() => setMaking(false)} onCreate={fields => { onCreateProject(fields); setMaking(false) }} />
+        : <button type="button" onClick={() => setMaking(true)} style={{ ...text('bodyStrong'), background: 'none', border: 'none', color: colour.accentDeep, padding: space.xs, cursor: 'pointer' }}>+ New project</button>}
     </nav>
   )
 
@@ -536,8 +596,9 @@ export default function Workspace({
   }
 
   const listView = () => {
-    if (groupBy === 'distributor') return <>{groupPicker}{distributorView()}</>
-    return <>{groupPicker}{projectListView()}</>
+    const picker = wide ? null : groupPicker
+    if (groupBy === 'distributor') return <>{picker}{distributorView()}</>
+    return <>{picker}{projectListView()}</>
   }
 
   const projectListView = () => {
@@ -567,6 +628,61 @@ export default function Workspace({
       )
     })
   }
+
+  // ── By division (mock-up B): the whole business at a glance ──
+  const divisionView = () => (
+    <div data-division-lanes style={{ display: 'grid', gridTemplateColumns: `repeat(${DIVISIONS.length}, minmax(0, 1fr))`, gap: space.md, alignItems: 'start' }}>
+      {DIVISIONS.map(d => {
+        const tint = tintOfDivision(d)
+        const inLane = shownOpen.filter(t => divisionFor(t) === d)
+        const late = inLane.filter(isOverdue).length
+        const groups = orderedProjects(all, items)
+          .map(p => [p, inLane.filter(t => projectIdOf(t) === p.id).sort(order)])
+          .filter(([, rows]) => rows.length)
+        return (
+          <section key={d} data-lane={d} style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: space.xs, paddingBottom: space.xs, marginBottom: space.sm, borderBottom: `3px solid ${tint.solid}` }}>
+              <span style={{ ...text('heading'), color: colour.ink }}>{d}</span>
+              <span style={{ ...text('caption'), color: colour.inkFaint, marginLeft: 'auto' }}>
+                {inLane.filter(t => t.status !== 'done').length} open{late ? <span style={{ color: colour.danger }}> · {late} late</span> : null}
+              </span>
+            </div>
+            {!groups.length && <div style={{ ...text('caption'), color: colour.inkFainter }}>Nothing open</div>}
+            {groups.map(([p, rows]) => {
+              const progress = progressOf(p, items)
+              return (
+                <div key={p.id} style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.control, padding: space.sm, marginBottom: space.sm }}>
+                  <button type="button" onClick={() => onOpenProject(p)} style={{ display: 'flex', width: '100%', gap: space.xs, alignItems: 'baseline', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0 }}>{p.name}</span>
+                    <span style={{ ...text('caption'), color: colour.inkFaint }}>{progress.done}/{progress.total}</span>
+                  </button>
+                  <div aria-hidden="true" style={{ height: 4, borderRadius: radius.pill, background: colour.lineSoft, margin: '6px 0' }}>
+                    <div style={{ width: `${progress.fraction * 100}%`, height: 4, borderRadius: radius.pill, background: tint.solid }} />
+                  </div>
+                  {rows.slice(0, 3).map(t => {
+                    const due = dueState(t.due_date, today)
+                    return (
+                      <button key={t.id} type="button" onClick={() => onOpenTask(t)}
+                        style={{ display: 'flex', gap: space.xs, width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '3px 0', cursor: 'pointer', alignItems: 'baseline' }}>
+                        <span style={{ ...text('caption'), color: colour.ink, flex: 1, minWidth: 0, textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>
+                          {t.task}<span style={{ color: colour.inkFaint }}> · {isMine(t) ? 'you' : t.assignee && t.assignee !== 'Unassigned' ? firstOf(t.assignee) : '?'}</span>
+                        </span>
+                        {due && t.status !== 'done' && <span style={{ ...text('caption'), color: DUE_TONES[due.tone].colour, fontWeight: due.tone !== 'calm' ? 700 : 400, flexShrink: 0 }}>{due.label}</span>}
+                      </button>
+                    )
+                  })}
+                  {rows.length > 3 && (
+                    <button type="button" onClick={() => setProjectId(p.id) || setView('list')}
+                      style={{ ...text('caption'), color: colour.inkFaint, background: 'none', border: 'none', padding: '3px 0', cursor: 'pointer' }}>+ {rows.length - 3} more</button>
+                  )}
+                </div>
+              )
+            })}
+          </section>
+        )
+      })}
+    </div>
+  )
 
   const boardView = () => {
     const columns = [['open', 'To do'], ['in_progress', 'In progress'], ['done', 'Done']]
@@ -696,19 +812,35 @@ export default function Workspace({
     )
   }
 
+  const content = (
+    <>
+      {view === 'list' && listView()}
+      {view === 'division' && wide && divisionView()}
+      {view === 'board' && boardView()}
+      {view === 'people' && peopleView()}
+    </>
+  )
+
+  if (!wide) {
+    return (
+      <div>
+        {!phoneTabGiven && phoneTabs}
+        {filters}
+        {phoneProjects}
+        <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFainter, padding: `0 ${space.xs}px ${space.xs}px` }}>Tasks</div>
+        {quickAdd}
+        {content}
+      </div>
+    )
+  }
+
   return (
-    <div>
-      {!phoneTabGiven && phoneTabs}
-      {(wide || filtersOpen) && statTiles}
-      {quickAdd}
-      {filters}
-      <div style={wide ? { display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', gap: space.md, alignItems: 'start' } : {}}>
-        {rail}
-        <div style={{ minWidth: 0 }}>
-          {view === 'list' && listView()}
-          {view === 'board' && boardView()}
-          {view === 'people' && peopleView()}
-        </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: space.lg, alignItems: 'start' }}>
+      {rail}
+      <div style={{ minWidth: 0 }}>
+        {quickAdd}
+        {filters}
+        {content}
       </div>
     </div>
   )

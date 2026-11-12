@@ -166,11 +166,12 @@ describe('hub contents (the agreed structure)', () => {
     }
   })
 
-  it('disables Timesheets for someone whose role has none', async () => {
+  it('leaves Timesheets off Me for someone who does not file one', async () => {
     signIn(ADMIN) // hasTimesheets: false
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /^Me$/ }))
-    await waitFor(() => expect(screen.getByText('Not required for your role')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Leave')).toBeInTheDocument())
+    expect(screen.queryByText('Timesheets')).not.toBeInTheDocument()
   })
 
   it('navigates into a section and back out again', async () => {

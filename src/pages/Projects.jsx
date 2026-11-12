@@ -509,6 +509,12 @@ export default function Projects({ user, onBack }) {
     .filter(it => !it.archived)
     .filter(it => me ? isSameStaff(it.assignee, me) : it.assignee === user?.name)
   const mineCount = mine.filter(it => it.status !== 'done').length
+  // The numbers that were four big tiles, as one line in the band.
+  const openAll = (worklist || []).filter(t => t && t.status !== 'done' && !t.archived)
+  const lateAll = openAll.filter(t => t.due_date && t.due_date < today).length
+  const weekAhead = (() => { const d = new Date(`${today}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 7); return d.toISOString().slice(0, 10) })()
+  const soonAll = openAll.filter(t => t.due_date && t.due_date >= today && t.due_date <= weekAhead).length
+  const summaryLine = `${openAll.length} open${lateAll ? ` · ${lateAll} overdue` : ''}${soonAll ? ` · ${soonAll} due this week` : ''}${mineCount ? ` · ${mineCount} yours` : ''}`
 
   // ── What the render needs ──
 
@@ -531,8 +537,23 @@ export default function Projects({ user, onBack }) {
     <Page>
       {/* A phone gets the short band — the page under it is the list (Brent,
           6 Nov 2026: "way too busy"). */}
-      <Header eyebrow={wide ? 'Team' : undefined} title="Projects" compact={!wide}
-        subtitle={board ? board.name : wide ? 'Projects, tasks and what was agreed' : undefined}
+      {/* One slim band (Brent, 12 Nov 2026: "the massive boxes at the top are
+          unnecessary"): the numbers as one line, and on a desktop the Tasks |
+          Meeting switch in the band itself. */}
+      <Header title="Projects" compact
+        subtitle={board ? board.name : summaryLine}
+        right={!board && wide ? (
+          <div role="tablist" aria-label="Projects" style={{ display: 'flex', gap: 3, background: colour.navySoft, borderRadius: radius.control, padding: 3 }}>
+            {[['projects', 'Tasks'], ['capture', 'Meeting']].map(([key, label]) => (
+              <button key={key} role="tab" aria-selected={at === key} onClick={() => setView(key)}
+                style={{
+                  ...text('caption'), fontWeight: 700, minHeight: 32, padding: `0 ${space.md}px`, border: 'none',
+                  borderRadius: radius.control - 2, cursor: 'pointer',
+                  background: at === key ? colour.surface : 'transparent', color: at === key ? colour.navy : colour.surface
+                }}>{label}</button>
+            ))}
+          </div>
+        ) : null}
         onBack={board ? () => setOpenId(null) : onBack} />
 
       <div className="tm-measure" style={{ padding: 16 }}>
@@ -543,55 +564,28 @@ export default function Projects({ user, onBack }) {
         )}
 
         {at === 'capture' && (<>
-        {/* The live meeting — suggestions from what is said, accepted with a
-            tap (Brent, 11 Nov 2026). See projects/LiveMeeting.jsx. */}
-        <button type="button" data-open-live-meeting onClick={() => setShowLive(true)}
-          style={{
-            ...text('bodyStrong'), width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: space.sm,
-            background: colour.navy, border: 'none', borderRadius: radius.card,
-            padding: space.md, marginBottom: space.sm, cursor: 'pointer', color: colour.surface
-          }}>
-          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: radius.pill, background: colour.danger, flexShrink: 0 }} />
-          <span style={{ flex: 1 }}>
-            Live meeting
-            <span style={{ ...text('caption'), display: 'block', color: colour.accentSoft, fontWeight: 400 }}>
-              Record the room — new tasks, done and changed appear for everyone to accept
-            </span>
-          </span>
-          <span aria-hidden="true">›</span>
-        </button>
-        {/* The next meeting's agenda — live, read by everyone, written by
-            Erin (Brent, 11 Nov 2026). See projects/Agenda.jsx. */}
-        <button type="button" data-open-agenda onClick={() => setShowAgenda(true)}
-          style={{
-            ...text('bodyStrong'), width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: space.sm,
-            background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card,
-            padding: space.md, marginBottom: space.sm, cursor: 'pointer', color: colour.ink
-          }}>
-          <span style={{ flex: 1 }}>
-            Next meeting agenda
-            <span style={{ ...text('caption'), display: 'block', color: colour.inkFaint, fontWeight: 400 }}>
-              The live agenda — everyone can see it, Erin keeps it up to date
-            </span>
-          </span>
-          <span aria-hidden="true" style={{ color: colour.inkFaint }}>›</span>
-        </button>
-        {/* Before the next meeting: what was done since the last one (Brent,
-            11 Nov 2026). See projects/MeetingReport.jsx. */}
-        <button type="button" data-open-meeting-report onClick={() => setShowReport(true)}
-          style={{
-            ...text('bodyStrong'), width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: space.sm,
-            background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card,
-            padding: space.md, marginBottom: space.md, cursor: 'pointer', color: colour.ink
-          }}>
-          <span style={{ flex: 1 }}>
-            Meeting report
-            <span style={{ ...text('caption'), display: 'block', color: colour.inkFaint, fontWeight: 400 }}>
-              Action items done and still outstanding since a meeting
-            </span>
-          </span>
-          <span aria-hidden="true" style={{ color: colour.inkFaint }}>›</span>
-        </button>
+        {/* The meeting, as one short list (Brent, 12 Nov 2026: no big boxes). */}
+        <div data-meeting-links style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden', marginBottom: space.md }}>
+          {[
+            ['live', 'Live meeting', 'Record the room — tasks to accept as you talk', () => setShowLive(true), colour.dangerSoft, colour.danger, '●', { 'data-open-live-meeting': true }],
+            ['agenda', 'Next meeting agenda', 'Built with Claude from what is not yet done', () => setShowAgenda(true), colour.accentSoft, colour.accentDeep, '≡', { 'data-open-agenda': true }],
+            ['report', 'Report since a meeting', 'Done and still outstanding — copy, Word or print', () => setShowReport(true), colour.lineSoft, colour.navy, '✓', { 'data-open-meeting-report': true }]
+          ].map(([key, title, sub, go, wash, ink, mark, attrs], i) => (
+            <button key={key} type="button" onClick={go} {...attrs}
+              style={{
+                width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: space.sm, cursor: 'pointer',
+                background: 'transparent', border: 'none', borderTop: i ? `1px solid ${colour.lineSoft}` : 'none',
+                padding: `${space.sm}px ${space.md}px`, minHeight: 58, color: colour.ink
+              }}>
+              <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: radius.control, background: wash, color: ink, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, ...text('bodyStrong') }}>{mark}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ ...text('bodyStrong'), display: 'block' }}>{title}</span>
+                <span style={{ ...text('caption'), color: colour.inkFaint }}>{sub}</span>
+              </span>
+              <span aria-hidden="true" style={{ color: colour.inkFaint }}>›</span>
+            </button>
+          ))}
+        </div>
         {/* Recording panel */}
         {(phase === 'idle' || phase === 'recording') && (
           <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid rgba(26,43,74,0.08)' }}>
@@ -832,38 +826,18 @@ export default function Projects({ user, onBack }) {
         {/* On a phone, one row of three: your list, the projects, a meeting.
             It used to be two rows of tabs, one inside the other. */}
         {!board && !wide && (
-          <div role="tablist" aria-label="Projects" style={{ display: 'flex', gap: 4, background: colour.lineSoft, borderRadius: radius.control, padding: 4, marginBottom: space.md }}>
+          <div role="tablist" aria-label="Projects" style={{ display: 'flex', borderBottom: `1px solid ${colour.line}`, margin: `-16px -16px ${space.md}px`, background: colour.surface }}>
             {[['todo', 'My To Do'], ['projects', 'Projects'], ['capture', 'Meeting']].map(([key, label]) => {
               const on = key === 'capture' ? at === 'capture' : at === 'projects' && phoneTab === key
               return (
                 <button key={key} type="button" role="tab" aria-selected={on}
                   onClick={() => { if (key === 'capture') setView('capture'); else { setView('projects'); choosePhoneTab(key) } }}
                   style={{
-                    ...text('bodyStrong'), flex: 1, minHeight: 44, border: 'none', borderRadius: radius.control - 2, cursor: 'pointer',
-                    background: on ? colour.surface : 'transparent', color: on ? colour.ink : colour.inkFaint
+                    ...text('bodyStrong'), flex: 1, minHeight: 46, border: 'none', cursor: 'pointer', background: 'transparent',
+                    color: on ? colour.ink : colour.inkFaint, borderBottom: `3px solid ${on ? colour.accent : 'transparent'}`
                   }}>{label}</button>
               )
             })}
-          </div>
-        )}
-
-        {!board && wide && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: space.md }} role="tablist">
-            {[
-              ['projects', `Projects and tasks${mineCount ? ` · ${mineCount} yours` : ''}`],
-              ['capture', 'Capture a meeting']
-            ].map(([key, label]) => (
-              <button key={key} role="tab" aria-selected={at === key}
-                onClick={() => setView(key)}
-                style={{
-                  ...text('bodyStrong'),
-                  flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 38,
-                  borderRadius: radius.control, cursor: 'pointer',
-                  border: at === key ? 'none' : `1px solid ${colour.line}`,
-                  background: at === key ? colour.navy : colour.surface,
-                  color: at === key ? 'white' : colour.inkFaint
-                }}>{label}</button>
-            ))}
           </div>
         )}
 
