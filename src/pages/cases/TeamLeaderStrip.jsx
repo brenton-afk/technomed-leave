@@ -38,7 +38,7 @@ function shortDate(day) {
 // `sheetOnly` (Brent, 7 Nov 2026: "make the team leader tile at the top
 // editable"): just the sheet, already open — for the "leading" tile in the
 // Cases band — closed with `onSheetClose`.
-export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour, day, weekLeader, onChangeWeek, sheetOnly = false, onSheetClose }) {
+export default function TeamLeaderStrip({ leader, away = [], onChange, week, today, hour, day, weekLeader, onChangeWeek, sheetOnly = false, onSheetClose, onOpenGuide }) {
   const monday = weekOf(week) || weekOf(today)
   const [openState, setOpenState] = useState(sheetOnly)
   const open = openState
@@ -271,6 +271,18 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                       ? `Back to the roster — ${(day ? weekLeader : leader).rostered.firstName}`
                       : 'Nobody this turn'}
                 </button>
+                {/* The leader's playbook and run-sheet, with the cases it is
+                    about (Brent, 12 Nov 2026 — it was under Kit). */}
+                {onOpenGuide && (
+                  <button data-open-leader-guide onClick={onOpenGuide}
+                    style={{
+                      width: '100%', minHeight: 44, marginTop: space.sm, cursor: 'pointer',
+                      borderRadius: radius.control, border: `1px solid ${colour.accent}`,
+                      background: colour.accentSoft, ...text('caption'), fontWeight: 700, color: colour.accentDeep
+                    }}>
+                    Team leader guide and run-sheet
+                  </button>
+                )}
               </div>
             </div>
           </div>

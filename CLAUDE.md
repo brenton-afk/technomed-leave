@@ -26,7 +26,7 @@ A mobile-first PWA staff portal for TechnoMed (a Tasmanian surgical device distr
 
 ### Navigation is state, not routes
 
-`src/App.jsx` holds `{tab, sub}` in state — no router, and `react-router-dom` is no longer imported. Five tabs (`today`, `scan`, `cases`, `me`, `admin`), because a bottom bar stops being scannable past about five; `admin` is filtered out for non-admins. A tab with no `sub` renders its **hub**; a `sub` renders one screen.
+`src/App.jsx` holds `{tab, sub}` in state — no router, and `react-router-dom` is no longer imported. **Six tabs since 12 Nov 2026 (Brent): Cases · Scan · Projects · Kit · Resources · Me.** Projects and Resources have their own tabs; **Kit is only kit** (Kit room, Stock take, Theatre guides); **Team leader is under Cases** (`{tab:'cases', sub:'teamlead'}`, opened from the "who's leading" sheet — `onOpenGuide` on `TeamLeaderStrip`); **Messages is a card at the top of Me** (`{tab:'me', sub:'messages'}`, the unread badge on the Me tab) until it has its own app. `movedTarget` sends links written to the old places to the new ones (applied in `navigate` and `renderTarget`). Checked in a real 360px render: six tabs, 60px each, no label clipped. Admin is reached from Me. A tab with no `sub` renders its **hub**; a `sub` renders one screen.
 
 Hubs (`src/pages/Hubs.jsx`) are lists of `NavCard`s, deliberately **not** nested tab bars — two competing "where am I" signals is most of what made the old eight-tab bar feel cluttered. Adding a screen means adding a `NavCard` to a hub plus a `case` in the relevant `switch`.
 

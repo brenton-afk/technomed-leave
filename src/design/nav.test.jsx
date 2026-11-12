@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import App from '../App.jsx'
+import App, { movedTarget } from '../App.jsx'
 import { type, colour } from './tokens.js'
 import * as icons from './icons.jsx'
 
@@ -28,7 +28,9 @@ beforeEach(() => {
 })
 
 describe('bottom navigation', () => {
-  it('shows the same five tabs to everybody', async () => {
+  // Layout of 12 Nov 2026 (Brent): Projects and Resources have their own
+  // tabs, Kit is only kit, Messages is reached from Me until its own app.
+  it('shows the same six tabs to everybody', async () => {
     // Including the admin. Admin used to hold the fifth slot and now lives at
     // the top of Me: five is the limit a bottom bar stays scannable at, an
     // admin is one of two people, and Messages is for all nine several times a
@@ -38,7 +40,7 @@ describe('bottom navigation', () => {
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Cases', 'Scan', 'Messages', 'Kit', 'Me'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Resources', 'Me'])
   })
 
   it('shows a rep the same bar', () => {
@@ -46,7 +48,7 @@ describe('bottom navigation', () => {
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Cases', 'Scan', 'Messages', 'Kit', 'Me'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Resources', 'Me'])
     expect(labels).not.toContain('Admin')
   })
 
@@ -64,19 +66,20 @@ describe('bottom navigation', () => {
     expect(screen.queryByText('Admin portal')).not.toBeInTheDocument()
   })
 
-  it('opens Messages from the bar', async () => {
+  it('opens Messages from Me', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Messages' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Me$/ }))
+    fireEvent.click(await screen.findByText('Messages'))
     // Loaded when opened, so it arrives a moment later. See lazyScreens.jsx.
     expect(await screen.findByText('Channels')).toBeInTheDocument()
   })
 
-  it('never exceeds five tabs — the point of the restructure', () => {
+  it('keeps the bar to six tabs', () => {
     signIn(ADMIN)
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
-    expect(nav.querySelectorAll('button').length).toBeLessThanOrEqual(5)
+    expect(nav.querySelectorAll('button').length).toBeLessThanOrEqual(6)
   })
 
   it('marks the current tab for assistive technology, not just colour', () => {
@@ -91,11 +94,11 @@ describe('bottom navigation', () => {
   it('opens a hub rather than a screen when a section tab is tapped', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Kit$/ }))
     // A hub is a list of cards; these are its contents.
     await waitFor(() => expect(screen.getByText('Kit Room')).toBeInTheDocument())
-    expect(screen.getByText('Resources')).toBeInTheDocument()
     expect(screen.getByText('Stock take')).toBeInTheDocument()
+    expect(screen.getByText('Theatre guides')).toBeInTheDocument()
   })
 
   it('opens straight onto the week, with no Today screen and no hub of cards', async () => {
@@ -114,25 +117,34 @@ describe('bottom navigation', () => {
     expect(screen.queryByRole('tab', { name: 'Team lead' })).not.toBeInTheDocument()
   })
 
-  it('opens the team leader guide from Kit, on the day\'s run-sheet, and back', async () => {
-    signIn(REP)
-    render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
-    fireEvent.click(await screen.findByText('Team leader'))
-    expect(await screen.findByText(/Work down this list through the day/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Back/i }))
-    await waitFor(() => expect(screen.getByText('Kit Room')).toBeInTheDocument())
+  it('sends links written to the old places to the new ones', () => {
+    expect(movedTarget({ tab: 'kit', sub: 'projects' })).toMatchObject({ tab: 'projects', sub: null })
+    expect(movedTarget({ tab: 'kit', sub: 'resources' })).toMatchObject({ tab: 'resources', sub: null })
+    expect(movedTarget({ tab: 'kit', sub: 'teamlead' })).toMatchObject({ tab: 'cases', sub: 'teamlead' })
+    expect(movedTarget({ tab: 'messages' })).toMatchObject({ tab: 'me', sub: 'messages' })
+    expect(movedTarget({ tab: 'kit', sub: 'kitroom' })).toEqual({ tab: 'kit', sub: 'kitroom' })
   })
 })
 
 describe('hub contents (the agreed structure)', () => {
-  it('Kit carries kit, stock, resources and projects', async () => {
+  it('Kit carries only kit: Kit room, Stock take and Theatre guides', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
-    for (const label of ['Kit Room', 'Stock take', 'Resources', 'Projects & actions']) {
+    fireEvent.click(screen.getByRole('button', { name: /^Kit$/ }))
+    for (const label of ['Kit Room', 'Stock take', 'Theatre guides']) {
       await waitFor(() => expect(screen.getByText(label)).toBeInTheDocument())
     }
+    expect(screen.queryByText('Projects & actions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Team leader')).not.toBeInTheDocument()
+  })
+
+  it('gives Projects and Resources their own tabs', async () => {
+    signIn(REP)
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /^Projects$/ }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /^Resources$/ }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Resources' })).toBeInTheDocument())
   })
 
   it('does not keep the calendar in Kit', async () => {
@@ -140,7 +152,7 @@ describe('hub contents (the agreed structure)', () => {
     // were two tabs apart with nothing to say they were the same data.
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Kit$/ }))
     await waitFor(() => expect(screen.getByText('Kit Room')).toBeInTheDocument())
     expect(screen.queryByText('Calendar view')).not.toBeInTheDocument()
   })
@@ -164,7 +176,7 @@ describe('hub contents (the agreed structure)', () => {
   it('navigates into a section and back out again', async () => {
     signIn(REP)
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: /Kit/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Kit$/ }))
     await waitFor(() => expect(screen.getByText('Stock take')).toBeInTheDocument())
 
     fireEvent.click(screen.getByText('Stock take'))

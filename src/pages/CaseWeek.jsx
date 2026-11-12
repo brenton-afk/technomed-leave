@@ -1700,7 +1700,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
         today={today}
         hour={new Date().getHours()}
         sheetOnly={sheetOnly}
-        onSheetClose={onSheetClose} />
+        onSheetClose={onSheetClose}
+        onOpenGuide={onNavigate ? () => onNavigate({ tab: 'cases', sub: 'teamlead' }) : undefined} />
     )
   }
 
@@ -2397,7 +2398,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onOpenPortal={result => {
             setSearching(false)
             if (result.type === 'inbox') { setShowQueue(true); return }
-            if (result.type === 'chat') { onNavigate({ tab: 'messages' }); return }
+            if (result.type === 'chat') { onNavigate({ tab: 'me', sub: 'messages' }); return }
             const scan = result.type === 'usage' ? 'usage' : result.type === 'resupply' ? 'resupply' : result.kind
             if (scan) saveScanKind(scan)
             if (result.type === 'screen') onNavigate(result.to)

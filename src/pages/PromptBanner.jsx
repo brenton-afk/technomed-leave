@@ -60,7 +60,7 @@ export default function PromptBanner({ user, onNavigate }) {
           found.push({
             id: 'actions', tone: 'info',
             text: `${mine.length} action${mine.length === 1 ? '' : 's'} assigned to you`,
-            go: { tab: 'kit', sub: 'projects' }
+            go: { tab: 'projects' }
           })
         }
       } catch { /* same */ }

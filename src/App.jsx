@@ -22,7 +22,7 @@ import PromptBanner from './pages/PromptBanner.jsx'
 import { colour, text, font, radius } from './design/tokens.js'
 import { useIsDesktop } from './design/viewport.js'
 import {
-  IconScan, IconCases, IconKit, IconMe, IconChat,
+  IconScan, IconCases, IconKit, IconMe, IconChat, IconTasks, IconFolder,
   IconStock, IconPayslip, IconLock, IconBack
 } from './design/icons.jsx'
 import { useNewBuild, applyWhenSafe } from './appVersion.js'
@@ -53,8 +53,13 @@ const TABS = [
   // weeks three taps deep inside Kit, next to stock and resources, which is
   // nowhere to put the thing meant to replace the WhatsApp group — nobody goes
   // looking in a kit menu for a conversation.
-  { id: 'messages', label: 'Messages', Icon: IconChat },
+  // Layout of 12 Nov 2026 (Brent): Projects gets its own tab, Kit is only kit
+  // (Kit room, Stock take, Theatre guides), Resources gets its own tab, and
+  // Messages leaves the bar for its own app — until then it is a card at the
+  // top of Me, which carries the unread badge.
+  { id: 'projects', label: 'Projects', Icon: IconTasks },
   { id: 'kit', label: 'Kit', Icon: IconKit },
+  { id: 'resources', label: 'Resources', Icon: IconFolder },
   { id: 'me', label: 'Me', Icon: IconMe }
   // Admin is deliberately not here any more. Five is the limit a bottom bar
   // stays scannable at, an admin is one of two people, and Admin has a card at
@@ -325,7 +330,7 @@ export default function App() {
     // place of whatever tab you tapped, which is the trapped screen again
     // wearing a different hat.
     setSubmitted(null)
-    const next = typeof target === 'string' ? { tab: target, sub: null } : { sub: null, ...target }
+    const next = movedTarget(typeof target === 'string' ? { tab: target, sub: null } : { sub: null, ...target })
     // Asked for on the way in rather than inside, so the portal never renders
     // behind the prompt.
     if (next.tab === 'admin' && !openAdmin()) return
@@ -432,6 +437,9 @@ export default function App() {
 
     const { tab, sub } = renderTarget(nav, user)
 
+    // Team leader lives with the cases it is about (Brent, 12 Nov 2026).
+    if (tab === 'cases' && sub === 'teamlead') return <TeamLeader user={user} onBack={back} />
+
     if (tab === 'cases') {
       // Both readings of the bookings calendar, and the switch between them.
       // The calendar view used to sit in the Kit tab, which is neither where
@@ -447,17 +455,15 @@ export default function App() {
 
     if (tab === 'scan') return <ScanTab user={user} />
 
-    if (tab === 'messages') return <Chat user={user} onRead={unread.refresh} />
+    if (tab === 'projects') return <Projects user={user} />
+
+    if (tab === 'resources') {
+      return <FileBrowser user={user} root="resources" eyebrow="Reference" title="Resources" />
+    }
 
     if (tab === 'kit') {
       switch (sub) {
         case 'kitroom': return <KitRoom user={user} onBack={back} />
-        case 'projects': return <Projects user={user} onBack={back} />
-        // Out of the Cases header (Brent, 4 Nov 2026: "remove the team leader tab
-        // and incorporate that information into kits for now").
-        case 'teamlead': return <TeamLeader user={user} onBack={back} />
-        case 'resources':
-          return <FileBrowser user={user} root="resources" eyebrow="Kit and reference" title="Resources" onBack={back} />
         case 'guides':
           return <TheatreGuides user={user} onBack={back} />
         case 'stock':
@@ -469,6 +475,7 @@ export default function App() {
 
     if (tab === 'me') {
       switch (sub) {
+        case 'messages': return <Chat user={user} onRead={unread.refresh} />
         case 'timesheets': return <Timesheets user={user} onBack={back} />
         case 'leave': return <LeaveForm user={user} onSuccess={setSubmitted} onBack={back} />
         case 'usagefiles':
@@ -485,7 +492,7 @@ export default function App() {
         case 'payslips':
           return <ComingSoonSection eyebrow="Pay" title="Payslips" icon={IconPayslip} onBack={back}
             detail="Pay run history appears here once Xero payslip access is enabled." />
-        default: return <MeHub user={user} onNavigate={navigate} onLogout={handleLogout} treasury={treasuryAllowed} />
+        default: return <MeHub user={user} onNavigate={navigate} onLogout={handleLogout} treasury={treasuryAllowed} unread={unread.count} />
       }
     }
 
@@ -653,7 +660,7 @@ export default function App() {
         {tabs.map(({ id, label, desktopLabel, Icon }) => {
           const active = nav.tab === id
           // Cleared by opening the tab, which is what marks the channel read.
-          const waiting = id === 'messages' && !active ? unread.count : 0
+          const waiting = id === 'me' && nav.sub !== 'messages' ? unread.count : 0
           return (
             <button key={id} onClick={() => navigate({ tab: id })}
               aria-current={active ? 'page' : undefined}
@@ -708,8 +715,20 @@ export default function App() {
 
 // A non-admin who somehow lands on the admin tab falls back to Today rather
 // than a blank screen.
-function renderTarget(nav, user) {
+export function renderTarget(nav, user) {
   if (nav.tab === 'admin' && !user.isAdmin) return { tab: 'cases', sub: null }
+  return movedTarget(nav)
+}
+
+/**
+ * Where a screen lives since the layout of 12 Nov 2026, for links written to
+ * the old places (search, the feed, prompts, a saved tab).
+ */
+export function movedTarget(nav) {
+  if (nav?.tab === 'kit' && nav.sub === 'projects') return { ...nav, tab: 'projects', sub: null }
+  if (nav?.tab === 'kit' && nav.sub === 'resources') return { ...nav, tab: 'resources', sub: null }
+  if (nav?.tab === 'kit' && nav.sub === 'teamlead') return { ...nav, tab: 'cases', sub: 'teamlead' }
+  if (nav?.tab === 'messages') return { ...nav, tab: 'me', sub: 'messages' }
   return nav
 }
 

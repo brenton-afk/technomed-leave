@@ -43,11 +43,11 @@ export const SCREENS = [
   { label: 'Patient history', words: 'patient history previous implants revision', to: { tab: 'me', sub: 'patient' } },
   { label: 'Kit Room', words: 'kit kits room tray trays move loan where', to: { tab: 'kit', sub: 'kitroom' } },
   { label: 'Theatre guides & preference cards', words: 'theatre guide guides preference preferences cards surgeon', to: { tab: 'kit', sub: 'guides' } },
-  { label: 'Resources', words: 'resources documents ifu brochures files', to: { tab: 'kit', sub: 'resources' } },
-  { label: 'Team leader', words: 'team leader run sheet runsheet rota', to: { tab: 'kit', sub: 'teamlead' } },
-  { label: 'Projects & To Do', words: 'projects project tasks to do todo meeting minutes actions', to: { tab: 'kit', sub: 'projects' } },
+  { label: 'Resources', words: 'resources documents ifu brochures files', to: { tab: 'resources' } },
+  { label: 'Team leader', words: 'team leader run sheet runsheet rota', to: { tab: 'cases', sub: 'teamlead' } },
+  { label: 'Projects & To Do', words: 'projects project tasks to do todo meeting minutes actions', to: { tab: 'projects' } },
   { label: 'Stock take', words: 'stock take count', to: { tab: 'kit', sub: 'stock' } },
-  { label: 'Messages', words: 'messages chat', to: { tab: 'messages' } },
+  { label: 'Messages', words: 'messages chat', to: { tab: 'me', sub: 'messages' } },
   { label: 'Notifications', words: 'notifications alerts push', to: { tab: 'me', sub: 'notifications' } },
   { label: 'Admin portal', words: 'admin invoices quotes notices email log approve leave timesheets system xero dropbox', to: { tab: 'admin' }, admin: true }
 ]

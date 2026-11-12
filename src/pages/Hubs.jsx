@@ -4,7 +4,7 @@ import { colour, text, space } from '../design/tokens.js'
 import { mayOpenTimesheets } from '../staffConfig.js'
 import {
   IconKit, IconStock, IconFolder, IconTasks,
-  IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout, IconAdmin, IconChart
+  IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout, IconAdmin, IconChart, IconChat
 } from '../design/icons.jsx'
 
 // ─── Section hubs ─────────────────────────────────────────────────────────────
@@ -13,41 +13,27 @@ import {
 // makes an app feel cluttered.
 
 export function KitHub({ user, onNavigate }) {
+  // Kit is only kit (Brent, 12 Nov 2026): Projects, Resources and Team leader
+  // moved to their own homes — their own tabs, and Cases.
   return (
     <Page>
-      <Header eyebrow="Kit and reference" title="Kit" subtitle="What's where, and everything you need before a list" />
+      <Header eyebrow="Kit" title="Kit" subtitle="What's where, and what to bring" />
       <Body>
-        <SectionLabel style={{ marginTop: 0 }}>Kit and stock</SectionLabel>
         <NavCard icon={IconKit} label="Kit Room" tone="accent"
           detail="What's where, across both hospitals"
           onClick={() => onNavigate({ tab: 'kit', sub: 'kitroom' })} />
         <NavCard icon={IconStock} label="Stock take"
           detail="Not set up yet"
           onClick={() => onNavigate({ tab: 'kit', sub: 'stock' })} />
-
-        <SectionLabel>Reference</SectionLabel>
         <NavCard icon={IconFolder} label="Theatre guides"
-          detail="Field references for the systems we carry"
+          detail="Field references and surgeon preference cards"
           onClick={() => onNavigate({ tab: 'kit', sub: 'guides' })} />
-        <NavCard icon={IconFolder} label="Resources"
-          detail="Surgical templates, techniques, implant codes"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'resources' })} />
-
-        <SectionLabel>Team</SectionLabel>
-        <NavCard icon={IconTasks} label="Team leader"
-          detail="The duty leader's daily playbook and run-sheet"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'teamlead' })} />
-        {/* Messages used to be here. It has its own tab now — a conversation is
-            not something anybody goes looking for in a kit menu. */}
-        <NavCard icon={IconTasks} label="Projects & actions"
-          detail="Meeting notes and the shared worklist"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'projects' })} />
       </Body>
     </Page>
   )
 }
 
-export function MeHub({ user, onNavigate, onLogout, treasury = false }) {
+export function MeHub({ user, onNavigate, onLogout, treasury = false, unread = 0 }) {
   const hasTimesheets = user?.staff?.hasTimesheets === true
   // An admin can open it without being on it — to check it, or to sit with
   // somebody who is stuck. Filing one is a separate question and still theirs
@@ -62,6 +48,11 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false }) {
         subtitle={user?.email}
       />
       <Body>
+        {/* Messages, until it has its own app (Brent, 12 Nov 2026: off the
+            bottom bar). The unread count shows on the Me tab and here. */}
+        <NavCard icon={IconChat} label={unread > 0 ? `Messages · ${unread > 9 ? '9+' : unread} unread` : 'Messages'} tone="accent"
+          detail="Team chats and a thread per booking"
+          onClick={() => onNavigate({ tab: 'me', sub: 'messages' })} />
         {/* Admin moved off the bottom bar to make room for Messages. Five is
             the limit a bottom bar stays scannable at; an admin is one of two
             people and knows where to look, while Messages is for all nine
