@@ -13,7 +13,7 @@ import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import {
   getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees,
-  overlappingXeroLeave, submitToXero
+  overlappingXeroLeave, submitToXero, listLeaveTypes
 } from '../_xeroClient.js'
 import { redis, redisSetBody } from '../_redis.js'
 import {
@@ -322,7 +322,7 @@ async function handleSubmit(req, res, session) {
         ? [`${overflow.excess}h over the ${overflow.limit}h fortnight, but there is no TOIL pay item to bank it in — check with Brent`] : [])
     ],
     toilOverflow: overflow.moved.length ? { excess: overflow.excess, limit: overflow.limit, moved: overflow.moved } : null,
-    leave: { rows: periodLeave.rows, pending: periodLeave.pending, total: periodLeave.total, xeroError: periodLeave.xeroError || undefined },
+    leave: { rows: periodLeave.rows, pending: periodLeave.pending, total: periodLeave.total, notes: periodLeave.notes, source: periodLeave.source, xeroError: periodLeave.xeroError || undefined },
     toilTaken,
     status: 'submitted',
     xero,
@@ -776,14 +776,21 @@ async function leaveFor(person, period, leaveIn = null) {
   const leave = leaveIn || await getAllApplications().catch(() => ({ approved: [], pending: [] }))
   let xero = []
   let xeroError = ''
+  let xeroRead = false
   try {
     const { token, tenantId } = await getXeroToken()
     const employee = await findStaffInXero(token, tenantId, person)
     xero = await overlappingXeroLeave(token, tenantId, employee.EmployeeID, period.start, period.end)
+    // The leave type's name, so "Personal/Carer's Leave" reads as personal leave
+    // whatever the application's title says.
+    const types = await listLeaveTypes(token, tenantId).catch(() => [])
+    const nameOf = new Map(types.map(t => [t.LeaveTypeID, t.Name]))
+    xero = xero.map(x => ({ ...x, typeName: nameOf.get(x.leaveTypeId) || '' }))
+    xeroRead = true
   } catch (err) {
-    xeroError = `Leave entered straight into Xero could not be read (${err.message})`
+    xeroError = `Xero could not be read, so this shows the portal's own leave records (${err.message})`
   }
-  return { ...leaveForPeriod({ leave, xero, email: person.email, days: period.days }), xeroError }
+  return { ...leaveForPeriod({ leave, xero, xeroRead, email: person.email, days: period.days }), xeroError }
 }
 
 const hobartToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())

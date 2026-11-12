@@ -328,6 +328,7 @@ export async function overlappingXeroLeave(token, tenantId, employeeId, startDat
     .map(app => ({
       id: app.LeaveApplicationID,
       title: app.Title || '',
+      leaveTypeId: app.LeaveTypeID || null,
       start: fromXeroDate(app.StartDate),
       end: fromXeroDate(app.EndDate),
       hours: (app.LeavePeriods || []).reduce((s, p) => s + Number(p.NumberOfUnits || 0), 0)

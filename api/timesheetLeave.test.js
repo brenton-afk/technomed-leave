@@ -16,27 +16,48 @@ describe('the rules', () => {
     for (const e of ['erin', 'brenton', 'jeremy']) expect(earnsToil(`${e}@technomed.com.au`), e).toBe(false)
   })
 
-  it('shows portal leave and Xero-only leave by type, and Xero leave the portal already sent only once', () => {
+  it('takes the hours from Xero, never from an old portal copy (Toni, 12 Nov 2026)', () => {
     const leave = {
       approved: [
-        { email: 'aimee@technomed.com.au', leaveType: 'ANNUAL_LEAVE', startDate: '2026-11-03', endDate: '2026-11-04', xero: { ok: true, id: 'x1' } },
-        { email: 'aimee@technomed.com.au', leaveType: 'SICK', startDate: '2026-11-09', endDate: '2026-11-09',
-          hours: [{ date: '2026-11-09', hours: 3.8 }], xero: { ok: false, error: 'refused' } },
-        { email: 'ben@technomed.com.au', leaveType: 'ANNUAL_LEAVE', startDate: '2026-11-03', endDate: '2026-11-03' }
+        // Sent to Xero, then removed there: not counted.
+        { email: 'toni@technomed.com.au', leaveType: 'SICK', startDate: '2026-11-02', endDate: '2026-11-02', xero: { ok: true, id: 'gone' } },
+        // Sent to Xero and still there, but Xero holds 5.5h: Xero's hours.
+        { email: 'toni@technomed.com.au', leaveType: 'SICK', startDate: '2026-11-04', endDate: '2026-11-04', xero: { ok: true, id: 'x4' } },
+        // Never reached Xero: shown and flagged.
+        { email: 'toni@technomed.com.au', leaveType: 'ANNUAL_LEAVE', startDate: '2026-11-05', endDate: '2026-11-05', xero: { ok: false, error: 'refused' } }
       ],
-      pending: [{ email: 'aimee@technomed.com.au', leaveType: 'ANNUAL_LEAVE', startDate: '2026-11-12', endDate: '2026-11-12' }]
+      pending: []
     }
     const xero = [
-      { id: 'x1', title: 'Aimee - Annual Leave', start: '2026-11-03', end: '2026-11-04', hours: 15.2 },
-      { id: 'x2', title: 'Aimee - Annual leave', start: '2026-11-13', end: '2026-11-13', hours: 10.5 }
+      { id: 'x2', title: 'Toni Hoppitt', typeName: "Personal/Carer's Leave", start: '2026-11-02', end: '2026-11-02', hours: 5.5 },
+      { id: 'x0', title: 'Sick', typeName: "Personal/Carer's Leave", start: '2026-11-02', end: '2026-11-02', hours: 0 },
+      { id: 'x4', title: 'Sick', typeName: "Personal/Carer's Leave", start: '2026-11-04', end: '2026-11-04', hours: 5.5 }
     ]
-    const out = leaveForPeriod({ leave, xero, email: 'aimee@technomed.com.au', days: DAYS })
-    const annual = out.rows.find(r => r.type === 'ANNUAL_LEAVE')
-    expect(annual.byDay).toEqual({ '2026-11-03': 7.6, '2026-11-04': 7.6, '2026-11-13': 10.5 })
+    const out = leaveForPeriod({ leave, xero, xeroRead: true, email: 'toni@technomed.com.au', days: DAYS })
     const personal = out.rows.find(r => r.type === 'SICK')
-    expect(personal).toMatchObject({ total: 3.8, inXero: false, notInXero: ['2026-11-09'] })
-    expect(out.pending).toEqual([{ type: 'ANNUAL_LEAVE', label: 'Annual leave', byDay: { '2026-11-12': 7.6 }, total: 7.6 }])
-    expect(out.total).toBe(29.5)
+    expect(personal.byDay).toEqual({ '2026-11-02': 5.5, '2026-11-04': 5.5 })
+    expect(personal.inXero).toBe(true)
+    // Toni's Thursday is 5.5h, not a standard 7.6.
+    expect(out.rows.find(r => r.type === 'ANNUAL_LEAVE')).toMatchObject({ total: 5.5, inXero: false })
+    expect(out.notes.join(' ')).toMatch(/no hours/)
+    expect(out.notes.join(' ')).toMatch(/no longer in Xero/)
+    expect(out.total).toBe(16.5)
+  })
+
+  it('spreads Xero hours over the days the person works, and lists pending apart', () => {
+    const xero = [
+      { id: 'x1', title: 'Aimee - Annual Leave', start: '2026-11-12', end: '2026-11-13', hours: 10.5 }
+    ]
+    const leave = { approved: [], pending: [{ email: 'aimee@technomed.com.au', leaveType: 'ANNUAL_LEAVE', startDate: '2026-11-10', endDate: '2026-11-10' }] }
+    const out = leaveForPeriod({ leave, xero, xeroRead: true, email: 'aimee@technomed.com.au', days: DAYS })
+    expect(out.rows[0].byDay).toEqual({ '2026-11-12': 5.25, '2026-11-13': 5.25 })
+    expect(out.pending[0]).toMatchObject({ total: 7.6 })
+  })
+
+  it('falls back to the portal records only when Xero cannot be read', () => {
+    const leave = { approved: [{ email: 'ben@technomed.com.au', leaveType: 'ANNUAL_LEAVE', startDate: '2026-11-03', endDate: '2026-11-03', xero: { ok: true, id: 'x' } }] }
+    const out = leaveForPeriod({ leave, xero: [], xeroRead: false, email: 'ben@technomed.com.au', days: DAYS })
+    expect(out).toMatchObject({ total: 7.6, source: 'portal' })
   })
 
   it('cleans the TOIL taken row and splits it into runs of days', () => {
@@ -61,6 +82,7 @@ describe('the rules', () => {
 const store = { timesheets: new Map(), leave: new Map(), approved: [], drafts: new Map(), kv: new Map() }
 const xeroCalls = { timesheets: [], leave: [] }
 let toilBalance = 10
+let xeroLeave = []
 
 const key = (email, start) => `${email}|${start}`
 vi.mock('./_redis.js', () => ({
@@ -104,7 +126,8 @@ vi.mock('./_xeroClient.js', () => ({
   findEmployee: vi.fn(async () => ({ EmployeeID: 'e1', FirstName: 'Ben', LastName: 'Cassidy' })),
   matchEmployee: vi.fn(), listEmployees: vi.fn(async () => []),
   leaveBalances: vi.fn(async () => ({ toil: { parts: [{ name: 'TOIL', hours: toilBalance }] }, all: [] })),
-  overlappingXeroLeave: vi.fn(async () => []),
+  overlappingXeroLeave: vi.fn(async () => xeroLeave),
+  listLeaveTypes: vi.fn(async () => [{ LeaveTypeID: 'lt-a', Name: 'Annual Leave' }]),
   submitToXero: vi.fn(async args => { xeroCalls.leave.push(args); return { leaveApplicationID: `L${xeroCalls.leave.length}` } })
 }))
 const calendarSyncs = []
@@ -125,6 +148,7 @@ beforeEach(() => {
   store.timesheets.clear(); store.leave.clear(); store.approved.length = 0; store.drafts.clear(); store.kv.clear()
   xeroCalls.timesheets.length = 0; xeroCalls.leave.length = 0; calendarSyncs.length = 0
   toilBalance = 10
+  xeroLeave = []
   who = { email: 'ben@technomed.com.au', name: 'Ben Cassidy' }
 })
 
@@ -137,6 +161,7 @@ describe('submitting and approving', () => {
   it('keeps approved leave with the timesheet and never sends it in the Xero timesheet', async () => {
     store.leave.set('a1', { seeded: true, email: 'ben@technomed.com.au', leaveType: 'ANNUAL_LEAVE',
       startDate: '2026-11-05', endDate: '2026-11-06', xero: { ok: true, id: 'x9' } })
+    xeroLeave = [{ id: 'x9', title: 'Ben', leaveTypeId: 'lt-a', start: '2026-11-05', end: '2026-11-06', hours: 15.2 }]
     const res = await call('submit', 'POST', fortnight())
     expect(res.statusCode).toBe(200)
     expect(res.payload.record.leave.rows[0]).toMatchObject({ type: 'ANNUAL_LEAVE', total: 15.2 })

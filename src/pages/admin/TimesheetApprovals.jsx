@@ -84,6 +84,7 @@ function LeaveBlock({ record, live, busy, onRetry }) {
       {(record.leave?.pending || []).length > 0 && (
         <div style={{ fontSize: 11, color: MUTED }}>Waiting for approval when submitted: {record.leave.pending.map(p => `${p.label} ${p.total}h`).join(' · ')}</div>
       )}
+      {(record.leave?.notes || []).map((n, i) => <div key={i} style={{ fontSize: 11, color: MUTED }}>{n}</div>)}
       {record.leave?.xeroError && <div style={{ fontSize: 11, color: '#8a5a00' }}>{record.leave.xeroError}</div>}
       {changed && (
         <div data-leave-changed style={{ fontSize: 11.5, color: '#8a5a00', marginTop: 4 }}>

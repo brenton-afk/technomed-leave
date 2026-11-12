@@ -823,6 +823,11 @@ export default function Timesheets({ user, onBack }) {
             Waiting for approval, not counted yet: {periodLeave.pending.map(p => `${p.label} ${p.total}h`).join(' · ')}
           </div>
         )}
+        {[...(periodLeave.notes || []), ...(periodLeave.xeroError ? [periodLeave.xeroError] : [])].length > 0 && (
+          <div data-leave-notes style={{ background: 'rgba(4,39,70,0.05)', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '9px 13px', marginBottom: 8, fontSize: 12.5, color: MUTED, lineHeight: 1.45 }}>
+            {[...(periodLeave.notes || []), ...(periodLeave.xeroError ? [periodLeave.xeroError] : [])].map((n, i) => <div key={i}>{n}</div>)}
+          </div>
+        )}
         {periodLeave.rows?.some(r => !r.inXero) && (
           <div style={{ background: '#fff8e6', color: '#8a5a00', borderRadius: 10, padding: '9px 13px', marginBottom: 8, fontSize: 12.5, lineHeight: 1.45 }}>
             Some of your leave was approved in the portal but did not reach Xero — Erin will see this too.

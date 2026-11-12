@@ -1850,10 +1850,15 @@ Flow and invariants:
 them apart — a timesheet holds worked hours, leave reaches a pay run only as
 a leave application — so `src/timesheetLeave.js` (shared) and
 `api/timesheet/agent.js`: **leave is shown, never sent in the timesheet.**
-`leaveForPeriod` builds rows per type (Annual / Personal / TOIL leave) from
-approved portal leave **and** Xero's own applications (`overlappingXeroLeave`;
-one the portal sent, matched by `xero.id`, counted once; Xero hours spread over
-its weekdays), flags portal leave Xero refused (`inXero: false`), lists pending
+`leaveForPeriod` builds rows per type (Annual / Personal / TOIL leave). **Xero's
+hours win** (Brent, 12 Nov 2026: Toni's Monday showed 15.2h of old portal
+personal leave over the 5.5h in Xero): when Xero answers, its applications are
+the leave — typed by their leave type's name (`listLeaveTypes`), hours spread
+over the days the person works (`workPattern`), an application with **no hours
+counts for nothing**; a portal application shows only if it never reached Xero
+(flagged `inXero: false`), one sent and since removed or changed in Xero is
+Xero's to say (`notes` explain both). Only if Xero cannot be read do the
+portal's records stand in (`source: 'portal'`, `xeroError`). Pending listed
 apart. `action=leavedays` returns it (`leave`, plus `toil` room; admins may pass
 `email=`); the grid draws read-only purple rows, the footer "+ Xh leave",
 review "Worked + leave". Submit snapshots it on the record (`leave`), and

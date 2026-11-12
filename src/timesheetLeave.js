@@ -1,4 +1,4 @@
-import { STAFF } from './staffConfig.js'
+import { STAFF, workPatternFor } from './staffConfig.js'
 
 // ─── Leave and TOIL taken, on the timesheet (Brent, 12 Nov 2026) ──────────────
 // "We would like annual leave days and hours to appear on the timesheet at the
@@ -51,12 +51,32 @@ function daysBetween(start, end) {
   return out
 }
 
+/** The hours this person usually works on a day — Toni's 5.5 Mon/Wed/Thu, else 7.6 on a weekday. */
+function usualDay(email, date, standardDay) {
+  const pattern = workPatternFor(email)
+  const dow = (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7
+  if (pattern?.kind === 'fixed') return Number(pattern.days?.[dow] || 0)
+  return weekday(date) ? standardDay : 0
+}
+
 /** One portal application's hours, day by day. */
-function portalDays(a, standardDay) {
+function portalDays(a, email, standardDay) {
   if (Array.isArray(a.hours) && a.hours.length) {
     return a.hours.filter(h => Number(h?.hours) > 0).map(h => ({ date: h.date, hours: Number(h.hours) }))
   }
-  return daysBetween(a.startDate, a.endDate).filter(weekday).map(date => ({ date, hours: standardDay }))
+  return daysBetween(a.startDate, a.endDate).map(date => ({ date, hours: usualDay(email, date, standardDay) }))
+    .filter(d => d.hours > 0)
+}
+
+/** A Xero application's hours, day by day: Xero holds them per pay period, so
+ * they are spread over the days the person works in its range. */
+function xeroDays(x, email, standardDay) {
+  const span = daysBetween(x.start, x.end)
+  const working = span.filter(d => usualDay(email, d, standardDay) > 0)
+  const over = working.length ? working : span.filter(weekday)
+  if (!over.length || !(Number(x.hours) > 0)) return []
+  const each = Math.round((Number(x.hours) / over.length) * 100) / 100
+  return over.map(date => ({ date, hours: each }))
 }
 
 /**
@@ -65,22 +85,25 @@ function portalDays(a, standardDay) {
  * @param {object} input
  * @param {object} input.leave       { approved, pending } from the leave store
  * @param {Array}  [input.xero]      this person's Xero leave applications over
- *                                   the period: { id, title, start, end, hours }
+ *                                   the period: { id, title, typeName, start, end, hours }
+ * @param {boolean} [input.xeroRead] whether Xero answered (else portal only)
  * @param {string} input.email
  * @param {string[]} input.days      the fortnight
- * @returns {{ rows: Array<{type, label, byDay, total, inXero: boolean, notInXero: string[]}>,
- *             pending: Array<{type, label, byDay, total}>, total: number, byDay: object }}
  *
- * Xero's own applications count only where no portal application already
- * accounts for them (matched by the id the portal kept at approval), so leave
- * approved in the portal is not shown twice. Leave the portal approved that
- * Xero refused is shown and flagged — that is the case Erin has to fix by hand.
- * TOIL taken on a timesheet is not a leave row here: it is that timesheet's own
- * TOIL taken row.
+ * **Xero's hours win** (Brent, 12 Nov 2026: Toni's Monday showed 15.2h of
+ * personal leave from old portal requests over the 5.5h actually in Xero).
+ * When Xero could be read, its applications are the leave — with the hours
+ * Xero holds, so a change made in Xero shows, and an application with no
+ * hours counts for nothing. A portal application shows only where it never
+ * reached Xero (flagged "not in Xero"); one that was sent and is no longer in
+ * Xero, or that Xero now holds differently, is Xero's to say. Only when Xero
+ * cannot be read do the portal's own records stand in, with a note.
+ * TOIL taken on a timesheet is that timesheet's own row, not a leave row.
  */
-export function leaveForPeriod({ leave = {}, xero = [], email, days = [], standardDay = STANDARD_DAY } = {}) {
+export function leaveForPeriod({ leave = {}, xero = [], xeroRead = true, email, days = [], standardDay = STANDARD_DAY } = {}) {
   const inPeriod = new Set(days)
   const rows = new Map()
+  const notes = []
   const add = (map, type, date, hours, flag) => {
     if (!inPeriod.has(date) || !(hours > 0)) return
     const row = map.get(type) || { type, label: LEAVE_LABEL[type] || 'Leave', byDay: {}, total: 0, inXero: true, notInXero: [] }
@@ -89,30 +112,43 @@ export function leaveForPeriod({ leave = {}, xero = [], email, days = [], standa
     if (flag === false) { row.inXero = false; if (!row.notInXero.includes(date)) row.notInXero.push(date) }
     map.set(type, row)
   }
+  const typeOf = a => (LEAVE_LABEL[a.leaveType] ? a.leaveType : 'OTHER')
 
   const mine = (leave.approved || []).filter(a => same(a.email, email) && a.source !== 'timesheet')
-  const known = new Set(mine.map(a => a.xero?.id).filter(Boolean))
-  for (const a of mine) {
-    const type = LEAVE_LABEL[a.leaveType] ? a.leaveType : 'OTHER'
-    const sent = a.xero ? a.xero.ok !== false : true
-    for (const { date, hours } of portalDays(a, standardDay)) add(rows, type, date, hours, sent)
-  }
-
-  for (const x of xero || []) {
-    if (!x || known.has(x.id) || x.source === 'timesheet') continue
-    const type = typeFromTitle(x.title)
-    const span = daysBetween(x.start, x.end).filter(weekday)
-    if (!span.length) continue
-    // Xero holds hours per pay period, not per day: spread evenly over the
-    // weekdays it covers, else a standard day each.
-    const each = Number(x.hours) > 0 ? Number(x.hours) / span.length : standardDay
-    for (const date of span) add(rows, type, date, round2(each), true)
+  if (xeroRead) {
+    for (const x of xero || []) {
+      if (!x || x.source === 'timesheet') continue
+      const spread = xeroDays(x, email, standardDay)
+      if (!spread.length) {
+        if (daysBetween(x.start, x.end).some(d => inPeriod.has(d))) {
+          notes.push(`Xero has a leave application with no hours (${x.typeName || x.title || 'leave'}, ${x.start}${x.end !== x.start ? ` to ${x.end}` : ''}) — not counted.`)
+        }
+        continue
+      }
+      const type = typeFromTitle(`${x.typeName || ''} ${x.title || ''}`)
+      for (const { date, hours } of spread) add(rows, type, date, hours, true)
+    }
+    const inXero = new Set((xero || []).map(x => x?.id).filter(Boolean))
+    for (const a of mine) {
+      const sent = a.xero?.ok === true && a.xero?.id
+      if (sent) {
+        // Xero's own copy, above, is the one that counts — or it was removed there.
+        if (!inXero.has(a.xero.id) && portalDays(a, email, standardDay).some(d => inPeriod.has(d.date))) {
+          notes.push(`A portal ${LEAVE_LABEL[typeOf(a)].toLowerCase()} application (${a.startDate}${a.endDate !== a.startDate ? ` to ${a.endDate}` : ''}) is no longer in Xero — not counted.`)
+        }
+        continue
+      }
+      for (const { date, hours } of portalDays(a, email, standardDay)) add(rows, typeOf(a), date, hours, false)
+    }
+  } else {
+    for (const a of mine) {
+      for (const { date, hours } of portalDays(a, email, standardDay)) add(rows, typeOf(a), date, hours, a.xero ? a.xero.ok !== false : true)
+    }
   }
 
   const pendingRows = new Map()
   for (const a of (leave.pending || []).filter(a => same(a.email, email))) {
-    const type = LEAVE_LABEL[a.leaveType] ? a.leaveType : 'OTHER'
-    for (const { date, hours } of portalDays(a, standardDay)) add(pendingRows, type, date, hours)
+    for (const { date, hours } of portalDays(a, email, standardDay)) add(pendingRows, typeOf(a), date, hours)
   }
 
   const order = r => LEAVE_ORDER.indexOf(r.type)
@@ -124,7 +160,9 @@ export function leaveForPeriod({ leave = {}, xero = [], email, days = [], standa
     pending: [...pendingRows.values()].sort((a, b) => order(a) - order(b))
       .map(({ type, label, byDay: b, total }) => ({ type, label, byDay: b, total })),
     total: round2(list.reduce((s, r) => s + r.total, 0)),
-    byDay
+    byDay,
+    notes,
+    source: xeroRead ? 'xero' : 'portal'
   }
 }
 
