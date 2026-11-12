@@ -59,8 +59,9 @@ describe('entering hours on a laptop', () => {
     show()
     await waitFor(() => expect(screen.getByText('Ordinary Hours')).toBeInTheDocument())
     const boxes = document.querySelectorAll('input[inputmode="decimal"]')
-    // Seven days across, two categories.
-    expect(boxes.length).toBe(14)
+    // Seven days across, two categories — and Toni earns TOIL, so a TOIL
+    // taken row as well (Brent, 12 Nov 2026).
+    expect(boxes.length).toBe(21)
   })
 
   it('takes a typed number', async () => {

@@ -5,8 +5,8 @@ import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { toilOverflow, contractFor } from '../timesheetRules.js'
 import { workPatternFor } from '../staffConfig.js'
+import { TOIL_TAKEN, earnsToil, totalOf, toilTakenCheck } from '../timesheetLeave.js'
 
-const LEAVE_NAMES = { ANNUAL_LEAVE: 'annual leave', SICK: 'personal leave', TOIL: 'TOIL' }
 
 // Points at the shared tokens rather than redefining them, so this screen
 // cannot drift from the rest of the app. Amber and purple stay local: here they
@@ -367,6 +367,10 @@ export default function Timesheets({ user, onBack }) {
   // Approved leave on the days of this period, from the leave store, so it
   // shows on the timesheet and the standard week does not claim it again.
   const [leaveDays, setLeaveDays] = useState({})
+  // The leave on this fortnight by type — the portal's and Xero's own — shown
+  // as rows on the grid (Brent, 12 Nov 2026), and what TOIL can be taken.
+  const [periodLeave, setPeriodLeave] = useState({ rows: [], pending: [], total: 0, byDay: {} })
+  const [toilRoom, setToilRoom] = useState(null)
   // Every pay item, invented, so the whole screen can be looked at. Brent's own
   // Xero template has one rate on it, so without this the screen he checks is
   // not the screen anybody uses.
@@ -423,7 +427,11 @@ export default function Timesheets({ user, onBack }) {
       fetch('/api/timesheet/agent?action=toil', { headers: authHeaders })
         .then(r => r.json()).then(d => setToil(d.me || null)).catch(() => {})
       fetch(`/api/timesheet/agent?action=leavedays&periodStart=${data.period.start}`, { headers: authHeaders })
-        .then(r => r.json()).then(d => setLeaveDays(d.days || {})).catch(() => {})
+        .then(r => r.json()).then(d => {
+          setLeaveDays(d.days || {})
+          if (d.leave) setPeriodLeave(d.leave)
+          setToilRoom(d.toil || null)
+        }).catch(() => {})
     } catch (err) {
       setError(err.message)
     }
@@ -474,6 +482,19 @@ export default function Timesheets({ user, onBack }) {
     remember(`${categoryKey}|${day}`)
     setEntries(prev => {
       const next = { ...prev, [categoryKey]: { ...(prev[categoryKey] || {}) } }
+      // TOIL taken on a day comes off the ordinary hours already there — the
+      // same hours cannot be worked and taken off.
+      if (categoryKey === TOIL_TAKEN) {
+        const more = round2(Number(value || 0) - Number(prev[TOIL_TAKEN]?.[day] || 0))
+        const ordinaryKey = Object.keys(prev).find(k => k.startsWith('ordinary') && prev[k]?.[day])
+        if (more > 0 && ordinaryKey) {
+          const left = round2(Math.max(0, Number(prev[ordinaryKey][day]) - more))
+          next[ordinaryKey] = { ...prev[ordinaryKey] }
+          if (left > 0) next[ordinaryKey][day] = left
+          else delete next[ordinaryKey][day]
+          if (!Object.keys(next[ordinaryKey]).length) delete next[ordinaryKey]
+        }
+      }
       if (!value) delete next[categoryKey][day]
       else next[categoryKey][day] = value
       if (!Object.keys(next[categoryKey]).length) delete next[categoryKey]
@@ -501,7 +522,8 @@ export default function Timesheets({ user, onBack }) {
       const cell = { ...(prev[ordinary.key] || {}) }
       weekDays.forEach((d, i) => {
         const usual = pattern?.kind === 'fixed' ? Number(pattern.days[i] || 0) : (i < 5 ? STANDARD_DAY : 0)
-        const worked = round2(Math.max(0, usual - Number(leaveDays[d]?.hours || 0)))
+        const off = Number(periodLeave.byDay?.[d] ?? leaveDays[d]?.hours ?? 0) + Number(prev[TOIL_TAKEN]?.[d] || 0)
+        const worked = round2(Math.max(0, usual - off))
         if (worked > 0) cell[d] = worked
         else if (usual > 0) delete cell[d]
       })
@@ -512,10 +534,15 @@ export default function Timesheets({ user, onBack }) {
   // Hours past a full-time contract, banked as TOIL on submit — shown here
   // first so nobody is surprised by their payslip. No per-day flag: "allow
   // staff to just enter the hours they worked". See src/timesheetRules.js.
+  const takesToil = earnsToil(user?.email)
+  const toilTaken = takesToil ? (entries[TOIL_TAKEN] || {}) : {}
+  const toilTakenTotal = totalOf(toilTaken)
+  const toilCheck = toilTakenCheck({ taken: toilTakenTotal, balance: toilRoom?.balance ?? null, alreadyClaimed: toilRoom?.claimed || 0 })
+  const leaveTotal = round2(Number(periodLeave.total || 0) + toilTakenTotal)
   const overflow = useMemo(() => toilOverflow({
     entries, categories, days, contract: contractFor(user?.email),
-    leaveHours: Object.values(leaveDays || {}).reduce((sum, d) => sum + Number(d?.hours || 0), 0)
-  }), [entries, categories, days, user?.email, leaveDays])
+    leaveHours: Number(periodLeave.total || 0) + toilTakenTotal
+  }), [entries, categories, days, user?.email, periodLeave, toilTakenTotal])
   const filed = overflow.entries
   const filedTotals = useMemo(() => computeTotals(filed, categories, days), [filed, categories, days])
 
@@ -540,7 +567,7 @@ export default function Timesheets({ user, onBack }) {
       const res = await fetch('/api/timesheet/agent?action=submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ periodStart: period.start, entries: filed })
+        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -620,13 +647,33 @@ export default function Timesheets({ user, onBack }) {
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 11, marginTop: 4 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>Total hours</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>Hours worked</span>
             <strong style={{ fontSize: 16, color: TEAL }}>{filedTotals.totalHours}h</strong>
           </div>
+          {[...(periodLeave.rows || []).map(r => [r.label, r.total]), ...(toilTakenTotal ? [['TOIL taken', toilTakenTotal]] : [])].map(([label, hours]) => (
+            <div key={label} data-review-leave={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid rgba(26,43,74,0.06)' }}>
+              <span style={{ fontSize: 14, color: NAVY }}>{label}</span>
+              <strong style={{ fontSize: 14, color: NAVY }}>{hours}h</strong>
+            </div>
+          ))}
+          {leaveTotal > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 9, borderTop: `1px solid ${BORDER}` }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>Worked + leave</span>
+              <strong style={{ fontSize: 16, color: NAVY }}>{round2(filedTotals.totalHours + leaveTotal)}h</strong>
+            </div>
+          )}
+          {leaveTotal > 0 && (
+            <div style={{ fontSize: 12.5, color: MUTED, paddingTop: 6, lineHeight: 1.45 }}>
+              Leave goes to Xero as leave, not on the timesheet{toilTakenTotal ? ' — your TOIL taken is sent when Erin approves this' : ''}.
+            </div>
+          )}
         </div>
 
-        <button onClick={submit} disabled={busy || !canSubmit}
-          style={{ width: '100%', padding: 16, background: (busy || !canSubmit) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: (busy || !canSubmit) ? 'default' : 'pointer', marginBottom: 10 }}>
+        {!toilCheck.ok && (
+          <div role="alert" style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12, lineHeight: 1.45 }}>{toilCheck.error}</div>
+        )}
+        <button onClick={submit} disabled={busy || !canSubmit || !toilCheck.ok}
+          style={{ width: '100%', padding: 16, background: (busy || !canSubmit || !toilCheck.ok) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: (busy || !canSubmit || !toilCheck.ok) ? 'default' : 'pointer', marginBottom: 10 }}>
           {busy ? 'Submitting to Xero…'
             : canSubmit ? 'Confirm and submit' : 'Not yours to submit'}
         </button>
@@ -771,12 +818,21 @@ export default function Timesheets({ user, onBack }) {
 
         {/* Leave already approved for days in this week. Shown so nobody
             enters ordinary hours for a day they were paid as leave. */}
-        {days.slice(activeWeek * 7, activeWeek * 7 + 7).filter(d => leaveDays[d]).map(d => (
-          <div key={`leave-${d}`} style={{ background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)', borderRadius: 10, padding: '9px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY }}>
-            <strong>{DAY_NAMES[days.indexOf(d) % 7]}</strong> — {leaveDays[d].hours}h approved{' '}
-            {leaveDays[d].types.map(t => LEAVE_NAMES[t] || t).join(' + ')}. Not entered as ordinary hours.
+        {(periodLeave.pending || []).length > 0 && (
+          <div data-pending-leave style={{ background: 'rgba(4,39,70,0.05)', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '9px 13px', marginBottom: 8, fontSize: 12.5, color: MUTED, lineHeight: 1.45 }}>
+            Waiting for approval, not counted yet: {periodLeave.pending.map(p => `${p.label} ${p.total}h`).join(' · ')}
           </div>
-        ))}
+        )}
+        {periodLeave.rows?.some(r => !r.inXero) && (
+          <div style={{ background: '#fff8e6', color: '#8a5a00', borderRadius: 10, padding: '9px 13px', marginBottom: 8, fontSize: 12.5, lineHeight: 1.45 }}>
+            Some of your leave was approved in the portal but did not reach Xero — Erin will see this too.
+          </div>
+        )}
+        {takesToil && toilTakenTotal > 0 && !toilCheck.ok && (
+          <div role="alert" data-toil-block style={{ background: '#fdecea', color: '#c0392b', borderRadius: 10, padding: '9px 13px', marginBottom: 8, fontSize: 12.5, lineHeight: 1.45 }}>
+            {toilCheck.error}
+          </div>
+        )}
 
         {overflow.excess > 0 && (
           <div style={{ background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
@@ -950,6 +1006,55 @@ export default function Timesheets({ user, onBack }) {
             </div>
           ))}
 
+          {/* Leave on these days, as rows (Brent, 12 Nov 2026): read only —
+              it is leave, sent to Xero as leave, never on the timesheet. */}
+          {(periodLeave.rows || []).map(row => (
+            <div key={row.type} data-leave-row={row.type} style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: NAVY, lineHeight: 1.2, paddingRight: 4 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: PURPLE, flexShrink: 0 }} />
+                {row.label}{!row.inXero ? ' ⚠' : ''}
+              </div>
+              {weekDays.map(day => {
+                const v = row.byDay[day]
+                return (
+                  <div key={day} title={row.notInXero.includes(day) ? 'Approved in the portal but not in Xero' : undefined}
+                    style={{ padding: '11px 0', borderRadius: 8, fontSize: 14, textAlign: 'center',
+                      fontWeight: v ? 700 : 400, color: v ? PURPLE : 'rgba(26,43,74,0.2)',
+                      background: v ? '#f4eefa' : 'transparent', border: v ? '1px dashed rgba(142,36,170,0.4)' : 'none' }}>
+                    {v ?? '·'}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+
+          {/* TOIL taken (Brent, 12 Nov 2026): typed like ordinary hours, by
+              those who earn TOIL. Never more than the balance; sent to Xero
+              as TOIL leave when Erin approves the timesheet. */}
+          {takesToil && (
+            <div data-toil-taken-row style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', fontSize: 10.5, fontWeight: 600, color: NAVY, lineHeight: 1.2, paddingRight: 4 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 4, background: PURPLE, flexShrink: 0 }} />TOIL taken
+                </span>
+                {toilRoom?.available !== null && toilRoom?.available !== undefined && (
+                  <span style={{ color: MUTED, fontWeight: 400 }}>{toilRoom.available}h available</span>
+                )}
+              </div>
+              {weekDays.map((day, i) => (
+                <GridCell key={day}
+                  desktop={desktop}
+                  value={entries[TOIL_TAKEN]?.[day]}
+                  tint={PURPLE}
+                  weekend={isWeekend(activeWeek * 7 + i)}
+                  onOpen={() => setPadCell({ categoryKey: TOIL_TAKEN, day, dayIndex: activeWeek * 7 + i, value: entries[TOIL_TAKEN]?.[day] })}
+                  onSet={raw => setCell(TOIL_TAKEN, day, raw === '' ? '' : Number(raw))}
+                  cellRef={el => { cellRefs.current[`${TOIL_TAKEN}|${day}`] = el }}
+                  onEnter={() => {}} />
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginTop: 7 }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>Day total</div>
             {weekDays.map(day => {
@@ -979,18 +1084,19 @@ export default function Timesheets({ user, onBack }) {
             {totals.totalHours}h
             <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', fontWeight: 400, marginLeft: 7 }}>
               {totals.weekHours[0]} + {totals.weekHours[1]}
+              {leaveTotal ? ` · + ${leaveTotal}h leave` : ''}
               {totals.callouts ? ` · ${totals.callouts} call-in${totals.callouts === 1 ? '' : 's'}` : ''}
             </span>
           </div>
         </div>
-        <button onClick={() => { setError(''); setStage('review') }} disabled={!totals.totalHours && !totals.callouts}
+        <button onClick={() => { setError(''); setStage('review') }} disabled={!totals.totalHours && !totals.callouts && !toilTakenTotal}
           style={{ padding: '12px 20px', background: (totals.totalHours || totals.callouts) ? TEAL : 'rgba(255,255,255,0.15)', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: (totals.totalHours || totals.callouts) ? 'pointer' : 'default' }}>
           Submit
         </button>
       </div>
 
       {padCell && (
-        <NumberPad cell={padCell} categories={categories}
+        <NumberPad cell={padCell} categories={[...categories, { key: TOIL_TAKEN, label: 'TOIL taken', unit: 'hours', hint: toilRoom?.available != null ? `${toilRoom.available}h available` : '' }]}
           onSet={v => setCell(padCell.categoryKey, padCell.day, v)}
           onClose={() => setPadCell(null)} />
       )}

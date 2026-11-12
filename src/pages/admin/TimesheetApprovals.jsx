@@ -33,6 +33,68 @@ export const rangeLabel = (start, end) => {
   return start && end ? `${dayLabel(start)} – ${dayLabel(end)}${e ? ` ${e.y}` : ''}` : ''
 }
 
+const PURPLE = '#8e24aa'
+const round2 = n => Math.round((Number(n) || 0) * 100) / 100
+const sumOf = byDay => round2(Object.values(byDay || {}).reduce((a, b) => a + Number(b || 0), 0))
+export const leaveTotalOf = record => round2(Number(record.leave?.total || 0) + sumOf(record.toilTaken))
+const daysText = byDay => Object.keys(byDay || {}).sort().map(d => `${dayLabel(d)} ${byDay[d]}h`).join(' · ')
+
+/**
+ * Leave and TOIL taken on a timesheet (Brent, 12 Nov 2026): as the staff
+ * member saw it when they submitted, whether each part is in Xero, and any
+ * leave added or changed since.
+ */
+function LeaveBlock({ record, live, busy, onRetry }) {
+  const rows = record.leave?.rows || []
+  const toil = record.toilTaken || {}
+  const toilTotal = sumOf(toil)
+  const liveTotal = live ? round2(live.total) : null
+  const changed = live && liveTotal !== round2(record.leave?.total || 0)
+  if (!rows.length && !toilTotal && !changed) return null
+  const line = { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, marginBottom: 2 }
+  return (
+    <div data-leave-block style={{ background: '#f8f4fc', border: '1px solid rgba(142,36,170,0.2)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: PURPLE, marginBottom: 6 }}>Leave — paid as leave, not on the Xero timesheet</div>
+      {rows.map(r => (
+        <div key={r.type} style={{ marginBottom: 6 }}>
+          <div style={line}><strong style={{ color: NAVY }}>{r.label}</strong><span style={{ color: PURPLE, fontWeight: 700 }}>{r.total}h</span></div>
+          <div style={{ fontSize: 11, color: MUTED }}>{daysText(r.byDay)}</div>
+          <div style={{ fontSize: 11, color: r.inXero ? TEAL : '#c0392b' }}>
+            {r.inXero ? 'In Xero ✓' : `Approved in the portal but not in Xero (${r.notInXero.map(dayLabel).join(', ')}) — add it in Xero`}
+          </div>
+        </div>
+      ))}
+      {toilTotal > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <div style={line}><strong style={{ color: NAVY }}>TOIL taken</strong><span style={{ color: PURPLE, fontWeight: 700 }}>{toilTotal}h</span></div>
+          <div style={{ fontSize: 11, color: MUTED }}>{daysText(toil)}</div>
+          <div style={{ fontSize: 11, color: record.toilLeave?.ok === false ? '#c0392b' : record.toilLeave?.ok ? TEAL : MUTED }}>
+            {record.status === 'approved'
+              ? (record.toilLeave?.ok ? 'Sent to Xero as TOIL leave ✓' : `Not in Xero yet: ${record.toilLeave?.error || 'not sent'}`)
+              : 'Sent to Xero as TOIL leave when you approve'}
+          </div>
+          {record.status === 'approved' && record.toilLeave?.ok === false && (
+            <button onClick={onRetry} disabled={busy}
+              style={{ marginTop: 4, padding: '6px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: 'white', fontSize: 12, fontWeight: 700, color: NAVY, cursor: 'pointer' }}>
+              {busy ? 'Sending…' : 'Try again'}
+            </button>
+          )}
+        </div>
+      )}
+      {(record.leave?.pending || []).length > 0 && (
+        <div style={{ fontSize: 11, color: MUTED }}>Waiting for approval when submitted: {record.leave.pending.map(p => `${p.label} ${p.total}h`).join(' · ')}</div>
+      )}
+      {record.leave?.xeroError && <div style={{ fontSize: 11, color: '#8a5a00' }}>{record.leave.xeroError}</div>}
+      {changed && (
+        <div data-leave-changed style={{ fontSize: 11.5, color: '#8a5a00', marginTop: 4 }}>
+          Leave has changed since this was submitted — it is now {liveTotal}h
+          {live.rows?.length ? ` (${live.rows.map(r => `${r.label} ${r.total}h`).join(' · ')})` : ''}.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TimesheetApprovals({ user }) {
   const [data, setData] = useState({ submitted: [], approved: [], rejected: [], outstanding: [] })
   const [loading, setLoading] = useState(true)
@@ -42,6 +104,9 @@ export default function TimesheetApprovals({ user }) {
   const [rejectFor, setRejectFor] = useState(null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState('')
+  // Leave as it stands now, per opened timesheet, to show what changed since
+  // it was submitted (Brent, 12 Nov 2026).
+  const [liveLeave, setLiveLeave] = useState({})
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${user?.token || ''}` }), [user])
 
@@ -70,6 +135,30 @@ export default function TimesheetApprovals({ user }) {
       if (body.error) throw new Error(body.error)
       if (body.emailError) setError(`Saved, but the notification email failed: ${body.emailError}`)
       setRejectFor(null); setReason(''); setOpen(null)
+      await load()
+    } catch (err) { setError(err.message) }
+    setBusy('')
+  }
+
+  async function checkLeaveNow(record) {
+    const k = `${record.email}-${record.periodStart}`
+    if (liveLeave[k]) return
+    try {
+      const res = await fetch(`/api/timesheet/agent?action=leavedays&periodStart=${record.periodStart}&email=${encodeURIComponent(record.email)}`, { headers: authHeaders })
+      const body = await res.json()
+      if (!body.error) setLiveLeave(p => ({ ...p, [k]: body.leave || null }))
+    } catch { /* the snapshot still shows */ }
+  }
+
+  async function retryToil(record) {
+    setBusy(record.email + 'toil'); setError('')
+    try {
+      const res = await fetch('/api/timesheet/agent?action=toilretry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ email: record.email, periodStart: record.periodStart })
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
       await load()
     } catch (err) { setError(err.message) }
     setBusy('')
@@ -116,7 +205,7 @@ export default function TimesheetApprovals({ user }) {
         const isOpen = open === key
         return (
           <div key={key} style={{ background: 'white', borderRadius: 12, marginBottom: 10, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
-            <div onClick={() => setOpen(isOpen ? null : key)} style={{ padding: '13px 15px', cursor: 'pointer' }}>
+            <div onClick={() => { setOpen(isOpen ? null : key); if (!isOpen) checkLeaveNow(record) }} style={{ padding: '13px 15px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>{record.staffName}</div>
@@ -132,6 +221,9 @@ export default function TimesheetApprovals({ user }) {
                   <div style={{ fontSize: 11, color: MUTED }}>
                     {(record.totals?.weekHours || []).map((h, i) => `Week ${i + 1}: ${h}h`).join(' · ')}
                   </div>
+                  {leaveTotalOf(record) > 0 && (
+                    <div data-leave-total style={{ fontSize: 11, color: PURPLE, fontWeight: 700 }}>+ {leaveTotalOf(record)}h leave</div>
+                  )}
                 </div>
               </div>
               {record.editedByAdmin && <div style={{ fontSize: 11, color: AMBER, marginTop: 5 }}>Edited before approval</div>}
@@ -183,6 +275,8 @@ export default function TimesheetApprovals({ user }) {
                     })}
                   </div>
                 ))}
+
+                <LeaveBlock record={record} live={liveLeave[key]} busy={busy === record.email + 'toil'} onRetry={() => retryToil(record)} />
 
                 {record.warnings?.length > 0 && (
                   <div style={{ background: '#fff8e6', color: '#8a5a00', borderRadius: 8, padding: 10, fontSize: 11.5, lineHeight: 1.5, marginBottom: 10 }}>

@@ -12,8 +12,13 @@ import {
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import {
-  getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees
+  getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees,
+  overlappingXeroLeave, submitToXero
 } from '../_xeroClient.js'
+import { redis, redisSetBody } from '../_redis.js'
+import {
+  TOIL_TAKEN, earnsToil, leaveForPeriod, cleanToilTaken, totalOf, toilTakenCheck, runsOf, futureDays
+} from '../../src/timesheetLeave.js'
 import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import { toilOverflow, contractFor } from '../../src/timesheetRules.js'
@@ -22,7 +27,7 @@ import {
 } from '../../src/clinicalPlan/onCall.js'
 import { callInsFor, COVERED_HOURS } from '../../src/clinicalPlan/callIn.js'
 import { periodFor, currentPeriod, recentPeriods, isValidPeriodStart } from '../_fortnight.js'
-import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from '../_googleCalendar.js'
+import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY, syncToilCalendar } from '../_googleCalendar.js'
 import { sendTimesheetSubmittedEmail, sendTimesheetDecisionEmail } from '../_email.js'
 
 // The spec's five endpoints — payitems, draft, submit, list, plus approve and
@@ -51,6 +56,7 @@ export default async function handler(req, res) {
     if (action === 'toilmatch') return await handleToilMatch(req, res)
     if (action === 'leavedays') return await handleLeaveDays(req, res, session)
     if (action === 'balances') return await handleBalances(req, res, session)
+    if (action === 'toilretry') return await handleToilRetry(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     console.error(`timesheet/${action} failed:`, err.message)
@@ -229,7 +235,10 @@ async function handleDraft(req, res, session) {
   const before = await getTimesheetDraft(staff.email)
   if (before?.periodStart === period.start && before.autoCallIns) draft.autoCallIns = before.autoCallIns
   await saveTimesheetDraft(staff.email, draft)
-  return res.status(200).json({ saved: true, savedAt: draft.savedAt })
+  const calendar = earnsToil(staff.email)
+    ? await toilOnCalendar(staff, period, cleanToilTaken(draft.entries[TOIL_TAKEN], period.days))
+    : { errors: [] }
+  return res.status(200).json({ saved: true, savedAt: draft.savedAt, calendarErrors: calendar.errors.length ? calendar.errors : undefined })
 }
 
 // ─── submit ────────────────────────────────────────────────
@@ -260,11 +269,24 @@ async function handleSubmit(req, res, session) {
   }
   const entered = normaliseEntries(req.body?.entries, categories, period.days)
 
+  // TOIL taken (Brent, 12 Nov 2026): only for those who earn it, never more
+  // than the balance. Kept apart from the pay items — it is leave, and goes to
+  // Xero as a TOIL leave application when the timesheet is approved.
+  const toilTaken = earnsToil(staff.email) ? cleanToilTaken(req.body?.entries?.[TOIL_TAKEN], period.days) : {}
+  if (totalOf(toilTaken) > 0) {
+    const room = await toilRoom(staff, { except: period.start })
+    const check = toilTakenCheck({ taken: totalOf(toilTaken), balance: room.balance, alreadyClaimed: room.claimed })
+    if (!check.ok) return res.status(400).json({ error: check.error, available: check.available })
+  }
+
+  // The leave on these days — portal and Xero — kept with the timesheet, so
+  // Erin approves exactly what was submitted.
+  const periodLeave = await leaveFor(staff, period)
+
   // Ordinary hours past a full-time contract go to TOIL — the same split the
-  // screen showed before submit. See src/timesheetRules.js.
-  const leave = await getAllApplications().catch(() => ({ approved: [] }))
-  const leaveHours = Object.values(leaveOnDays({ leave, email: staff.email, days: period.days }))
-    .reduce((sum, d) => sum + Number(d.hours || 0), 0)
+  // screen showed before submit. See src/timesheetRules.js. Leave and TOIL
+  // taken both come off the contract: neither is time worked.
+  const leaveHours = periodLeave.total + totalOf(toilTaken)
   const overflow = toilOverflow({
     entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours
   })
@@ -300,12 +322,15 @@ async function handleSubmit(req, res, session) {
         ? [`${overflow.excess}h over the ${overflow.limit}h fortnight, but there is no TOIL pay item to bank it in — check with Brent`] : [])
     ],
     toilOverflow: overflow.moved.length ? { excess: overflow.excess, limit: overflow.limit, moved: overflow.moved } : null,
+    leave: { rows: periodLeave.rows, pending: periodLeave.pending, total: periodLeave.total, xeroError: periodLeave.xeroError || undefined },
+    toilTaken,
     status: 'submitted',
     xero,
     submittedAt: new Date().toISOString()
   }
   await saveTimesheet('submitted', record)
   await clearTimesheetDraft(staff.email)
+  if (earnsToil(staff.email)) await toilOnCalendar(staff, period, toilTaken).catch(() => {})
 
   let emailError = null
   try {
@@ -723,9 +748,144 @@ async function handleLeaveDays(req, res, session) {
   const staff = requireTimesheetAccess(session)
   const start = String(req.query.periodStart || '')
   if (!isValidPeriodStart(start)) return res.status(400).json({ error: 'periodStart is not a period start' })
-  const { days } = periodFor(start)
+  // An admin may look at someone else's (Erin, checking a timesheet).
+  const who = req.query.email && staff.isAdmin ? getStaffByEmail(String(req.query.email)) : staff
+  if (!who) return res.status(404).json({ error: 'No such person' })
+  const period = periodFor(start)
   const leave = await getAllApplications().catch(() => ({ approved: [] }))
-  return res.status(200).json({ days: leaveOnDays({ leave, email: staff.email, days }) })
+  const periodLeave = await leaveFor(who, period, leave)
+  let toil = null
+  if (earnsToil(who.email)) {
+    const room = await toilRoom(who, { except: start })
+    toil = { balance: room.balance, claimed: room.claimed, source: room.source,
+      available: room.balance === null ? null : Math.round((room.balance - room.claimed) * 100) / 100 }
+  }
+  return res.status(200).json({
+    days: leaveOnDays({ leave, email: who.email, days: period.days }),
+    leave: periodLeave,
+    earnsToil: earnsToil(who.email),
+    toil
+  })
+}
+
+// ─── Leave and TOIL taken on the timesheet (Brent, 12 Nov 2026) ──────────────
+// See src/timesheetLeave.js for the rules.
+
+/** This person's leave over a fortnight: the portal's and Xero's own. */
+async function leaveFor(person, period, leaveIn = null) {
+  const leave = leaveIn || await getAllApplications().catch(() => ({ approved: [], pending: [] }))
+  let xero = []
+  let xeroError = ''
+  try {
+    const { token, tenantId } = await getXeroToken()
+    const employee = await findStaffInXero(token, tenantId, person)
+    xero = await overlappingXeroLeave(token, tenantId, employee.EmployeeID, period.start, period.end)
+  } catch (err) {
+    xeroError = `Leave entered straight into Xero could not be read (${err.message})`
+  }
+  return { ...leaveForPeriod({ leave, xero, email: person.email, days: period.days }), xeroError }
+}
+
+const hobartToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+
+/**
+ * How much TOIL this person can take: Xero's balance (the portal's where Xero
+ * cannot say), less TOIL taken on their timesheets awaiting approval, and on
+ * ones approved in the last fortnight — Xero's balance only moves when the
+ * pay run is processed, so those hours are spoken for but not yet off it.
+ */
+async function toilRoom(person, { except = '' } = {}) {
+  const [timesheets, leave] = await Promise.all([
+    getAllTimesheets(200), getAllApplications().catch(() => ({ approved: [], pending: [] }))
+  ])
+  const mine = timesheets.filter(t => String(t.email).toLowerCase() === person.email.toLowerCase() && t.periodStart !== except)
+  const cutoff = new Date(Date.now() - 15 * 86400000).toISOString().slice(0, 10)
+  let balance = null
+  let source = 'xero'
+  try {
+    const { token, tenantId } = await getXeroToken()
+    balance = (await toilInXero(token, tenantId, person)).hours
+  } catch { /* falls back below */ }
+  const portalTaken = t => totalOf(t.toilTaken)
+  let claimed = mine.filter(t => t.status === 'submitted').reduce((s, t) => s + portalTaken(t), 0)
+  if (balance === null) {
+    source = 'portal'
+    const opening = await getToilOpening(person.email).catch(() => null)
+    balance = toilBalanceFor({ timesheets, leave, email: person.email, opening }).balance
+  } else {
+    claimed += mine.filter(t => t.status === 'approved' && String(t.periodEnd) >= cutoff).reduce((s, t) => s + portalTaken(t), 0)
+  }
+  return { balance, claimed: Math.round(claimed * 100) / 100, source }
+}
+
+/** Future TOIL days on the leave calendar, kept in step with the timesheet. */
+async function toilOnCalendar(person, period, toilTaken) {
+  const key = `toilcal:${person.email}:${period.start}`
+  let existing = {}
+  try { existing = JSON.parse(await redis('get', key) || '{}') || {} } catch { existing = {} }
+  const today = hobartToday()
+  const want = futureDays(toilTaken, today)
+  if (!Object.keys(want).length && !Object.keys(existing).some(d => d >= today)) return { errors: [] }
+  try {
+    const { entries, errors } = await syncToilCalendar({ name: person.name, want, existing, today })
+    await redisSetBody(key, JSON.stringify(entries))
+    return { errors }
+  } catch (err) {
+    return { errors: [`The leave calendar could not be updated (${err.message})`] }
+  }
+}
+
+/**
+ * TOIL taken on an approved timesheet, sent to Xero as TOIL leave — one
+ * application per run of consecutive days — and kept in the portal's leave
+ * store (source 'timesheet') so the TOIL balance and ledger count it. Each run
+ * is done once: what Xero already accepted is remembered on the record.
+ */
+async function sendToilTaken(record, staff) {
+  const done = { ...(record.toilLeave?.done || {}) }
+  const errors = []
+  for (const run of runsOf(record.toilTaken)) {
+    const key = run[0].date
+    if (done[key]) continue
+    try {
+      const result = await submitToXero({
+        name: staff.name, startDate: run[0].date, endDate: run[run.length - 1].date, leaveType: 'TOIL',
+        reason: `TOIL taken on the timesheet for ${record.periodStart} to ${record.periodEnd}`,
+        hours: run
+      })
+      const id = `ts-${staff.email.split('@')[0]}-${key}-${Math.random().toString(36).slice(2, 7)}`
+      const application = {
+        id, email: staff.email, name: staff.name, division: staff.division, leaveType: 'TOIL',
+        startDate: run[0].date, endDate: run[run.length - 1].date, hours: run,
+        totalHours: Math.round(run.reduce((s, d) => s + d.hours, 0) * 100) / 100,
+        reason: `TOIL taken on timesheet ${record.periodStart}`, status: 'approved', source: 'timesheet',
+        xero: { ok: true, id: result?.leaveApplicationID || null, at: new Date().toISOString() },
+        createdAt: new Date().toISOString()
+      }
+      await redisSetBody(`leave:${id}`, JSON.stringify(application))
+      await redis('lpush', 'leave:approved', id)
+      done[key] = { xeroId: result?.leaveApplicationID || null, leaveId: id, hours: application.totalHours }
+    } catch (err) {
+      errors.push(`${key}: ${err.message}`)
+    }
+  }
+  return { ok: errors.length === 0, done, error: errors.join(' · ') || undefined, at: new Date().toISOString() }
+}
+
+/** Admin: try again to send TOIL taken that Xero refused at approval. */
+async function handleToilRetry(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
+  const { email, periodStart } = req.body || {}
+  const record = await getTimesheet('submitted', email, periodStart)
+  if (!record || record.status !== 'approved') return res.status(404).json({ error: 'No approved timesheet to send TOIL for' })
+  const staff = getStaffByEmail(email)
+  const toilLeave = await sendToilTaken(record, staff)
+  const next = { ...record, toilLeave }
+  await saveTimesheet('submitted', next)
+  await saveTimesheet('approved', next)
+  return res.status(200).json({ record: next })
 }
 
 // ─── list / decide: admin ──────────────────────────────────
@@ -801,10 +961,25 @@ async function handleDecide(req, res) {
     decidedAt: new Date().toISOString()
   }
 
+  // TOIL taken is checked against the balance again — it may have moved since
+  // the timesheet was submitted. Over it, the timesheet is not approved.
+  const taking = totalOf(record.toilTaken)
+  if (taking > 0) {
+    const room = await toilRoom(staff || { email, name: record.staffName }, { except: record.periodStart })
+    const check = toilTakenCheck({ taken: taking, balance: room.balance, alreadyClaimed: room.claimed })
+    if (!check.ok) {
+      return res.status(400).json({ error: `${record.staffName}: ${check.error.replace(/^You have/, 'has')} Return the timesheet to have it corrected.` })
+    }
+  }
+
   // Push the approval to Xero before recording it, so an approved record always
   // means Xero agrees.
   const xeroResult = await approveTimesheetInXero(approvedRecord, categories)
   approvedRecord.xero = { ...approvedRecord.xero, ...xeroResult }
+
+  // Then the TOIL taken, as TOIL leave in Xero. A failure does not undo the
+  // approval: it is said on the timesheet with Try again.
+  if (taking > 0) approvedRecord.toilLeave = await sendToilTaken(approvedRecord, staff || { email, name: record.staffName })
 
   await saveTimesheet('submitted', approvedRecord)
   await saveTimesheet('approved', approvedRecord)

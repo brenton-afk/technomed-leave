@@ -268,6 +268,83 @@ export async function addCalendarEvent({ name, division, startDate, endDate, lea
   throw new Error(lastError?.message || 'Google Calendar error')
 }
 
+// ─── TOIL taken on a timesheet, ahead of time (Brent, 12 Nov 2026) ──────────
+// "If it's prospective then we want the TOIL added to the calendar like a
+// leave day or an RDO." A day of TOIL typed on a timesheet for today or later
+// goes on the Staff Leave calendar, one all-day entry per day, written the way
+// approved leave is (as bookings@ where it can be, else the service account).
+// A day taken off the timesheet comes off the calendar; a past day is never
+// added — the leave calendar is for planning.
+
+const nextDay = d => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10) }
+const fmtHours = h => `${Math.round(Number(h) * 100) / 100}h`
+
+async function leaveCalendarWays() {
+  const leaveCalendar = (process.env.GOOGLE_LEAVE_CALENDAR_ID || STAFF_LEAVE_CALENDAR_ID).trim()
+  return [
+    { id: leaveCalendar, token: () => getGoogleToken(CALENDAR_SCOPE_EVENTS, { impersonate: CALENDAR_OWNER }) },
+    { id: leaveCalendar, token: () => getGoogleToken(CALENDAR_SCOPE_WRITE) },
+    { id: GOOGLE_CALENDAR_ID, token: () => getGoogleToken(CALENDAR_SCOPE_WRITE) }
+  ]
+}
+
+/**
+ * @param {object} input
+ * @param {string} input.name        the person
+ * @param {object} input.want        { day: hours } — today and later only
+ * @param {object} input.existing    { day: { eventId, calendarId, hours } } written before
+ * @returns {Promise<{ entries: object, errors: string[] }>} the entries now on the calendar
+ */
+export async function syncToilCalendar({ name, want = {}, existing = {}, today }) {
+  const entries = { ...existing }
+  const errors = []
+  const ways = await leaveCalendarWays()
+  const call = async (method, calendarId, path, body) => {
+    let last = ''
+    for (const way of ways.filter(w => !calendarId || w.id === calendarId)) {
+      let bearer
+      try { bearer = await way.token() } catch (err) { last = err.message; continue }
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(way.id)}/events${path}`, {
+        method, headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' },
+        ...(body ? { body: JSON.stringify(body) } : {})
+      })
+      if (res.ok || (method === 'DELETE' && (res.status === 404 || res.status === 410))) {
+        return { ok: true, calendarId: way.id, data: method === 'DELETE' ? null : await res.json().catch(() => ({})) }
+      }
+      last = `${res.status}`
+      if (res.status !== 403 && res.status !== 404) break
+    }
+    return { ok: false, error: last }
+  }
+  const event = (day, hours) => ({
+    summary: `${name} — TOIL (${fmtHours(hours)})`,
+    description: [`Employee: ${name}`, 'Leave type: TOIL', `Hours: ${hours}`, '',
+      'Taken on a timesheet in the TechnoMed Portal'].join('\n'),
+    start: { date: day }, end: { date: nextDay(day) },
+    colorId: GRAPE_COLOR_ID, transparency: 'transparent'
+  })
+
+  for (const [day, was] of Object.entries(existing)) {
+    if (today && day < today) continue
+    if (Number(want[day]) > 0) continue
+    const done = await call('DELETE', was.calendarId, `/${encodeURIComponent(was.eventId)}`)
+    if (done.ok) delete entries[day]
+    else errors.push(`Could not take TOIL off the calendar for ${day}`)
+  }
+  for (const [day, hours] of Object.entries(want)) {
+    if (today && day < today) continue
+    const was = existing[day]
+    if (was && Number(was.hours) === Number(hours)) continue
+    const done = was
+      ? await call('PATCH', was.calendarId, `/${encodeURIComponent(was.eventId)}`, event(day, hours))
+      : await call('POST', null, '', event(day, hours))
+    if (done.ok) entries[day] = { eventId: was?.eventId || done.data?.id, calendarId: done.calendarId, hours: Number(hours) }
+    else errors.push(`Could not put TOIL on the calendar for ${day}`)
+  }
+  if (JSON.stringify(entries) !== JSON.stringify(existing)) calendarChanged()
+  return { entries, errors }
+}
+
 /**
  * Moves an approved leave's calendar entry to its amended dates (Brent, 11 Nov
  * 2026). The entry is found by the id kept at approval, or — for leave

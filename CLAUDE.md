@@ -1846,6 +1846,37 @@ Flow and invariants:
 - Resubmission is blocked with 409 unless the timesheet was returned; returning requires a reason.
 - `api/cron/timesheet-reminder.js` is now both daily jobs (Hobby allows two), chosen by `?job=`: `evening` 07:00 UTC (6pm AEDT) sends the "usage not sent" reminders (`api/_usageReminders.js`, Task 11), `morning` 22:00 UTC (9am AEDT) escalates yesterday's unsent usage to the week's team leader and, on Sat/Sun only, sends the timesheet reminders as before. It verifies `CRON_SECRET`. **Tasmania observes daylight saving**, so from October to April this lands at 9am local — Hobby allows only two crons total, so there is no seasonal second pair. Staff `mobileNumber` fields in `staffConfig.js` are blank, so every reminder is currently skipped rather than sent.
 
+**Leave and TOIL taken on the timesheet** (Brent, 12 Nov 2026). Xero keeps
+them apart — a timesheet holds worked hours, leave reaches a pay run only as
+a leave application — so `src/timesheetLeave.js` (shared) and
+`api/timesheet/agent.js`: **leave is shown, never sent in the timesheet.**
+`leaveForPeriod` builds rows per type (Annual / Personal / TOIL leave) from
+approved portal leave **and** Xero's own applications (`overlappingXeroLeave`;
+one the portal sent, matched by `xero.id`, counted once; Xero hours spread over
+its weekdays), flags portal leave Xero refused (`inXero: false`), lists pending
+apart. `action=leavedays` returns it (`leave`, plus `toil` room; admins may pass
+`email=`); the grid draws read-only purple rows, the footer "+ Xh leave",
+review "Worked + leave". Submit snapshots it on the record (`leave`), and
+leave + TOIL taken come off the contract for `toilOverflow`.
+**TOIL taken** (`toil_taken`, kept in the draft's entries, stripped from pay
+items by `normaliseEntries`) only for `earnsToil` in `staffConfig.js` (Ben,
+Aimee, Mat, Toni). Typing it takes the same hours off that day's ordinary
+hours. **Blocked over the balance** (`toilTakenCheck`; `toilRoom` = Xero's TOIL
+balance, else the portal's, less TOIL taken on timesheets awaiting approval and
+on ones approved in the last fortnight — Xero moves only at the pay run) on
+screen, on submit and again on approve. **On approval only** `sendToilTaken`
+posts one Xero TOIL leave application per run of consecutive days
+(`submitToXero`, its overlap check included) and keeps each as an approved
+portal leave record (`source: 'timesheet'`) so the balance and ledger count it;
+done runs are remembered (`toilLeave.done`), a failure is shown to Erin with
+Try again (`action=toilretry`) and does not undo the approval. **Future TOIL
+days go on the Staff Leave calendar** like a leave day (`syncToilCalendar` in
+`_googleCalendar.js`, one all-day "Name — TOIL (2h)" per day, today or later
+only, kept in step on every draft save and submit, map in
+`toilcal:{email}:{periodStart}`); past days never. Admin → Timesheets shows the
+leave block per timesheet (in Xero ✓ / not), TOIL taken and its Xero status,
+and re-reads leave on open to say if it changed since submission.
+
 **Call-ins are logged, not only offered** (Brent, 7 Nov 2026: "Mat gets a
 call-in logged for pt White"). `callInsFor` (`src/clinicalPlan/callIn.js`)
 marks a case `auto` when it is out of hours, the person is on the booking (or
