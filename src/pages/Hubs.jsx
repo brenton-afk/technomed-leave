@@ -1,6 +1,7 @@
 import React from 'react'
-import { Page, Header, Body, NavCard, SectionLabel, Banner } from '../design/Shell.jsx'
-import { colour, text, space } from '../design/tokens.js'
+import { Page, Header, Body, NavCard, NavGroup, IconTile, SectionLabel, Banner } from '../design/Shell.jsx'
+import { STAFF } from '../staffConfig.js'
+import { colour, text, space, radius, border } from '../design/tokens.js'
 import {
   IconKit, IconStock, IconFolder, IconTasks,
   IconClock, IconLeave, IconPayslip, IconLock, IconFile, IconLogout, IconAdmin, IconChart, IconChat
@@ -18,107 +19,127 @@ export function KitHub({ user, onNavigate }) {
     <Page>
       <Header eyebrow="Kit" title="Kit" subtitle="What's where, and what to bring" />
       <Body>
-        <NavCard icon={IconKit} label="Kit Room" tone="accent"
-          detail="What's where, across both hospitals"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'kitroom' })} />
-        <NavCard icon={IconStock} label="Stock take"
-          detail="Not set up yet"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'stock' })} />
-        <NavCard icon={IconFolder} label="Theatre guides"
-          detail="Field references and surgeon preference cards"
-          onClick={() => onNavigate({ tab: 'kit', sub: 'guides' })} />
+        <NavGroup first>
+          <NavCard icon={IconKit} label="Kit Room" tint="teal"
+            detail="What's where, across both hospitals"
+            onClick={() => onNavigate({ tab: 'kit', sub: 'kitroom' })} />
+          <NavCard icon={IconStock} label="Stock take" tint="amber"
+            detail="Not set up yet"
+            onClick={() => onNavigate({ tab: 'kit', sub: 'stock' })} />
+          <NavCard icon={IconFolder} label="Theatre guides" tint="ocean"
+            detail="Field references and surgeon preference cards"
+            onClick={() => onNavigate({ tab: 'kit', sub: 'guides' })} />
+        </NavGroup>
       </Body>
     </Page>
   )
 }
 
+// ─── Me (face lift, Brent 12 Nov 2026: "I don't like the blue band at the top
+// with all the buttons … build some style into the whole portal, like we did
+// with the front cases page") ────────────────────────────────────────────────
+// The band carries who you are — your initials, name and role over the logo's
+// tiles. The three things people open most sit under it as tiles; the rest is
+// grouped into settings-style lists instead of a stack of separate boxes.
+
+const initialsOf = name => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '·'
+
+function Avatar({ name }) {
+  return (
+    <span aria-hidden="true" style={{
+      width: 56, height: 56, borderRadius: radius.pill, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'linear-gradient(145deg, #22b39b 0%, #0f7566 100%)', color: 'white', ...text('title'),
+      boxShadow: '0 0 0 3px rgba(255,255,255,0.16), 0 4px 14px rgba(0,0,0,0.3)'
+    }}>{initialsOf(name)}</span>
+  )
+}
+
+function QuickTile({ icon, tint, label, badge, onClick }) {
+  return (
+    <button type="button" onClick={onClick} data-quick-tile={label} style={{
+      position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: space.sm,
+      padding: space.md, background: colour.surface, border: border.hairline, borderRadius: radius.card,
+      boxShadow: '0 1px 2px rgba(4,39,70,0.04), 0 4px 14px rgba(4,39,70,0.05)', textAlign: 'left', minWidth: 0
+    }}>
+      <IconTile icon={icon} tint={tint} size={40} />
+      <span style={{ ...text('bodyStrong'), color: colour.ink }}>{label}</span>
+      {badge > 0 && (
+        <span style={{ ...text('micro'), position: 'absolute', top: 10, right: 10, background: colour.danger, color: 'white', borderRadius: radius.pill, padding: '3px 8px' }}>
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
 export function MeHub({ user, onNavigate, onLogout, treasury = false, unread = 0 }) {
   const hasTimesheets = user?.staff?.hasTimesheets === true
-  // An admin can open it without being on it — to check it, or to sit with
-  // somebody who is stuck. Filing one is a separate question and still theirs
-  // alone; see mayOpenTimesheets.
+  const me = STAFF.find(s => s.email === user?.email)
+  const role = [user?.staff?.role || me?.role, me?.division].filter(Boolean).join(' · ') || 'Staff'
+  const go = target => () => onNavigate(target)
+
+  // The three most opened, as tiles: Messages and Leave for everyone, then
+  // Timesheets for those who file one, else Admin for an admin, else history.
+  const third = hasTimesheets
+    ? { icon: IconClock, tint: 'ocean', label: 'Timesheets', to: { tab: 'me', sub: 'timesheets' } }
+    : user?.isAdmin
+      ? { icon: IconAdmin, tint: 'navy', label: 'Admin', to: { tab: 'admin', sub: null } }
+      : { icon: IconFile, tint: 'slate', label: 'Patient history', to: { tab: 'me', sub: 'patient' } }
 
   return (
     <Page>
-      <Header
-        eyebrow={user?.staff?.role || 'Staff'}
-        title={user?.name || 'You'}
-        subtitle={user?.email}
-      />
+      <Header lead={<Avatar name={user?.name} />} eyebrow={role} title={user?.name || 'You'} subtitle={user?.email} />
       <Body>
-        {/* Messages, until it has its own app (Brent, 12 Nov 2026: off the
-            bottom bar). The unread count shows on the Me tab and here. */}
-        <NavCard icon={IconChat} label={unread > 0 ? `Messages · ${unread > 9 ? '9+' : unread} unread` : 'Messages'} tone="accent"
-          detail="Team chats and a thread per booking"
-          onClick={() => onNavigate({ tab: 'me', sub: 'messages' })} />
-        {/* Admin moved off the bottom bar to make room for Messages. Five is
-            the limit a bottom bar stays scannable at; an admin is one of two
-            people and knows where to look, while Messages is for all nine
-            several times a day. First card here, so it is no further away
-            than a tab was. */}
+        <div data-quick-tiles style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.sm, marginBottom: space.lg, maxWidth: 560 }}>
+          {/* Messages, until it has its own app (Brent, 12 Nov 2026). */}
+          <QuickTile icon={IconChat} tint="teal" label="Messages" badge={unread} onClick={go({ tab: 'me', sub: 'messages' })} />
+          <QuickTile icon={IconLeave} tint="grape" label="Leave" onClick={go({ tab: 'me', sub: 'leave' })} />
+          <QuickTile icon={third.icon} tint={third.tint} label={third.label} onClick={go(third.to)} />
+        </div>
+
         {(user?.isAdmin || treasury) && (
-          <>
-            <SectionLabel style={{ marginTop: 0 }}>Administration</SectionLabel>
+          <NavGroup label="Administration" first>
             {user?.isAdmin && (
-              <NavCard icon={IconAdmin} label="Admin portal" tone="accent"
-                detail="Staff, PINs, approvals and system status"
-                onClick={() => onNavigate({ tab: 'admin', sub: null })} />
+              <NavCard icon={IconAdmin} label="Admin portal" tint="navy"
+                detail="Staff, PINs, approvals and system status" onClick={go({ tab: 'admin', sub: null })} />
             )}
-            {/* Only when the server has said this person may see it — it
-                answers 404 for everyone not on TREASURY_USERS, admins included. */}
+            {/* Only when the server has said this person may see it. */}
             {treasury && (
-              <NavCard icon={IconChart} label="Treasury" tone="accent"
-                detail="Private · cash, ATO, Bitcoin and the trust"
-                onClick={() => onNavigate({ tab: 'me', sub: 'treasury' })} />
+              <NavCard icon={IconChart} label="Treasury" tint="amber"
+                detail="Private · cash, ATO, Bitcoin and the trust" onClick={go({ tab: 'me', sub: 'treasury' })} />
             )}
-            <SectionLabel>Pay and time</SectionLabel>
-          </>
+          </NavGroup>
         )}
-        {!user?.isAdmin && !treasury && <SectionLabel style={{ marginTop: 0 }}>Pay and time</SectionLabel>}
-        {/* Only for the people who file one (Brent, 12 Nov 2026: "get rid of
-            timesheets from my portal page, I don't need it"). Approving them
-            is in Admin. */}
-        {hasTimesheets && (
-        <NavCard icon={IconClock} label="Timesheets" tone="accent"
-          detail="Fortnightly hours for payroll"
-          onClick={() => onNavigate({ tab: 'me', sub: 'timesheets' })} />
-        )}
-        <NavCard icon={IconLeave} label="Leave"
-          detail="Apply for annual, personal or TOIL"
-          onClick={() => onNavigate({ tab: 'me', sub: 'leave' })} />
-        <NavCard icon={IconPayslip} label="Payslips"
-          detail="Not set up yet"
-          onClick={() => onNavigate({ tab: 'me', sub: 'payslips' })} />
 
-        <SectionLabel>Your files</SectionLabel>
-        {/* Listed first because it answers the question people actually have.
-            The folder tree below is filed by surgeon and then by month, which
-            is the right way to file and the wrong way to look something up. */}
-        <NavCard icon={IconFile} label="Patient history"
-          detail="Every case filed under a surname, whichever surgeon"
-          onClick={() => onNavigate({ tab: 'me', sub: 'patient' })} />
-        <NavCard icon={IconFile} label="Filed usage sheets"
-          detail="Everything saved to Dropbox from a scan"
-          onClick={() => onNavigate({ tab: 'me', sub: 'usagefiles' })} />
+        <NavGroup label="Pay and time" first={!user?.isAdmin && !treasury}>
+          {/* Only for the people who file one (Brent, 12 Nov 2026). */}
+          {hasTimesheets && (
+            <NavCard icon={IconClock} label="Timesheets" tint="ocean"
+              detail="Fortnightly hours for payroll" onClick={go({ tab: 'me', sub: 'timesheets' })} />
+          )}
+          <NavCard icon={IconLeave} label="Leave" tint="grape"
+            detail="Apply for annual, personal or TOIL" onClick={go({ tab: 'me', sub: 'leave' })} />
+          <NavCard icon={IconPayslip} label="Payslips" tint="slate"
+            detail="Not set up yet" onClick={go({ tab: 'me', sub: 'payslips' })} />
+        </NavGroup>
 
-        <SectionLabel>Account</SectionLabel>
-        {/* In settings, where somebody looks for a setting. It used to be a
-            banner inside Messages that appeared when the state warranted one,
-            so finding it meant opening the chat and hoping. */}
-        <NavCard icon={IconLock} label="Notifications"
-          detail="Messages on your phone, on or off"
-          onClick={() => onNavigate({ tab: 'me', sub: 'notifications' })} />
-        <NavCard icon={IconLock} label="Sign-in & Face ID"
-          detail="Manage this device"
-          onClick={() => onNavigate({ tab: 'me', sub: 'security' })} />
-        <NavCard icon={IconLogout} label="Log out"
-          detail={user?.email}
-          onClick={onLogout} />
+        <NavGroup label="Your files">
+          <NavCard icon={IconFile} label="Patient history" tint="sky"
+            detail="Every case filed under a surname, whichever surgeon" onClick={go({ tab: 'me', sub: 'patient' })} />
+          <NavCard icon={IconFile} label="Filed usage sheets" tint="ocean"
+            detail="Everything saved to Dropbox from a scan" onClick={go({ tab: 'me', sub: 'usagefiles' })} />
+        </NavGroup>
 
-        {/* Which version this phone is running. It was only on the sign-in
-            screen, which nobody sees once signed in for 30 days — so "am I on
-            the new version?" had no answer on a phone. Tapping it reloads past
-            any saved copy. */}
+        <NavGroup label="Account">
+          <NavCard icon={IconLock} label="Notifications" tint="slate"
+            detail="Messages on your phone, on or off" onClick={go({ tab: 'me', sub: 'notifications' })} />
+          <NavCard icon={IconLock} label="Sign-in & Face ID" tint="navy"
+            detail="Manage this device" onClick={go({ tab: 'me', sub: 'security' })} />
+          <NavCard icon={IconLogout} label="Log out" tint="rose"
+            detail={user?.email} onClick={onLogout} />
+        </NavGroup>
+
+        {/* Which version this phone is running; tapping reloads past any saved copy. */}
         <button type="button" onClick={() => { window.location.href = `/?r=${Date.now()}` }}
           style={{ display: 'block', width: '100%', marginTop: space.lg, background: 'none', border: 'none',
             cursor: 'pointer', textAlign: 'center', ...text('micro'), color: colour.inkFaint }}>

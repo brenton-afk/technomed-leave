@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { createContext, useContext } from 'react'
 import { createPortal } from 'react-dom'
 import { colour, text, space, radius, border, font, card } from './tokens.js'
 import { IconChevron, IconBack } from './icons.jsx'
@@ -163,7 +163,20 @@ export function BandLogo({ height = 34 }) {
   return <img src="/logo-band.png" alt="TechnoMed — Surgical Solutions & Support" style={{ height, width: 'auto', display: 'block' }} />
 }
 
-export function Header({ eyebrow, title, subtitle, onBack, right, children, compact, sticky, art, logo }) {
+// The band's face lift (Brent, 12 Nov 2026: "build some style into the whole
+// portal, like we did with the front cases page"): every header gets the
+// Cases band's treatment — a deep navy gradient and the logo's tiles pressed
+// into the top-right corner. `art={false}` keeps a band plain.
+export const BAND_GRADIENT = `linear-gradient(160deg, ${colour.navySoft} 0%, ${colour.navy} 48%, ${colour.navyDeep} 100%)`
+
+// A control on the band: solid and raised, never see-through over the tiles.
+export const BAND_RAISED = {
+  background: colour.navySoft, color: 'white', border: '1px solid rgba(255,255,255,0.14)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12), 0 2px 6px rgba(0,0,0,0.25)'
+}
+
+export function Header({ eyebrow, title, subtitle, onBack, right, children, compact, sticky, art: artGiven, logo, lead }) {
+  const art = artGiven === undefined ? 'subtle' : artGiven
   return (
     // `tm-bleed` on the navy, `tm-measure` on what is written on it. On a wide
     // screen the bar reaches both edges of the window while the title lines up
@@ -171,7 +184,7 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children, comp
     // floating panel, and a title that drifts away from the column under it
     // reads as two pages.
     <div className="tm-bleed" style={{
-      background: colour.navy,
+      background: BAND_GRADIENT,
       ...(art ? { position: sticky ? 'sticky' : 'relative', overflow: 'hidden' } : {}),
       // Pinned to the top of the scrolling page where asked (the Cases week:
       // "if you scroll down on the desktop version, you don't lose the ability
@@ -193,14 +206,14 @@ export function Header({ eyebrow, title, subtitle, onBack, right, children, comp
         {onBack && (
           <button onClick={onBack} aria-label="Back"
             style={{
-              width: 34, height: 34, marginTop: 2, flexShrink: 0,
-              borderRadius: radius.pill, border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(255,255,255,0.08)', color: 'white',
+              width: 36, height: 36, marginTop: 2, flexShrink: 0,
+              borderRadius: radius.pill, ...BAND_RAISED,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
             }}>
             <IconBack size={18} />
           </button>
         )}
+        {lead}
         <div style={{ minWidth: 0, flex: 1 }}>
           {eyebrow && (
             <div style={{ ...text('micro'), color: 'rgba(255,255,255,0.42)', textTransform: 'uppercase', marginBottom: 5 }}>
@@ -261,29 +274,77 @@ export function SectionLabel({ children, style }) {
   )
 }
 
+// Icon tiles, one colour per kind of thing — the logo's own blues and teals,
+// plus the grape leave already uses and an amber for money. A gradient and a
+// soft inner light, like the case cards, rather than a flat pastel square.
+export const ICON_TINTS = {
+  teal: ['#22b39b', '#0f7566'],
+  navy: ['#1d5a8c', '#042746'],
+  sky: ['#4fc6f5', '#2b98da'],
+  ocean: ['#2b98da', '#0b6470'],
+  grape: ['#a24bbd', '#6f1d8a'],
+  amber: ['#f0a43a', '#c46a12'],
+  rose: ['#ef6b6b', '#c0392b'],
+  slate: ['#8395a8', '#4a5d72']
+}
+export function IconTile({ icon: Icon, tint = 'teal', size = 38 }) {
+  const [a, b] = ICON_TINTS[tint] || ICON_TINTS.teal
+  return (
+    <span aria-hidden="true" style={{
+      width: size, height: size, borderRadius: Math.round(size * 0.3), flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
+      background: `linear-gradient(145deg, ${a} 0%, ${b} 100%)`,
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 6px rgba(4,39,70,0.18)'
+    }}>
+      <Icon size={Math.round(size * 0.52)} />
+    </span>
+  )
+}
+
+/**
+ * A group of hub rows in one card, divided by hairlines — the way a settings
+ * screen reads — instead of a stack of separate boxes (Brent, 12 Nov 2026).
+ */
+const InGroup = createContext(false)
+export function NavGroup({ label, children, first }) {
+  const rows = React.Children.toArray(children).filter(Boolean)
+  if (!rows.length) return null
+  return (
+    <section style={{ marginTop: first ? 0 : space.lg }}>
+      {label && <SectionLabel style={{ margin: `0 0 ${space.sm}px ${space.xs}px` }}>{label}</SectionLabel>}
+      <div style={{ ...card(), overflow: 'hidden', boxShadow: elevationSoft }}>
+        <InGroup.Provider value={true}>
+          {rows.map((row, i) => (
+            <React.Fragment key={row.key ?? i}>
+              {i > 0 && <div aria-hidden="true" style={{ height: 1, background: colour.lineSoft, marginLeft: 70 }} />}
+              {row}
+            </React.Fragment>
+          ))}
+        </InGroup.Provider>
+      </div>
+    </section>
+  )
+}
+const elevationSoft = '0 1px 2px rgba(4,39,70,0.04), 0 4px 14px rgba(4,39,70,0.05)'
+
 /**
  * The building block of every hub: an icon, a label, a line of context, and a
- * chevron. Large enough to hit reliably in a corridor.
+ * chevron. Large enough to hit reliably in a corridor. Inside a NavGroup it is
+ * a row of that card; on its own, a card of its own.
  */
-export function NavCard({ icon: Icon, label, detail, badge, onClick, disabled, tone = 'default' }) {
-  const tinted = tone === 'accent'
+export function NavCard({ icon: Icon, label, detail, badge, onClick, disabled, tone = 'default', tint }) {
+  const grouped = useContext(InGroup)
+  const t = tint || (tone === 'accent' ? 'teal' : 'slate')
   return (
     <button onClick={disabled ? undefined : onClick} disabled={disabled}
       style={{
-        ...card(),
+        ...(grouped ? { background: colour.surface, border: 'none', borderRadius: 0 } : { ...card(), boxShadow: elevationSoft, marginBottom: space.sm }),
         width: '100%', display: 'flex', alignItems: 'center', gap: space.md,
-        padding: `${space.md + 2}px ${space.md}px`, marginBottom: space.sm,
+        padding: `${space.md}px ${space.md}px`,
         textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.55 : 1, font: 'inherit'
       }}>
-      <span style={{
-        width: 38, height: 38, borderRadius: radius.control, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: tinted ? colour.accentSoft : colour.canvas,
-        color: tinted ? colour.accent : colour.navy
-      }}>
-        <Icon size={20} />
-      </span>
+      <IconTile icon={Icon} tint={t} />
       <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block' }}>{label}</span>
         {detail && (
@@ -348,8 +409,9 @@ export function Banner({ tone = 'info', children, action }) {
 
 export function Button({ children, onClick, variant = 'primary', disabled, style }) {
   const variants = {
-    primary: { background: colour.accent, color: 'white', border: 'none' },
-    secondary: { background: colour.surface, color: colour.navy, border: border.hairline },
+    primary: { background: `linear-gradient(180deg, #1fae97 0%, ${colour.accent} 55%, ${colour.accentDeep} 100%)`, color: 'white', border: 'none',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), 0 2px 8px rgba(15,117,102,0.28)' },
+    secondary: { background: colour.surface, color: colour.navy, border: border.hairline, boxShadow: '0 1px 2px rgba(4,39,70,0.06)' },
     quiet: { background: 'transparent', color: colour.inkFaint, border: border.hairline },
     danger: { background: colour.dangerSoft, color: colour.danger, border: `1px solid ${colour.dangerLine}` }
   }
@@ -358,7 +420,7 @@ export function Button({ children, onClick, variant = 'primary', disabled, style
       style={{
         ...variants[variant], ...text('bodyStrong'),
         width: '100%', padding: `${space.md + 1}px ${space.lg}px`,
-        borderRadius: radius.control, cursor: disabled ? 'default' : 'pointer',
+        borderRadius: radius.control + 2, cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.5 : 1, font: 'inherit', ...style
       }}>
       {children}

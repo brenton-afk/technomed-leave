@@ -112,6 +112,39 @@ button {
   cursor: pointer;
   border: none;
   background: none;
+  /* Face lift (Brent, 12 Nov 2026: "the buttons are all pretty basic"):
+     every button eases between states and answers a press, app-wide. */
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, color 0.15s ease, filter 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+button:not(:disabled):active {
+  filter: brightness(0.94);
+}
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):hover {
+    filter: brightness(0.97);
+  }
+}
+button:disabled {
+  cursor: default;
+}
+/* Drop-downs drawn in the portal's style, not the browser's grey box: their
+   own chevron, rounded, a breath of shadow. !important because most selects
+   set `background` inline, which would otherwise wipe the chevron. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23042746' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  background-size: 12px 12px !important;
+  padding-right: 30px !important;
+  box-shadow: 0 1px 2px rgba(4, 39, 70, 0.05);
+  cursor: pointer;
+}
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid rgba(24, 154, 133, 0.55);
+  outline-offset: 2px;
 }
 
 a {
