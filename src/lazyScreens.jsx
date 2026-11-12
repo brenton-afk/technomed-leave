@@ -27,6 +27,7 @@ const loaders = {
   Timesheets: () => import('./pages/Timesheets.jsx'),
   AdminPortal: () => import('./pages/admin/AdminPortal.jsx'),
   FileBrowser: () => import('./pages/FileBrowser.jsx'),
+  Resources: () => import('./pages/Resources.jsx'),
   PatientHistory: () => import('./pages/PatientHistory.jsx'),
   Notifications: () => import('./pages/Notifications.jsx')
 }

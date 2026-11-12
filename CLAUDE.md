@@ -210,7 +210,20 @@ colours, which are the ones carrying real meaning.
 
 `src/pages/TodayFeed.jsx` is the home screen: a scrolling feed, not a dashboard. It surfaces today's cases, the day's flags, the signed-in user's action items and an unsubmitted-timesheet prompt. Every item is a pointer into a section — the feed never becomes a place to do work.
 
-`src/pages/FileBrowser.jsx` serves both Resources and filed usage sheets from Dropbox, since they are the same problem. Paths are constrained server-side to the usage and resources roots (`assertAllowedPath` in `api/usage/agent.js`); without that, any signed-in user could read the whole Dropbox account. Temporary links are fetched per tap and never stored — a persisted one would be a public URL to patient data.
+**Resources is one card per system we carry** (Brent, 12 Nov 2026: "ARTG
+certificates, the full surgical techniques, the rebate codes and prices and a
+tray list"; chose by system, systems we carry). `pages/Resources.jsx`, served by
+`api/guides.js?resources=` (list, files, open, pick) from `api/_resources.js`:
+the reference files are found by name (`slotOf`: ARTG / technique / rebate) in
+each distributor's Dropbox folder (`DISTRIBUTOR_FOLDERS`, plus TGA and
+Instrument Production for TechnoMed's own) and linked where they are, never
+copied; a file goes to the system whose words it names most precisely
+(`systemsForFile`), newest first. Anyone signed in can **Change** a slot to
+another file of that distributor, or say there is none — shared in Redis
+`resources:picks`. The catalogue is cached six hours (`resources:catalogue`,
+"Look in Dropbox again" refreshes). **Tray list** opens the system's kit in the
+Kit room at its trays (`KitRoom openKit/openFocus`). Only catalogued paths open.
+`src/pages/FileBrowser.jsx` now serves only filed usage sheets.
 
 Session lives in `localStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a 30-day age limit (`SESSION_MAX_AGE_MS`) on restore and re-checks every minute, matching `SESSION_TTL_SECONDS` in `api/_auth.js` — keep the two constants in step.
 
@@ -817,6 +830,16 @@ fixed** by `orderedItems` (`src/projects/agendaOrder.js`). Word, Print
 (`[data-no-print]` hidden) and Copy for everyone; only `AGENDA_EDITORS`
 (erin@) change it. The chat, Claude draft and past-agenda import
 (`agenda-chat`, `agenda-draft`, `agenda-import`) were removed with it.
+
+**The Word export copies Erin's own agenda document** (Brent, 12 Nov 2026:
+"the formatting is very poor … This is what we want the format to look
+like"). `agendaWordDoc` in `projects/Agenda.jsx`, colours in `WORD`: A4 with
+her margins, Montserrat 9pt grey, a "TechnoMed · Surgical Solutions & Support"
+header ruled in teal, the address footer with page number, the details table
+with grey label cells, the agenda table (#, Item, Discussion points, Lead) under
+a navy heading row with a teal "Staff meeting" band and teal round bullets,
+and an empty **Actions arising** table. `agendaWord.test.js` checks it;
+render with `AGENDA_DOCX_OUT=…` and LibreOffice to look at it.
 
 **The live meeting** (Brent, 11 Nov 2026: "a real time live meeting, where
 you automatically update the projects page"). Meeting tab → **Live meeting**

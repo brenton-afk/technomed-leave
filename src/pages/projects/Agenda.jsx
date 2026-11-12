@@ -56,28 +56,109 @@ export function agendaText(a, actions = null) {
   return [...head, '', ...body].join('\n')
 }
 
-async function agendaWord(a, actions) {
-  const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } = await import('docx')
-  const run = (t, o = {}) => new TextRun({ text: t, font: 'Arial', ...o })
-  const p = (t, o = {}, r = {}) => new Paragraph({ children: [run(t, r)], ...o })
-  const cell = (children, w) => new TableCell({ children, width: { size: w, type: WidthType.PERCENTAGE } })
-  const head = [['Date', dmy(a.date)], ['Time', a.time], ['Location', a.location], ['Attendees', a.attendees], ['Apologies', a.apologies], ['Chair', a.chair]]
-    .filter(([, v]) => v).map(([k, v]) => new Paragraph({ children: [run(`${k}: `, { bold: true }), run(v)] }))
-  const rows = [
-    new TableRow({ children: [cell([p('#', {}, { bold: true })], 6), cell([p('Item', {}, { bold: true })], 34), cell([p('Discussion points', {}, { bold: true })], 45), cell([p('Lead', {}, { bold: true })], 15)] }),
-    ...agendaSections(a, actions).map((sec, i) => new TableRow({ children: [
-      cell([p(String(i + 1))], 6),
-      cell([p(sec.title, {}, sec.kind === 'actions' ? { bold: true } : {})], 34),
-      cell(sec.kind === 'actions'
-        ? (sec.rows.length ? sec.rows.map(t => p(actionLine(t), { bullet: { level: 0 } })) : [p('None outstanding')])
-        : (sec.points?.length ? sec.points : ['']).map(pt => p(pt, pt ? { bullet: { level: 0 } } : {})), 45),
-      cell([p(sec.kind === 'actions' ? 'Owners' : (sec.lead || ''))], 15)
+// ─── The Word export (Brent, 12 Nov 2026: "the formatting is very poor … This
+// is what we want the format to look like") ──────────────────────────────────
+// Copied from Erin's own agenda document: Montserrat 9pt grey body, A4 with
+// her margins, a "TechnoMed | Surgical Solutions & Support" header ruled in
+// teal, the address footer with page numbers, a details table with grey label
+// cells, the agenda table under a navy heading row with a teal band naming the
+// meeting, teal round bullets, and an empty "Actions arising" table to fill in.
+export const WORD = { navy: '182A46', teal: '0D6475', bullet: '00957F', label: 'E2E2E2', ink: '555555', rule: 'BFBFBF', font: 'Montserrat' }
+
+export async function agendaWordDoc(a, actions) {
+  const {
+    Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, BorderStyle, Header, Footer,
+    TabStopType, PageNumber, LevelFormat, AlignmentType
+  } = await import('docx')
+  const W = WORD
+  const run = (t, o = {}) => new TextRun({ text: String(t ?? ''), font: W.font, size: 18, color: W.ink, ...o })
+  const para = (children, o = {}) => new Paragraph({ children: Array.isArray(children) ? children : [children], spacing: { after: 40 }, ...o })
+  const bullet = t => para(run(t), { numbering: { reference: 'tm-dots', level: 0 }, spacing: { after: 20 } })
+  const line = { style: BorderStyle.SINGLE, size: 4, color: W.rule }
+  const borders = { top: line, bottom: line, left: line, right: line, insideHorizontal: line, insideVertical: line }
+  const margins = { top: 70, bottom: 70, left: 110, right: 110 }
+  const cell = (children, width, o = {}) => new TableCell({
+    children: Array.isArray(children) ? children : [children], width: { size: width, type: WidthType.DXA }, margins, ...o
+  })
+  const shade = fill => ({ shading: { type: ShadingType.CLEAR, color: 'auto', fill } })
+  const headCell = (t, w) => cell(para(run(t, { bold: true, color: 'FFFFFF' })), w, shade(W.navy))
+  const band = (t, cols) => new TableRow({ children: [cell(para(run(t, { bold: true, color: 'FFFFFF' })), 9638, { ...shade(W.teal), columnSpan: cols })] })
+
+  // The meeting's details, grey labels on the left.
+  const details = [['Date', dmy(a.date)], ['Time', a.time], ['Location', a.location], ['Attendees', a.attendees], ['Apologies', a.apologies], ['Chair', a.chair]]
+    .filter(([, v]) => v)
+  const detailTable = new Table({
+    width: { size: 9638, type: WidthType.DXA }, columnWidths: [2300, 7338], borders,
+    rows: details.map(([k, v]) => new TableRow({ children: [
+      cell(para(run(k, { bold: true, color: W.navy })), 2300, shade(W.label)),
+      cell(para(run(v)), 7338)
     ] }))
+  })
+
+  // The agenda itself: #, Item, Discussion points, Lead.
+  const cols = [600, 2700, 4738, 1600]
+  const rows = [
+    new TableRow({ tableHeader: true, children: [headCell('#', cols[0]), headCell('Item', cols[1]), headCell('Discussion points', cols[2]), headCell('Lead', cols[3])] }),
+    band('Staff meeting', 4),
+    ...agendaSections(a, actions).map((sec, i) => {
+      const points = sec.kind === 'actions'
+        ? (sec.rows.length ? sec.rows.map(t => bullet(actionLine(t))) : [para(run('None outstanding'))])
+        : (sec.points?.length ? sec.points.map(bullet) : [para(run(''))])
+      const lead = sec.kind === 'actions' ? [...new Set(sec.rows.map(t => first(t.assignee)).filter(Boolean))].join(', ') : (sec.lead || '')
+      return new TableRow({ cantSplit: true, children: [
+        cell(para(run(String(i + 1), { bold: true, color: W.navy })), cols[0]),
+        cell(para(run(sec.title, { bold: true, color: W.navy })), cols[1]),
+        cell(points, cols[2]),
+        cell(para(run(lead)), cols[3])
+      ] })
+    })
   ]
-  return Packer.toBlob(new Document({ sections: [{ children: [
-    p('Agenda', {}, { bold: true, size: 36 }), p(a.title, {}, { bold: true, size: 28 }), ...head, p(''),
-    new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } })
-  ] }] }))
+  const agendaTable = new Table({ width: { size: 9638, type: WidthType.DXA }, columnWidths: cols, borders, rows })
+
+  // Actions arising, left empty to be filled in at the meeting.
+  const acols = [5338, 2150, 2150]
+  const arising = new Table({
+    width: { size: 9638, type: WidthType.DXA }, columnWidths: acols, borders,
+    rows: [
+      new TableRow({ tableHeader: true, children: [headCell('Action', acols[0]), headCell('Owner', acols[1]), headCell('Due', acols[2])] }),
+      ...[0, 1, 2].map(() => new TableRow({ height: { value: 360, rule: 'atLeast' }, children: acols.map(w => cell(para(run('')), w)) }))
+    ]
+  })
+
+  const heading = t => para(run(t, { bold: true, color: W.navy, size: 24 }), { spacing: { before: 240, after: 100 } })
+  const right = [{ type: TabStopType.RIGHT, position: 9638 }]
+  return new Document({
+    creator: 'TechnoMed', title: `${a.title} agenda`,
+    styles: { default: { document: { run: { font: W.font, size: 18, color: W.ink } } } },
+    numbering: { config: [{ reference: 'tm-dots', levels: [{ level: 0, format: LevelFormat.BULLET, text: '●', alignment: AlignmentType.LEFT,
+      style: { run: { color: W.bullet, size: 12 }, paragraph: { indent: { left: 300, hanging: 220 } } } }] }] },
+    sections: [{
+      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1300, right: 1134, bottom: 1100, left: 1134, header: 708, footer: 708 } } },
+      headers: { default: new Header({ children: [new Paragraph({
+        tabStops: right, border: { bottom: { style: BorderStyle.SINGLE, size: 8, space: 4, color: W.bullet } },
+        children: [run('TechnoMed', { bold: true, color: W.navy, size: 22 }), run('\tSurgical Solutions & Support', { color: W.teal, size: 16 })]
+      })] }) },
+      footers: { default: new Footer({ children: [new Paragraph({
+        tabStops: right,
+        children: [run('TechnoMed Pty Ltd  |  295 Elizabeth Street, North Hobart TAS 7000  |  www.technomed.com.au', { size: 14 }),
+          run('\tPage ', { size: 14 }), new TextRun({ children: [PageNumber.CURRENT], font: W.font, size: 14, color: W.ink })]
+      })] }) },
+      children: [
+        para(run('Agenda', { bold: true, color: W.navy, size: 40 }), { spacing: { after: 0 } }),
+        para(run(a.title || 'TechnoMed Staff Meeting', { color: W.teal, size: 24 }), { spacing: { after: 200 } }),
+        detailTable,
+        heading('Agenda'),
+        agendaTable,
+        heading('Actions arising'),
+        arising
+      ]
+    }]
+  })
+}
+
+async function agendaWord(a, actions) {
+  const { Packer } = await import('docx')
+  return Packer.toBlob(await agendaWordDoc(a, actions))
 }
 
 // ─── Who is coming (Brent, 12 Nov 2026: "Attendees need to be buttons") ─────

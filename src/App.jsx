@@ -9,7 +9,7 @@ import { Screens, LazyScreen, prefetchScreens } from './lazyScreens.jsx'
 // Loaded when opened rather than with the app — see lazyScreens.jsx.
 const {
   LeaveForm, KitRoom, Projects, TeamLeader, UsageScan, ScanTab, TheatreGuides, Chat, Timesheets,
-  AdminPortal, FileBrowser, PatientHistory, Notifications
+  AdminPortal, FileBrowser, Resources, PatientHistory, Notifications
 } = Screens
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
 // Not in lazyScreens' list on purpose: that list is prefetched onto every
@@ -458,12 +458,13 @@ export default function App() {
     if (tab === 'projects') return <Projects user={user} />
 
     if (tab === 'resources') {
-      return <FileBrowser user={user} root="resources" eyebrow="Reference" title="Resources" />
+      // One card per system: ARTG, technique, rebate codes, tray list (Brent, 12 Nov 2026).
+      return <Resources user={user} onOpenKit={id => navigate({ tab: 'kit', sub: 'kitroom', kit: id, focus: 'trays' })} />
     }
 
     if (tab === 'kit') {
       switch (sub) {
-        case 'kitroom': return <KitRoom user={user} onBack={back} />
+        case 'kitroom': return <KitRoom user={user} onBack={back} openKit={nav.kit} openFocus={nav.focus} />
         case 'guides':
           return <TheatreGuides user={user} onBack={back} />
         case 'stock':

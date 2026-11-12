@@ -13,6 +13,7 @@ import {
 import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus } from './_dropbox.js'
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
+import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath } from './_resources.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
 import { listKitDocs, docCounts, keepKitDoc, removeKitDoc, setKitDocKind, kitDocLink, DOC_KINDS,
   dropboxCatalogue, suggestFor, searchCatalogue, linkKitDoc, proposeAgreements } from './_kitDocs.js'
@@ -138,6 +139,8 @@ export default async function handler(req, res) {
   if (req.query.prefs) return handlePreferences(req, res, session)
   // The kit room, here for the same reason.
   if (req.query.kits) return handleKits(req, res, session)
+  // Resources: each system's ARTG, surgical technique, rebate codes and tray list.
+  if (req.query.resources) return handleResources(req, res, session)
 
   const slug = String(req.query.guide || '').trim()
 
@@ -235,6 +238,41 @@ async function handlePreferences(req, res, session) {
 
 function hobartToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date())
+}
+
+// ─── Resources (Brent, 12 Nov 2026) — see api/_resources.js ─────────────────
+async function handleResources(req, res, session) {
+  const what = String(req.query.resources)
+  try {
+    if (what === 'list' && req.method === 'GET') {
+      const fresh = req.query.fresh === '1'
+      const [catalogue, picks, kits] = await Promise.all([resourceCatalogue({ fresh }), getPicks(), listKits().catch(() => [])])
+      const lists = kits.length ? await redis('mget', ...kits.map(k => `kits:list:${k.id}`)).catch(() => []) : []
+      const withTrays = kits.map((k, i) => {
+        let n = 0
+        try { n = (JSON.parse(lists?.[i] || 'null')?.trays || []).length } catch { n = 0 }
+        return { id: k.id, name: k.name, system: k.system, trayCount: n }
+      })
+      return res.status(200).json({ systems: resourcesBySystem({ catalogue, picks, kits: withTrays }), canEdit: Boolean(session?.email) })
+    }
+    if (what === 'files' && req.method === 'GET') {
+      const catalogue = await resourceCatalogue()
+      return res.status(200).json({ files: filesFor(catalogue, String(req.query.distributor || ''), String(req.query.slot || '')) })
+    }
+    if (what === 'open' && req.method === 'GET') {
+      const path = String(req.query.path || '')
+      if (!openablePath(path, await resourceCatalogue())) return res.status(404).json({ error: 'That file is not in the reference folders' })
+      return res.status(200).json(await temporaryLink(path))
+    }
+    if (what === 'pick' && req.method === 'POST') {
+      const { system, slot, path } = req.body || {}
+      await setPick(String(system || ''), String(slot || ''), path ? String(path) : null, await resourceCatalogue())
+      return res.status(200).json({ ok: true })
+    }
+    return res.status(400).json({ error: 'Unknown resources action' })
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'Could not load the resources' })
+  }
 }
 
 async function handleKits(req, res, session) {

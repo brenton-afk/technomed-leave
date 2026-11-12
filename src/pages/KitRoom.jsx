@@ -81,7 +81,7 @@ function sinceText(iso) {
   return `${days} days`
 }
 
-export default function KitRoom({ user, onBack }) {
+export default function KitRoom({ user, onBack, openKit = '', openFocus: startFocus = '' }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [place, setPlace] = useState('all')
@@ -108,6 +108,13 @@ export default function KitRoom({ user, onBack }) {
   }, [user?.token])
 
   useEffect(() => { load() }, [load])
+  // Opened from Resources' "Tray list": straight to that kit's trays, once.
+  const opened = useRef(false)
+  useEffect(() => {
+    if (opened.current || !openKit || !data?.kits) return
+    const k = data.kits.find(x => x.id === openKit)
+    if (k) { opened.current = true; setOpenFocus(startFocus || ''); setOpen(k) }
+  }, [data, openKit, startFocus])
 
   async function post(what, body) {
     const res = await fetch(`/api/guides?kits=${what}`, {
