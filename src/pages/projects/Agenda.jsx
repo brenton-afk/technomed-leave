@@ -4,7 +4,7 @@ import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { useLiveRefresh } from '../../liveRefresh.js'
 import { useIsDesktop } from '../../design/viewport.js'
 import { STAFF } from '../../staffConfig.js'
-import { orderedItems } from '../../projects/agendaOrder.js'
+import { orderedItems, isWelcome, isGeneral, isNextMeeting } from '../../projects/agendaOrder.js'
 
 // ─── The next meeting's agenda (Brent, 11 and 12 Nov 2026) ───────────────────
 // "The agendas [should] be written based off the projects completed report …
@@ -15,12 +15,14 @@ import { orderedItems } from '../../projects/agendaOrder.js'
 // a Claude chat … to build the agenda from scratch using the data in the
 // projects report."
 //
-// So: Erin sets the date and time (Set up the next meeting); the agenda is the
-// document as it will print — header, then the actions since the last
-// meeting (Completed / Not completed, worked out from the projects every time,
-// never typed), then her numbered items. She adds, edits and orders items by
-// hand, or asks Claude in the chat beside it. Everyone reads it live; only
-// Erin (AGENDA_EDITORS) changes it. Word and Print for everyone.
+// So: the agenda is the document as it will print — header, then the actions
+// not yet completed (worked out from the projects every time, never typed),
+// then Erin's numbered items. The Claude chat was removed (Brent, 12 Nov
+// 2026: "Get rid of the bot and give us an alternative way to edit easily"):
+// Erin picks the date and time, taps who is coming, taps items on from the
+// projects and the last agenda, and edits any item in place. Every change
+// saves at once. Everyone reads it live; only Erin (AGENDA_EDITORS) changes
+// it. Word and Print for everyone.
 
 const dmy = d => (d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Hobart' }) : '')
 const short = d => (d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Hobart' }) : '')
@@ -130,12 +132,77 @@ function WhoIsComing({ value, onChange, chip, field }) {
   )
 }
 
-const STARTERS = [
-  'The next meeting is Wednesday 25 November at 9am',
-  'Build the agenda from the report',
-  'Add an item about the Christmas roster, led by Erin',
-  'Everyone is coming except Toni'
-]
+export const TIMES = ['9:00am', '10:00am', '11:00am', '12:00pm', '1:00pm', '2:00pm', '3:00pm']
+const isStanding = t => isWelcome(t) || isGeneral(t) || isNextMeeting(t)
+
+/** The agenda with one item changed, moved, removed or added. Pure. */
+export function editItems(agenda, op) {
+  const items = orderedItems(agenda?.items || []).map(i => ({ ...i, points: [...(i.points || [])] }))
+  const at = items.findIndex(i => i.id === op.id)
+  if (op.type === 'add') return { ...agenda, items: [...items.slice(0, -1), { title: op.title, points: op.points || [], lead: op.lead || '' }, items[items.length - 1]] }
+  if (at < 0) return agenda
+  if (op.type === 'update') items[at] = { ...items[at], ...op.patch }
+  if (op.type === 'remove' && !isStanding(items[at].title)) items.splice(at, 1)
+  if (op.type === 'move') {
+    const to = at + op.dir
+    if (to < 0 || to >= items.length || isStanding(items[at].title) || isStanding(items[to].title)) return agenda
+    ;[items[at], items[to]] = [items[to], items[at]]
+  }
+  return { ...agenda, items }
+}
+
+const LEADS = [...new Set(STAFF.map(s => s.firstName).filter(Boolean))]
+
+function ItemEditor({ item, n, first: isFirst, last: isLast, onChange, onMove, onRemove, field, small }) {
+  const standing = isStanding(item.title)
+  const [adding, setAdding] = useState(false)
+  const commit = (value, was, apply) => { const v = value.trim(); if (v !== String(was || '').trim()) apply(v) }
+  const points = item.points || []
+  return (
+    <div data-edit-item style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control, padding: space.sm, marginTop: space.xs }}>
+      <div style={{ display: 'flex', gap: space.xs, alignItems: 'center' }}>
+        <span style={{ ...text('heading'), color: colour.accentDeep, minWidth: 22 }}>{n}</span>
+        {standing
+          ? <div style={{ ...text('bodyStrong'), color: colour.ink, flex: 1 }}>{item.title}</div>
+          : <input key={`t-${item.id}-${item.title}`} defaultValue={item.title} aria-label="Item title" data-item-title
+              onBlur={e => commit(e.target.value, item.title, v => v && onChange({ title: v }))}
+              onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }} style={{ ...field, flex: 1, fontWeight: 600 }} />}
+        {!standing && <>
+          <button type="button" aria-label="Move up" disabled={isFirst} onClick={() => onMove(-1)} style={small}>↑</button>
+          <button type="button" aria-label="Move down" disabled={isLast} onClick={() => onMove(1)} style={small}>↓</button>
+          <button type="button" aria-label="Remove item" onClick={onRemove} style={{ ...small, color: colour.danger }}>✕</button>
+        </>}
+      </div>
+      <div style={{ paddingLeft: 30, marginTop: 6 }}>
+        {points.map((p, j) => (
+          <div key={`${item.id}-${j}-${p}`} style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+            <input defaultValue={p} aria-label="Discussion point" data-item-point
+              onBlur={e => commit(e.target.value, p, v => onChange({ points: v ? points.map((x, k) => (k === j ? v : x)) : points.filter((_, k) => k !== j) }))}
+              onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }} style={{ ...field, flex: 1 }} />
+            <button type="button" aria-label="Remove point" onClick={() => onChange({ points: points.filter((_, k) => k !== j) })} style={small}>✕</button>
+          </div>
+        ))}
+        {adding && (
+          <input autoFocus aria-label="New point" placeholder="New point" data-new-point
+            onBlur={e => { const v = e.target.value.trim(); setAdding(false); if (v) onChange({ points: [...points, v] }) }}
+            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setAdding(false) }}
+            style={{ ...field, marginTop: 4 }} />
+        )}
+        <div style={{ display: 'flex', gap: space.sm, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => setAdding(true)} style={{ ...small, color: colour.accentDeep, padding: '0 10px', width: 'auto' }}>+ Point</button>
+          <label style={{ ...text('caption'), color: colour.inkFaint, display: 'flex', alignItems: 'center', gap: 6 }}>
+            Lead
+            <select value={item.lead || ''} aria-label="Lead" onChange={e => onChange({ lead: e.target.value })}
+              style={{ ...field, width: 'auto', padding: '4px 8px' }}>
+              <option value="">—</option>
+              {[...new Set([...LEADS, ...(item.lead ? [item.lead] : [])])].map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </label>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Agenda({ user, onClose, today }) {
   const auth = { Authorization: `Bearer ${user?.token || ''}` }
@@ -144,10 +211,11 @@ export default function Agenda({ user, onClose, today }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
-  const [said, setSaid] = useState('')
   const [undo, setUndo] = useState(null)
-  const [pane, setPane] = useState('chat') // a phone shows one at a time
-  const chatEnd = useRef(null)
+  const [newTitle, setNewTitle] = useState('')
+  const [pane, setPane] = useState('edit') // a phone shows one at a time
+  const latest = useRef(null)
+  const queue = useRef(Promise.resolve())
 
   const call = async (action, method, body) => {
     const res = await fetch(`/api/meetings/agent?action=${action}`, {
@@ -167,47 +235,46 @@ export default function Agenda({ user, onClose, today }) {
 
   const agenda = data?.agenda
   const actions = data?.actions
-  const chat = data?.chat || []
+  const suggestions = data?.suggestions || []
   const canEdit = Boolean(data?.canEdit)
-  useEffect(() => { chatEnd.current?.scrollIntoView?.({ block: 'end' }) }, [chat.length, busy])
+  useEffect(() => { latest.current = agenda || null }, [agenda])
 
-  async function save(next, message = 'Saved.') {
+  const took = (out, d) => ({ ...d, agenda: out.agenda, actions: out.actions ?? d.actions, suggestions: out.suggestions ?? d.suggestions })
+
+  /** Saves a change made to the newest agenda; changes queue so none is lost. */
+  function save(change, message = 'Saved.') {
+    queue.current = queue.current.then(async () => {
+      const cur = latest.current || {}
+      const next = typeof change === 'function' ? change(cur) : change
+      if (next === cur) return
+      setBusy('save'); setNote('')
+      try {
+        const out = await call('agenda', 'PUT', { agenda: next, version: cur.version || 0 })
+        setUndo(cur); latest.current = out.agenda; setData(d => took(out, d)); setNote(message)
+      } catch (err) {
+        if (err.status === 409 && err.out?.agenda) { latest.current = err.out.agenda; setData(d => ({ ...d, agenda: err.out.agenda })) }
+        setNote(err.message)
+      }
+      setBusy('')
+    })
+    return queue.current
+  }
+  const edit = (op, message) => save(cur => editItems(cur, op), message)
+
+  async function newMeeting(date) {
+    if (!date) return
+    const cur = latest.current
+    // Same meeting, new day: just the date. A meeting that has passed: a fresh
+    // agenda for the new one — standing items kept, the rest offered to tap.
+    if (cur?.date && cur.date >= today) return save(c => ({ ...c, date }), 'Date changed.')
     setBusy('save'); setNote('')
     try {
-      const { agenda: saved } = await call('agenda', 'PUT', { agenda: next, version: agenda?.version || 0 })
-      setUndo(agenda); setData(d => ({ ...d, agenda: saved })); setNote(message)
-    } catch (err) {
-      if (err.status === 409 && err.out?.agenda) setData(d => ({ ...d, agenda: err.out.agenda }))
-      setNote(err.message)
-    }
-    setBusy('')
-  }
-  async function ask(words) {
-    const message = String(words ?? said).trim()
-    if (!message || busy === 'chat') return
-    setSaid(''); setBusy('chat'); setNote('')
-    setData(d => ({ ...d, chat: [...(d?.chat || []), { role: 'user', text: message }] }))
-    try {
-      const out = await call('agenda-chat', 'POST', { text: message })
-      if (out.changed) setUndo(out.previous || agenda)
-      setData(d => ({ ...d, chat: out.chat, agenda: out.agenda ?? d.agenda, actions: out.actions ?? d.actions }))
-    } catch (err) {
-      setData(d => ({ ...d, chat: [...(d?.chat || []), { role: 'assistant', text: err.message, failed: true }] }))
-    }
-    setBusy('')
-  }
-  async function freshChat() {
-    try { const out = await call('agenda-chat', 'DELETE'); setData(d => ({ ...d, chat: out.chat })) } catch (err) { setNote(err.message) }
-  }
-  async function importPast() {
-    setBusy('import'); setNote('')
-    try {
-      const out = await call('agenda-import', 'POST', {})
-      setNote(`Read ${out.read} agenda${out.read === 1 ? '' : 's'} from email — ${out.added} new.`)
-      await load()
+      const out = await call('agenda-setup', 'POST', { date, time: cur?.time || '', location: cur?.location || '', chair: cur?.chair || '' })
+      setUndo(cur); latest.current = out.agenda; setData(d => took(out, d)); setNote('New agenda started — tap items below to add them.')
     } catch (err) { setNote(err.message) }
     setBusy('')
   }
+
   async function download() {
     try {
       const blob = await agendaWord(agenda, actions)
@@ -225,13 +292,15 @@ export default function Agenda({ user, onClose, today }) {
   const btn = on => ({ ...text('caption'), fontWeight: 700, minHeight: 38, padding: `0 ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer',
     border: on ? 'none' : border.hairline, background: on ? colour.navy : colour.surface, color: on ? colour.surface : colour.ink })
   const field = { ...text('body'), fontSize: 16, width: '100%', boxSizing: 'border-box', padding: `${space.xs}px ${space.sm}px`, border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink }
+  const small = { ...text('caption'), fontWeight: 700, minWidth: 36, height: 36, borderRadius: radius.control, border: border.hairline, background: colour.surface, color: colour.inkMuted, cursor: 'pointer', flexShrink: 0 }
   const chip = state => ({
     ...text('caption'), fontWeight: 600, minHeight: 36, padding: `0 ${space.sm}px`, borderRadius: radius.pill, cursor: 'pointer',
-    border: state === 'going' ? `1px solid ${colour.accent}` : state === 'away' ? `1px solid ${colour.dangerLine}` : border.hairline,
-    background: state === 'going' ? colour.accentSoft : state === 'away' ? colour.dangerSoft : state === 'all' ? colour.canvas : colour.surface,
-    color: state === 'going' ? colour.accentDeep : state === 'away' ? colour.danger : colour.ink
+    border: state === 'going' || state === 'on' ? `1px solid ${colour.accent}` : state === 'away' ? `1px solid ${colour.dangerLine}` : border.hairline,
+    background: state === 'going' || state === 'on' ? colour.accentSoft : state === 'away' ? colour.dangerSoft : state === 'all' ? colour.canvas : colour.surface,
+    color: state === 'going' || state === 'on' ? colour.accentDeep : state === 'away' ? colour.danger : colour.ink
   })
   const card = { background: colour.surface, border: border.hairline, borderRadius: radius.card, padding: space.md }
+  const label = { ...text('caption'), fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: colour.inkFaint, marginBottom: 6 }
 
   // ── The agenda, as it prints ──
   const doc = agenda ? (
@@ -247,20 +316,8 @@ export default function Agenda({ user, onClose, today }) {
           .filter(([, v]) => v).map(([k, v]) => (
             <div key={k} style={{ ...text('body'), color: colour.inkMuted, marginTop: 2 }}><b style={{ color: colour.ink }}>{k}:</b> {v}</div>
           ))}
-        {agenda.date && agenda.date < today && <div data-no-print style={{ ...text('caption'), color: colour.warning, marginTop: space.xs }}>This was for a meeting that has passed — tell Claude when the next one is.</div>}
+        {agenda.date && agenda.date < today && <div data-no-print style={{ ...text('caption'), color: colour.warning, marginTop: space.xs }}>This was for a meeting that has passed{canEdit ? ' — pick the next date to start a new one.' : '.'}</div>}
       </div>
-
-      {canEdit && (
-        <details data-no-print style={{ ...card, padding: `${space.sm}px ${space.md}px`, marginTop: space.sm }}>
-          <summary style={{ ...text('bodyStrong'), color: colour.ink, cursor: 'pointer' }}>
-            Who is coming · {splitNames(agenda.attendees).length} attending{splitNames(agenda.apologies).length ? `, ${splitNames(agenda.apologies).length} apolog${splitNames(agenda.apologies).length === 1 ? 'y' : 'ies'}` : ''}
-          </summary>
-          <div style={{ marginTop: space.sm }}>
-            <WhoIsComing value={{ attendees: agenda.attendees, apologies: agenda.apologies }}
-              onChange={v => save({ ...agenda, ...v })} chip={chip} field={field} />
-          </div>
-        </details>
-      )}
 
       <div style={{ ...text('heading'), color: colour.ink, margin: `${space.md}px 0 ${space.xs}px` }}>Agenda</div>
       {agendaSections(agenda, actions).map((sec, i) => (sec.kind === 'actions' ? (
@@ -294,53 +351,82 @@ export default function Agenda({ user, onClose, today }) {
       )}
     </div>
   ) : data && (
-    <div style={{ ...text('body'), color: colour.inkFaint }}>{canEdit ? 'No agenda yet — tell Claude when the next meeting is.' : 'Erin has not put the next agenda up yet.'}</div>
+    <div style={{ ...text('body'), color: colour.inkFaint }}>{canEdit ? 'No agenda yet — pick the meeting date to start one.' : 'Erin has not put the next agenda up yet.'}</div>
   )
 
-  // ── The conversation ──
-  const chatPanel = canEdit && (
-    <div data-agenda-chat data-no-print style={{ ...card, display: 'flex', flexDirection: 'column', gap: space.sm, minHeight: wide ? 'calc(100vh - 140px)' : 'calc(100dvh - 190px)' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm }}>
-        <div style={{ ...text('heading'), color: colour.ink, flex: 1 }}>Build the agenda with Claude</div>
-        {chat.length > 0 && <button type="button" onClick={freshChat} style={{ ...text('caption'), border: 'none', background: 'none', color: colour.inkFaint, cursor: 'pointer' }}>New conversation</button>}
+  // ── Erin's editor: all taps, typing only for something new ──
+  const items = orderedItems(agenda?.items || [])
+  const sections = agenda ? agendaSections(agenda, actions) : []
+  const numberOf = id => sections.findIndex(s => s.kind === 'item' && s.id === id) + 1
+  const movable = items.filter(i => !isStanding(i.title))
+  const addNew = () => { const t = newTitle.trim(); if (!t) return; setNewTitle(''); edit({ type: 'add', title: t }, `Added "${t}".`) }
+  const editor = canEdit && (
+    <div data-agenda-editor data-no-print style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
+      <div style={card}>
+        <div style={label}>The meeting</div>
+        <input type="date" aria-label="Meeting date" value={agenda?.date || ''} onChange={e => newMeeting(e.target.value)} style={{ ...field, maxWidth: 220 }} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: space.xs }}>
+          {[...new Set([...TIMES, ...(agenda?.time && !TIMES.includes(agenda.time) ? [agenda.time] : [])])].map(t => (
+            <button key={t} type="button" aria-pressed={agenda?.time === t} data-time={t}
+              onClick={() => save(c => ({ ...c, time: t }), `Time set to ${t}.`)} style={chip(agenda?.time === t ? 'on' : '')}>{t}</button>
+          ))}
+        </div>
+        <input key={`loc-${agenda?.version || 0}`} defaultValue={agenda?.location || ''} aria-label="Location" placeholder="Location (e.g. TechnoMed office and Google Meet)"
+          onBlur={e => { const v = e.target.value.trim(); if (v !== (agenda?.location || '')) save(c => ({ ...c, location: v }), 'Location saved.') }}
+          onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }} style={{ ...field, marginTop: space.xs }} />
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: space.xs }}>
-        {chat.length === 0 && (
-          <div style={{ ...text('body'), color: colour.inkMuted }}>
-            Tell me when the next meeting is and who is coming, and I will build it from the projects report, with everything not yet done.  Then just say what to add or change.
+
+      {agenda && (
+        <div style={card}>
+          <div style={label}>Who is coming</div>
+          <WhoIsComing value={{ attendees: agenda.attendees, apologies: agenda.apologies }}
+            onChange={v => save(c => ({ ...c, ...v }))} chip={chip} field={field} />
+        </div>
+      )}
+
+      {agenda && suggestions.length > 0 && (
+        <div style={card} data-agenda-suggestions>
+          <div style={label}>Tap to add</div>
+          {suggestions.map(sug => (
+            <button key={sug.key} type="button" data-suggestion={sug.kind}
+              onClick={() => edit({ type: 'add', title: sug.title, points: sug.points, lead: sug.lead }, `Added "${sug.title}".`)}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: space.sm, width: '100%', textAlign: 'left', padding: `${space.xs}px 0`, border: 'none', borderBottom: border.hairlineSoft, background: 'none', cursor: 'pointer' }}>
+              <span style={{ ...text('heading'), color: colour.accent, lineHeight: 1 }}>+</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ ...text('bodyStrong'), color: colour.ink, display: 'block' }}>{sug.title}{sug.lead ? <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}> · {sug.lead}</span> : null}</span>
+                <span style={{ ...text('caption'), color: colour.inkFaint }}>{sug.note}{sug.points?.length ? ` — ${sug.points.slice(0, 2).join('; ')}${sug.points.length > 2 ? '…' : ''}` : ''}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {agenda && (
+        <div style={card}>
+          <div style={label}>Items — tap any wording to change it</div>
+          {items.map(it => (
+            <React.Fragment key={it.id}>
+              <ItemEditor item={it} n={numberOf(it.id)} field={field} small={small}
+                first={movable[0]?.id === it.id} last={movable[movable.length - 1]?.id === it.id}
+                onChange={patch => edit({ type: 'update', id: it.id, patch })}
+                onMove={dir => edit({ type: 'move', id: it.id, dir }, 'Moved.')}
+                onRemove={() => edit({ type: 'remove', id: it.id }, `Removed "${it.title}".`)} />
+              {isGeneral(it.title) && (
+                <div style={{ ...text('caption'), color: colour.inkFaint, padding: `${space.xs}px ${space.sm}px`, marginTop: space.xs, border: `1px dashed ${colour.line}`, borderRadius: radius.control }}>
+                  {numberOf(it.id) + 1}. Actions not yet completed — filled in from the projects page
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+          <div style={{ display: 'flex', gap: 6, marginTop: space.sm }}>
+            <input value={newTitle} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addNew() }}
+              placeholder="Something else to discuss" aria-label="New item" style={{ ...field, flex: 1 }} />
+            <button type="button" onClick={addNew} disabled={!newTitle.trim()} style={btn(true)}>Add</button>
           </div>
-        )}
-        {chat.length === 0 && STARTERS.map(st => (
-          <button key={st} type="button" onClick={() => ask(st)}
-            style={{ ...text('body'), textAlign: 'left', padding: `${space.xs}px ${space.sm}px`, borderRadius: radius.control, border: border.hairline, background: colour.canvas, color: colour.ink, cursor: 'pointer' }}>{st}</button>
-        ))}
-        {chat.map((m, i) => (
-          <div key={i} data-chat-role={m.role} style={{ ...text('body'), alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%',
-            background: m.role === 'user' ? colour.accentSoft : m.failed ? colour.dangerSoft : colour.canvas, color: colour.ink,
-            borderRadius: radius.card, padding: `${space.xs}px ${space.sm}px`, whiteSpace: 'pre-wrap' }}>
-            {m.text}
-            {m.changed && (m.changes?.length
-              ? <ul data-chat-changes style={{ ...text('caption'), color: colour.accentDeep, margin: '4px 0 0', paddingLeft: 0, listStyle: 'none' }}>
-                  {m.changes.map((c, j) => <li key={j}>✓ {c}</li>)}
-                </ul>
-              : <div style={{ ...text('caption'), color: colour.accentDeep, marginTop: 2 }}>✓ Agenda updated</div>)}
-            {m.role === 'assistant' && !m.changed && !m.failed && <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>No change made</div>}
-          </div>
-        ))}
-        {busy === 'chat' && <div style={{ ...text('caption'), color: colour.inkFaint }}>Claude is working on it…</div>}
-        <div ref={chatEnd} />
-      </div>
-      <div style={{ display: 'flex', gap: space.xs }}>
-        <input value={said} onChange={e => setSaid(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') ask() }}
-          placeholder="Message Claude about the agenda…" aria-label="Message Claude" style={{ ...field, flex: 1 }} />
-        <button type="button" onClick={() => ask()} disabled={busy === 'chat' || !said.trim()} style={btn(true)}>Send</button>
-      </div>
-      <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap' }}>
-        {undo && <button type="button" onClick={() => { const back = undo; setUndo(null); save(back, 'Last change undone.') }} style={btn(false)}>Undo last change</button>}
-        <button type="button" onClick={importPast} disabled={Boolean(busy)} style={{ ...text('caption'), border: 'none', background: 'none', color: colour.inkFaint, cursor: 'pointer' }}>
-          {busy === 'import' ? 'Reading your email…' : `Import past agendas from email${data?.past?.length ? ` (${data.past.length} in)` : ''}`}
-        </button>
-      </div>
+          {undo && <button type="button" onClick={() => { const back = undo; setUndo(null); save(c => ({ ...back, version: c.version }), 'Last change undone.') }}
+            style={{ ...btn(false), marginTop: space.sm }}>Undo last change</button>}
+        </div>
+      )}
     </div>
   )
 
@@ -353,6 +439,7 @@ export default function Agenda({ user, onClose, today }) {
         <div style={{ maxWidth: wide && canEdit ? 1240 : 760, margin: '0 auto', padding: space.md }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
             <div style={{ ...text('title'), color: colour.ink, flex: 1 }}>Next meeting agenda</div>
+            {busy === 'save' && <span style={{ ...text('caption'), color: colour.inkFaint }}>Saving…</span>}
             <button type="button" onClick={onClose} aria-label="Close" style={btn(false)}>✕</button>
           </div>
           {error && <div role="alert" style={{ ...text('caption'), color: colour.danger }}>{error}</div>}
@@ -361,18 +448,18 @@ export default function Agenda({ user, onClose, today }) {
 
           {data && (canEdit && wide ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: space.md, alignItems: 'start' }}>
-              {chatPanel}<div>{doc}</div>
+              {editor}<div>{doc}</div>
             </div>
           ) : canEdit ? (
             <>
               <div data-no-print role="tablist" style={{ display: 'flex', borderBottom: border.hairline, marginBottom: space.sm }}>
-                {[['chat', 'Chat'], ['agenda', 'Agenda']].map(([k, l]) => (
+                {[['edit', 'Edit'], ['agenda', 'Agenda']].map(([k, l]) => (
                   <button key={k} type="button" role="tab" aria-selected={pane === k} onClick={() => setPane(k)}
                     style={{ ...text('bodyStrong'), flex: 1, minHeight: 44, border: 'none', background: 'none', cursor: 'pointer',
                       color: pane === k ? colour.ink : colour.inkFaint, borderBottom: pane === k ? `3px solid ${colour.accent}` : '3px solid transparent' }}>{l}</button>
                 ))}
               </div>
-              {pane === 'chat' ? chatPanel : doc}
+              {pane === 'edit' ? editor : doc}
             </>
           ) : doc)}
         </div>

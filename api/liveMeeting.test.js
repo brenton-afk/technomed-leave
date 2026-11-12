@@ -38,7 +38,8 @@ vi.mock('./_readDictatedBooking.js', () => ({ transcribe: vi.fn(async () => 'Mat
 vi.mock('./_taskDone.js', () => ({ settleWorklistItem: vi.fn(async () => []) }))
 vi.mock('./_agenda.js', () => ({
   getAgenda: vi.fn(async () => ({ items: [{ title: 'Stock-take' }] })), saveAgenda: vi.fn(), cleanAgenda: vi.fn(),
-  canEditAgenda: vi.fn(() => true), pastAgendas: vi.fn(async () => []), keepPastAgenda: vi.fn(), isAgendaFile: vi.fn(), draftMaterial: vi.fn()
+  canEditAgenda: vi.fn(() => true), agendaActions: vi.fn(), newAgendaFor: vi.fn(),
+  isWelcome: vi.fn(() => false), isGeneral: vi.fn(() => false), isNextMeeting: vi.fn(() => false)
 }))
 vi.mock('./_email.js', () => ({ sendMeetingSummaryEmail: vi.fn() }))
 vi.mock('@vercel/blob/client', () => ({ handleUpload: vi.fn() }))

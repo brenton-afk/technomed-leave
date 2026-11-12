@@ -13,8 +13,6 @@
 import { redis, redisSetBody } from './_redis.js'
 
 export const AGENDA_KEY = 'agenda:current'
-export const PAST_INDEX = 'agenda:past'
-const PAST = id => `agenda:past:${id}`
 
 export function agendaEditors() {
   return String(process.env.AGENDA_EDITORS || 'erin@technomed.com.au')
@@ -76,40 +74,6 @@ export async function saveAgenda(agenda, { version, by }) {
   }
 }
 
-// ─── Earlier agendas ─────────────────────────────────────────────────────────
-
-export async function pastAgendas(limit = 40) {
-  const ids = await redis('lrange', PAST_INDEX, '0', String(limit - 1)) || []
-  const rows = await Promise.all(ids.map(id => redis('get', PAST(id)).catch(() => null)))
-  return rows.map(r => { try { return r ? JSON.parse(r) : null } catch { return null } }).filter(Boolean)
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-}
-
-export async function keepPastAgenda({ id, date, subject, filename, text }) {
-  const exists = await redis('exists', PAST(id))
-  await redisSetBody(PAST(id), JSON.stringify({ id, date, subject: clip(subject, 200), filename: clip(filename, 200), text: clip(text, 20000) }))
-  if (!exists) await redis('lpush', PAST_INDEX, id)
-  return !exists
-}
-
-/** Whether an email attachment looks like an agenda document. Pure. */
-export function isAgendaFile(filename = '') {
-  return /\.docx$/i.test(filename) && /agenda/i.test(filename)
-}
-
-/** The draft prompt's material, compacted. Pure, for the tests. */
-export function draftMaterial({ past = [], report = null, nextDate = '' }) {
-  const recent = past.slice(0, 6).map(p => `--- ${p.date} · ${p.subject}\n${String(p.text).slice(0, 4000)}`).join('\n\n')
-  const r = report
-  const list = (title, rows) => (rows?.length ? `${title}:\n${rows.map(t => `- ${t.task} (${t.assignee}${t.doneOn ? `, done ${t.doneOn}` : t.due_date ? `, due ${t.due_date}` : ''})`).join('\n')}` : '')
-  const work = r ? [
-    `Since the meeting of ${r.from} (${r.meeting.title}): ${r.totals.done} of ${r.totals.items} action items done, ${r.totals.open} outstanding.`,
-    list('Done', r.done), list('Outstanding', r.open), list('Still open from earlier meetings', r.earlier),
-    list('Other work completed in the period', r.other.slice(0, 30))
-  ].filter(Boolean).join('\n\n') : 'No earlier meeting with action items on record.'
-  return { recent, work, nextDate }
-}
-
 // ─── Built from the projects report (Brent, 12 Nov 2026) ─────────────────────
 // "The agendas [should] be written based off the projects completed report …
 // and the agenda should have a section for the items that are not completed,
@@ -153,38 +117,4 @@ export function newAgendaFor({ date, time, location, chair, attendees, apologies
       { title: 'Next meeting' }
     ]
   })
-}
-
-const weekdayOf = d => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${d}T12:00:00Z`).getUTCDay()] || ''
-
-/** The prompt for one turn of the agenda chat. Pure, for the tests. */
-export function agendaChatPrompt({ agenda, actions, past = [], staff = [], today }) {
-  const list = (rows, done) => rows.map(t => `- ${t.task} (${t.assignee}${done ? `, done ${t.doneOn}` : t.due_date ? `, due ${t.due_date}${t.overdue ? ', OVERDUE' : ''}` : ''})`).join('\n') || '(none)'
-  return `You help Erin Smallbon, General Manager of TechnoMed (a Tasmanian surgical device distributor), build the agenda for the next staff meeting by chatting with her. Today is ${today}.
-
-The printed agenda always shows, automatically after "General business", the actions from earlier meetings that are NOT completed, worked out from the projects page — do NOT copy these into items. Completed work never goes on the agenda.
-NOT completed (to be discussed, not asked about):
-${list(actions?.notDone || [], false)}
-
-The order is fixed and kept for you: "Welcome and apologies" first, "General business" second, the outstanding actions, then the other items, "Next meeting" last.
-
-You are the way Erin builds the agenda — she does not fill in a form, she talks to you. ACT: whenever what she says implies a change, make it with the tools (set_details, start_new_agenda, add_item, update_item, remove_item) in this same turn — never just say you did. Several changes, several tool calls. Then reply in a sentence or two saying what changed. Only ask a question when you truly cannot act (for example no date at all for a new meeting).
-
-You change only the header (title, date as YYYY-MM-DD, time, location, chair, attendees, apologies) and the discussion items. Attendees and apologies are comma-separated full staff names; "everyone" means all staff below, less any apologies.
-${agenda?.date && agenda.date >= today ? '' : 'The agenda on file is for a meeting that has passed (or there is none). When she gives the next meeting date, call start_new_agenda first, then make her other changes.\n'}You may add discussion items that follow from the not-completed list (e.g. one item per person or topic with the outstanding tasks as points) when she asks. Never invent decisions, dates or people. Work dates out from today (${weekdayOf(today)} ${today}). Staff: ${staff.join(', ')}.
-
-Her earlier agendas, for her structure and wording:
-${past.slice(0, 3).map(p => `--- ${p.date}\n${String(p.text).slice(0, 2500)}`).join('\n\n') || '(none imported)'}
-
-The agenda as it stands now (items are named by id in the tools):
-${JSON.stringify({ title: agenda?.title, date: agenda?.date, time: agenda?.time, location: agenda?.location, chair: agenda?.chair, attendees: agenda?.attendees, apologies: agenda?.apologies, items: (agenda?.items || []).map(i => ({ id: i.id, title: i.title, points: i.points, lead: i.lead })) })}`
-}
-
-// ─── The conversation, kept (Brent, 12 Nov 2026: "use it like a chatbot") ────
-export const AGENDA_CHAT_KEY = 'agenda:chat'
-export async function getAgendaChat() {
-  try { return JSON.parse(await redis('get', AGENDA_CHAT_KEY) || '[]') || [] } catch { return [] }
-}
-export async function saveAgendaChat(messages) {
-  await redisSetBody(AGENDA_CHAT_KEY, JSON.stringify(messages.slice(-40)))
 }

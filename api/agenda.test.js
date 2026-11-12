@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { cleanAgenda, canEditAgenda, isAgendaFile, draftMaterial, agendaActions, newAgendaFor, agendaChatPrompt } from './_agenda.js'
+import { cleanAgenda, canEditAgenda, agendaActions, newAgendaFor } from './_agenda.js'
+import { agendaSuggestions } from '../src/projects/agendaSuggest.js'
 import { agendaText, cycleAttendance, splitNames } from '../src/pages/projects/Agenda.jsx'
 
 // Brent, 11 Nov 2026: a live agenda everyone can see, only Erin edits,
@@ -20,21 +21,6 @@ describe('the agenda', () => {
     expect(a.items[2].points).toEqual(['Signus from 1 Dec', 'E4 on 27 Jan'])
     expect(cleanAgenda({ date: 'next week' }).date).toBe('')
     expect(agendaText(a)).toContain('4. Stocktake planning\n   • Signus from 1 Dec')
-  })
-  it('imports only agenda Word documents', () => {
-    expect(isAgendaFile('TechnoMed_Staff_Meeting_Agenda_12_November_2026.docx')).toBe(true)
-    expect(isAgendaFile('Minutes.docx')).toBe(false)
-    expect(isAgendaFile('Agenda.pdf')).toBe(false)
-  })
-  it('gives the draft the recent agendas and the work since the last meeting', () => {
-    const m = draftMaterial({
-      past: [{ date: '2026-11-10', subject: 'Staff meeting agenda', text: 'Agenda\n1 Welcome' }],
-      report: { from: '2026-11-12', meeting: { title: 'Staff meeting' }, totals: { done: 1, items: 2, open: 1 },
-        done: [{ task: 'Book stocktake', assignee: 'Toni', doneOn: '2026-11-20' }], open: [{ task: 'Order cages', assignee: 'Mat', due_date: '2026-12-01' }], earlier: [], other: [] }
-    })
-    expect(m.recent).toContain('Staff meeting agenda')
-    expect(m.work).toContain('1 of 2 action items done')
-    expect(m.work).toContain('- Order cages (Mat, due 2026-12-01)')
   })
 })
 
@@ -69,15 +55,6 @@ describe('the agenda from the report', () => {
     expect(next.items.map(i => [i.title, i.lead, i.points.length])).toEqual([['Welcome', 'Erin', 0], ['General business', '', 0], ['Spine update', 'Mat', 0], ['Next meeting', '', 0]])
     expect(newAgendaFor({ date: '2026-11-25' }).items.map(i => i.title)).toContain('General business')
   })
-  it('gives the chat the not-completed list and the agenda, and tells it not to copy the lists', () => {
-    const prompt = agendaChatPrompt({ agenda: cleanAgenda({ items: [{ title: 'Welcome' }] }), actions: agendaActions(report), staff: ['Erin Smallbon'], today: '2026-11-12' })
-    expect(prompt).toContain('Chase plate ETA (Mat Usher, due 2026-11-09, OVERDUE)')
-    expect(prompt).toMatch(/do NOT copy these into items/)
-    expect(prompt).toMatch(/call start_new_agenda first/)
-    expect(prompt).toMatch(/never just say you did/)
-    expect(prompt).toMatch(/Thursday 2026-11-12/)
-    expect(prompt).toContain('"title":"Welcome"')
-  })
   it('prints the outstanding actions as item 3, after general business, with no completed list', () => {
     const t = agendaText(cleanAgenda({ items: [{ title: 'Spine update' }] }), agendaActions(report))
     expect(t).toContain('3. Actions not yet completed')
@@ -87,7 +64,36 @@ describe('the agenda from the report', () => {
   })
 })
 
-// Brent, 12 Nov 2026: "Attendees need to be buttons."
+// Brent, 12 Nov 2026: "Get rid of the bot and give us an alternative way to
+// edit easily" — items are tapped on from the projects and the last agenda.
+describe('items to tap onto the agenda', () => {
+  const projects = [
+    { id: 'p1', name: 'CYLOX rollout', owner: 'Mat Usher' },
+    { id: 'p2', name: 'Secret', private: true },
+    { id: 'p3', name: 'Quiet project', owner: 'Erin Smallbon' }
+  ]
+  const tasks = [
+    { projectId: 'p1', task: 'Chase plate ETA', assignee: 'Mat Usher', due_date: '2026-11-09', status: 'todo' },
+    { projectId: 'p1', task: 'Book stock-take', assignee: 'Toni Hoppitt', due_date: '2026-12-01', status: 'todo' },
+    { projectId: 'p1', task: 'Done already', status: 'done' },
+    { projectId: 'p2', task: 'Hidden', status: 'todo' },
+    { projectId: 'p3', task: 'Finished', status: 'done' }
+  ]
+  it('offers each project with open work, its open tasks as points, overdue first', () => {
+    const s = agendaSuggestions({ projects, tasks, today: '2026-11-12' })
+    expect(s.map(x => x.title)).toEqual(['CYLOX rollout'])
+    expect(s[0]).toMatchObject({ lead: 'Mat', note: '2 open · 1 overdue' })
+    expect(s[0].points).toEqual(['Chase plate ETA — Mat (overdue)', 'Book stock-take — Toni'])
+  })
+  it('offers the last agenda\'s own items, and nothing already on the agenda', () => {
+    const previous = { items: [{ title: 'Welcome and apologies' }, { title: 'Christmas party', lead: 'Erin' }, { title: 'CYLOX rollout' }] }
+    const current = { items: [{ title: 'CYLOX rollout' }] }
+    const s = agendaSuggestions({ projects, tasks, previous, current, today: '2026-11-12' })
+    expect(s.map(x => [x.title, x.kind])).toEqual([['Christmas party', 'last']])
+  })
+})
+
+// Brent, 12 Nov 2026: "Attendees need to be buttons." 
 describe('who is coming', () => {
   it('cycles a name: attending, apology, cleared', () => {
     let v = { attendees: 'Erin Smallbon', apologies: '' }
