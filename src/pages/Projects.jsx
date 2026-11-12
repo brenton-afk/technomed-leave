@@ -568,7 +568,7 @@ export default function Projects({ user, onBack }) {
         <div data-meeting-links style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, overflow: 'hidden', marginBottom: space.md }}>
           {[
             ['live', 'Live meeting', 'Record the room — tasks to accept as you talk', () => setShowLive(true), colour.dangerSoft, colour.danger, '●', { 'data-open-live-meeting': true }],
-            ['agenda', 'Next meeting agenda', 'Built with Claude from what is not yet done', () => setShowAgenda(true), colour.accentSoft, colour.accentDeep, '≡', { 'data-open-agenda': true }],
+            ['agenda', 'Next meeting agenda', 'Tap to build — date, who is coming, items from the projects', () => setShowAgenda(true), colour.accentSoft, colour.accentDeep, '≡', { 'data-open-agenda': true }],
             ['report', 'Report since a meeting', 'Done and still outstanding — copy, Word or print', () => setShowReport(true), colour.lineSoft, colour.navy, '✓', { 'data-open-meeting-report': true }]
           ].map(([key, title, sub, go, wash, ink, mark, attrs], i) => (
             <button key={key} type="button" onClick={go} {...attrs}
