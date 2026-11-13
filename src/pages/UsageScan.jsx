@@ -1004,6 +1004,14 @@ export default function UsageScan({ user, switcher }) {
               onAmend={() => { setAmending(duplicate.earlier.id); setDuplicate(null); setStep('history'); loadHistory() }}
               onSeparate={() => confirmAndSend({ separate: true })} />
           )}
+          {/* The Boost tracking form found in this scan (Brent, 14 Nov 2026). */}
+          {(caseRecord.boostPages || []).length > 0 && (
+            <div data-boost-pages style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginTop: 14, fontSize: 12.5, color: NAVY, lineHeight: 1.5 }}>
+              <strong>Boost tracking form found</strong> — page {caseRecord.boostPages.map(i => i + 1).join(', ')}.
+              It goes on its own to boost@device.com.au (admin@ copied), tracking only, and is filed separately in Dropbox.
+              Device's restocking email gets the chargeable form without it.
+            </div>
+          )}
           {/* Loan stock not marked LOAN on the form (Brent, 13 Nov 2026). */}
           {loanFlags.length > 0 && (
             <div data-loan-flags style={{ background: '#fff4e5', border: `1px solid ${AMBER_TEXT}`, borderRadius: 12, padding: 14, marginTop: 14 }}>
@@ -1100,7 +1108,10 @@ export default function UsageScan({ user, switcher }) {
               reaches both. */}
           {/* A Boost case: its tracking form is scanned on its own and goes to
               the Boost team only (Brent, 9 Nov 2026). */}
-          {!result.test && (result.record?.items || []).some(i => i.distributorKey === 'device_boost' && !i.excluded) && (
+          {/* Only when the scan held no tracking form: one that did went to the
+              Boost team with the usage (Brent, 14 Nov 2026), listed below. */}
+          {!result.test && !result.emails.some(e => e.key === 'boost_tracking')
+            && (result.record?.items || []).some(i => i.distributorKey === 'device_boost' && !i.excluded) && (
             <BoostForm usageId={result.record.id} user={user} toPage={fileToPage}
               sentAt={(result.emails.find(e => e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt
                 || ((result.record.emailsSent || []).find(e => e && e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt} />

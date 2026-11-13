@@ -25,8 +25,10 @@ vi.mock('./_usagePdf.js', () => ({ buildScanPdf: vi.fn(async pages => Buffer.fro
 vi.mock('./_googleCalendar.js', () => ({ markAttendance: vi.fn() }))
 vi.mock('./_anthropic.js', () => ({ streamClaude: vi.fn() }))
 const uploads = []
+const savedFiles = []
 vi.mock('./_dropbox.js', () => ({
-  caseFolderPath: vi.fn(), saveUsageFiles: vi.fn(), dropboxConfigured: () => true, listFolder: vi.fn(), temporaryLink: vi.fn(),
+  caseFolderPath: vi.fn(() => '/ALL SURGEON USAGE/SPINE/Thani/November 2026/Case'),
+  saveUsageFiles: vi.fn(async ({ scanPdf, usageSheet }) => { savedFiles.push(String(scanPdf)); return { saved: ['scan', 'sheet'] } }), dropboxConfigured: () => true, listFolder: vi.fn(), temporaryLink: vi.fn(),
   resourcesRoot: vi.fn(), usageRoot: vi.fn(), patientHistory: vi.fn(), caseFoldersOnDay: vi.fn(async () => []),
   uploadFile: vi.fn(async (path, buf, opts) => { uploads.push({ path, opts }) })
 }))
@@ -44,7 +46,7 @@ const CASE = {
   items: [{ id: 'i1', referenceCode: 'B-1', productName: 'Boost DBM Allograft', distributorKey: 'device_boost', quantity: 1 }]
 }
 
-beforeEach(() => { records.clear(); usage.length = 0; tracking.length = 0; uploads.length = 0 })
+beforeEach(() => { records.clear(); usage.length = 0; tracking.length = 0; uploads.length = 0; savedFiles.length = 0 })
 
 describe('the Boost usage', () => {
   it('goes to Device\'s spine/ortho desk for resupply — not to boost@', async () => {
@@ -135,5 +137,25 @@ describe('both forms in one scan', () => {
     await call('email', { usageId: CASE.id, pages: [page1, page2] })
     expect(tracking).toHaveLength(0)
     expect(String(usage[0].scanPdf)).toBe('2 pages')
+  })
+})
+
+// Brent, 14 Nov 2026: one scan of every page; the tracking form is filed on
+// its own in Dropbox and is not inside the filed usage scan.
+describe('filing one scan with the tracking form in it', () => {
+  it('files the usage scan without the tracking page, and the tracking form beside it', async () => {
+    const { id, dropboxPath, createdAt, ...fresh } = CASE
+    const p1 = { mediaType: 'image/jpeg', data: 'a'.repeat(40) }
+    const p2 = { mediaType: 'image/jpeg', data: 'b'.repeat(40) }
+    const { status, data } = await call('save', { case: { ...fresh, boostPages: [1] }, pages: [p1, p2] })
+    expect(status).toBe(200)
+    expect(savedFiles).toEqual(['1 pages'])
+    expect(uploads[0].path).toMatch(/_Boost_Tracking_Form\.pdf$/)
+    expect(data.record.filesSaved).toContain(`${data.record.folderName}_Boost_Tracking_Form.pdf`)
+    expect(data.record.boostPages).toEqual([1])
+    // Sending then does not file it a second time.
+    await call('email', { usageId: data.record.id, pages: [p1, p2] })
+    expect(tracking).toHaveLength(1)
+    expect(uploads).toHaveLength(1)
   })
 })

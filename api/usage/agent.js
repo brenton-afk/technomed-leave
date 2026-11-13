@@ -372,11 +372,17 @@ async function handleSave(req, res, session) {
   }
 
   const folderPath = caseFolderPath(caseRecord)
-  const [scanPdf, usageSheet] = await Promise.all([
-    buildScanPdf(pages),
+  // The Boost tracking form is filed on its own, never inside the usage scan
+  // (Brent, 14 Nov 2026: "split the boost form off … store in Dropbox
+  // separately"). Its pages were told apart on the scan (api/_boostPages.js).
+  const boostPages = cleanBoostPages(incoming.boostPages, pages.length)
+  const { usagePages, trackingPages } = splitPages(pages, boostPages)
+  const [scanPdf, usageSheet, trackingPdf] = await Promise.all([
+    buildScanPdf(usagePages.length ? usagePages : pages),
     // The Dropbox copy: every distributor's items together, and the only place
     // that records who scanned it and which rows never left the building.
-    buildUsageWorkbook(caseRecord, included, { internal: true })
+    buildUsageWorkbook(caseRecord, included, { internal: true }),
+    trackingPages.length && usagePages.length ? buildScanPdf(trackingPages) : null
   ])
 
   // Dropbox is optional. Where it is configured it goes first, so a filing
@@ -392,6 +398,15 @@ async function handleSave(req, res, session) {
       scanPdf,
       usageSheet
     }))
+    if (trackingPdf) {
+      const name = `${caseRecord.folderName}_Boost_Tracking_Form.pdf`
+      try {
+        await uploadFile(`${folderPath}/${name}`, trackingPdf, { keep: true })
+        saved = [...saved, name]
+      } catch (err) {
+        console.error('Boost tracking form not filed:', err.message)
+      }
+    }
   } else {
     dropboxSkipped = true
   }
@@ -402,7 +417,7 @@ async function handleSave(req, res, session) {
     dropboxPath: dropboxSkipped ? '' : folderPath,
     dropboxSkipped,
     filesSaved: saved,
-    boostPages: cleanBoostPages(incoming.boostPages, pages.length),
+    boostPages,
     emailsSent: stored?.emailsSent || [],
     ...(stored?.amendments ? { amendments: stored.amendments } : {}),
     createdByEmail: stored?.createdByEmail || session.email,
@@ -706,7 +721,8 @@ async function sendTrackingForm({ record, pdf, test, session }) {
   }
   // Filed beside the usage, never over anything (Dropbox adds " (1)").
   let filed = ''
-  if (!test && result.ok && dropboxConfigured() && record.dropboxPath) {
+  const already = (record.filesSaved || []).includes(`${record.folderName}_Boost_Tracking_Form.pdf`)
+  if (!test && result.ok && !already && dropboxConfigured() && record.dropboxPath) {
     try {
       const name = `${record.folderName}_Boost_Tracking_Form.pdf`
       await uploadFile(`${record.dropboxPath.replace(/\/+$/, '')}/${name}`, pdf, { keep: true })

@@ -1608,6 +1608,13 @@ Invariants worth preserving:
   filed beside the usage. A graft read off the tracking form is dropped when
   the chargeable form also has a Boost sticker (`splitBoostReadings`), so it is
   restocked once. Scanning the tracking form on its own still works.
+  **One scan, filed apart** (Brent, 14 Nov 2026: "scan everything in one
+  scan … split the boost form off … store in Dropbox separately"):
+  `action=save` files the usage scan **without** the tracking pages and the
+  tracking form beside it as `{folder}_Boost_Tracking_Form.pdf` (in
+  `filesSaved`, so the send does not file it twice). Review says "Boost
+  tracking form found — page N"; the Done screen offers the separate Boost
+  form scan only when the scan held no tracking form.
 - **Loan stock must be marked LOAN** (Brent, 13 Nov 2026, after the Munro
   usage went to Device as consignment). The reader returns `stockMarking`
   per item (loan / consignment / ''); `action=scan` looks up the day's one
