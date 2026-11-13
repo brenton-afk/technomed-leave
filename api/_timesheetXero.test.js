@@ -34,3 +34,29 @@ describe('pay items Xero will not take on a timesheet', () => {
     expect(out).toEqual({ a: true, b: false, c: false })
   })
 })
+
+import { postDroppingRefused } from './_timesheetXero.js'
+
+describe('a pay item Xero refuses for any reason', () => {
+  const cats = [{ key: 'call_in', earningsRateID: 'bdee0ebc-bf8e-4d1b-b513-c36d4dae9bb6', xeroName: 'Call In Allowance' }]
+  const lines = [{ EarningsRateID: 'aaaaaaaa-0000-0000-0000-000000000000' }, { EarningsRateID: cats[0].earningsRateID }]
+
+  it('posts again without it and says which was left off', async () => {
+    const sent = []
+    const post = async ls => {
+      sent.push(ls.length)
+      if (ls.some(l => l.EarningsRateID === cats[0].earningsRateID)) {
+        throw new Error(`Xero timesheet: Earnings Rate ${cats[0].earningsRateID} does not exist or is not valid for timesheets. (400)`)
+      }
+      return { ok: true }
+    }
+    const out = await postDroppingRefused(post, lines, cats)
+    expect(sent).toEqual([2, 1])
+    expect(out.refused).toEqual([cats[0].earningsRateID])
+  })
+
+  it('never drops the last line, and names the item when it gives up', async () => {
+    const post = async () => { throw new Error(`Earnings Rate ${cats[0].earningsRateID} does not exist or is not valid for timesheets. (400)`) }
+    await expect(postDroppingRefused(post, [lines[1]], cats)).rejects.toThrow(/"Call In Allowance"/)
+  })
+})

@@ -38,6 +38,32 @@ export function notOnTimesheet(entries, categories, days) {
   })).filter(c => c.total > 0)
 }
 
+const REFUSED_RATE = /Earnings Rate ([0-9a-f-]{36}) does not exist or is not valid for timesheets/i
+
+/**
+ * Posts a timesheet, and when Xero refuses a pay item for timesheets (Ben,
+ * 14 Nov 2026) posts it again without that item's line — whatever the reason
+ * Xero gives no detail on. The refused items come back so the portal keeps
+ * them for the pay run. Never drops the last line.
+ */
+export async function postDroppingRefused(post, lines, categories = []) {
+  let remaining = [...lines]
+  const refused = []
+  for (;;) {
+    try {
+      return { result: await post(remaining), refused }
+    } catch (err) {
+      const id = String(err.message || '').match(REFUSED_RATE)?.[1]
+      const left = remaining.filter(l => l.EarningsRateID !== id)
+      if (!id || left.length === remaining.length || left.length === 0) {
+        throw new Error(namedXeroError(err.message, categories))
+      }
+      refused.push(id)
+      remaining = left
+    }
+  }
+}
+
 /** Xero's error with any earnings rate id named as the pay item it is. */
 export function namedXeroError(message, categories = []) {
   let text = String(message || '')
@@ -174,26 +200,25 @@ export async function submitTimesheetToXero({ staffName, start, end, entries, ca
       + 'Ask Brent or Erin to reopen it before resubmitting.')
   }
 
-  let result
-  try {
-    result = await postTimesheet(buildTimesheetPayload({
-      employeeID: employee.EmployeeID,
-      timesheetID: already?.TimesheetID,
-      start,
-      end,
-      lines,
-      status: 'DRAFT'
-    }))
-  } catch (err) {
-    throw new Error(namedXeroError(err.message, categories))
-  }
+  const { result, refused } = await postDroppingRefused(sendLines => postTimesheet(buildTimesheetPayload({
+    employeeID: employee.EmployeeID,
+    timesheetID: already?.TimesheetID,
+    start,
+    end,
+    lines: sendLines,
+    status: 'DRAFT'
+  })), lines, categories)
+  const refusedCats = categories.filter(c => refused.includes(c.earningsRateID))
+    .map(c => ({ ...c, timesheetOk: false }))
 
   return {
     ...result,
     employeeID: employee.EmployeeID,
     employeeName: `${employee.FirstName} ${employee.LastName}`,
     lineCount: lines.length,
-    notOnTimesheet: notOnTimesheet(entries, categories, days),
+    notOnTimesheet: notOnTimesheet(entries, categories.map(c => refusedCats.find(r => r.key === c.key) || c), days),
+    // Kept so approval leaves the same lines off.
+    refusedRateIds: refused,
     dayCount: days.length,
     // Recorded so a resubmission is distinguishable from a first one when
     // somebody asks later why Xero has a different number.
@@ -208,18 +233,17 @@ export async function approveTimesheetInXero(record, categories) {
     throw new Error('This timesheet has no Xero timesheet ID — it was never submitted to Xero')
   }
   const days = record.days || []
-  try {
-    return await postTimesheet(buildTimesheetPayload({
-      employeeID: record.xero.employeeID,
-      timesheetID: record.xero.timesheetID,
-      start: record.periodStart,
-      end: record.periodEnd,
-      lines: buildTimesheetLines(record.entries, categories, days),
-      status: 'APPROVED'
-    }))
-  } catch (err) {
-    throw new Error(namedXeroError(err.message, categories))
-  }
+  const skip = new Set(record.xero?.refusedRateIds || [])
+  const lines = buildTimesheetLines(record.entries, categories, days).filter(l => !skip.has(l.EarningsRateID))
+  const { result } = await postDroppingRefused(sendLines => postTimesheet(buildTimesheetPayload({
+    employeeID: record.xero.employeeID,
+    timesheetID: record.xero.timesheetID,
+    start: record.periodStart,
+    end: record.periodEnd,
+    lines: sendLines,
+    status: 'APPROVED'
+  })), lines, categories)
+  return result
 }
 
 export { FORTNIGHT_DAYS }

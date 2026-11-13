@@ -2068,7 +2068,10 @@ bonus / parental leave / workers comp type. `buildTimesheetLines` leaves those
 off the Xero lines; the entries stay on the portal record and the submit adds
 a warning per item ("… not sent; add it in the pay run", `notOnTimesheet`).
 The entry sheet says so under the item. Any Xero error naming an earnings rate
-id is reworded with the pay item's name (`namedXeroError`).
+id is reworded with the pay item's name (`namedXeroError`). And whatever the
+reason, a refused rate is retried without (`postDroppingRefused`, never the
+last line): the refused ids are kept on the record (`xero.refusedRateIds`) so
+approval leaves the same lines off, and they join the pay-run warning.
 
 **Call-ins are logged, not only offered** (Brent, 7 Nov 2026: "Mat gets a
 call-in logged for pt White"). `callInsFor` (`src/clinicalPlan/callIn.js`)
