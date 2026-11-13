@@ -4,6 +4,7 @@
 // googleapis dependency is not needed.
 
 import { readBooking, plainDescription } from '../src/clinicalPlan/parse.js'
+import { formatKitSupplies } from '../src/clinicalPlan/kitSupply.js'
 import { redis } from './_redis.js'
 
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || 'bookings@technomed.com.au'
@@ -499,13 +500,40 @@ export function namedInBrackets(summary, firstName) {
     .some(m => m[1].split(/[\/,&+]|\band\b/i).map(x => x.trim().toLowerCase()).includes(who))
 }
 
+/**
+ * The procedure and kit of the one booking on that day naming this patient —
+ * read-only, for the usage review's loan check. Null when there is none, or
+ * more than one (the same rule as markAttendance: never guess between two).
+ */
+export async function findBookingFacts({ date, patientSurname }) {
+  const surname = String(patientSurname || '').trim().toLowerCase()
+  if (!surname || !/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return null
+  const calendarId = getCalendarId()
+  if (!calendarId) return null
+  const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+  const params = new URLSearchParams({
+    timeMin: `${date}T00:00:00+11:00`,
+    timeMax: `${date}T23:59:59+10:00`,
+    singleEvents: 'true',
+    maxResults: '250'
+  })
+  const listed = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } })
+  if (!listed.ok) return null
+  const matches = ((await listed.json()).items || []).filter(e => String(e.summary || '').toLowerCase().includes(surname))
+  return matches.length === 1 ? bookingFacts(matches[0]) : null
+}
+
 /** The procedure and kit a booking names, read the way the week reads it. */
 function bookingFacts(event) {
   try {
     const read = readBooking(String(event.summary || ''), String(event.description || ''))
     return {
       procedure: String(read?.operation || '').slice(0, 200),
-      kit: String(read?.kit || read?.system || '').slice(0, 200)
+      kit: String(read?.kit || read?.system || '').slice(0, 200),
+      // Each system with its supply, "Mariner MIS (Distributor Loan) / …",
+      // for the usage review's loan check (src/usageLoanCheck.js).
+      supplyKit: formatKitSupplies(read?.supplies || []).slice(0, 300)
     }
   } catch {
     return null

@@ -273,6 +273,9 @@ export function normaliseItem(raw, index) {
     quantity,
     rebateCode,
     notes,
+    // What is stamped or written against the sticker — LOAN or consignment —
+    // for the loan check (src/usageLoanCheck.js).
+    stockMarking: str(raw.stockMarking || raw.stock || ''),
     handwritten: raw.handwritten === true,
     excluded,
     manualReview: !excluded && reasons.length > 0,

@@ -1,7 +1,7 @@
 import { streamClaude } from '../_anthropic.js'
 import { requireSession, requireAdmin } from '../_auth.js'
 import { checkSalesReport } from '../_salesCheck.js'
-import { markAttendance } from '../_googleCalendar.js'
+import { markAttendance, findBookingFacts } from '../_googleCalendar.js'
 import { STAFF, firstNameFor } from '../../src/staffConfig.js'
 import {
   saveUsageRecord, getUsageRecord, getUsageHistory,
@@ -17,6 +17,7 @@ import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksS
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
+import { loanStampFlags } from '../../src/usageLoanCheck.js'
 import { splitBoostReadings, boostPagesFromWhole, cleanBoostPages, splitPages } from '../_boostPages.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
@@ -39,7 +40,7 @@ const VISION_MODEL = process.env.USAGE_VISION_MODEL || 'claude-opus-5'
 const MAX_PAGES = 8
 const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given.
+const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given. For each item also return \`stockMarking\`: \"loan\" if LOAN is stamped or written against that item (or across the whole form), \"consignment\" if consignment or CONS is written or ticked for it, otherwise \"\".
 
 The document is a "Record of Implantable/Rebatable Items Used" form from Calvary Health Care Tasmania (CLV) or Royal Hobart Hospital (RHH). It mixes printed implant stickers with handwritten quantities ("x1", "x3", "×4"), handwritten product names, a printed patient ID label, and a handwritten date, procedure and rep name.
 
@@ -272,6 +273,16 @@ async function handleScan(req, res, session) {
     repEmail: session.email
   })
 
+  // The booking's kit, so a distributor loan not stamped LOAN on the form is
+  // flagged on review (src/usageLoanCheck.js). Read-only; never fatal.
+  try {
+    const booking = await findBookingFacts({ date: caseRecord.date, patientSurname: caseRecord.patientSurname })
+    caseRecord.bookingKit = booking?.supplyKit || ''
+  } catch {
+    caseRecord.bookingKit = ''
+  }
+  caseRecord.loanFlags = loanStampFlags(caseRecord.items, caseRecord.bookingKit)
+
   // Which pages are the Boost tracking form: kept on the case, so the send
   // leaves them out of every distributor's scan and sends them to boost@ alone.
   caseRecord.boostPages = boostPages
@@ -322,6 +333,12 @@ async function handleSave(req, res, session) {
     blocking.push(`the patient and surgeon the right way round — ${caseRecord.patientSurname} is one of our surgeons`)
   } else if (caseRecord.surgeonSurname && !knownSurgeon(caseRecord.surgeonSurname) && !req.body?.newSurgeonConfirmed) {
     blocking.push(`a surgeon the portal knows — "${caseRecord.surgeonSurname}" is not one of ours (pick from the list, or confirm they are new)`)
+  }
+  // Loan stock not marked LOAN (Brent, 13 Nov 2026): the rep stamps the form
+  // and confirms, or it is not filed or sent.
+  const loanFlags = loanStampFlags(caseRecord.items, incoming.bookingKit || '')
+  if (loanFlags.length && !req.body?.loanConfirmed) {
+    blocking.push(`LOAN marked on the form — ${loanFlags.map(f => f.message).join(' ')}`)
   }
   if (blocking.length) {
     return res.status(400).json({ error: `Complete these before saving: ${blocking.join(', ')}` })

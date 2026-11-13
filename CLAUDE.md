@@ -1608,6 +1608,17 @@ Invariants worth preserving:
   filed beside the usage. A graft read off the tracking form is dropped when
   the chargeable form also has a Boost sticker (`splitBoostReadings`), so it is
   restocked once. Scanning the tracking form on its own still works.
+- **Loan stock must be marked LOAN** (Brent, 13 Nov 2026, after the Munro
+  usage went to Device as consignment). The reader returns `stockMarking`
+  per item (loan / consignment / ''); `action=scan` looks up the day's one
+  booking for the surname (`findBookingFacts`, read-only, `supplyKit` = each
+  system with its supply) into `caseRecord.bookingKit`. `loanStampFlags`
+  (`src/usageLoanCheck.js`, shared) flags lines of a **Distributor Loan**
+  system (matched by name via `inventoryFor`, or by distributor when that is
+  the only system of theirs booked; never Boost) that say consignment or have
+  no LOAN stamp. Review shows "Mark the loan stock LOAN" with Retake the
+  pages and a tick; Send is disabled and `action=save` refuses until
+  `loanConfirmed`.
 - **The surgeon must be one the portal knows** (Brent, same day: a case was
   read with the surgeon as the patient and the patient as the surgeon, and
   filed under a new surgeon folder named after the patient — "the portal needs

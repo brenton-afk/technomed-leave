@@ -11,6 +11,7 @@ import { partitionItems } from '../usageReview.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { Header as ShellHeader } from '../design/Shell.jsx'
 import { itemGaps, suggestedCode } from '../usageItemCheck.js'
+import { loanStampFlags } from '../usageLoanCheck.js'
 import { SURGEON_KEYS, normaliseSurgeon } from '../clinicalPlan/parse.js'
 import { colour } from '../design/tokens.js'
 
@@ -568,7 +569,9 @@ export default function UsageScan({ user, switcher }) {
           // Only from "It's a different operation" on the already-filed panel.
           confirmSeparate: separate,
           // A surgeon the portal does not know, confirmed as new on review.
-          newSurgeonConfirmed: Boolean(caseRecord.newSurgeonConfirmed)
+          newSurgeonConfirmed: Boolean(caseRecord.newSurgeonConfirmed),
+          // Loan stock marked LOAN on the form, confirmed on review.
+          loanConfirmed: Boolean(caseRecord.loanConfirmed)
         })
       })
       const saved = await saveRes.json()
@@ -833,6 +836,8 @@ export default function UsageScan({ user, switcher }) {
   // ── Review ───────────────────────────────────────────────
   if (step === 'review' && caseRecord) {
     const { inReview, outstanding, clean, excluded, sendable } = partitionItems(caseRecord.items)
+    const loanFlags = loanStampFlags(caseRecord.items, caseRecord.bookingKit)
+    const loanBlocked = loanFlags.length > 0 && !caseRecord.loanConfirmed
 
     return (
       <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
@@ -999,15 +1004,36 @@ export default function UsageScan({ user, switcher }) {
               onAmend={() => { setAmending(duplicate.earlier.id); setDuplicate(null); setStep('history'); loadHistory() }}
               onSeparate={() => confirmAndSend({ separate: true })} />
           )}
-          <button onClick={() => confirmAndSend()} disabled={busy || sendable.length === 0 || Boolean(duplicate)}
-            style={{ width: '100%', padding: 15, background: (busy || sendable.length === 0) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', margin: '18px 0 10px' }}>
+          {/* Loan stock not marked LOAN on the form (Brent, 13 Nov 2026). */}
+          {loanFlags.length > 0 && (
+            <div data-loan-flags style={{ background: '#fff4e5', border: `1px solid ${AMBER_TEXT}`, borderRadius: 12, padding: 14, marginTop: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: AMBER_TEXT, marginBottom: 6 }}>Mark the loan stock LOAN</div>
+              {loanFlags.map(f => (
+                <div key={`${f.system}-${f.problem}`} style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.5, marginBottom: 6 }}>{f.message}</div>
+              ))}
+              <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>
+                The booking has it as a distributor loan, so the distributor must not restock our consignment from this usage. Fix the form, then retake the page so they see it.
+              </div>
+              <button type="button" onClick={() => setStep('capture')} disabled={busy}
+                style={{ fontSize: 13, fontWeight: 600, padding: '8px 14px', minHeight: 40, borderRadius: 10, border: `1px solid ${BORDER}`, background: 'white', color: NAVY, cursor: 'pointer', marginBottom: 8 }}>
+                Retake the pages
+              </button>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: NAVY }}>
+                <input type="checkbox" data-loan-confirm checked={Boolean(caseRecord.loanConfirmed)} onChange={e => updateCase('loanConfirmed', e.target.checked)}
+                  style={{ width: 18, height: 18, fontSize: 16 }} />
+                I've marked these LOAN on the form
+              </label>
+            </div>
+          )}
+          <button onClick={() => confirmAndSend()} disabled={busy || sendable.length === 0 || Boolean(duplicate) || loanBlocked}
+            style={{ width: '100%', padding: 15, background: (busy || sendable.length === 0 || loanBlocked) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', margin: '18px 0 10px' }}>
             {busy ? 'Saving and sending…' : `Confirm — file to Dropbox & email${sendable.length ? ` (${sendable.length} item${sendable.length === 1 ? '' : 's'})` : ''}`}
           </button>
           {/* Testing the scanner should not mean emailing a distributor. This
               sends the identical message and attachment to whoever is signed in,
               and to nobody else — the address comes from the session, so there is
               no way to type one in. */}
-          <button onClick={() => confirmAndSend({ testOnly: true })} disabled={busy || sendable.length === 0 || Boolean(duplicate)}
+          <button onClick={() => confirmAndSend({ testOnly: true })} disabled={busy || sendable.length === 0 || Boolean(duplicate) || loanBlocked}
             style={{ width: '100%', padding: 13, background: 'transparent', border: `1px solid ${TEAL}`, borderRadius: 10, fontSize: 13.5, fontWeight: 600, color: TEAL, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', marginBottom: 10 }}>
             {busy ? 'Sending…' : `Send a test to me only (${user?.email || 'your address'})`}
           </button>
