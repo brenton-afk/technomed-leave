@@ -86,7 +86,9 @@ const SUPPLY_STOCK = { 'Distributor Loan': 'Loan', Consignment: 'Consignment', '
 export function stockFor(item, kit = '') {
   const mark = markingOf(item)
   if (mark) return mark === 'loan' ? 'Loan' : 'Consignment'
-  if (!item || item.distributorKey === 'device_boost') return ''
+  if (!item) return ''
+  // Boost is consigned to TechnoMed (Brent, 13 Nov 2026) — never a loan set.
+  if (item.distributorKey === 'device_boost') return 'Consignment'
   const entries = parseKitSupplies(kit).filter(e => !e.navigation && e.supply)
     .map(e => ({ inv: inventoryFor(e.system), supply: e.supply })).filter(e => e.inv)
   const inv = inventoryFor(textOf(item))

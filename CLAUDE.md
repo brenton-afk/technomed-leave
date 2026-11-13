@@ -1622,7 +1622,7 @@ Invariants worth preserving:
   **The sheet says Loan or Consignment** (same day): `withStock` sets each
   line's `stock` at save — the form's marking, else the booking's supply for
   that system (Distributor Loan → Loan; Consignment / RHH Loan / Calvary Loan
-  → Consignment), a confirmed flagged line Loan. `buildUsageWorkbook` writes a
+  → Consignment; Boost is always Consignment — consigned to TechnoMed), a confirmed flagged line Loan. `buildUsageWorkbook` writes a
   "Stock" header line when every row agrees ("LOAN — distributor loan set"),
   a Stock column when they differ, nothing when no row knows.
 - **The surgeon must be one the portal knows** (Brent, same day: a case was

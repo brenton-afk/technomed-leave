@@ -49,6 +49,8 @@ describe('each line\'s stock', () => {
     expect(stockFor({ productName: 'Shoreline cage', distributorKey: 'device' }, KIT)).toBe('Consignment')
     expect(stockFor({ productName: 'Mariner screw', distributorKey: 'device' }, KIT)).toBe('Loan')
     expect(stockFor({ productName: 'Mariner screw', distributorKey: 'device' }, '')).toBe('')
+    // Boost is consigned to TechnoMed.
+    expect(stockFor({ productName: 'BOOST UltraFibres', distributorKey: 'device_boost' }, '')).toBe('Consignment')
   })
 
   it('a flagged line the rep confirmed is Loan', () => {
