@@ -184,6 +184,13 @@ function NumberPad({ cell, categories, onSet, onClose }) {
           </div>
         )}
 
+        {/* Xero takes this pay item only in the pay run, not on a timesheet. */}
+        {category?.timesheetOk === false && (
+          <div data-pay-run-only style={{ color: MUTED, fontSize: 12.5, lineHeight: 1.45, marginBottom: 12 }}>
+            Recorded here and paid through the pay run — Xero does not take this pay item on a timesheet.
+          </div>
+        )}
+
         <div style={{ background: tokenColour.canvas, borderRadius: 12, padding: '16px 18px', marginBottom: 12, textAlign: 'right', fontSize: 32, fontWeight: 700, color: NAVY, minHeight: 64, boxSizing: 'border-box' }}>
           {value || '0'}<span style={{ fontSize: 16, color: MUTED, marginLeft: 6 }}>{isCount ? '' : 'h'}</span>
         </div>

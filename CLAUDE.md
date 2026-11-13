@@ -2060,6 +2060,16 @@ only, kept in step on every draft save and submit, map in
 leave block per timesheet (in Xero ✓ / not), TOIL taken and its Xero status,
 and re-reads leave on open to say if it changed since submission.
 
+**Pay items Xero will not take on a timesheet** (Ben, 14 Nov 2026: "Earnings
+Rate … does not exist or is not valid for timesheets (400)"). `rateFacts` in
+`_payItems.js` sets `timesheetOk` false for a FIXEDAMOUNT rate, an archived one
+(`CurrentRecord: false`), or a lump sum / termination / director's fee /
+bonus / parental leave / workers comp type. `buildTimesheetLines` leaves those
+off the Xero lines; the entries stay on the portal record and the submit adds
+a warning per item ("… not sent; add it in the pay run", `notOnTimesheet`).
+The entry sheet says so under the item. Any Xero error naming an earnings rate
+id is reworded with the pay item's name (`namedXeroError`).
+
 **Call-ins are logged, not only offered** (Brent, 7 Nov 2026: "Mat gets a
 call-in logged for pt White"). `callInsFor` (`src/clinicalPlan/callIn.js`)
 marks a case `auto` when it is out of hours, the person is on the booking (or

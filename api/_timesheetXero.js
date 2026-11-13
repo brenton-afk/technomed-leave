@@ -20,11 +20,33 @@ export function unitsForCategory(entries, days) {
 export function buildTimesheetLines(entries, categories, days) {
   const lines = []
   for (const category of categories) {
+    // A pay item Xero will not take on a timesheet goes in the pay run instead
+    // (see timesheetOk in _payItems.js and notOnTimesheet below).
+    if (category.timesheetOk === false) continue
     const units = unitsForCategory(entries?.[category.key], days)
     if (units.every(u => u === 0)) continue // don't send empty lines
     lines.push({ EarningsRateID: category.earningsRateID, NumberOfUnits: units })
   }
   return lines
+}
+
+/** Entries on pay items Xero will not take on a timesheet: label and total. */
+export function notOnTimesheet(entries, categories, days) {
+  return categories.filter(c => c.timesheetOk === false).map(c => ({
+    key: c.key, label: c.label || c.xeroName, xeroName: c.xeroName,
+    total: unitsForCategory(entries?.[c.key], days).reduce((a, b) => a + b, 0)
+  })).filter(c => c.total > 0)
+}
+
+/** Xero's error with any earnings rate id named as the pay item it is. */
+export function namedXeroError(message, categories = []) {
+  let text = String(message || '')
+  for (const c of categories) {
+    if (c.earningsRateID && text.includes(c.earningsRateID)) {
+      text = text.split(c.earningsRateID).join(`"${c.xeroName || c.label}"`)
+    }
+  }
+  return text
 }
 
 export function buildTimesheetPayload({ employeeID, timesheetID, start, end, lines, status }) {
@@ -152,20 +174,26 @@ export async function submitTimesheetToXero({ staffName, start, end, entries, ca
       + 'Ask Brent or Erin to reopen it before resubmitting.')
   }
 
-  const result = await postTimesheet(buildTimesheetPayload({
-    employeeID: employee.EmployeeID,
-    timesheetID: already?.TimesheetID,
-    start,
-    end,
-    lines,
-    status: 'DRAFT'
-  }))
+  let result
+  try {
+    result = await postTimesheet(buildTimesheetPayload({
+      employeeID: employee.EmployeeID,
+      timesheetID: already?.TimesheetID,
+      start,
+      end,
+      lines,
+      status: 'DRAFT'
+    }))
+  } catch (err) {
+    throw new Error(namedXeroError(err.message, categories))
+  }
 
   return {
     ...result,
     employeeID: employee.EmployeeID,
     employeeName: `${employee.FirstName} ${employee.LastName}`,
     lineCount: lines.length,
+    notOnTimesheet: notOnTimesheet(entries, categories, days),
     dayCount: days.length,
     // Recorded so a resubmission is distinguishable from a first one when
     // somebody asks later why Xero has a different number.
@@ -180,14 +208,18 @@ export async function approveTimesheetInXero(record, categories) {
     throw new Error('This timesheet has no Xero timesheet ID — it was never submitted to Xero')
   }
   const days = record.days || []
-  return postTimesheet(buildTimesheetPayload({
-    employeeID: record.xero.employeeID,
-    timesheetID: record.xero.timesheetID,
-    start: record.periodStart,
-    end: record.periodEnd,
-    lines: buildTimesheetLines(record.entries, categories, days),
-    status: 'APPROVED'
-  }))
+  try {
+    return await postTimesheet(buildTimesheetPayload({
+      employeeID: record.xero.employeeID,
+      timesheetID: record.xero.timesheetID,
+      start: record.periodStart,
+      end: record.periodEnd,
+      lines: buildTimesheetLines(record.entries, categories, days),
+      status: 'APPROVED'
+    }))
+  } catch (err) {
+    throw new Error(namedXeroError(err.message, categories))
+  }
 }
 
 export { FORTNIGHT_DAYS }

@@ -54,8 +54,17 @@ export const CATEGORY_RULES = [
 function rateFacts(rate) {
   const units = String(rate?.TypeOfUnits ?? rate?.typeOfUnits ?? '').trim()
   const amount = Number(rate?.RatePerUnit ?? rate?.ratePerUnit)
+  const rateType = String(rate?.RateType ?? rate?.rateType ?? '').trim()
+  const earningsType = String(rate?.EarningsType ?? rate?.earningsType ?? '').trim()
+  const current = rate?.CurrentRecord ?? rate?.currentRecord
   return {
-    rateType: String(rate?.RateType ?? rate?.rateType ?? '').trim() || null,
+    // Whether Xero will take this pay item on a timesheet (Ben, 14 Nov 2026:
+    // "Earnings Rate … does not exist or is not valid for timesheets"). A
+    // fixed-amount item, an archived one, or a lump sum / termination /
+    // director's fee is paid through the pay run, never a timesheet.
+    timesheetOk: !(/^FIXEDAMOUNT$/i.test(rateType) || current === false
+      || /LUMPSUM|EMPLOYMENTTERMINATION|DIRECTORSFEES|BONUSES|PAIDPARENTAL|WORKERSCOMP/i.test(earningsType)),
+    rateType: rateType || null,
     typeOfUnits: units || null,
     ratePerUnit: Number.isFinite(amount) ? amount : null,
     // "Hours" is the only unit type that means time. Anything else — Callouts,

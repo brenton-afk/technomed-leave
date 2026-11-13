@@ -318,6 +318,8 @@ async function handleSubmit(req, res, session) {
     warnings: [
       ...check.warnings,
       ...(overflow.moved.length ? [`${overflow.excess}h over the ${overflow.limit}h fortnight banked as TOIL`] : []),
+      // Kept on the record, not sent: Xero takes these only in the pay run.
+      ...(xero.notOnTimesheet || []).map(n => `${n.label}: ${n.total} — Xero cannot take this pay item on a timesheet, so it was not sent; add it in the pay run`),
       ...(overflow.excess > 0 && !overflow.toilKey
         ? [`${overflow.excess}h over the ${overflow.limit}h fortnight, but there is no TOIL pay item to bank it in — check with Brent`] : [])
     ],
