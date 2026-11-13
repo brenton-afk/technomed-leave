@@ -213,3 +213,34 @@ describe('what only the internal copy carries', () => {
     expect(s.sheet.getRow(headRow + 1).getCell(1).fill?.fgColor).toBeUndefined()
   })
 })
+
+// Brent, 13 Nov 2026: Loan or Consignment is on the usage sheet.
+describe('stock on the sheet', () => {
+  const textOf = async buf => {
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(buf)
+    const out = []
+    wb.getWorksheet('Usage').eachRow(r => out.push(r.values.filter(v => v !== undefined && v !== null).map(String).join(' | ')))
+    return out.join('\n')
+  }
+
+  it('is a header line when every row agrees', async () => {
+    const buf = await buildUsageWorkbook(CASE, [{ ...ITEM, stock: 'Loan' }, { ...ITEM, stock: 'Loan' }])
+    const text = await textOf(buf)
+    expect(text).toMatch(/Stock \| LOAN — distributor loan set/)
+    expect(text).not.toMatch(/\| Stock\b(?! \|  LOAN)/)
+  })
+
+  it('is a column when rows differ', async () => {
+    const buf = await buildUsageWorkbook(CASE, [{ ...ITEM, stock: 'Loan' }, { ...ITEM, stock: 'Consignment' }])
+    const text = await textOf(buf)
+    expect(text).toMatch(/Rebate \| Stock/)
+    expect(text).toMatch(/LOAN/)
+    expect(text).toMatch(/Consignment/)
+  })
+
+  it('says nothing when nobody knows', async () => {
+    const text = await textOf(await buildUsageWorkbook(CASE, [ITEM]))
+    expect(text).not.toMatch(/Stock/)
+  })
+})

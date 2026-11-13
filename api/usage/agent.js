@@ -17,7 +17,7 @@ import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksS
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
-import { loanStampFlags } from '../../src/usageLoanCheck.js'
+import { loanStampFlags, withStock } from '../../src/usageLoanCheck.js'
 import { splitBoostReadings, boostPagesFromWhole, cleanBoostPages, splitPages } from '../_boostPages.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
@@ -343,6 +343,8 @@ async function handleSave(req, res, session) {
   if (blocking.length) {
     return res.status(400).json({ error: `Complete these before saving: ${blocking.join(', ')}` })
   }
+  // Each line's stock — Loan or Consignment — for the sheets.
+  caseRecord.items = withStock(caseRecord.items, incoming.bookingKit || '', Boolean(req.body?.loanConfirmed))
 
   const included = caseRecord.items.filter(i => !i.excluded)
   if (included.length === 0) throw badRequest('There are no items to save')

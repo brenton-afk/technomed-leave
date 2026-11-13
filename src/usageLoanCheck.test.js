@@ -40,3 +40,21 @@ describe('loan stock not marked LOAN', () => {
     expect(markingOf({})).toBe('')
   })
 })
+
+import { stockFor, withStock } from './usageLoanCheck.js'
+
+describe('each line\'s stock', () => {
+  it('takes the form first, then the booking', () => {
+    expect(stockFor({ productName: 'Shoreline cage', distributorKey: 'device', stockMarking: 'LOAN' }, KIT)).toBe('Loan')
+    expect(stockFor({ productName: 'Shoreline cage', distributorKey: 'device' }, KIT)).toBe('Consignment')
+    expect(stockFor({ productName: 'Mariner screw', distributorKey: 'device' }, KIT)).toBe('Loan')
+    expect(stockFor({ productName: 'Mariner screw', distributorKey: 'device' }, '')).toBe('')
+  })
+
+  it('a flagged line the rep confirmed is Loan', () => {
+    const [item] = withStock([{ id: 'a', productName: 'Mariner screw', distributorKey: 'device', stockMarking: 'consignment' }], KIT, true)
+    expect(item.stock).toBe('Loan')
+    const [unconfirmed] = withStock([{ id: 'a', productName: 'Mariner screw', distributorKey: 'device', stockMarking: 'consignment' }], KIT, false)
+    expect(unconfirmed.stock).toBe('Consignment')
+  })
+})

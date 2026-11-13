@@ -74,9 +74,16 @@ export async function buildUsageWorkbook(caseRecord, items, opts = {}) {
   // column. More than one — the Dropbox copy — and it has to be per row.
   const distributors = [...new Set(items.map(distributorOf).filter(Boolean))]
   const perItemDistributor = distributors.length > 1
-  const columns = perItemDistributor
-    ? [...ITEM_COLUMNS, { header: 'Distributor', width: 22 }]
-    : ITEM_COLUMNS
+  // Loan or consignment (Brent, 13 Nov 2026): a header line when every row
+  // agrees, a column when they do not, nothing when nobody knows.
+  const stockOf = it => String(it?.stock || '')
+  const stocks = [...new Set(items.map(stockOf))]
+  const perItemStock = stocks.length > 1
+  const columns = [
+    ...ITEM_COLUMNS,
+    ...(perItemStock ? [{ header: 'Stock', width: 13 }] : []),
+    ...(perItemDistributor ? [{ header: 'Distributor', width: 22 }] : [])
+  ]
 
   // Widths only. Assigning headers here would put them in row 1, and row 1 is
   // the title.
@@ -113,6 +120,7 @@ export async function buildUsageWorkbook(caseRecord, items, opts = {}) {
   detail('Patient surname', caseRecord.patientSurname)
   detail('Procedure', caseRecord.procedure)
   if (!perItemDistributor) detail('Distributor', distributors[0] || '')
+  if (!perItemStock && stocks[0]) detail('Stock', stocks[0] === 'Loan' ? 'LOAN — distributor loan set' : 'Consignment')
 
   const heldBack = items.filter(it => it.manualReview)
   if (internal) {
@@ -142,6 +150,7 @@ export async function buildUsageWorkbook(caseRecord, items, opts = {}) {
       item.quantity,
       item.rebateCode
     ]
+    if (perItemStock) values.push(stockOf(item) === 'Loan' ? 'LOAN' : stockOf(item))
     if (perItemDistributor) values.push(distributorOf(item))
     const row = sheet.addRow(values)
     row.alignment = { vertical: 'top', wrapText: true }

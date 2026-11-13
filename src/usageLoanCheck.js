@@ -73,3 +73,33 @@ export function loanStampFlags(items = [], kit = '') {
       : `${g.system} was booked as a distributor loan, but ${g.itemIds.length === 1 ? '1 item has' : `${g.itemIds.length} items have`} no LOAN stamp. Stamp ${g.itemIds.length === 1 ? 'it' : 'them'} LOAN on the form.`
   }))
 }
+
+// ─── Loan or consignment, on the usage sheet (Brent, 13 Nov 2026) ────────────
+// "If it's marked as consignment that should be included in the usage
+// templates (as well as Loan being mentioned)." Each line's stock: what the
+// form says against it; else what the booking has its system as; else
+// nothing. A line flagged above and confirmed by the rep is Loan.
+
+const SUPPLY_STOCK = { 'Distributor Loan': 'Loan', Consignment: 'Consignment', 'RHH Loan': 'Consignment', 'Calvary Loan': 'Consignment' }
+
+/** 'Loan', 'Consignment' or '' for one line. */
+export function stockFor(item, kit = '') {
+  const mark = markingOf(item)
+  if (mark) return mark === 'loan' ? 'Loan' : 'Consignment'
+  if (!item || item.distributorKey === 'device_boost') return ''
+  const entries = parseKitSupplies(kit).filter(e => !e.navigation && e.supply)
+    .map(e => ({ inv: inventoryFor(e.system), supply: e.supply })).filter(e => e.inv)
+  const inv = inventoryFor(textOf(item))
+  let hit = inv ? entries.find(e => e.inv === inv) : null
+  if (!inv) {
+    const same = entries.filter(e => e.inv.distributor && e.inv.distributor === item.distributorKey)
+    if (same.length === 1) hit = same[0]
+  }
+  return (hit && SUPPLY_STOCK[hit.supply]) || ''
+}
+
+/** The items with `stock` set, for filing and the sheets. */
+export function withStock(items = [], kit = '', loanConfirmed = false) {
+  const flagged = new Set(loanConfirmed ? loanStampFlags(items, kit).flatMap(f => f.itemIds) : [])
+  return items.map(it => ({ ...it, stock: flagged.has(it.id) ? 'Loan' : stockFor(it, kit) }))
+}

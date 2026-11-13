@@ -1619,6 +1619,12 @@ Invariants worth preserving:
   no LOAN stamp. Review shows "Mark the loan stock LOAN" with Retake the
   pages and a tick; Send is disabled and `action=save` refuses until
   `loanConfirmed`.
+  **The sheet says Loan or Consignment** (same day): `withStock` sets each
+  line's `stock` at save — the form's marking, else the booking's supply for
+  that system (Distributor Loan → Loan; Consignment / RHH Loan / Calvary Loan
+  → Consignment), a confirmed flagged line Loan. `buildUsageWorkbook` writes a
+  "Stock" header line when every row agrees ("LOAN — distributor loan set"),
+  a Stock column when they differ, nothing when no row knows.
 - **The surgeon must be one the portal knows** (Brent, same day: a case was
   read with the surgeon as the patient and the patient as the surgeon, and
   filed under a new surgeon folder named after the patient — "the portal needs
