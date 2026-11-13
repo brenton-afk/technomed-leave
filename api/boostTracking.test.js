@@ -91,3 +91,49 @@ describe('the Boost tracking form, scanned on its own', () => {
     expect((await call('boost-form', { usageId: CASE.id, pages: [] })).status).toBe(400)
   })
 })
+
+// Brent, 13 Nov 2026: the allograft (tracking) form goes automatically to
+// boost@ and admin@ only; the chargeable items form with the Boost sticker
+// goes to the usual distributors for restocking.
+describe('both forms in one scan', () => {
+  const page1 = { mediaType: 'image/jpeg', data: 'a'.repeat(40) }
+  const page2 = { mediaType: 'image/jpeg', data: 'b'.repeat(40) }
+
+  it('sends the tracking page to boost@ only, and leaves it out of Device\'s scan', async () => {
+    records.set(CASE.id, { ...CASE, boostPages: [1] })
+    const { status, data } = await call('email', { usageId: CASE.id, pages: [page1, page2] })
+    expect(status).toBe(200)
+    expect(usage).toHaveLength(1)
+    expect(usage[0].to).toEqual(['dl_spine_marketing@device.com.au', 'ortho@device.com.au'])
+    expect(String(usage[0].scanPdf)).toBe('1 pages')
+    expect(tracking).toHaveLength(1)
+    expect(tracking[0]).toMatchObject({ to: ['boost@device.com.au'], cc: ['admin@technomed.com.au'] })
+    expect(String(tracking[0].pdf)).toBe('1 pages')
+    expect(data.results.map(r => r.key).sort()).toEqual(['boost_tracking', 'device_boost'])
+    const saved = records.get(CASE.id)
+    expect(saved.emailsSent.find(e => e.key === 'boost_tracking').ok).toBe(true)
+    expect(saved.filesSaved).toContain(`${CASE.folderName}_Boost_Tracking_Form.pdf`)
+  })
+
+  it('does not send the tracking form twice', async () => {
+    records.set(CASE.id, { ...CASE, boostPages: [1] })
+    await call('email', { usageId: CASE.id, pages: [page1, page2] })
+    await call('email', { usageId: CASE.id, pages: [page1, page2], only: ['boost_tracking'] })
+    expect(tracking).toHaveLength(1)
+  })
+
+  it('a test goes to the rep only', async () => {
+    records.set(CASE.id, { ...CASE, boostPages: [1] })
+    await call('email', { usageId: CASE.id, pages: [page1, page2], testOnly: true })
+    expect(tracking[0].to).toEqual(['rep@example.test'])
+    expect(tracking[0].cc).toEqual([])
+    expect(uploads).toHaveLength(0)
+  })
+
+  it('a scan with no tracking page sends nothing to boost@', async () => {
+    records.set(CASE.id, CASE)
+    await call('email', { usageId: CASE.id, pages: [page1, page2] })
+    expect(tracking).toHaveLength(0)
+    expect(String(usage[0].scanPdf)).toBe('2 pages')
+  })
+})

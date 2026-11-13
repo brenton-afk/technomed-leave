@@ -66,7 +66,7 @@ export default function BoostForm({ usageId, user, toPage, sentAt, onClose, onSe
       </div>
       <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
         Scan the Boost form on its own. It goes to boost@device.com.au only (admin@ copied), marked tracking only — the usage has gone to Device for resupply.
-        {sentAt && !done && <div style={{ color: colour.warning, marginTop: 4 }}>Already sent for this case.</div>}
+        {sentAt && !done && <div style={{ color: colour.warning, marginTop: 4 }}>Already sent to the Boost team for this case — scan it again only if it was missed.</div>}
       </div>
 
       {done ? (

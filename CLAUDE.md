@@ -1597,6 +1597,17 @@ Invariants worth preserving:
   usage as `{folder}_Boost_Tracking_Form.pdf` (`keep: true`); recorded as
   `emailsSent` key `boost_tracking`, once (409 unless `confirmRepeat`); a test
   goes to the rep only and is neither recorded nor filed.
+- **Both Boost forms in one scan are split by themselves** (Brent, 13 Nov
+  2026: "the allograft form for Boost should only be automatically emailed to
+  the Boost tracking email and our admin email … the chargeable item form with
+  the Boost sticker … goes to ortho@ Device etc for restocking"). Each page is
+  read with `boostTrackingPages` (`api/_boostPages.js`); the case keeps
+  `boostPages`. On `action=email` those pages are left out of every
+  distributor's scan PDF and sent, once, to `BOOST_TRACKING` alone
+  (`sendTrackingForm`, shared with `boost-form`; a test goes to the rep only),
+  filed beside the usage. A graft read off the tracking form is dropped when
+  the chargeable form also has a Boost sticker (`splitBoostReadings`), so it is
+  restocked once. Scanning the tracking form on its own still works.
 - **The surgeon must be one the portal knows** (Brent, same day: a case was
   read with the surgeon as the patient and the patient as the surgeon, and
   filed under a new surgeon folder named after the patient — "the portal needs

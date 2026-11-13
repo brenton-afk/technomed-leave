@@ -1075,7 +1075,9 @@ export default function UsageScan({ user, switcher }) {
           {/* A Boost case: its tracking form is scanned on its own and goes to
               the Boost team only (Brent, 9 Nov 2026). */}
           {!result.test && (result.record?.items || []).some(i => i.distributorKey === 'device_boost' && !i.excluded) && (
-            <BoostForm usageId={result.record.id} user={user} toPage={fileToPage} />
+            <BoostForm usageId={result.record.id} user={user} toPage={fileToPage}
+              sentAt={(result.emails.find(e => e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt
+                || ((result.record.emailsSent || []).find(e => e && e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt} />
           )}
           {caseRecord && (
             <RegistrarText key={caseRecord.id || caseRecord.folderName}

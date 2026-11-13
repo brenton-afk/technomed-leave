@@ -17,6 +17,7 @@ import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksS
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
+import { splitBoostReadings, boostPagesFromWhole, cleanBoostPages, splitPages } from '../_boostPages.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
   listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile, caseFoldersOnDay
@@ -38,7 +39,7 @@ const VISION_MODEL = process.env.USAGE_VISION_MODEL || 'claude-opus-5'
 const MAX_PAGES = 8
 const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON.
+const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given.
 
 The document is a "Record of Implantable/Rebatable Items Used" form from Calvary Health Care Tasmania (CLV) or Royal Hobart Hospital (RHH). It mixes printed implant stickers with handwritten quantities ("x1", "x3", "×4"), handwritten product names, a printed patient ID label, and a handwritten date, procedure and rep name.
 
@@ -212,7 +213,10 @@ export function mergeExtractions(readings) {
 }
 
 async function readForm(pages) {
-  if (!FAST) return readOnce(pages, 'high')
+  if (!FAST) {
+    const whole = await readOnce(pages, 'high')
+    return { ...whole, boostPages: boostPagesFromWhole(whole.extracted, pages.length) }
+  }
   const readPage = async (page, i) => {
     const note = pages.length > 1
       ? `\n\nThis image is page ${i + 1} of ${pages.length} of one form. Return the header fields only where they are visible on this page, and every item on this page.`
@@ -229,9 +233,12 @@ async function readForm(pages) {
     }
   }
   const readings = await Promise.all(pages.map(readPage))
+  // The Boost tracking form is told apart page by page (api/_boostPages.js).
+  const split = splitBoostReadings(readings.map(r => r.extracted))
   return {
-    extracted: mergeExtractions(readings.map(r => r.extracted)),
-    truncated: readings.some(r => r.truncated)
+    extracted: mergeExtractions(split.readings),
+    truncated: readings.some(r => r.truncated),
+    boostPages: split.boostPages
   }
 }
 
@@ -255,7 +262,7 @@ async function handleScan(req, res, session) {
 
   const pages = validatePages(req.body?.pages)
 
-  const { extracted, truncated } = await readForm(pages)
+  const { extracted, truncated, boostPages = [] } = await readForm(pages)
   const caseRecord = normaliseCase(extracted, {
     // The device's own date. The server has none to offer: Vercel runs in UTC, so
     // through a Hobart evening its "today" is already tomorrow here, and a case
@@ -264,6 +271,10 @@ async function handleScan(req, res, session) {
     repName: session.name,
     repEmail: session.email
   })
+
+  // Which pages are the Boost tracking form: kept on the case, so the send
+  // leaves them out of every distributor's scan and sends them to boost@ alone.
+  caseRecord.boostPages = boostPages
 
   return res.status(200).json({
     case: caseRecord,
@@ -372,6 +383,7 @@ async function handleSave(req, res, session) {
     dropboxPath: dropboxSkipped ? '' : folderPath,
     dropboxSkipped,
     filesSaved: saved,
+    boostPages: cleanBoostPages(incoming.boostPages, pages.length),
     emailsSent: stored?.emailsSent || [],
     ...(stored?.amendments ? { amendments: stored.amendments } : {}),
     createdByEmail: stored?.createdByEmail || session.email,
@@ -462,17 +474,37 @@ async function handleEmail(req, res, session) {
   // reloaded has no pages to send, and a usage sheet with no scan is worth more
   // than no email at all — but the result says which was sent, so nobody assumes
   // the form went when it did not.
+  //
+  // The Boost tracking form's pages are not in it (Brent, 13 Nov 2026): they
+  // go to the Boost team alone, below, and never to Device's restocking desk.
   let scanPdf = null
   let scanError = ''
+  let trackingPages = []
   if (Array.isArray(pages) && pages.length) {
     try {
-      scanPdf = await buildScanPdf(validatePages(pages))
+      const valid = validatePages(pages)
+      const split = splitPages(valid, cleanBoostPages(record.boostPages, valid.length))
+      trackingPages = split.trackingPages
+      if (split.usagePages.length) scanPdf = await buildScanPdf(split.usagePages)
+      else scanError = 'only the Boost tracking form was scanned — the chargeable items form was not'
     } catch (err) {
       scanError = err.message
     }
   }
 
   const results = []
+  let trackingFiled = ''
+
+  // The Boost tracking form, by itself, to boost@ and admin@ only — once.
+  // A retry of one distributor (`only`) leaves it alone unless it is named.
+  if (trackingPages.length && (!only?.length || only.includes(BOOST_TRACKING.key))) {
+    const done = (record.emailsSent || []).some(e => e && e.key === BOOST_TRACKING.key && e.ok && !e.test)
+    if (!done || test) {
+      const sent = await sendTrackingForm({ record, pdf: await buildScanPdf(trackingPages), test, session })
+      if (sent.result) results.push(sent.result)
+      trackingFiled = sent.filed
+    }
+  }
 
   // The same patient's usage on the same day, already sent to a distributor
   // from another case (see api/_usageRepeat.js), is held back unless the rep
@@ -565,7 +597,12 @@ async function handleEmail(req, res, session) {
       const recorded = results.filter(r => !(r.held && (fresh.emailsSent || []).some(e => e.key === r.key && e.ok)))
       // Keep the latest outcome per distributor so a retry replaces the failure.
       const merged = [...(fresh.emailsSent || [])].filter(e => !recorded.some(r => r.key === e.key))
-      return { ...fresh, emailsSent: [...merged, ...recorded], updatedAt: new Date().toISOString() }
+      return {
+        ...fresh,
+        emailsSent: [...merged, ...recorded],
+        ...(trackingFiled ? { filesSaved: [...(fresh.filesSaved || []), trackingFiled] } : {}),
+        updatedAt: new Date().toISOString()
+      }
     })()
   if (!test) await saveUsageRecord(updated)
 
@@ -605,8 +642,29 @@ async function handleBoostForm(req, res, session) {
   if (done && !test && !confirmRepeat) {
     return res.status(409).json({ ...base, ok: false, held: true, error: 'The Boost team already has the tracking form for this case.' })
   }
+  const { result, filed } = await sendTrackingForm({ record, pdf, test, session })
+  if (result.held) return res.status(409).json(result)
+  if (test) return res.status(result.ok ? 200 : 502).json(result)
+  const fresh = (await getUsageRecord(record.id)) || record
+  await saveUsageRecord({
+    ...fresh,
+    emailsSent: [...(fresh.emailsSent || []).filter(e => e.key !== BOOST_TRACKING.key), result],
+    filesSaved: filed ? [...(fresh.filesSaved || []), filed] : fresh.filesSaved,
+    updatedAt: new Date().toISOString()
+  })
+  return res.status(result.ok ? 200 : 502).json({ ...result, filed })
+}
+
+/**
+ * Sends the Boost tracking form, by itself, to the Boost team (cc admin@) —
+ * or to the signed-in person only on a test — and files it beside the usage.
+ * Shared by the manual Boost form and the automatic split in `email`.
+ * Saves nothing: the caller records `result` and `filed` on the case.
+ */
+async function sendTrackingForm({ record, pdf, test, session }) {
+  const base = { key: BOOST_TRACKING.key, name: BOOST_TRACKING.name }
   if (!test && !(await claimUsageSend(record.id, BOOST_TRACKING.key))) {
-    return res.status(409).json({ ...base, ok: false, held: true, error: 'The tracking form is already being sent from another tap or phone.' })
+    return { result: { ...base, to: [], ok: false, held: true, error: 'The tracking form is already being sent from another tap or phone.' }, filed: '' }
   }
   const to = test ? [session.email] : BOOST_TRACKING.to
   let result
@@ -627,11 +685,9 @@ async function handleBoostForm(req, res, session) {
   } finally {
     if (!test) await releaseUsageSend(record.id, BOOST_TRACKING.key)
   }
-  if (test) return res.status(result.ok ? 200 : 502).json(result)
-
   // Filed beside the usage, never over anything (Dropbox adds " (1)").
   let filed = ''
-  if (result.ok && dropboxConfigured() && record.dropboxPath) {
+  if (!test && result.ok && dropboxConfigured() && record.dropboxPath) {
     try {
       const name = `${record.folderName}_Boost_Tracking_Form.pdf`
       await uploadFile(`${record.dropboxPath.replace(/\/+$/, '')}/${name}`, pdf, { keep: true })
@@ -640,14 +696,7 @@ async function handleBoostForm(req, res, session) {
       console.error('Boost tracking form not filed:', err.message)
     }
   }
-  const fresh = (await getUsageRecord(record.id)) || record
-  await saveUsageRecord({
-    ...fresh,
-    emailsSent: [...(fresh.emailsSent || []).filter(e => e.key !== BOOST_TRACKING.key), result],
-    filesSaved: filed ? [...(fresh.filesSaved || []), filed] : fresh.filesSaved,
-    updatedAt: new Date().toISOString()
-  })
-  return res.status(result.ok ? 200 : 502).json({ ...result, filed })
+  return { result, filed }
 }
 
 // ─── record / amend: correcting a usage after it has gone ────
