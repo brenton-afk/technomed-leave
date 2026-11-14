@@ -634,7 +634,8 @@ export default function Timesheets({ user, onBack }) {
   const banked = useMemo(() => toilInto
     ? toilOverflow({ entries, categories, days, contract: contractFor(user?.email), leaveHours: Number(periodLeave.total || 0) + toilTakenTotal, into: toilInto })
     : overflow, [toilInto, overflow, entries, categories, days, user?.email, periodLeave, toilTakenTotal])
-  const filed = keepPaid ? entries : overtime ? overtime.entries : banked.entries
+  // Until they answer, the review shows the hours as entered.
+  const filed = (keepPaid || (balance.kind === 'over' && !fortnightChoice)) ? entries : overtime ? overtime.entries : banked.entries
   const filedTotals = useMemo(() => computeTotals(filed, categories, days), [filed, categories, days])
 
   async function saveDraft() {
@@ -732,9 +733,11 @@ export default function Timesheets({ user, onBack }) {
               <strong style={{ fontSize: 14, color: NAVY }}>{filedTotals.byCategory[c.key]}{c.unit === 'count' ? '' : 'h'}</strong>
             </div>
           ))}
-          {overflow.moved.length > 0 && (
+          {/* Said only once they have chosen to bank it — before then, or for
+              overtime or paid hours, it would be wrong. */}
+          {banked.moved.length > 0 && String(fortnightChoice || '').startsWith('bank') && (
             <div style={{ fontSize: 12.5, color: MUTED, padding: '8px 0' }}>
-              Includes {overflow.excess}h TOIL: ordinary hours over your {overflow.limit}h fortnight.
+              Includes {banked.excess}h banked as TOIL.
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 11, marginTop: 4 }}>
@@ -977,7 +980,7 @@ export default function Timesheets({ user, onBack }) {
             them. */}
         {onCallCategory && onCall?.offered && (
           <div data-on-call-auto style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
-            🌙 On call this fortnight: <strong>{onCall.hours} hours</strong> from the roster, 17:00 Friday to 07:00 Monday. Filled in for you — change the roster on the calendar if it is wrong.
+            🌙 On call this fortnight: <strong>{onCall.hours} hours</strong> from the roster — 17:00 before each weekend or public holiday to 07:00 the next working day. Filled in for you — change the roster on the calendar if it is wrong.
           </div>
         )}
 
