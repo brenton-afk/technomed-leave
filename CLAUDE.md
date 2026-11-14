@@ -2094,7 +2094,12 @@ button per day (`data-call-in-add`, with a − to take one off). Xero's Call-in
 is now **$250 per unit** (Brent changed it from a fixed amount), so two
 call-ins send 2 and pay $500. **Only April, Ben, Mat and Aimee** are paid
 call-ins (`paidCallIns` in staffConfig.js, `paysCallIns()`; the pay item is
-dropped for everyone else and `paidCallIns(staff)` in the agent requires it).
+dropped for everyone else and `paidCallIns(staff)` in the agent requires it). **On-call hours are
+not hours worked**: `totals` in `_timesheetValidate.js` and the screen's
+`computeTotals` leave `on_call` out of `byDay`, `totalHours` and the week
+totals (`onCallHours` / "· 62h on call" beside them) — a 24h on-call Saturday
+plus a call-in's worked hours had pushed the day over 24 and refused the
+timesheet.
 **One-off leave corrections** live in `api/_leaveFixes.js` (`LEAVE_FIXES`),
 applied once from `getAllApplications`: a matched approved record that never
 reached Xero moves to `leave:withdrawn` with who and why; Xero and the

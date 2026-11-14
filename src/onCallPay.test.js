@@ -39,3 +39,22 @@ describe('who is paid call-ins', () => {
     expect(categoriesForStaff(rates, 'april@technomed.com.au', { assignedRateIds: ['ci'] }).map(c => c.key)).toContain('call_in')
   })
 })
+
+import { validate } from '../api/_timesheetValidate.js'
+
+// 14 Nov 2026: a Saturday on call is 24h; adding a call-in's worked hours put
+// the day over 24 and the timesheet was refused. On-call is not time worked.
+describe('on-call hours are not hours worked', () => {
+  const cats = [
+    { key: 'ordinary', label: 'Ordinary Hours', unit: 'hours' },
+    { key: 'on_call', label: 'On-call (roster)', unit: 'hours' },
+    { key: 'call_in', label: 'Call-in', unit: 'count' }
+  ]
+  const days = ['2026-11-07', '2026-11-08']
+  it('a 24h on-call Saturday with 4h worked passes, and the hours total leaves on-call out', () => {
+    const out = validate({ ordinary: { '2026-11-07': 4 }, on_call: { '2026-11-07': 24, '2026-11-08': 24 }, call_in: { '2026-11-07': 1 } }, cats, days)
+    expect(out.ok).toBe(true)
+    expect(out.totals.totalHours).toBe(4)
+    expect(out.totals.onCallHours).toBe(48)
+  })
+})

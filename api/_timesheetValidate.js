@@ -38,7 +38,10 @@ export function totals(entries, categories, days) {
       const v = Number(cell[day] || 0)
       if (!v) continue
       sum += v
-      if (category.unit === 'hours') {
+      // On-call hours are an allowance for being available, not time worked
+      // (14 Nov 2026): a Saturday on call is 24h, and adding a call-in's worked
+      // hours to it put the day over 24 and refused the timesheet.
+      if (category.unit === 'hours' && category.key !== 'on_call') {
         byDay[day] = (byDay[day] || 0) + v
         totalHours += v
       }
@@ -55,6 +58,7 @@ export function totals(entries, categories, days) {
     byCategory,
     byDay: Object.fromEntries(Object.entries(byDay).map(([d, v]) => [d, round(v)])),
     totalHours: round(totalHours),
+    onCallHours: round(byCategory.on_call || 0),
     callouts: round(callouts),
     weekHours
   }

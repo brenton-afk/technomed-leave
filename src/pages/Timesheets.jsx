@@ -37,7 +37,8 @@ function computeTotals(entries, categories, days) {
       const v = Number(cell[day] || 0)
       if (!v) continue
       sum += v
-      if (cat.unit === 'hours') { byDay[day] = (byDay[day] || 0) + v; totalHours += v }
+      // On-call is an allowance, not time worked — kept out of the hours (mirrors api/_timesheetValidate.js).
+      if (cat.unit === 'hours' && cat.key !== 'on_call') { byDay[day] = (byDay[day] || 0) + v; totalHours += v }
     }
     if (sum) byCategory[cat.key] = round2(sum)
     if (cat.unit === 'count') callouts += sum
@@ -1106,6 +1107,7 @@ export default function Timesheets({ user, onBack }) {
               {totals.weekHours[0]} + {totals.weekHours[1]}
               {leaveTotal ? ` · + ${leaveTotal}h leave` : ''}
               {totals.callouts ? ` · ${totals.callouts} call-in${totals.callouts === 1 ? '' : 's'}` : ''}
+              {totals.byCategory?.on_call ? ` · ${totals.byCategory.on_call}h on call` : ''}
             </span>
           </div>
         </div>
