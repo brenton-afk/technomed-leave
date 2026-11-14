@@ -13,7 +13,7 @@ import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
 import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
 import {
   getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees,
-  overlappingXeroLeave, submitToXero, listLeaveTypes
+  overlappingXeroLeave, submitToXero, listLeaveTypes, getEmployee, FALLBACK_LEAVE_TYPE_IDS
 } from '../_xeroClient.js'
 import { redis, redisSetBody } from '../_redis.js'
 import {
@@ -787,6 +787,16 @@ async function leaveFor(person, period, leaveIn = null) {
     // whatever the application's title says.
     const types = await listLeaveTypes(token, tenantId).catch(() => [])
     const nameOf = new Map(types.map(t => [t.LeaveTypeID, t.Name]))
+    // The list needs payroll.settings; without it Toni's personal leave came
+    // back unnamed and showed as plain "Leave" beside the same hours as
+    // "Personal leave" (14 Nov 2026). The person's own balances name every
+    // type they hold, and the two known ids are a last resort.
+    if (!nameOf.size) {
+      const emp = await getEmployee(token, tenantId, employee.EmployeeID).catch(() => null)
+      for (const l of emp?.LeaveBalances || []) if (l.LeaveTypeID) nameOf.set(l.LeaveTypeID, l.LeaveName || '')
+    }
+    if (!nameOf.has(FALLBACK_LEAVE_TYPE_IDS.ANNUAL_LEAVE)) nameOf.set(FALLBACK_LEAVE_TYPE_IDS.ANNUAL_LEAVE, 'Annual Leave')
+    if (!nameOf.has(FALLBACK_LEAVE_TYPE_IDS.SICK)) nameOf.set(FALLBACK_LEAVE_TYPE_IDS.SICK, 'Personal Leave')
     xero = xero.map(x => ({ ...x, typeName: nameOf.get(x.leaveTypeId) || '' }))
     xeroRead = true
   } catch (err) {

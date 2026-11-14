@@ -129,6 +129,27 @@ export function leaveForPeriod({ leave = {}, xero = [], xeroRead = true, email, 
       for (const { date, hours } of spread) add(rows, type, date, hours, true)
     }
     const inXero = new Set((xero || []).map(x => x?.id).filter(Boolean))
+    const xeroDates = new Set([...rows.values()].flatMap(r => Object.keys(r.byDay)))
+    // Xero's leave of no known type takes the type of the portal request for
+    // the same day, so it reads "Personal leave", not plain "Leave".
+    const other = rows.get('OTHER')
+    if (other) {
+      for (const a of mine) {
+        const t = typeOf(a)
+        if (t === 'OTHER') continue
+        for (const { date } of portalDays(a, email, standardDay)) {
+          const h = other.byDay[date]
+          if (!h) continue
+          delete other.byDay[date]
+          other.total = round2(other.total - h)
+          const row = rows.get(t) || { type: t, label: LEAVE_LABEL[t], byDay: {}, total: 0, inXero: true, notInXero: [] }
+          row.byDay[date] = round2((row.byDay[date] || 0) + h)
+          row.total = round2(row.total + h)
+          rows.set(t, row)
+        }
+      }
+      if (!Object.keys(other.byDay).length) rows.delete('OTHER')
+    }
     for (const a of mine) {
       const sent = a.xero?.ok === true && a.xero?.id
       if (sent) {
@@ -138,7 +159,12 @@ export function leaveForPeriod({ leave = {}, xero = [], xeroRead = true, email, 
         }
         continue
       }
-      for (const { date, hours } of portalDays(a, email, standardDay)) add(rows, typeOf(a), date, hours, false)
+      // Never on a day Xero already holds leave (14 Nov 2026: Toni's Monday
+      // showed 5.5h twice — Xero's own, and a portal request never sent).
+      for (const { date, hours } of portalDays(a, email, standardDay)) {
+        if (xeroDates.has(date)) continue
+        add(rows, typeOf(a), date, hours, false)
+      }
     }
   } else {
     for (const a of mine) {

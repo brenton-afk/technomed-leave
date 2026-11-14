@@ -6,7 +6,7 @@ const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
 // Fallback leave type IDs for the TechnoMed AU payroll org, used only if the
 // live LeaveTypes lookup fails. Prefer the lookup — IDs differ per org.
-const FALLBACK_LEAVE_TYPE_IDS = {
+export const FALLBACK_LEAVE_TYPE_IDS = {
   ANNUAL_LEAVE: '4b7fb322-1f51-4416-a512-07e9553a1149',
   SICK: 'caf18bdb-6c7f-4b5d-8ab3-233866b534bd'
 }

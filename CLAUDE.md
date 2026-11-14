@@ -2037,7 +2037,12 @@ counts for nothing**; a portal application shows only if it never reached Xero
 (flagged `inXero: false`), one sent and since removed or changed in Xero is
 Xero's to say (`notes` explain both). Only if Xero cannot be read do the
 portal's records stand in (`source: 'portal'`, `xeroError`). Pending listed
-apart. `action=leavedays` returns it (`leave`, plus `toil` room; admins may pass
+apart. **One day's leave is shown once** (14 Nov 2026: Toni's Monday showed 5.5h
+as both "Personal leave ⚠" and "Leave"): a portal request never sent to Xero
+is not counted on a day Xero already holds leave; Xero leave of no known type
+takes the type of the portal request for that day; and when the leave-type
+list cannot be read (payroll.settings), the person's own `LeaveBalances`
+name the types, then `FALLBACK_LEAVE_TYPE_IDS`. `action=leavedays` returns it (`leave`, plus `toil` room; admins may pass
 `email=`); the grid draws read-only purple rows, the footer "+ Xh leave",
 review "Worked + leave". Submit snapshots it on the record (`leave`), and
 leave + TOIL taken come off the contract for `toilOverflow`.
