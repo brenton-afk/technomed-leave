@@ -3,7 +3,7 @@ import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { extraDoubleTime, COVERED_HOURS } from '../clinicalPlan/callIn.js'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
-import { toilOverflow, contractFor } from '../timesheetRules.js'
+import { toilOverflow, contractFor, fortnightBalance, spreadShortfall } from '../timesheetRules.js'
 import { workPatternFor } from '../staffConfig.js'
 import { TOIL_TAKEN, earnsToil, totalOf, toilTakenCheck } from '../timesheetLeave.js'
 
@@ -69,6 +69,42 @@ function isWeekend(index) { return index % 7 >= 5 }
  * the other way somebody fills this in. Focusing selects what is there, so
  * typing replaces rather than appending to a number already in the box.
  */
+/**
+ * Over or under the fortnight, asked before submit (Brent, 14 Nov 2026).
+ * Over: bank the extra as TOIL, or keep it as paid hours. Under: take TOIL to
+ * make it up (up to the balance), or leave it short.
+ */
+function FortnightQuestion({ balance, choice, available, onBank, onPaid, onTake, onShort }) {
+  const btn = on => ({ flex: 1, padding: '11px 8px', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer', border: `1px solid ${on ? TEAL : BORDER}`, background: on ? TEAL : 'white', color: on ? 'white' : NAVY })
+  if (balance.kind === 'over') {
+    return (
+      <div data-fortnight-question="over" style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 4 }}>You're {balance.hours}h over your {balance.limit}h fortnight</div>
+        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 10, lineHeight: 1.45 }}>Bank the extra as TOIL to take later, or keep it as paid hours?</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" data-bank-toil onClick={onBank} style={btn(choice === 'bank')}>Bank {balance.hours}h as TOIL</button>
+          <button type="button" data-keep-paid onClick={onPaid} style={btn(choice === 'paid')}>Keep as paid hours</button>
+        </div>
+      </div>
+    )
+  }
+  const canTake = available == null ? balance.hours : Math.max(0, Math.min(balance.hours, available))
+  return (
+    <div data-fortnight-question="under" style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 4 }}>You're {balance.hours}h under your {balance.limit}h fortnight</div>
+      <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 10, lineHeight: 1.45 }}>
+        {canTake > 0
+          ? <>Take TOIL to make it up?{available != null ? ` You have ${available}h available.` : ''}</>
+          : 'You have no TOIL available to make it up.'}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {canTake > 0 && <button type="button" data-take-toil onClick={() => onTake(canTake)} style={btn(choice === 'take')}>Take {canTake}h TOIL</button>}
+        <button type="button" data-leave-short onClick={onShort} style={btn(choice === 'short')}>Leave it short</button>
+      </div>
+    </div>
+  )
+}
+
 function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnter }) {
   // What is being typed, which is not always a number yet.
   //
@@ -556,7 +592,14 @@ export default function Timesheets({ user, onBack }) {
     entries, categories, days, contract: contractFor(user?.email),
     leaveHours: Number(periodLeave.total || 0) + toilTakenTotal
   }), [entries, categories, days, user?.email, periodLeave, toilTakenTotal])
-  const filed = overflow.entries
+  // Over or under the fortnight — asked on review (Brent, 14 Nov 2026).
+  const [fortnightChoice, setFortnightChoice] = useState(null)
+  const balance = useMemo(() => takesToil
+    ? fortnightBalance({ entries, categories, contract: contractFor(user?.email), leaveHours: Number(periodLeave.total || 0), toilTaken: toilTakenTotal })
+    : { kind: 'none', hours: 0 }, [takesToil, entries, categories, user?.email, periodLeave, toilTakenTotal])
+  const keepPaid = balance.kind === 'over' && fortnightChoice === 'paid'
+  const needsAnswer = (balance.kind === 'over' || balance.kind === 'under') && !fortnightChoice
+  const filed = keepPaid ? entries : overflow.entries
   const filedTotals = useMemo(() => computeTotals(filed, categories, days), [filed, categories, days])
 
   async function saveDraft() {
@@ -580,7 +623,7 @@ export default function Timesheets({ user, onBack }) {
       const res = await fetch('/api/timesheet/agent?action=submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed })
+        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed, bankToil: !keepPaid })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -685,8 +728,27 @@ export default function Timesheets({ user, onBack }) {
         {!toilCheck.ok && (
           <div role="alert" style={{ background: '#fdecea', color: '#c0392b', padding: 12, borderRadius: 10, fontSize: 14, marginBottom: 12, lineHeight: 1.45 }}>{toilCheck.error}</div>
         )}
-        <button onClick={submit} disabled={busy || !canSubmit || !toilCheck.ok}
-          style={{ width: '100%', padding: 16, background: (busy || !canSubmit || !toilCheck.ok) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: (busy || !canSubmit || !toilCheck.ok) ? 'default' : 'pointer', marginBottom: 10 }}>
+        {/* Over or under the fortnight (Brent, 14 Nov 2026): asked here, and
+            the answer goes to Xero — banked TOIL as a TOIL line on the
+            timesheet, TOIL taken as a TOIL leave application on approval. */}
+        {(balance.kind === 'over' || balance.kind === 'under') && (
+          <FortnightQuestion balance={balance} choice={fortnightChoice}
+            available={toilRoom?.available != null ? round2(Math.max(0, toilRoom.available - toilTakenTotal)) : null}
+            onBank={() => setFortnightChoice('bank')}
+            onPaid={() => setFortnightChoice('paid')}
+            onShort={() => setFortnightChoice('short')}
+            onTake={hours => {
+              const add = spreadShortfall({ hours, email: user?.email, days, entries, categories, leaveByDay: periodLeave.byDay || {}, taken: toilTaken })
+              setEntries(prev => {
+                const row = { ...(prev[TOIL_TAKEN] || {}) }
+                for (const [d, h] of Object.entries(add)) row[d] = round2(Number(row[d] || 0) + h)
+                return { ...prev, [TOIL_TAKEN]: row }
+              })
+              setFortnightChoice('take')
+            }} />
+        )}
+        <button onClick={submit} disabled={busy || !canSubmit || !toilCheck.ok || needsAnswer}
+          style={{ width: '100%', padding: 16, background: (busy || !canSubmit || !toilCheck.ok || needsAnswer) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: (busy || !canSubmit || !toilCheck.ok) ? 'default' : 'pointer', marginBottom: 10 }}>
           {busy ? 'Submitting to Xero…'
             : canSubmit ? 'Confirm and submit' : 'Not yours to submit'}
         </button>
@@ -851,7 +913,7 @@ export default function Timesheets({ user, onBack }) {
         {overflow.excess > 0 && (
           <div style={{ background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
             {overflow.toilKey
-              ? <><strong>{overflow.excess}h over your {overflow.limit}h fortnight</strong> will be banked as TOIL when you submit. To be paid it as double time instead, enter those hours under Overtime — Double.</>
+              ? <><strong>{overflow.excess}h over your {overflow.limit}h fortnight.</strong> When you submit you'll be asked whether to bank it as TOIL or keep it as paid hours. To be paid it as double time, enter those hours under Overtime — Double.</>
               : <><strong>{overflow.excess}h over your {overflow.limit}h fortnight.</strong> There is no TOIL pay item on your timesheet to bank it in — check with Brent before submitting.</>}
           </div>
         )}
@@ -1111,7 +1173,7 @@ export default function Timesheets({ user, onBack }) {
             </span>
           </div>
         </div>
-        <button onClick={() => { setError(''); setStage('review') }} disabled={!totals.totalHours && !totals.callouts && !toilTakenTotal}
+        <button onClick={() => { setError(''); setFortnightChoice(null); setStage('review') }} disabled={!totals.totalHours && !totals.callouts && !toilTakenTotal}
           style={{ padding: '12px 20px', background: (totals.totalHours || totals.callouts) ? TEAL : 'rgba(255,255,255,0.15)', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: (totals.totalHours || totals.callouts) ? 'pointer' : 'default' }}>
           Submit
         </button>

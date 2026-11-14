@@ -288,9 +288,11 @@ async function handleSubmit(req, res, session) {
   // screen showed before submit. See src/timesheetRules.js. Leave and TOIL
   // taken both come off the contract: neither is time worked.
   const leaveHours = periodLeave.total + totalOf(toilTaken)
-  const overflow = toilOverflow({
-    entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours
-  })
+  // Banked unless the person chose to keep the extra hours as paid hours when
+  // the screen asked (Brent, 14 Nov 2026) — `bankToil: false`.
+  const overflow = req.body?.bankToil === false
+    ? { entries: entered, excess: 0, moved: [], limit: null }
+    : toilOverflow({ entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours })
   const entries = overflow.entries
 
   const check = validate(entries, categories, period.days)

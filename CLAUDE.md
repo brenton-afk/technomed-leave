@@ -2016,6 +2016,20 @@ overflowToToil: true }` (Aimee, Ben, Mat). Ordinary hours over 76 less approved
 leave move to `toil_accrued` from the end of the fortnight back; double time
 entered stays double time. The screen shows the split before submit and the
 server applies the same function on submit (idempotent).
+**Asked on submit, not flagged per day** (Brent, 14 Nov 2026: "staff hours
+are very variable … submit hours and then the portal automatically ask them
+if they are under hours, if they would like to take TOIL, or if they are over
+hours if they would like to add TOIL"). For everyone who earns TOIL,
+`fortnightBalance` (`src/timesheetRules.js`) compares ordinary hours + leave
++ TOIL taken with the contract — `contractFor` now also derives one from a
+work pattern (Toni: 5.5 × 3 days = 33h). The review screen shows
+`FortnightQuestion`: **over** → "Bank Xh as TOIL" or "Keep as paid hours"
+(`bankToil: false` on submit skips `toilOverflow`); **under** → "Take Xh
+TOIL" (up to the balance less TOIL already on the sheet; `spreadShortfall`
+puts it on the days furthest short of the usual day, earliest first) or
+"Leave it short". Submit waits for an answer. To Xero: banked TOIL is the
+TOIL Accrued line on the timesheet; TOIL taken goes as TOIL leave
+applications on approval (`sendToilTaken`).
 
 Flow and invariants:
 
