@@ -72,9 +72,15 @@ export async function getAllApplications() {
   const declinedIds = await redis('lrange', 'leave:declined', '0', '49') || []
   const approved = await Promise.all(approvedIds.map(id => getApplication(id)))
   const declined = await Promise.all(declinedIds.map(id => getApplication(id)))
+  // One-off corrections (api/_leaveFixes.js), each applied once.
+  let kept = approved.filter(Boolean)
+  try {
+    const { applyLeaveFixes } = await import('./_leaveFixes.js')
+    kept = await applyLeaveFixes(kept)
+  } catch { /* the list still answers */ }
   return {
     pending,
-    approved: approved.filter(Boolean),
+    approved: kept,
     declined: declined.filter(Boolean)
   }
 }

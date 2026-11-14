@@ -32,8 +32,8 @@ export const PAY_ITEMS = {
   toil_accrued: 'TOIL Accrued',
   toil_toni_admin: 'TOIL — Admin',
   toil_toni_scientific: 'TOIL — Scientific',
-  call_in: 'Call-In Allowance',
-  on_call: 'On-Call Hours'
+  call_in: 'Call-in',
+  on_call: 'On-call (roster)'
 }
 
 /**

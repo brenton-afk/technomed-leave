@@ -5,6 +5,7 @@
 import { getXeroToken, findEmployee, assignedEarningsRateIds } from './_xeroClient.js'
 import { readXero } from './_xeroResponse.js'
 import { payItemsFor } from '../src/payOptions.js'
+import { paidOnCall } from '../src/clinicalPlan/onCall.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
@@ -32,8 +33,8 @@ export const CATEGORY_RULES = [
   // per hour"; the callout rate is $250. A number written down in two places
   // disagrees eventually, and the copy in the code is the one nobody updates.
   // Both now come off the Xero rate itself — see rateFacts below.
-  { key: 'call_in', pattern: /call\s*in/i, label: 'Call-In Allowance', kind: 'allowance', unit: 'count', colour: 'purple' },
-  { key: 'on_call', pattern: /on\s*call/i, label: 'On-Call Hours', kind: 'allowance', unit: 'hours', colour: 'purple' },
+  { key: 'call_in', pattern: /call\s*in/i, label: 'Call-in', kind: 'allowance', unit: 'count', colour: 'purple' },
+  { key: 'on_call', pattern: /on\s*call/i, label: 'On-call (roster)', kind: 'allowance', unit: 'hours', colour: 'purple' },
   { key: 'ordinary', pattern: /ordinary/i, label: 'Ordinary Hours', kind: 'ordinary', unit: 'hours', colour: 'navy' }
 ]
 
@@ -173,6 +174,8 @@ export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {
 
   for (const rule of CATEGORY_RULES) {
     if (allowed && !allowed.has(rule.key)) continue
+    // On-call hours only for those paid them, and filled from the roster.
+    if (rule.key === 'on_call' && !paidOnCall(email)) continue
 
     const match = earningsRates.find(r => {
       const id = r.EarningsRateID || r.earningsRateID

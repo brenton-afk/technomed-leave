@@ -420,6 +420,11 @@ export default function Timesheets({ user, onBack }) {
         .then(d => {
           setCallIns(d.suggestions || [])
           setOnCall(d.onCall || null)
+          // On-call hours are the roster's (Brent, 14 Nov 2026) — put on the
+          // grid as the calendar has them, replacing anything there.
+          if (d.onCall) {
+            setEntries(prev => ({ ...prev, on_call: { ...(d.onCall.byDay || {}) } }))
+          }
           // Logged on the server just now (Brent, 7 Nov 2026): put the same
           // call-ins on the grid on screen, which was read before they were.
           if (d.logged?.length) {
@@ -803,10 +808,6 @@ export default function Timesheets({ user, onBack }) {
             style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: NAVY, cursor: 'pointer' }}>
             ⚡ {pattern ? 'My usual week' : 'Standard week'}
           </button>}
-          <button onClick={() => setShowOnCall(true)}
-            style={{ flex: '1 1 46%', padding: '10px 8px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: PURPLE, cursor: 'pointer' }}>
-            🌙 On-call
-          </button>
           {/* Only once there is something to undo. A permanently greyed button
               is a permanent invitation to wonder what it would have done. */}
           {undoDepth > 0 && (
@@ -864,32 +865,9 @@ export default function Timesheets({ user, onBack }) {
             a rotation worked out from a start date. Offered and not filled
             in: the person filing is the one who knows whether it was really
             them. */}
-        {onCallCategory && onCall?.offered && !onCallDone && (
-          <div style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>
-            <div style={{ fontSize: 12.5, color: PURPLE, fontWeight: 700, marginBottom: 3 }}>
-              On call this fortnight?
-            </div>
-            <div style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
-              The calendar has you on call for{' '}
-              {Object.keys(onCall.byDay).length > 4 ? 'two weekends' : 'the weekend'} —{' '}
-              <strong>{onCall.hours} hours</strong>, 17:00 Friday to 07:00 Monday.
-            </div>
-            <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
-              <button
-                onClick={() => {
-                  for (const [day, hours] of Object.entries(onCall.byDay)) {
-                    setCell(onCallCategory.key, day, hours)
-                  }
-                  setOnCallDone(true)
-                }}
-                style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-                Fill in {onCall.hours} hours
-              </button>
-              <button onClick={() => setOnCallDone(true)}
-                style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, color: MUTED, cursor: 'pointer' }}>
-                No
-              </button>
-            </div>
+        {onCallCategory && onCall?.offered && (
+          <div data-on-call-auto style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
+            🌙 On call this fortnight: <strong>{onCall.hours} hours</strong> from the roster, 17:00 Friday to 07:00 Monday. Filled in for you — change the roster on the calendar if it is wrong.
           </div>
         )}
 
@@ -997,6 +975,14 @@ export default function Timesheets({ user, onBack }) {
               {weekDays.map((day, i) => {
                 const value = entries[cat.key]?.[day]
                 const tint = COLOURS[cat.colour] || NAVY
+                // The roster's hours: shown, never typed (14 Nov 2026).
+                if (cat.key === 'on_call') {
+                  return (
+                    <div key={day} data-on-call-cell style={{ minHeight: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: value ? tint : MUTED, background: value ? '#f4eefa' : 'transparent', border: `1px dashed ${value ? 'rgba(142,36,170,0.35)' : BORDER}` }}>
+                      {value || '·'}
+                    </div>
+                  )
+                }
                 return (
                   <GridCell key={day}
                     desktop={desktop}
@@ -1111,13 +1097,6 @@ export default function Timesheets({ user, onBack }) {
         <NumberPad cell={padCell} categories={[...categories, { key: TOIL_TAKEN, label: 'TOIL taken', unit: 'hours', hint: toilRoom?.available != null ? `${toilRoom.available}h available` : '' }]}
           onSet={v => setCell(padCell.categoryKey, padCell.day, v)}
           onClose={() => setPadCell(null)} />
-      )}
-      {showOnCall && (
-        <OnCallModal days={days} onClose={() => setShowOnCall(false)}
-          onApply={(day, hours) => {
-            const onCall = categories.find(c => c.key === 'on_call')
-            if (onCall) addToCell(onCall.key, day, hours)
-          }} />
       )}
       {showSplit && (
         <SplitModal days={days} onClose={() => setShowSplit(false)}

@@ -14,7 +14,7 @@ vi.mock('./_auth.js', () => ({ requireSession: vi.fn(), requireAdmin: vi.fn() })
 vi.mock('./_googleCalendar.js', () => ({ getGoogleToken: vi.fn(), getCalendarId: vi.fn(), CALENDAR_SCOPE_READONLY: 'r' }))
 vi.mock('./_email.js', () => ({ sendTimesheetSubmittedEmail: vi.fn(), sendTimesheetDecisionEmail: vi.fn() }))
 
-const { logCallIns, paidCallIns } = await import('./timesheet/agent.js')
+const { logCallIns, paidCallIns, withRosterOnCall } = await import('./timesheet/agent.js')
 const MAT = { email: 'mat@technomed.com.au', name: 'Mat Usher', hasTimesheets: true }
 const PERIOD = { start: '2026-10-26', end: '2026-11-08' }
 const WHITE = { id: 'evt-1', day: '2026-11-07', title: 'Testa', time: '08:00', auto: true }
@@ -61,3 +61,29 @@ describe('who is paid call-ins', () => {
   })
 })
 
+
+// Brent, 14 Nov 2026: on-call hours are the roster's, never typed, and only
+// Mat, Ben and Aimee are paid them.
+describe('on-call hours on submit', () => {
+  const period = { start: '2026-11-02', end: '2026-11-15', days: Array.from({ length: 14 }, (_, i) => `2026-11-${String(2 + i).padStart(2, '0')}`) }
+  const roster = async () => ({ onCallEntries: [{ title: 'On call - Ben', date: '2026-11-06' }] })
+
+  it('replaces what was typed with the roster for Ben', async () => {
+    const out = await withRosterOnCall({ ordinary: { '2026-11-03': 7.6 }, on_call: { '2026-11-04': 99 } },
+      { email: 'ben@technomed.com.au', firstName: 'Ben' }, period, roster)
+    expect(out.entries.on_call['2026-11-04']).toBeUndefined()
+    expect(Object.values(out.entries.on_call).reduce((a, b) => a + b, 0)).toBe(62)
+    expect(out.entries.ordinary).toEqual({ '2026-11-03': 7.6 })
+  })
+
+  it('empties it for someone not paid on-call', async () => {
+    const out = await withRosterOnCall({ on_call: { '2026-11-07': 24 } }, { email: 'brenton@technomed.com.au', firstName: 'Brent' }, period, roster)
+    expect(out.entries.on_call).toBeUndefined()
+  })
+
+  it('leaves it empty with a warning when the roster cannot be read', async () => {
+    const out = await withRosterOnCall({}, { email: 'ben@technomed.com.au', firstName: 'Ben' }, period, async () => { throw new Error('down') })
+    expect(out.entries.on_call).toBeUndefined()
+    expect(out.warning).toMatch(/roster/)
+  })
+})

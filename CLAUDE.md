@@ -2078,6 +2078,21 @@ reason, a refused rate is retried without (`postDroppingRefused`, never the
 last line): the refused ids are kept on the record (`xero.refusedRateIds`) so
 approval leaves the same lines off, and they join the pay-run warning.
 
+**On-call is the roster's, not typed** (Brent, 14 Nov 2026: "should not be an
+option for staff to put in … allocated … as an hourly rate on their on call
+weekends … Mat, Ben and Aimee … not Brent"). `paidOnCall` in staffConfig.js
+(`paidOnCall()` in `clinicalPlan/onCall.js`); the `on_call` pay item is offered
+only to them (`categoriesForStaff`) and labelled "On-call (roster)". The grid
+draws the row read-only from `action=callins` (`onCall.byDay`, 17:00 Fri –
+07:00 Mon, 62h a weekend); the 🌙 On-call button and its modal are gone. On
+submit `withRosterOnCall` replaces the row with the calendar's hours (anybody
+else's is emptied; a roster that cannot be read leaves it empty with a
+warning). The rate is Xero's. The call-in item is labelled "Call-in".
+**One-off leave corrections** live in `api/_leaveFixes.js` (`LEAVE_FIXES`),
+applied once from `getAllApplications`: a matched approved record that never
+reached Xero moves to `leave:withdrawn` with who and why; Xero and the
+calendar are not touched. First: Toni's 2 Nov 2026 personal leave.
+
 **Call-ins are logged, not only offered** (Brent, 7 Nov 2026: "Mat gets a
 call-in logged for pt White"). `callInsFor` (`src/clinicalPlan/callIn.js`)
 marks a case `auto` when it is out of hours, the person is on the booking (or

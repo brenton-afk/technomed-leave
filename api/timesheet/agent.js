@@ -23,7 +23,7 @@ import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import { toilOverflow, contractFor } from '../../src/timesheetRules.js'
 import {
-  onCallHoursFor, totalHours as onCallTotal
+  onCallHoursFor, totalHours as onCallTotal, paidOnCall
 } from '../../src/clinicalPlan/onCall.js'
 import { callInsFor, COVERED_HOURS } from '../../src/clinicalPlan/callIn.js'
 import { periodFor, currentPeriod, recentPeriods, isValidPeriodStart } from '../_fortnight.js'
@@ -267,7 +267,8 @@ async function handleSubmit(req, res, session) {
   if (isDemo(req.body?.categories) || isDemo(categories)) {
     return res.status(400).json({ error: 'Those are demonstration pay items and cannot be filed.' })
   }
-  const entered = normaliseEntries(req.body?.entries, categories, period.days)
+  const roster = await withRosterOnCall(normaliseEntries(req.body?.entries, categories, period.days), staff, period)
+  const entered = roster.entries
 
   // TOIL taken (Brent, 12 Nov 2026): only for those who earn it, never more
   // than the balance. Kept apart from the pay items — it is leave, and goes to
@@ -318,6 +319,7 @@ async function handleSubmit(req, res, session) {
     warnings: [
       ...check.warnings,
       ...(overflow.moved.length ? [`${overflow.excess}h over the ${overflow.limit}h fortnight banked as TOIL`] : []),
+      ...(roster.warning ? [roster.warning] : []),
       // Kept on the record, not sent: Xero takes these only in the pay run.
       ...(xero.notOnTimesheet || []).map(n => `${n.label}: ${n.total} — Xero cannot take this pay item on a timesheet, so it was not sent; add it in the pay run`),
       ...(overflow.excess > 0 && !overflow.toilKey
@@ -358,6 +360,46 @@ async function handleMine(req, res, session) {
 
 // ─── callins: after-hours cases, and the on-call weekend ───
 
+/** The bookings calendar over a pay period, and its on-call roster entries. */
+async function periodEvents(period) {
+  const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+  const timeMin = `${period.start}T00:00:00+10:00`
+  const timeMax = `${period.end}T23:59:59+10:00`
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
+    + `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`
+    + '&singleEvents=true&orderBy=startTime&maxResults=250'
+  const eventsRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const data = await eventsRes.json()
+  if (data.error) throw new Error(data.error.message)
+  const events = data.items || []
+  const onCallEntries = events
+    .map(e => ({ title: e.summary || '', date: (e.start?.dateTime || e.start?.date || '').slice(0, 10) }))
+    .filter(e => e.date)
+  return { events, onCallEntries }
+}
+
+/**
+ * On-call hours are the roster's, never typed (Brent, 14 Nov 2026: "should
+ * not be an option for staff to put in … allocated … as an hourly rate on
+ * their on call weekends", 17:00 Friday to 07:00 Monday). For the people
+ * paid it (`paidOnCall`) the row is replaced with the calendar's hours;
+ * anybody else's is emptied. A roster that cannot be read leaves the row
+ * empty with a warning for Erin rather than trusting what was sent.
+ */
+export async function withRosterOnCall(entries, staff, period, read = periodEvents) {
+  const out = { ...entries }
+  delete out.on_call
+  if (!paidOnCall(staff.email)) return { entries: out, warning: '' }
+  try {
+    const { onCallEntries } = await read(period)
+    const byDay = onCallHoursFor(onCallEntries, staff, period.days)
+    if (Object.keys(byDay).length) out.on_call = byDay
+    return { entries: out, warning: '' }
+  } catch {
+    return { entries: out, warning: 'On-call hours could not be read from the roster — add them in the pay run if this was an on-call fortnight' }
+  }
+}
+
 /**
  * What the person filing might need to claim.
  *
@@ -374,24 +416,7 @@ async function handleCallIns(req, res, session) {
   const staff = requireTimesheetAccess(session)
   const period = resolvePeriod(req.query.periodStart)
 
-  const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
-  const timeMin = `${period.start}T00:00:00+10:00`
-  const timeMax = `${period.end}T23:59:59+10:00`
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(getCalendarId())}/events`
-    + `?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`
-    + '&singleEvents=true&orderBy=startTime&maxResults=250'
-
-  const eventsRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  const data = await eventsRes.json()
-  if (data.error) throw new Error(data.error.message)
-
-  const events = data.items || []
-  const onCallEntries = events
-    .map(e => ({
-      title: e.summary || '',
-      date: (e.start?.dateTime || e.start?.date || '').slice(0, 10)
-    }))
-    .filter(e => e.date)
+  const { events, onCallEntries } = await periodEvents(period)
 
   // Only for people paid call-ins (Brent, 7 Nov 2026: "I am also attending
   // but I'm not on call and I don't get paid call-ins as a director"): somebody
@@ -411,7 +436,8 @@ async function handleCallIns(req, res, session) {
   const logged = await logCallIns(staff, period, suggestions.filter(s => s.auto))
 
   // The roster, read rather than computed — see src/clinicalPlan/onCall.js.
-  const onCall = onCallHoursFor(onCallEntries, staff, period.days)
+  // Only for those paid it; filled from the roster, never typed (14 Nov 2026).
+  const onCall = paidOnCall(staff.email) ? onCallHoursFor(onCallEntries, staff, period.days) : {}
 
   return res.status(200).json({
     suggestions,

@@ -125,3 +125,14 @@ export function onCallHoursFor(entries, person, days) {
 export function totalHours(byDay) {
   return Object.values(byDay || {}).reduce((n, h) => n + h, 0)
 }
+
+/**
+ * Whether this person is paid the on-call allowance (Brent, 14 Nov 2026:
+ * "Mat, Ben and Aimee will be entitled to it (not Brent even though he is on
+ * call)"). `paidOnCall` in staffConfig.js. Their on-call hours come from the
+ * roster on the calendar, never from what anyone types.
+ */
+export function paidOnCall(email) {
+  const e = String(email || '').toLowerCase()
+  return Boolean(STAFF.find(s => String(s.email).toLowerCase() === e)?.paidOnCall)
+}
