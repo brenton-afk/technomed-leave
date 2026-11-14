@@ -2030,6 +2030,16 @@ puts it on the days furthest short of the usual day, earliest first) or
 "Leave it short". Submit waits for an answer. To Xero: banked TOIL is the
 TOIL Accrued line on the timesheet; TOIL taken goes as TOIL leave
 applications on approval (`sendToilTaken`).
+**Or overtime at double time, approved by Erin** (Brent, 14 Nov 2026): over
+the fortnight, a third button "Claim Xh overtime (double time)" (only where
+the person has the `overtime_double` pay item) — `overtimeOverflow` moves the
+same hours to double time, submit sends `overflowAs: 'overtime'`, and the
+record carries `overtimeClaim` (`status: 'pending'`, `moved` per day). Admin →
+Timesheets shows it (`OvertimeBlock`): **Pay as overtime** or **Bank as TOIL
+instead** must be chosen before Approve (`overtime` on `decide`, 400
+otherwise); banking runs `overtimeToToil` — only the claimed hours move, on
+the same days — and the approved Xero timesheet carries the result. April is
+casual (no contract, no `earnsToil`) and is never asked.
 
 Flow and invariants:
 

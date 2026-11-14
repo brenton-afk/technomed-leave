@@ -3,7 +3,7 @@ import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { extraDoubleTime, COVERED_HOURS } from '../clinicalPlan/callIn.js'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
-import { toilOverflow, contractFor, fortnightBalance, spreadShortfall } from '../timesheetRules.js'
+import { toilOverflow, overtimeOverflow, overtimeKeyOf, contractFor, fortnightBalance, spreadShortfall } from '../timesheetRules.js'
 import { workPatternFor } from '../staffConfig.js'
 import { TOIL_TAKEN, earnsToil, totalOf, toilTakenCheck } from '../timesheetLeave.js'
 
@@ -74,17 +74,23 @@ function isWeekend(index) { return index % 7 >= 5 }
  * Over: bank the extra as TOIL, or keep it as paid hours. Under: take TOIL to
  * make it up (up to the balance), or leave it short.
  */
-function FortnightQuestion({ balance, choice, available, onBank, onPaid, onTake, onShort }) {
+function FortnightQuestion({ balance, choice, available, canOvertime, onBank, onPaid, onOvertime, onTake, onShort }) {
   const btn = on => ({ flex: 1, padding: '11px 8px', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer', border: `1px solid ${on ? TEAL : BORDER}`, background: on ? TEAL : 'white', color: on ? 'white' : NAVY })
   if (balance.kind === 'over') {
     return (
       <div data-fortnight-question="over" style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 4 }}>You're {balance.hours}h over your {balance.limit}h fortnight</div>
-        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 10, lineHeight: 1.45 }}>Bank the extra as TOIL to take later, or keep it as paid hours?</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 10, lineHeight: 1.45 }}>Bank the extra as TOIL to take later, keep it as paid hours{canOvertime ? ', or claim it as overtime at double time' : ''}?</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" data-bank-toil onClick={onBank} style={btn(choice === 'bank')}>Bank {balance.hours}h as TOIL</button>
           <button type="button" data-keep-paid onClick={onPaid} style={btn(choice === 'paid')}>Keep as paid hours</button>
+          {canOvertime && <button type="button" data-claim-overtime onClick={onOvertime} style={{ ...btn(choice === 'overtime'), flexBasis: '100%' }}>Claim {balance.hours}h overtime (double time)</button>}
         </div>
+        {choice === 'overtime' && (
+          <div data-overtime-note style={{ fontSize: 12.5, color: MUTED, marginTop: 8, lineHeight: 1.45 }}>
+            Erin approves overtime. If she doesn't, she can bank these hours as TOIL instead.
+          </div>
+        )}
       </div>
     )
   }
@@ -598,8 +604,13 @@ export default function Timesheets({ user, onBack }) {
     ? fortnightBalance({ entries, categories, contract: contractFor(user?.email), leaveHours: Number(periodLeave.total || 0), toilTaken: toilTakenTotal })
     : { kind: 'none', hours: 0 }, [takesToil, entries, categories, user?.email, periodLeave, toilTakenTotal])
   const keepPaid = balance.kind === 'over' && fortnightChoice === 'paid'
+  const claimOvertime = balance.kind === 'over' && fortnightChoice === 'overtime'
+  const canOvertime = !!overtimeKeyOf(categories)
+  const overtime = useMemo(() => claimOvertime
+    ? overtimeOverflow({ entries, categories, days, contract: contractFor(user?.email), leaveHours: Number(periodLeave.total || 0) + toilTakenTotal })
+    : null, [claimOvertime, entries, categories, days, user?.email, periodLeave, toilTakenTotal])
   const needsAnswer = (balance.kind === 'over' || balance.kind === 'under') && !fortnightChoice
-  const filed = keepPaid ? entries : overflow.entries
+  const filed = keepPaid ? entries : overtime ? overtime.entries : overflow.entries
   const filedTotals = useMemo(() => computeTotals(filed, categories, days), [filed, categories, days])
 
   async function saveDraft() {
@@ -623,7 +634,7 @@ export default function Timesheets({ user, onBack }) {
       const res = await fetch('/api/timesheet/agent?action=submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed, bankToil: !keepPaid })
+        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed, bankToil: !keepPaid && !claimOvertime, overflowAs: claimOvertime ? 'overtime' : keepPaid ? 'paid' : 'toil' })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -736,6 +747,8 @@ export default function Timesheets({ user, onBack }) {
             available={toilRoom?.available != null ? round2(Math.max(0, toilRoom.available - toilTakenTotal)) : null}
             onBank={() => setFortnightChoice('bank')}
             onPaid={() => setFortnightChoice('paid')}
+            canOvertime={canOvertime}
+            onOvertime={() => setFortnightChoice('overtime')}
             onShort={() => setFortnightChoice('short')}
             onTake={hours => {
               const add = spreadShortfall({ hours, email: user?.email, days, entries, categories, leaveByDay: periodLeave.byDay || {}, taken: toilTaken })

@@ -21,7 +21,7 @@ import {
 } from '../../src/timesheetLeave.js'
 import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../../src/clinicalPlan/toil.js'
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
-import { toilOverflow, contractFor } from '../../src/timesheetRules.js'
+import { toilOverflow, overtimeOverflow, overtimeToToil, contractFor } from '../../src/timesheetRules.js'
 import {
   onCallHoursFor, totalHours as onCallTotal, paidOnCall, paysCallIns
 } from '../../src/clinicalPlan/onCall.js'
@@ -290,10 +290,24 @@ async function handleSubmit(req, res, session) {
   const leaveHours = periodLeave.total + totalOf(toilTaken)
   // Banked unless the person chose to keep the extra hours as paid hours when
   // the screen asked (Brent, 14 Nov 2026) — `bankToil: false`.
-  const overflow = req.body?.bankToil === false
-    ? { entries: entered, excess: 0, moved: [], limit: null }
-    : toilOverflow({ entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours })
+  // Or claimed as overtime at double time, for Erin to approve (Brent, 14 Nov
+  // 2026) — `overflowAs: 'overtime'`; she may bank it as TOIL instead.
+  const asOvertime = req.body?.overflowAs === 'overtime'
+  const claim = asOvertime
+    ? overtimeOverflow({ entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours })
+    : null
+  if (asOvertime && !categories.some(c => c.key === 'overtime_double')) {
+    return res.status(400).json({ error: 'Overtime at double time is not one of your pay items — bank the hours as TOIL or keep them as paid hours.' })
+  }
+  const overflow = asOvertime
+    ? { entries: claim.entries, excess: 0, moved: [], limit: claim.limit }
+    : req.body?.bankToil === false
+      ? { entries: entered, excess: 0, moved: [], limit: null }
+      : toilOverflow({ entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours })
   const entries = overflow.entries
+  const overtimeClaim = claim?.moved?.length
+    ? { hours: claim.excess, limit: claim.limit, moved: claim.moved, key: claim.toilKey, status: 'pending' }
+    : null
 
   const check = validate(entries, categories, period.days)
   if (!check.ok) return res.status(400).json({ error: check.errors[0], errors: check.errors })
@@ -321,6 +335,7 @@ async function handleSubmit(req, res, session) {
     warnings: [
       ...check.warnings,
       ...(overflow.moved.length ? [`${overflow.excess}h over the ${overflow.limit}h fortnight banked as TOIL`] : []),
+      ...(overtimeClaim ? [`${overtimeClaim.hours}h over the ${overtimeClaim.limit}h fortnight claimed as overtime at double time — needs Erin's approval`] : []),
       ...(roster.warning ? [roster.warning] : []),
       // Kept on the record, not sent: Xero takes these only in the pay run.
       ...(xero.notOnTimesheet || []).map(n => `${n.label}: ${n.total} — Xero cannot take this pay item on a timesheet, so it was not sent; add it in the pay run`),
@@ -328,6 +343,7 @@ async function handleSubmit(req, res, session) {
         ? [`${overflow.excess}h over the ${overflow.limit}h fortnight, but there is no TOIL pay item to bank it in — check with Brent`] : [])
     ],
     toilOverflow: overflow.moved.length ? { excess: overflow.excess, limit: overflow.limit, moved: overflow.moved } : null,
+    overtimeClaim,
     leave: { rows: periodLeave.rows, pending: periodLeave.pending, total: periodLeave.total, notes: periodLeave.notes, source: periodLeave.source, xeroError: periodLeave.xeroError || undefined },
     toilTaken,
     status: 'submitted',
@@ -963,7 +979,7 @@ async function handleDecide(req, res) {
   const admin = await requireAdmin(req, res)
   if (!admin) return
 
-  const { email, periodStart, decision, reason, entries } = req.body || {}
+  const { email, periodStart, decision, reason, entries, overtime } = req.body || {}
   if (!email || !periodStart) throw badRequest('email and periodStart are required')
   if (!['approve', 'reject'].includes(decision)) throw badRequest('decision must be approve or reject')
 
@@ -989,9 +1005,25 @@ async function handleDecide(req, res) {
   const staff = getStaffByEmail(email)
   const rates = await fetchEarningsRates()
   const categories = categoriesForStaff(rates, email)
-  const finalEntries = entries
+  let finalEntries = entries
     ? normaliseEntries(entries, categories, record.days)
     : record.entries
+
+  // Overtime claimed at double time must be decided (Brent, 14 Nov 2026):
+  // paid as claimed, or banked as TOIL on the same days.
+  const claimed = record.overtimeClaim?.status === 'pending' ? record.overtimeClaim : null
+  if (claimed && !['approve', 'toil'].includes(overtime)) {
+    return res.status(400).json({ error: `${record.staffName} claimed ${claimed.hours}h overtime at double time — approve it or bank it as TOIL.`, overtimeNeeded: true })
+  }
+  let overtimeClaim = record.overtimeClaim || null
+  if (claimed) {
+    if (overtime === 'toil') {
+      const banked = overtimeToToil({ entries: finalEntries, categories, moved: claimed.moved, overtimeKey: claimed.key || 'overtime_double' })
+      if (!banked.ok) return res.status(400).json({ error: `${record.staffName} has no TOIL pay item to bank the overtime in — check their pay items in Xero.` })
+      finalEntries = banked.entries
+    }
+    overtimeClaim = { ...claimed, status: overtime === 'toil' ? 'banked' : 'approved', decidedBy: admin.email, decidedAt: new Date().toISOString() }
+  }
 
   const check = validate(finalEntries, categories, record.days)
   if (!check.ok) return res.status(400).json({ error: check.errors[0], errors: check.errors })
@@ -1002,6 +1034,7 @@ async function handleDecide(req, res) {
     staffName: staff?.name || record.staffName,
     entries: finalEntries,
     totals: check.totals,
+    overtimeClaim,
     status: 'approved',
     editedByAdmin: edited,
     decidedBy: admin.email,

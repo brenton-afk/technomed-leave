@@ -40,6 +40,31 @@ export const leaveTotalOf = record => round2(Number(record.leave?.total || 0) + 
 const daysText = byDay => Object.keys(byDay || {}).sort().map(d => `${dayLabel(d)} ${byDay[d]}h`).join(' · ')
 
 /**
+ * Overtime claimed at double time (Brent, 14 Nov 2026): Erin approves it, or
+ * banks the same hours as TOIL instead. Chosen before Approve.
+ */
+function OvertimeBlock({ record, choice, onChoose }) {
+  const claim = record.overtimeClaim
+  if (!claim) return null
+  const btn = on => ({ flex: 1, padding: '10px 8px', borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', border: `1px solid ${on ? TEAL : BORDER}`, background: on ? TEAL : 'white', color: on ? 'white' : NAVY })
+  const when = (claim.moved || []).map(m => `${dayLabel(m.day)} ${m.hours}h`).join(' · ')
+  return (
+    <div data-overtime-claim style={{ background: '#fff8e6', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: NAVY }}>Overtime claimed: {claim.hours}h at double time</div>
+      <div style={{ fontSize: 12, color: MUTED, margin: '3px 0 8px', lineHeight: 1.45 }}>Over the {claim.limit}h fortnight · {when}</div>
+      {claim.status === 'pending' ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" data-overtime-approve onClick={() => onChoose('approve')} style={btn(choice === 'approve')}>Pay as overtime</button>
+          <button type="button" data-overtime-toil onClick={() => onChoose('toil')} style={btn(choice === 'toil')}>Bank as TOIL instead</button>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12.5, color: NAVY }}>{claim.status === 'banked' ? 'Banked as TOIL instead' : 'Paid as overtime'}</div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Leave and TOIL taken on a timesheet (Brent, 12 Nov 2026): as the staff
  * member saw it when they submitted, whether each part is in Xero, and any
  * leave added or changed since.
@@ -108,6 +133,8 @@ export default function TimesheetApprovals({ user }) {
   // Leave as it stands now, per opened timesheet, to show what changed since
   // it was submitted (Brent, 12 Nov 2026).
   const [liveLeave, setLiveLeave] = useState({})
+  // Pay or bank, per timesheet with overtime claimed.
+  const [otChoice, setOtChoice] = useState({})
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${user?.token || ''}` }), [user])
 
@@ -130,7 +157,7 @@ export default function TimesheetApprovals({ user }) {
       const res = await fetch('/api/timesheet/agent?action=decide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ email: record.email, periodStart: record.periodStart, decision, reason: why })
+        body: JSON.stringify({ email: record.email, periodStart: record.periodStart, decision, reason: why, overtime: otChoice[`${record.email}-${record.periodStart}`] })
       })
       const body = await res.json()
       if (body.error) throw new Error(body.error)
@@ -277,6 +304,7 @@ export default function TimesheetApprovals({ user }) {
                   </div>
                 ))}
 
+                <OvertimeBlock record={record} choice={otChoice[key]} onChoose={c => setOtChoice(prev => ({ ...prev, [key]: c }))} />
                 <LeaveBlock record={record} live={liveLeave[key]} busy={busy === record.email + 'toil'} onRetry={() => retryToil(record)} />
 
                 {record.warnings?.length > 0 && (
@@ -293,7 +321,7 @@ export default function TimesheetApprovals({ user }) {
 
                 {record.status === 'submitted' && (
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => decide(record, 'approve')} disabled={busy === record.email + 'approve'}
+                    <button onClick={() => decide(record, 'approve')} disabled={busy === record.email + 'approve' || (record.overtimeClaim?.status === 'pending' && !otChoice[key])}
                       style={{ flex: 2, padding: 12, background: TEAL, color: 'white', border: 'none', borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: busy === record.email + 'approve' ? 0.7 : 1 }}>
                       {busy === record.email + 'approve' ? 'Approving…' : '✓ Approve'}
                     </button>

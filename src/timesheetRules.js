@@ -112,13 +112,16 @@ const round2 = n => Math.round(n * 100) / 100
  *
  * @returns {{ entries, excess: number, moved: Array<{day, hours}>, toilKey: string|null, limit: number }}
  */
-export function toilOverflow({ entries, categories, days, contract, leaveHours = 0 }) {
+export function toilOverflow({ entries, categories, days, contract, leaveHours = 0, into = null }) {
   const none = { entries, excess: 0, moved: [], toilKey: null, limit: null }
   if (!contract?.overflowToToil || !contract.fortnightHours) return none
 
   const ordinary = (categories || []).filter(c => c.kind === 'ordinary').map(c => c.key)
-  const toil = (categories || []).find(c => c.key === 'toil_accrued')
-    || (categories || []).find(c => c.kind === 'toil')
+  // `into` names another pay item to move the hours to — overtime at double
+  // time when the person claims it (overtimeOverflow below).
+  const toil = into
+    ? (categories || []).find(c => c.key === into)
+    : (categories || []).find(c => c.key === 'toil_accrued') || (categories || []).find(c => c.kind === 'toil')
   const limit = round2(Math.max(0, contract.fortnightHours - Number(leaveHours || 0)))
   const worked = round2(ordinary.reduce((sum, key) =>
     sum + Object.values(entries?.[key] || {}).reduce((s, v) => s + Number(v || 0), 0), 0))
@@ -151,4 +154,42 @@ export function toilOverflow({ entries, categories, days, contract, leaveHours =
   }
   for (const key of Object.keys(next)) if (!Object.keys(next[key]).length) delete next[key]
   return { entries: next, excess, moved: moved.reverse(), toilKey: toil.key, limit }
+}
+
+// ─── Overtime at double time, approved by Erin (Brent, 14 Nov 2026) ──────────
+// "If they are over hours and don't want TOIL another option is paid overtime
+// (at double time) but this needs to be approved by Erin … If she rejects it,
+// she can elect to bank it as TOIL instead of paid overtime."
+
+/** The pay item overtime at double time goes on, or null if they have none. */
+export const overtimeKeyOf = categories =>
+  (categories || []).find(c => c.key === 'overtime_double')?.key || null
+
+/** The hours over the fortnight moved to overtime at double time instead of TOIL. */
+export function overtimeOverflow({ entries, categories, days, contract, leaveHours = 0 }) {
+  const key = overtimeKeyOf(categories)
+  if (!key) return { entries, excess: 0, moved: [], toilKey: null, limit: null }
+  return toilOverflow({ entries, categories, days, contract, leaveHours, into: key })
+}
+
+/**
+ * Claimed overtime, declined and banked as TOIL: the same hours on the same
+ * days move from double time to TOIL. Only what was claimed moves — double
+ * time the person typed in themselves is left as it is. Pure.
+ */
+export function overtimeToToil({ entries, categories, moved = [], overtimeKey = 'overtime_double' }) {
+  const toil = (categories || []).find(c => c.key === 'toil_accrued') || (categories || []).find(c => c.kind === 'toil')
+  if (!toil) return { entries, ok: false }
+  const next = Object.fromEntries(Object.entries(entries || {}).map(([k, v]) => [k, { ...v }]))
+  for (const { day, hours } of moved) {
+    const have = Number(next[overtimeKey]?.[day] || 0)
+    const take = round2(Math.min(have, Number(hours || 0)))
+    if (take <= 0) continue
+    const left = round2(have - take)
+    if (left > 0) next[overtimeKey][day] = left
+    else delete next[overtimeKey][day]
+    next[toil.key] = { ...(next[toil.key] || {}), [day]: round2(Number(next[toil.key]?.[day] || 0) + take) }
+  }
+  for (const key of Object.keys(next)) if (!Object.keys(next[key]).length) delete next[key]
+  return { entries: next, ok: true, toilKey: toil.key }
 }

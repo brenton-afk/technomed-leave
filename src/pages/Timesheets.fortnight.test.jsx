@@ -7,7 +7,8 @@ import Timesheets from './Timesheets.jsx'
 const USER = { name: 'Test Rep', email: 'ben@technomed.com.au', token: 'tok', staff: { hasTimesheets: true } }
 const CATEGORIES = [
   { key: 'ordinary', kind: 'ordinary', label: 'Ordinary Hours', unit: 'hours', colour: 'navy', earningsRateID: 'r1' },
-  { key: 'toil_accrued', kind: 'toil', label: 'TOIL Accrued', unit: 'hours', colour: 'teal', earningsRateID: 'r2' }
+  { key: 'toil_accrued', kind: 'toil', label: 'TOIL Accrued', unit: 'hours', colour: 'teal', earningsRateID: 'r2' },
+  { key: 'overtime_double', kind: 'overtime', label: 'Overtime — Double', unit: 'hours', colour: 'amber', earningsRateID: 'r3' }
 ]
 const days = Array.from({ length: 14 }, (_, i) => { const d = new Date('2026-09-21T00:00:00Z'); d.setUTCDate(d.getUTCDate() + i); return d.toISOString().slice(0, 10) })
 let draft
@@ -58,5 +59,20 @@ describe('over or under the fortnight', () => {
     await waitFor(() => expect(posted).toHaveLength(1))
     const taken = Object.values(posted[0].entries.toil_taken || {}).reduce((a, b) => a + b, 0)
     expect(Math.round(taken * 100) / 100).toBe(6)
+  })
+
+  it('over: "Claim overtime" moves the extra to double time for Erin to approve', async () => {
+    draft = { ordinary: Object.fromEntries(days.slice(0, 10).map(d => [d, 8])) } // 80h
+    await toReview()
+    await waitFor(() => expect(document.querySelector('[data-claim-overtime]')).not.toBeNull())
+    fireEvent.click(document.querySelector('[data-claim-overtime]'))
+    expect(document.querySelector('[data-overtime-note]').textContent).toMatch(/Erin/)
+    fireEvent.click(screen.getByText('Confirm and submit'))
+    await waitFor(() => expect(posted).toHaveLength(1))
+    expect(posted[0].overflowAs).toBe('overtime')
+    expect(posted[0].bankToil).toBe(false)
+    const ot = Object.values(posted[0].entries.overtime_double || {}).reduce((a, b) => a + b, 0)
+    expect(ot).toBe(4)
+    expect(posted[0].entries.toil_accrued).toBeUndefined()
   })
 })
