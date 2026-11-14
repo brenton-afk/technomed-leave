@@ -22,7 +22,9 @@ export const STAFF = [
   { name: 'Brenton Lovering', email: 'brenton@technomed.com.au', firstName: 'Brent', division: 'Operations', role: 'Managing Director', isAdmin: true, isClinicalTeam: true, hasTimesheets: false, phone: '0400 997 550', mobileNumber: '' },
   // The one leave approver (Brent, 1 Nov 2026): lodged leave is sent to her.
   // Permanent part-time, 24 hours a week on days that change (Brent, 1 Nov 2026).
-  { name: 'Erin Smallbon', email: 'erin@technomed.com.au', firstName: 'Erin', division: 'Operations', role: 'General Manager', isAdmin: true, isLeaveApprover: true, hasTimesheets: true, mobileNumber: '',
+  // Approves her own timesheet; may bank TOIL or claim overtime, and time and a
+  // half on the odd Saturday (Brent, 14 Nov 2026).
+  { name: 'Erin Smallbon', earnsToil: true, email: 'erin@technomed.com.au', firstName: 'Erin', division: 'Operations', role: 'General Manager', isAdmin: true, isLeaveApprover: true, hasTimesheets: true, mobileNumber: '',
     workPattern: { kind: 'flexible', weeklyHours: 24 } },
   { name: 'Emma Lovering', email: 'marketing@technomed.com.au', firstName: 'Emma', division: 'Operations', role: 'Co-Founder, Brand Lead', isAdmin: false, hasTimesheets: false, mobileNumber: '' },
   // Permanent part-time, 16.5 hours a week (contract, Erin 8 May 2026): Monday,
@@ -42,8 +44,10 @@ export const STAFF = [
   // "Matthew Usher" still be his, and what lets a transcript saying "Matt"
   // find him. Removing them would fix the display and break the reading.
   { name: 'Mat Usher', earnsToil: true, paidOnCall: true, paidCallIns: true, email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', acrossDivisions: true, role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
-  { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
-  { name: 'April Foale', paidCallIns: true, email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
+  // Salaried; no timesheet (Brent, 14 Nov 2026).
+  { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: false, mobileNumber: '' },
+  // Casual: enters her hours; paid the on-call allowance and call-ins (14 Nov 2026).
+  { name: 'April Foale', paidOnCall: true, paidCallIns: true, email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
   { name: 'Aimee Vulinovich', earnsToil: true, paidOnCall: true, paidCallIns: true, email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0477 334 561', mobileNumber: '' }
 ]
 /**

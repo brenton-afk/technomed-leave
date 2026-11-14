@@ -38,7 +38,7 @@ describe('commission never reaches a timesheet', () => {
 
   it('still keeps the ordinary pay items', () => {
     const cats = categoriesForStaff([rate('r-ord', 'Ordinary Hours'), rate('r-ot', 'Overtime')],
-      'ben@technomed.com.au', { assignedRateIds: ['r-ord', 'r-ot'] })
+      'erin@technomed.com.au', { assignedRateIds: ['r-ord', 'r-ot'] })
     expect(cats.map(c => c.key).sort()).toEqual(['ordinary', 'overtime_1_5'])
   })
 })

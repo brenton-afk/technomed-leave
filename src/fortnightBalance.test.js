@@ -18,7 +18,8 @@ describe('the fortnight against the contract', () => {
   it('Toni gets a contract from her pattern: 5.5 × 3 days, 33h a fortnight', () => {
     expect(contractFor('toni@technomed.com.au')).toEqual({ fortnightHours: 33, overflowToToil: true })
     expect(contractFor('ben@technomed.com.au').fortnightHours).toBe(76)
-    expect(contractFor('erin@technomed.com.au')).toBeNull()
+    expect(contractFor('erin@technomed.com.au')).toEqual({ fortnightHours: 48, overflowToToil: true })
+    expect(contractFor('april@technomed.com.au')).toBeNull()
   })
 
   it('spreads TOIL taken over the days furthest short, earliest first', () => {
@@ -68,5 +69,28 @@ describe('overtime at double time (Brent, 14 Nov 2026)', () => {
 
   it('April is casual and is never asked', () => {
     expect(contractFor('april@technomed.com.au')).toBeNull()
+  })
+})
+
+import { usualFortnight, canPrefill } from './timesheetRules.js'
+
+describe('the usual fortnight, pre-filled (14 Nov 2026)', () => {
+  const fortnight = Array.from({ length: 14 }, (_, i) => { const d = new Date('2026-06-01T00:00:00Z'); d.setUTCDate(d.getUTCDate() + i); return d.toISOString().slice(0, 10) })
+  it('fills 7.6 a weekday for the full-timers, the public holiday included, less leave', () => {
+    const out = usualFortnight({ email: 'ben@technomed.com.au', days: fortnight, leaveByDay: { '2026-06-02': 7.6, '2026-06-03': 3.8 } })
+    expect(out['2026-06-01']).toBe(7.6)
+    expect(out['2026-06-02']).toBeUndefined()
+    expect(out['2026-06-03']).toBe(3.8)
+    expect(out['2026-06-08']).toBe(7.6) // King's Birthday: paid at the usual hours
+    expect(out['2026-06-06']).toBeUndefined()
+    expect(Object.values(out).reduce((a, b) => a + b, 0)).toBeCloseTo(76 - 7.6 - 3.8)
+  })
+  it('fills Toni\'s own days', () => {
+    const out = usualFortnight({ email: 'toni@technomed.com.au', days: fortnight })
+    expect(Object.keys(out)).toEqual(['2026-06-01', '2026-06-03', '2026-06-04', '2026-06-08', '2026-06-10', '2026-06-11'])
+  })
+  it('leaves Erin and April to enter their own', () => {
+    expect(canPrefill('erin@technomed.com.au')).toBe(false)
+    expect(canPrefill('april@technomed.com.au')).toBe(false)
   })
 })

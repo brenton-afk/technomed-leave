@@ -193,3 +193,29 @@ export function overtimeToToil({ entries, categories, moved = [], overtimeKey = 
   for (const key of Object.keys(next)) if (!Object.keys(next[key]).length) delete next[key]
   return { entries: next, ok: true, toilKey: toil.key }
 }
+
+// ─── The usual fortnight, pre-filled (Brent, 14 Nov 2026) ─────────────────────
+// "Yes pre fill." A new timesheet opens with the person's usual days already
+// in — Toni's Mon, Wed and Thu at 5.5, 7.6 a weekday for the full-timers — less
+// any leave on a day, so most fortnights are change-the-odd-day and Submit.
+// Public holidays keep the usual hours: "you just get paid to not be at work
+// at your normal rate". Erin's days change and April is casual, so neither is
+// pre-filled (`canPrefill`).
+
+/** Whether this person has a usual week the portal can fill in. */
+export function canPrefill(email) {
+  const row = staffRow(email)
+  if (!row?.hasTimesheets || !contractFor(email)) return false
+  return row.workPattern?.kind !== 'flexible'
+}
+
+/** { date: hours } of ordinary time for a usual fortnight, leave taken off. */
+export function usualFortnight({ email, days = [], leaveByDay = {} }) {
+  const out = {}
+  if (!canPrefill(email)) return out
+  for (const d of days) {
+    const hours = round2(Math.max(0, expectedOnDay(email, d) - Number(leaveByDay?.[d] || 0)))
+    if (hours > 0) out[d] = hours
+  }
+  return out
+}

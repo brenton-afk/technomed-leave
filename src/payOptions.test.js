@@ -12,28 +12,30 @@ import { STAFF } from './staffConfig.js'
 // Moving it here must not change a single person's entitlement. These pin that.
 
 describe('nobody\'s entitlement changed when this moved', () => {
-  // What the old onlyFor/notFor flags produced, written out by hand from the
-  // rules as they were before the change.
-  const BEFORE = {
-    'toni@technomed.com.au': ['ordinary_toni_admin', 'ordinary_toni_scientific',
-      'overtime_1_5', 'overtime_double', 'toil_accrued', 'call_in', 'on_call',
-      // Added 1 Nov 2026: "her Science role can earn TOIL" — one TOIL per role.
-      'toil_toni_admin', 'toil_toni_scientific'],
-    everyoneElse: ['ordinary', 'overtime_1_5', 'overtime_double',
-      'toil_accrued', 'call_in', 'on_call']
+  // Each person's contract, confirmed by Brent on 14 Nov 2026.
+  const CONFIRMED = {
+    'erin@technomed.com.au': ['ordinary', 'overtime_1_5', 'overtime_double', 'toil_accrued'],
+    'toni@technomed.com.au': ['ordinary_toni_admin', 'ordinary_toni_scientific', 'overtime_double',
+      'toil_toni_admin', 'toil_toni_scientific', 'toil_accrued'],
+    'ben@technomed.com.au': ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    'aimee@technomed.com.au': ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    'mat@technomed.com.au': ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    'april@technomed.com.au': ['ordinary', 'call_in', 'on_call']
   }
 
-  it('gives Toni her split ordinary rates and not the generic one', () => {
-    expect([...payItemsFor('toni@technomed.com.au')].sort())
-      .toEqual([...BEFORE['toni@technomed.com.au']].sort())
-    expect(payItemsFor('toni@technomed.com.au')).not.toContain('ordinary')
+  it('gives everyone on timesheets exactly their confirmed items', () => {
+    for (const person of STAFF.filter(s => s.hasTimesheets)) {
+      expect([...payItemsFor(person.email)].sort(), person.name)
+        .toEqual([...CONFIRMED[person.email]].sort())
+      expect(isReviewed(person.email), person.name).toBe(true)
+    }
   })
 
-  it('gives everybody else exactly what they had', () => {
-    for (const person of STAFF.filter(s => s.email !== 'toni@technomed.com.au')) {
-      expect([...payItemsFor(person.email)].sort(), person.name)
-        .toEqual([...BEFORE.everyoneElse].sort())
+  it('time and a half is Erin\'s alone; casual April has no overtime or TOIL', () => {
+    for (const person of STAFF.filter(s => s.hasTimesheets && s.firstName !== 'Erin')) {
+      expect(payItemsFor(person.email), person.name).not.toContain('overtime_1_5')
     }
+    expect(payItemsFor('april@technomed.com.au')).not.toContain('toil_accrued')
   })
 
   it('keeps the split rates away from everybody but Toni', () => {
@@ -77,6 +79,6 @@ describe('the table itself', () => {
     // default is not the same as having been checked, and the difference is
     // the whole point of recording it.
     expect(isReviewed('toni@technomed.com.au')).toBe(true)
-    expect(isReviewed('ben@technomed.com.au')).toBe(false)
+    expect(isReviewed('newstarter@technomed.com.au')).toBe(false)
   })
 })

@@ -4,7 +4,7 @@
 // measured in hours or callouts is decided here.
 import { getXeroToken, findEmployee, assignedEarningsRateIds } from './_xeroClient.js'
 import { readXero } from './_xeroResponse.js'
-import { payItemsFor } from '../src/payOptions.js'
+import { payItemsFor, isReviewed } from '../src/payOptions.js'
 import { paidOnCall, paysCallIns } from '../src/clinicalPlan/onCall.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
@@ -170,7 +170,11 @@ export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {
   const assigned = Array.isArray(assignedRateIds) && assignedRateIds.length
     ? new Set(assignedRateIds)
     : null
-  const allowed = assigned ? null : new Set(payItemsFor(email))
+  // Since 14 Nov 2026 every person on timesheets has a reviewed row — their
+  // contract, confirmed by Brent. That row always applies; a Xero template,
+  // when there is one, narrows it further (an item missing there cannot be
+  // paid). The read-only payroll check reports where the two disagree.
+  const allowed = (assigned && !isReviewed(email)) ? null : new Set(payItemsFor(email))
 
   for (const rule of CATEGORY_RULES) {
     if (allowed && !allowed.has(rule.key)) continue
@@ -312,3 +316,5 @@ export function demoCategories() {
 /** Whether a set of categories is the invented one. */
 export const isDemo = categories =>
   (categories || []).some(c => String(c.earningsRateID || '').startsWith(DEMO_RATE_PREFIX))
+
+export { rateFacts, classify, enterableOnATimesheet }

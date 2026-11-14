@@ -56,18 +56,40 @@ export const DEFAULT = [
  * `note`      why it differs, for whoever reads this next
  */
 export const PAY_OPTIONS = {
-  'toni@technomed.com.au': {
-    // Toni's ordinary hours are split between two rates so the scientific
-    // portion is costed separately. The split is why the timesheet offers her a
-    // slider rather than one box.
-    // TOIL likewise, one per role. `toil_accrued` stays as the fallback for
-    // a Xero org that has only the one TOIL rate, so she is never left with
-    // nowhere to claim it.
-    items: ['ordinary_toni_admin', 'ordinary_toni_scientific',
-      'overtime_1_5', 'overtime_double',
-      'toil_toni_admin', 'toil_toni_scientific', 'toil_accrued', 'call_in', 'on_call'],
+  // Confirmed with Brent, 14 Nov 2026 — each row is the person's contract.
+  'erin@technomed.com.au': {
+    items: ['ordinary', 'overtime_1_5', 'overtime_double', 'toil_accrued'],
     reviewed: true,
-    note: 'Ordinary hours and TOIL each split between admin and scientific rates.'
+    note: 'Permanent part-time, 24h a week on days that change. TOIL or overtime if she wishes; time and a half for the odd Saturday. Approves her own timesheet.'
+  },
+  'toni@technomed.com.au': {
+    // Ordinary hours split between admin and scientific as the work needs —
+    // mostly about 90% admin, ad hoc. TOIL banks in whichever she chooses;
+    // `toil_accrued` stays as the fallback for an org with one TOIL rate.
+    items: ['ordinary_toni_admin', 'ordinary_toni_scientific', 'overtime_double',
+      'toil_toni_admin', 'toil_toni_scientific', 'toil_accrued'],
+    reviewed: true,
+    note: 'Permanent part-time, 16.5h a week (Mon, Wed, Thu). Admin and scientific hours ad hoc; TOIL in either.'
+  },
+  'ben@technomed.com.au': {
+    items: ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    reviewed: true,
+    note: 'Full time, 76h a fortnight. Extra hours: TOIL, or double time with Erin\'s approval. On-call roster and call-ins.'
+  },
+  'aimee@technomed.com.au': {
+    items: ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    reviewed: true,
+    note: 'Full time, 76h a fortnight. Extra hours: TOIL, or double time with Erin\'s approval. On-call roster and call-ins.'
+  },
+  'mat@technomed.com.au': {
+    items: ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    reviewed: true,
+    note: 'Full time, 76h a fortnight (director of a division by title only). Extra hours: TOIL, or double time with Erin\'s approval. On-call roster and call-ins.'
+  },
+  'april@technomed.com.au': {
+    items: ['ordinary', 'call_in', 'on_call'],
+    reviewed: true,
+    note: 'Casual: enters her hours (loading in her Xero rate). On-call roster and call-ins.'
   }
 }
 

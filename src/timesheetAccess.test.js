@@ -53,6 +53,6 @@ describe('who may actually file one', () => {
     // If this changes, somebody starts getting chased for a timesheet on a
     // Saturday morning by the reminder cron.
     expect(STAFF.filter(s => s.hasTimesheets).map(s => s.firstName).sort())
-      .toEqual(['Aimee', 'April', 'Ben', 'Erin', 'Jeremy', 'Mat', 'Toni'])
+      .toEqual(['Aimee', 'April', 'Ben', 'Erin', 'Mat', 'Toni']) // Jeremy is salaried (14 Nov 2026)
   })
 })

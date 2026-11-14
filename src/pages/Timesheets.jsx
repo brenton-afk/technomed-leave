@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Page, Header, Overlay } from '../design/Shell.jsx'
-import { extraDoubleTime, COVERED_HOURS } from '../clinicalPlan/callIn.js'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
-import { toilOverflow, overtimeOverflow, overtimeKeyOf, contractFor, fortnightBalance, spreadShortfall } from '../timesheetRules.js'
+import { toilOverflow, overtimeOverflow, overtimeKeyOf, contractFor, fortnightBalance, spreadShortfall, usualFortnight, canPrefill } from '../timesheetRules.js'
+import { holidaysAmong } from '../publicHolidays.js'
 import { workPatternFor } from '../staffConfig.js'
 import { TOIL_TAKEN, earnsToil, totalOf, toilTakenCheck } from '../timesheetLeave.js'
 
@@ -74,7 +74,7 @@ function isWeekend(index) { return index % 7 >= 5 }
  * Over: bank the extra as TOIL, or keep it as paid hours. Under: take TOIL to
  * make it up (up to the balance), or leave it short.
  */
-function FortnightQuestion({ balance, choice, available, canOvertime, onBank, onPaid, onOvertime, onTake, onShort }) {
+function FortnightQuestion({ balance, choice, available, canOvertime, toilKinds = [], onBank, onPaid, onOvertime, onTake, onShort }) {
   const btn = on => ({ flex: 1, padding: '11px 8px', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer', border: `1px solid ${on ? TEAL : BORDER}`, background: on ? TEAL : 'white', color: on ? 'white' : NAVY })
   if (balance.kind === 'over') {
     return (
@@ -82,7 +82,11 @@ function FortnightQuestion({ balance, choice, available, canOvertime, onBank, on
         <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 4 }}>You're {balance.hours}h over your {balance.limit}h fortnight</div>
         <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 10, lineHeight: 1.45 }}>Bank the extra as TOIL to take later, keep it as paid hours{canOvertime ? ', or claim it as overtime at double time' : ''}?</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" data-bank-toil onClick={onBank} style={btn(choice === 'bank')}>Bank {balance.hours}h as TOIL</button>
+          {toilKinds.length > 1
+            ? toilKinds.map(k => (
+              <button key={k.key} type="button" data-bank-toil={k.key} onClick={() => onBank(k.key)} style={btn(choice === `bank:${k.key}`)}>Bank {balance.hours}h as {k.short} TOIL</button>
+            ))
+            : <button type="button" data-bank-toil onClick={() => onBank(null)} style={btn(choice === 'bank')}>Bank {balance.hours}h as TOIL</button>}
           <button type="button" data-keep-paid onClick={onPaid} style={btn(choice === 'paid')}>Keep as paid hours</button>
           {canOvertime && <button type="button" data-claim-overtime onClick={onOvertime} style={{ ...btn(choice === 'overtime'), flexBasis: '100%' }}>Claim {balance.hours}h overtime (double time)</button>}
         </div>
@@ -404,7 +408,6 @@ export default function Timesheets({ user, onBack }) {
   // How long each call-in ran, keyed by the calendar event. The allowance
   // covers five hours and double time starts after that, so the claim is not
   // complete without it.
-  const [callInHours, setCallInHours] = useState({})
   // The on-call weekends this fortnight, read off the calendar roster with the
   // hours already worked out. Offered rather than filled in: the roster gets
   // amended and the person filing is the one who knows whether it was them.
@@ -426,6 +429,7 @@ export default function Timesheets({ user, onBack }) {
   // not the screen anybody uses.
   const [demo, setDemo] = useState(false)
   const [savedAt, setSavedAt] = useState('')
+  const [prefilled, setPrefilled] = useState(false)
   const [stage, setStage] = useState('entry')
   const [submitted, setSubmitted] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -452,9 +456,19 @@ export default function Timesheets({ user, onBack }) {
         fetch('/api/timesheet/agent?action=draft', { headers: authHeaders }).then(r => r.json()),
         fetch('/api/timesheet/agent?action=mine', { headers: authHeaders }).then(r => r.json())
       ])
-      if (draftRes.draft?.periodStart === data.period.start) {
+      const hasDraft = draftRes.draft?.periodStart === data.period.start
+      if (hasDraft) {
         setEntries(draftRes.draft.entries || {})
         setSavedAt(draftRes.draft.savedAt || '')
+      }
+      // A fresh timesheet opens with the usual fortnight in (14 Nov 2026).
+      const ordinaryKey = (data.categories || []).find(c => c.kind === 'ordinary')?.key
+      const prefill = leaveByDay => {
+        if (hasDraft || !ordinaryKey || !canPrefill(user?.email)) return
+        const row = usualFortnight({ email: user?.email, days: data.period.days || [], leaveByDay })
+        if (!Object.keys(row).length) return
+        setEntries(prev => (prev[ordinaryKey] ? prev : { ...prev, [ordinaryKey]: row }))
+        setPrefilled(true)
       }
       setHistory(mineRes.records || [])
 
@@ -486,7 +500,8 @@ export default function Timesheets({ user, onBack }) {
           setLeaveDays(d.days || {})
           if (d.leave) setPeriodLeave(d.leave)
           setToilRoom(d.toil || null)
-        }).catch(() => {})
+          prefill(d.leave?.byDay || {})
+        }).catch(() => prefill({}))
     } catch (err) {
       setError(err.message)
     }
@@ -494,6 +509,7 @@ export default function Timesheets({ user, onBack }) {
   }
 
   const days = period?.days || []
+  const holidays = useMemo(() => holidaysAmong(days), [days])
   const totals = useMemo(() => computeTotals(entries, categories, days), [entries, categories, days])
 
   const alreadySubmitted = history.find(r => r.periodStart === period?.start && r.status !== 'rejected')
@@ -606,11 +622,19 @@ export default function Timesheets({ user, onBack }) {
   const keepPaid = balance.kind === 'over' && fortnightChoice === 'paid'
   const claimOvertime = balance.kind === 'over' && fortnightChoice === 'overtime'
   const canOvertime = !!overtimeKeyOf(categories)
+  // Toni banks TOIL in admin or science, as she chooses (14 Nov 2026).
+  const toilKinds = useMemo(() => categories
+    .filter(c => c.key === 'toil_toni_admin' || c.key === 'toil_toni_scientific')
+    .map(c => ({ key: c.key, short: c.key === 'toil_toni_admin' ? 'admin' : 'science' })), [categories])
+  const toilInto = String(fortnightChoice || '').startsWith('bank:') ? fortnightChoice.slice(5) : null
   const overtime = useMemo(() => claimOvertime
     ? overtimeOverflow({ entries, categories, days, contract: contractFor(user?.email), leaveHours: Number(periodLeave.total || 0) + toilTakenTotal })
     : null, [claimOvertime, entries, categories, days, user?.email, periodLeave, toilTakenTotal])
   const needsAnswer = (balance.kind === 'over' || balance.kind === 'under') && !fortnightChoice
-  const filed = keepPaid ? entries : overtime ? overtime.entries : overflow.entries
+  const banked = useMemo(() => toilInto
+    ? toilOverflow({ entries, categories, days, contract: contractFor(user?.email), leaveHours: Number(periodLeave.total || 0) + toilTakenTotal, into: toilInto })
+    : overflow, [toilInto, overflow, entries, categories, days, user?.email, periodLeave, toilTakenTotal])
+  const filed = keepPaid ? entries : overtime ? overtime.entries : banked.entries
   const filedTotals = useMemo(() => computeTotals(filed, categories, days), [filed, categories, days])
 
   async function saveDraft() {
@@ -634,7 +658,7 @@ export default function Timesheets({ user, onBack }) {
       const res = await fetch('/api/timesheet/agent?action=submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed, bankToil: !keepPaid && !claimOvertime, overflowAs: claimOvertime ? 'overtime' : keepPaid ? 'paid' : 'toil' })
+        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed, bankToil: !keepPaid && !claimOvertime, overflowAs: claimOvertime ? 'overtime' : keepPaid ? 'paid' : 'toil', toilInto: toilInto || undefined })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -745,7 +769,8 @@ export default function Timesheets({ user, onBack }) {
         {(balance.kind === 'over' || balance.kind === 'under') && (
           <FortnightQuestion balance={balance} choice={fortnightChoice}
             available={toilRoom?.available != null ? round2(Math.max(0, toilRoom.available - toilTakenTotal)) : null}
-            onBank={() => setFortnightChoice('bank')}
+            toilKinds={toilKinds}
+            onBank={key => setFortnightChoice(key ? `bank:${key}` : 'bank')}
             onPaid={() => setFortnightChoice('paid')}
             canOvertime={canOvertime}
             onOvertime={() => setFortnightChoice('overtime')}
@@ -781,7 +806,6 @@ export default function Timesheets({ user, onBack }) {
     && (!c.auto || Number(entries.call_in?.[c.day] || 0) > 0))
   const callInCategory = categories.find(c => c.key === 'call_in')
   const onCallCategory = categories.find(c => c.key === 'on_call')
-  const doubleCategory = categories.find(c => c.key === 'overtime_double')
   const hasToniSplit = categories.some(c => c.key === 'ordinary_toni_admin') && categories.some(c => c.key === 'ordinary_toni_scientific')
 
   return (
@@ -870,6 +894,16 @@ export default function Timesheets({ user, onBack }) {
           </div>
         )}
 
+        {prefilled && (
+          <div data-prefilled style={{ background: 'rgba(24,154,133,0.08)', color: NAVY, borderRadius: 10, padding: '10px 12px', fontSize: 14, lineHeight: 1.45, marginBottom: 12 }}>
+            Your usual fortnight is filled in{Object.keys(holidays).length ? ` (public holiday${Object.keys(holidays).length > 1 ? 's' : ''} at your usual hours)` : ''}. Change any day that was different, then Submit.
+          </div>
+        )}
+        {!prefilled && Object.keys(holidays).length > 0 && (
+          <div data-holiday-note style={{ background: 'rgba(24,154,133,0.08)', color: NAVY, borderRadius: 10, padding: '10px 12px', fontSize: 14, lineHeight: 1.45, marginBottom: 12 }}>
+            {Object.entries(holidays).map(([d, n]) => `${n} (${dayNumber(d)})`).join(', ')} — a public holiday: enter your usual hours for the day if you normally work it.
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {[0, 1].map(w => (
             <button key={w} onClick={() => setActiveWeek(w)}
@@ -956,50 +990,15 @@ export default function Timesheets({ user, onBack }) {
               {c.title} · {DAY_NAMES[days.indexOf(c.day) % 7]} {c.time} ({c.auto ? 'you were on call' : c.reason})
             </div>
 
-            {/* How long it ran. The allowance covers the first five hours;
-                past that every hour or part thereof is double the ordinary
-                rate, so the hours have to be known before the claim is right.
-                Asked here rather than left to somebody to work out and enter
-                in a second place. */}
-            <div style={{ fontSize: 12.5, color: MUTED, marginTop: 9, marginBottom: 5 }}>
-              How long were you there?
-            </div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {[2, 4, 5, 6, 7, 8].map(h => {
-                const on = callInHours[c.id] === h
-                return (
-                  <button key={h} onClick={() => setCallInHours(p => ({ ...p, [c.id]: h }))}
-                    style={{
-                      minWidth: 44, minHeight: 36, padding: '0 10px', borderRadius: 8,
-                      cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                      border: `1px solid ${on ? PURPLE : BORDER}`,
-                      background: on ? PURPLE : 'transparent',
-                      color: on ? 'white' : NAVY
-                    }}>
-                    {h}h
-                  </button>
-                )
-              })}
-            </div>
-            {extraDoubleTime(callInHours[c.id]) > 0 && (
-              <div style={{ fontSize: 12.5, color: PURPLE, marginTop: 7, lineHeight: 1.45 }}>
-                Over {COVERED_HOURS} hours — <strong>{extraDoubleTime(callInHours[c.id])}h double time</strong>{' '}
-                will be added as well.
-              </div>
-            )}
-
+            {/* A call-in is $250 however long it runs (Brent, 14 Nov 2026) —
+                no hours to ask about. */}
             {c.auto ? (
             <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
-              {/* Already on the grid: all that is left is the double time past
-                  five hours, or taking it off if it was not a call-in. */}
+              {/* Already on the grid: keep it, or take it off if it was not a call-in. */}
               <button
-                onClick={() => {
-                  const extra = extraDoubleTime(callInHours[c.id])
-                  if (extra > 0 && doubleCategory) addToCell(doubleCategory.key, c.day, extra)
-                  setDismissedCallIns(p => [...p, c.id])
-                }}
+                onClick={() => setDismissedCallIns(p => [...p, c.id])}
                 style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-                {extraDoubleTime(callInHours[c.id]) > 0 ? `Add ${extraDoubleTime(callInHours[c.id])}h double` : 'Done'}
+                Done
               </button>
               <button onClick={() => { addToCell(callInCategory.key, c.day, -1); setDismissedCallIns(p => [...p, c.id]) }}
                 style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, color: MUTED, cursor: 'pointer' }}>
@@ -1011,14 +1010,10 @@ export default function Timesheets({ user, onBack }) {
               <button
                 onClick={() => {
                   addToCell(callInCategory.key, c.day, 1)
-                  const extra = extraDoubleTime(callInHours[c.id])
-                  if (extra > 0 && doubleCategory) addToCell(doubleCategory.key, c.day, extra)
                   setDismissedCallIns(p => [...p, c.id])
                 }}
                 style={{ flex: 2, padding: 9, background: PURPLE, color: 'white', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-                Add call-in{extraDoubleTime(callInHours[c.id]) > 0
-                  ? ` + ${extraDoubleTime(callInHours[c.id])}h double`
-                  : ' allowance'}
+                Add call-in
               </button>
               <button onClick={() => setDismissedCallIns(p => [...p, c.id])}
                 style={{ flex: 1, padding: 9, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12.5, color: MUTED, cursor: 'pointer' }}>
@@ -1038,6 +1033,7 @@ export default function Timesheets({ user, onBack }) {
             {weekDays.map((d, i) => (
               <div key={d} style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: isWeekend(activeWeek * 7 + i) ? BLUE : MUTED, textTransform: 'uppercase' }}>
                 {DAY_NAMES[i]}<div style={{ fontSize: 12.5, fontWeight: 600, color: NAVY }}>{dayNumber(d)}</div>
+                {holidays[d] && <div data-public-holiday={d} title={holidays[d]} style={{ fontSize: 10.5, fontWeight: 700, color: TEAL, textTransform: 'none' }}>Public hol.</div>}
               </div>
             ))}
           </div>

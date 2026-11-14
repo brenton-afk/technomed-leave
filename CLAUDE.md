@@ -2041,6 +2041,37 @@ otherwise); banking runs `overtimeToToil` — only the claimed hours move, on
 the same days — and the approved Xero timesheet carries the result. April is
 casual (no contract, no `earnsToil`) and is never asked.
 
+**Each person's pay, confirmed (Brent, 14 Nov 2026)** — `PAY_OPTIONS` in
+`src/payOptions.js`, every row `reviewed`, now **always applied** (a Xero pay
+template narrows it further; `categoriesForStaff`). Erin: ordinary, time and a
+half (odd Saturdays), double time, TOIL — 24h a week, days vary, `earnsToil`,
+approves her own. Toni: admin and science ordinary (ad hoc, mostly admin),
+double time, TOIL in either — on "Bank as TOIL" she picks admin or science
+(`toilInto` on submit → `toilOverflow({ into })`). Ben, Aimee, Mat (Mat is a
+director by title only): ordinary, double time, TOIL, call-in, on-call. April
+(casual): ordinary, call-in, on-call (`paidOnCall`). Jeremy is salaried — no
+timesheet. **A call-in is $250 however long** — the "how long were you there /
+double time past five hours" step is gone.
+**Public holidays** (`src/publicHolidays.js`, Hobart's, computed; `EXTRA` for
+one-offs): paid at the usual hours, no special rate — pre-filled for anyone
+with a usual week and marked "Public hol." on the grid. **On call runs through
+them** (`weekendHours`): from 17:00 the last working day before a run of days
+off to 07:00 the first working day after — a long weekend to Tuesday 07:00,
+Easter Thursday evening to Tuesday morning, a midweek holiday 7 + 24 + 7.
+**Pre-filled** (`usualFortnight` / `canPrefill`): a timesheet with no draft
+opens with the usual fortnight (Toni's days, 7.6 a weekday for the full-timers)
+less leave; not Erin (days change) or April (casual).
+**Erin's approvals**: each waiting timesheet shows chips (`flagsFor` in
+`src/timesheetFlags.js`: overtime to decide, TOIL banked/taken, call-ins, on
+call, leave, leave not in Xero, warnings) or "Nothing unusual"; **Approve all**
+approves every one without an overtime decision (`needsDecision`).
+**Read-only Xero check** (`api/_payrollCheck.js`): earnings rates, leave types
+and each person's pay template against their contract (`comparePerson` —
+missing items, extra items, call-in paid by the hour, items Xero will not take
+on a timesheet). No per-person pay amounts. Admin → Timesheets **Check Xero
+setup** (`action=payrollcheck`) and Claude's key (`api/agent.js`
+`payroll-check`).
+
 Flow and invariants:
 
 - Staff submit → Xero as `DRAFT`. Admin approve → the **same** Xero timesheet (`TimesheetID` included in the POST, which makes it an update) flips to `APPROVED`. That is how the spec's "submit to Xero" and later "approval triggers the pay run" both hold.

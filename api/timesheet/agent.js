@@ -1,4 +1,5 @@
 import { requireSession, requireAdmin } from '../_auth.js'
+import { payrollCheck } from '../_payrollCheck.js'
 import { STAFF, getStaffByEmail } from '../../src/staffConfig.js'
 import {
   saveTimesheetDraft, getTimesheetDraft, clearTimesheetDraft,
@@ -51,6 +52,11 @@ export default async function handler(req, res) {
     if (action === 'list') return await handleList(req, res)
     if (action === 'decide') return await handleDecide(req, res)
     if (action === 'payaudit') return await handlePayAudit(req, res)
+    if (action === 'payrollcheck') {
+      const admin = await requireAdmin(req, res)
+      if (!admin) return
+      return res.status(200).json(await payrollCheck())
+    }
     if (action === 'toil') return await handleToil(req, res, session)
     if (action === 'toilopening') return await handleToilOpening(req, res)
     if (action === 'toilmatch') return await handleToilMatch(req, res)
@@ -303,7 +309,9 @@ async function handleSubmit(req, res, session) {
     ? { entries: claim.entries, excess: 0, moved: [], limit: claim.limit }
     : req.body?.bankToil === false
       ? { entries: entered, excess: 0, moved: [], limit: null }
-      : toilOverflow({ entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours })
+      : toilOverflow({ entries: entered, categories, days: period.days, contract: contractFor(staff.email), leaveHours,
+        // Toni chooses admin or science TOIL (14 Nov 2026) — only a TOIL item she has.
+        into: categories.some(c => c.kind === 'toil' && c.key === req.body?.toilInto) ? req.body.toilInto : null })
   const entries = overflow.entries
   const overtimeClaim = claim?.moved?.length
     ? { hours: claim.excess, limit: claim.limit, moved: claim.moved, key: claim.toilKey, status: 'pending' }

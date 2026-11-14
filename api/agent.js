@@ -21,6 +21,7 @@
 // exist (404), the same as any other wrong address. Every call is logged —
 // refused ones included — under `agent:log`, readable by admins.
 
+import { payrollCheck } from './_payrollCheck.js'
 import { timingSafeEqual, createHash } from 'node:crypto'
 import { redis } from './_redis.js'
 import { usageCasesBetween, checkSalesReport } from './_salesCheck.js'
@@ -64,6 +65,13 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Read-only payroll check (Brent, 14 Nov 2026): Xero's pay items and each
+    // person's pay template against their contract. Nothing is written.
+    if (action === 'payroll-check' && req.method === 'GET') {
+      const result = await payrollCheck()
+      await log({ action, ok: true, problems: result.people.reduce((n, p) => n + p.problems.length, 0), ip })
+      return res.status(200).json(result)
+    }
     if (action === 'usage' && req.method === 'GET') {
       const from = String(req.query.from || '')
       const to = String(req.query.to || '')

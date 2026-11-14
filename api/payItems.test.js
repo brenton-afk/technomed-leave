@@ -39,13 +39,13 @@ describe('when Xero says what somebody is assigned', () => {
     expect(keys(cats)).not.toContain('overtime_1_5')
   })
 
-  it('overrides the table rather than being merged with it', () => {
-    // Toni's row in payOptions.js gives her the split ordinary rates. If Xero
-    // says she is on the plain one, Xero wins — the table is a fallback, not a
-    // second opinion.
+  it('needs both the contract row and the template to allow an item (14 Nov 2026)', () => {
+    // Toni's confirmed row gives her the split ordinary rates. A template
+    // with only the plain rate offers her nothing it does not also allow —
+    // the payroll check reports the disagreement instead.
     const cats = categoriesForStaff(RATES, 'toni@technomed.com.au',
       { assignedRateIds: ['r-ord'] })
-    expect(keys(cats)).toEqual(['ordinary'])
+    expect(keys(cats)).toEqual([])
   })
 
   it('still shows a rate no rule recognises, to the people who have it', () => {
@@ -69,7 +69,7 @@ describe('when Xero cannot be asked', () => {
   it('falls back to the table', () => {
     const cats = categoriesForStaff(RATES, 'ben@technomed.com.au', { assignedRateIds: null })
     expect(keys(cats)).toEqual(
-      ['call_in', 'on_call', 'ordinary', 'overtime_1_5', 'overtime_double', 'toil_accrued'])
+      ['call_in', 'on_call', 'ordinary', 'overtime_double', 'toil_accrued'])
   })
 
   it('falls back when the template came back empty', () => {

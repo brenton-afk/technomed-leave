@@ -11,9 +11,9 @@ const DAYS = Array.from({ length: 14 }, (_, i) => {
 })
 
 describe('the rules', () => {
-  it('only Ben, Aimee, Mat and Toni take TOIL on a timesheet', () => {
-    for (const e of ['ben', 'aimee', 'mat', 'toni']) expect(earnsToil(`${e}@technomed.com.au`), e).toBe(true)
-    for (const e of ['erin', 'brenton', 'jeremy']) expect(earnsToil(`${e}@technomed.com.au`), e).toBe(false)
+  it('only Ben, Aimee, Mat, Toni and Erin take TOIL on a timesheet', () => {
+    for (const e of ['ben', 'aimee', 'mat', 'toni', 'erin']) expect(earnsToil(`${e}@technomed.com.au`), e).toBe(true)
+    for (const e of ['april', 'brenton', 'jeremy']) expect(earnsToil(`${e}@technomed.com.au`), e).toBe(false)
   })
 
   it('takes the hours from Xero, never from an old portal copy (Toni, 12 Nov 2026)', () => {
@@ -179,7 +179,7 @@ describe('submitting and approving', () => {
   })
 
   it('only those who earn TOIL can take it', async () => {
-    who = { email: 'erin@technomed.com.au', name: 'Erin Smallbon' }
+    who = { email: 'april@technomed.com.au', name: 'April Foale' }
     const res = await call('submit', 'POST', fortnight({ toil_taken: { '2026-11-03': 99 } }))
     expect(res.statusCode).toBe(200)
     expect(res.payload.record.toilTaken).toEqual({})

@@ -1,4 +1,5 @@
 import { STAFF } from '../staffConfig.js'
+import { isDayOff } from '../publicHolidays.js'
 
 // ─── The on-call weekend ─────────────────────────────────────────────────────
 // A weekend on call runs from 17:00 Friday to 07:00 Monday. It is a rota: two
@@ -23,7 +24,9 @@ import { STAFF } from '../staffConfig.js'
 //                            ──
 //                            62
 //
-// A public holiday Monday makes no difference: it still ends at 07:00.
+// A public holiday next to the weekend extends it (Brent, 14 Nov 2026): the
+// allowance runs through the holiday and ends at 07:00 the next working day.
+// A midweek holiday is 17:00 the day before to 07:00 the day after.
 
 /** 17:00 Friday. */
 export const STARTS_AT = 17
@@ -70,18 +73,30 @@ export function weekendHours(anyDayOfIt) {
   const date = String(anyDayOfIt || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return {}
 
-  const weekday = isoWeekday(date)
-  // Walk back to the Friday the weekend began on. Monday belongs to the
-  // weekend behind it, because the shift ends at seven that morning.
-  const back = weekday === 1 ? 3 : (weekday - FRIDAY + 7) % 7
-  const friday = shift(date, -back)
-
-  return {
-    [friday]: 24 - STARTS_AT,
-    [shift(friday, 1)]: 24,
-    [shift(friday, 2)]: 24,
-    [shift(friday, 3)]: ENDS_AT
+  // The run of days off the entry belongs to: the one it falls in; else the
+  // one starting the next day (a Friday, or the day before a holiday); else
+  // the one that ended the day before (a Monday, or the day after one); else
+  // the weekend behind it, as before.
+  let first
+  if (isDayOff(date)) first = date
+  else if (isDayOff(shift(date, 1))) first = shift(date, 1)
+  else if (isDayOff(shift(date, -1))) first = shift(date, -1)
+  else {
+    const weekday = isoWeekday(date)
+    const back = weekday === 1 ? 3 : (weekday - FRIDAY + 7) % 7
+    first = shift(shift(date, -back), 1)
   }
+  while (isDayOff(shift(first, -1))) first = shift(first, -1)
+  let last = first
+  while (isDayOff(shift(last, 1))) last = shift(last, 1)
+
+  // Public holidays (Brent, 14 Nov 2026): the allowance runs through them as
+  // through a weekend — from 17:00 the last working day before to 07:00 the
+  // first working day after. An Easter is Thursday evening to Tuesday morning.
+  const out = { [shift(first, -1)]: 24 - STARTS_AT }
+  for (let d = first; d <= last; d = shift(d, 1)) out[d] = 24
+  out[shift(last, 1)] = ENDS_AT
+  return out
 }
 
 /**

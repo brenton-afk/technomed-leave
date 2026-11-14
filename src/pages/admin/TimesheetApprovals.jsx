@@ -1,3 +1,4 @@
+import { flagsFor, needsDecision } from '../../timesheetFlags.js'
 import React, { useState, useEffect, useMemo } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 
@@ -38,6 +39,51 @@ const round2 = n => Math.round((Number(n) || 0) * 100) / 100
 const sumOf = byDay => round2(Object.values(byDay || {}).reduce((a, b) => a + Number(b || 0), 0))
 export const leaveTotalOf = record => round2(Number(record.leave?.total || 0) + sumOf(record.toilTaken))
 const daysText = byDay => Object.keys(byDay || {}).sort().map(d => `${dayLabel(d)} ${byDay[d]}h`).join(' · ')
+
+/**
+ * Is Xero set up the way each person's contract says? (Brent, 14 Nov 2026:
+ * "ensure it talks to Xero correctly and that the pay items are set up
+ * properly".) Read-only — `action=payrollcheck`.
+ */
+function XeroSetupCheck({ authHeaders }) {
+  const [state, setState] = useState(null)
+  async function run() {
+    setState({ busy: true })
+    try {
+      const res = await fetch('/api/timesheet/agent?action=payrollcheck', { headers: authHeaders })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      setState({ result: body })
+    } catch (err) { setState({ error: err.message }) }
+  }
+  const result = state?.result
+  return (
+    <div data-xero-check style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '11px 13px', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+        <div style={{ fontSize: 13, color: NAVY, fontWeight: 700 }}>Xero pay setup</div>
+        <button onClick={run} disabled={state?.busy}
+          style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: 'white', color: NAVY, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+          {state?.busy ? 'Checking…' : result ? 'Check again' : 'Check Xero setup'}
+        </button>
+      </div>
+      {state?.error && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 8 }}>{state.error}</div>}
+      {result && (
+        <div style={{ marginTop: 8 }}>
+          {result.allClear && <div style={{ fontSize: 12.5, color: TEAL, fontWeight: 600 }}>✓ Every person's Xero pay template matches their contract.</div>}
+          {result.people.map(p => (
+            <div key={p.name} style={{ fontSize: 12, padding: '6px 0', borderTop: `1px solid ${BORDER}` }}>
+              <strong style={{ color: NAVY }}>{p.name}</strong>
+              <span style={{ color: MUTED }}> · sees {p.willSee.join(', ') || 'nothing'}</span>
+              {p.problems.length === 0
+                ? <span style={{ color: TEAL }}> ✓</span>
+                : p.problems.map((x, i) => <div key={i} style={{ color: '#8a5a00', marginTop: 2 }}>· {x}</div>)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /**
  * Overtime claimed at double time (Brent, 14 Nov 2026): Erin approves it, or
@@ -198,6 +244,27 @@ export default function TimesheetApprovals({ user }) {
     { id: 'rejected', label: 'Returned', count: data.rejected?.length || 0 }
   ]
   const list = data[tab] || []
+  // Approve all (Brent, 14 Nov 2026): every timesheet waiting that needs no
+  // decision — overtime claims are left to be opened.
+  const clean = tab === 'submitted' ? list.filter(r => !needsDecision(r)) : []
+  async function approveAll() {
+    if (!clean.length || !window.confirm(`Approve ${clean.length} timesheet${clean.length === 1 ? '' : 's'}: ${clean.map(r => r.staffName).join(', ')}?`)) return
+    setBusy('all'); setError('')
+    const failed = []
+    for (const record of clean) {
+      try {
+        const res = await fetch('/api/timesheet/agent?action=decide', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ email: record.email, periodStart: record.periodStart, decision: 'approve' })
+        })
+        const body = await res.json()
+        if (body.error) failed.push(`${record.staffName}: ${body.error}`)
+      } catch (err) { failed.push(`${record.staffName}: ${err.message}`) }
+    }
+    if (failed.length) setError(failed.join(' · '))
+    await load()
+    setBusy('')
+  }
 
   return (
     <div>
@@ -212,6 +279,8 @@ export default function TimesheetApprovals({ user }) {
         </div>
       )}
 
+      <XeroSetupCheck authHeaders={authHeaders} />
+
       <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -221,6 +290,12 @@ export default function TimesheetApprovals({ user }) {
         ))}
       </div>
 
+      {clean.length > 1 && (
+        <button data-approve-all onClick={approveAll} disabled={busy === 'all'}
+          style={{ width: '100%', padding: 12, marginBottom: 12, background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: busy === 'all' ? 0.7 : 1 }}>
+          {busy === 'all' ? 'Approving…' : `✓ Approve all ${clean.length}${clean.length < list.length ? ' without a decision to make' : ''}`}
+        </button>
+      )}
       {loading && <div style={{ textAlign: 'center', padding: 30, color: MUTED, fontSize: 14 }}>Loading…</div>}
       {!loading && list.length === 0 && (
         <div style={{ background: 'white', borderRadius: 12, padding: 32, textAlign: 'center', color: MUTED, fontSize: 14 }}>
@@ -256,8 +331,17 @@ export default function TimesheetApprovals({ user }) {
               </div>
               {record.editedByAdmin && <div style={{ fontSize: 11, color: AMBER, marginTop: 5 }}>Edited before approval</div>}
               {record.rejectionReason && <div style={{ fontSize: 11.5, color: '#c0392b', marginTop: 5 }}>Returned: {record.rejectionReason}</div>}
-              {record.warnings?.length > 0 && (
-                <div style={{ fontSize: 11, color: '#8a5a00', marginTop: 5 }}>⚠ {record.warnings.length} warning{record.warnings.length === 1 ? '' : 's'}</div>
+              {record.status === 'submitted' && flagsFor(record).length > 0 && (
+                <div data-flags style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+                  {flagsFor(record).map((f, i) => (
+                    <span key={i} data-flag={f.kind} style={{ fontSize: 11, fontWeight: 600, borderRadius: 10, padding: '2px 8px', lineHeight: 1.4,
+                      background: f.tone === 'decide' ? AMBER : f.tone === 'warn' ? '#fff8e6' : 'rgba(4,39,70,0.06)',
+                      color: f.tone === 'decide' ? 'white' : f.tone === 'warn' ? '#8a5a00' : NAVY }}>{f.text}</span>
+                  ))}
+                </div>
+              )}
+              {record.status === 'submitted' && flagsFor(record).length === 0 && (
+                <div style={{ fontSize: 11, color: TEAL, marginTop: 5, fontWeight: 600 }}>✓ Nothing unusual</div>
               )}
             </div>
 

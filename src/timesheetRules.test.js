@@ -24,7 +24,8 @@ describe('who is on a 76-hour fortnight', () => {
     for (const e of ['aimee@technomed.com.au', 'ben@technomed.com.au', 'mat@technomed.com.au']) {
       expect(contractFor(e), e).toMatchObject({ fortnightHours: 76, overflowToToil: true })
     }
-    expect(contractFor('erin@technomed.com.au')).toBeNull()
+    // Erin: 24h a week, asked about TOIL or overtime like the others (14 Nov 2026).
+    expect(contractFor('erin@technomed.com.au')).toMatchObject({ fortnightHours: 48 })
   })
 })
 
