@@ -975,6 +975,28 @@ export default function Timesheets({ user, onBack }) {
               {weekDays.map((day, i) => {
                 const value = entries[cat.key]?.[day]
                 const tint = COLOURS[cat.colour] || NAVY
+                // Call-ins are counted by tapping (Brent, 14 Nov 2026: "tap call
+                // ins as a button on the day … tallies the number"). Each tap
+                // adds one; − takes one off.
+                if (cat.key === 'call_in') {
+                  const n = Number(value) || 0
+                  return (
+                    <div key={day} data-call-in-cell style={{ position: 'relative', minHeight: 44, display: 'flex' }}>
+                      <button type="button" data-call-in-add aria-label={`Add a call-in on ${day}`}
+                        onClick={() => setCell(cat.key, day, n + 1)}
+                        style={{ flex: 1, minHeight: 44, borderRadius: 10, cursor: 'pointer', fontSize: n ? 16 : 18, fontWeight: 700, border: `1px solid ${n ? tint : BORDER}`, background: n ? tint : 'white', color: n ? 'white' : MUTED }}>
+                        {n || '+'}
+                      </button>
+                      {n > 0 && (
+                        <button type="button" data-call-in-remove aria-label={`Take a call-in off ${day}`}
+                          onClick={() => setCell(cat.key, day, n - 1 || '')}
+                          style={{ position: 'absolute', top: 2, right: 2, width: 22, height: 22, borderRadius: 11, border: `1px solid ${BORDER}`, background: 'white', color: NAVY, fontSize: 14, lineHeight: '18px', padding: 0, cursor: 'pointer' }}>
+                          −
+                        </button>
+                      )}
+                    </div>
+                  )
+                }
                 // The roster's hours: shown, never typed (14 Nov 2026).
                 if (cat.key === 'on_call') {
                   return (

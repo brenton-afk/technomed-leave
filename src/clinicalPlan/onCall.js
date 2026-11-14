@@ -136,3 +136,12 @@ export function paidOnCall(email) {
   const e = String(email || '').toLowerCase()
   return Boolean(STAFF.find(s => String(s.email).toLowerCase() === e)?.paidOnCall)
 }
+
+/**
+ * Whether this person is paid call-ins (Brent, 14 Nov 2026: "call ins … are
+ * only for April, Ben, Mat and Aimee"). `paidCallIns` in staffConfig.js.
+ */
+export function paysCallIns(email) {
+  const e = String(email || '').toLowerCase()
+  return Boolean(STAFF.find(s => String(s.email).toLowerCase() === e)?.paidCallIns)
+}

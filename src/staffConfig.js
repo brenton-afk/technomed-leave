@@ -29,7 +29,7 @@ export const STAFF = [
   // Wednesday and Thursday at 5.5 (her own email of 26 Oct 2026). See leaveHours.js.
   { name: 'Toni Hoppitt', earnsToil: true, email: 'toni@technomed.com.au', firstName: 'Toni', division: 'Operations', role: 'Operations Coordinator', isAdmin: false, hasTimesheets: true, mobileNumber: '',
     workPattern: { kind: 'fixed', days: [5.5, 0, 5.5, 5.5, 0, 0, 0] } },
-  { name: 'Ben Cassidy', earnsToil: true, paidOnCall: true, email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0409 437 131', mobileNumber: '' },
+  { name: 'Ben Cassidy', earnsToil: true, paidOnCall: true, paidCallIns: true, email: 'ben@technomed.com.au', firstName: 'Ben', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0409 437 131', mobileNumber: '' },
   // "All references to Mat Usher in the portal should be Mat not Matt."
   //
   // `firstName` was already Mat and the rep names on a booking already tidy
@@ -41,10 +41,10 @@ export const STAFF = [
   // never displayed; it is what lets an old worklist item assigned to
   // "Matthew Usher" still be his, and what lets a transcript saying "Matt"
   // find him. Removing them would fix the display and break the reading.
-  { name: 'Mat Usher', earnsToil: true, paidOnCall: true, email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', acrossDivisions: true, role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
+  { name: 'Mat Usher', earnsToil: true, paidOnCall: true, paidCallIns: true, email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', acrossDivisions: true, role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
   { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
-  { name: 'April Foale', email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
-  { name: 'Aimee Vulinovich', earnsToil: true, paidOnCall: true, email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0477 334 561', mobileNumber: '' }
+  { name: 'April Foale', paidCallIns: true, email: 'april@technomed.com.au', firstName: 'April', division: 'Orthopaedics', role: 'Clinical Support Specialist', isAdmin: false, hasTimesheets: true, mobileNumber: '' },
+  { name: 'Aimee Vulinovich', earnsToil: true, paidOnCall: true, paidCallIns: true, email: 'aimee@technomed.com.au', firstName: 'Aimee', division: 'Spine', role: 'Clinical Support Specialist', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0477 334 561', mobileNumber: '' }
 ]
 /**
  * Who may open the timesheet screen.

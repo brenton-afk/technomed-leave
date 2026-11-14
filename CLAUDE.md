@@ -2088,6 +2088,13 @@ draws the row read-only from `action=callins` (`onCall.byDay`, 17:00 Fri –
 submit `withRosterOnCall` replaces the row with the calendar's hours (anybody
 else's is emptied; a roster that cannot be read leaves it empty with a
 warning). The rate is Xero's. The call-in item is labelled "Call-in".
+**Call-ins are counted by tapping** (Brent, same day: "tap call ins as a
+button on the day … tallies the number"): the `call_in` row is a tap-to-add
+button per day (`data-call-in-add`, with a − to take one off). Xero's Call-in
+is now **$250 per unit** (Brent changed it from a fixed amount), so two
+call-ins send 2 and pay $500. **Only April, Ben, Mat and Aimee** are paid
+call-ins (`paidCallIns` in staffConfig.js, `paysCallIns()`; the pay item is
+dropped for everyone else and `paidCallIns(staff)` in the agent requires it).
 **One-off leave corrections** live in `api/_leaveFixes.js` (`LEAVE_FIXES`),
 applied once from `getAllApplications`: a matched approved record that never
 reached Xero moves to `leave:withdrawn` with who and why; Xero and the

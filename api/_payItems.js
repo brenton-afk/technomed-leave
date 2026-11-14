@@ -5,7 +5,7 @@
 import { getXeroToken, findEmployee, assignedEarningsRateIds } from './_xeroClient.js'
 import { readXero } from './_xeroResponse.js'
 import { payItemsFor } from '../src/payOptions.js'
-import { paidOnCall } from '../src/clinicalPlan/onCall.js'
+import { paidOnCall, paysCallIns } from '../src/clinicalPlan/onCall.js'
 
 const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 
@@ -176,6 +176,8 @@ export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {
     if (allowed && !allowed.has(rule.key)) continue
     // On-call hours only for those paid them, and filled from the roster.
     if (rule.key === 'on_call' && !paidOnCall(email)) continue
+    // Call-ins only for April, Ben, Mat and Aimee (14 Nov 2026).
+    if (rule.key === 'call_in' && !paysCallIns(email)) continue
 
     const match = earningsRates.find(r => {
       const id = r.EarningsRateID || r.earningsRateID

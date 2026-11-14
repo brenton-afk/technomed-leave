@@ -24,3 +24,18 @@ describe('who is paid on-call', () => {
     expect(erin.map(c => c.key)).not.toContain('on_call')
   })
 })
+
+import { paysCallIns } from './clinicalPlan/onCall.js'
+
+describe('who is paid call-ins', () => {
+  it('April, Ben, Mat and Aimee only', () => {
+    for (const e of ['april', 'ben', 'mat', 'aimee']) expect(paysCallIns(`${e}@technomed.com.au`)).toBe(true)
+    for (const e of ['brenton', 'toni', 'erin', 'jeremy']) expect(paysCallIns(`${e}@technomed.com.au`)).toBe(false)
+  })
+
+  it('the call-in pay item is off everyone else\'s timesheet', () => {
+    const rates = [{ EarningsRateID: 'ci', Name: 'Call In', RateType: 'RATEPERUNIT', TypeOfUnits: 'Call-ins' }]
+    expect(categoriesForStaff(rates, 'toni@technomed.com.au', { assignedRateIds: ['ci'] }).map(c => c.key)).not.toContain('call_in')
+    expect(categoriesForStaff(rates, 'april@technomed.com.au', { assignedRateIds: ['ci'] }).map(c => c.key)).toContain('call_in')
+  })
+})

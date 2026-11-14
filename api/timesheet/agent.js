@@ -23,7 +23,7 @@ import { toilBalanceFor, compareWithXero, toilLedgerFor, leaveOnDays } from '../
 import { normaliseEntries, validate, totals } from '../_timesheetValidate.js'
 import { toilOverflow, contractFor } from '../../src/timesheetRules.js'
 import {
-  onCallHoursFor, totalHours as onCallTotal, paidOnCall
+  onCallHoursFor, totalHours as onCallTotal, paidOnCall, paysCallIns
 } from '../../src/clinicalPlan/onCall.js'
 import { callInsFor, COVERED_HOURS } from '../../src/clinicalPlan/callIn.js'
 import { periodFor, currentPeriod, recentPeriods, isValidPeriodStart } from '../_fortnight.js'
@@ -456,7 +456,7 @@ async function handleCallIns(req, res, session) {
 
 /** Whether this person is paid call-ins at all. */
 export function paidCallIns(staff) {
-  return Boolean(staff?.hasTimesheets) && payItemsFor(staff.email).includes('call_in')
+  return Boolean(staff?.hasTimesheets) && paysCallIns(staff.email) && payItemsFor(staff.email).includes('call_in')
 }
 
 export async function logCallIns(staff, period, auto) {

@@ -30,7 +30,7 @@ describe('pay items Xero will not take on a timesheet', () => {
       { EarningsRateID: 'b', Name: 'Call In Allowance', RateType: 'FIXEDAMOUNT', EarningsType: 'ALLOWANCE' },
       { EarningsRateID: 'c', Name: 'Overtime 1.5', RateType: 'MULTIPLE', CurrentRecord: false }
     ]
-    const out = Object.fromEntries(catsFor(rates, 'x@example.test', { assignedRateIds: ['a', 'b', 'c'] }).map(c => [c.earningsRateID, c.timesheetOk]))
+    const out = Object.fromEntries(catsFor(rates, 'ben@technomed.com.au', { assignedRateIds: ['a', 'b', 'c'] }).map(c => [c.earningsRateID, c.timesheetOk]))
     expect(out).toEqual({ a: true, b: false, c: false })
   })
 })
