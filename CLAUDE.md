@@ -1513,7 +1513,11 @@ brenton@; everyone else a plain 404, `mayUseCommissions` in
   or reference, sales from "Sales of $X"; amounts on each pay item's total
   base, as the workbooks do. A late correction for an earlier month
   ("Additional AUG 2026 Comms") is paid once — lines already in an approved
-  month are `counted`. `expected` rows with nothing are listed as missing.
+  month are `counted` — and **only when it was raised after the previous
+  run's date** (`calcDateFor(month − 1)`) and by this run's: a month's own
+  commission invoices are raised the month after, and October once read
+  September's Signus invoice (19 Oct) as a correction — $372k of "October"
+  sales (Brent, 15 Nov 2026). `expected` rows with nothing are listed as missing.
   `calc.test.js` reproduces September 2026 exactly (Mat $12,546.44).
 - **Approve** files each person's workbook in Dropbox as before
   (`/Admin/Accounts/Finances/Commissions/{Mat|Jeremy|Toni} Commissions/

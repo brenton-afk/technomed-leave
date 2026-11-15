@@ -5,6 +5,8 @@
 // is TechnoMed's own sales of those kits to Calvary Lenah Valley that month.
 // Pure, so the September 2026 workbook can be reproduced in a test.
 
+import { calcDateFor, monthPlus } from './schedule.js'
+
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 const r2 = n => Math.round(n * 100) / 100
 
@@ -64,7 +66,15 @@ export function commissionsFor({ salesMonth, invoices, rules, counted = new Set(
       if (!row) return
       const month = monthIn(line.description) || monthIn(inv.reference)
       if (!month) return
-      const adjustment = month < salesMonth && !counted.has(key)
+      // A line for an earlier month is a late correction only if it was not
+      // there when that earlier month's run was worked out — raised after the
+      // previous run's date and by this run's. September's own commission
+      // invoices are raised in October; they are September's, never October's
+      // (Brent, 15 Nov 2026: October showed Signus sales of $372k, which was
+      // September's $177,678 added to October's $195,303.60).
+      const date = String(inv.date || '').slice(0, 10)
+      const late = date > calcDateFor(monthPlus(salesMonth, -1)) && date <= calcDateFor(salesMonth)
+      const adjustment = month < salesMonth && late && !counted.has(key)
       if (month !== salesMonth && !adjustment) return
       sources.push({
         key, row: row.id, invoice: inv.number, month, adjustment: adjustment || undefined,

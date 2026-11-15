@@ -76,3 +76,30 @@ describe('a month with only a late correction from a distributor (October 2026)'
     expect(line.amount).toBe(5.7)
   })
 })
+
+describe('October 2026 as Xero has it (Brent, 15 Nov 2026: Signus showed $372k)', () => {
+  // September's commission invoices are raised in October; they must stay
+  // September's. Only the Northstar correction, raised after September's run,
+  // is a late correction in October.
+  const OCT = [
+    ...SEP,
+    inv('o1', 'INV-2036', 'Signus Australia Pty Ltd', '2026-11-09', 'OCT 2026 Sales Comms', [l('Commission on OCTOBER 2026 Sales of $195,303.60 @ 30%', 58591.08)]),
+    inv('o2', 'INV-2037', 'E4 Surgical', '2026-11-09', 'OCT 2026 Sales Comms', [l('Commission on October 2026 Sales of $134,525.00 @ 30%', 40357.5)]),
+    inv('o3', 'INV-2031', 'KT Medical Pty Ltd', '2026-11-04', 'OCT 26 Implant Sales Comms', [l('Clinical Case Support Fee for October 2026, on sales of $44,630.70 @ 25%', 11157.68)]),
+    inv('o4', 'INV-2035', 'KT Medical Pty Ltd', '2026-11-09', 'OCT 2026 DTBV Sales Comms', [l('Commission on October 2026 Total Sales of $9,699.00 @ 20%', 1939.8)]),
+    inv('n', 'INV-2033', 'Device Technologies Australia Pty. Ltd.', '2026-11-05', 'SEP 2026 Northstar Rate Adjustment', [l('Commission on September 2026 NORTHSTAR Sales of $15,196.00 @ 25% (less commission already received at 22.5% on INV-2007)', 379.9)])
+  ]
+  const out = commissionsFor({ salesMonth: '2026-10', invoices: OCT, rules: DEFAULT_RULES })
+  it('counts only October\'s Signus sales', () => {
+    const signus = out.sources.filter(s => s.row === 'signus')
+    expect(signus.map(s => s.invoice)).toEqual(['INV-2036'])
+    expect(signus[0].sales).toBe(195303.6)
+  })
+  it('leaves every September invoice raised in October out', () => {
+    expect(out.sources.filter(s => s.adjustment).map(s => s.invoice)).toEqual(['INV-2033'])
+  })
+  it('pays Mat 1.5% of October\'s spine commission plus the Northstar correction', () => {
+    const mat = out.people.find(p => p.name === 'Mat Usher')
+    expect(mat.byPayItem['Commissions Spine']).toBe(1686.39)
+  })
+})
