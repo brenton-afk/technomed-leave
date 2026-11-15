@@ -949,7 +949,7 @@ export default function Timesheets({ user, onBack }) {
         {overflow.excess > 0 && (
           <div style={{ background: '#e6f4f2', border: '1px solid rgba(42,181,160,0.3)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
             {overflow.toilKey
-              ? <><strong>{overflow.excess}h over your {overflow.limit}h fortnight.</strong> When you submit you'll be asked whether to bank it as TOIL or keep it as paid hours. To be paid it as double time, enter those hours under Overtime — Double.</>
+              ? <><strong>{overflow.excess}h over your {overflow.limit}h fortnight.</strong> When you submit you'll be asked whether to bank it as TOIL, keep it as paid hours, or claim it as double time for Erin to approve.</>
               : <><strong>{overflow.excess}h over your {overflow.limit}h fortnight.</strong> There is no TOIL pay item on your timesheet to bank it in — check with Brent before submitting.</>}
           </div>
         )}
@@ -1013,8 +1013,8 @@ export default function Timesheets({ user, onBack }) {
 
       {/* Grid: sticky category column, one column per day */}
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 0 8px' }}>
-        <div style={{ minWidth: 460, padding: '0 16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+        <div style={{ padding: '0 16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '84px repeat(7, minmax(0, 1fr))', gap: 3, marginBottom: 3 }}>
             <div />
             {weekDays.map((d, i) => (
               <div key={d} style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: isWeekend(activeWeek * 7 + i) ? BLUE : MUTED, textTransform: 'uppercase' }}>
@@ -1026,7 +1026,7 @@ export default function Timesheets({ user, onBack }) {
 
           {categories.map((cat, catIndex) => (
             <React.Fragment key={cat.key}>
-            <div style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '84px repeat(7, minmax(0, 1fr))', gap: 3, marginBottom: 3 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: NAVY, lineHeight: 1.2, paddingRight: 4 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 4, background: COLOURS[cat.colour] || NAVY, flexShrink: 0 }} />
                 {cat.label}
@@ -1089,7 +1089,7 @@ export default function Timesheets({ user, onBack }) {
             {catIndex === lastOrdinaryIndex && (
               <>
           {(periodLeave.rows || []).map(row => (
-            <div key={row.type} data-leave-row={row.type} style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+            <div key={row.type} data-leave-row={row.type} style={{ display: 'grid', gridTemplateColumns: '84px repeat(7, minmax(0, 1fr))', gap: 3, marginBottom: 3 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: NAVY, lineHeight: 1.2, paddingRight: 4 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 4, background: PURPLE, flexShrink: 0 }} />
                 {row.label}{!row.inXero ? ' ⚠' : ''}
@@ -1116,7 +1116,7 @@ export default function Timesheets({ user, onBack }) {
               those who earn TOIL. Never more than the balance; sent to Xero
               as TOIL leave when Erin approves the timesheet. */}
           {takesToil && (
-            <div data-toil-taken-row style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+            <div data-toil-taken-row style={{ display: 'grid', gridTemplateColumns: '84px repeat(7, minmax(0, 1fr))', gap: 3, marginBottom: 3 }}>
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', fontSize: 10.5, fontWeight: 600, color: NAVY, lineHeight: 1.2, paddingRight: 4 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 4, background: PURPLE, flexShrink: 0 }} />TOIL taken
@@ -1139,7 +1139,7 @@ export default function Timesheets({ user, onBack }) {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginTop: 7 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '84px repeat(7, minmax(0, 1fr))', gap: 3, marginTop: 7 }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: MUTED, textTransform: 'uppercase', display: 'flex', alignItems: 'center' }}>Day total</div>
             {weekDays.map(day => {
               const v = round2(totals.byDay[day] || 0)
