@@ -86,6 +86,36 @@ export async function salesInvoicesSince(since, { maxPages = 20 } = {}) {
   return out
 }
 
+/**
+ * Sales invoices dated between two days, with their lines (commissions,
+ * 15 Nov 2026). Only what the sums need is kept: contact, number, date,
+ * reference, status and each line's words, amount and item name.
+ */
+export async function salesInvoicesWithLines(from, to, { maxPages = 20 } = {}) {
+  const d = s => String(s).split('-').map(Number).join(',')
+  const where = encodeURIComponent(`Type=="ACCREC" AND Date>=DateTime(${d(from)}) AND Date<=DateTime(${d(to)})`)
+  const out = []
+  for (let page = 1; page <= maxPages; page++) {
+    const data = await call('GET', `/Invoices?where=${where}&page=${page}`)
+    const got = data.Invoices || []
+    for (const i of got) {
+      out.push({
+        id: i.InvoiceID, number: i.InvoiceNumber, status: i.Status, reference: i.Reference || '',
+        contact: i.Contact?.Name || '', date: xeroDay(i.DateString || i.Date),
+        lines: (i.LineItems || []).map(l => ({ description: l.Description || '', amount: Number(l.LineAmount) || 0, itemName: l.Item?.Name || l.ItemCode || '' }))
+      })
+    }
+    if (got.length < 100) break
+  }
+  return out
+}
+
+function xeroDay(value) {
+  const s = String(value || '')
+  const ms = s.match(/\/Date\((\d+)/)
+  return ms ? new Date(Number(ms[1])).toISOString().slice(0, 10) : s.slice(0, 10)
+}
+
 /** Invoices whose reference contains this PO number, not voided or deleted. */
 export async function invoicesWithReference(reference) {
   if (!reference) return []

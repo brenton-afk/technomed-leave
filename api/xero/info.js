@@ -1,4 +1,7 @@
-import { requireAdmin } from '../_auth.js'
+import { requireAdmin, requireSession } from '../_auth.js'
+import { mayUseCommissions, getRules, saveRules, getRun, listRuns, runCommissions, approveRun } from '../_commissions.js'
+import { nextSalesMonth, paymentDateFor, calcDateFor } from '../../src/commissions/schedule.js'
+import { todayStr } from '../../src/clinicalPlan/week.js'
 import { listSupplierQuotes, readSupplierQuote, saveSupplierPo, dismissSupplierQuote } from '../_supplierPos.js'
 import {
   getXeroConnectionStatus, getXeroToken, findEmployee,
@@ -27,6 +30,15 @@ export default async function handler(req, res) {
   const action = req.query.action || 'status'
 
   try {
+    // ── Commissions (Brent only, 15 Nov 2026) ──
+    // Anyone not on COMMISSION_USERS gets a plain 404, as if there were none.
+    if (String(action).startsWith('commission')) {
+      const session = await requireSession(req, res)
+      if (!session) return
+      if (!mayUseCommissions(session.email)) return res.status(404).json({ error: 'Not found' })
+      return await handleCommissions(action, req, res, session)
+    }
+
     // ── Invoices and quotes (Admin → Invoices) ──
     // Admin only, every one. Reading accounts@ and writing drafts into Xero.
     if (INVOICE_ACTIONS.has(action)) {
@@ -332,5 +344,31 @@ async function handleInvoices(action, req, res, session) {
   } catch (err) {
     const code = err.code === 'permission' ? 403 : (err.code === 'duplicate' || err.code === 'billed') ? 409 : 400
     return res.status(code).json({ error: err.message, code: err.code || null, existing: err.existing || null })
+  }
+}
+
+async function handleCommissions(action, req, res, session) {
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  try {
+    if (action === 'commission-access') return res.status(200).json({ ok: true })
+    if (action === 'commission-runs') {
+      const next = nextSalesMonth(todayStr())
+      return res.status(200).json({ runs: await listRuns(), next: { salesMonth: next, paymentDate: paymentDateFor(next), calcDate: calcDateFor(next) } })
+    }
+    if (action === 'commission-run') {
+      const month = String(req.query.month || body.month || '')
+      if (req.method === 'POST') return res.status(200).json({ run: await runCommissions(month, { by: session.email }) })
+      return res.status(200).json({ run: await getRun(month) })
+    }
+    if (action === 'commission-approve' && req.method === 'POST') {
+      return res.status(200).json({ run: await approveRun(String(body.month || ''), { by: session.email }) })
+    }
+    if (action === 'commission-rules') {
+      if (req.method === 'PUT') return res.status(200).json({ rules: await saveRules(body.rules, session.email) })
+      return res.status(200).json({ rules: await getRules() })
+    }
+    return res.status(404).json({ error: 'Not found' })
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message })
   }
 }

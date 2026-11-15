@@ -1476,6 +1476,41 @@ admin-only; no new function).
   spreadsheet (code, description, qty, price, discount; `src/invoiceLines.js`),
   skipping headers and total rows and never guessing a price.
 
+### Commissions (Brent only, 15 Nov 2026)
+
+"Build an auto commission pay calculator, based on the commission tables saved
+in Dropbox … uses the Xero invoiced data … commissions paid on the 1st … for
+all sales two months before." Admin → **Commissions**, shown only when
+`action=commission-access` answers 200 — `COMMISSION_USERS` (default
+brenton@; everyone else a plain 404, `mayUseCommissions` in
+`api/_commissions.js`). Served from `api/xero/info.js` (`commission-*`).
+- **When** (`src/commissions/schedule.js`): sales month M is paid on the 1st of
+  M+2, or the next business day (weekend or Hobart public holiday,
+  `isDayOff`); worked out **three business days before** (`calcDateFor`) by
+  the morning cron (`commissionsDue`), or on the screen at any time.
+- **Rules** (`src/commissions/rules.js`, seeded from the September 2026
+  workbooks; edited on the screen, saved in `commission:rules` with a
+  version): `ROWS` say which Xero invoice lines are which source (contact +
+  words, specific first; Lateral Medical is TechnoMed's own sales of the
+  Jackson/shoulder kits and beach chair masks to Calvary LV that month);
+  `PEOPLE` give each person's rate, `base` (`tm` = TechnoMed's commission, the
+  line amount; `sales` = the sales figure the line states) and Xero pay item.
+  Mat: spine 1.5% of TM, Evomed 10% of sales, Novus 15% of TM, Lateral 1% of
+  sales. Toni: Novus 15% of TM. Jeremy: J&J capital, Boost Ultrafibres, Mat
+  Ortho — **no J&J trauma** (agency ending). Jeremy's pay item names are a
+  guess until checked against Xero.
+- **Sums** (`src/commissions/calc.js`, pure): each line's month from its words
+  or reference, sales from "Sales of $X"; amounts on each pay item's total
+  base, as the workbooks do. A late correction for an earlier month
+  ("Additional AUG 2026 Comms") is paid once — lines already in an approved
+  month are `counted`. `expected` rows with nothing are listed as missing.
+  `calc.test.js` reproduces September 2026 exactly (Mat $12,546.44).
+- **Approve** files each person's workbook in Dropbox as before
+  (`/Admin/Accounts/Finances/Commissions/{Mat|Jeremy|Toni} Commissions/
+  … {Month YYYY}.xlsx`, `keep`) and locks the month. **Nothing is written to
+  Xero payroll** — Brent enters the pay-item totals in the monthly
+  unscheduled pay run on the Fortnightly calendar.
+
 ### Google Calendar
 
 Service-account JWT signed inline with `node:crypto` `createSign` — no `googleapis` dependency. **The token is kept for its hour** (Brent, 11 Nov 2026: slow bookings, flat batteries): `getGoogleToken` holds it in memory and in Redis (`google:token:{who}:{scope}`) until five minutes before expiry, so a request no longer signs and waits on Google's token server first; off under vitest unless `GOOGLE_TOKEN_CACHE=on`. `handleBooking` reads the event, the no-usage mark and the loan log side by side. `getGoogleToken(scope)` in `api/_googleCalendar.js` is the single signer; `api/calendar/today.js` imports it with `CALENDAR_SCOPE_READONLY` and the write path uses `CALENDAR_SCOPE_WRITE`. Approved leave becomes an all-day event on `bookings@technomed.com.au` in Grape (`colorId` 3), with `end` shifted +1 day per Google's exclusive-end convention. `TodayView.jsx` reads that same calendar back and distinguishes leave from bookings by `colorId`.

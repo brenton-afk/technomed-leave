@@ -7,6 +7,7 @@ import ToilLedger from './ToilLedger.jsx'
 import NoticeSettings from './NoticeSettings.jsx'
 import Invoices from './Invoices.jsx'
 import AmendLeave from './AmendLeave.jsx'
+import Commissions from './Commissions.jsx'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -114,6 +115,14 @@ export default function AdminPortal({ user }) {
   const [error, setError] = useState('')
   // Back from connecting Dropbox (or Xero): open on System, where it says how
   // that went.
+  // Commissions appear only when the server says this person may see them
+  // (Brent alone, 15 Nov 2026) — everyone else gets a 404 and no chip.
+  const [canCommission, setCanCommission] = useState(false)
+  useEffect(() => {
+    fetch('/api/xero/info?action=commission-access', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
+      .then(r => setCanCommission(r.ok)).catch(() => {})
+  }, [user?.token])
+  const sections = canCommission ? [...SECTIONS.slice(0, 4), ['commissions', 'Commissions', 'Commissions'], ...SECTIONS.slice(4)] : SECTIONS
   const [domain, setDomain] = useState(() => {
     try { return new URLSearchParams(window.location.search).get('dropbox') ? 'system' : 'leave' } catch { return 'leave' }
   })
@@ -229,9 +238,9 @@ export default function AdminPortal({ user }) {
           <img src="/logo.png" alt="TechnoMed" style={{ height:28, width:'auto' }} />
           <div style={{ fontSize:10, color:'rgba(255,255,255,0.45)', letterSpacing:'1.5px', textTransform:'uppercase' }}>Admin</div>
         </div>
-        <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:12 }}>{SECTIONS.find(([id]) => id === domain)?.[2] || 'Admin'}</div>
+        <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:12 }}>{sections.find(([id]) => id === domain)?.[2] || 'Admin'}</div>
         <div className="tm-chip-row" style={{ display:'flex', gap:7, overflowX:'auto', flexWrap:'nowrap', margin:'0 -20px', padding:'0 20px 2px', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
-          {SECTIONS.map(([id,label]) => (
+          {sections.map(([id,label]) => (
             <button key={id} ref={el => { if (el && domain === id) el.scrollIntoView?.({ block:'nearest', inline:'nearest' }) }} onClick={() => setDomain(id)} style={{ flex:'0 0 auto', whiteSpace:'nowrap', padding:'7px 14px', borderRadius:20, border:'none', background: domain===id ? '#189a85' : 'rgba(255,255,255,0.12)', color:'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
               {label}
             </button>
@@ -254,6 +263,7 @@ export default function AdminPortal({ user }) {
         {domain === 'toil' && <ToilLedger user={user} />}
         {domain === 'notices' && <NoticeSettings user={user} />}
         {domain === 'invoices' && <Invoices user={user} />}
+        {domain === 'commissions' && canCommission && <Commissions user={user} />}
         {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
         {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{error}</div>}

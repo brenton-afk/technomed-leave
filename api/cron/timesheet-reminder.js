@@ -1,3 +1,4 @@
+import { commissionsDue } from '../_commissions.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getAllTimesheets } from '../_redis.js'
 import { currentPeriod, todayAest } from '../_fortnight.js'
@@ -115,8 +116,10 @@ export default async function handler(req, res) {
     ? Promise.all([
       autoInvoice({ by: `cron-${job}` }).catch(err => { console.error('po auto-invoice failed:', err.message); return { error: err.message } }),
       autoQuotes({ by: `cron-${job}` }).catch(err => { console.error('quote auto failed:', err.message); return { error: err.message } }),
-      ingestBookings().then(({ pending, ...rest }) => rest).catch(err => { console.error('booking inbox check failed:', err.message); return { error: err.message } })
-    ]).then(([po, quotes, bookings]) => ({ po, quotes, bookings }))
+      ingestBookings().then(({ pending, ...rest }) => rest).catch(err => { console.error('booking inbox check failed:', err.message); return { error: err.message } }),
+      // Commissions worked out three business days before they are paid (15 Nov 2026).
+      (job === 'morning' ? commissionsDue({ by: 'cron-morning' }) : Promise.resolve(null)).catch(err => { console.error('commissions failed:', err.message); return { error: err.message } })
+    ]).then(([po, quotes, bookings, commissions]) => ({ po, quotes, bookings, commissions }))
     : Promise.resolve(null)
   const settled = () => {
     let timer
