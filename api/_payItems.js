@@ -230,7 +230,15 @@ export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {
     })
   }
 
+  // Shown in the order people fill them in (Brent, 15 Nov 2026: "ordinary
+  // hours should be at the top … the one everyone will alter"): ordinary,
+  // overtime, TOIL, then call-ins and on-call, then anything unrecognised.
+  // The matching above runs most-specific-first, which is not a display order.
+  const RANK = { ordinary: 0, overtime: 1, toil: 2, allowance: 3, other: 4 }
   return categories
+    .map((c, i) => [c, i])
+    .sort((a, b) => (RANK[a[0].kind] ?? 5) - (RANK[b[0].kind] ?? 5) || a[1] - b[1])
+    .map(([c]) => c)
 }
 
 
