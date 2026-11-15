@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
-import { toilOverflow, overtimeOverflow, overtimeKeyOf, contractFor, fortnightBalance, spreadShortfall, usualFortnight, canPrefill } from '../timesheetRules.js'
+import { toilOverflow, overtimeOverflow, overtimeKeyOf, contractFor, fortnightBalance, spreadShortfall } from '../timesheetRules.js'
 import { holidaysAmong } from '../publicHolidays.js'
 import { workPatternFor } from '../staffConfig.js'
 import { TOIL_TAKEN, earnsToil, totalOf, toilTakenCheck } from '../timesheetLeave.js'
@@ -429,7 +429,6 @@ export default function Timesheets({ user, onBack }) {
   // not the screen anybody uses.
   const [demo, setDemo] = useState(false)
   const [savedAt, setSavedAt] = useState('')
-  const [prefilled, setPrefilled] = useState(false)
   const [stage, setStage] = useState('entry')
   const [submitted, setSubmitted] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -461,15 +460,6 @@ export default function Timesheets({ user, onBack }) {
         setEntries(draftRes.draft.entries || {})
         setSavedAt(draftRes.draft.savedAt || '')
       }
-      // A fresh timesheet opens with the usual fortnight in (14 Nov 2026).
-      const ordinaryKey = (data.categories || []).find(c => c.kind === 'ordinary')?.key
-      const prefill = leaveByDay => {
-        if (hasDraft || !ordinaryKey || !canPrefill(user?.email)) return
-        const row = usualFortnight({ email: user?.email, days: data.period.days || [], leaveByDay })
-        if (!Object.keys(row).length) return
-        setEntries(prev => (prev[ordinaryKey] ? prev : { ...prev, [ordinaryKey]: row }))
-        setPrefilled(true)
-      }
       setHistory(mineRes.records || [])
 
       fetch(`/api/timesheet/agent?action=callins&periodStart=${data.period.start}`, { headers: authHeaders })
@@ -500,8 +490,7 @@ export default function Timesheets({ user, onBack }) {
           setLeaveDays(d.days || {})
           if (d.leave) setPeriodLeave(d.leave)
           setToilRoom(d.toil || null)
-          prefill(d.leave?.byDay || {})
-        }).catch(() => prefill({}))
+        }).catch(() => {})
     } catch (err) {
       setError(err.message)
     }
@@ -803,6 +792,8 @@ export default function Timesheets({ user, onBack }) {
 
   // ── Entry grid ───────────────────────────────────────────
   const weekDays = days.slice(activeWeek * 7, activeWeek * 7 + 7)
+  // Leave rows sit straight after the last ordinary-hours row.
+  const lastOrdinaryIndex = Math.max(0, categories.map(c => c.kind).lastIndexOf('ordinary'))
   // A logged call-in is shown only while it is on the grid: one somebody took
   // off stays off, and is not offered again either.
   const visibleCallIns = callIns.filter(c => !dismissedCallIns.includes(c.id)
@@ -812,7 +803,7 @@ export default function Timesheets({ user, onBack }) {
   const hasToniSplit = categories.some(c => c.key === 'ordinary_toni_admin') && categories.some(c => c.key === 'ordinary_toni_scientific')
 
   return (
-    <Page style={{ paddingBottom: 130 }}>
+    <Page>
       <Header
         eyebrow="Pay and time"
         title="Timesheet"
@@ -897,12 +888,7 @@ export default function Timesheets({ user, onBack }) {
           </div>
         )}
 
-        {prefilled && (
-          <div data-prefilled style={{ background: 'rgba(24,154,133,0.08)', color: NAVY, borderRadius: 10, padding: '10px 12px', fontSize: 14, lineHeight: 1.45, marginBottom: 12 }}>
-            Your usual fortnight is filled in{Object.keys(holidays).length ? ` (public holiday${Object.keys(holidays).length > 1 ? 's' : ''} at your usual hours)` : ''}. Change any day that was different, then Submit.
-          </div>
-        )}
-        {!prefilled && Object.keys(holidays).length > 0 && (
+        {Object.keys(holidays).length > 0 && (
           <div data-holiday-note style={{ background: 'rgba(24,154,133,0.08)', color: NAVY, borderRadius: 10, padding: '10px 12px', fontSize: 14, lineHeight: 1.45, marginBottom: 12 }}>
             {Object.entries(holidays).map(([d, n]) => `${n} (${dayNumber(d)})`).join(', ')} — a public holiday: enter your usual hours for the day if you normally work it.
           </div>
@@ -1041,8 +1027,9 @@ export default function Timesheets({ user, onBack }) {
             ))}
           </div>
 
-          {categories.map(cat => (
-            <div key={cat.key} style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
+          {categories.map((cat, catIndex) => (
+            <React.Fragment key={cat.key}>
+            <div style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: NAVY, lineHeight: 1.2, paddingRight: 4 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 4, background: COLOURS[cat.colour] || NAVY, flexShrink: 0 }} />
                 {cat.label}
@@ -1099,10 +1086,11 @@ export default function Timesheets({ user, onBack }) {
                 )
               })}
             </div>
-          ))}
-
-          {/* Leave on these days, as rows (Brent, 12 Nov 2026): read only —
-              it is leave, sent to Xero as leave, never on the timesheet. */}
+            {/* Leave on these days, right under the hours it stands in for
+                (Brent, 15 Nov 2026: it was below the fold, under the total
+                bar). Read only — sent to Xero as leave, never on the timesheet. */}
+            {catIndex === lastOrdinaryIndex && (
+              <>
           {(periodLeave.rows || []).map(row => (
             <div key={row.type} data-leave-row={row.type} style={{ display: 'grid', gridTemplateColumns: '104px repeat(7, 1fr)', gap: 3, marginBottom: 3 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: NAVY, lineHeight: 1.2, paddingRight: 4 }}>
@@ -1121,6 +1109,10 @@ export default function Timesheets({ user, onBack }) {
                 )
               })}
             </div>
+          ))}
+              </>
+            )}
+            </React.Fragment>
           ))}
 
           {/* TOIL taken (Brent, 12 Nov 2026): typed like ordinary hours, by
@@ -1171,8 +1163,11 @@ export default function Timesheets({ user, onBack }) {
         </button>
       </div>
 
-      {/* Running total bar, above the app's bottom nav */}
-      <div className="tm-fixed" style={{ position: 'fixed', bottom: 'calc(70px + env(safe-area-inset-bottom, 0px))', background: NAVY, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 90 }}>
+      {/* Running total bar. Sticky to the bottom of the page's own scroll
+          area, not fixed 70px up the screen (Brent, 15 Nov 2026: it sat over
+          the leave row) — a fixed bar guessed where the tab bar was, and on a
+          desktop or an installed iPhone it guessed wrong. */}
+      <div data-total-bar style={{ position: 'sticky', bottom: 0, marginTop: 12, background: NAVY, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 5 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Fortnight total</div>
           <div style={{ fontSize: 19, fontWeight: 700, color: 'white', lineHeight: 1.15 }}>

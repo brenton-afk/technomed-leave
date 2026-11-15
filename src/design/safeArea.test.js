@@ -97,9 +97,11 @@ describe('full-screen overlays', () => {
     expect(camera).toMatch(/env\(safe-area-inset-top/)
   })
 
-  it('the timesheet bar sits above a tab bar that has grown', () => {
+  it('the timesheet total bar is sticky in the page, never fixed over the grid (15 Nov 2026)', () => {
+    // A fixed bar guessed the tab bar's height and sat over the leave row.
     const timesheets = read('src/pages/Timesheets.jsx')
-    expect(timesheets).toMatch(/bottom: 'calc\(70px \+ env\(safe-area-inset-bottom/)
+    expect(timesheets).toMatch(/data-total-bar style=\{\{ position: 'sticky', bottom: 0/)
+    expect(timesheets).not.toMatch(/bottom: 'calc\(70px/)
   })
 })
 

@@ -2053,18 +2053,21 @@ director by title only): ordinary, double time, TOIL, call-in, on-call. April
 timesheet. **A call-in is $250 however long** — the "how long were you there /
 double time past five hours" step is gone.
 **Public holidays** (`src/publicHolidays.js`, Hobart's, computed; `EXTRA` for
-one-offs): paid at the usual hours, no special rate — pre-filled for anyone
-with a usual week and marked "Public hol." on the grid. **On call runs through
+one-offs): paid at the usual hours, no special rate — staff enter them; marked
+"Public hol." on the grid. **On call runs through
 them** (`weekendHours`): from 17:00 the last working day before a run of days
 off to 07:00 the first working day after — a long weekend to Tuesday 07:00,
 Easter Thursday evening to Tuesday morning, a midweek holiday 7 + 24 + 7.
-**Pre-filled** (`usualFortnight` / `canPrefill`): a timesheet with no draft
-opens with the usual fortnight (Toni's days, 7.6 a weekday for the full-timers)
-less leave; not Erin (days change) or April (casual).
+**No pre-fill** (Brent, 15 Nov 2026: "staff will be changing every day anyway"): a new timesheet opens empty; a public holiday in the fortnight is named in a note and marked on the grid.
 **Erin's approvals**: each waiting timesheet shows chips (`flagsFor` in
 `src/timesheetFlags.js`: overtime to decide, TOIL banked/taken, call-ins, on
 call, leave, leave not in Xero, warnings) or "Nothing unusual"; **Approve all**
 approves every one without an overtime decision (`needsDecision`).
+**The grid's leave rows sit under Ordinary Hours, and the total bar is
+sticky** (Brent, 15 Nov 2026: the leave was hidden under the bar). The
+fortnight-total bar is `position: sticky; bottom: 0` inside the page
+(`data-total-bar`), never `fixed` at a guessed 70px over the tab bar;
+`safeArea.test.js` holds it.
 **Read-only Xero check** (`api/_payrollCheck.js`): earnings rates, leave types
 and each person's pay template against their contract (`comparePerson` —
 missing items, extra items, call-in paid by the hour, items Xero will not take

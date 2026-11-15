@@ -22,26 +22,15 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
-describe('the usual fortnight', () => {
-  it('opens a fresh timesheet filled in, with the public holiday marked', async () => {
+describe('no pre-fill (Brent, 15 Nov 2026: hours change every day)', () => {
+  it('opens a fresh timesheet empty, with the public holiday said', async () => {
     user = { name: 'Ben', email: 'ben@technomed.com.au', token: 't', staff: { hasTimesheets: true } }
     cats = [{ key: 'ordinary', kind: 'ordinary', label: 'Ordinary Hours', unit: 'hours', colour: 'navy', earningsRateID: 'r1' }]
     draft = null
     render(<Timesheets user={user} onBack={() => {}} />)
-    await waitFor(() => expect(document.querySelector('[data-prefilled]')).not.toBeNull())
-    expect(document.querySelector('[data-prefilled]').textContent).toMatch(/public holiday/)
-    await waitFor(() => expect(screen.getByText('Week 1 · 38h')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Week 2 · 38h'))
-    expect(document.querySelector('[data-public-holiday="2026-06-08"]')).not.toBeNull()
-  })
-
-  it('does not overwrite a saved draft', async () => {
-    user = { name: 'Ben', email: 'ben@technomed.com.au', token: 't', staff: { hasTimesheets: true } }
-    cats = [{ key: 'ordinary', kind: 'ordinary', label: 'Ordinary Hours', unit: 'hours', colour: 'navy', earningsRateID: 'r1' }]
-    draft = { periodStart: days[0], entries: { ordinary: { [days[0]]: 3 } } }
-    render(<Timesheets user={user} onBack={() => {}} />)
-    await waitFor(() => expect(screen.getByText('Week 1 · 3h')).toBeInTheDocument())
-    expect(document.querySelector('[data-prefilled]')).toBeNull()
+    await waitFor(() => expect(document.querySelector('[data-holiday-note]')).not.toBeNull())
+    expect(document.querySelector('[data-holiday-note]').textContent).toMatch(/King's Birthday/)
+    expect(screen.getByText('Week 1 · 0h')).toBeInTheDocument()
   })
 })
 
