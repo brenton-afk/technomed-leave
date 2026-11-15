@@ -308,7 +308,13 @@ export default function Agenda({ user, onClose, today }) {
   }
 
   const load = useCallback(async () => {
-    try { setData(await call('agenda', 'GET')); setError('') } catch (err) { setError(err.message) }
+    try {
+      const d = await call('agenda', 'GET')
+      // Known the moment it arrives, not after the next render: a tap in that
+      // gap saved against no agenda at version 0 (the flaky Agenda test).
+      if (d?.agenda) latest.current = d.agenda
+      setData(d); setError('')
+    } catch (err) { setError(err.message) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token])
   useEffect(() => { load() }, [load])
