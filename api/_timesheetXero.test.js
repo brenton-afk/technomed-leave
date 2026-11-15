@@ -60,3 +60,4 @@ describe('a pay item Xero refuses for any reason', () => {
     await expect(postDroppingRefused(post, [lines[1]], cats)).rejects.toThrow(/"Call In Allowance"/)
   })
 })
+

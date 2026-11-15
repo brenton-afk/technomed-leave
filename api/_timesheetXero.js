@@ -200,14 +200,25 @@ export async function submitTimesheetToXero({ staffName, start, end, entries, ca
       + 'Ask Brent or Erin to reopen it before resubmitting.')
   }
 
-  const { result, refused } = await postDroppingRefused(sendLines => postTimesheet(buildTimesheetPayload({
-    employeeID: employee.EmployeeID,
-    timesheetID: already?.TimesheetID,
-    start,
-    end,
-    lines: sendLines,
-    status: 'DRAFT'
-  })), lines, categories)
+  let posted
+  try {
+    posted = await postDroppingRefused(sendLines => postTimesheet(buildTimesheetPayload({
+      employeeID: employee.EmployeeID,
+      timesheetID: already?.TimesheetID,
+      start,
+      end,
+      lines: sendLines,
+      status: 'DRAFT'
+    })), lines, categories)
+  } catch (err) {
+    // A timesheet the person made themselves in Xero (Xero Me) cannot be
+    // changed by anyone else (Brent's test of Mat's, 15 Nov 2026).
+    if (/employee created timesheets/i.test(err.message)) {
+      throw new Error(`${employee.FirstName} already has a timesheet in Xero for this fortnight that they made themselves, and Xero will not let the portal change it. Delete it in Xero (Payroll → Timesheets), then submit again.`)
+    }
+    throw err
+  }
+  const { result, refused } = posted
   const refusedCats = categories.filter(c => refused.includes(c.earningsRateID))
     .map(c => ({ ...c, timesheetOk: false }))
 
