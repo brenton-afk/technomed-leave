@@ -135,6 +135,22 @@ export default function EditableTray({ tray, onEdit, onDone }) {
         ...text('bodyStrong'), width: '100%', marginTop: space.md, padding: space.md, borderRadius: radius.control,
         border: border.hairline, background: colour.surface, color: colour.ink, cursor: 'pointer'
       }}>Done</button>
+
+      {/* The whole tray off the list (Aimee, 16 Nov 2026: a document loaded
+          into the wrong kit could only be undone a line at a time). The
+          server keeps a copy, so a wrong tap can be put back. */}
+      <button data-delete-tray disabled={busy}
+        onClick={() => {
+          const n = tray.lines.length
+          if (window.confirm(`Delete the whole tray "${tray.name}" (${n} item${n === 1 ? '' : 's'}) from this kit?`)) {
+            run({ op: 'deleteTray', expect: { lines: n } })
+          }
+        }}
+        style={{
+          ...text('bodyStrong'), width: '100%', marginTop: space.sm, padding: space.md, borderRadius: radius.control,
+          border: `1px solid ${colour.danger}`, background: colour.surface, color: colour.danger, cursor: 'pointer',
+          opacity: busy ? 0.6 : 1
+        }}>Delete this tray</button>
     </div>
   )
 }

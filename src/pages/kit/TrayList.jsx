@@ -198,6 +198,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
       if (data.list) setList(data.list)
       if (!res.ok || data.error) throw new Error(data.error || 'Not saved — try again')
       if (body.op === 'rename') { setEditingTray(body.name); setOpen(body.name); onSaved?.() }
+      if (body.op === 'deleteTray') { setEditingTray(''); setOpen(''); onSaved?.() }
     } catch (err) {
       setEditError(err.message)
     }

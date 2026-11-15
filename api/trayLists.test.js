@@ -183,6 +183,33 @@ describe('saving a tray list onto a kit', () => {
     expect((await listKits()).find(k => k.id === kit.id).trays).toContain('Pedicle screws')
   })
 
+  it('deletes a whole tray, keeps a copy, and takes it off the kit (Aimee, 16 Nov 2026)', async () => {
+    // "I accidentally loaded the Ascot into the Athlet tray and there's no way
+    // for me to delete them, I can only … delete individual items."
+    const { listKits, saveTrayList, editTrayList, getTrayList, kitHistory } = await import('./_kits.js')
+    const kit = (await listKits()).find(k => k.system === 'Diplomat')
+    await saveTrayList(kit.id, { trays: [
+      { name: 'Keep', lines: [{ code: 'K-1', description: 'AWL', qty: 1 }] },
+      { name: 'Wrong kit', lines: [{ code: 'W-1', description: 'PLATE', qty: 2, kind: 'implant' }, { code: 'W-2', description: 'DRILL', qty: 1 }] }
+    ] }, 'Aimee')
+    const list = await editTrayList(kit.id, { op: 'deleteTray', tray: 'Wrong kit', expect: { lines: 2 } }, 'Aimee')
+    expect(list.trays.map(t => t.name)).toEqual(['Keep'])
+    expect((await getTrayList(kit.id)).trays.map(t => t.name)).toEqual(['Keep'])
+    expect((await listKits()).find(k => k.id === kit.id).trays).not.toContain('Wrong kit')
+    expect((await kitHistory())[0].text).toMatch(/^Wrong kit — tray deleted \(2 items; kept/)
+    const kept = JSON.parse(lists.get(`kits:list:deleted:${kit.id}`)[0])
+    expect(kept).toMatchObject({ name: 'Wrong kit', deletedBy: 'Aimee' })
+    expect(kept.lines).toHaveLength(2)
+  })
+
+  it('does not delete a tray that changed since it was shown', async () => {
+    const { listKits, saveTrayList, editTrayList, getTrayList } = await import('./_kits.js')
+    const kit = (await listKits())[0]
+    await saveTrayList(kit.id, { trays: [{ name: 'T', lines: [{ code: 'A', description: 'ONE', qty: 1 }] }] }, 'Ben')
+    await expect(editTrayList(kit.id, { op: 'deleteTray', tray: 'T', expect: { lines: 5 } }, 'Mat')).rejects.toMatchObject({ code: 'conflict' })
+    expect((await getTrayList(kit.id)).trays).toHaveLength(1)
+  })
+
   it('refuses a change made against a line somebody else has since changed', async () => {
     const { listKits, saveTrayList, editTrayList } = await import('./_kits.js')
     const kit = (await listKits())[0]

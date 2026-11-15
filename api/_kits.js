@@ -578,6 +578,8 @@ export async function editTrayList(kitId, change, by) {
   throw new Error('Someone else is saving this tray list — try again in a moment')
 }
 
+const DELETED_TRAYS = kitId => `kits:list:deleted:${kitId}`
+
 async function editTrayListNow(kitId, { op, tray, index, line, expect, name }, by) {
   const list = await getTrayList(kitId)
   if (!list) throw new Error('This kit has no tray list yet')
@@ -628,6 +630,26 @@ async function editTrayListNow(kitId, { op, tray, index, line, expect, name }, b
       if (loc?.trays?.length) await setLoc(kitId, { ...loc, trays: loc.trays.map(n => (n === from ? to : n)) })
     }
     note = `tray renamed ${from} → ${to}`
+  } else if (op === 'deleteTray') {
+    // A whole tray off the list (Aimee, 16 Nov 2026: "I accidentally loaded
+    // the Ascot into the Athlet tray and there's no way for me to delete
+    // them"). The tray is kept, whole, in kits:list:deleted:{kit} and its
+    // lines in the history, so a wrong tap can be put back.
+    if (Number(expect?.lines) !== t.lines.length) throw stale()
+    list.trays = list.trays.filter(x => x !== t)
+    // "From …" names only the documents still behind the list.
+    if (list.source && t.file) list.source.file = [...new Set(list.trays.map(x => x.file).filter(Boolean))].join(', ')
+    await redis('lpush', DELETED_TRAYS(kitId), JSON.stringify({ ...t, deletedBy: by, deletedAt: new Date().toISOString() })).catch(() => {})
+    await redis('ltrim', DELETED_TRAYS(kitId), '0', '49').catch(() => {})
+    if (kit) {
+      await redisSetBody(DEFS, JSON.stringify(defs.map(k => (k.id === kitId
+        ? { ...k, trays: (k.trays || []).filter(n => n !== t.name) } : k))))
+      const loc = await getLoc(kitId)
+      if (loc?.trays?.length) await setLoc(kitId, { ...loc, trays: loc.trays.filter(n => n !== t.name) })
+    }
+    await redisSetBody(LIST(kitId), JSON.stringify(list))
+    await addHistory({ kind: 'edit', kitId, kitName: kit?.name || kitId, by, text: `${t.name} — tray deleted (${t.lines.length} item${t.lines.length === 1 ? '' : 's'}; kept, can be put back)` })
+    return list
   } else {
     throw new Error('Unknown change')
   }

@@ -1166,7 +1166,12 @@ including two in one upload, gets a number — "Tray 1 (2)".
 
 **A saved tray list is live, not read-only.** Anyone signed in can edit a tray
 (`kit/EditableTray.jsx`): quantity steppers, code, description, implant or
-instrument, add and remove lines, rename. Each change is one call to
+instrument, add and remove lines, rename, and **Delete this tray** (Aimee,
+16 Nov 2026: Ascot loaded into the Athlet kit could only be removed line by
+line) — `op: 'deleteTray'` with `expect: { lines }` (409 if the tray changed
+since it was shown), asked first; the tray comes off the list, the kit's tray
+names and its location, the whole tray is kept in `kits:list:deleted:{kit}`
+(last 50) and the history says so, so a wrong tap can be put back. Each change is one call to
 `guides.js?kits=editlist` → `editTrayList` (set | add | remove | rename), sent
 with the line it was made against; if that line has changed meanwhile it is a
 409 with the current list. Every change is in `kits:history` with who made it,

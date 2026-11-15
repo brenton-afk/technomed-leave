@@ -64,3 +64,48 @@ describe('tray lists from several files', () => {
     expect(post.mock.calls[0][1].mode).toBe('replace')
   })
 })
+
+describe('deleting a whole tray (Aimee, 16 Nov 2026)', () => {
+  it('asks first, sends the delete with the tray as it was shown, and the tray goes', async () => {
+    const calls = []
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url)
+      if (u.includes('kits=traylist')) {
+        return reply({ list: { trays: [
+          { name: 'Keep', lines: [{ code: 'K', description: 'AWL', qty: 1, kind: 'instrument' }] },
+          { name: 'Wrong kit', lines: [{ code: 'W1', description: 'PLATE', qty: 2, kind: 'implant' }, { code: 'W2', description: 'DRILL', qty: 1, kind: 'instrument' }] }
+        ], source: {} } })
+      }
+      if (u.includes('kits=editlist')) {
+        calls.push(JSON.parse(init.body))
+        return reply({ list: { trays: [{ name: 'Keep', lines: [{ code: 'K', description: 'AWL', qty: 1, kind: 'instrument' }] }], source: {} } })
+      }
+      return reply({})
+    })
+    window.confirm = vi.fn(() => true)
+    render(<TrayList kit={kit} canEdit user={{ token: 't' }} post={vi.fn()} />)
+    await screen.findByText('Wrong kit')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Wrong kit' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete this tray' }))
+    expect(window.confirm).toHaveBeenCalledWith('Delete the whole tray "Wrong kit" (2 items) from this kit?')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toMatchObject({ kitId: 'k1', op: 'deleteTray', tray: 'Wrong kit', expect: { lines: 2 } })
+    await waitFor(() => expect(screen.queryByText('Wrong kit')).not.toBeInTheDocument())
+    expect(screen.getByText('Keep')).toBeInTheDocument()
+  })
+
+  it('does nothing when the question is answered no', async () => {
+    const calls = []
+    global.fetch = vi.fn(async (url, init) => {
+      if (String(url).includes('kits=editlist')) calls.push(init)
+      return reply({ list: { trays: [{ name: 'Only', lines: [{ code: 'A', description: 'B', qty: 1, kind: 'instrument' }] }], source: {} } })
+    })
+    window.confirm = vi.fn(() => false)
+    render(<TrayList kit={kit} canEdit user={{ token: 't' }} post={vi.fn()} />)
+    await screen.findByText('Only')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Only' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete this tray' }))
+    expect(calls).toHaveLength(0)
+    expect(screen.getByText('Only')).toBeInTheDocument()
+  })
+})
