@@ -964,11 +964,8 @@ export default function Timesheets({ user, onBack }) {
             a rotation worked out from a start date. Offered and not filled
             in: the person filing is the one who knows whether it was really
             them. */}
-        {onCallCategory && onCall?.offered && (
-          <div data-on-call-auto style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8, fontSize: 12.5, color: NAVY, lineHeight: 1.45 }}>
-            🌙 On call this fortnight: <strong>{onCall.hours} hours</strong> from the roster — 17:00 before each weekend or public holiday to 07:00 the next working day. Filled in for you — change the roster on the calendar if it is wrong.
-          </div>
-        )}
+        {/* No on-call note (Brent, 15 Nov 2026): it is automatic — the row on
+            the grid is enough. */}
 
         {callInCategory && visibleCallIns.filter(c => days.indexOf(c.day) >= activeWeek * 7 && days.indexOf(c.day) < activeWeek * 7 + 7).map(c => (
           <div key={c.id} data-call-in={c.auto ? 'logged' : 'offered'} style={{ background: '#f4eefa', border: '1px solid rgba(142,36,170,0.25)', borderRadius: 10, padding: '11px 13px', marginBottom: 8 }}>
