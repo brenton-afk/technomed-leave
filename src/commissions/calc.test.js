@@ -63,3 +63,16 @@ describe('when commissions are paid', () => {
     expect(nextSalesMonth('2026-11-15')).toBe('2026-10')
   })
 })
+
+describe('a month with only a late correction from a distributor (October 2026)', () => {
+  it('still says that distributor has not invoiced the month', () => {
+    const out = commissionsFor({ salesMonth: '2026-10', rules: DEFAULT_RULES, invoices: [
+      inv('n', 'INV-2033', 'Device Technologies Australia Pty. Ltd.', '2026-11-05', 'SEP 2026 Northstar Rate Adjustment', [l('Commission on September 2026 NORTHSTAR Sales of $15,196.00 @ 25% (less commission already received at 22.5% on INV-2007)', 379.9)])
+    ] })
+    expect(out.missing).toContain('Device Technologies Implants (Mariner, Northstar, Reef TO)')
+    const line = out.people[0].lines.find(x => x.row === 'device_mariner')
+    expect(line.invoices).toEqual([])
+    expect(line.adjustments).toEqual(['INV-2033 (2026-09)'])
+    expect(line.amount).toBe(5.7)
+  })
+})

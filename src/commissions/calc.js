@@ -74,7 +74,7 @@ export function commissionsFor({ salesMonth, invoices, rules, counted = new Set(
   }
 
   const rowById = Object.fromEntries(rows.map(r => [r.id, r]))
-  const missing = rows.filter(r => r.expected && !sources.some(s => s.row === r.id) && people.some(p => p.rates.some(x => x.row === r.id)))
+  const missing = rows.filter(r => r.expected && !sources.some(s => s.row === r.id && !s.adjustment) && people.some(p => p.rates.some(x => x.row === r.id)))
     .map(r => r.label)
 
   const out = people.map(person => {
@@ -85,7 +85,7 @@ export function commissionsFor({ salesMonth, invoices, rules, counted = new Set(
       const base = r2(found.reduce((sum, s) => sum + (rate.base === 'sales' ? (s.sales ?? 0) : s.tm), 0))
       const unknownSales = rate.base === 'sales' && found.some(s => s.sales == null)
       lines.push({
-        row: rate.row, label: rowById[rate.row]?.label || rate.row, invoices: found.map(s => s.invoice),
+        row: rate.row, label: rowById[rate.row]?.label || rate.row, invoices: [...new Set(found.filter(s => !s.adjustment).map(s => s.invoice))],
         adjustments: found.filter(s => s.adjustment).map(s => `${s.invoice} (${s.month})`),
         sales: r2(found.reduce((sum, s) => sum + (s.sales ?? 0), 0)), tm: r2(found.reduce((sum, s) => sum + s.tm, 0)),
         base: rate.base, rate: rate.rate, payItem: rate.payItem, unknownSales: unknownSales || undefined,
