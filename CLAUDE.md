@@ -2049,7 +2049,26 @@ templates down to Ordinary Hours: on-call, call-ins, TOIL and overtime come in
 on the timesheet (on the template they added a second line every pay run —
 Mat's carried a fixed 62h on-call), and commissions only in the monthly
 unscheduled pay run. `comparePerson` now flags any of those still on a
-template, and Ordinary Hours missing from one. Erin: ordinary, time and a
+template, and Ordinary Hours missing from one.
+**From Claude in Chrome's audit of Xero (15 Nov 2026):** rates are matched by
+Xero's **exact names** first (`EXACT_RATE_NAMES` in `_payItems.js`) and
+**archived rates are never used** (an archived "Double time" was 1×, "Call in
+Cranial/Spinal" and "Time off in Lieu (TOIL)" would catch a loose match);
+leave types likewise (`LEAVE_TYPE_NAMES` in `_xeroClient.js`: "Annual Leave",
+not "Annual Leave PT"; "Personal/Carer's Leave"; "TOIL"; archived skipped).
+Toni's TOIL taken goes to "TOIL - Admin" (`toilLeaveType` in staffConfig).
+**Salaried staff** (`salaried`: Ben, Aimee, Mat) never have ordinary hours on
+the Xero timesheet (`buildTimesheetLines({ salaried })`) — they would replace
+the salary line and pay by the hour; with nothing on top of the salary no Xero
+timesheet is made (`xero.skipped`, approval skips Xero), and a leftover Xero
+timesheet for the fortnight is warned about. **Banked TOIL does not reach the
+Xero balance by itself** (every TOIL leave type is no-auto-calc): approval
+records `toilAccrual` (`toilToAccrue`, per Xero leave type) and Admin →
+Timesheets shows **Before you post the pay run** (`PayRunChecklist`): add each
+as a leave accrual on the payslip, then **Added ✓** (`action=toilaccrued`). It
+also says when a **draft pay run already existed** at approval
+(`draftPayRunFor`, read-only) — Xero only includes timesheets approved before
+the draft was made. Erin: ordinary, time and a
 half (odd Saturdays), double time, TOIL — 24h a week, days vary, `earnsToil`,
 approves her own. Toni: admin and science ordinary (ad hoc, mostly admin),
 double time, TOIL in either — on "Bank as TOIL" she picks admin or science

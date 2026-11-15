@@ -122,3 +122,18 @@ describe('display order (Brent, 15 Nov 2026)', () => {
     expect(keys).toEqual(['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'])
   })
 })
+
+describe('Xero exact names, archived never (Claude in Chrome audit, 15 Nov 2026)', () => {
+  const r = (id, Name, extra = {}) => ({ EarningsRateID: id, Name, RateType: 'RATEPERUNIT', TypeOfUnits: 'Hours', ...extra })
+  const rates = [
+    r('old-dbl', 'Double time', { CurrentRecord: false }),
+    r('old-cranial', 'Call in Cranial', { CurrentRecord: false }),
+    r('old-toil', 'Time off in Lieu (TOIL)', { CurrentRecord: false }),
+    r('ord', 'Ordinary Hours'), r('dbl', 'Overtime Double Time'), r('toil', 'TOIL Accrued'),
+    r('call', 'Call in', { TypeOfUnits: 'Call ins' }), r('oc', 'On Call Hourly Rate')
+  ]
+  it('picks the current, exactly named rate for every item', () => {
+    const ids = Object.fromEntries(categoriesForStaff(rates, 'ben@technomed.com.au', {}).map(c => [c.key, c.earningsRateID]))
+    expect(ids).toEqual({ ordinary: 'ord', overtime_double: 'dbl', toil_accrued: 'toil', call_in: 'call', on_call: 'oc' })
+  })
+})

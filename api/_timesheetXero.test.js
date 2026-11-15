@@ -31,7 +31,8 @@ describe('pay items Xero will not take on a timesheet', () => {
       { EarningsRateID: 'c', Name: 'Overtime Double Time', RateType: 'MULTIPLE', CurrentRecord: false }
     ]
     const out = Object.fromEntries(catsFor(rates, 'ben@technomed.com.au', { assignedRateIds: ['a', 'b', 'c'] }).map(c => [c.earningsRateID, c.timesheetOk]))
-    expect(out).toEqual({ a: true, b: false, c: false })
+    // An archived rate is not offered at all (15 Nov 2026), so c is missing.
+    expect(out).toEqual({ a: true, b: false })
   })
 })
 
@@ -61,3 +62,30 @@ describe('a pay item Xero refuses for any reason', () => {
   })
 })
 
+
+import { buildTimesheetLines } from './_timesheetXero.js'
+
+describe('salaried staff (15 Nov 2026)', () => {
+  const cats = [
+    { key: 'ordinary', kind: 'ordinary', earningsRateID: 'ord' },
+    { key: 'toil_accrued', kind: 'toil', earningsRateID: 'toil' },
+    { key: 'on_call', kind: 'allowance', earningsRateID: 'oc' }
+  ]
+  const days = ['2026-11-16', '2026-11-17']
+  const entries = { ordinary: { '2026-11-16': 8 }, toil_accrued: { '2026-11-17': 2 }, on_call: { '2026-11-17': 7 } }
+  it('sends only what is on top of the salary', () => {
+    expect(buildTimesheetLines(entries, cats, days, { salaried: true }).map(l => l.EarningsRateID)).toEqual(['toil', 'oc'])
+    expect(buildTimesheetLines(entries, cats, days).map(l => l.EarningsRateID)).toEqual(['ord', 'toil', 'oc'])
+  })
+})
+
+import { toilToAccrue } from './_timesheetXero.js'
+
+describe('banked TOIL to add in the pay run (15 Nov 2026)', () => {
+  it('totals each TOIL pay item against its Xero leave type', () => {
+    expect(toilToAccrue({ toil_accrued: { a: 2, b: 1 }, ordinary: { a: 8 } })).toEqual([{ leaveType: 'TOIL', hours: 3 }])
+    expect(toilToAccrue({ toil_toni_admin: { a: 1.5 }, toil_toni_scientific: { b: 0.5 } }))
+      .toEqual([{ leaveType: 'TOIL - Admin', hours: 1.5 }, { leaveType: 'TOIL - Science', hours: 0.5 }])
+    expect(toilToAccrue({ ordinary: { a: 8 } })).toEqual([])
+  })
+})

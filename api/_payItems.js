@@ -17,6 +17,22 @@ const XERO_API_BASE = 'https://api.xero.com/payroll.xro/1.0'
 // what is a business question and it is answered in one reviewable table, in
 // src/payOptions.js, rather than as onlyFor/notFor flags buried in a list of
 // regular expressions where nobody could check the policy.
+// The names in TechnoMed's Xero (Claude in Chrome's audit, 15 Nov 2026). Tried
+// before the patterns below, so a near-duplicate never wins over the real one.
+export const EXACT_RATE_NAMES = {
+  ordinary: 'Ordinary Hours',
+  ordinary_toni_admin: 'Ordinary Hours - Toni Admin',
+  ordinary_toni_scientific: 'Ordinary Hours - Toni Scientific',
+  overtime_1_5: 'Overtime 1.5',
+  overtime_double: 'Overtime Double Time',
+  toil_accrued: 'TOIL Accrued',
+  toil_toni_admin: 'TOIL Admin Accrued',
+  toil_toni_scientific: 'TOIL Science Accrued',
+  call_in: 'Call in',
+  on_call: 'On Call Hourly Rate'
+}
+const plainRate = n => String(n || '').toLowerCase().replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim()
+
 export const CATEGORY_RULES = [
   { key: 'ordinary_toni_admin', pattern: /ordinary.*toni.*admin/i, label: 'Ordinary — Admin', kind: 'ordinary', unit: 'hours', colour: 'navy' },
   { key: 'ordinary_toni_scientific', pattern: /ordinary.*toni.*scientific/i, label: 'Ordinary — Scientific', kind: 'ordinary', unit: 'hours', colour: 'blue' },
@@ -151,7 +167,11 @@ export async function fetchEarningsRates() {
 export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {}) {
   // Taken out once, here, so neither the recognised pass nor the catch-all
   // below can let one through.
+  // Archived rates never (Claude in Chrome's audit, 15 Nov 2026: an archived
+  // "Double time" at 1×, "Call in Cranial/Spinal", "Time off in Lieu (TOIL)"
+  // would otherwise catch a loose name match and underpay).
   const earningsRates = (allRates || []).filter(enterableOnATimesheet)
+    .filter(r => (r?.CurrentRecord ?? r?.currentRecord) !== false)
   const email = String(staffEmail || '').toLowerCase()
   const seen = new Set()
   const categories = []
@@ -190,7 +210,13 @@ export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {
     // Call-ins only for April, Ben, Mat and Aimee (14 Nov 2026).
     if (rule.key === 'call_in' && !paysCallIns(email)) continue
 
-    const match = earningsRates.find(r => {
+    // Xero's exact name first; the pattern only when no rate has it.
+    const exactName = plainRate(EXACT_RATE_NAMES[rule.key])
+    const candidates = exactName
+      ? [...earningsRates.filter(r => plainRate(r.Name || r.name) === exactName),
+        ...earningsRates.filter(r => plainRate(r.Name || r.name) !== exactName)]
+      : earningsRates
+    const match = candidates.find(r => {
       const id = r.EarningsRateID || r.earningsRateID
       if (seen.has(id)) return false
       // When Xero has told us what this person is assigned, that decides it.

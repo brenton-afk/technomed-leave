@@ -17,9 +17,14 @@ export function unitsForCategory(entries, days) {
 }
 
 // entries: { [categoryKey]: { [dateStr]: hours } }
-export function buildTimesheetLines(entries, categories, days) {
+export function buildTimesheetLines(entries, categories, days, { salaried = false } = {}) {
   const lines = []
   for (const category of categories) {
+    // A salaried person's ordinary hours stay in the portal (Claude in Chrome's
+    // audit, 15 Nov 2026): on the Xero timesheet they would replace the salary
+    // line and pay the hours at an hourly rate. Only what is on top of the
+    // salary — TOIL, overtime, call-ins, on-call — is sent.
+    if (salaried && category.kind === 'ordinary') continue
     // A pay item Xero will not take on a timesheet goes in the pay run instead
     // (see timesheetOk in _payItems.js and notOnTimesheet below).
     if (category.timesheetOk === false) continue
@@ -176,11 +181,21 @@ function xeroDateToIso(value) {
   return String(value || '').slice(0, 10)
 }
 
-export async function submitTimesheetToXero({ staffName, start, end, entries, categories, days }) {
+export async function submitTimesheetToXero({ staffName, start, end, entries, categories, days, salaried = false }) {
   const { token, tenantId } = await getXeroToken()
   const employee = await findEmployee(token, tenantId, staffName)
 
-  const lines = buildTimesheetLines(entries, categories, days)
+  const lines = buildTimesheetLines(entries, categories, days, { salaried })
+  if (lines.length === 0 && salaried) {
+    // Nothing on top of the salary: no Xero timesheet, so the pay run pays
+    // the salary. One already in Xero for the fortnight would replace it.
+    const already = await existingTimesheet(token, tenantId, employee.EmployeeID, start)
+    return {
+      skipped: true, salaried: true, employeeID: employee.EmployeeID,
+      employeeName: `${employee.FirstName} ${employee.LastName}`,
+      existingDraft: already ? { id: already.TimesheetID, status: already.Status } : null
+    }
+  }
   if (lines.length === 0) throw new Error('There are no hours to submit')
 
   // Xero refuses a second timesheet for the same person and fortnight —
@@ -233,19 +248,22 @@ export async function submitTimesheetToXero({ staffName, start, end, entries, ca
     dayCount: days.length,
     // Recorded so a resubmission is distinguishable from a first one when
     // somebody asks later why Xero has a different number.
-    replaced: Boolean(already)
+    replaced: Boolean(already),
+    salaried: Boolean(salaried)
   }
 }
 
 // Admin approval: flips the existing Xero timesheet to APPROVED so it is picked
 // up by the pay run.
 export async function approveTimesheetInXero(record, categories) {
+  // Salaried with nothing on top of the salary: there is no Xero timesheet.
+  if (record.xero?.skipped) return { status: 'NONE', skipped: true }
   if (!record.xero?.timesheetID) {
     throw new Error('This timesheet has no Xero timesheet ID — it was never submitted to Xero')
   }
   const days = record.days || []
   const skip = new Set(record.xero?.refusedRateIds || [])
-  const lines = buildTimesheetLines(record.entries, categories, days).filter(l => !skip.has(l.EarningsRateID))
+  const lines = buildTimesheetLines(record.entries, categories, days, { salaried: Boolean(record.xero?.salaried) }).filter(l => !skip.has(l.EarningsRateID))
   const { result } = await postDroppingRefused(sendLines => postTimesheet(buildTimesheetPayload({
     employeeID: record.xero.employeeID,
     timesheetID: record.xero.timesheetID,
@@ -258,3 +276,41 @@ export async function approveTimesheetInXero(record, categories) {
 }
 
 export { FORTNIGHT_DAYS }
+
+// ─── The pay run and banked TOIL (Claude in Chrome's audit, 15 Nov 2026) ──────
+// "A draft pay run only picks up timesheets approved before it was created",
+// and "the TOIL … Accrued timesheet lines pay $0 but don't add to the TOIL
+// leave balance" — every TOIL leave type is set to no automatic calculation.
+// So on approval the portal says whether a draft pay run already exists, and
+// lists the banked hours as a leave accrual for Erin to add to the payslip.
+
+/** The draft pay run covering a period, or null. Read only. */
+export async function draftPayRunFor(periodStart) {
+  try {
+    const { token, tenantId } = await getXeroToken()
+    const res = await fetch(`${XERO_API_BASE}/PayRuns?where=${encodeURIComponent('PayRunStatus=="DRAFT"')}`, {
+      headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' }
+    })
+    const { ok, data } = await readXero(res, 'Xero pay runs')
+    if (!ok) return null
+    const runs = Array.isArray(data) ? data : data.PayRuns || []
+    const run = runs.find(r => String(r.PayRunStatus || '').toUpperCase() === 'DRAFT'
+      && xeroDateToIso(r.PayRunPeriodStartDate) === String(periodStart).slice(0, 10))
+    return run ? { id: run.PayRunID, paymentDate: xeroDateToIso(run.PaymentDate) } : null
+  } catch {
+    return null
+  }
+}
+
+/** Xero's TOIL leave type for each TOIL pay item. */
+export const TOIL_LEAVE_FOR = { toil_accrued: 'TOIL', toil_toni_admin: 'TOIL - Admin', toil_toni_scientific: 'TOIL - Science' }
+
+/** Banked TOIL on an approved timesheet, per Xero leave type: [{ leaveType, hours }]. Pure. */
+export function toilToAccrue(entries) {
+  const out = []
+  for (const [key, leaveType] of Object.entries(TOIL_LEAVE_FOR)) {
+    const hours = Math.round(Object.values(entries?.[key] || {}).reduce((s, v) => s + Number(v || 0), 0) * 100) / 100
+    if (hours > 0) out.push({ leaveType, hours })
+  }
+  return out
+}

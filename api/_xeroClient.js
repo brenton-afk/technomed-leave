@@ -274,7 +274,14 @@ export async function listLeaveTypes(token, tenantId) {
 
 // Resolves an internal leave type to a Xero LeaveTypeID by matching on name,
 // so TOIL and any future type work without hardcoded UUIDs.
-export async function getLeaveTypeId(token, tenantId, leaveType) {
+// Xero's exact names (Claude in Chrome's audit, 15 Nov 2026). A loose match
+// found "Annual Leave PT" before "Annual Leave"; the exact name is tried first,
+// archived types never.
+export const LEAVE_TYPE_NAMES = { ANNUAL_LEAVE: 'Annual Leave', SICK: "Personal/Carer's Leave", TOIL: 'TOIL' }
+const plainName = n => String(n || '').toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim()
+const isCurrent = t => (t?.CurrentRecord ?? t?.currentRecord) !== false
+
+export async function getLeaveTypeId(token, tenantId, leaveType, { exactName } = {}) {
   const pattern = LEAVE_TYPE_PATTERNS[leaveType]
   if (!pattern) throw new Error(`Unknown leave type "${leaveType}"`)
 
@@ -288,7 +295,12 @@ export async function getLeaveTypeId(token, tenantId, leaveType) {
     throw err
   }
 
-  const match = leaveTypes.find(lt => pattern.test(lt.Name || ''))
+  const current = leaveTypes.filter(isCurrent)
+  const wanted = plainName(exactName || LEAVE_TYPE_NAMES[leaveType])
+  const exact = current.find(lt => plainName(lt.Name) === wanted)
+  if (exact) return exact.LeaveTypeID
+  if (exactName) throw new Error(`No Xero leave type called "${exactName}"`)
+  const match = current.find(lt => pattern.test(lt.Name || ''))
   if (match) return match.LeaveTypeID
 
   const fallback = FALLBACK_LEAVE_TYPE_IDS[leaveType]
@@ -348,10 +360,10 @@ export class XeroLeaveExists extends Error {
   }
 }
 
-export async function submitToXero({ name, startDate, endDate, leaveType, reason, hours }) {
+export async function submitToXero({ name, startDate, endDate, leaveType, leaveTypeName, reason, hours }) {
   const { token, tenantId } = await getXeroToken()
   const employee = await findEmployee(token, tenantId, name)
-  const leaveTypeId = await getLeaveTypeId(token, tenantId, leaveType)
+  const leaveTypeId = await getLeaveTypeId(token, tenantId, leaveType, { exactName: leaveTypeName })
 
   // Exact hours per pay period where the portal knows them. The dates sent are
   // the first and last day that carry hours, not the whole range asked for.

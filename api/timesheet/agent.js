@@ -11,7 +11,7 @@ import {
   demoCategories, isDemo
 } from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
-import { submitTimesheetToXero, approveTimesheetInXero, buildTimesheetLines, notOnTimesheet } from '../_timesheetXero.js'
+import { submitTimesheetToXero, approveTimesheetInXero, buildTimesheetLines, notOnTimesheet, draftPayRunFor, toilToAccrue } from '../_timesheetXero.js'
 import {
   getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees,
   overlappingXeroLeave, submitToXero, listLeaveTypes, getEmployee, FALLBACK_LEAVE_TYPE_IDS
@@ -81,6 +81,7 @@ export default async function handler(req, res) {
     if (action === 'leavedays') return await handleLeaveDays(req, res, subject)
     if (action === 'balances') return await handleBalances(req, res, subject)
     if (action === 'toilretry') return await handleToilRetry(req, res)
+    if (action === 'toilaccrued') return await handleToilAccrued(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     console.error(`timesheet/${action} failed:`, err.message)
@@ -347,7 +348,8 @@ async function handleSubmit(req, res, session) {
       dryRun: true,
       staffName: staff.name,
       period: { start: period.start, end: period.end },
-      lines: buildTimesheetLines(entries, categories, period.days).map(l => ({
+      salaried: Boolean(staff.salaried),
+      lines: buildTimesheetLines(entries, categories, period.days, { salaried: Boolean(staff.salaried) }).map(l => ({
         payItem: byId.get(l.EarningsRateID)?.xeroName || byId.get(l.EarningsRateID)?.label || l.EarningsRateID,
         units: l.NumberOfUnits,
         total: Math.round(l.NumberOfUnits.reduce((a, b) => a + b, 0) * 100) / 100
@@ -369,7 +371,8 @@ async function handleSubmit(req, res, session) {
     end: period.end,
     entries,
     categories,
-    days: period.days
+    days: period.days,
+    salaried: Boolean(staff.salaried)
   })
 
   const record = {
@@ -386,6 +389,9 @@ async function handleSubmit(req, res, session) {
       ...(overflow.moved.length ? [`${overflow.excess}h over the ${overflow.limit}h fortnight banked as TOIL`] : []),
       ...(overtimeClaim ? [`${overtimeClaim.hours}h over the ${overtimeClaim.limit}h fortnight claimed as overtime at double time — needs Erin's approval`] : []),
       ...(roster.warning ? [roster.warning] : []),
+      ...(xero.skipped ? [xero.existingDraft
+        ? `Xero already has a ${String(xero.existingDraft.status || 'draft').toLowerCase()} timesheet for ${staff.name} this fortnight — delete it in Xero so the salary is paid as normal`
+        : 'Salaried — nothing on top of the salary this fortnight, so no Xero timesheet was needed'] : []),
       // Kept on the record, not sent: Xero takes these only in the pay run.
       ...(xero.notOnTimesheet || []).map(n => `${n.label}: ${n.total} — Xero cannot take this pay item on a timesheet, so it was not sent; add it in the pay run`),
       ...(overflow.excess > 0 && !overflow.toilKey
@@ -964,6 +970,8 @@ async function sendToilTaken(record, staff) {
     try {
       const result = await submitToXero({
         name: staff.name, startDate: run[0].date, endDate: run[run.length - 1].date, leaveType: 'TOIL',
+        // Toni's TOIL is two balances in Xero (15 Nov 2026); taken from admin.
+        leaveTypeName: staff.toilLeaveType || undefined,
         reason: `TOIL taken on the timesheet for ${record.periodStart} to ${record.periodEnd}`,
         hours: run
       })
@@ -1112,6 +1120,14 @@ async function handleDecide(req, res) {
   // approval: it is said on the timesheet with Try again.
   if (taking > 0) approvedRecord.toilLeave = await sendToilTaken(approvedRecord, staff || { email, name: record.staffName })
 
+  // Banked TOIL does not reach the Xero balance by itself — listed for Erin
+  // to add as a leave accrual on the payslip (Claude in Chrome's audit).
+  const accrue = toilToAccrue(finalEntries)
+  if (accrue.length) approvedRecord.toilAccrual = { lines: accrue, done: false }
+  // A draft pay run made before this approval will not include it.
+  const draft = await draftPayRunFor(record.periodStart)
+  if (draft) approvedRecord.payRunDraft = { ...draft, seenAt: new Date().toISOString() }
+
   await saveTimesheet('submitted', approvedRecord)
   await saveTimesheet('approved', approvedRecord)
 
@@ -1119,6 +1135,20 @@ async function handleDecide(req, res) {
   try { await sendTimesheetDecisionEmail(approvedRecord, 'approved') } catch (err) { emailError = err.message }
 
   return res.status(200).json({ record: approvedRecord, emailError })
+}
+
+/** Erin has added the banked TOIL to the payslip in Xero. */
+async function handleToilAccrued(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
+  const { email, periodStart } = req.body || {}
+  const record = await getTimesheet('approved', email, periodStart)
+  if (!record?.toilAccrual) return res.status(404).json({ error: 'No banked TOIL to mark' })
+  const next = { ...record, toilAccrual: { ...record.toilAccrual, done: true, doneBy: admin.email, doneAt: new Date().toISOString() } }
+  await saveTimesheet('submitted', next)
+  await saveTimesheet('approved', next)
+  return res.status(200).json({ record: next })
 }
 
 export { totals }

@@ -120,6 +120,8 @@ vi.mock('./_payItems.js', () => ({
 vi.mock('./_timesheetXero.js', async importOriginal => ({
   buildTimesheetLines: (await importOriginal()).buildTimesheetLines,
   notOnTimesheet: (await importOriginal()).notOnTimesheet,
+  toilToAccrue: (await importOriginal()).toilToAccrue,
+  draftPayRunFor: vi.fn(async () => null),
   submitTimesheetToXero: vi.fn(async args => { xeroCalls.timesheets.push(args); return { timesheetID: 'ts1', status: 'DRAFT' } }),
   approveTimesheetInXero: vi.fn(async () => ({ status: 'APPROVED' }))
 }))
@@ -222,12 +224,16 @@ describe('submitting and approving', () => {
 describe('"Try it as…" (Brent, 15 Nov 2026)', () => {
   it('lets an admin dry-run someone else\'s timesheet — nothing sent, nothing saved', async () => {
     who = { email: 'brenton@technomed.com.au', name: 'Brenton Lovering' }
-    const res = await call('submit', 'POST', { ...fortnight(), as: 'ben@technomed.com.au', dryRun: true })
+    const res = await call('submit', 'POST', { ...fortnight(), as: 'april@technomed.com.au', dryRun: true })
     expect(res.statusCode).toBe(200)
     expect(res.payload.error).toBeUndefined()
     expect(res.payload.dryRun).toBe(true)
-    expect(res.payload.staffName).toBe('Ben Cassidy')
+    expect(res.payload.staffName).toBe('April Foale')
     expect(res.payload.lines[0].total).toBe(76)
+    // Ben is salaried: his ordinary hours stay off the Xero timesheet.
+    const ben = await call('submit', 'POST', { ...fortnight(), as: 'ben@technomed.com.au', dryRun: true })
+    expect(ben.payload.salaried).toBe(true)
+    expect(ben.payload.lines).toEqual([])
     expect(xeroCalls.timesheets).toHaveLength(0)
     expect(store.timesheets.size).toBe(0)
   })

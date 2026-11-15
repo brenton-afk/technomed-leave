@@ -88,6 +88,39 @@ function XeroSetupCheck({ authHeaders }) {
 }
 
 /**
+ * Before the pay run (Claude in Chrome's audit, 15 Nov 2026): Xero does not
+ * add banked TOIL to the balance by itself, and a draft pay run made before a
+ * timesheet was approved does not include it. Both are listed here for Erin.
+ */
+function PayRunChecklist({ approved, busy, onDone }) {
+  const accruals = approved.filter(r => r.toilAccrual && !r.toilAccrual.done)
+  const late = approved.filter(r => r.payRunDraft && !r.payRunDraft.dismissed)
+  if (!accruals.length && !late.length) return null
+  return (
+    <div data-pay-run-checklist style={{ background: '#fff8e6', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 12, padding: '11px 13px', marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#8a5a00', marginBottom: 6 }}>Before you post the pay run in Xero</div>
+      {late.length > 0 && (
+        <div style={{ fontSize: 12.5, color: '#8a5a00', lineHeight: 1.45, marginBottom: 8 }}>
+          A draft pay run already existed when {late.map(r => r.staffName.split(' ')[0]).join(', ')}{late.length === 1 ? '\'s timesheet was' : '\'s timesheets were'} approved, so it won't include {late.length === 1 ? 'it' : 'them'}.
+          In Xero, delete the draft pay run and create it again (or add the lines to the payslip by hand).
+        </div>
+      )}
+      {accruals.map(r => (
+        <div key={`${r.email}-${r.periodStart}`} data-toil-accrual style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: NAVY, padding: '6px 0', borderTop: '1px solid rgba(245,158,11,0.25)' }}>
+          <div style={{ flex: 1, lineHeight: 1.45 }}>
+            <strong>{r.staffName}</strong> banked {r.toilAccrual.lines.map(l => `${l.hours}h (${l.leaveType})`).join(' and ')} — on their payslip in the pay run, add a leave accrual of that many hours to that TOIL leave type.
+          </div>
+          <button onClick={() => onDone(r)} disabled={busy}
+            style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: TEAL, color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+            Added ✓
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
  * Overtime claimed at double time (Brent, 14 Nov 2026): Erin approves it, or
  * banks the same hours as TOIL instead. Chosen before Approve.
  */
@@ -283,6 +316,19 @@ export default function TimesheetApprovals({ user }) {
       )}
 
       <XeroSetupCheck authHeaders={authHeaders} />
+      <PayRunChecklist approved={data.approved || []} busy={busy === 'accrual'} onDone={async record => {
+        setBusy('accrual'); setError('')
+        try {
+          const res = await fetch('/api/timesheet/agent?action=toilaccrued', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({ email: record.email, periodStart: record.periodStart })
+          })
+          const body = await res.json()
+          if (body.error) throw new Error(body.error)
+          await load()
+        } catch (err) { setError(err.message) }
+        setBusy('')
+      }} />
 
       {/* "Try it as…" (Brent, 15 Nov 2026): open anyone's timesheet exactly as
           they see it — dry run, or file it for them. */}
