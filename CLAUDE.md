@@ -972,6 +972,16 @@ Meeting tab is one compact list (Live meeting, Next meeting agenda, Report
 since a meeting — `data-meeting-links`). The Suggested box draws nothing when
 nothing is waiting.
 
+**Admin is a hub** (Brent, 15 Nov 2026: "admin button at the top right and
+admin portal as another option … all the little buttons … stuck at the top").
+Me has one way in — the **Admin** row under Administration, never a quick
+tile. `AdminPortal` opens on grouped `NavGroup`s (Approvals: Leave with the
+pending count, Timesheets, TOIL · Money: Invoices & quotes, Commissions ·
+Email: Supplier notices, Sent email · People and system: Staff PINs, System);
+a section has Shell's `Header` with a back arrow to the hub, the hub's goes
+back to Me (`onExit`). `/?go=approvals` lands on Leave (`sub: 'leave'` →
+`section`); Dropbox's return lands on System. The chip row is gone.
+
 **Timesheets on Me only for people who file one** (Brent, 12 Nov 2026: "I
 don't need it") — `hasTimesheets` in `staffConfig.js`; admins approve them in
 Admin as before.

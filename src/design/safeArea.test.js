@@ -78,11 +78,10 @@ describe('every screen with its own navy header', () => {
   // 56px top padding, which is one particular iPhone's status bar: too much on a
   // desktop, too little on the newest phones. UsageScan left this list on
   // 6 Nov 2026 — it now uses Shell's Header, which carries the inset itself.
-  const bespoke = ['src/pages/admin/AdminPortal.jsx']
-
-  it.each(bespoke)('%s uses the inset rather than a fixed guess', file => {
-    const source = read(file)
-    expect(source).toMatch(/env\(safe-area-inset-top/)
+  // AdminPortal left on 15 Nov 2026 — it is a hub on Shell's Header now.
+  it('Admin uses the shared Header, which carries the inset', () => {
+    const source = read('src/pages/admin/AdminPortal.jsx')
+    expect(source).toMatch(/<Header /)
     expect(source, 'a hardcoded status-bar height').not.toMatch(/paddingTop\s*:\s*56\b/)
   })
 })

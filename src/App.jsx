@@ -186,14 +186,14 @@ export default function App() {
     return () => { live = false }
   }, [user?.token])
   // "/?go=approvals" — the link in the leave email and notification — opens
-  // the admin portal, whose first screen is Leave. Read once and then taken
+  // Admin at its Leave section (Admin opens on a hub since 15 Nov 2026). Read once and then taken
   // off the address, so a reload does not keep landing there.
   const [nav, setNav] = useState(() => {
     try {
       const go = new URLSearchParams(window.location.search).get('go')
       if (go === 'approvals') {
         window.history.replaceState(null, '', window.location.pathname)
-        return { tab: 'admin', sub: null }
+        return { tab: 'admin', sub: 'leave' }
       }
       // The Treasury: "/?go=treasury", back from Xero ("?treasury=…"), or this
       // device set to open there. The server decides whether there is anything
@@ -498,7 +498,7 @@ export default function App() {
       }
     }
 
-    if (tab === 'admin') return <AdminPortal user={user} />
+    if (tab === 'admin') return <AdminPortal user={user} section={nav.sub} onExit={() => navigate({ tab: 'me', sub: null })} />
 
     return null
   }

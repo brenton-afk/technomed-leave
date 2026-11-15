@@ -79,12 +79,12 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, unread = 0
   const go = target => () => onNavigate(target)
 
   // The three most opened, as tiles: Messages and Leave for everyone, then
-  // Timesheets for those who file one, else Admin for an admin, else history.
+  // Timesheets for those who file one, else patient history. Admin is never a
+  // tile — it is one row under Administration (Brent, 15 Nov 2026: "I have
+  // admin button at the top right and admin portal as another option").
   const third = hasTimesheets
     ? { icon: IconClock, tint: 'ocean', label: 'Timesheets', to: { tab: 'me', sub: 'timesheets' } }
-    : user?.isAdmin
-      ? { icon: IconAdmin, tint: 'navy', label: 'Admin', to: { tab: 'admin', sub: null } }
-      : { icon: IconFile, tint: 'slate', label: 'Patient history', to: { tab: 'me', sub: 'patient' } }
+    : { icon: IconFile, tint: 'slate', label: 'Patient history', to: { tab: 'me', sub: 'patient' } }
 
   return (
     <Page>
@@ -100,8 +100,8 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, unread = 0
         {(user?.isAdmin || treasury) && (
           <NavGroup label="Administration" first>
             {user?.isAdmin && (
-              <NavCard icon={IconAdmin} label="Admin portal" tint="navy"
-                detail="Staff, PINs, approvals and system status" onClick={go({ tab: 'admin', sub: null })} />
+              <NavCard icon={IconAdmin} label="Admin" tint="navy"
+                detail="Approvals, invoices, commissions, notices and system" onClick={go({ tab: 'admin', sub: null })} />
             )}
             {/* Only when the server has said this person may see it. */}
             {treasury && (

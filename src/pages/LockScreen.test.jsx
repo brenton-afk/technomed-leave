@@ -72,7 +72,7 @@ describe('opening the admin portal', () => {
     signedIn()
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Me' }))
-    fireEvent.click(screen.getByText('Admin portal'))
+    fireEvent.click(screen.getByText('Approvals, invoices, commissions, notices and system'))
   }
 
   it('goes straight in', async () => {
@@ -86,7 +86,7 @@ describe('opening the admin portal', () => {
     // The prompt was a WebAuthn call. Not reaching for it at all is the
     // difference between "turned off" and "turned off but still asking".
     await goAdmin()
-    await waitFor(() => expect(screen.queryByText('Admin portal')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('Approvals, invoices, commissions, notices and system')).not.toBeInTheDocument())
     expect(authenticate).not.toHaveBeenCalled()
   })
 

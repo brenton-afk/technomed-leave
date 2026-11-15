@@ -8,6 +8,8 @@ import NoticeSettings from './NoticeSettings.jsx'
 import Invoices from './Invoices.jsx'
 import AmendLeave from './AmendLeave.jsx'
 import Commissions from './Commissions.jsx'
+import { Header, Body, NavGroup, NavCard } from '../../design/Shell.jsx'
+import { IconLeave, IconClock, IconWallet, IconChart, IconChat, IconFile, IconLock, IconAdmin } from '../../design/icons.jsx'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -103,7 +105,7 @@ const SECTIONS = [
   ['pins', 'Staff PINs', 'Staff PINs'], ['system', 'System', 'System']
 ]
 
-export default function AdminPortal({ user }) {
+export default function AdminPortal({ user, section, onExit }) {
   const [applications, setApplications] = useState({ pending: [], approved: [], declined: [] })
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('pending')
@@ -124,7 +126,8 @@ export default function AdminPortal({ user }) {
   }, [user?.token])
   const sections = canCommission ? [...SECTIONS.slice(0, 4), ['commissions', 'Commissions', 'Commissions'], ...SECTIONS.slice(4)] : SECTIONS
   const [domain, setDomain] = useState(() => {
-    try { return new URLSearchParams(window.location.search).get('dropbox') ? 'system' : 'leave' } catch { return 'leave' }
+    // null is the hub; Dropbox's return lands straight on System.
+    try { return new URLSearchParams(window.location.search).get('dropbox') ? 'system' : (section || null) } catch { return section || null }
   })
 
   // The admin endpoints authorise on the session token minted at PIN login —
@@ -226,36 +229,49 @@ export default function AdminPortal({ user }) {
   const currentApps = applications[tab] || []
 
   return (
-    <div style={{ minHeight:'100%', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
-      {/* Safe-area inset plus normal spacing. It was a fixed 56px, which is one
-          iPhone's status bar and wrong everywhere else. */}
-      <div style={{ background:'#042746', paddingTop:'calc(env(safe-area-inset-top, 0px) + 20px)', paddingLeft:20, paddingRight:20, paddingBottom:14, overflow:'hidden' }}>
-        {/* One compact header (Brent, 5 Nov 2026: "sloppy at the top with the
-            menu"): the section's own name, not "Leave Applications" on every
-            tab, and the menu as one row that scrolls sideways instead of
-            wrapping into three. */}
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-          <img src="/logo.png" alt="TechnoMed" style={{ height:28, width:'auto' }} />
-          <div style={{ fontSize:10, color:'rgba(255,255,255,0.45)', letterSpacing:'1.5px', textTransform:'uppercase' }}>Admin</div>
-        </div>
-        <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:12 }}>{sections.find(([id]) => id === domain)?.[2] || 'Admin'}</div>
-        <div className="tm-chip-row" style={{ display:'flex', gap:7, overflowX:'auto', flexWrap:'nowrap', margin:'0 -20px', padding:'0 20px 2px', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
-          {sections.map(([id,label]) => (
-            <button key={id} ref={el => { if (el && domain === id) el.scrollIntoView?.({ block:'nearest', inline:'nearest' }) }} onClick={() => setDomain(id)} style={{ flex:'0 0 auto', whiteSpace:'nowrap', padding:'7px 14px', borderRadius:20, border:'none', background: domain===id ? '#189a85' : 'rgba(255,255,255,0.12)', color:'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
-              {label}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: domain === 'leave' ? 'flex' : 'none', gap:8, marginTop:10, overflowX:'auto', flexWrap:'nowrap' }}>
+    <div data-admin style={{ minHeight:'100%', background:'#f0f3f7', fontFamily:'-apple-system,sans-serif' }}>
+      {/* An Admin hub, then one section at a time (Brent, 15 Nov 2026: "all
+          the little buttons … stuck at the top of the screen"). The hub is the
+          portal's own grouped list; a section has the band with a back arrow
+          to the hub. Replaces the row of chips. */}
+      <Header title={domain ? (sections.find(([id]) => id === domain)?.[2] || 'Admin') : 'Admin'}
+        eyebrow={domain ? 'Admin' : undefined}
+        onBack={domain ? () => setDomain(null) : onExit} />
+      {domain === 'leave' && (
+        <div data-leave-tabs style={{ display:'flex', gap:8, padding:'12px 16px 0', overflowX:'auto', flexWrap:'nowrap' }}>
           {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:'7px 14px', borderRadius:20, border:'none', background: tab===t.id ? 'white' : 'rgba(255,255,255,0.12)', color: tab===t.id ? '#042746' : 'white', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:'7px 14px', borderRadius:20, border:'none', background: tab===t.id ? '#042746' : 'rgba(4,39,70,0.07)', color: tab===t.id ? 'white' : '#6b7a8d', fontSize:13, fontWeight:600, cursor:'pointer', flex:'0 0 auto' }}>
               {t.label} {t.count > 0 && `(${t.count})`}
             </button>
           ))}
         </div>
-      </div>
+      )}
+      {!domain && (
+        <Body>
+          <NavGroup label="Approvals" first>
+            <NavCard icon={IconLeave} tint="grape" label="Leave" detail="Applications to approve, decline or amend"
+              badge={applications.pending?.length || undefined} onClick={() => setDomain('leave')} />
+            <NavCard icon={IconClock} tint="ocean" label="Timesheets" detail="Approve, try a timesheet as someone, check Xero setup" onClick={() => setDomain('timesheets')} />
+            <NavCard icon={IconClock} tint="teal" label="TOIL" detail="Balances and the ledger" onClick={() => setDomain('toil')} />
+          </NavGroup>
+          <NavGroup label="Money">
+            <NavCard icon={IconWallet} tint="amber" label="Invoices & quotes" detail="POs, self-funding quotes, supplier quotes, sales reports" onClick={() => setDomain('invoices')} />
+            {canCommission && (
+              <NavCard icon={IconChart} tint="navy" label="Commissions" detail="Worked out from Xero before the 1st of each month" onClick={() => setDomain('commissions')} />
+            )}
+          </NavGroup>
+          <NavGroup label="Email">
+            <NavCard icon={IconChat} tint="sky" label="Supplier notices" detail="Who is told about bookings and loan sets" onClick={() => setDomain('notices')} />
+            <NavCard icon={IconFile} tint="slate" label="Sent email" detail="Every email the portal has sent" onClick={() => setDomain('email')} />
+          </NavGroup>
+          <NavGroup label="People and system">
+            <NavCard icon={IconLock} tint="rose" label="Staff PINs" detail="Reset a PIN" onClick={() => setDomain('pins')} />
+            <NavCard icon={IconAdmin} tint="navy" label="System" detail="Xero, Dropbox and connections" onClick={() => setDomain('system')} />
+          </NavGroup>
+        </Body>
+      )}
 
-      <div style={{ padding:16 }}>
+      {domain && <div style={{ padding:16 }}>
         {domain === 'timesheets' && <TimesheetApprovals user={user} />}
         {domain === 'pins' && <StaffPins user={user} />}
         {domain === 'system' && <SystemStatus user={user} />}
@@ -357,7 +373,7 @@ export default function AdminPortal({ user }) {
           Refresh
         </button>
         </>}
-      </div>
+      </div>}
 
       {amending && (
         <AmendLeave app={amending} authHeaders={authHeaders} onClose={() => setAmending(null)}

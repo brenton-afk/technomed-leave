@@ -56,14 +56,14 @@ describe('bottom navigation', () => {
     signIn(ADMIN)
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Me' }))
-    expect(screen.getByText('Admin portal')).toBeInTheDocument()
+    expect(screen.getByText('Approvals, invoices, commissions, notices and system')).toBeInTheDocument()
   })
 
   it('does not offer the admin portal to anybody else', () => {
     signIn(REP)
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Me' }))
-    expect(screen.queryByText('Admin portal')).not.toBeInTheDocument()
+    expect(screen.queryByText('Approvals, invoices, commissions, notices and system')).not.toBeInTheDocument()
   })
 
   it('opens Messages from Me', async () => {

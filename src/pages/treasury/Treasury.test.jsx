@@ -26,7 +26,7 @@ describe('the card', () => {
   it('appears for someone on the list who is not an admin, too', () => {
     render(<MeHub user={{ ...ERIN, isAdmin: false }} onNavigate={() => {}} onLogout={() => {}} treasury />)
     expect(screen.getByText('Treasury')).toBeInTheDocument()
-    expect(screen.queryByText('Admin portal')).toBeNull()
+    expect(screen.queryByText('Approvals, invoices, commissions, notices and system')).toBeNull()
   })
 })
 
