@@ -314,3 +314,120 @@ export function toilToAccrue(entries) {
   }
   return out
 }
+
+// ─── Banked TOIL onto the draft payslip (Brent's amendment, 15 Nov 2026) ─────
+// "Xero draft payslips have a leave accrual section … for banked TOIL, as well
+// as the $0 TOIL Accrued timesheet line, write a leave accrual line to the
+// employee's payslip in the DRAFT pay run against the matching leave type …
+// After posting, read the balance back and flag any mismatch."
+
+async function xeroCall(method, path, body) {
+  const { token, tenantId } = await getXeroToken()
+  const res = await fetch(`${XERO_API_BASE}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, 'Xero-tenant-id': tenantId, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined
+  })
+  const { ok, data, error } = await readXero(res, `Xero ${path.split('?')[0]}`)
+  if (!ok) throw new Error(error)
+  return data
+}
+
+const plainType = n => String(n || '').toLowerCase().replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim()
+const unitsOf = l => Number(l?.NumberOfUnits ?? 0)
+
+/**
+ * What to post to the payslip's leave accrual lines. Pure. Keeps every line
+ * already there (Xero's own annual and personal accruals) and adds one per
+ * banked TOIL type — unless that type already has a line, which is left alone
+ * and reported (Erin may have added it by hand; adding again would double it).
+ */
+export function accrualLinesFor(existing, wanted) {
+  const lines = (existing || []).map(l => ({ LeaveTypeID: l.LeaveTypeID, NumberOfUnits: unitsOf(l), AutoCalculate: Boolean(l.AutoCalculate) }))
+  const added = []
+  const already = []
+  for (const w of wanted) {
+    const there = lines.find(l => l.LeaveTypeID === w.leaveTypeID)
+    if (there && there.NumberOfUnits > 0) { already.push({ ...w, onPayslip: there.NumberOfUnits }); continue }
+    if (there) { there.NumberOfUnits = w.hours; there.AutoCalculate = false } else lines.push({ LeaveTypeID: w.leaveTypeID, NumberOfUnits: w.hours, AutoCalculate: false })
+    added.push(w)
+  }
+  return { lines, added, already }
+}
+
+/** Current TOIL leave type ids by name. */
+async function toilTypeIds() {
+  const data = await xeroCall('GET', '/LeaveTypes')
+  const types = (data.LeaveTypes || []).filter(t => (t.CurrentRecord ?? true) !== false)
+  return name => types.find(t => plainType(t.Name) === plainType(name))?.LeaveTypeID || null
+}
+
+/** Each leave type's balance by name, for the before/after check. */
+async function balancesByName(employeeID) {
+  const data = await xeroCall('GET', `/Employees/${employeeID}`)
+  const emp = (data.Employees || [])[0] || {}
+  const out = {}
+  for (const b of emp.LeaveBalances || []) out[plainType(b.LeaveName)] = Number(b.NumberOfUnits ?? 0)
+  return out
+}
+
+/**
+ * Writes banked TOIL onto the person's payslip in the draft pay run for the
+ * period. lines: [{ leaveType, hours }]. Returns { status } — 'added',
+ * 'no-draft' (no draft pay run yet: try again once Erin creates it),
+ * 'not-on-payslip', or 'already' (a line of that type is on it already).
+ */
+export async function addToilToPayslip({ employeeID, periodStart, lines }) {
+  const run = await draftPayRunFor(periodStart)
+  if (!run) return { status: 'no-draft' }
+  const runData = await xeroCall('GET', `/PayRuns/${run.id}`)
+  const slip = ((runData.PayRuns || [])[0]?.Payslips || []).find(p => p.EmployeeID === employeeID)
+  if (!slip) return { status: 'not-on-payslip', payRunID: run.id }
+
+  const idFor = await toilTypeIds()
+  const wanted = []
+  for (const l of lines) {
+    const leaveTypeID = idFor(l.leaveType)
+    if (!leaveTypeID) throw new Error(`No current Xero leave type called "${l.leaveType}"`)
+    wanted.push({ ...l, leaveTypeID })
+  }
+  const before = await balancesByName(employeeID)
+  const slipData = await xeroCall('GET', `/Payslip/${slip.PayslipID}`)
+  const { lines: post, added, already } = accrualLinesFor(slipData.Payslip?.LeaveAccrualLines, wanted)
+  if (added.length) await xeroCall('POST', `/Payslip/${slip.PayslipID}`, [{ LeaveAccrualLines: post }])
+
+  // Read it back: the line is there, at the hours, or it is not done.
+  const after = await xeroCall('GET', `/Payslip/${slip.PayslipID}`)
+  const onSlip = after.Payslip?.LeaveAccrualLines || []
+  const missing = added.filter(w => !onSlip.some(l => l.LeaveTypeID === w.leaveTypeID && Math.abs(unitsOf(l) - w.hours) < 0.01))
+  if (missing.length) throw new Error(`Xero did not keep the TOIL accrual on the payslip (${missing.map(m => m.leaveType).join(', ')})`)
+  return {
+    status: already.length && !added.length ? 'already' : 'added',
+    payRunID: run.id, payslipID: slip.PayslipID,
+    lines: wanted.map(w => ({ leaveType: w.leaveType, hours: w.hours, before: before[plainType(w.leaveType)] ?? null })),
+    already: already.map(a => ({ leaveType: a.leaveType, hours: a.hours, onPayslip: a.onPayslip })),
+    at: new Date().toISOString()
+  }
+}
+
+/**
+ * Once the pay run is posted, each TOIL balance should be what it was before
+ * plus what was banked, less TOIL taken in the same pay run. Pure.
+ */
+export function toilBalanceMismatches(lines, after, takenByType = {}) {
+  return lines.filter(l => l.before !== null && l.before !== undefined).map(l => {
+    const expected = Math.round((l.before + l.hours - Number(takenByType[l.leaveType] || 0)) * 100) / 100
+    const actual = after[plainType(l.leaveType)]
+    return { leaveType: l.leaveType, expected, actual: actual ?? null }
+  }).filter(m => m.actual === null || Math.abs(m.actual - m.expected) > 0.01)
+}
+
+/** After the pay run is posted: reads the balances back. */
+export async function checkToilBalance({ employeeID, payRunID, lines, takenByType }) {
+  const runData = await xeroCall('GET', `/PayRuns/${payRunID}`)
+  const status = String((runData.PayRuns || [])[0]?.PayRunStatus || '').toUpperCase()
+  if (status !== 'POSTED') return { status: 'not-posted', payRunStatus: status || 'unknown' }
+  const after = await balancesByName(employeeID)
+  const mismatches = toilBalanceMismatches(lines, after, takenByType)
+  return { status: mismatches.length ? 'mismatch' : 'ok', mismatches, checkedAt: new Date().toISOString() }
+}

@@ -2108,9 +2108,21 @@ the salary line and pay by the hour; with nothing on top of the salary no Xero
 timesheet is made (`xero.skipped`, approval skips Xero), and a leftover Xero
 timesheet for the fortnight is warned about. **Banked TOIL does not reach the
 Xero balance by itself** (every TOIL leave type is no-auto-calc): approval
-records `toilAccrual` (`toilToAccrue`, per Xero leave type) and Admin →
-Timesheets shows **Before you post the pay run** (`PayRunChecklist`): add each
-as a leave accrual on the payslip, then **Added ✓** (`action=toilaccrued`). It
+records `toilAccrual` (`toilToAccrue`, per Xero leave type) and **writes it
+onto the draft payslip itself** (Brent's amendment, 15 Nov 2026:
+`addToilToPayslip` in `_timesheetXero.js` — the draft pay run for the period,
+the person's payslip, a positive manual `LeaveAccrualLines` entry per TOIL type
+(TOIL, or TOIL - Admin / TOIL - Science for Toni), Xero's own lines kept
+(`accrualLinesFor`), never a second line of a type already there, read back
+after posting; the balance before is kept). With no draft pay run yet, Admin →
+Timesheets (`PayRunChecklist`) offers **Add to payslip**
+(`action=toilaccrual-post`) or **Added by hand ✓** (`action=toilaccrued`);
+once the pay run is posted, **Check the balance** (`action=toilaccrual-check`,
+`checkToilBalance`: before + banked − TOIL taken on that timesheet) flags a
+mismatch in red. Writing the payslip needs the `payroll.payslip` scope the
+connection already asks for. **Salaried staff** (Ben, Aimee, Mat): their draft
+payslips show the full salaried fortnight — no Ordinary Hours from the
+timesheet, extras on top, leave does not reduce it (acceptance test 7). It
 also says when a **draft pay run already existed** at approval
 (`draftPayRunFor`, read-only) — Xero only includes timesheets approved before
 the draft was made. Erin: ordinary, time and a

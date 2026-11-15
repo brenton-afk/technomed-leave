@@ -11,7 +11,7 @@ import {
   demoCategories, isDemo
 } from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
-import { submitTimesheetToXero, approveTimesheetInXero, buildTimesheetLines, notOnTimesheet, draftPayRunFor, toilToAccrue } from '../_timesheetXero.js'
+import { submitTimesheetToXero, approveTimesheetInXero, buildTimesheetLines, notOnTimesheet, draftPayRunFor, toilToAccrue, addToilToPayslip, checkToilBalance } from '../_timesheetXero.js'
 import {
   getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees,
   overlappingXeroLeave, submitToXero, listLeaveTypes, getEmployee, FALLBACK_LEAVE_TYPE_IDS
@@ -82,6 +82,8 @@ export default async function handler(req, res) {
     if (action === 'balances') return await handleBalances(req, res, subject)
     if (action === 'toilretry') return await handleToilRetry(req, res)
     if (action === 'toilaccrued') return await handleToilAccrued(req, res)
+    if (action === 'toilaccrual-post') return await handleToilAccrualPost(req, res)
+    if (action === 'toilaccrual-check') return await handleToilAccrualCheck(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
     console.error(`timesheet/${action} failed:`, err.message)
@@ -1123,10 +1125,15 @@ async function handleDecide(req, res) {
   // Banked TOIL does not reach the Xero balance by itself — listed for Erin
   // to add as a leave accrual on the payslip (Claude in Chrome's audit).
   const accrue = toilToAccrue(finalEntries)
-  if (accrue.length) approvedRecord.toilAccrual = { lines: accrue, done: false }
   // A draft pay run made before this approval will not include it.
   const draft = await draftPayRunFor(record.periodStart)
   if (draft) approvedRecord.payRunDraft = { ...draft, seenAt: new Date().toISOString() }
+  // Banked TOIL goes onto the draft payslip as a leave accrual (Brent,
+  // 15 Nov 2026). No draft pay run yet: Admin → Timesheets offers it again.
+  if (accrue.length) {
+    approvedRecord.toilAccrual = { lines: accrue, done: false }
+    if (draft && approvedRecord.xero?.employeeID) approvedRecord.toilAccrual = await postAccrual(approvedRecord)
+  }
 
   await saveTimesheet('submitted', approvedRecord)
   await saveTimesheet('approved', approvedRecord)
@@ -1135,6 +1142,61 @@ async function handleDecide(req, res) {
   try { await sendTimesheetDecisionEmail(approvedRecord, 'approved') } catch (err) { emailError = err.message }
 
   return res.status(200).json({ record: approvedRecord, emailError })
+}
+
+/** Writes a record's banked TOIL onto its draft payslip. Never throws. */
+async function postAccrual(record) {
+  const acc = record.toilAccrual
+  try {
+    const result = await addToilToPayslip({ employeeID: record.xero?.employeeID, periodStart: record.periodStart, lines: acc.lines })
+    return { ...acc, posted: result, done: result.status === 'added', error: null }
+  } catch (err) {
+    return { ...acc, error: err.message }
+  }
+}
+
+/** TOIL taken on the timesheet, per Xero leave type, for the balance check. */
+function takenByType(record) {
+  const staff = getStaffByEmail(record.email)
+  const taken = totalOf(record.toilTaken)
+  return taken > 0 ? { [staff?.toilLeaveType || 'TOIL']: taken } : {}
+}
+
+/** Try again to put banked TOIL on the draft payslip (once the pay run is made). */
+async function handleToilAccrualPost(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
+  const { email, periodStart } = req.body || {}
+  const record = await getTimesheet('approved', email, periodStart)
+  if (!record?.toilAccrual) return res.status(404).json({ error: 'No banked TOIL on this timesheet' })
+  if (!record.xero?.employeeID) return res.status(400).json({ error: 'This timesheet has no Xero employee — add the accrual by hand' })
+  const next = { ...record, toilAccrual: await postAccrual(record) }
+  await saveTimesheet('submitted', next)
+  await saveTimesheet('approved', next)
+  return res.status(200).json({ record: next })
+}
+
+/** After the pay run is posted: is each TOIL balance what it should be? */
+async function handleToilAccrualCheck(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const admin = await requireAdmin(req, res)
+  if (!admin) return
+  const { email, periodStart } = req.body || {}
+  const record = await getTimesheet('approved', email, periodStart)
+  const posted = record?.toilAccrual?.posted
+  if (!posted?.payRunID) return res.status(404).json({ error: 'The TOIL was not put on a payslip by the portal' })
+  let check
+  try {
+    check = await checkToilBalance({ employeeID: record.xero.employeeID, payRunID: posted.payRunID, lines: posted.lines || [], takenByType: takenByType(record) })
+  } catch (err) {
+    return res.status(502).json({ error: err.message })
+  }
+  if (check.status === 'not-posted') return res.status(200).json({ record, check })
+  const next = { ...record, toilAccrual: { ...record.toilAccrual, balanceCheck: check } }
+  await saveTimesheet('submitted', next)
+  await saveTimesheet('approved', next)
+  return res.status(200).json({ record: next, check })
 }
 
 /** Erin has added the banked TOIL to the payslip in Xero. */

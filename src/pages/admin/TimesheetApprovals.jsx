@@ -92,30 +92,58 @@ function XeroSetupCheck({ authHeaders }) {
  * add banked TOIL to the balance by itself, and a draft pay run made before a
  * timesheet was approved does not include it. Both are listed here for Erin.
  */
-function PayRunChecklist({ approved, busy, onDone }) {
-  const accruals = approved.filter(r => r.toilAccrual && !r.toilAccrual.done)
+function PayRunChecklist({ approved, busy, onDone, onPost, onCheck }) {
+  // Banked TOIL goes onto the draft payslip by itself (Brent, 15 Nov 2026);
+  // this lists what is still to do: no draft pay run yet, a failure, or the
+  // balance to read back once the pay run is posted.
+  const accruals = approved.filter(r => r.toilAccrual && (!r.toilAccrual.done
+    || (r.toilAccrual.posted?.status === 'added' && r.toilAccrual.balanceCheck?.status !== 'ok' && !r.toilAccrual.doneBy)))
   const late = approved.filter(r => r.payRunDraft && !r.payRunDraft.dismissed)
   if (!accruals.length && !late.length) return null
+  const small = { padding: '6px 10px', borderRadius: 8, border: 'none', background: TEAL, color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }
+  const plain = { ...small, background: 'white', color: NAVY, border: `1px solid ${BORDER}` }
   return (
     <div data-pay-run-checklist style={{ background: '#fff8e6', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 12, padding: '11px 13px', marginBottom: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#8a5a00', marginBottom: 6 }}>Before you post the pay run in Xero</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#8a5a00', marginBottom: 6 }}>The pay run in Xero</div>
       {late.length > 0 && (
         <div style={{ fontSize: 12.5, color: '#8a5a00', lineHeight: 1.45, marginBottom: 8 }}>
           A draft pay run already existed when {late.map(r => r.staffName.split(' ')[0]).join(', ')}{late.length === 1 ? '\'s timesheet was' : '\'s timesheets were'} approved, so it won't include {late.length === 1 ? 'it' : 'them'}.
           In Xero, delete the draft pay run and create it again (or add the lines to the payslip by hand).
         </div>
       )}
-      {accruals.map(r => (
-        <div key={`${r.email}-${r.periodStart}`} data-toil-accrual style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: NAVY, padding: '6px 0', borderTop: '1px solid rgba(245,158,11,0.25)' }}>
-          <div style={{ flex: 1, lineHeight: 1.45 }}>
-            <strong>{r.staffName}</strong> banked {r.toilAccrual.lines.map(l => `${l.hours}h (${l.leaveType})`).join(' and ')} — on their payslip in the pay run, add a leave accrual of that many hours to that TOIL leave type.
+      {accruals.map(r => {
+        const acc = r.toilAccrual
+        const what = acc.lines.map(l => `${l.hours}h (${l.leaveType})`).join(' and ')
+        const st = acc.posted?.status
+        const check = acc.balanceCheck
+        let text, buttons
+        if (acc.done && st === 'added') {
+          text = check?.status === 'mismatch'
+            ? <>On <strong>{r.staffName}</strong>'s payslip: {what}. <span style={{ color: '#b42318', fontWeight: 700 }}>After the pay run Xero's balance does not match — {check.mismatches.map(m => `${m.leaveType}: Xero ${m.actual ?? 'none'}h, expected ${m.expected}h`).join('; ')}.</span></>
+            : <>Added to <strong>{r.staffName}</strong>'s draft payslip: {what}. Once the pay run is posted, check the balance.</>
+          buttons = <>
+            <button data-toil-check onClick={() => onCheck(r)} disabled={busy} style={small}>Check the balance</button>
+            {check?.status === 'mismatch' && <button onClick={() => onDone(r)} disabled={busy} style={plain}>Sorted ✓</button>}
+          </>
+        } else {
+          text = <><strong>{r.staffName}</strong> banked {what}. {
+            acc.error ? <span style={{ color: '#b42318' }}>Could not add it to the payslip: {acc.error}</span>
+              : st === 'not-on-payslip' ? 'They are not on the draft pay run — add them, then try again.'
+              : st === 'already' ? `A TOIL accrual is already on their payslip (${acc.posted.already.map(a => `${a.onPayslip}h ${a.leaveType}`).join(', ')}) — check it is right.`
+              : 'It goes on their payslip as a leave accrual once the draft pay run is made in Xero.'
+          }</>
+          buttons = <>
+            {st !== 'already' && <button data-toil-post onClick={() => onPost(r)} disabled={busy} style={small}>Add to payslip</button>}
+            <button onClick={() => onDone(r)} disabled={busy} style={plain}>Added by hand ✓</button>
+          </>
+        }
+        return (
+          <div key={`${r.email}-${r.periodStart}`} data-toil-accrual style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: NAVY, padding: '6px 0', borderTop: '1px solid rgba(245,158,11,0.25)', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 220px', lineHeight: 1.45 }}>{text}</div>
+            <div style={{ display: 'flex', gap: 6 }}>{buttons}</div>
           </div>
-          <button onClick={() => onDone(r)} disabled={busy}
-            style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: TEAL, color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-            Added ✓
-          </button>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -233,6 +261,23 @@ export default function TimesheetApprovals({ user }) {
     setLoading(false)
   }
 
+  // Banked TOIL on the payslip: add it, mark it done by hand, or read the
+  // balance back after the pay run is posted.
+  async function accrualStep(action, record) {
+    setBusy('accrual'); setError('')
+    try {
+      const res = await fetch(`/api/timesheet/agent?action=${action}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ email: record.email, periodStart: record.periodStart })
+      })
+      const body = await res.json()
+      if (body.error) throw new Error(body.error)
+      if (body.check?.status === 'not-posted') setError(`The pay run is not posted yet (${String(body.check.payRunStatus).toLowerCase()}) — check the balance after it is.`)
+      await load()
+    } catch (err) { setError(err.message) }
+    setBusy('')
+  }
+
   async function decide(record, decision, why = '') {
     setBusy(record.email + decision); setError('')
     try {
@@ -316,19 +361,10 @@ export default function TimesheetApprovals({ user }) {
       )}
 
       <XeroSetupCheck authHeaders={authHeaders} />
-      <PayRunChecklist approved={data.approved || []} busy={busy === 'accrual'} onDone={async record => {
-        setBusy('accrual'); setError('')
-        try {
-          const res = await fetch('/api/timesheet/agent?action=toilaccrued', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders },
-            body: JSON.stringify({ email: record.email, periodStart: record.periodStart })
-          })
-          const body = await res.json()
-          if (body.error) throw new Error(body.error)
-          await load()
-        } catch (err) { setError(err.message) }
-        setBusy('')
-      }} />
+      <PayRunChecklist approved={data.approved || []} busy={busy === 'accrual'}
+        onDone={record => accrualStep('toilaccrued', record)}
+        onPost={record => accrualStep('toilaccrual-post', record)}
+        onCheck={record => accrualStep('toilaccrual-check', record)} />
 
       {/* "Try it as…" (Brent, 15 Nov 2026): open anyone's timesheet exactly as
           they see it — dry run, or file it for them. */}
