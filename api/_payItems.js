@@ -175,6 +175,13 @@ export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {
   // when there is one, narrows it further (an item missing there cannot be
   // paid). The read-only payroll check reports where the two disagree.
   const allowed = (assigned && !isReviewed(email)) ? null : new Set(payItemsFor(email))
+  // For a confirmed row the row alone decides (Brent, 15 Nov 2026: tidying
+  // the Xero pay templates). On-call, call-ins and TOIL come off the
+  // templates — left there they add a second, empty or fixed line to every
+  // pay run — so a template no longer has to carry an item for the timesheet
+  // to offer it. Xero is the judge when the timesheet is posted: a rate it
+  // refuses is dropped and named (postDroppingRefused).
+  const templateDecides = assigned && !isReviewed(email)
 
   for (const rule of CATEGORY_RULES) {
     if (allowed && !allowed.has(rule.key)) continue
@@ -187,7 +194,7 @@ export function categoriesForStaff(allRates, staffEmail, { assignedRateIds } = {
       const id = r.EarningsRateID || r.earningsRateID
       if (seen.has(id)) return false
       // When Xero has told us what this person is assigned, that decides it.
-      if (assigned && !assigned.has(id)) return false
+      if (templateDecides && !assigned.has(id)) return false
       return classify(r.Name || r.name)?.key === rule.key
     })
     if (!match) continue

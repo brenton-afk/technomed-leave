@@ -2042,8 +2042,14 @@ the same days — and the approved Xero timesheet carries the result. April is
 casual (no contract, no `earnsToil`) and is never asked.
 
 **Each person's pay, confirmed (Brent, 14 Nov 2026)** — `PAY_OPTIONS` in
-`src/payOptions.js`, every row `reviewed`, now **always applied** (a Xero pay
-template narrows it further; `categoriesForStaff`). Erin: ordinary, time and a
+`src/payOptions.js`, every row `reviewed`, now **always applied** and, since
+15 Nov 2026, **alone** — the Xero pay template no longer narrows a confirmed
+row (`templateDecides` only for someone without one). Brent is tidying the
+templates down to Ordinary Hours: on-call, call-ins, TOIL and overtime come in
+on the timesheet (on the template they added a second line every pay run —
+Mat's carried a fixed 62h on-call), and commissions only in the monthly
+unscheduled pay run. `comparePerson` now flags any of those still on a
+template, and Ordinary Hours missing from one. Erin: ordinary, time and a
 half (odd Saturdays), double time, TOIL — 24h a week, days vary, `earnsToil`,
 approves her own. Toni: admin and science ordinary (ad hoc, mostly admin),
 double time, TOIL in either — on "Bank as TOIL" she picks admin or science

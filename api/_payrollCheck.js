@@ -32,16 +32,29 @@ export function comparePerson({ person, rates, templateIds }) {
     // Toni's TOIL fallback is only needed when the split rates are missing.
     if (key === 'toil_accrued' && wanted.includes('toil_toni_admin') && offeredKeys.has('toil_toni_admin')) continue
     const exists = rates.some(r => classify(nameOf(r))?.key === key)
-    problems.push(exists
-      ? `${PAY_ITEMS[key]} is in their contract but not on their Xero pay template.`
-      : `${PAY_ITEMS[key]} is in their contract but Xero has no earnings rate for it.`)
+    if (!exists) problems.push(`${PAY_ITEMS[key]} is in their contract but Xero has no earnings rate for it.`)
+  }
+  // Since 15 Nov 2026 only ordinary hours belong on the template; the rest
+  // come in on the timesheet.
+  if (templateIds) {
+    for (const key of wanted.filter(k => /^ordinary/.test(k))) {
+      if (!templateKeys.has(key) && rates.some(r => classify(nameOf(r))?.key === key)) {
+        problems.push(`${PAY_ITEMS[key]} is not on their Xero pay template — it should be (the timesheet's hours link to it).`)
+      }
+    }
   }
   for (const [key, name] of templateKeys) {
     if (key.startsWith('other:')) {
-      if (enterableOnATimesheet({ Name: name })) problems.push(`"${name}" is on their Xero template; the portal does not know what it is.`)
+      if (!enterableOnATimesheet({ Name: name })) {
+        problems.push(`"${name}" is on their pay template — it belongs only in the monthly commission pay run; remove it from the template.`)
+      } else problems.push(`"${name}" is on their Xero template; the portal does not know what it is.`)
       continue
     }
-    if (!wanted.includes(key)) problems.push(`"${name}" is on their Xero template but not in their contract — they will not see it on a timesheet.`)
+    if (/^ordinary/.test(key)) {
+      if (!wanted.includes(key)) problems.push(`"${name}" is on their Xero template but not in their contract.`)
+      continue
+    }
+    problems.push(`"${name}" is on their pay template — remove it. The timesheet brings it into the pay run; on the template it adds a second line every pay run${key === 'on_call' ? ' (and a fixed number of hours there is paid whether or not they were on call)' : ''}.`)
   }
   for (const c of offered) {
     if (c.timesheetOk === false) problems.push(`"${c.xeroName}" cannot go on a Xero timesheet (fixed amount, archived or lump sum) — it has to be added in the pay run.`)

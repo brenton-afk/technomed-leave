@@ -24,10 +24,15 @@ const RATES = [
 const keys = cats => cats.map(c => c.key).sort()
 
 describe('when Xero says what somebody is assigned', () => {
-  it('offers exactly those and nothing else', () => {
-    const cats = categoriesForStaff(RATES, 'ben@technomed.com.au',
-      { assignedRateIds: ['r-ord', 'r-oncall'] })
-    expect(keys(cats)).toEqual(['on_call', 'ordinary'])
+  it('offers exactly those and nothing else, for someone with no confirmed contract', () => {
+    const cats = categoriesForStaff(RATES, 'newstarter@technomed.com.au',
+      { assignedRateIds: ['r-ord', 'r-dbl'] })
+    expect(keys(cats)).toEqual(['ordinary', 'overtime_double'])
+  })
+
+  it('for a confirmed contract, the contract decides — on-call need not be on the template (15 Nov 2026)', () => {
+    const cats = categoriesForStaff(RATES, 'ben@technomed.com.au', { assignedRateIds: ['r-ord'] })
+    expect(keys(cats)).toEqual(['call_in', 'on_call', 'ordinary', 'overtime_double', 'toil_accrued'])
   })
 
   it('does not offer overtime to somebody whose template has none', () => {
@@ -39,15 +44,11 @@ describe('when Xero says what somebody is assigned', () => {
     expect(keys(cats)).not.toContain('overtime_1_5')
   })
 
-  it('needs both the contract row and the template to allow an item (14 Nov 2026)', () => {
-    // Toni's confirmed row gives her the split ordinary rates. A template
-    // with only the plain rate offers her nothing it does not also allow —
-    // the payroll check reports the disagreement instead.
-    const cats = categoriesForStaff(RATES, 'toni@technomed.com.au',
-      { assignedRateIds: ['r-ord'] })
-    expect(keys(cats)).toEqual([])
+  it('Toni gets her split rates from her contract whatever the template says', () => {
+    const cats = categoriesForStaff(RATES, 'toni@technomed.com.au', { assignedRateIds: ['r-ord'] })
+    expect(keys(cats)).toEqual(expect.arrayContaining(['ordinary_toni_admin', 'ordinary_toni_scientific']))
+    expect(keys(cats)).not.toContain('ordinary')
   })
-
   it('still shows a rate no rule recognises, to the people who have it', () => {
     // A new earnings rate should be visible rather than silently missing.
     const cats = categoriesForStaff([...RATES, rate('r-new', 'Higher Duties')],
