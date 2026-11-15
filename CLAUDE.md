@@ -2077,6 +2077,11 @@ logged from a preview. The review offers **Dry run** (`dryRun: true` on
 submit — every rule and check, then the exact Xero lines, nothing sent or
 stored) and **Submit for real** (filed in Xero for them, `submittedBy` on the
 record). Admins (Brent and Erin) approve in the same screen.
+**Keyboard and keypad** (Brent, 15 Nov 2026: "enter the number and then tap
+the arrow … to go to the next cell"): on a computer Enter and → keep the
+number and go to the next day (wrapping to the next row), ← back, ↑ ↓ change
+row (`moveFrom`; only typing boxes are stops). On a phone the keypad has
+**Next day ›** (`data-pad-next`) beside Done.
 **Read-only Xero check** (`api/_payrollCheck.js`): earnings rates, leave types
 and each person's pay template against their contract (`comparePerson` —
 missing items, extra items, call-in paid by the hour, items Xero will not take

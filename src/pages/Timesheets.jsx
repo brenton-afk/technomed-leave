@@ -115,7 +115,7 @@ function FortnightQuestion({ balance, choice, available, canOvertime, toilKinds 
   )
 }
 
-function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnter }) {
+function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnter, onMove }) {
   // What is being typed, which is not always a number yet.
   //
   // The bug this fixes: the cell showed `value`, and the parent turned every
@@ -167,6 +167,10 @@ function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnt
       onBlur={() => setDraft(null)}
       onKeyDown={e => {
         if (e.key === 'Enter') { e.preventDefault(); setDraft(null); onEnter?.() }
+        // Arrows keep the number and move on (Brent, 15 Nov 2026: "the arrows
+        // should act as enter and take you to the next cell").
+        const dir = { ArrowRight: 'right', ArrowLeft: 'left', ArrowDown: 'down', ArrowUp: 'up' }[e.key]
+        if (dir && onMove) { e.preventDefault(); setDraft(null); onMove(dir) }
         if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur() }
       }}
       onChange={e => {
@@ -189,7 +193,7 @@ function GridCell({ desktop, value, tint, weekend, onOpen, onSet, cellRef, onEnt
   )
 }
 
-function NumberPad({ cell, categories, onSet, onClose }) {
+function NumberPad({ cell, categories, onSet, onClose, onNext }) {
   const category = categories.find(c => c.key === cell.categoryKey)
   const [value, setValue] = useState(cell.value ? String(cell.value) : '')
   const isCount = category?.unit === 'count'
@@ -266,9 +270,16 @@ function NumberPad({ cell, categories, onSet, onClose }) {
             Clear
           </button>
           <button onClick={() => { onSet(Number(value) || 0); onClose() }}
-            style={{ flex: 2, padding: 14, background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ flex: 2, padding: 14, background: onNext ? 'white' : TEAL, color: onNext ? TEAL : 'white', border: onNext ? `1px solid ${TEAL}` : 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
             Done
           </button>
+          {/* Straight on to the next day, as the arrows do on a keyboard. */}
+          {onNext && (
+            <button data-pad-next onClick={() => { onSet(Number(value) || 0); onNext() }}
+              style={{ flex: 2, padding: 14, background: TEAL, color: 'white', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+              Next day ›
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -822,6 +833,23 @@ export default function Timesheets({ user, onBack, actAs = null }) {
 
   // ── Entry grid ───────────────────────────────────────────
   const weekDays = days.slice(activeWeek * 7, activeWeek * 7 + 7)
+  // Keyboard movement round the grid (15 Nov 2026). Enter and → go to the next
+  // day, wrapping to the next row's Monday; ← back; ↑ ↓ change row. Only boxes
+  // that take typing are stops — the roster and call-in buttons are skipped.
+  function moveFrom(rowKey, day, dir) {
+    const rows = [...categories.map(c => c.key), TOIL_TAKEN]
+      .filter(k => weekDays.some(d => cellRefs.current[`${k}|${d}`]))
+    let r = rows.indexOf(rowKey), c = weekDays.indexOf(day)
+    for (let step = 0; step < rows.length * 7; step++) {
+      if (dir === 'right') { c++; if (c > 6) { c = 0; r++ } }
+      else if (dir === 'left') { c--; if (c < 0) { c = 6; r-- } }
+      else if (dir === 'down') r++
+      else r--
+      if (r < 0 || r >= rows.length) return
+      const el = cellRefs.current[`${rows[r]}|${weekDays[c]}`]
+      if (el) { el.focus(); return }
+    }
+  }
   // Leave rows sit straight after the last ordinary-hours row.
   const lastOrdinaryIndex = Math.max(0, categories.map(c => c.kind).lastIndexOf('ordinary'))
   // A logged call-in is shown only while it is on the grid: one somebody took
@@ -1103,13 +1131,8 @@ export default function Timesheets({ user, onBack, actAs = null }) {
                     onOpen={() => setPadCell({ categoryKey: cat.key, day, dayIndex: activeWeek * 7 + i, value })}
                     onSet={raw => setCell(cat.key, day, raw === '' ? '' : Number(raw))}
                     cellRef={el => { cellRefs.current[`${cat.key}|${day}`] = el }}
-                    onEnter={() => {
-                      // Down a row, same day — the other way a fortnight gets
-                      // filled in.
-                      const at = categories.findIndex(c => c.key === cat.key)
-                      const next = categories[at + 1]
-                      cellRefs.current[`${next?.key}|${day}`]?.focus()
-                    }} />
+                    onEnter={() => moveFrom(cat.key, day, 'right')}
+                    onMove={dir => moveFrom(cat.key, day, dir)} />
                 )
               })}
             </div>
@@ -1164,7 +1187,8 @@ export default function Timesheets({ user, onBack, actAs = null }) {
                   onOpen={() => setPadCell({ categoryKey: TOIL_TAKEN, day, dayIndex: activeWeek * 7 + i, value: entries[TOIL_TAKEN]?.[day] })}
                   onSet={raw => setCell(TOIL_TAKEN, day, raw === '' ? '' : Number(raw))}
                   cellRef={el => { cellRefs.current[`${TOIL_TAKEN}|${day}`] = el }}
-                  onEnter={() => {}} />
+                  onEnter={() => moveFrom(TOIL_TAKEN, day, 'right')}
+                  onMove={dir => moveFrom(TOIL_TAKEN, day, dir)} />
               ))}
             </div>
           )}
@@ -1214,9 +1238,15 @@ export default function Timesheets({ user, onBack, actAs = null }) {
       </div>
 
       {padCell && (
-        <NumberPad cell={padCell} categories={[...categories, { key: TOIL_TAKEN, label: 'TOIL taken', unit: 'hours', hint: toilRoom?.available != null ? `${toilRoom.available}h available` : '' }]}
+        <NumberPad key={`${padCell.categoryKey}|${padCell.day}`} cell={padCell} categories={[...categories, { key: TOIL_TAKEN, label: 'TOIL taken', unit: 'hours', hint: toilRoom?.available != null ? `${toilRoom.available}h available` : '' }]}
           onSet={v => setCell(padCell.categoryKey, padCell.day, v)}
-          onClose={() => setPadCell(null)} />
+          onClose={() => setPadCell(null)}
+          onNext={padCell.dayIndex < days.length - 1 ? () => {
+            const i = padCell.dayIndex + 1
+            const day = days[i]
+            if (Math.floor(i / 7) !== activeWeek) setActiveWeek(Math.floor(i / 7))
+            setPadCell({ categoryKey: padCell.categoryKey, day, dayIndex: i, value: entries[padCell.categoryKey]?.[day] })
+          } : undefined} />
       )}
       {showSplit && (
         <SplitModal days={days} onClose={() => setShowSplit(false)}
