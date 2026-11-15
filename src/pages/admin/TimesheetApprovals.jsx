@@ -1,4 +1,6 @@
 import { flagsFor, needsDecision } from '../../timesheetFlags.js'
+import { STAFF } from '../../staffConfig.js'
+import Timesheets from '../Timesheets.jsx'
 import React, { useState, useEffect, useMemo } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 
@@ -181,6 +183,7 @@ export default function TimesheetApprovals({ user }) {
   const [liveLeave, setLiveLeave] = useState({})
   // Pay or bank, per timesheet with overtime claimed.
   const [otChoice, setOtChoice] = useState({})
+  const [tryAs, setTryAs] = useState(null)
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${user?.token || ''}` }), [user])
 
@@ -280,6 +283,32 @@ export default function TimesheetApprovals({ user }) {
       )}
 
       <XeroSetupCheck authHeaders={authHeaders} />
+
+      {/* "Try it as…" (Brent, 15 Nov 2026): open anyone's timesheet exactly as
+          they see it — dry run, or file it for them. */}
+      <div data-try-as style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '11px 13px', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: NAVY, fontWeight: 700, marginBottom: 7 }}>Try a timesheet as…</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {STAFF.filter(s => s.hasTimesheets).map(s => (
+            <button key={s.email} data-try-as-person={s.email} onClick={() => setTryAs(s)}
+              style={{ padding: '7px 12px', borderRadius: 18, border: `1px solid ${BORDER}`, background: 'white', color: NAVY, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+              {s.firstName}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tryAs && (
+        <Overlay>
+          <div data-try-as-sheet style={{ position: 'fixed', inset: 0, background: '#f4f6f9', overflowY: 'auto', overflowX: 'hidden', zIndex: 1000 }}>
+            <div style={{ background: AMBER, color: 'white', fontSize: 12.5, fontWeight: 700, padding: '7px 16px', paddingTop: 'calc(7px + env(safe-area-inset-top, 0px))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <span>Viewing as {tryAs.name} — nothing is saved unless you tap Submit for real</span>
+              <button onClick={() => { setTryAs(null); load() }} style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: 'white', borderRadius: 8, padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}>Close</button>
+            </div>
+            <Timesheets actAs={tryAs.email} onBack={() => { setTryAs(null); load() }}
+              user={{ ...user, name: tryAs.name, email: tryAs.email, staff: { hasTimesheets: true } }} />
+          </div>
+        </Overlay>
+      )}
 
       <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
         {tabs.map(t => (

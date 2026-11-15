@@ -384,7 +384,10 @@ function SplitModal({ days, onApply, onClose }) {
 
 // ─── Main ────────────────────────────────────────────────────
 
-export default function Timesheets({ user, onBack }) {
+export default function Timesheets({ user, onBack, actAs = null }) {
+  // "Try it as…" (Brent, 15 Nov 2026): an admin opening someone else's
+  // timesheet. Every request carries `as`; drafts are not saved.
+  const asQ = actAs ? `&as=${encodeURIComponent(actAs)}` : ''
   // Whether this person is one payroll expects a timesheet from. An admin can
   // open the screen without being on it — to check it, or to sit with somebody
   // stuck on it — but submitting posts to Xero, so it is not theirs to press.
@@ -429,6 +432,7 @@ export default function Timesheets({ user, onBack }) {
   // not the screen anybody uses.
   const [demo, setDemo] = useState(false)
   const [savedAt, setSavedAt] = useState('')
+  const [dryRunResult, setDryRunResult] = useState(null)
   const [stage, setStage] = useState('entry')
   const [submitted, setSubmitted] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -445,15 +449,15 @@ export default function Timesheets({ user, onBack }) {
     setLoading(true); setError('')
     try {
       const res = await fetch(
-        `/api/timesheet/agent?action=payitems${demo ? '&demo=1' : ''}`, { headers: authHeaders })
+        `/api/timesheet/agent?action=payitems${demo ? '&demo=1' : ''}${asQ}`, { headers: authHeaders })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setCategories(data.categories)
       setPeriod(data.period)
 
       const [draftRes, mineRes] = await Promise.all([
-        fetch('/api/timesheet/agent?action=draft', { headers: authHeaders }).then(r => r.json()),
-        fetch('/api/timesheet/agent?action=mine', { headers: authHeaders }).then(r => r.json())
+        fetch(`/api/timesheet/agent?action=draft${asQ}`, { headers: authHeaders }).then(r => r.json()),
+        fetch(`/api/timesheet/agent?action=mine${asQ}`, { headers: authHeaders }).then(r => r.json())
       ])
       const hasDraft = draftRes.draft?.periodStart === data.period.start
       if (hasDraft) {
@@ -462,7 +466,7 @@ export default function Timesheets({ user, onBack }) {
       }
       setHistory(mineRes.records || [])
 
-      fetch(`/api/timesheet/agent?action=callins&periodStart=${data.period.start}`, { headers: authHeaders })
+      fetch(`/api/timesheet/agent?action=callins&periodStart=${data.period.start}${asQ}`, { headers: authHeaders })
         .then(r => r.json())
         .then(d => {
           setCallIns(d.suggestions || [])
@@ -483,9 +487,9 @@ export default function Timesheets({ user, onBack }) {
           }
         })
         .catch(() => {})
-      fetch('/api/timesheet/agent?action=toil', { headers: authHeaders })
+      fetch(`/api/timesheet/agent?action=toil${asQ}`, { headers: authHeaders })
         .then(r => r.json()).then(d => setToil(d.me || null)).catch(() => {})
-      fetch(`/api/timesheet/agent?action=leavedays&periodStart=${data.period.start}`, { headers: authHeaders })
+      fetch(`/api/timesheet/agent?action=leavedays&periodStart=${data.period.start}${asQ}`, { headers: authHeaders })
         .then(r => r.json()).then(d => {
           setLeaveDays(d.days || {})
           if (d.leave) setPeriodLeave(d.leave)
@@ -642,22 +646,23 @@ export default function Timesheets({ user, onBack }) {
     setBusy(false)
   }
 
-  async function submit() {
-    setBusy(true); setError('')
+  async function submit({ dryRun = false } = {}) {
+    setBusy(true); setError(''); setDryRunResult(null)
     try {
       const res = await fetch('/api/timesheet/agent?action=submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed, bankToil: !keepPaid && !claimOvertime, overflowAs: claimOvertime ? 'overtime' : keepPaid ? 'paid' : 'toil', toilInto: toilInto || undefined })
+        body: JSON.stringify({ as: actAs || undefined, dryRun: dryRun || undefined, periodStart: period.start, entries: takesToil && toilTakenTotal ? { ...filed, [TOIL_TAKEN]: toilTaken } : filed, bankToil: !keepPaid && !claimOvertime, overflowAs: claimOvertime ? 'overtime' : keepPaid ? 'paid' : 'toil', toilInto: toilInto || undefined })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      if (data.dryRun) { setDryRunResult(data); setBusy(false); return }
       setSubmitted(data.record)
       setStage('done')
       boot()
     } catch (err) {
       setError(err.message)
-      setStage('entry')
+      if (!dryRun) setStage('entry')
     }
     setBusy(false)
   }
@@ -777,10 +782,35 @@ export default function Timesheets({ user, onBack }) {
               setFortnightChoice('take')
             }} />
         )}
-        <button onClick={submit} disabled={busy || !canSubmit || !toilCheck.ok || needsAnswer}
+        {actAs && (
+          <div data-preview-actions style={{ marginBottom: 10 }}>
+            <button data-dry-run onClick={() => submit({ dryRun: true })} disabled={busy || !toilCheck.ok || needsAnswer}
+              style={{ width: '100%', padding: 14, background: (busy || needsAnswer) ? '#c8d2dc' : NAVY, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: 'pointer', marginBottom: 6 }}>
+              {busy ? 'Checking…' : 'Dry run — show what Xero would get'}
+            </button>
+            <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.45 }}>A dry run sends nothing and saves nothing. "Submit for real" below files it for {user?.name?.split(' ')[0] || 'them'} in Xero, exactly as if they had.</div>
+            {error && <div role="alert" style={{ background: '#fdecea', color: '#c0392b', padding: 10, borderRadius: 10, fontSize: 14, marginTop: 8 }}>{error}</div>}
+            {dryRunResult && (
+              <div data-dry-run-result style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, marginTop: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 6 }}>✓ Passed every check — Xero would get:</div>
+                {dryRunResult.lines.map(l => (
+                  <div key={l.payItem} style={{ fontSize: 12.5, color: NAVY, padding: '5px 0', borderTop: `1px solid ${BORDER}` }}>
+                    <strong>{l.payItem}</strong> — {l.total}
+                    <div style={{ color: MUTED, fontSize: 12.5 }}>{l.units.map((u, i) => u ? `${DAY_NAMES[i % 7]} ${dayNumber(days[i])}: ${u}` : null).filter(Boolean).join(' · ')}</div>
+                  </div>
+                ))}
+                {dryRunResult.toilTaken > 0 && <div style={{ fontSize: 12.5, color: NAVY, paddingTop: 5 }}>TOIL taken {dryRunResult.toilTaken}h — sent as TOIL leave when approved.</div>}
+                {dryRunResult.overtimeClaim && <div style={{ fontSize: 12.5, color: NAVY, paddingTop: 5 }}>Overtime claimed {dryRunResult.overtimeClaim.hours}h — Erin decides on approval.</div>}
+                {(dryRunResult.notOnTimesheet || []).map(n => <div key={n.key} style={{ fontSize: 12.5, color: '#8a5a00', paddingTop: 5 }}>{n.label}: {n.total} — added in the pay run, not on the timesheet.</div>)}
+                {(dryRunResult.warnings || []).map((w, i) => <div key={i} style={{ fontSize: 12.5, color: '#8a5a00', paddingTop: 5 }}>⚠ {w}</div>)}
+              </div>
+            )}
+          </div>
+        )}
+        <button onClick={() => (!actAs || window.confirm(`Submit this timesheet for ${user?.name} to Xero for real?`)) && submit()} disabled={busy || !canSubmit || !toilCheck.ok || needsAnswer}
           style={{ width: '100%', padding: 16, background: (busy || !canSubmit || !toilCheck.ok || needsAnswer) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: (busy || !canSubmit || !toilCheck.ok) ? 'default' : 'pointer', marginBottom: 10 }}>
           {busy ? 'Submitting to Xero…'
-            : canSubmit ? 'Confirm and submit' : 'Not yours to submit'}
+            : actAs ? `Submit for real for ${user?.name?.split(' ')[0] || 'them'}` : canSubmit ? 'Confirm and submit' : 'Not yours to submit'}
         </button>
         <button onClick={() => setStage('entry')} disabled={busy}
           style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>
@@ -1153,12 +1183,12 @@ export default function Timesheets({ user, onBack }) {
         </div>
       </div>
 
-      <div style={{ padding: '10px 16px 0' }}>
+      {!actAs && <div style={{ padding: '10px 16px 0' }}>
         <button onClick={saveDraft} disabled={busy}
           style={{ width: '100%', padding: 12, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: MUTED, cursor: 'pointer' }}>
           {busy ? 'Saving…' : savedAt ? `Draft saved ${new Date(savedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })} — save again` : 'Save draft'}
         </button>
-      </div>
+      </div>}
 
       {/* Running total bar. Sticky to the bottom of the page's own scroll
           area, not fixed 70px up the screen (Brent, 15 Nov 2026: it sat over

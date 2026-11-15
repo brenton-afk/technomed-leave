@@ -11,7 +11,7 @@ import {
   demoCategories, isDemo
 } from '../_payItems.js'
 import { payItemsFor, isReviewed, PAY_ITEMS } from '../../src/payOptions.js'
-import { submitTimesheetToXero, approveTimesheetInXero } from '../_timesheetXero.js'
+import { submitTimesheetToXero, approveTimesheetInXero, buildTimesheetLines, notOnTimesheet } from '../_timesheetXero.js'
 import {
   getXeroToken, findEmployee, matchEmployee, leaveBalances, listEmployees,
   overlappingXeroLeave, submitToXero, listLeaveTypes, getEmployee, FALLBACK_LEAVE_TYPE_IDS
@@ -44,11 +44,29 @@ export default async function handler(req, res) {
   if (!session) return
 
   try {
-    if (action === 'payitems') return await handlePayItems(req, res, session)
-    if (action === 'draft') return await handleDraft(req, res, session)
-    if (action === 'submit') return await handleSubmit(req, res, session)
-    if (action === 'callins') return await handleCallIns(req, res, session)
-    if (action === 'mine') return await handleMine(req, res, session)
+    // "Try it as…" (Brent, 15 Nov 2026): an admin opens someone else's
+    // timesheet — their pay items, roster, leave and TOIL — to check it, or to
+    // file it for them. Admins only; nothing of theirs is saved as a draft,
+    // and a call-in is never logged into their draft from a preview.
+    const asEmail = String(req.query.as || req.body?.as || '').trim()
+    let subject = session
+    if (asEmail) {
+      const me = getStaffByEmail(session.email)
+      if (!me?.isAdmin) return res.status(403).json({ error: 'Only an admin can open someone else\'s timesheet' })
+      const target = getStaffByEmail(asEmail)
+      if (!target?.hasTimesheets) return res.status(404).json({ error: 'That person is not on timesheets' })
+      subject = { ...session, email: target.email, name: target.name }
+      req.actingAs = { email: me.email, name: me.name }
+      if (action === 'draft' && req.method !== 'GET') {
+        return res.status(403).json({ error: 'A preview does not save drafts' })
+      }
+    }
+
+    if (action === 'payitems') return await handlePayItems(req, res, subject)
+    if (action === 'draft') return await handleDraft(req, res, subject)
+    if (action === 'submit') return await handleSubmit(req, res, subject)
+    if (action === 'callins') return await handleCallIns(req, res, subject)
+    if (action === 'mine') return await handleMine(req, res, subject)
     if (action === 'list') return await handleList(req, res)
     if (action === 'decide') return await handleDecide(req, res)
     if (action === 'payaudit') return await handlePayAudit(req, res)
@@ -57,11 +75,11 @@ export default async function handler(req, res) {
       if (!admin) return
       return res.status(200).json(await payrollCheck())
     }
-    if (action === 'toil') return await handleToil(req, res, session)
+    if (action === 'toil') return await handleToil(req, res, subject)
     if (action === 'toilopening') return await handleToilOpening(req, res)
     if (action === 'toilmatch') return await handleToilMatch(req, res)
-    if (action === 'leavedays') return await handleLeaveDays(req, res, session)
-    if (action === 'balances') return await handleBalances(req, res, session)
+    if (action === 'leavedays') return await handleLeaveDays(req, res, subject)
+    if (action === 'balances') return await handleBalances(req, res, subject)
     if (action === 'toilretry') return await handleToilRetry(req, res)
     return res.status(400).json({ error: 'Unknown or missing action' })
   } catch (err) {
@@ -320,6 +338,29 @@ async function handleSubmit(req, res, session) {
   const check = validate(entries, categories, period.days)
   if (!check.ok) return res.status(400).json({ error: check.errors[0], errors: check.errors })
 
+  // A dry run (Brent, 15 Nov 2026, "Try it as…"): everything above — the
+  // roster, leave, TOIL and overtime rules, validation — and the exact lines
+  // Xero would be sent, without sending them or saving anything.
+  if (req.body?.dryRun) {
+    const byId = new Map(categories.map(c => [c.earningsRateID, c]))
+    return res.status(200).json({
+      dryRun: true,
+      staffName: staff.name,
+      period: { start: period.start, end: period.end },
+      lines: buildTimesheetLines(entries, categories, period.days).map(l => ({
+        payItem: byId.get(l.EarningsRateID)?.xeroName || byId.get(l.EarningsRateID)?.label || l.EarningsRateID,
+        units: l.NumberOfUnits,
+        total: Math.round(l.NumberOfUnits.reduce((a, b) => a + b, 0) * 100) / 100
+      })),
+      notOnTimesheet: notOnTimesheet(entries, categories, period.days),
+      toilTaken: totalOf(toilTaken),
+      overtimeClaim: overtimeClaim ? { hours: overtimeClaim.hours } : null,
+      toilBanked: overflow.moved.length ? overflow.excess : 0,
+      warnings: [...check.warnings, ...(roster.warning ? [roster.warning] : [])],
+      totals: check.totals
+    })
+  }
+
   // Xero first: if it rejects, nothing is recorded as submitted and the staff
   // member can correct and retry.
   const xero = await submitTimesheetToXero({
@@ -356,7 +397,9 @@ async function handleSubmit(req, res, session) {
     toilTaken,
     status: 'submitted',
     xero,
-    submittedAt: new Date().toISOString()
+    submittedAt: new Date().toISOString(),
+    // Filed by an admin for this person ("Try it as…", 15 Nov 2026).
+    ...(req.actingAs ? { submittedBy: req.actingAs } : {})
   }
   await saveTimesheet('submitted', record)
   await clearTimesheetDraft(staff.email)
@@ -459,7 +502,7 @@ async function handleCallIns(req, res, session) {
   // are kept on the draft, so a call-in somebody takes back out stays out.
   // Never into a fortnight already filed, and only for people whose pay
   // items include the call-in allowance.
-  const logged = await logCallIns(staff, period, suggestions.filter(s => s.auto))
+  const logged = req.actingAs ? [] : await logCallIns(staff, period, suggestions.filter(s => s.auto))
 
   // The roster, read rather than computed — see src/clinicalPlan/onCall.js.
   // Only for those paid it; filled from the roster, never typed (14 Nov 2026).

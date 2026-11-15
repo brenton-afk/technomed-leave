@@ -2068,6 +2068,14 @@ sticky** (Brent, 15 Nov 2026: the leave was hidden under the bar). The
 fortnight-total bar is `position: sticky; bottom: 0` inside the page
 (`data-total-bar`), never `fixed` at a guessed 70px over the tab bar;
 `safeArea.test.js` holds it.
+**"Try a timesheet as…"** (Brent, 15 Nov 2026): Admin → Timesheets, a button
+per person opens their own timesheet screen (`Timesheets actAs`), every
+request carrying `as` (admins only, else 403; `req.actingAs`). Nothing of
+theirs is saved as a draft (POST `draft` with `as` is 403) and no call-in is
+logged from a preview. The review offers **Dry run** (`dryRun: true` on
+submit — every rule and check, then the exact Xero lines, nothing sent or
+stored) and **Submit for real** (filed in Xero for them, `submittedBy` on the
+record). Admins (Brent and Erin) approve in the same screen.
 **Read-only Xero check** (`api/_payrollCheck.js`): earnings rates, leave types
 and each person's pay template against their contract (`comparePerson` —
 missing items, extra items, call-in paid by the hour, items Xero will not take

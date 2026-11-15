@@ -117,7 +117,9 @@ vi.mock('./_payItems.js', () => ({
   fetchEarningsRates: vi.fn(async () => []), categoriesForStaff: vi.fn(() => CATS), CATEGORY_RULES: [],
   assignedRatesFor: vi.fn(async () => null), unitMismatch: vi.fn(() => null), demoCategories: vi.fn(() => []), isDemo: vi.fn(() => false)
 }))
-vi.mock('./_timesheetXero.js', () => ({
+vi.mock('./_timesheetXero.js', async importOriginal => ({
+  buildTimesheetLines: (await importOriginal()).buildTimesheetLines,
+  notOnTimesheet: (await importOriginal()).notOnTimesheet,
   submitTimesheetToXero: vi.fn(async args => { xeroCalls.timesheets.push(args); return { timesheetID: 'ts1', status: 'DRAFT' } }),
   approveTimesheetInXero: vi.fn(async () => ({ status: 'APPROVED' }))
 }))
@@ -214,5 +216,32 @@ describe('submitting and approving', () => {
     await call('draft', 'POST', { periodStart: '2026-11-02', entries: { toil_taken: { '2026-11-03': 2 } } })
     // 3 Nov is past: nothing written.
     expect(calendarSyncs).toHaveLength(0)
+  })
+})
+
+describe('"Try it as…" (Brent, 15 Nov 2026)', () => {
+  it('lets an admin dry-run someone else\'s timesheet — nothing sent, nothing saved', async () => {
+    who = { email: 'brenton@technomed.com.au', name: 'Brenton Lovering' }
+    const res = await call('submit', 'POST', { ...fortnight(), as: 'ben@technomed.com.au', dryRun: true })
+    expect(res.statusCode).toBe(200)
+    expect(res.payload.error).toBeUndefined()
+    expect(res.payload.dryRun).toBe(true)
+    expect(res.payload.staffName).toBe('Ben Cassidy')
+    expect(res.payload.lines[0].total).toBe(76)
+    expect(xeroCalls.timesheets).toHaveLength(0)
+    expect(store.timesheets.size).toBe(0)
+  })
+  it('files it for real for them, saying who did', async () => {
+    who = { email: 'brenton@technomed.com.au', name: 'Brenton Lovering' }
+    const res = await call('submit', 'POST', { ...fortnight(), as: 'ben@technomed.com.au' })
+    expect(res.statusCode).toBe(200)
+    expect(res.payload.record.email).toBe('ben@technomed.com.au')
+    expect(res.payload.record.submittedBy.email).toBe('brenton@technomed.com.au')
+  })
+  it('refuses anyone who is not an admin, and never saves a draft for them', async () => {
+    who = { email: 'ben@technomed.com.au', name: 'Ben Cassidy' }
+    expect((await call('submit', 'POST', { ...fortnight(), as: 'aimee@technomed.com.au', dryRun: true })).statusCode).toBe(403)
+    who = { email: 'brenton@technomed.com.au', name: 'Brenton Lovering' }
+    expect((await call('draft', 'POST', { ...fortnight(), as: 'ben@technomed.com.au' })).statusCode).toBe(403)
   })
 })
