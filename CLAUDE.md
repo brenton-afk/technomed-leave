@@ -2047,8 +2047,9 @@ template narrows it further; `categoriesForStaff`). Erin: ordinary, time and a
 half (odd Saturdays), double time, TOIL — 24h a week, days vary, `earnsToil`,
 approves her own. Toni: admin and science ordinary (ad hoc, mostly admin),
 double time, TOIL in either — on "Bank as TOIL" she picks admin or science
-(`toilInto` on submit → `toilOverflow({ into })`). Ben, Aimee, Mat (Mat is a
-director by title only): ordinary, double time, TOIL, call-in, on-call. April
+(`toilInto` on submit → `toilOverflow({ into })`). Ben, Aimee: ordinary, double time, TOIL, call-in, on-call. Mat
+(director by title only): the same without double time — not in his contract
+(15 Nov 2026), so he is offered TOIL or paid hours, never the overtime claim. April
 (casual): ordinary, call-in, on-call (`paidOnCall`). Jeremy is salaried — no
 timesheet. **A call-in is $250 however long** — the "how long were you there /
 double time past five hours" step is gone.

@@ -117,7 +117,7 @@ describe('display order (Brent, 15 Nov 2026)', () => {
   it('puts ordinary hours first, then overtime, TOIL, call-ins and on-call', () => {
     const rates = ['Call In Allowance', 'TOIL Accrued', 'On Call Allowance', 'Ordinary Hours', 'Overtime Double Time']
       .map((n, i) => ({ EarningsRateID: `r${i}`, Name: n, RateType: 'RATEPERUNIT', TypeOfUnits: 'Hours' }))
-    const keys = categoriesForStaff(rates, 'mat@technomed.com.au', { assignedRateIds: rates.map(r => r.EarningsRateID) }).map(c => c.key)
+    const keys = categoriesForStaff(rates, 'ben@technomed.com.au', { assignedRateIds: rates.map(r => r.EarningsRateID) }).map(c => c.key)
     expect(keys).toEqual(['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'])
   })
 })

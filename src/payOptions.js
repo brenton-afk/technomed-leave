@@ -82,9 +82,10 @@ export const PAY_OPTIONS = {
     note: 'Full time, 76h a fortnight. Extra hours: TOIL, or double time with Erin\'s approval. On-call roster and call-ins.'
   },
   'mat@technomed.com.au': {
-    items: ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    // No overtime in his contract (Brent, 15 Nov 2026) — extra hours are TOIL.
+    items: ['ordinary', 'toil_accrued', 'call_in', 'on_call'],
     reviewed: true,
-    note: 'Full time, 76h a fortnight (director of a division by title only). Extra hours: TOIL, or double time with Erin\'s approval. On-call roster and call-ins.'
+    note: 'Full time, 76h a fortnight (director of a division by title only). Extra hours: TOIL (no overtime in his contract). On-call roster and call-ins.'
   },
   'april@technomed.com.au': {
     items: ['ordinary', 'call_in', 'on_call'],

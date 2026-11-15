@@ -19,7 +19,7 @@ describe('nobody\'s entitlement changed when this moved', () => {
       'toil_toni_admin', 'toil_toni_scientific', 'toil_accrued'],
     'ben@technomed.com.au': ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
     'aimee@technomed.com.au': ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
-    'mat@technomed.com.au': ['ordinary', 'overtime_double', 'toil_accrued', 'call_in', 'on_call'],
+    'mat@technomed.com.au': ['ordinary', 'toil_accrued', 'call_in', 'on_call'], // no overtime (15 Nov 2026)
     'april@technomed.com.au': ['ordinary', 'call_in', 'on_call']
   }
 
