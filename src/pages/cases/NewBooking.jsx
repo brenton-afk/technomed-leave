@@ -6,6 +6,7 @@ import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggesti
 import { Overlay } from '../../design/Shell.jsx'
 import { offerNotices } from '../../notices.js'
 import DictateBooking from './DictateBooking.jsx'
+import PasteMessage from './PasteMessage.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES, GOOGLE_COLOR_HEX, guideColorIdFor } from '../../clinicalPlan/colours.js'
 import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall, SYSTEM_BUTTONS } from '../../clinicalPlan/inventory.js'
@@ -221,6 +222,9 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
   const [dictating, setDictating] = useState(false)
+  // A registrar's WhatsApp, read and booked straight in (Brent, 16 Nov 2026).
+  const [pasting, setPasting] = useState(false)
+  const pasteDone = useRef(false)
 
   // A booking spoken at the mic from anywhere in the app arrives already read,
   // so the form opens filled in rather than making somebody say it twice. The
@@ -449,6 +453,16 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
             display: 'flex', alignItems: 'center', gap: space.sm
           }}>
             <span style={{ ...text('heading'), color: colour.ink, flex: 1 }}>New booking</span>
+            {!dictating && !pasting && (
+              <button onClick={() => setPasting(true)} aria-label="Paste a message"
+                style={{
+                  background: 'none', border: `1px solid ${colour.line}`,
+                  borderRadius: radius.pill, padding: `4px ${space.sm}px`,
+                  cursor: 'pointer', ...text('caption'), color: colour.inkMuted
+                }}>
+                💬 Paste
+              </button>
+            )}
             {!dictating && (
               <button onClick={() => setDictating(true)} aria-label="Speak the booking"
                 style={{
@@ -472,6 +486,12 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
           </div>
 
           <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
+            {pasting && (
+              <PasteMessage user={user}
+                onBooked={() => { pasteDone.current = true; onCreated?.() }}
+                onUseForm={f => { setPasting(false); applyDictation(f) }}
+                onClose={() => { setPasting(false); if (!pasteDone.current) return; onClose?.() }} />
+            )}
             {dictating && (
               <DictateBooking
                 user={user}

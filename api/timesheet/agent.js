@@ -66,6 +66,7 @@ export default async function handler(req, res) {
     if (action === 'draft') return await handleDraft(req, res, subject)
     if (action === 'submit') return await handleSubmit(req, res, subject)
     if (action === 'callins') return await handleCallIns(req, res, subject)
+    if (action === 'case-callin') return await handleCaseCallIn(req, res, session)
     if (action === 'mine') return await handleMine(req, res, subject)
     if (action === 'list') return await handleList(req, res)
     if (action === 'decide') return await handleDecide(req, res)
@@ -261,6 +262,7 @@ async function handleDraft(req, res, session) {
   // screen cannot make it log them again.
   const before = await getTimesheetDraft(staff.email)
   if (before?.periodStart === period.start && before.autoCallIns) draft.autoCallIns = before.autoCallIns
+  if (before?.periodStart === period.start && before.offCallIns) draft.offCallIns = before.offCallIns
   await saveTimesheetDraft(staff.email, draft)
   const calendar = earnsToil(staff.email)
     ? await toilOnCalendar(staff, period, cleanToilTaken(draft.entries[TOIL_TAKEN], period.days))
@@ -557,6 +559,76 @@ export async function logCallIns(staff, period, auto) {
     savedAt: new Date().toISOString()
   })
   return fresh.map(({ id, day, title, time }) => ({ id, day, title, time }))
+}
+
+// ─── An after-hours call-in tapped on the case (Brent, 16 Nov 2026) ─────────
+// "An after hours call in button next to the button where you tap your name as
+// having attended a case … added to their timesheet as a call in if it tapped
+// for the respective employee." Keyed by the booking's id — the same id the
+// automatic logging uses (callInsFor), so a case is never a call-in twice.
+// Off again takes the one call-in away and remembers it, so the automatic
+// logging does not put it back.
+
+/** Whether this case is a call-in on this person's draft. Pure. */
+export function caseCallInOn(draft, id, periodStart) {
+  if (!draft || draft.periodStart !== periodStart) return false
+  return (draft.autoCallIns || []).includes(id) && !(draft.offCallIns || []).includes(id)
+}
+
+/** Turns one case's call-in on or off in a person's draft. */
+export async function setCaseCallIn(staff, { id, day, on }, by) {
+  if (!paidCallIns(staff)) throw Object.assign(new Error(`${staff.firstName || staff.name} is not paid call-ins`), { status: 400 })
+  const period = periodFor(day)
+  const filed = (await getAllTimesheets(100))
+    .some(r => r.email === staff.email && r.periodStart === period.start && r.status !== 'rejected')
+  if (filed) {
+    throw Object.assign(new Error(`${staff.firstName}'s timesheet for that fortnight is already submitted — add the call-in there`), { status: 409 })
+  }
+  const draft = await getTimesheetDraft(staff.email)
+  const base = draft?.periodStart === period.start
+    ? draft
+    : { email: staff.email, staffName: staff.name, periodStart: period.start, periodEnd: period.end, entries: {} }
+  const was = caseCallInOn(base, id, period.start)
+  if (Boolean(on) === was) return { on: was }
+  const row = { ...(base.entries?.call_in || {}) }
+  row[day] = Math.max(0, (Number(row[day]) || 0) + (on ? 1 : -1))
+  if (!row[day]) delete row[day]
+  const auto = new Set(base.autoCallIns || [])
+  const off = new Set(base.offCallIns || [])
+  if (on) { auto.add(id); off.delete(id) } else { off.add(id) }
+  await saveTimesheetDraft(staff.email, {
+    ...base,
+    entries: { ...(base.entries || {}), call_in: row },
+    autoCallIns: [...auto],
+    offCallIns: [...off],
+    callInsTappedBy: { ...(base.callInsTappedBy || {}), [id]: by },
+    savedAt: new Date().toISOString()
+  })
+  return { on: Boolean(on) }
+}
+
+/** GET: who on the roster is paid call-ins, and whether this case is one for each. POST: set one. */
+async function handleCaseCallIn(req, res, session) {
+  const body = req.method === 'POST' ? (req.body || {}) : req.query
+  const id = String(body.id || '').trim()
+  const day = String(body.day || '').trim()
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ error: 'The case and its day are needed' })
+  const paid = STAFF.filter(s => paidCallIns(s))
+  if (req.method === 'POST') {
+    const who = paid.find(s => s.firstName === String(body.firstName || '').trim() || s.email === body.email)
+    if (!who) return res.status(400).json({ error: 'Not someone who is paid call-ins' })
+    const me = getStaffByEmail(session.email)
+    try {
+      return res.status(200).json(await setCaseCallIn(who, { id, day, on: Boolean(body.on) }, me?.firstName || session.email))
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message })
+    }
+  }
+  const period = periodFor(day)
+  const people = await Promise.all(paid.map(async s => ({
+    firstName: s.firstName, on: caseCallInOn(await getTimesheetDraft(s.email), id, period.start)
+  })))
+  return res.status(200).json({ people })
 }
 
 // ─── The TOIL balance ────────────────────────────────────────────────────────

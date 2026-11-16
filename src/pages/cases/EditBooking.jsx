@@ -510,6 +510,10 @@ export default function EditBooking({
   // "No usage for this case" — stops the 6pm reminder. Saved straight away,
   // separately from the booking, because it is not a change to the case.
   const [noUsage, setNoUsage] = useState(false)
+  // After-hours call-ins tapped beside a rep's name (Brent, 16 Nov 2026):
+  // { Ben: true, … } for the people paid call-ins, read from their drafts.
+  const [callIns, setCallIns] = useState({})
+  const [callInBusy, setCallInBusy] = useState('')
   // What else is booked on the day this booking is headed for. Refetched when
   // the date changes, because moving a booking onto a day whose kit is already
   // committed is the same clash as booking a second one there.
@@ -576,6 +580,20 @@ export default function EditBooking({
     setPlanned(data.planned || [])
     setNoUsage(Boolean(data.noUsage))
   }
+
+  // Who is paid call-ins, and whether this case is one for each of them —
+  // only for a case that has happened or is happening.
+  const callInDay = when.date && when.date <= todayStr() ? when.date : ''
+  useEffect(() => {
+    if (!callInDay || !eventId) return undefined
+    let live = true
+    fetch(`/api/timesheet/agent?action=case-callin&id=${encodeURIComponent(eventId)}&day=${callInDay}`, { headers: auth })
+      .then(r => (r.ok ? r.json() : { people: [] }))
+      .then(d => { if (live) setCallIns(Object.fromEntries((d.people || []).map(p => [p.firstName, Boolean(p.on)]))) })
+      .catch(() => {})
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, callInDay])
 
   const load = useCallback(async () => {
     setError('')
@@ -1298,6 +1316,50 @@ export default function EditBooking({
                   <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block', marginTop: 2 }}>
                     Goes into the booking title, as the team already writes it
                   </span>
+                  {/* After-hours call-in, for a rep called in from home (Brent,
+                      16 Nov 2026). Beside each attending rep who is paid
+                      call-ins, once the case has happened or is happening;
+                      tapping puts one call-in on their timesheet that day. */}
+                  {when.date && when.date <= todayStr() && reps.some(r => r in callIns) && (
+                    <div data-call-ins style={{ marginTop: space.sm }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {reps.filter(r => r in callIns).map(name => {
+                          const on = callIns[name]
+                          return (
+                            <button key={name} type="button" aria-pressed={on} disabled={callInBusy === name}
+                              aria-label={`After-hours call-in for ${name}`}
+                              onClick={async () => {
+                                setCallInBusy(name); setError('')
+                                try {
+                                  const res = await fetch('/api/timesheet/agent?action=case-callin', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json', ...auth },
+                                    body: JSON.stringify({ id: eventId, day: when.date, firstName: name, on: !on })
+                                  })
+                                  const data = await res.json().catch(() => ({}))
+                                  if (!res.ok || data.error) throw new Error(data.error || 'Not saved — try again')
+                                  setCallIns(c => ({ ...c, [name]: Boolean(data.on) }))
+                                } catch (err) {
+                                  setError(err.message)
+                                } finally {
+                                  setCallInBusy('')
+                                }
+                              }}
+                              style={{
+                                padding: `6px ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer', ...text('bodyStrong'),
+                                background: on ? colour.warning : colour.surface,
+                                color: on ? 'white' : colour.inkMuted,
+                                border: `1px solid ${on ? colour.warning : colour.line}`
+                              }}>
+                              {on ? '✓ ' : ''}{name} · after-hours call-in
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block', marginTop: 2 }}>
+                        Called in from home — adds a call-in to their timesheet for that day
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Only once the case has happened or is happening. */}

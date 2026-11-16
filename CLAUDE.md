@@ -519,6 +519,49 @@ operation, `NEW_OPERATION`); when the entry's day has already passed and the
 email is later; or when both name spinal levels (`levelsIn`) and none are
 shared. `bookingsOnCalendar` carries `procedure` for this.
 
+### Bookings say where their kit comes from, and a pasted message books itself (Brent, 16 Nov 2026)
+
+"Choose the system and confirm it in the booking when added, rather than
+having consignment? in the field … You know what systems exist at each
+hospital, so you need to start booking accordingly." `kitWithDaySupplies` in
+`src/clinicalPlan/kitSupply.js` (pure, `kitDaySupplies.test.js`) gives every
+system on a booking with no supply one, by the day: `suggestSupplyOnDay` with
+`nth` = 1 + the non-cancelled bookings at that hospital that day drawing on
+the same system's shelf set (a loan case brings its own). A supply written by
+a person is never changed; unknown systems and navigation are left alone.
+Applied in `writeBooking` (Add booking, Inbox Accept, a pasted message) and in
+`handleSave` whenever an edit touches hospital, procedure or kit (the day's
+other bookings, this one left out). `bookingsOnCalendar` now carries each
+case's `hospital` and `supplies` for it. The "?" on a card stays only for
+bookings typed in Google.
+
+**Paste a message** (Brent: a registrar's WhatsApp — "add it straight in to the
+bookings for the day"; "Don't need the UR number"). Add booking → **💬 Paste**
+(`cases/PasteMessage.jsx`) → `action=book-message` (`handleBookMessage` in
+`api/calendar/today.js`): `readMessageBooking` in `api/_readDictatedBooking.js`
+(the dictation prompt with `{ message: true }`; "Boss Gupta" is the surgeon;
+clinical context — mechanism, ICU — into notes; the surname from the word in
+capitals, `capitalsSurname`; never a given name or UR, `stripIdentifiers`
+after). No kit named → the surgeon's usual for that operation (`assumedKit`,
+system only — `writeBooking` sets the supply for the day); AIRO on an RHH
+pedicle-screw case as always. Written straight to the calendar, attributed
+"(from a message)", supplier notices offered as for any new booking. The
+message not saying the hospital or day → `needs` and the screen asks (RHH /
+Calvary buttons, a day); no patient or surgeon → **Fill in the form** with what
+was read. The same surname with the same surgeon already booked that day is
+refused (409), so pasting twice books once.
+
+**After-hours call-in beside the attending rep** (Brent, same day: "for when
+staff attend a case out of hours that they were called from home for").
+Edit booking, under Rep attended, for a case today or past: a button per
+attending rep who is paid call-ins (`paidCallIns`: Ben, Aimee, Mat, April —
+not Brent) → `action=case-callin` on `api/timesheet/agent.js`
+(`setCaseCallIn`): one call-in on that day in their draft, keyed by the
+booking id — the same id the automatic logging uses, so never two; off takes
+it away and is remembered (`offCallIns`) so the automatic logging does not put
+it back; refused (409) once that fortnight is submitted. Anyone signed in may
+tap it for the person who went; who tapped is kept (`callInsTappedBy`).
+
 ### System suggestions and Brainlab billing (Brent, 3 Nov 2026)
 
 `src/clinicalPlan/systemSuggestions.js` holds Brent's operation → system rules

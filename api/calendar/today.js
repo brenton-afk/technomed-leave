@@ -58,7 +58,8 @@ import { searchChat } from '../_chatSearch.js'
 import { searchMailbox, readMessage, addressOf, headersOf } from '../_gmail.js'
 import { parseTheatreList } from '../../src/clinicalPlan/parseTheatreList.js'
 import { readBookingDocument } from '../_readBookingDocument.js'
-import { readDictatedBooking } from '../_readDictatedBooking.js'
+import { readDictatedBooking, readMessageBooking } from '../_readDictatedBooking.js'
+import { assumedKit } from '../../src/clinicalPlan/deduceKit.js'
 import { readVoiceCommand } from '../_voiceCommand.js'
 import {
   sourceOf, isSameBooking, mergeBookings, isDistributorEmail, alreadyInCalendar, asksForCover, DISTRIBUTOR_REQUEST,
@@ -70,6 +71,7 @@ import {
 } from '../../src/clinicalPlan/dayLayout.js'
 import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
 import { kitWithAutoAiro } from '../../src/clinicalPlan/brainlab.js'
+import { kitWithDaySupplies } from '../../src/clinicalPlan/kitSupply.js'
 import { cleanListPlace, withListPlace, bySession, moveWithinList, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
 import { weekOf, cleanLeader, turnOf } from '../../src/clinicalPlan/teamLeader.js'
 import { leadersOn, turnLeader, leaderEmailOn } from '../_leaders.js'
@@ -163,6 +165,7 @@ export default async function handler(req, res) {
   if (req.query.action === 'loantrail') return handleLoanTrail(req, res)
   if (req.query.action === 'loanattachment') return handleLoanAttachment(req, res)
   if (req.query.action === 'create') return handleCreate(req, res)
+  if (req.query.action === 'book-message') return handleBookMessage(req, res)
   // Kit to move, a tray to get back, something to restock. Not an operation,
   // and the part of a week that actually goes wrong.
   if (req.query.action === 'task') return handleTask(req, res)
@@ -617,6 +620,16 @@ async function handleSave(req, res) {
       const kit = kitWithAutoAiro({ hospital: now.hospital || current.location, procedure: now.procedure, kit: now.kit,
         notes: typeof body.notes === 'string' ? body.notes : [].concat(descriptionNotes(description)).join('\n') })
       if (kit !== String(now.kit || '')) description = setLabelledValue(description, 'kit', kit)
+      // And any system left without a supply gets one, the day considered
+      // (Brent, 16 Nov 2026) — the same rule as a new booking.
+      const after = parseLabelledDescription(description)
+      const day = String(current.start?.dateTime || current.start?.date || '').slice(0, 10)
+      if (after.kit && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        let sameDay = []
+        try { sameDay = (await bookingsOnCalendar(day, day)).filter(c => !c.cancelled && c.id !== eventId) } catch { sameDay = [] }
+        const supplied = kitWithDaySupplies({ kit: after.kit, hospital: after.hospital || current.location, sameDay })
+        if (supplied !== String(after.kit)) description = setLabelledValue(description, 'kit', supplied)
+      }
     }
 
     // Who is allocated (Task 10). Only the week's team leader, or an admin.
@@ -851,6 +864,22 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
     if (kit !== String(fields.kit || '')) fields = { ...fields, kit }
   }
 
+  // The day's other bookings: for this case's hour, and for which kit it
+  // takes. A calendar that cannot be read is no reason to refuse the booking.
+  let sameDay = []
+  try {
+    sameDay = (await bookingsOnCalendar(day, day)).filter(c => !c.cancelled)
+  } catch {
+    sameDay = []
+  }
+  // Every system gets its supply now, from what is at that hospital and what
+  // else is booked there that day — never a "Consignment?" for a rep to
+  // confirm (Brent, 16 Nov 2026; kitWithDaySupplies in kitSupply.js).
+  if (fields.kit) {
+    const kit = kitWithDaySupplies({ kit: fields.kit, hospital: fields.hospital, sameDay })
+    if (kit !== String(fields.kit || '')) fields = { ...fields, kit }
+  }
+
   // Built through the same writer the edit sheet uses, so a booking created
   // here reads back exactly like one the team typed.
   //
@@ -895,7 +924,6 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
   // means this one starts the day.
   let hour = 8
   try {
-    const sameDay = (await bookingsOnCalendar(day, day)).filter(c => !c.cancelled)
     hour = hourForNewCase(sameDay, surgeon)
   } catch {
     hour = 8
@@ -942,6 +970,60 @@ async function handleCreate(req, res) {
   }
 }
 
+
+/**
+ * A pasted message, booked straight onto the calendar (Brent, 16 Nov 2026: a
+ * registrar's WhatsApp — "I want you to add it straight in to the bookings for
+ * the day"). Read by Claude (readMessageBooking: surname only, no UR number),
+ * the system chosen by the surgeon's rules when the message names none, and
+ * its supply by the day (writeBooking → kitWithDaySupplies). The person may
+ * say the hospital or day where the message does not; anything still missing
+ * comes back as `needs` with what was read, and nothing is written. The same
+ * surname with the same surgeon already booked that day is not booked twice.
+ */
+async function handleBookMessage(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const read = await readMessageBooking(body.text)
+    const fields = { ...read.fields }
+    if (['RHH', 'CLV'].includes(body.hospital)) fields.hospital = body.hospital
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(body.date || ''))) fields.date = body.date
+    const needs = [['patient', 'patient surname'], ['surgeon', 'surgeon'], ['hospital', 'hospital'], ['date', 'day']]
+      .filter(([k]) => !fields[k]).map(([k]) => k)
+    if (needs.length) return res.status(200).json({ ok: false, needs, fields, unclear: read.unclear })
+
+    let sameDay = []
+    try { sameDay = (await bookingsOnCalendar(fields.date, fields.date)).filter(c => !c.cancelled) } catch { sameDay = [] }
+    const dup = sameDay.find(c => String(c.patient).toLowerCase() === fields.patient.toLowerCase()
+      && normaliseSurgeon(c.surgeon) === normaliseSurgeon(fields.surgeon))
+    if (dup) return res.status(409).json({ error: `${fields.patient} is already booked with ${fields.surgeon} that day`, existing: { id: dup.id, summary: dup.summary }, fields })
+
+    // No kit named: the surgeon's usual for that operation (systemSuggestions);
+    // its supply is left to writeBooking, which knows the day.
+    if (!fields.kit) {
+      const assumed = assumedKit({ surgeon: fields.surgeon, procedure: fields.procedure, hospital: fields.hospital })
+      if (assumed?.system) fields.kit = assumed.system
+    }
+    const notes = fields.note || ''
+    const created = await writeBooking({
+      fields: { patient: fields.patient, surgeon: fields.surgeon, hospital: fields.hospital, procedure: fields.procedure, kit: fields.kit },
+      date: fields.date, notes
+    }, firstNameFor(session.email), { source: 'message' })
+    const notices = await prepareNotices({ kind: 'new', afterEvent: created, eventId: created.id, session })
+    const kit = parseLabelledDescription(created.description || '').kit || fields.kit || ''
+    return res.status(200).json({
+      ok: true,
+      booked: { ...fields, kit, note: fields.note, unclear: read.unclear },
+      event: { id: created.id, summary: created.summary || '', etag: created.etag || null },
+      ...notices
+    })
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message })
+  }
+}
 
 /**
  * Who entered the booking, and who has touched it since.
@@ -1195,7 +1277,11 @@ async function bookingsOnCalendar(from, to) {
         // the week reads it. readBooking has no cancelled field, so this was
         // always false: a CANCELLED booking counted as live, and a
         // cancellation email for it was offered again (Brent, 9 Nov 2026).
-        cancelled: isCancelled(e.summary || '', e.description || '')
+        cancelled: isCancelled(e.summary || '', e.description || ''),
+        // Where, and with what, so a new booking that day can tell whether
+        // the hospital's shelf set is already taken (kitWithDaySupplies).
+        hospital: read.hospital || e.location || '',
+        supplies: (read.supplies || []).map(x => ({ system: x.system, supply: x.supply || null }))
       }
     })
     .filter(Boolean)

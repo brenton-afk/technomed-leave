@@ -921,3 +921,27 @@ describe('opening a booking without the wait (Brent, 11 Nov 2026)', () => {
     expect(screen.getByDisplayValue('L5/S1 PLIF')).toBeInTheDocument()
   })
 })
+
+describe('after-hours call-in beside an attending rep (Brent, 16 Nov 2026)', () => {
+  it('shows for a paid rep who attended a past case, and tapping it logs the call-in', async () => {
+    const posts = []
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url)
+      if (u.includes('action=booking')) return { status: 200, ok: true, json: async () => ({ ...BOOKING, reps: ['Mat', 'Brent'] }) }
+      if (u.includes('action=case-callin') && !init?.method) {
+        return { ok: true, status: 200, json: async () => ({ people: [{ firstName: 'Mat', on: false }, { firstName: 'Ben', on: false }] }) }
+      }
+      if (u.includes('action=case-callin')) { posts.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ on: true }) } }
+      return { ok: true, status: 200, json: async () => ({}) }
+    })
+    show()
+    await ready()
+    const button = await screen.findByRole('button', { name: 'After-hours call-in for Mat' })
+    // Brent attended too but is not paid call-ins: no button for him.
+    expect(screen.queryByRole('button', { name: 'After-hours call-in for Brent' })).toBeNull()
+    fireEvent.click(button)
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0]).toEqual({ id: 'evt-1', day: '2026-09-23', firstName: 'Mat', on: true })
+    await waitFor(() => expect(button).toHaveAttribute('aria-pressed', 'true'))
+  })
+})

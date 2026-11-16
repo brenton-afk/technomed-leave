@@ -27,6 +27,7 @@
 
 /** The three, in the order they appear on the buttons. */
 import { isNavigationOnly } from './systems.js'
+import { inventoryFor, siteCode, suggestSupplyOnDay } from './inventory.js'
 
 // Calvary Loan added 1 Nov 2026 at Brent's request: Calvary's consigned kit
 // lent to a case at RHH, the mirror of RHH Loan. The same job — we move it.
@@ -236,4 +237,40 @@ export function drawsOnLocalStock(kit, system) {
   // Every kind of loan arrives for the case: a distributor sends one, or we
   // bring one over ourselves. Either way it is not the hospital's.
   return !/loan/i.test(entry.supply)
+}
+
+/**
+ * Every system on a new booking with no supply gets one (Brent, 16 Nov 2026:
+ * "I want the portal to choose the system and confirm it in the booking when
+ * added, rather than having consignment? in the field and that then needing to
+ * be confirmed by the rep. You know what systems exist at each hospital").
+ *
+ * The day decides it, as on the week: the first cases at a hospital take its
+ * consigned sets, the next takes the office's loan kit, then a set from the
+ * other Hobart hospital, then a distributor's (suggestSupplyOnDay). A case
+ * already booked that day on loan brings its own kit and takes no shelf set.
+ * A supply somebody wrote is never changed; a system the inventory does not
+ * know, or navigation, is left as it is. Pure.
+ *
+ * @param sameDay [{ hospital, cancelled, supplies: [{system, supply}] } | { kit }]
+ */
+export function kitWithDaySupplies({ kit, hospital, sameDay = [] } = {}) {
+  const text = String(kit || '')
+  const site = siteCode(hospital)
+  const entries = parseKitSupplies(text)
+  if (!site || !entries.some(e => !e.supply && !e.navigation)) return text
+  let changed = false
+  const next = entries.map(e => {
+    if (e.supply || e.navigation || isNavigationOnly(e.system)) return e
+    const item = inventoryFor(e.system)
+    if (!item) return e
+    const onShelf = (sameDay || []).filter(c => !c.cancelled && siteCode(c.hospital) === site
+      && (c.supplies || parseKitSupplies(c.kit)).some(x => x?.system && !x.navigation
+        && inventoryFor(x.system) === item && !/loan/i.test(x.supply || ''))).length
+    const supply = suggestSupplyOnDay(e.system, hospital, onShelf + 1)
+    if (!supply) return e
+    changed = true
+    return { ...e, supply }
+  })
+  return changed ? formatKitSupplies(next) : text
 }

@@ -87,3 +87,41 @@ describe('on-call hours on submit', () => {
     expect(out.warning).toMatch(/roster/)
   })
 })
+
+describe('an after-hours call-in tapped on the case (Brent, 16 Nov 2026)', () => {
+  const load = async () => (await import('./timesheet/agent.js'))
+  const P2 = { start: '2026-11-02', end: '2026-11-15' }
+  const MATP = { email: 'mat@technomed.com.au', name: 'Mat Usher', firstName: 'Mat', hasTimesheets: true }
+  it('puts one call-in on the day, and taking it off takes it away', async () => {
+    const { setCaseCallIn, caseCallInOn } = await load()
+    expect(await setCaseCallIn(MATP, { id: 'evt-9', day: '2026-11-07', on: true }, 'Toni')).toEqual({ on: true })
+    expect(draft.entries.call_in['2026-11-07']).toBe(1)
+    expect(caseCallInOn(draft, 'evt-9', '2026-11-02')).toBe(true)
+    expect(draft.callInsTappedBy['evt-9']).toBe('Toni')
+    await setCaseCallIn(MATP, { id: 'evt-9', day: '2026-11-07', on: true }, 'Toni')
+    expect(draft.entries.call_in['2026-11-07']).toBe(1)
+    await setCaseCallIn(MATP, { id: 'evt-9', day: '2026-11-07', on: false }, 'Toni')
+    expect(draft.entries.call_in['2026-11-07']).toBeUndefined()
+    expect(caseCallInOn(draft, 'evt-9', '2026-11-02')).toBe(false)
+  })
+  it('is never two call-ins with the automatic one for the same case', async () => {
+    const { setCaseCallIn } = await load()
+    await logCallIns(MATP, P2, [{ ...WHITE, id: 'evt-9' }])
+    await setCaseCallIn(MATP, { id: 'evt-9', day: '2026-11-07', on: true }, 'Mat')
+    expect(draft.entries.call_in['2026-11-07']).toBe(1)
+  })
+  it('stays off after being taken off, even when the automatic logging runs again', async () => {
+    const { setCaseCallIn } = await load()
+    await setCaseCallIn(MATP, { id: 'evt-9', day: '2026-11-07', on: true }, 'Mat')
+    await setCaseCallIn(MATP, { id: 'evt-9', day: '2026-11-07', on: false }, 'Mat')
+    expect(await logCallIns(MATP, P2, [{ ...WHITE, id: 'evt-9' }])).toEqual([])
+    expect(draft.entries.call_in['2026-11-07']).toBeUndefined()
+  })
+  it('is refused once that fortnight is submitted, and for anyone not paid call-ins', async () => {
+    const { setCaseCallIn } = await load()
+    filed = [{ email: MATP.email, periodStart: P2.start, status: 'submitted' }]
+    await expect(setCaseCallIn(MATP, { id: 'e', day: '2026-11-07', on: true }, 'Mat')).rejects.toMatchObject({ status: 409 })
+    const { STAFF } = await import('../src/staffConfig.js')
+    await expect(setCaseCallIn(STAFF.find(p => p.firstName === 'Brent'), { id: 'e', day: '2026-11-07', on: true }, 'Brent')).rejects.toMatchObject({ status: 400 })
+  })
+})

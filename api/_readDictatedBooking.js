@@ -103,7 +103,7 @@ export async function transcribe(audioBase64, contentType, extra = []) {
  * nothing and said so — which surfaced to the user as "no text could be
  * extracted" underneath a transcript that was plainly right there on screen.
  */
-export function promptFor(transcript, today) {
+export function promptFor(transcript, today, { message = false } = {}) {
   // Refused rather than sent. A prompt that announces a transcription and
   // carries none asks the model to invent one, and what came back instead —
   // "no text could be extracted" — was shown to somebody looking at an accurate
@@ -115,11 +115,22 @@ export function promptFor(transcript, today) {
   const surgeons = Object.keys(SURGEON_COLOUR_NAMES).join(', ')
   const systems = INVENTORY.map(i => i.system).join(', ')
 
-  return `A staff member at a Tasmanian spinal implant distributor has dictated a surgical booking out loud. Below is an automatic transcription of what they said. Turn it into booking fields.
+  const intro = message
+    ? `A staff member at a Tasmanian spinal implant distributor has pasted a message about a surgical case — usually a WhatsApp or text from a hospital registrar or theatre ("New case for today … For L1-L3 perc screws … Boss Gupta"). Turn it into booking fields.
+
+The message:
+${transcript}
+`
+    : `A staff member at a Tasmanian spinal implant distributor has dictated a surgical booking out loud. Below is an automatic transcription of what they said. Turn it into booking fields.
 
 What they said:
 ${transcript}
+`
+  const how = message
+    ? `Write the procedure as the operation planned, plainly and in full: "For L1-L3 perc screws" on an "L2 3 column fracture" is "L1-L3 percutaneous pedicle screw fixation for L2 three-column fracture". "Boss", "Consultant" or "Dr" before a name is the surgeon. Put the clinical context that matters on the day — how it happened, where the patient is (ICU, intubated), anything urgent — in "note", in short plain words. If the message does not say which hospital, return "" for hospital rather than guessing.`
+    : `Transcription is unreliable on surnames and product names — it has never heard of these people or these systems. Where a spoken word is clearly a mangled version of a name on those lists, correct it. Where it is not clear, keep what was said rather than guessing at a name: a wrong surgeon is worse than an odd one.`
 
+  return `${intro}
 Today is ${weekdayName(today)} ${today}, in Hobart.
 
 Resolve spoken dates against that. "Friday" or "next Friday" means the coming Friday; "the second" means the 2nd of the nearest sensible month, which is usually ahead rather than behind. Return YYYY-MM-DD. If no date was said at all, return "".
@@ -127,7 +138,7 @@ Resolve spoken dates against that. "Friday" or "next Friday" means the coming Fr
 The surgeons are: ${surgeons}, and Peters-Willke, who is also called JPW.
 The implant systems are: ${systems}.
 
-Transcription is unreliable on surnames and product names — it has never heard of these people or these systems. Where a spoken word is clearly a mangled version of a name on those lists, correct it. Where it is not clear, keep what was said rather than guessing at a name: a wrong surgeon is worse than an odd one.
+${how}
 
 Return each field, or "" where nothing was said:
   surname     the patient's SURNAME ONLY
@@ -147,6 +158,60 @@ Return ONLY JSON:
 {"surname":"","surgeon":"","date":"","hospital":"","procedure":"","kit":"","note":"","unclear":""}
 
 Put in "unclear" a short plain-English note about anything you could not make out or had to guess at, or "" if it was all clear. This is shown to the person so they know what to check.`
+}
+
+/** The model's answer as booking fields, identifiers stripped. Shared by both readers. */
+/**
+ * "Alex KNIGHT" is how a registrar writes a name: the surname in capitals. When
+ * a name mixes capitals and ordinary case, the words in capitals are the
+ * surname; numbers (a UR) never are. Pure.
+ */
+export function capitalsSurname(raw) {
+  const words = String(raw || '').replace(/\d+/g, ' ').split(/\s+/).filter(Boolean)
+  const caps = words.filter(w => /[A-Z]{2,}/.test(w) && w === w.toUpperCase())
+  return caps.length && caps.length < words.length ? caps.join(' ') : words.join(' ')
+}
+
+function fieldsFrom(parsed) {
+  const kit = resolveKit(stripIdentifiers(String(parsed.kit || '')), String(parsed.procedure || ''))
+  return {
+    patient: surnameFromField(capitalsSurname(parsed.surname)),
+    surgeon: normaliseSurgeon(parsed.surgeon) || '',
+    date: /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.date || '')) ? parsed.date : '',
+    hospital: /rhh|royal/i.test(String(parsed.hospital || '')) ? 'RHH'
+      : /clv|calvary|lenah/i.test(String(parsed.hospital || '')) ? 'CLV' : '',
+    procedure: stripIdentifiers(String(parsed.procedure || '')),
+    kit,
+    systems: systemsInKit(kit),
+    note: stripIdentifiers(String(parsed.note || ''))
+  }
+}
+
+/**
+ * A pasted message — a registrar's WhatsApp — as booking fields (Brent,
+ * 16 Nov 2026: "copy in a whatsapp message … have the portal read it and add
+ * the booking"). Surname only: a given name or UR number in the message never
+ * comes back (the prompt says so, and stripIdentifiers makes sure).
+ */
+export async function readMessageBooking(text) {
+  const message = String(text || '').trim().slice(0, 4000)
+  if (!message) throw Object.assign(new Error('Paste the message first'), { status: 400 })
+  const today = toDateStr(zonedCivil(new Date(), TZ))
+  const reply = await askClaude({
+    feature: 'message-booking',
+    whenUnavailable: 'The message could not be read right now — please fill in the form below.',
+    request: {
+      model: MODEL,
+      max_tokens: 1500,
+      thinking: { type: 'adaptive' },
+      messages: [{ role: 'user', content: promptFor(message, today, { message: true }) }]
+    }
+  })
+  const out = reply.content.filter(b => b.type === 'text').map(b => b.text).join('')
+  const json = /\{[\s\S]*\}/.exec(out)
+  let parsed = {}
+  try { parsed = json ? JSON.parse(json[0]) : {} } catch { parsed = {} }
+  return { fields: fieldsFrom(parsed), unclear: stripIdentifiers(String(parsed.unclear || '')) }
 }
 
 /**

@@ -41,7 +41,7 @@ export function enteredByOf(description) {
 export function creatorTag(name, { source } = {}) {
   const who = String(name || '').trim()
   if (!who) return ''
-  return source === 'email' ? `${who} (from email)` : who
+  return source === 'email' ? `${who} (from email)` : source === 'message' ? `${who} (from a message)` : who
 }
 
 /**
