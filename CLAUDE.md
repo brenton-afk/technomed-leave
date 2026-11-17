@@ -1105,6 +1105,17 @@ days ahead (`casesOn` now carries `inSitu`): surgeon, operation, hospital, day,
 the sentence and whether a rep confirmed — never the patient
 (`sendInSituAlert`); once per case (`insitu:alerted:{id}`, let go if the
 send fails).
+**Only on the booking for now** (Brent, 17 Nov 2026: "too much going on at
+the top of the page … The Insitu note is not needed … leave it in the booking
+until we can set up the Dropbox search"): the day's in-situ box is not drawn
+(`shownFlags` in `CaseWeek.jsx` drops `kind: 'inSitu'`; the flag still rides in
+the plan so `InSituProvider` can look the tag up), the card's tag carries it
+(not-checked reads "In situ?"), and `inSituAlerts` emails nobody until
+`DROPBOX_USAGE_READS=on` (`ready`). **Only kit jobs on the Cases page** (same
+day: "The jobs aren't being ticked off … only show things that are related to
+kit movements … Things that are projects should stay in the my to do list"):
+`kitJobs` / `isKitTask` — move, tray back, restock, dispatch suggestions, or a
+task naming a kit; project items (`undoneDue`) are no longer drawn on Cases.
 **Not when the booking already says what is in there** (Brent, 9 Nov 2026):
 `inSituNoted` — one line of the operation or notes that says it is already in
 (in situ, existing, old/previous construct …) *and* names a system or maker

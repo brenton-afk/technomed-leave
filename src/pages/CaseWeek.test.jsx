@@ -1526,83 +1526,15 @@ describe('project tasks that fall due', () => {
     })
   }
 
-  it('puts what is due today on today', async () => {
+  // Brent, 17 Nov 2026: "only show things that are related to kit movements in
+  // that space. Things that are projects should stay in the my to do list."
+  it('keeps project items off the Cases page — they live in My To Do', async () => {
     withWorklist()
     show()
-    await waitFor(() =>
-      expect(screen.getByText(/Get the Athlet tray back from RHH/)).toBeInTheDocument())
-  })
-
-  it('brings the overdue one along, because it is still due', async () => {
-    // A task due on Friday does not stop being due because it is Monday, and
-    // a list that quietly drops it is a list that helped you forget.
-    withWorklist()
-    show()
-    await waitFor(() =>
-      expect(screen.getByText(/Chase the Globus paperwork/)).toBeInTheDocument())
-    expect(screen.getByText(/Chase the Globus paperwork/).textContent)
-      .toMatch(/overdue/)
-  })
-
-  it('leaves a later one for its own day', async () => {
-    withWorklist()
-    show()
-    await waitFor(() =>
-      expect(screen.getByText(/Get the Athlet tray back/)).toBeInTheDocument())
-    expect(screen.queryByText(/Book the Calvary in-service/)).not.toBeInTheDocument()
-  })
-
-  it('drops what is already done from the Cases page', async () => {
-    // Brent, 6 Nov 2026: "if they're done they're done and gone, they're just
-    // taking up valuable space on the page".
-    withWorklist()
-    show()
-    await waitFor(() =>
-      expect(screen.getByText(/Get the Athlet tray back/)).toBeInTheDocument())
-    expect(screen.queryByLabelText('Already handled — done — open')).not.toBeInTheDocument()
-  })
-
-  it('names who has it, so the day view says whose job it is', async () => {
-    withWorklist()
-    show()
-    await waitFor(() =>
-      expect(screen.getByText(/Get the Athlet tray back/).textContent)
-        .toMatch(/Ben Cassidy/))
-  })
-
-  it('opens one, then ticks it off without leaving the week', async () => {
-    // The point of putting these here is clearing them without changing tab —
-    // and a tap opens it first, so a stray tap ticks nothing.
-    withWorklist()
-    show()
-    const row = await waitFor(() =>
-      screen.getByLabelText('Get the Athlet tray back from RHH — open'))
-    fireEvent.click(row)
-    expect(global.fetch.mock.calls.filter(c => String(c[0]).includes('action=task'))).toHaveLength(0)
-    fireEvent.click(await screen.findByRole('button', { name: 'Mark as done' }))
-    await waitFor(() => {
-      const calls = global.fetch.mock.calls.filter(c => String(c[0]).includes('action=task'))
-      expect(calls.length).toBeGreaterThan(0)
-      expect(JSON.parse(calls[0][1].body)).toMatchObject({ id: 'w1', done: true })
-    })
-  })
-
-  it('still draws the week when the worklist will not load', async () => {
-    // A missing to-do list is a smaller problem than a blank screen on the
-    // morning of a list.
-    global.fetch = vi.fn(async url => {
-      if (String(url).includes('action=board')) throw new Error('Upstash is down')
-      if (String(url).includes('/api/guides')) {
-        return { ok: true, json: async () => ({ guides: [], coming: [] }) }
-      }
-      return {
-        ok: true,
-        json: async () => ({ events, syncedAt: '2026-09-21T02:00:00.000Z' }),
-        text: async () => ''
-      }
-    })
-    show()
-    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    await new Promise(r => setTimeout(r, 50))
+    expect(screen.queryByText(/Get the Athlet tray back from RHH/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Chase the Globus paperwork/)).not.toBeInTheDocument()
   })
 })
 
@@ -1728,5 +1660,20 @@ describe('ETBS without a list place (Brent, 9 Nov 2026)', () => {
     await waitFor(() => expect(screen.getByText('Testcase')).toBeInTheDocument())
     expect(document.querySelector('[data-etbs]')).not.toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('only kit jobs on the Cases page (Brent, 17 Nov 2026)', () => {
+  it('keeps a move, a tray back, a restock and a dispatch; drops a free-text job', async () => {
+    const { kitJobs } = await import('./CaseWeek.jsx')
+    const jobs = kitJobs([
+      { id: 'a', kind: 'move', thing: 'Diplomat' },
+      { id: 'b', kind: 'return' },
+      { id: 'c', kind: 'restock' },
+      { id: 'd', suggested: true, kind: 'dispatch' },
+      { id: 'e', kind: 'other', what: 'Ring the CSSD' },
+      { id: 'f', kind: 'move', done: true }
+    ])
+    expect(jobs.map(j => j.id)).toEqual(['a', 'b', 'c', 'd'])
   })
 })

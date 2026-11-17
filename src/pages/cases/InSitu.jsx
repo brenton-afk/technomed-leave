@@ -63,6 +63,7 @@ export function inSituTag(answer) {
   if (ok === 'same' || ok === 'none-confirmed') return 'In situ ✓'
   if (ok === 'not-this-patient') return 'In situ: not found'
   if (answer.status === 'found') return 'In situ: confirm'
+  if (answer.status === 'not-checked') return 'In situ?'
   return 'No usage found'
 }
 

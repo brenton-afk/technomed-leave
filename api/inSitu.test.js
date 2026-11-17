@@ -90,7 +90,8 @@ describe('a week before, to the team leader on shift', () => {
     addDays: (d, n) => (n === 7 ? '2026-11-24' : d),
     casesOn: async day => (day === '2026-11-24' ? [CASE, { ...CASE, id: 'evt2', inSitu: null }] : []),
     leaderEmailOn: async day => (day === '2026-11-17' ? 'mat@technomed.com.au' : null),
-    send: async m => { sent.push(m) }
+    send: async m => { sent.push(m) },
+    ready: true
   })
 
   it('emails the answer for each in-situ case seven days out, once', async () => {
@@ -101,6 +102,13 @@ describe('a week before, to the team leader on shift', () => {
     expect(sent[0].answer.sentence).toMatch(/Diplomat/)
     await inSituAlerts(deps(sent))
     expect(sent).toHaveLength(1)
+  })
+
+  it('waits for the Dropbox usage search before emailing anyone', async () => {
+    const sent = []
+    const r = await inSituAlerts({ ...deps(sent), ready: false })
+    expect(r.skipped).toMatch(/Dropbox/)
+    expect(sent).toHaveLength(0)
   })
 
   it('tries again tomorrow if the email failed', async () => {

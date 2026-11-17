@@ -66,6 +66,12 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
 // surgeon's colour (Brent, 9 Nov 2026).
 const IN_SITU_CHIP = { color: colour.danger, background: colour.surface }
 
+// What is in situ stays on the booking's tag, not as a box at the top of the
+// day (Brent, 17 Nov 2026: "too much going on at the top … leave it in the
+// booking until we can set up the Dropbox search"). The flag still travels in
+// the plan, so the tag can be looked up.
+const shownFlags = flags => (flags || []).filter(f => f.kind !== 'inSitu')
+
 /** The case card's in-situ tag, from the looked-up answer (cases/InSitu.jsx). */
 function InSituTagText({ id }) {
   const { answers } = useInSitu()
@@ -210,6 +216,16 @@ const KIND_TONE = {
  */
 export const openTasks = tasks => (tasks || []).filter(t => t.suggested || !t.done)
 export const undoneDue = due => (due || []).filter(t => t.status !== 'done')
+
+/**
+ * Only kit on the Cases page (Brent, 17 Nov 2026: "only show things that are
+ * related to kit movements in that space. Things that are projects should stay
+ * in the My To Do list"): a move, a tray to get back, a restock, the portal's
+ * own dispatch suggestions, and any other task that names a kit. Project items
+ * are not drawn here at all.
+ */
+export const isKitTask = t => Boolean(t && (t.suggested || ['move', 'return', 'restock'].includes(t.kind) || t.thing))
+export const kitJobs = tasks => openTasks(tasks).filter(isKitTask)
 
 /** "Mon 3 Nov", for a job carried over from that day. */
 function carriedDay(date) {
@@ -1168,7 +1184,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
         // (8 Nov 2026: the desktop showed only the red ones, so Ben's 9am
         // appointment was at the top of a phone's Wednesday and missing from
         // the desktop's — the two must never differ).
-        const alerts = day.flags || []
+        const alerts = shownFlags(day.flags)
         const danger = f => ['clinicalAlert', 'kitTask', 'inSitu'].includes(f.kind)
 
   return (
@@ -1226,16 +1242,10 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
               {/* Kit to move, trays to get back, things to restock. Above the
                   cases, because a job that has to happen before the list
                   starts is the thing somebody needs to see first. */}
-              {openTasks(day.tasks).map(task => (
+              {kitJobs(day.tasks).map(task => (
                 <TaskRow key={task.id} task={task} onDone={onTaskDone} compact />
               ))}
-
-              {/* And what falls due off the project board. Same row as the day
-                  view uses, so the two cannot drift apart. */}
-              {undoneDue(due).map(task => (
-                <DueRow key={task.id} task={task} today={today}
-                  onDone={onDueDone} compact />
-              ))}
+              {/* Project items stay in My To Do (Brent, 17 Nov 2026). */}
 
               {groups.map(group => {
                 // The order the list will run in, and whether it is worth
@@ -1299,7 +1309,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   // those are the same sentence twice, a few centimetres apart — and the one
   // that can be acted on is the other one.
   const empty = !groups.length && !others.length && !away.length
-    && !attention.length && !(day.flags || []).length && !openTasks(day.tasks).length
+    && !attention.length && !shownFlags(day.flags).length && !kitJobs(day.tasks).length
 
   return (
     <>
@@ -1309,9 +1319,9 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           somebody has to physically do, on that day, and it used to sit at the
           foot of the page under "Also on" — below the cases, which is where a
           task goes to be forgotten. */}
-      {(day.flags || []).length > 0 && (
+      {shownFlags(day.flags).length > 0 && (
         <div style={{ marginBottom: space.sm }}>
-          {day.flags.map((flag, i) => flag.inSituCase ? <InSituFlag key={i} flag={flag} /> : (
+          {shownFlags(day.flags).map((flag, i) => flag.inSituCase ? <InSituFlag key={i} flag={flag} /> : (
             <Banner key={i}
               tone={['clinicalAlert', 'kitTask'].includes(flag.kind) ? 'danger' : 'warning'}>
               {flag.text}
@@ -1343,15 +1353,10 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           because a job that has to happen before the list starts is the thing
           somebody needs to see first. Same component as the week column, so
           the two cannot drift apart. */}
-      {openTasks(day.tasks).map(task => (
+      {kitJobs(day.tasks).map(task => (
         <TaskRow key={task.id} task={task} onDone={onTaskDone} />
       ))}
-
-      {/* And whatever falls due today off the project board, so the morning
-          view is one place to look rather than two. */}
-      {undoneDue(due).map(task => (
-        <DueRow key={task.id} task={task} today={today} onDone={onDueDone} />
-      ))}
+      {/* Project items stay in My To Do (Brent, 17 Nov 2026). */}
 
       {groups.map(group => {
         const cases = group.cases

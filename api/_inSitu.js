@@ -134,8 +134,12 @@ export async function confirmInSitu(c, answer, session) {
  * today — once per case. Dependencies are passed in so the cron and the tests
  * share it.
  */
-export async function inSituAlerts({ today, addDays, casesOn, leaderEmailOn, send }) {
+export async function inSituAlerts({ today, addDays, casesOn, leaderEmailOn, send, ready = usageReadsAllowed() }) {
   const day = addDays(today, 7)
+  // Held until the Dropbox usage search is on (Brent, 17 Nov 2026: "leave it
+  // in the booking until we can set up the Dropbox search") — before then the
+  // email could only say "not searched yet".
+  if (!ready) return { day, alerted: 0, skipped: 'waiting for the Dropbox usage search (DROPBOX_USAGE_READS)' }
   const cases = (await casesOn(day))
     .filter(c => c.inSitu && !c.cancelled && !c.notRequired)
   if (!cases.length) return { day, alerted: 0 }
