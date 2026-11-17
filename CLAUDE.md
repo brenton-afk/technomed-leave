@@ -554,7 +554,8 @@ refused (409), so pasting twice books once.
 **After-hours call-in beside the attending rep** (Brent, same day: "for when
 staff attend a case out of hours that they were called from home for").
 Edit booking, under Rep attended, for a case today or past: a button per
-attending rep who is paid call-ins (`paidCallIns`: Ben, Aimee, Mat, April —
+rep who is paid call-ins, ticked or not (tapping one on ticks them as attended
+too — Brent's screenshot showed nobody ticked, so nothing appeared) (`paidCallIns`: Ben, Aimee, Mat, April —
 not Brent) → `action=case-callin` on `api/timesheet/agent.js`
 (`setCaseCallIn`): one call-in on that day in their draft, keyed by the
 booking id — the same id the automatic logging uses, so never two; off takes

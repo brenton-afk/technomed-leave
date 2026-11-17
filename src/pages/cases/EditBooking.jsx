@@ -1320,10 +1320,10 @@ export default function EditBooking({
                       16 Nov 2026). Beside each attending rep who is paid
                       call-ins, once the case has happened or is happening;
                       tapping puts one call-in on their timesheet that day. */}
-                  {when.date && when.date <= todayStr() && reps.some(r => r in callIns) && (
+                  {when.date && when.date <= todayStr() && Object.keys(callIns).length > 0 && (
                     <div data-call-ins style={{ marginTop: space.sm }}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {reps.filter(r => r in callIns).map(name => {
+                        {Object.keys(callIns).map(name => {
                           const on = callIns[name]
                           return (
                             <button key={name} type="button" aria-pressed={on} disabled={callInBusy === name}
@@ -1338,6 +1338,8 @@ export default function EditBooking({
                                   const data = await res.json().catch(() => ({}))
                                   if (!res.ok || data.error) throw new Error(data.error || 'Not saved — try again')
                                   setCallIns(c => ({ ...c, [name]: Boolean(data.on) }))
+                                  // Called in means they attended: tick them too, for Save.
+                                  if (data.on) setReps(list => (list.includes(name) ? list : [...list, name]))
                                 } catch (err) {
                                   setError(err.message)
                                 } finally {
@@ -1356,7 +1358,7 @@ export default function EditBooking({
                         })}
                       </div>
                       <span style={{ ...text('caption'), color: colour.inkFainter, display: 'block', marginTop: 2 }}>
-                        Called in from home — adds a call-in to their timesheet for that day
+                        Called in from home — adds a call-in to their timesheet for that day, and ticks them as attended
                       </span>
                     </div>
                   )}

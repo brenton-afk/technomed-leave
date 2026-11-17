@@ -923,6 +923,24 @@ describe('opening a booking without the wait (Brent, 11 Nov 2026)', () => {
 })
 
 describe('after-hours call-in beside an attending rep (Brent, 16 Nov 2026)', () => {
+  it('shows for every rep paid call-ins on a past case, ticked or not, and tapping one ticks them as attended', async () => {
+    const posts = []
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url)
+      if (u.includes('action=booking')) return { status: 200, ok: true, json: async () => ({ ...BOOKING, reps: [] }) }
+      if (u.includes('action=case-callin') && !init?.method) {
+        return { ok: true, status: 200, json: async () => ({ people: [{ firstName: 'Ben', on: false }, { firstName: 'Mat', on: false }] }) }
+      }
+      if (u.includes('action=case-callin')) { posts.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ on: true }) } }
+      return { ok: true, status: 200, json: async () => ({}) }
+    })
+    show()
+    await ready()
+    fireEvent.click(await screen.findByRole('button', { name: 'After-hours call-in for Ben' }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Ben' }).some(b => b.getAttribute('aria-pressed') === 'true')).toBe(true))
+  })
+
   it('shows for a paid rep who attended a past case, and tapping it logs the call-in', async () => {
     const posts = []
     global.fetch = vi.fn(async (url, init) => {
