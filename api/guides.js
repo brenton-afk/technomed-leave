@@ -10,10 +10,10 @@ import {
   listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit, getKitOrder, saveKitOrder, logKitEvent,
   saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
-import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus } from './_dropbox.js'
+import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, uploadFile } from './_dropbox.js'
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
-import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath } from './_resources.js'
+import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath, uploadPathFor } from './_resources.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
 import { listKitDocs, docCounts, keepKitDoc, removeKitDoc, setKitDocKind, kitDocLink, DOC_KINDS,
   dropboxCatalogue, suggestFor, searchCatalogue, linkKitDoc, proposeAgreements } from './_kitDocs.js'
@@ -256,7 +256,8 @@ async function handleResources(req, res, session) {
       return res.status(200).json({ systems: resourcesBySystem({ catalogue, picks, kits: withTrays }), canEdit: Boolean(session?.email) })
     }
     if (what === 'files' && req.method === 'GET') {
-      const catalogue = await resourceCatalogue()
+      // Fresh: someone choosing a file has often just put it in Dropbox.
+      const catalogue = await resourceCatalogue({ fresh: true })
       return res.status(200).json({ files: filesFor(catalogue, String(req.query.distributor || ''), String(req.query.slot || '')) })
     }
     if (what === 'open' && req.method === 'GET') {
@@ -268,6 +269,36 @@ async function handleResources(req, res, session) {
       const { system, slot, path } = req.body || {}
       await setPick(String(system || ''), String(slot || ''), path ? String(path) : null, await resourceCatalogue())
       return res.status(200).json({ ok: true })
+    }
+    if (what === 'upload' && req.method === 'POST') {
+      // A file from the phone or computer, into the distributor's Dropbox
+      // folder, chosen for the slot (Aimee, 17 Nov 2026).
+      const body = req.body || {}
+      const system = String(body.system || '')
+      const slot = String(body.slot || '')
+      const { path } = uploadPathFor({ system, slot, filename: body.filename, catalogue: await resourceCatalogue() })
+      const viaBlob = /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/kitdocs\//i.test(String(body.url || ''))
+      let buffer
+      if (typeof body.data === 'string' && body.data) buffer = Buffer.from(body.data, 'base64')
+      else if (viaBlob) {
+        const got = await fetch(body.url)
+        if (!got.ok) return res.status(502).json({ error: 'The upload could not be fetched — try again' })
+        buffer = Buffer.from(await got.arrayBuffer())
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          fetch('https://blob.vercel-storage.com/delete', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`, 'Content-Type': 'application/json', 'x-api-version': '7' },
+            body: JSON.stringify({ urls: [body.url] })
+          }).catch(() => {})
+        }
+      } else return res.status(400).json({ error: 'Upload the file again' })
+      if (!buffer.length) return res.status(400).json({ error: 'That file is empty' })
+      const up = await uploadFile(path, buffer, { keep: true })
+      const saved = up?.path_display || path
+      const catalogue = await resourceCatalogue({ fresh: true })
+      // Chosen for the slot, so it shows at once however the portal would rank it.
+      if (openablePath(saved, catalogue)) await setPick(system, slot, saved, catalogue)
+      return res.status(200).json({ ok: true, path: saved })
     }
     return res.status(400).json({ error: 'Unknown resources action' })
   } catch (err) {

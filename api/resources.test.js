@@ -65,3 +65,37 @@ describe('the Resources tab', () => {
     expect(openablePath('/ALL SURGEON USAGE/SPINE/x.pdf', catalogue)).toBe(false)
   })
 })
+
+// Aimee, 17 Nov 2026: "Trying to add the ARTGs and it doesn't allow you to
+// upload a document; I uploaded the Shoreline one to the distributor folder
+// but it didn't appear in the options."
+import { uploadPathFor } from './_resources.js'
+
+describe('names the team actually uses', () => {
+  it('reads "Surgical_Tech" as a surgical technique', () => {
+    expect(slotOf('Shoreline_Surgical_Tech D0000975C.pdf')).toBe('technique')
+  })
+  it('reads the ARTG Aimee filed', () => {
+    expect(slotOf('298002 ARTG Device Technologies Shoreline.pdf')).toBe('artg')
+  })
+})
+
+describe('uploading a reference file', () => {
+  it("goes beside that system's other files, named as it is", () => {
+    const out = uploadPathFor({ system: 'Shoreline', slot: 'artg', filename: '298002 ARTG Shoreline.pdf', catalogue })
+    expect(out.path).toBe('/Distributors/Device Technologies/SHORELINE SYSTEM/Shoreline Rebate Codes/298002 ARTG Shoreline.pdf')
+  })
+  it('is named so the portal reads it as that slot and system', () => {
+    const out = uploadPathFor({ system: 'Northstar', slot: 'artg', filename: 'certificate 123.pdf', catalogue })
+    expect(out.path).toBe('/Distributors/Device Technologies/Northstar/Northstar ARTG - certificate 123.pdf')
+    expect(slotOf(out.path.split('/').pop())).toBe('artg')
+  })
+  it('refuses a system we do not carry, or a picture', () => {
+    expect(() => uploadPathFor({ system: 'Nope', slot: 'artg', filename: 'x.pdf' })).toThrow(/Unknown system/)
+    expect(() => uploadPathFor({ system: 'Shoreline', slot: 'artg', filename: 'x.jpg' })).toThrow(/Upload a PDF/)
+  })
+  it('cannot climb out of the folder', () => {
+    const out = uploadPathFor({ system: 'Shoreline', slot: 'artg', filename: '../../ALL SURGEON USAGE/ARTG x.pdf', catalogue })
+    expect(out.path).not.toMatch(/\.\.|ALL SURGEON USAGE/)
+  })
+})

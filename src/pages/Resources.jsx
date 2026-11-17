@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { upload } from '@vercel/blob/client'
 import { Page, Header, Body, Banner, EmptyState, Skeleton, Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../design/tokens.js'
 import { IconFolder } from '../design/icons.jsx'
@@ -13,6 +14,20 @@ import { hasDoc } from '../kit/docCache.js'
 // them where they are); "Change" picks another, or says there is none, for
 // everyone. The tray list opens the system's kit in the Kit room.
 
+// Through the request up to this; larger goes through the same upload store the
+// Kit room's documents use (a request body tops out at 4.5 MB).
+const SMALL = 2.8 * 1024 * 1024
+const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt'
+
+function asBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1] || '')
+    r.onerror = () => reject(new Error('Could not read that file'))
+    r.readAsDataURL(file)
+  })
+}
+
 export const SLOT_LABELS = { artg: 'ARTG', technique: 'Surgical technique', rebate: 'Rebate codes & prices' }
 
 export default function Resources({ user, onOpenKit }) {
@@ -25,6 +40,8 @@ export default function Resources({ user, onOpenKit }) {
   const [changing, setChanging] = useState(null) // { system, distributor, slot }
   const [choices, setChoices] = useState(null)
   const [note, setNote] = useState('')
+  const [uploading, setUploading] = useState('')
+  const fileInput = useRef(null)
 
   const load = useCallback(async (fresh = false) => {
     try {
@@ -75,6 +92,39 @@ export default function Resources({ user, onOpenKit }) {
       if (!res.ok) throw new Error(json.error || 'Could not save that')
       await load()
     } catch (err) { setNote(err.message) }
+  }
+
+  // A file from this phone or computer, into the distributor's Dropbox folder,
+  // chosen for the slot (Aimee, 17 Nov 2026: "it doesn't allow you to upload a
+  // document").
+  async function uploadInto(file) {
+    const c = changing
+    if (!file || !c) return
+    setUploading(file.name); setNote('')
+    try {
+      let payload
+      if (file.size <= SMALL) payload = { data: await asBase64(file) }
+      else {
+        const up = await upload(`kitdocs/${Date.now()}-${file.name.replace(/[^\w.\- ]+/g, '_')}`, file, {
+          access: 'public', contentType: file.type || 'application/octet-stream',
+          handleUploadUrl: '/api/meetings/agent?action=blob-upload',
+          clientPayload: JSON.stringify({ token: user?.token || null })
+        })
+        payload = { url: up.url }
+      }
+      const res = await fetch('/api/guides?resources=upload', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system: c.system, slot: c.slot, filename: file.name, ...payload })
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Could not upload that file')
+      setChanging(null)
+      await load()
+    } catch (err) {
+      setNote(`${file.name}: ${err.message}`)
+      setChanging(null)
+    }
+    setUploading('')
   }
 
   const groups = useMemo(() => {
@@ -151,7 +201,7 @@ export default function Resources({ user, onOpenKit }) {
       </Body>
 
       {changing && (<Overlay>
-        <div role="dialog" aria-label={`Choose the ${SLOT_LABELS[changing.slot]}`} onClick={() => setChanging(null)}
+        <div role="dialog" aria-label={`Choose the ${SLOT_LABELS[changing.slot]}`} onClick={() => !uploading && setChanging(null)}
           style={{ position: 'fixed', inset: 0, zIndex: 3600, background: 'rgba(4,39,70,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: colour.surface, width: '100%', maxWidth: 640, maxHeight: '80dvh', overflowY: 'auto', overflowX: 'hidden', borderRadius: `${radius.card}px ${radius.card}px 0 0`, padding: space.md, paddingBottom: `calc(${space.md}px + env(safe-area-inset-bottom, 0px))` }}>
             <div style={{ ...text('heading'), color: colour.ink }}>{changing.system} — {SLOT_LABELS[changing.slot]}</div>
@@ -165,6 +215,13 @@ export default function Resources({ user, onOpenKit }) {
                 <span style={{ ...text('caption'), color: colour.inkFaint }}>{c.path.split('/').slice(2, -1).join(' › ')}</span>
               </button>
             ))}
+            <input ref={fileInput} type="file" accept={ACCEPT} hidden aria-label="Upload a file" style={{ fontSize: 16 }}
+              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; uploadInto(f) }} />
+            <button type="button" data-resource-upload disabled={Boolean(uploading)} onClick={() => fileInput.current?.click()}
+              style={{ ...text('bodyStrong'), width: '100%', minHeight: 44, marginTop: space.sm, borderRadius: radius.control, border: `1px solid ${colour.accent}`, background: colour.accent, color: 'white', cursor: 'pointer' }}>
+              {uploading ? `Uploading ${uploading}…` : 'Upload a file'}
+            </button>
+            <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 4 }}>Saved in {changing.system}'s folder in Dropbox and used here for everyone.</div>
             <div style={{ display: 'flex', gap: space.sm, marginTop: space.sm, flexWrap: 'wrap' }}>
               <button type="button" onClick={() => pick('none')} style={link}>There isn't one</button>
               {changing.current?.picked && <button type="button" onClick={() => pick(null)} style={link}>Let the portal choose</button>}

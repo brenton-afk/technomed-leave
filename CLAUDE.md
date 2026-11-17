@@ -220,10 +220,21 @@ Instrument Production for TechnoMed's own) and linked where they are, never
 copied; a file goes to the system whose words it names most precisely
 (`systemsForFile`), newest first. Anyone signed in can **Change** a slot to
 another file of that distributor, or say there is none — shared in Redis
-`resources:picks`. The catalogue is cached six hours (`resources:catalogue`,
+`resources:picks`. The catalogue is cached (see below) (`resources:catalogue`,
 "Look in Dropbox again" refreshes). **Tray list** opens the system's kit in the
 Kit room at its trays (`KitRoom openKit/openFocus`). Only catalogued paths open.
 `src/pages/FileBrowser.jsx` now serves only filed usage sheets.
+**Upload into a slot** (Aimee, 17 Nov 2026: "it doesn't allow you to upload a
+document … uploaded the Shoreline one to the distributor folder but it didn't
+appear"): the Change sheet has **Upload a file** (`resources=upload`; ≤2.8 MB
+in the request, larger through the Kit room's `kitdocs/` Blob handshake). It is
+filed with `keep` in the system's shallowest folder of that distributor (else
+`{distributor folder}/{system}`), renamed `{system} {ARTG|Surgical Technique|
+Rebate Codes} - {name}` unless its name already says both (`uploadPathFor`),
+and picked for the slot for everyone. The choices list reads Dropbox **fresh**
+(`resources=files`), and the catalogue is kept 30 minutes, not six hours.
+"Surgical_Tech" names count as techniques.
+
 
 Session lives in `localStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a 30-day age limit (`SESSION_MAX_AGE_MS`) on restore and re-checks every minute, matching `SESSION_TTL_SECONDS` in `api/_auth.js` — keep the two constants in step.
 

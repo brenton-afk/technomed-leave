@@ -26,7 +26,9 @@ export const DISTRIBUTOR_NAMES = { signus: 'Signus', device: 'Device Technologie
 export const SLOTS = ['artg', 'technique', 'rebate']
 
 const CATALOGUE = 'resources:catalogue'
-const CATALOGUE_TTL = 6 * 3600
+// Half an hour (it was six: Aimee, 17 Nov 2026, put Shoreline's ARTG in
+// Dropbox and it was not in the choices). The picker reads Dropbox fresh anyway.
+const CATALOGUE_TTL = 30 * 60
 const PICKS = 'resources:picks'
 const DOC_FILE = /\.(pdf|docx?|xlsx?|pptx?|csv|txt)$/i
 
@@ -35,7 +37,7 @@ export function slotOf(name = '') {
   const n = String(name).toLowerCase()
   if (/(^|[^a-z])artg([^a-z]|$)/.test(n)) return 'artg'
   if (/rebate|prosthes[ie]s\s*list|prescribed\s*list|(^|[^a-z])pl\s*codes?|billing\s*codes?|charge\s*sheet/.test(n)) return 'rebate'
-  if (/surgical\s*technique|op(erative)?\s*technique|technique\s*guide|surgical\s*(guide|protocol)|(^|[^a-z])stg([^a-z]|$)/.test(n)) return 'technique'
+  if (/surgical[\s_-]*tech(nique)?|op(erative)?[\s_-]*technique|technique[\s_-]*guide|surgical[\s_-]*(guide|protocol)|(^|[^a-z])stg([^a-z]|$)/.test(n)) return 'technique'
   return ''
 }
 
@@ -156,4 +158,34 @@ export function resourcesBySystem({ catalogue = [], picks = {}, kits = [], syste
 /** Every file of one kind for a distributor, for "choose another". Pure. */
 export function filesFor(catalogue, distributor, slot) {
   return catalogue.filter(f => f.distributor === distributor && f.slot === slot).sort(rank).map(f => ({ name: f.name, path: f.path }))
+}
+
+// ─── Upload a file into a slot (Aimee, 17 Nov 2026) ──────────────────────────
+// "Trying to add the ARTGs and it doesn't allow you to upload a document."
+// The file is filed in the distributor's own Dropbox folder — beside that
+// system's other references where there are any, else in a folder named for
+// the system — never over a file (keep), named so the portal reads it as that
+// slot and that system, then chosen for the slot for everyone.
+const SLOT_WORD = { artg: 'ARTG', technique: 'Surgical Technique', rebate: 'Rebate Codes' }
+export const UPLOAD_TYPES = /\.(pdf|docx?|xlsx?|pptx?|csv|txt)$/i
+
+/** Where an uploaded reference goes, and under what name. Pure. */
+export function uploadPathFor({ system, slot, filename, catalogue = [], systems = carriedSystems() }) {
+  const sys = systems.find(s => s.system === system)
+  if (!sys) throw Object.assign(new Error('Unknown system'), { status: 400 })
+  if (!SLOTS.includes(slot)) throw Object.assign(new Error('Unknown kind of document'), { status: 400 })
+  const base = String(filename || '').split(/[\\/]/).pop().replace(/[:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140)
+  if (!UPLOAD_TYPES.test(base)) throw Object.assign(new Error('Upload a PDF, Word, Excel, PowerPoint or text file'), { status: 400 })
+  const ofDist = systems.filter(s => s.distributor === sys.distributor)
+  const theirs = catalogue.filter(f => f.distributor === sys.distributor && systemsForFile(f.path, ofDist).includes(system))
+  // The shallowest of the system's folders: its own, not a rebate-codes corner of it.
+  const folders = theirs.map(f => f.path.split('/').slice(0, -1).join('/'))
+    .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))
+  const folder = folders.length
+    ? folders[0]
+    : `${DISTRIBUTOR_FOLDERS[sys.distributor][0]}/${system.replace(/[:*?"<>|/\\]+/g, ' ').trim()}`
+  const sysWords = wordsOf(system)
+  const namesSystem = sysWords.every(w => wordAt(`${folder}/${base}`.toLowerCase(), w) >= 0)
+  const name = slotOf(base) === slot && namesSystem ? base : `${system} ${SLOT_WORD[slot]} - ${base}`
+  return { path: `${folder}/${name}`, distributor: sys.distributor }
 }
