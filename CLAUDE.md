@@ -1580,6 +1580,15 @@ admin-only; no new function).
   ?action=sales-check {file}`. Nothing else, nothing writes; every call, refused
   ones included, is logged to `agent:log` (last 500). The cloud environment
   holds the same value as `TM_PORTAL_AGENT_KEY`.
+- **TechnoMed's letterhead on every draft** (Brent, 17 Nov 2026: "I just
+  generated a PO from the portal, but it didn't have the Technomed logos").
+  Drafts made through the API took Xero's default branding theme, which has no
+  logo. New POs, quotes and invoices now carry `BrandingThemeID` from
+  `withTheme` / `pickBrandingTheme` in `api/_xeroAccounting.js`:
+  `XERO_BRANDING_THEME` (a theme's name) if set, else a theme named TechnoMed
+  with a logo, else any theme with a logo (`/BrandingThemes`, needs
+  `accounting.settings.read`, remembered per instance). Unreadable → drafted as
+  before. A PO being replaced keeps its own theme.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

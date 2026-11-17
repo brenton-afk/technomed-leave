@@ -10,7 +10,7 @@ vi.mock('./_redis.js', () => ({
 }))
 vi.mock('./_gmail.js', () => ({ searchMailboxOf: vi.fn(), readMessageHeadline: vi.fn(), readAttachment: vi.fn(), sniffMediaType: vi.fn(), addressOf: v => v }))
 vi.mock('./_anthropic.js', () => ({ askClaude: vi.fn() }))
-vi.mock('./_xeroAccounting.js', () => ({ xeroCall: vi.fn() }))
+vi.mock('./_xeroAccounting.js', () => ({ xeroCall: vi.fn(), withTheme: vi.fn(async () => ({ BrandingThemeID: 'tm-theme' })) }))
 
 const S = await import('./_supplierPos.js')
 
@@ -93,6 +93,8 @@ describe('saving the PO in Xero', () => {
     const { po } = await S.saveSupplierPo({ messageId: 'msg123458', contactId: 'mac', lines, freight: 25, reference: 'K-Wires', quoteNumber: '00012501' }, xero)
     const sent = xero.mock.calls[0][2].PurchaseOrders[0]
     expect(sent).toMatchObject({ Status: 'DRAFT', Contact: { ContactID: 'mac' }, Reference: 'K-Wires — as per quote 00012501' })
+    // TechnoMed's letterhead (Brent, 17 Nov 2026: the PO "didn't have the Technomed logos").
+    expect(sent.BrandingThemeID).toBe('tm-theme')
     expect(sent.LineItems.at(-1)).toMatchObject({ Description: 'Freight', UnitAmount: 25 })
     expect(po.number).toBe('PO-0158')
   })

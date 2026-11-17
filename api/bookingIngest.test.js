@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ─── The mailbox check: faster, and Toby's Brainlab cases come in as No F2F ──
 // Gmail, Google Calendar, Redis and the model are all faked. Invented patients.
@@ -260,6 +260,10 @@ describe('two checks of bookings@ at once', () => {
 // Brent, 9 Nov 2026: "pt Nichols on 17/11/26 has been cancelled but the portal
 // can't see it when I hit inbox." Invented patient.
 describe('a cancellation email', () => {
+  // The case is on 17 Nov; these were written before it, and a cancellation
+  // for a day already gone is never shown — so the clock is held at 10 Nov.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-10T00:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
   const EVENT = {
     id: 'evt-t', summary: 'Testcase DAKOTA - Ibbett',
     description: 'Surgeon: Ibbett\nPatient: Testcase\nHospital: CLV\nKit: Dakota (Consignment)',
@@ -321,6 +325,10 @@ describe('a cancellation email', () => {
 })
 
 describe('a cancellation with nothing on the calendar to match', () => {
+  // The case is on 17 Nov; these were written before it, and a cancellation
+  // for a day already gone is never shown — so the clock is held at 10 Nov.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-10T00:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
   it('still shows in the Inbox, saying nothing matches', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [] }) })))
     const reader = await import('./_readBookingDocument.js')

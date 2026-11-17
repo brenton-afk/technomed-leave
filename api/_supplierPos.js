@@ -1,7 +1,7 @@
 import { searchMailboxOf, readMessageHeadline, readAttachment, sniffMediaType, addressOf } from './_gmail.js'
 import { askClaude } from './_anthropic.js'
 import { redis } from './_redis.js'
-import { xeroCall } from './_xeroAccounting.js'
+import { xeroCall, withTheme } from './_xeroAccounting.js'
 
 // ─── Purchase orders TO suppliers, from their quotes (Brent, 9 Nov 2026) ─────
 // "Can you build a module in the portal so I can just tap check for POs in
@@ -278,6 +278,8 @@ export async function saveSupplierPo({ messageId, contactId, update, lines, frei
     const data = await xero('POST', '/PurchaseOrders', {
       PurchaseOrders: [{
         Contact: { ContactID: contactId },
+        // TechnoMed's letterhead, not Xero's plain default (Brent, 17 Nov 2026).
+        ...(await withTheme(xero)),
         Date: new Date().toISOString().slice(0, 10),
         ...(ref ? { Reference: ref } : {}),
         LineAmountTypes: 'Exclusive',

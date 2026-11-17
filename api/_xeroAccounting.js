@@ -46,6 +46,39 @@ async function call(method, path, body) {
 /** The same authenticated call, for the supplier-PO module (api/_supplierPos.js). */
 export const xeroCall = (method, path, body) => call(method, path, body)
 
+
+// ─── The TechnoMed letterhead on what the portal drafts (Brent, 17 Nov 2026) ──
+// "I just generated a PO from the portal, but it didn't have the Technomed
+// logos." A draft made through the API without a BrandingThemeID gets Xero's
+// default theme, which carries no logo here. The theme is chosen once per
+// instance: XERO_BRANDING_THEME by name if set, else one named TechnoMed with
+// a logo, else any theme with a logo (lowest sort order). A theme that cannot
+// be read never stops a draft — it is made as before.
+let themeMemo = null
+export function pickBrandingTheme(themes = [], wanted = process.env.XERO_BRANDING_THEME || '') {
+  const list = (themes || []).filter(t => t && t.BrandingThemeID)
+  const byName = wanted && list.find(t => String(t.Name || '').toLowerCase() === String(wanted).toLowerCase())
+  if (byName) return byName.BrandingThemeID
+  const withLogo = list.filter(t => t.LogoUrl).sort((a, b) => (a.SortOrder ?? 99) - (b.SortOrder ?? 99))
+  const ours = withLogo.find(t => /techno\s*med/i.test(String(t.Name || '')))
+  return (ours || withLogo[0])?.BrandingThemeID || null
+}
+export async function brandingTheme(xero = call) {
+  if (themeMemo !== null) return themeMemo
+  try {
+    const data = await xero('GET', '/BrandingThemes')
+    themeMemo = pickBrandingTheme(data.BrandingThemes)
+  } catch {
+    return {}
+  }
+  return themeMemo
+}
+export const withTheme = async (xero = call) => {
+  const id = await brandingTheme(xero)
+  return id && typeof id === 'string' ? { BrandingThemeID: id } : {}
+}
+export function forgetBrandingTheme() { themeMemo = null }
+
 const quoted = s => String(s || '').replace(/["\\]/g, '')
 
 /** Customers whose name contains `search`: [{ id, name }]. */
@@ -176,6 +209,7 @@ export async function createDraftInvoice({ contactId, reference, date, dueDate, 
     Invoices: [{
       Type: 'ACCREC',
       Contact: { ContactID: contactId },
+      ...(await withTheme()),
       ...(reference ? { Reference: String(reference).slice(0, 255) } : {}),
       ...(date ? { Date: date } : {}),
       ...(dueDate ? { DueDate: dueDate } : {}),
@@ -252,6 +286,7 @@ export async function createDraftQuote({ contactId, reference, title, summary, d
   const data = await call('POST', '/Quotes', {
     Quotes: [{
       Contact: { ContactID: contactId },
+      ...(await withTheme()),
       Date: date || new Date().toISOString().slice(0, 10),
       ...(expiryDate ? { ExpiryDate: expiryDate } : {}),
       ...(reference ? { Reference: String(reference).slice(0, 255) } : {}),
