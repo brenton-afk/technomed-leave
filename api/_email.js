@@ -786,6 +786,36 @@ export async function sendBookingNotice({ to, cc, subject, html, text, sender, c
   })
 }
 
+/**
+ * What is in situ, a week before the case, to the team leader on shift
+ * (Brent, 17 Nov 2026). Names the surgeon, operation, hospital and day — never
+ * the patient, like the other staff reminders. See api/_inSitu.js.
+ */
+export async function sendInSituAlert({ to, case: c, answer }) {
+  const hospital = c.hospital === 'CLV' ? 'Calvary' : (c.hospital || '')
+  const day = new Date(`${c.date}T00:00:00Z`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+  const caseLine = [c.surgeon, c.operation, hospital, day].filter(Boolean).join(' · ')
+  const confirmed = answer?.confirmed
+    ? `Confirmed by ${answer.confirmed.by}: ${({ same: 'same patient', 'not-this-patient': 'not this patient', 'none-confirmed': 'checked, nothing found' })[answer.confirmed.answer] || answer.confirmed.answer}.`
+    : 'Not confirmed by a rep yet — please check it with the rep on this case.'
+  const sentence = answer?.sentence || 'Could not be looked up.'
+  const intro = 'A case in a week needs what is already in the patient known before the day:'
+  const text = [intro, '', caseLine, `Why: ${c.inSitu}`, '', `In situ: ${sentence}`, confirmed, '',
+    'Open the booking in the portal to see it or confirm it.', PORTAL_URL].join('\n')
+  const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746;line-height:1.5">
+<p>${escapeHtml(intro)}</p>
+<p><strong>${escapeHtml(caseLine)}</strong><br><span style="color:#6b7a8d">Why: ${escapeHtml(c.inSitu)}</span></p>
+<p style="background:#f3faf8;border:1px solid #dbe7e4;border-radius:8px;padding:10px 14px"><strong>In situ:</strong> ${escapeHtml(sentence)}</p>
+<p style="color:${answer?.confirmed ? '#189a85' : '#9b2c1f'}">${escapeHtml(confirmed)}</p>
+<p><a href="${PORTAL_URL}">Open the portal</a></p></div>`
+  return send({
+    kind: 'notification', to: [to],
+    label: `In situ check · ${caseLine}`,
+    subject: `In situ check, one week out — ${caseLine}`,
+    html, text
+  })
+}
+
 /** "Usage not sent" (Task 11) — to a rep, or to the team leader the next morning. */
 export async function sendUsageReminderEmail({ to, firstName, lines, escalation = false }) {
   const intro = escalation

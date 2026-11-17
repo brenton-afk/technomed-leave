@@ -38,6 +38,7 @@ import { preferencesFor } from '../clinicalPlan/preferences.js'
 import { GuideView } from './TheatreGuides.jsx'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
 import TaskSheet from './cases/TaskSheet.jsx'
+import { InSituProvider, InSituFlag, useInSitu, inSituTag } from './cases/InSitu.jsx'
 import { withCarried } from '../clinicalPlan/tasks.js'
 
 // ─── The week ─────────────────────────────────────────────────────────────────
@@ -64,6 +65,12 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
 // The In situ? chip carries its own white ground, so its red reads on any
 // surgeon's colour (Brent, 9 Nov 2026).
 const IN_SITU_CHIP = { color: colour.danger, background: colour.surface }
+
+/** The case card's in-situ tag, from the looked-up answer (cases/InSitu.jsx). */
+function InSituTagText({ id }) {
+  const { answers } = useInSitu()
+  return <span data-in-situ-tag>{inSituTag(answers[id])}</span>
+}
 
 function ordinal(n) {
   const teen = n % 100
@@ -743,7 +750,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             display: 'inline-flex', alignItems: 'center',
             padding: '0 8px', borderRadius: radius.pill,
             border: `1.5px solid ${IN_SITU_CHIP.color}`
-          }}>In situ?</span>}
+          }}><InSituTagText id={surgicalCase.id} /></span>}
           {surgicalCase.rep && (
             <span style={{
               ...text('caption'), display: 'inline-block',
@@ -1046,7 +1053,8 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
           <span style={{
             ...text('micro'), display: 'block', textTransform: 'none',
             fontWeight: 700, color: ink.ink
-          }}>{[place?.headline, surgicalCase.etbs ? 'ETBS' : '', surgicalCase.inSitu ? 'In situ?' : ''].filter(Boolean).join(' · ')}</span>
+          }}>{[place?.headline, surgicalCase.etbs ? 'ETBS' : ''].filter(Boolean).join(' · ')}
+            {surgicalCase.inSitu && <>{place?.headline || surgicalCase.etbs ? ' · ' : ''}<InSituTagText id={surgicalCase.id} /></>}</span>
         )}
 
         {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} compact />}
@@ -1195,7 +1203,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
 
             <div style={{ padding: 7 }}>
               {/* The things that change the day, first and briefly. */}
-              {alerts.map((flag, i) => (
+              {alerts.map((flag, i) => flag.inSituCase ? <InSituFlag key={i} flag={flag} compact /> : (
                 <div key={i} data-day-flag={flag.kind} style={{
                   ...text('micro'), textTransform: 'none', fontWeight: 600,
                   lineHeight: 1.35,
@@ -1303,7 +1311,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           task goes to be forgotten. */}
       {(day.flags || []).length > 0 && (
         <div style={{ marginBottom: space.sm }}>
-          {day.flags.map((flag, i) => (
+          {day.flags.map((flag, i) => flag.inSituCase ? <InSituFlag key={i} flag={flag} /> : (
             <Banner key={i}
               tone={['clinicalAlert', 'kitTask'].includes(flag.kind) ? 'danger' : 'warning'}>
               {flag.text}
@@ -1987,6 +1995,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
   return (
+    <InSituProvider plan={plan} token={user?.token}>
     <Page
       // tm-wide turns off the reading measure. A measure is right for a screen
       // of prose and wrong for a week in columns — capping it is exactly what
@@ -2424,5 +2433,6 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onSaved={() => load(window_, { quiet: true })} />
       )}
     </Page>
+    </InSituProvider>
   )
 }

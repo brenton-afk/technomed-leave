@@ -776,7 +776,10 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
       const who = [c.patient, c.surgeon].filter(Boolean).join(' · ')
       flags.push({
         kind: 'inSitu', boxed: true,
-        text: `Check what is in situ — ${who} (${c.inSitu}): team leader to find the previous usage in Dropbox.`
+        text: `Check what is in situ — ${who} (${c.inSitu}): team leader to find the previous usage in Dropbox.`,
+        // The answer is looked up for this case (api/_inSitu.js, Brent 17 Nov
+        // 2026) and drawn in place of the text once it comes.
+        inSituCase: { id: c.id, patient: c.patient, surgeon: c.surgeon, date: dayDate, inSitu: c.inSitu, who }
       })
     }
 

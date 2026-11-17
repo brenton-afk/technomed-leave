@@ -1065,6 +1065,35 @@ a red boxed flag ("Check what is in situ — … team leader to find the previou
 usage in Dropbox"), and both cards an **In situ?** tag. Not for cancelled or
 not-required cases. The automatic lookup (`priorImplantsFor`) stays behind the
 usage-read lock.
+**What is in situ is looked up, in one sentence** (Brent, 17 Nov 2026: "It
+just places an In situ? marking … That's not helpful … hunt through Dropbox
+to find previous usages, read those usages and tell us in one sentence what is
+in situ … no usage in Dropbox. Rep needs to confirm and that alert needs to be
+sent to the team leader that is on shift one week before the case").
+`api/_inSitu.js` + `src/clinicalPlan/inSituSummary.js` (pure): earlier usages
+under the surname, before the case — the portal's own records
+(`getUsageRecordsBulk`, MGET) with their items read (`implantsLine`: screws,
+rods, cross links, connectors, hooks, plates, cages, disc replacements; never
+set screws, caps, tulips or graft), then the Dropbox usage tree
+(`searchUsage` → `readFiledCase`, folder name only) **only when
+`DROPBOX_USAGE_READS=on`** — until the redaction lifts the lock a case with
+nothing in the portal says "Dropbox not searched yet", never "No usage in
+Dropbox", which is said only after a real search. The sentence never names the
+patient: "Last usage (Thani, Calvary, 12 Mar 2025): Diplomat — 6 screws, 2
+rods, 1 cross link." Stored per booking (`insitu:{id}`, 12h fresh), fetched
+for the week in one call (`action=insitu`, up to three looked up per call,
+the rest "pending" and asked again shortly). The day's red flag
+(`cases/InSitu.jsx`, `InSituFlag` via `InSituProvider` around CaseWeek;
+`inSituCase` on the flag from `buildWeekPlan`) shows it with **Same patient**
+/ **Not this patient**, or **I've checked** when nothing was found
+(`action=insitu-confirm`, `insitu:ok:{id}`, kept against that surname and
+day); the card's tag reads In situ? / In situ: confirm / In situ ✓ / No usage
+found. **A week out** the morning cron (`inSituAlerts`) emails the team
+leader on shift that day (`leaderEmailOn(today)`) for each in-situ case seven
+days ahead (`casesOn` now carries `inSitu`): surgeon, operation, hospital, day,
+the sentence and whether a rep confirmed — never the patient
+(`sendInSituAlert`); once per case (`insitu:alerted:{id}`, let go if the
+send fails).
 **Not when the booking already says what is in there** (Brent, 9 Nov 2026):
 `inSituNoted` — one line of the operation or notes that says it is already in
 (in situ, existing, old/previous construct …) *and* names a system or maker

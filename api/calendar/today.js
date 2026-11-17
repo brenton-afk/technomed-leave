@@ -79,6 +79,7 @@ import { dropboxConfigured, searchUsage } from '../_dropbox.js'
 import {
   readFiledCase, priorImplantsFor, describePrior
 } from '../../src/clinicalPlan/priorImplants.js'
+import { inSituFor, confirmInSitu } from '../_inSitu.js'
 import { firstNameFor, getStaffByEmail as STAFF_BY_EMAIL, parseRepNames } from '../../src/staffConfig.js'
 import { sanitisePatient } from '../../src/clinicalPlan/parse.js'
 import { withAttribution, creatorTag } from '../../src/clinicalPlan/attribution.js'
@@ -198,6 +199,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'cancel') return handleCancel(req, res)
   // What this patient already has in, for a revision or a removal.
   if (req.query.action === 'prior') return handlePrior(req, res)
+  if (req.query.action === 'insitu') return handleInSitu(req, res)
+  if (req.query.action === 'insitu-confirm') return handleInSituConfirm(req, res)
   if (req.query.action === 'search') return handleSearch(req, res)
   if (req.query.action === 'find') return handleFind(req, res)
   if (req.query.action === 'notify') return handleNotify(req, res)
@@ -2639,6 +2642,46 @@ async function handlePrior(req, res) {
   } catch (err) {
     // A history that cannot be read must not stop anybody opening a booking.
     return res.status(200).json({ ok: true, matches: [], unavailable: err.message })
+  }
+}
+
+
+// ─── What is in situ (Brent, 17 Nov 2026) ─────────────────────────────────────
+// The week asks for the answer for each case flagged in situ (api/_inSitu.js):
+// stored answers in one round trip, up to three missing ones looked up now and
+// the rest on the next refresh. The rep's confirmation is a second action.
+const inSituCase = c => ({
+  id: String(c?.id || '').slice(0, 200),
+  patient: stripIdentifiers(String(c?.patient || '')).trim().slice(0, 60),
+  surgeon: String(c?.surgeon || '').trim().slice(0, 60),
+  date: /^\d{4}-\d{2}-\d{2}$/.test(String(c?.date || '')) ? c.date : '',
+  inSitu: String(c?.inSitu || '').slice(0, 60)
+})
+
+async function handleInSitu(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const cases = (Array.isArray(req.body?.cases) ? req.body.cases : []).slice(0, 40).map(inSituCase)
+    .filter(c => c.id && c.patient)
+  try {
+    return res.status(200).json({ answers: await inSituFor(cases) })
+  } catch (err) {
+    // Not knowing must never stop the week drawing.
+    return res.status(200).json({ answers: {}, error: err.message })
+  }
+}
+
+async function handleInSituConfirm(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const c = inSituCase(req.body?.case)
+  if (!c.id || !c.patient) return res.status(400).json({ error: 'Which case?' })
+  try {
+    return res.status(200).json({ confirmed: await confirmInSitu(c, String(req.body?.answer || ''), session) })
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message })
   }
 }
 

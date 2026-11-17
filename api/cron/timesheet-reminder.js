@@ -3,10 +3,12 @@ import { STAFF } from '../../src/staffConfig.js'
 import { getAllTimesheets } from '../_redis.js'
 import { currentPeriod, todayAest } from '../_fortnight.js'
 import { sendSms, toE164, twilioConfigured } from '../_twilio.js'
-import { owingFor, caseLine, leaderEmailFor } from '../_usageReminders.js'
-import { sendUsageReminderEmail, PORTAL_URL } from '../_email.js'
+import { owingFor, caseLine, leaderEmailFor, casesOn } from '../_usageReminders.js'
+import { sendUsageReminderEmail, sendInSituAlert, PORTAL_URL } from '../_email.js'
+import { inSituAlerts } from '../_inSitu.js'
+import { leaderEmailOn } from '../_leaders.js'
 import { notify } from '../_push.js'
-import { TZ, zonedCivil, toDateStr, addCivilDays } from '../../src/clinicalPlan/week.js'
+import { TZ, zonedCivil, toDateStr, addCivilDays, parseDateStr } from '../../src/clinicalPlan/week.js'
 import { autoInvoice } from '../_poAuto.js'
 import { autoQuotes } from '../_quoteAuto.js'
 import { ingestBookings } from '../calendar/today.js'
@@ -147,6 +149,7 @@ export default async function handler(req, res) {
   }
 
   let usage = null
+  let inSitu = null
   if (job === 'morning') {
     try {
       usage = usageRemindersOn() ? await usageMorning() : 'paused'
@@ -154,9 +157,20 @@ export default async function handler(req, res) {
       console.error('usage reminder (morning) failed:', err.message)
       usage = { error: err.message }
     }
+    // What is in situ, a week out, to today's team leader (Brent, 17 Nov 2026).
+    try {
+      inSitu = await inSituAlerts({
+        today: hobartToday(),
+        addDays: (d, n) => toDateStr(addCivilDays(parseDateStr(d), n)),
+        casesOn, leaderEmailOn, send: sendInSituAlert
+      })
+    } catch (err) {
+      console.error('in situ alerts failed:', err.message)
+      inSitu = { error: err.message }
+    }
     // Timesheet reminders only at the weekend, as when this ran Sat/Sun only.
     if (!['Sat', 'Sun'].includes(hobartWeekday())) {
-      return res.status(200).json({ ran: 'morning', usage, invoices: await settled(), timesheets: 'not a weekend' })
+      return res.status(200).json({ ran: 'morning', usage, inSitu, invoices: await settled(), timesheets: 'not a weekend' })
     }
   }
 

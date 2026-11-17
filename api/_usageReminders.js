@@ -1,5 +1,6 @@
 import { getGoogleToken, getCalendarId, CALENDAR_SCOPE_READONLY } from './_googleCalendar.js'
 import { readBooking, isCancelled, detectHospital } from '../src/clinicalPlan/parse.js'
+import { inSituReason, inSituNoted } from '../src/clinicalPlan/priorImplants.js'
 import { isDistributorEmail } from '../src/clinicalPlan/bookingSources.js'
 import { redis, getUsageHistory } from './_redis.js'
 import { STAFF } from '../src/staffConfig.js'
@@ -44,7 +45,10 @@ export async function casesOn(day) {
         planned: read.planned || [],
         reps: read.reps || [],
         cancelled: isCancelled(e.summary || '', e.description || ''),
-        notRequired: Boolean(read.notRequired)
+        notRequired: Boolean(read.notRequired),
+        // Why what is in situ needs finding, as the week shows it (api/_inSitu.js).
+        inSitu: (!inSituNoted([read.operation, ...(read.notes || [])])
+          && inSituReason([e.summary, read.operation, ...(read.notes || [])].join(' \n '))) || null
       }
     })
     .filter(Boolean)

@@ -427,6 +427,23 @@ export async function getAllTimesheets(limit = 100) {
   return records.filter(Boolean)
 }
 
+/**
+ * The newest usage records in one round trip per hundred (MGET), for a search
+ * across them — getUsageHistory reads one key per record.
+ */
+export async function getUsageRecordsBulk(limit = 600) {
+  const ids = await redis('lrange', 'usage:all', '0', String(limit - 1)) || []
+  const out = []
+  for (let i = 0; i < ids.length; i += 100) {
+    const raws = await redis('mget', ...ids.slice(i, i + 100).map(id => `usage:${id}`)) || []
+    for (const raw of raws) {
+      if (!raw) continue
+      try { out.push(applyUsageFix(JSON.parse(raw)).record) } catch { /* not ours */ }
+    }
+  }
+  return out
+}
+
 export async function getUsageHistory(limit = 50) {
   const ids = await redis('lrange', 'usage:all', '0', String(limit - 1)) || []
   const records = await Promise.all(ids.map(id => getUsageRecord(id)))

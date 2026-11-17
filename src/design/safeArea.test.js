@@ -141,7 +141,7 @@ describe('no screen is left out', () => {
     // one's Header is showing. It draws no chrome of its own to inset.
     'Cases.jsx',
     // A panel inside the New booking sheet, which already carries the insets.
-    'cases/DictateBooking.jsx', 'cases/PasteMessage.jsx',
+    'cases/DictateBooking.jsx', 'cases/PasteMessage.jsx', 'cases/InSitu.jsx',
     // The calendar inside the leave form, which has the Header above it.
     'leave/DateRange.jsx',
     // A strip inside the Cases header, which carries the insets itself.
