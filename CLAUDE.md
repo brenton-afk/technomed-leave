@@ -1773,6 +1773,18 @@ Invariants worth preserving:
   system used, so **every distributor sees the whole form**. The *sheet* is still
   split — a distributor never sees another's line items, and there is a test for
   that — but the scan is not splittable. Raised and accepted deliberately. Emails record a per-distributor outcome and a single failure can be retried with `{ only: [key] }`.
+- **The usage email is personal from both ends** (Brent, 17 Nov 2026, option B
+  of the mock-ups, `claude.ai/artifact/KLFYtSx7me31Z5KwSrDgFg`):
+  `api/_usageEmailBody.js` (pure, `usageEmailBody.test.js`) — the logo inline as
+  letterhead, "Hi {greeting}," per distributor (`DEFAULT_USAGE_GREETINGS`;
+  Signus is Jasper and Amanda, E4 Roy and the E4 team; edited in Admin →
+  Supplier notices, stored as `usageGreetings` in `notices:settings`,
+  `usageGreetingsFrom`), a panel of surgeon, hospital, date, their systems and
+  item count — never the patient — the rep's optional **Note to the
+  distributor** (a box above Confirm on the review, `note` on `action=email`,
+  escaped, 600 characters), and the rep's signature from `staffConfig.js`
+  (name, role, phone, email). Corrections and tests use the same layout, the
+  correction line first, TEST at the top.
 - **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 

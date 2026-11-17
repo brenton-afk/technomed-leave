@@ -62,6 +62,12 @@ function AddressList({ label, addresses, onChange, who }) {
   )
 }
 
+// The usage email's greeting per distributor (Brent, 17 Nov 2026).
+const USAGE_GREETING_LABELS = {
+  signus: 'Signus', e4: 'E4 Surgical', device: 'Device Technologies', device_boost: 'Device — Boost resupply',
+  kt: 'KT Medical', globus: 'Nuvasive / Globus', dtbv: 'Donor Tissue Bank of Victoria'
+}
+
 export default function NoticeSettings({ user }) {
   const [settings, setSettings] = useState(null)
   const [error, setError] = useState('')
@@ -155,6 +161,23 @@ export default function NoticeSettings({ user }) {
             </label>
           )
         })}
+      </div>
+
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#042746', margin: '12px 0 8px' }}>Usage email greetings</div>
+      <div data-usage-greetings style={card}>
+        <div style={{ fontSize: 12.5, color: '#6b7a8d', marginBottom: 6 }}>
+          How each distributor's usage email opens: "Hi …,". Their names, or "… team".
+        </div>
+        {Object.entries(USAGE_GREETING_LABELS).map(([key, name]) => (
+          <label key={key} style={label}>{name}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 14, color: '#042746' }}>Hi</span>
+              <input value={settings.usageGreetings?.[key] ?? ''} aria-label={`Greeting for ${name}`}
+                onChange={e => setSettings(st => ({ ...st, usageGreetings: { ...(st.usageGreetings || {}), [key]: e.target.value } }))}
+                style={input} />
+            </div>
+          </label>
+        ))}
       </div>
 
       <div style={{ fontSize: 15, fontWeight: 700, color: '#042746', margin: '12px 0 8px' }}>Contacts</div>

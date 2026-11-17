@@ -1,4 +1,5 @@
 import { redis, redisSetBody } from './_redis.js'
+import { DEFAULT_USAGE_GREETINGS } from './_usageEmailBody.js'
 import { readBooking, detectHospital } from '../src/clinicalPlan/parse.js'
 import { systemsInKit } from '../src/clinicalPlan/systems.js'
 import { inventoryFor, kitArrivalBy, isRush, suggestSupply } from '../src/clinicalPlan/inventory.js'
@@ -186,6 +187,18 @@ function ruleMatches(rule, now) {
   return Boolean(now.distributors?.includes(rule.distributor))
 }
 
+// How each usage email opens, "Hi {greeting}," (Brent, 17 Nov 2026), per
+// distributor key — the defaults filled in under whatever was saved, and only
+// known keys kept. A blank one falls back to the default.
+export function usageGreetingsFrom(saved = {}) {
+  const out = { ...DEFAULT_USAGE_GREETINGS }
+  for (const key of Object.keys(DEFAULT_USAGE_GREETINGS)) {
+    const v = String(saved?.[key] ?? '').replace(/^\s*hi\b[\s,]*/i, '').replace(/[,\s]+$/, '').trim().slice(0, 60)
+    if (v) out[key] = v
+  }
+  return out
+}
+
 export async function getNoticeSettings() {
   try {
     const raw = await redis('get', KEY)
@@ -196,16 +209,16 @@ export async function getNoticeSettings() {
         saved = corrected
         await redisSetBody(KEY, JSON.stringify(saved)).catch(() => {})
       }
-      return { ...saved, loanRequests: withNewLoanRequests(saved.loanRequests, saved.contacts) }
+      return { ...saved, loanRequests: withNewLoanRequests(saved.loanRequests, saved.contacts), usageGreetings: usageGreetingsFrom(saved.usageGreetings) }
     }
   } catch { /* fall through to the first copy */ }
-  return { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES, loanRequests: DEFAULT_LOAN_REQUESTS }
+  return { contacts: DEFAULT_CONTACTS, rules: DEFAULT_RULES, loanRequests: DEFAULT_LOAN_REQUESTS, usageGreetings: usageGreetingsFrom() }
 }
 
 const isEmail = v => /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[a-z]{2,}$/i.test(String(v || '').trim())
 
 /** Checks and stores edited settings. Throws a sentence on anything malformed. */
-export async function saveNoticeSettings({ contacts, rules, loanRequests = DEFAULT_LOAN_REQUESTS }) {
+export async function saveNoticeSettings({ contacts, rules, loanRequests = DEFAULT_LOAN_REQUESTS, usageGreetings }) {
   if (!Array.isArray(contacts) || !Array.isArray(rules)) throw new Error('Contacts and rules are both needed')
   const cleanContacts = contacts.map(c => {
     const to = (c.to || []).map(String).map(s => s.trim()).filter(Boolean)
@@ -235,6 +248,7 @@ export async function saveNoticeSettings({ contacts, rules, loanRequests = DEFAU
   // Corrections already in force stay recorded as applied, so saving does not
   // bring one back round to run again.
   const settings = { contacts: cleanContacts, rules: cleanRules, loanRequests: cleanLoans,
+    usageGreetings: usageGreetingsFrom(usageGreetings),
     applied: CONTACT_CORRECTIONS.map(c => c.id) }
   await redisSetBody(KEY, JSON.stringify(settings))
   return settings

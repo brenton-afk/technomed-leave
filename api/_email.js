@@ -1,5 +1,6 @@
 import { STAFF, leaveApprovers } from '../src/staffConfig.js'
 import { recordEmail } from './_emailLog.js'
+import { usageEmailContent } from './_usageEmailBody.js'
 import { EMAIL_LOGO_PNG_BASE64 } from './_emailLogo.js'
 
 const LEAVE_LABELS = {
@@ -495,19 +496,13 @@ export async function sendTimesheetDecisionEmail(record, decision, reason = '') 
  */
 export async function sendUsageEmail({
   to, cc, subject, distributorLabel, xlsx, xlsxFilename,
-  scanPdf, scanPdfFilename, test, sender, caseId, correction
+  scanPdf, scanPdfFilename, test, sender, caseId, correction,
+  greeting, record, items, note
 }) {
   // A test send goes to the person testing and nowhere else, and has to be
   // impossible to mistake for the real thing — in the inbox list, in the subject,
   // and at the top of the body. Someone forwarding one on by accident is the
   // failure being designed against.
-  const body = test
-    ? 'This is a test. Nothing has been sent to the distributor. The attachments are '
-      + 'the ones that would have gone to them.'
-    : (scanPdf
-      ? 'Please find the usage sheet and a scan of the signed form attached.'
-      : 'Please find usage attached.')
-  const signoff = 'Warm regards,<br>TechnoMed'
   // A correction to a usage already sent (api/_usageAmend.js): said in the
   // subject and first in the body, with exactly what changed — item lines only,
   // never patient detail.
@@ -521,24 +516,21 @@ export async function sendUsageEmail({
   const wouldHaveGone = test && to.length
     ? `Would have gone to: ${test.wouldSendTo.join(', ')}`
     : ''
-
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#042746;padding:24px 28px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">${test ? 'Usage · test' : 'Usage'}</div>
-  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(heading)}</div>
-  ${distributorLabel ? `<div style="font-size:12px;color:rgba(255,255,255,0.55);margin-top:4px;">${escapeHtml(distributorLabel)}</div>` : ''}
-  </td></tr>
-  ${test ? `<tr><td style="padding:14px 28px;background:#fff3cd;color:#856404;font-size:13px;font-weight:700;line-height:1.5;">
-  TEST — not sent to the distributor${wouldHaveGone ? `<div style="font-weight:400;margin-top:4px;">${escapeHtml(wouldHaveGone)}</div>` : ''}
-  </td></tr>` : ''}
-  <tr><td style="padding:24px 28px;font-size:14px;color:#042746;line-height:1.6;">
-  ${fix ? `<div style="font-weight:700;margin-bottom:10px;">${escapeHtml(fix)}</div>` : escapeHtml(body)}<div style="margin-top:16px;color:#6b7a8d;font-size:13px;">${signoff}</div>
-  </td></tr>
-  <tr><td style="padding:0 28px 22px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`
+  // Personal from both ends (Brent, 17 Nov 2026, option B): "Hi {greeting},"
+  // for the distributor, the rep's own note and signature. See _usageEmailBody.js.
+  const { html, text } = usageEmailContent({
+    greeting: greeting || (distributorLabel ? `${distributorLabel} team` : 'team'),
+    record: record || {},
+    items: items || [],
+    note,
+    sender,
+    scanAttached: Boolean(scanPdf),
+    logoCid: SIGNATURE_LOGO_CID,
+    correctionText: fix,
+    banner: test
+      ? { tone: 'warning', title: 'TEST — not sent to the distributor. The attachments are the ones that would have gone to them.', detail: wouldHaveGone }
+      : null
+  })
 
   return send({
     to,
@@ -548,8 +540,9 @@ export async function sendUsageEmail({
     label: [test ? 'Usage (test)' : correction ? 'Usage correction' : 'Usage', distributorLabel].filter(Boolean).join(' · '),
     subject: heading,
     html,
-    text: `${test ? `TEST — not sent to the distributor. ${wouldHaveGone}\n\n` : ''}${fix || body}\n\nWarm regards,\nTechnoMed`,
+    text,
     attachments: [
+      signatureLogo(),
       ...(xlsx ? [{ filename: xlsxFilename, content: xlsx.toString('base64') }] : []),
       // The scanned form, where the pages were supplied. Most distributors need
       // the signed original for traceability, not only the transcription of it.

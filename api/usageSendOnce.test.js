@@ -18,8 +18,9 @@ vi.mock('./_redis.js', () => ({
 }))
 vi.mock('./_auth.js', () => ({ requireSession: vi.fn(async () => ({ email: 'rep@example.test', name: 'Rep Example' })) }))
 const sends = []
+const messages = []
 vi.mock('./_email.js', () => ({
-  sendUsageEmail: vi.fn(async m => { sends.push(m.distributorLabel); return { from: 'rep@example.test' } }),
+  sendUsageEmail: vi.fn(async m => { sends.push(m.distributorLabel); messages.push(m); return { from: 'rep@example.test' } }),
   sendBoostTrackingEmail: vi.fn(async () => ({ from: 'rep@example.test' }))
 }))
 vi.mock('./_usageExcel.js', () => ({ buildUsageWorkbook: vi.fn(async () => Buffer.from('x')) }))
@@ -47,9 +48,16 @@ const CASE = {
   items: [{ id: 'i1', referenceCode: 'AB-1', productName: 'Boost allograft', distributorKey: 'device_boost', quantity: 1 }]
 }
 
-beforeEach(() => { records.clear(); claims.clear(); sends.length = 0 })
+beforeEach(() => { records.clear(); claims.clear(); sends.length = 0; messages.length = 0 })
 
 describe('sending a usage', () => {
+  it("carries the rep's note and the distributor's greeting (Brent, 17 Nov 2026)", async () => {
+    records.set(CASE.id, CASE)
+    await call('email', { usageId: CASE.id, note: 'One graft opened, not used.' })
+    expect(messages[0]).toMatchObject({ note: 'One graft opened, not used.', greeting: 'Device team' })
+    expect(messages[0].record.id).toBe(CASE.id)
+  })
+
   it('goes to a distributor once; a second Send is held', async () => {
     records.set(CASE.id, CASE)
     const first = await call('email', { usageId: CASE.id })

@@ -27,6 +27,7 @@ import { amendItems, changesByDistributor, amendGaps } from '../_usageAmend.js'
 import { earlierSends } from '../_usageRepeat.js'
 import { findDuplicate, freeFolderName } from '../_usageDuplicate.js'
 import { sendUsageEmail, sendBoostTrackingEmail } from '../_email.js'
+import { getNoticeSettings, usageGreetingsFrom } from '../_bookingNotices.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
 // reason as api/meetings/agent.js: Vercel's Hobby plan caps a deployment at 12
@@ -464,7 +465,7 @@ async function handleSave(req, res, session) {
 async function handleEmail(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { usageId, only, testOnly, pages, confirmRepeat } = req.body || {}
+  const { usageId, only, testOnly, pages, confirmRepeat, note } = req.body || {}
   if (!usageId) throw badRequest('No usage record specified')
 
   const record = await getUsageRecord(usageId)
@@ -493,6 +494,7 @@ async function handleEmail(req, res, session) {
   // way to name a recipient here — only to say "me".
   const test = Boolean(testOnly)
   const cc = test ? [] : ccFor(session.email)
+  const greetings = await usageGreetings()
 
   // The scanned form, merged into one PDF, built here from the pages sent with
   // this request.
@@ -596,6 +598,12 @@ async function handleEmail(req, res, session) {
         to,
         cc,
         subject: theirName,
+        // Personal from both ends (Brent, 17 Nov 2026): their greeting, the
+        // case facts for their items, the rep's note and signature.
+        greeting: greetings[key],
+        record,
+        items,
+        note,
         caseId: record.id,
         distributorLabel: distributor.name,
         xlsx,
@@ -654,6 +662,12 @@ async function handleEmail(req, res, session) {
     allSent: failed.length === 0,
     record: updated
   })
+}
+
+// How each distributor's usage email opens (Admin → Supplier notices). The
+// defaults stand in if the settings cannot be read: a greeting never stops a send.
+async function usageGreetings() {
+  try { return (await getNoticeSettings()).usageGreetings || usageGreetingsFrom() } catch { return usageGreetingsFrom() }
 }
 
 // ─── boost-form: the Boost tracking form, scanned on its own ──
@@ -819,6 +833,8 @@ async function handleAmend(req, res, session) {
       await sendUsageEmail({
         to, cc: test ? [] : ccFor(session.email),
         subject: theirName, caseId: record.id,
+        greeting: (await usageGreetings())[change.key],
+        record: amended, items: theirs,
         distributorLabel: distributor.name,
         xlsx, xlsxFilename: `${theirName}_Usage_Sheet_corrected.xlsx`,
         test: test ? { wouldSendTo: distributor.to } : undefined,

@@ -352,6 +352,9 @@ export default function UsageScan({ user, switcher }) {
   const [caseRecord, setCaseRecord] = useState(null)
   // Set when the save found this case already filed (see confirmAndSend).
   const [duplicate, setDuplicate] = useState(null)
+  // A line of the rep's own for the distributor (Brent, 17 Nov 2026), in every
+  // email of this send. Optional.
+  const [note, setNote] = useState('')
   // Which past usage is open for a correction (scan/AmendUsage.jsx).
   const [amending, setAmending] = useState(null)
   // Which past usage has its Boost tracking form being scanned (scan/BoostForm.jsx).
@@ -457,7 +460,7 @@ export default function UsageScan({ user, switcher }) {
 
   function startNew() {
     pagesRef.current = []
-    setPages([]); setCaseRecord(null); setResult(null); setDuplicate(null)
+    setPages([]); setCaseRecord(null); setResult(null); setDuplicate(null); setNote('')
     setError(''); setNotice(''); setStep('capture'); setShowCamera(true)
   }
 
@@ -594,6 +597,7 @@ export default function UsageScan({ user, switcher }) {
         body: JSON.stringify({
           usageId: saved.record.id,
           testOnly,
+          note,
           // The pages again, so the merged scan can be attached. Nothing stores
           // them server-side — the record holds the transcription, not the
           // photographs — and this is what lets the distributor get the signed
@@ -657,6 +661,7 @@ export default function UsageScan({ user, switcher }) {
         body: JSON.stringify({
           usageId: result.record.id,
           only: failedKeys,
+          note,
           // Only from the "Send anyway" button: the rep has seen that this
           // distributor already had this patient's usage today.
           confirmRepeat: held,
@@ -1033,6 +1038,16 @@ export default function UsageScan({ user, switcher }) {
               </label>
             </div>
           )}
+          {/* The rep's own note to the distributor (Brent, 17 Nov 2026). It goes
+              in the email under the case details, as typed. */}
+          <label data-usage-note style={{ display: 'block', marginTop: 18 }}>
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Note to the distributor <span style={{ fontWeight: 400, color: MUTED }}>(optional)</span></span>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={600}
+              aria-label="Note to the distributor"
+              placeholder="e.g. Two extra screws were opened and not used — they're back in the set."
+              style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 16, fontFamily: 'inherit', color: NAVY, resize: 'vertical' }} />
+            <span style={{ display: 'block', fontSize: 12, color: MUTED, marginTop: 4 }}>Goes in each distributor's email, above your signature.</span>
+          </label>
           <button onClick={() => confirmAndSend()} disabled={busy || sendable.length === 0 || Boolean(duplicate) || loanBlocked}
             style={{ width: '100%', padding: 15, background: (busy || sendable.length === 0 || loanBlocked) ? '#c8d2dc' : TEAL, color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: (busy || sendable.length === 0) ? 'default' : 'pointer', margin: '18px 0 10px' }}>
             {busy ? 'Saving and sending…' : `Confirm — file to Dropbox & email${sendable.length ? ` (${sendable.length} item${sendable.length === 1 ? '' : 's'})` : ''}`}
