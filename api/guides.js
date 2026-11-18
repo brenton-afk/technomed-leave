@@ -257,8 +257,9 @@ async function handleResources(req, res, session) {
     }
     if (what === 'files' && req.method === 'GET') {
       // Fresh: someone choosing a file has often just put it in Dropbox.
-      const catalogue = await resourceCatalogue({ fresh: true })
-      return res.status(200).json({ files: filesFor(catalogue, String(req.query.distributor || ''), String(req.query.slot || '')) })
+      const distributor = String(req.query.distributor || '')
+      const catalogue = await resourceCatalogue({ fresh: true, distributor })
+      return res.status(200).json({ files: filesFor(catalogue, distributor, String(req.query.slot || '')) })
     }
     if (what === 'open' && req.method === 'GET') {
       const path = String(req.query.path || '')
@@ -276,7 +277,7 @@ async function handleResources(req, res, session) {
       const body = req.body || {}
       const system = String(body.system || '')
       const slot = String(body.slot || '')
-      const { path } = uploadPathFor({ system, slot, filename: body.filename, catalogue: await resourceCatalogue() })
+      const { path, distributor } = uploadPathFor({ system, slot, filename: body.filename, catalogue: await resourceCatalogue() })
       const viaBlob = /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\/kitdocs\//i.test(String(body.url || ''))
       let buffer
       if (typeof body.data === 'string' && body.data) buffer = Buffer.from(body.data, 'base64')
@@ -295,7 +296,7 @@ async function handleResources(req, res, session) {
       if (!buffer.length) return res.status(400).json({ error: 'That file is empty' })
       const up = await uploadFile(path, buffer, { keep: true })
       const saved = up?.path_display || path
-      const catalogue = await resourceCatalogue({ fresh: true })
+      const catalogue = await resourceCatalogue({ fresh: true, distributor })
       // Chosen for the slot, so it shows at once however the portal would rank it.
       if (openablePath(saved, catalogue)) await setPick(system, slot, saved, catalogue)
       return res.status(200).json({ ok: true, path: saved })

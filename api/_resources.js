@@ -26,9 +26,12 @@ export const DISTRIBUTOR_NAMES = { signus: 'Signus', device: 'Device Technologie
 export const SLOTS = ['artg', 'technique', 'rebate']
 
 const CATALOGUE = 'resources:catalogue'
-// Half an hour (it was six: Aimee, 17 Nov 2026, put Shoreline's ARTG in
-// Dropbox and it was not in the choices). The picker reads Dropbox fresh anyway.
-const CATALOGUE_TTL = 30 * 60
+// Kept until it is rebuilt (Brent, 18 Nov 2026: "The resources page takes
+// AGES to load" — at 30 minutes the next person after it lapsed waited while
+// every distributor folder was read). Rebuilt overnight (job=nightly), by
+// "Look in Dropbox again", and one distributor at a time whenever someone
+// opens Choose a file or uploads one, so a new file still shows at once.
+const CATALOGUE_TTL = 8 * 24 * 3600
 const PICKS = 'resources:picks'
 const DOC_FILE = /\.(pdf|docx?|xlsx?|pptx?|csv|txt)$/i
 
@@ -80,23 +83,46 @@ const yearOf = f => Math.max(0, ...(`${f.path}`.match(/20\d\d/g) || []).map(Numb
 const rank = (a, b) => (yearOf(b) - yearOf(a)) || (Number(/\.pdf$/i.test(b.name)) - Number(/\.pdf$/i.test(a.name)))
   || String(b.modified || '').localeCompare(String(a.modified || '')) || a.path.localeCompare(b.path)
 
-/** The reference files of every folder above, classified, cached six hours. */
-export async function resourceCatalogue({ fresh = false, list = listFilesUnder } = {}) {
-  if (!fresh) {
-    const raw = await redis('get', CATALOGUE).catch(() => null)
-    try { if (raw) return JSON.parse(raw) } catch { /* rebuild */ }
-  }
+/** One distributor's reference files, its folders read side by side. */
+async function readDistributor(distributor, list) {
+  const roots = DISTRIBUTOR_FOLDERS[distributor] || []
+  const found = await Promise.all(roots.map(root => list(root).catch(() => [])))
   const out = []
-  for (const [distributor, roots] of Object.entries(DISTRIBUTOR_FOLDERS)) {
-    for (const root of roots) {
-      for (const f of await list(root).catch(() => [])) {
-        const slot = DOC_FILE.test(f.name) ? slotOf(f.name) : ''
-        if (slot) out.push({ name: f.name, path: f.path, modified: f.modified || null, rev: f.rev || '', slot, distributor })
-      }
+  for (const files of found) {
+    for (const f of files) {
+      const slot = DOC_FILE.test(f.name) ? slotOf(f.name) : ''
+      if (slot) out.push({ name: f.name, path: f.path, modified: f.modified || null, rev: f.rev || '', slot, distributor })
     }
   }
+  return out
+}
+
+async function storeCatalogue(out) {
   await redisSetBody(CATALOGUE, JSON.stringify(out)).catch(() => {})
   await redis('expire', CATALOGUE, String(CATALOGUE_TTL)).catch(() => {})
+}
+
+/**
+ * The reference files of every folder above, classified. The stored copy
+ * unless `fresh`; `distributor` with `fresh` rereads that distributor only and
+ * keeps everyone else's as stored.
+ */
+export async function resourceCatalogue({ fresh = false, distributor = '', list = listFilesUnder } = {}) {
+  let stored = null
+  if (!fresh || distributor) {
+    const raw = await redis('get', CATALOGUE).catch(() => null)
+    try { stored = raw ? JSON.parse(raw) : null } catch { stored = null }
+    if (stored && !fresh) return stored
+  }
+  if (fresh && distributor && stored && DISTRIBUTOR_FOLDERS[distributor]) {
+    const theirs = await readDistributor(distributor, list)
+    const out = [...stored.filter(f => f.distributor !== distributor), ...theirs]
+    await storeCatalogue(out)
+    return out
+  }
+  const all = await Promise.all(Object.keys(DISTRIBUTOR_FOLDERS).map(d => readDistributor(d, list)))
+  const out = all.flat()
+  await storeCatalogue(out)
   return out
 }
 

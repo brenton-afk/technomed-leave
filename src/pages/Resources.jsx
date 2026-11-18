@@ -28,11 +28,17 @@ function asBase64(file) {
   })
 }
 
+const CACHE_KEY = 'tm_resources_v1'
+
 export const SLOT_LABELS = { artg: 'ARTG', technique: 'Surgical technique', rebate: 'Rebate codes & prices' }
 
 export default function Resources({ user, onOpenKit }) {
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
-  const [data, setData] = useState(null)
+  // The last list this phone saw, drawn at once while the fresh one comes
+  // (Brent, 18 Nov 2026: "The resources page takes AGES to load").
+  const [data, setData] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null') } catch { return null }
+  })
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [viewing, setViewing] = useState(null)
@@ -49,6 +55,7 @@ export default function Resources({ user, onOpenKit }) {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Could not load the resources')
       setData(json); setError('')
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(json)) } catch { /* full or blocked: it just loads next time */ }
     } catch (err) { setError(err.message) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token])

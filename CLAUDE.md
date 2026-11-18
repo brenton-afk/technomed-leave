@@ -232,8 +232,15 @@ filed with `keep` in the system's shallowest folder of that distributor (else
 `{distributor folder}/{system}`), renamed `{system} {ARTG|Surgical Technique|
 Rebate Codes} - {name}` unless its name already says both (`uploadPathFor`),
 and picked for the slot for everyone. The choices list reads Dropbox **fresh**
-(`resources=files`), and the catalogue is kept 30 minutes, not six hours.
-"Surgical_Tech" names count as techniques.
+(`resources=files`, that distributor's folders only). "Surgical_Tech" names
+count as techniques. **Fast to open** (Brent, 18 Nov 2026: "The resources
+page takes AGES to load" — the catalogue had been cut to 30 minutes, so the
+next visitor waited while all eight folders were read one after another): the
+catalogue is kept until rebuilt (8 days) and rebuilt in the nightly cron,
+by "Look in Dropbox again", and per distributor (`resourceCatalogue({ fresh,
+distributor })`) on Choose a file and upload; folders are read in parallel;
+the phone draws its last list (`tm_resources_v1`) at once and swaps in the
+fresh one.
 
 
 Session lives in `localStorage` under `tm_user` (includes the session `token`) and `tm_login_time`. `loadStoredSession()` enforces a 30-day age limit (`SESSION_MAX_AGE_MS`) on restore and re-checks every minute, matching `SESSION_TTL_SECONDS` in `api/_auth.js` — keep the two constants in step.
