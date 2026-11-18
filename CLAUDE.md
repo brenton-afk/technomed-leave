@@ -1163,6 +1163,16 @@ task naming a kit; project items (`undoneDue`) are no longer drawn on Cases.
 ("Existing System - Diplomat as per …", "Stryker Tritanium cages in situ") —
 and there is no day flag and no tag. The kit line never counts: it is what we
 are bringing.
+**Any sign of hardware already in** (Brent, 18 Nov 2026: "extension,
+revision, connection, connecting existing constructs, removal cases. Any
+keyword that indicates the patient might have preexisting hardware"):
+`IN_SITU` in `priorImplants.js` now also catches extend up/down/the construct,
+connecting onto/with existing, existing/previous/retained + any hardware word
+(`HARDWARE`), previous/post + a fusing operation (`FUSED_OP`), previously
+fused, revise/redo/re-operation/return to theatre/RTT/take back/rod exchange,
+ROMW/retrieval/extraction of hardware, hardware failure (broken, loose,
+loosening, pull-out, pseudarthrosis, non-union) and adjacent level/ASD/PJK/DJK.
+"Previous"/"prior" alone and "prior to …" never count; tests list both sides.
 **…but what it says is on the card** (Brent, 18 Nov 2026: "pull the note
 out onto the case tab and put a comment 'diplomat in situ' or similar as a
 flag for clinical staff"). `inSituNote` in `priorImplants.js` reads the same

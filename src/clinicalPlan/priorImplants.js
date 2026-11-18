@@ -45,13 +45,20 @@ const ASKS_ABOUT_EXISTING = new RegExp([
 // Narrower than ASKS_ABOUT_EXISTING: that one also catches "previous" and
 // "prior", which a booking's notes use about days and lists ("moved from the
 // previous Tuesday"), and a flag that cries wolf on the week gets ignored.
+// Widened (Brent, 18 Nov 2026: "extension, revision, connection, connecting
+// existing constructs, removal cases. Any keyword that indicates the patient
+// might have preexisting hardware"). Still never "previous"/"prior" on their
+// own: they have to be about a fusion, construct or hardware.
+const HARDWARE = '(?:construct|fusion|fixation|instrumentation|hardware|metalwork|implants?|screws?|rods?|plates?|cages?|cerclage|wires?)'
+const FUSED_OP = '(?:fusion|ACDF|ALIF|PLIF|TLIF|XLIF|OLIF|LLIF|PSF|fixation|instrumentation|arthrodesis|disc\\s+replacement|arthroplasty|cervical\\s+plate)'
 const IN_SITU = [
-  ['extension', /\bextension\b|\bextend(?:ing|ed)?\s+(?:the\s+)?(?:fusion|construct|instrumentation)/i],
-  ['connection to existing construct', /\b(?:connect(?:ion|ing|s)?|join(?:ing)?|link(?:ing)?)\s+(?:in)?to\s+(?:the\s+)?(?:existing|previous|old|prior)\b/i],
-  ['existing construct', /\b(?:existing|previous|old|prior)\s+(?:construct|fusion|instrumentation|hardware|screws?|rods?|plate|metalwork)\b/i],
-  ['revision', /\brevision\b|\bredo\b|\bre-do\b/i],
-  ['removal', /\bremoval\b|\bremove\b|\bexplant\b|\bR\s*\/\s*O\b/i],
-  ['adjacent segment', /\badjacent\s+segment/i],
+  ['extension', new RegExp(`\\bextension\\b|\\bextend(?:s|ing|ed)?\\s+(?:the\\s+)?(?:${HARDWARE}|up|down|cranially|caudally|proximally|distally)\\b`, 'i')],
+  ['connection to existing construct', /\b(?:connect(?:ion|ing|s|ed)?|join(?:ing|s|ed)?|link(?:ing|s|ed)?)\s+(?:(?:in)?to\s+|onto\s+|with\s+)?(?:the\s+)?(?:existing|previous|old|prior|current)\b/i],
+  ['existing construct', new RegExp(`\\b(?:existing|previous|old|prior|retained)\\s+(?:(?!to\\b)\\S+\\s+){0,2}?${HARDWARE}\\b|\\b(?:previous|prior|old)\\s+(?:(?!to\\b)\\S+\\s+)?${FUSED_OP}\\b|\\bpreviously\\s+(?:fused|instrumented|plated)\\b|\\b(?:post|s\\/p)\\s*-?\\s*${FUSED_OP}\\b`, 'i')],
+  ['revision', /\brevision\b|\brevis(?:e|ed|ing)\b|\bre-?do\b|\bre-?operation\b|\bre-?explor(?:e|ation)\b|\breturn\s+to\s+theatre\b|\bRTT\b|\btake\s*-?\s*back\b|\b(?:rod|screw|cage|plate)\s+(?:exchange|replacement|revision)\b/i],
+  ['removal', /\bremovals?\b|\bremov(?:e|ing)\b|\bexplant(?:ation)?\b|\bR\s*\/\s*O\b|\bROMW\b|\bretrieval\b|\bextraction\s+of\s+(?:the\s+)?(?:screws?|rods?|plates?|cages?|hardware|metalwork)/i],
+  ['hardware failure', new RegExp(`\\b(?:broken|fractured|failed|failing|loose|loosened|loosening|migrated|migrating|backed[-\\s]?out|pulled[-\\s]?out|subsided|displaced)\\s+(?:\\w+\\s+)?${HARDWARE}\\b|\\b${HARDWARE}\\s+(?:failure|fracture|breakage|loosening|migration|pull-?out|back-?out|subsidence)\\b|\\bpseudo-?arthrosis\\b|\\bnon-?union\\b`, 'i')],
+  ['adjacent segment', /\badjacent\s+(?:segment|level)|\bASD\b|\b(?:proximal|distal)\s+junctional\b|\bjunctional\s+(?:kyphosis|failure)\b|\b[PD]JK\b|\b[PD]JF\b/i],
   ['in situ', /\bin\s*-?\s*situ\b|\binsitu\b/i]
 ]
 

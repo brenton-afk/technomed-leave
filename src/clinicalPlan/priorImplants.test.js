@@ -139,3 +139,25 @@ describe('what is in situ, as a flag on the card (Brent, 18 Nov 2026)', async ()
     expect(inSituNote(['Kit: Diplomat'])).toBeNull()
   })
 })
+
+describe('any sign of hardware already in (Brent, 18 Nov 2026)', async () => {
+  const { inSituReason } = await import('./priorImplants.js')
+  const flagged = {
+    extension: ['L3/4 extension PLIF', 'Extend fusion up to L2', 'extending the construct cranially'],
+    'connection to existing construct': ['T10-pelvis connecting to existing construct', 'connect onto existing rods', 'connecting existing L4-S1'],
+    'existing construct': ['existing Diplomat screws L4-5', 'previous L4/5 fusion', 'previously fused C5/6', 'retained hardware', 'post ACDF C5/6'],
+    revision: ['revision PSF', 'redo ACDF', 'return to theatre for washout', 'rod exchange'],
+    removal: ['R/O C5/6 ACDF plate', 'removal of metalwork', 'ROMW', 'explant'],
+    'hardware failure': ['broken rod L3', 'screw loosening at S1', 'pseudoarthrosis L5/S1', 'failed fusion'],
+    'adjacent segment': ['adjacent level disease', 'ASD above L3', 'PJK T10']
+  }
+  for (const [why, texts] of Object.entries(flagged)) {
+    it(`flags ${why}`, () => {
+      for (const t of texts) expect(inSituReason(t), t).toBeTruthy()
+    })
+  }
+  it('does not flag days, lists or plain primary surgery', () => {
+    for (const t of ['moved from the previous Tuesday', 'L4/5 PLIF', 'C5/6 ACDF', 'CT prior to fixation', 'list extended to 5pm', 'prior to the case', 'Reduced ROM'])
+      expect(inSituReason(t), t).toBeNull()
+  })
+})
