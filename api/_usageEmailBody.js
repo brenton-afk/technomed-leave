@@ -101,7 +101,6 @@ export function usageEmailContent({
     : (scanAttached
       ? 'Here’s the usage from the case below. The usage sheet and the signed hospital form are attached.'
       : 'Here’s the usage from the case below. The usage sheet is attached.')
-  const close = 'Any questions, reply here and it comes straight to me.'
 
   // The portal's one letterhead (api/_emailLayout.js), labelled USAGE.
   const html = emailShell({
@@ -113,7 +112,6 @@ export function usageEmailContent({
       correctionText ? para(correctionText, { strong: true }) : para(lead),
       factsPanel(facts),
       typed ? para(typed) : '',
-      para(close),
       signoff({ closing: 'Thanks,', name: sig.name, role: sig.role, contact: sig.contact })
     ].join('\n')
   })
@@ -126,8 +124,6 @@ export function usageEmailContent({
     '',
     ...facts.map(([k, v]) => `${k}: ${v}`),
     ...(typed ? ['', typed] : []),
-    '',
-    close,
     '',
     'Thanks,',
     sig.name,

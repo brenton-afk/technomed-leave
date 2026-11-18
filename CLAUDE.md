@@ -1872,7 +1872,8 @@ Invariants worth preserving:
   item count — never the patient — the rep's optional **Note to the
   distributor** (a box above Confirm on the review, `note` on `action=email`,
   escaped, 600 characters), and the rep's signature from `staffConfig.js`
-  (name, role, phone, email). Corrections and tests use the same layout, the
+  (name, role, phone, email) — no closing line before it (Brent, 18 Nov 2026:
+  "Any questions, reply here…" was "a bit unprofessional"). Corrections and tests use the same layout, the
   correction line first, TEST at the top.
 - **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
