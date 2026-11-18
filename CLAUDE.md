@@ -937,6 +937,12 @@ ones on, wording / owner / overdue as now. Erin's typed points stay in
 the screen, Word and Copy. Items tapped on before this are linked by project
 name on read and their copied task lines dropped. Private-board projects are
 never linked.
+**Tick tasks off on the agenda** (Brent, same day: "Can I also tick them off
+on the agenda itself?"): every live task point and every "Actions not yet
+completed" row (`brief` now carries the task `id`) has a round tick
+(`TickBox`), for anyone signed in. It is the projects page's own tick —
+PATCH `action=task` with `{id, done}` (doneAt, calendar copies) — shown
+struck through at once, tapped again to undo, gone on the next read.
 
 **The Word export copies Erin's own agenda document** (Brent, 12 Nov 2026:
 "the formatting is very poor … This is what we want the format to look

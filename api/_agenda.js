@@ -90,7 +90,7 @@ export async function saveAgenda(agenda, { version, by }) {
 // the projects page. Erin's own items sit after them, and the chat edits only
 // those and the header.
 
-const brief = t => ({ task: t.task, assignee: t.assignee, due_date: t.due_date || '', doneOn: t.doneOn || '', overdue: Boolean(t.overdue) })
+const brief = t => ({ id: t.id != null ? String(t.id) : '', task: t.task, assignee: t.assignee, due_date: t.due_date || '', doneOn: t.doneOn || '', overdue: Boolean(t.overdue) })
 
 /** The report as the agenda's two lists. Pure. */
 export function agendaActions(report) {

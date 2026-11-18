@@ -42,7 +42,7 @@ export function agendaSections(a, actions) {
   const cut = at >= 0 ? at + 1 : Math.min(items.length, 1)
   const outstanding = { kind: 'actions', title: 'Actions not yet completed', rows: actions?.notDone || [], since: actions?.since || null }
   // A project item's points are its live tasks then Erin's own (src/projects/agendaLive.js).
-  const item = i => ({ kind: 'item', ...i, points: itemPoints(i) })
+  const item = i => ({ kind: 'item', ...i, own: i.points || [], points: itemPoints(i) })
   return [...items.slice(0, cut).map(item), outstanding, ...items.slice(cut).map(item)]
 }
 
@@ -307,6 +307,21 @@ function ItemEditor({ item, n, first: isFirst, last: isLast, onChange, onMove, o
   )
 }
 
+const DONE_STYLE = { textDecoration: 'line-through', color: colour.inkFaint }
+
+/** A round tick for a task on the agenda. On paper it prints as an empty circle. */
+function TickBox({ on, onTick, tone }) {
+  return (
+    <button type="button" role="checkbox" aria-checked={on} aria-label={on ? 'Done — tap to undo' : 'Tick off this task'}
+      onClick={onTick}
+      style={{
+        flex: '0 0 auto', width: 20, height: 20, marginTop: 2, borderRadius: '50%', padding: 0, cursor: 'pointer',
+        border: `1.5px solid ${on ? colour.accent : tone}`, background: on ? colour.accent : 'transparent',
+        color: 'white', ...text('micro'), lineHeight: '17px', fontWeight: 700
+      }}>{on ? '✓' : ''}</button>
+  )
+}
+
 export default function Agenda({ user, onClose, today }) {
   const auth = { Authorization: `Bearer ${user?.token || ''}` }
   const wide = useIsDesktop()
@@ -319,6 +334,10 @@ export default function Agenda({ user, onClose, today }) {
   const [pane, setPane] = useState('edit') // a phone shows one at a time
   const latest = useRef(null)
   const queue = useRef(Promise.resolve())
+  // Tasks ticked from the agenda (Brent, 18 Nov 2026: "Can I also tick them
+  // off on the agenda itself?"). Shown ticked at once; the task is marked
+  // done exactly as on the projects page, and the agenda reloads without it.
+  const [ticked, setTicked] = useState(() => new Set())
 
   const call = async (action, method, body) => {
     const res = await fetch(`/api/meetings/agent?action=${action}`, {
@@ -327,6 +346,19 @@ export default function Agenda({ user, onClose, today }) {
     const out = await res.json().catch(() => ({}))
     if (!res.ok) throw Object.assign(new Error(out.error || 'That did not work'), { out, status: res.status })
     return out
+  }
+
+  async function tickTask(id) {
+    if (!id || String(id).startsWith('new-')) return
+    const done = !ticked.has(id)
+    setTicked(t => { const n = new Set(t); if (done) n.add(id); else n.delete(id); return n })
+    try {
+      await call('task', 'PATCH', { id, done })
+      setNote(done ? 'Ticked off — done on the projects page too.' : 'Back on — not done.')
+    } catch (err) {
+      setTicked(t => { const n = new Set(t); if (done) n.delete(id); else n.add(id); return n })
+      setError(err.message)
+    }
   }
 
   const load = useCallback(async () => {
@@ -434,11 +466,14 @@ export default function Agenda({ user, onClose, today }) {
           <span style={{ ...text('heading'), color: colour.accentDeep, minWidth: 22 }}>{i + 1}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ ...text('bodyStrong'), color: colour.ink }}>{sec.title}{sec.since?.date ? <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}> · since {short(sec.since.date)}</span> : null}</div>
-            <div data-no-print style={{ ...text('caption'), color: colour.inkFaint }}>From the projects page — tick a task there and it comes off.</div>
+            <div data-no-print style={{ ...text('caption'), color: colour.inkFaint }}>From the projects page — tick one here or there and it comes off.</div>
             {sec.rows.length === 0 && <div style={{ ...text('body'), color: colour.inkMuted }}>None outstanding.</div>}
             {sec.rows.map((t, j) => (
               <div key={j} data-agenda-notdone style={{ ...text('body'), color: colour.ink, display: 'flex', gap: space.xs, padding: '3px 0', borderBottom: border.hairlineSoft }}>
-                <span style={{ color: t.overdue ? colour.danger : colour.inkFainter }}>○</span><span style={{ flex: 1, minWidth: 0 }}>{t.task}</span>
+                {t.id
+                  ? <TickBox on={ticked.has(t.id)} onTick={() => tickTask(t.id)} tone={t.overdue ? colour.danger : colour.inkFainter} />
+                  : <span style={{ color: t.overdue ? colour.danger : colour.inkFainter }}>○</span>}
+                <span style={{ flex: 1, minWidth: 0, ...(ticked.has(t.id) ? DONE_STYLE : {}) }}>{t.task}</span>
                 <span style={{ ...text('caption'), color: t.overdue ? colour.danger : colour.inkFaint, whiteSpace: 'nowrap' }}>{first(t.assignee)}{t.due_date ? ` · ${t.overdue ? 'overdue ' : 'due '}${short(t.due_date)}` : ''}</span>
               </div>
             ))}
@@ -449,7 +484,13 @@ export default function Agenda({ user, onClose, today }) {
           <span style={{ ...text('heading'), color: colour.accentDeep, minWidth: 22 }}>{i + 1}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ ...text('bodyStrong'), color: colour.ink }}>{sec.title}{sec.lead ? <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}> · {sec.lead}</span> : null}</div>
-            {(sec.points || []).map((p, j) => <div key={j} style={{ ...text('body'), color: colour.inkMuted }}>• {p}</div>)}
+            {(sec.live || []).filter(l => !(sec.hidden || []).includes(l.id)).map(l => (
+              <div key={`live-${l.id}`} data-agenda-task={l.id} style={{ ...text('body'), color: colour.inkMuted, display: 'flex', gap: space.xs, alignItems: 'flex-start' }}>
+                <TickBox on={ticked.has(l.id)} onTick={() => tickTask(l.id)} tone={colour.accentDeep} />
+                <span style={{ flex: 1, minWidth: 0, ...(ticked.has(l.id) ? DONE_STYLE : {}) }}>{l.text}</span>
+              </div>
+            ))}
+            {(sec.own || sec.points || []).map((p, j) => <div key={j} style={{ ...text('body'), color: colour.inkMuted }}>• {p}</div>)}
           </div>
         </div>
       )))}

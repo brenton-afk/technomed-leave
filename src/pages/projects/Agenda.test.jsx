@@ -71,3 +71,30 @@ describe('the agenda screen for Erin', () => {
     expect(second.agenda.items.find(i => i.id === 'a').points).toEqual(['Drill guide sample arrived'])
   })
 })
+
+describe('ticking tasks off on the agenda (Brent, 18 Nov 2026)', () => {
+  it('a project task and an outstanding action tick off as done on the projects page, and untick', async () => {
+    const calls = []
+    const agenda = { ...base, items: base.items.map(i => (i.id === 'a' ? { ...i, projectId: 'p1', live: [{ id: 't1', text: 'Order the drill guide — Mat' }] } : i)) }
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      calls.push({ url, method: opts.method, body: opts.body ? JSON.parse(opts.body) : null })
+      if (opts.method === 'PATCH') return { ok: true, status: 200, json: async () => ({ item: {} }) }
+      return { ok: true, status: 200, json: async () => ({ agenda, canEdit: false, suggestions: [],
+        actions: { since: { date: '2026-11-05' }, notDone: [{ id: 't9', task: 'Send the stock list', assignee: 'Toni', overdue: true }] } }) }
+    })
+    render(<Agenda user={{ email: 'ben@technomed.com.au', token: 't' }} today="2026-11-12" onClose={() => {}} />)
+    await screen.findByText('Order the drill guide — Mat')
+    const boxes = screen.getAllByRole('checkbox', { name: 'Tick off this task' })
+    expect(boxes).toHaveLength(2)
+    fireEvent.click(boxes[1])
+    await waitFor(() => expect(calls.some(c => c.method === 'PATCH')).toBe(true))
+    expect(calls.find(c => c.method === 'PATCH')).toMatchObject({ body: { id: 't1', done: true } })
+    expect(calls.find(c => c.method === 'PATCH').url).toMatch(/action=task/)
+    fireEvent.click(boxes[0])
+    await waitFor(() => expect(calls.filter(c => c.method === 'PATCH')).toHaveLength(2))
+    expect(calls.filter(c => c.method === 'PATCH')[1].body).toEqual({ id: 't9', done: true })
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Done — tap to undo' })[0])
+    await waitFor(() => expect(calls.filter(c => c.method === 'PATCH')).toHaveLength(3))
+    expect(calls.filter(c => c.method === 'PATCH')[2].body.done).toBe(false)
+  })
+})
