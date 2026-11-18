@@ -83,6 +83,28 @@ export function inSituNoted(lines) {
   })
 }
 
+const MAKER_NAMES = { cd: 'CD Horizon', 'cd horizon': 'CD Horizon', xia: 'Xia', kls: 'KLS', ldr: 'LDR', mobic: 'Mobi-C', 'mobi-c': 'Mobi-C', k2m: 'K2M' }
+const titled = w => MAKER_NAMES[w.toLowerCase()] || w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+
+/**
+ * What the booking says is in situ, as a short flag for the case card
+ * (Brent, 18 Nov 2026: "pull the note out onto the case tab and put a comment
+ * 'diplomat in situ' or similar as a flag for clinical staff"). From the line
+ * inSituNoted accepted: the systems it names, else the makers — "Diplomat in
+ * situ", "Stryker in situ". Null when no line says what is in there.
+ */
+export function inSituNote(lines) {
+  for (const line of (Array.isArray(lines) ? lines : [lines])) {
+    const t = String(line || '')
+    if (!ALREADY_IN.test(t)) continue
+    const systems = [...new Set(findSystems(t).filter(x => !OUR_KIT.test(x.name)).map(x => x.name))]
+    if (systems.length) return `${systems.join(' + ')} in situ`
+    const makers = [...new Set((t.match(new RegExp(MAKERS.source, 'gi')) || []).map(titled))]
+    if (makers.length) return `${makers.join(' + ')} in situ`
+  }
+  return null
+}
+
 /** Whether this booking needs the history looked up at all. */
 export function needsPriorImplants(text) {
   return ASKS_ABOUT_EXISTING.test(String(text || ''))

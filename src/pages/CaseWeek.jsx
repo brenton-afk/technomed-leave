@@ -767,6 +767,12 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             padding: '0 8px', borderRadius: radius.pill,
             border: `1.5px solid ${IN_SITU_CHIP.color}`
           }}><InSituTagText id={surgicalCase.id} /></span>}
+          {surgicalCase.inSituNote && !off && <span data-in-situ-note style={{
+            ...text('caption'), fontWeight: 700, ...IN_SITU_CHIP,
+            display: 'inline-flex', alignItems: 'center',
+            padding: '0 8px', borderRadius: radius.pill,
+            border: `1.5px solid ${IN_SITU_CHIP.color}`
+          }}>{surgicalCase.inSituNote}</span>}
           {surgicalCase.rep && (
             <span style={{
               ...text('caption'), display: 'inline-block',
@@ -1065,12 +1071,13 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
             kind of drift the parity rule exists to stop and did not, because
             that rule asked whether both cards carried a thing and never
             whether they carried it in the same order. */}
-        {(place?.headline || surgicalCase.etbs || surgicalCase.inSitu) && (
+        {(place?.headline || surgicalCase.etbs || surgicalCase.inSitu || surgicalCase.inSituNote) && (
           <span style={{
             ...text('micro'), display: 'block', textTransform: 'none',
             fontWeight: 700, color: ink.ink
           }}>{[place?.headline, surgicalCase.etbs ? 'ETBS' : ''].filter(Boolean).join(' · ')}
-            {surgicalCase.inSitu && <>{place?.headline || surgicalCase.etbs ? ' · ' : ''}<InSituTagText id={surgicalCase.id} /></>}</span>
+            {surgicalCase.inSitu && <>{place?.headline || surgicalCase.etbs ? ' · ' : ''}<InSituTagText id={surgicalCase.id} /></>}
+            {surgicalCase.inSituNote && <span data-in-situ-note>{place?.headline || surgicalCase.etbs || surgicalCase.inSitu ? ' · ' : ''}{surgicalCase.inSituNote}</span>}</span>
         )}
 
         {!off && <NavigationNote surgicalCase={surgicalCase} ink={ink} compact />}

@@ -1163,6 +1163,13 @@ task naming a kit; project items (`undoneDue`) are no longer drawn on Cases.
 ("Existing System - Diplomat as per …", "Stryker Tritanium cages in situ") —
 and there is no day flag and no tag. The kit line never counts: it is what we
 are bringing.
+**…but what it says is on the card** (Brent, 18 Nov 2026: "pull the note
+out onto the case tab and put a comment 'diplomat in situ' or similar as a
+flag for clinical staff"). `inSituNote` in `priorImplants.js` reads the same
+line `inSituNoted` accepts and returns the systems it names, else the makers
+— "Diplomat in situ", "Medtronic in situ" — as `inSituNote` on the case (in
+`planSignature`), drawn as the in-situ pill on the phone card's footer
+(`data-in-situ-note`) and on the week card's list line.
 **The list view names every case ahead of ours it knows** (`rowsFor` in
 `ListOrder.jsx`): from the List line's words, else a note starting "After …"
 (`aheadWords`). Fewer named than the gap: the named ones numbered, then "N

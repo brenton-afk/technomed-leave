@@ -124,3 +124,18 @@ describe('finding what a patient has in', () => {
     expect(describePrior([], 'Thani')).toBeNull()
   })
 })
+
+describe('what is in situ, as a flag on the card (Brent, 18 Nov 2026)', async () => {
+  const { inSituNote } = await import('./priorImplants.js')
+  it('names the system the booking says is already in', () => {
+    expect(inSituNote(['L3/4 extension PLIF', 'Removal/Extending Existing System - Diplomat as per Sharon'])).toBe('Diplomat in situ')
+    expect(inSituNote(['Stryker Tritanium cages in situ as per Hana'])).toMatch(/in situ$/)
+  })
+  it('names a maker when no system is named', () => {
+    expect(inSituNote(['Existing Medtronic construct'])).toBe('Medtronic in situ')
+  })
+  it('says nothing when no line says what is in there', () => {
+    expect(inSituNote(['extension of L5/S1 fixation'])).toBeNull()
+    expect(inSituNote(['Kit: Diplomat'])).toBeNull()
+  })
+})
