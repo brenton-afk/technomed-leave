@@ -13,6 +13,8 @@ import {
   RESUPPLY_PROMPT, normaliseResupply, documentKindOf, documentKindOfPages, candidateCases, compareResupply, findCases,
   resupplyFileName, itemsFor
 } from '../_resupply.js'
+import { loadPriceBook } from '../_priceStore.js'
+import { priceCheckCase } from '../../src/usagePriceCheck.js'
 import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped, knownSurgeon } from '../_usageCase.js'
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
@@ -287,6 +289,16 @@ async function handleScan(req, res, session) {
     caseRecord.bookingKit = ''
   }
   caseRecord.loanFlags = loanStampFlags(caseRecord.items, caseRecord.bookingKit)
+
+  // Each line against its distributor's price list (Brent, 18 Nov 2026): on
+  // the list (rebate code filled where blank), on another distributor's list
+  // (to review), or not on it (said). Never a price. Never fatal.
+  try {
+    const book = await loadPriceBook()
+    if (book) caseRecord.items = priceCheckCase(caseRecord.items, book, { hospital: caseRecord.hospital })
+  } catch (err) {
+    console.error('price list check failed:', err.message)
+  }
 
   // Which pages are the Boost tracking form: kept on the case, so the send
   // leaves them out of every distributor's scan and sends them to boost@ alone.

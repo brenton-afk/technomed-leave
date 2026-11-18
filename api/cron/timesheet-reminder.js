@@ -14,6 +14,7 @@ import { autoQuotes } from '../_quoteAuto.js'
 import { ingestBookings } from '../calendar/today.js'
 import { archiveChat } from '../_chatArchive.js'
 import { resourceCatalogue } from '../_resources.js'
+import { refreshPriceBook } from '../_priceStore.js'
 
 // ─── The two daily runs ──────────────────────────────────────────────────────
 // Vercel's Hobby plan allows two scheduled jobs, so both share this function
@@ -102,7 +103,9 @@ export default async function handler(req, res) {
       const archive = await archiveChat(yesterday)
       // The Resources list, rebuilt while nobody is waiting for it.
       const resources = await resourceCatalogue({ fresh: true }).then(c => c.length).catch(err => ({ error: err.message }))
-      return res.status(200).json({ ran: 'nightly', archive, resources })
+      // The distributor price lists, read into the portal when the workbook changed.
+      const prices = await refreshPriceBook({ by: 'nightly' }).then(r => (r.read ? r.meta.counts : r.unchanged ? 'unchanged' : r.skipped)).catch(err => ({ error: err.message }))
+      return res.status(200).json({ ran: 'nightly', archive, resources, prices })
     } catch (err) {
       console.error('chat archive failed:', err.message)
       return res.status(500).json({ error: err.message })

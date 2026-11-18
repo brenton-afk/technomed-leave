@@ -5,6 +5,7 @@ import AmendUsage from './scan/AmendUsage.jsx'
 import BoostForm from './scan/BoostForm.jsx'
 import CaseFiles from './scan/CaseFiles.jsx'
 import WrongKind from './scan/WrongKind.jsx'
+import { priceCheckLine } from '../usagePriceCheck.js'
 import CameraSheet from './scan/CameraSheet.jsx'
 import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
@@ -998,6 +999,19 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
                       <Field label="Rebate code" value={item.rebateCode} onChange={v => updateItem(item.id, 'rebateCode', v)} />
                     </div>
                     <Field label="Distributor" value={item.distributorKey || ''} onChange={v => updateItem(item.id, 'distributorKey', v)} options={DISTRIBUTOR_OPTIONS} />
+                    {/* Against the distributor's price list (Brent, 18 Nov 2026) — never a price. */}
+                    {(() => {
+                      const pc = priceCheckLine(item)
+                      if (!pc) return null
+                      const btn = { marginLeft: 6, padding: '3px 8px', borderRadius: 6, border: `1px solid ${TEAL}`, background: 'white', color: TEAL, fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+                      return (
+                        <div data-price-check={item.priceCheck.status} style={{ fontSize: 12, color: pc.tone === 'ok' ? TEAL : AMBER_TEXT, margin: '-2px 0 8px', lineHeight: 1.5 }}>
+                          {pc.tone === 'ok' ? '✓ ' : '⚠ '}{pc.text}
+                          {pc.move && <button type="button" data-price-move onClick={() => updateItem(item.id, 'distributorKey', pc.move)} style={btn}>{pc.moveLabel}</button>}
+                          {pc.near && <button type="button" data-price-near onClick={() => updateItem(item.id, 'referenceCode', pc.near)} style={btn}>Use {pc.near}</button>}
+                        </div>
+                      )
+                    })()}
                     <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                       {needsWork && (() => {
                         // A rod or screw with no size cannot be resolved; a line

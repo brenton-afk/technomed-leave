@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { loadPriceBook, refreshPriceBook, searchPriceBook, LISTS, PRICE_FOLDER } from './_priceStore.js'
 import { readFile } from 'node:fs/promises'
 import { join, normalize } from 'node:path'
 import { requireSession } from './_auth.js'
@@ -141,6 +142,8 @@ export default async function handler(req, res) {
   if (req.query.kits) return handleKits(req, res, session)
   // Resources: each system's ARTG, surgical technique, rebate codes and tray list.
   if (req.query.resources) return handleResources(req, res, session)
+  // The distributor price lists the portal keeps (api/_priceStore.js). Admins only.
+  if (req.query.prices) return handlePrices(req, res, session)
 
   const slug = String(req.query.guide || '').trim()
 
@@ -504,6 +507,32 @@ function dropboxRedirectUri(req) {
   if (process.env.DROPBOX_REDIRECT_URI) return process.env.DROPBOX_REDIRECT_URI
   const host = req.headers['x-forwarded-host'] || req.headers.host
   return `https://${host}/api/dropbox/callback`
+}
+
+/**
+ * Admin → Price lists. status: what the portal holds and from which file;
+ * search: lines by code, description, range or rebate code; refresh: read the
+ * workbook from Dropbox again. Prices are commercially confidential — admins only.
+ */
+async function handlePrices(req, res, session) {
+  const staff = STAFF.find(s => s.email === session.email)
+  if (!staff?.isAdmin) return res.status(404).json({ error: 'Not found' })
+  try {
+    if (req.query.prices === 'refresh') {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+      const out = await refreshPriceBook({ force: true, by: staff.firstName || staff.name })
+      if (out.skipped) return res.status(409).json({ error: out.skipped })
+      return res.status(200).json({ meta: out.meta })
+    }
+    const book = await loadPriceBook({ fresh: req.query.prices === 'status' })
+    if (req.query.prices === 'status') {
+      return res.status(200).json({ meta: book?.meta || null, lists: LISTS.map(l => ({ key: l.key, label: l.label, count: book?.lists?.[l.key]?.length || 0 })), folder: PRICE_FOLDER })
+    }
+    if (req.query.prices === 'search') return res.status(200).json({ results: searchPriceBook(book, req.query.q) })
+    return res.status(400).json({ error: 'Unknown price list action' })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
 }
 
 async function handleDropbox(req, res, session) {

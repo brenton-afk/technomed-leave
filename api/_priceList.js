@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs'
 import { redis, redisSetBody } from './_redis.js'
 import { listFolder, downloadFile, dropboxConfigured } from './_dropbox.js'
+import { loadPriceBook, LISTS } from './_priceStore.js'
 
 // ─── Toni's distributor price list (Brent, 5 Nov 2026) ───────────────────────
 // "If you've taken prices from Signus from 6/10/26 they'll be accurate."
@@ -59,6 +60,17 @@ async function newestList() {
 
 /** { file, modified, rows } — from the 12-hour cache, else Dropbox. Null if there is none. */
 export async function priceList({ fresh = false } = {}) {
+  // What the portal keeps (api/_priceStore.js) comes first: every line, read
+  // nightly from the same workbook. The 12-hour Dropbox read is the fallback.
+  if (!fresh) {
+    const book = await loadPriceBook().catch(() => null)
+    if (book) {
+      const rows = LISTS.flatMap(l => (book.lists[l.key] || [])
+        .filter(r => Number.isFinite(r.price) && r.price > 0)
+        .map(r => ({ sheet: l.label, range: r.range, description: r.description, code: r.code, rebate: r.rebate, price: r.price })))
+      if (rows.length) return { file: book.meta.file, modified: book.meta.modified, rows }
+    }
+  }
   if (!fresh) {
     const cached = await redis('GET', CACHE).catch(() => null)
     if (cached) { try { return JSON.parse(cached) } catch { /* reload */ } }

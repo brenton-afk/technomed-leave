@@ -1,0 +1,125 @@
+// ─── A usage line against the distributor's price list (Brent, 18 Nov 2026) ──
+// "… to cross check when usages are sent." Each scanned line's product code is
+// looked up in the price lists the portal keeps (api/_priceStore.js):
+//
+//   listed            on its distributor's list — the rebate code and range come
+//                     from the list (the rebate code fills a blank one);
+//   other-distributor on another distributor's list only — the line is
+//                     probably going to the wrong company, so it goes to review;
+//   not-listed        on no list — likely a misread code; said, with the
+//                     nearest code on that distributor's list if one is a
+//                     single character away. Not stopped: lists are not
+//                     complete (Boost, some KT ranges).
+//   no-list           the distributor has no list in the portal — nothing said.
+//
+// Never a price: this is shown to reps. Pure, so the server and tests share it.
+
+export const DISTRIBUTOR_LISTS = {
+  signus: ['signus'],
+  e4: ['e4'],
+  globus: ['globus'],
+  device: ['device'],
+  kt: ['kt-private', 'kt-rhh'],
+  dtbv: ['kt-private']
+}
+const LABELS = {
+  signus: 'Signus', e4: 'E4 Surgical', globus: 'Globus Medical', device: 'Device Technologies', kt: 'KT Medical', dtbv: 'KT Medical'
+}
+
+export const codeKey = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+
+/** Code → every list line carrying it. */
+export function indexPriceBook(book) {
+  const index = new Map()
+  for (const [list, rows] of Object.entries(book?.lists || {})) {
+    for (const r of rows || []) {
+      const k = codeKey(r.code)
+      if (!k) continue
+      if (!index.has(k)) index.set(k, [])
+      index.get(k).push({ list, row: r })
+    }
+  }
+  return index
+}
+
+const distributorOfList = list => Object.keys(DISTRIBUTOR_LISTS).find(d => d !== 'dtbv' && DISTRIBUTOR_LISTS[d].includes(list))
+
+/** One character changed, added or dropped. */
+function oneApart(a, b) {
+  if (a === b || Math.abs(a.length - b.length) > 1) return false
+  let i = 0, j = 0, edits = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue }
+    if (++edits > 1) return false
+    if (a.length > b.length) i++
+    else if (b.length > a.length) j++
+    else { i++; j++ }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1
+}
+
+/**
+ * The check for one usage line.
+ * @param item  { referenceCode, distributorKey }
+ * @param book  { lists } from loadPriceBook
+ * @param index from indexPriceBook(book)
+ * @param hospital 'RHH' | 'CLV' — KT prices differ, so its RHH list is preferred at the RHH
+ */
+export function priceCheckItem(item, book, index, { hospital = '' } = {}) {
+  const code = String(item?.referenceCode || '').trim()
+  const k = codeKey(code)
+  const dist = item?.distributorKey && item.distributorKey !== 'null' ? (item.distributorKey === 'device_boost' ? 'device' : item.distributorKey) : ''
+  if (!k) return { status: 'no-code' }
+  const lists = DISTRIBUTOR_LISTS[dist] || []
+  const held = lists.filter(l => (book?.lists?.[l] || []).length)
+  const hits = index.get(k) || []
+  // KT: the RHH list at the RHH, the private list everywhere else.
+  const rank = h => ((hospital === 'RHH') === (h.list === 'kt-rhh') ? 0 : 1)
+  const ours = hits.filter(h => lists.includes(h.list)).sort((a, b) => rank(a) - rank(b))
+  if (ours.length) {
+    const r = ours[0].row
+    return { status: 'listed', code, list: ours[0].list, rebate: r.rebate && !/no rebate/i.test(r.rebate) ? r.rebate : '', range: r.range, description: r.description }
+  }
+  if (hits.length) {
+    const other = distributorOfList(hits[0].list)
+    if (other && other !== dist) return { status: 'other-distributor', code, distributorKey: other, distributor: LABELS[other], range: hits[0].row.range }
+  }
+  if (!held.length) return { status: 'no-list', code }
+  let near = ''
+  for (const l of held) {
+    for (const r of book.lists[l]) {
+      if (oneApart(k, codeKey(r.code))) { near = r.code; break }
+    }
+    if (near) break
+  }
+  return { status: 'not-listed', code, distributor: LABELS[dist] || '', ...(near ? { near } : {}) }
+}
+
+/** Every line of a case, checked; the rebate code filled from the list where blank. */
+export function priceCheckCase(items = [], book, { hospital = '' } = {}) {
+  if (!book) return items
+  const index = indexPriceBook(book)
+  return items.map(it => {
+    if (it.excluded) return it
+    const check = priceCheckItem(it, book, index, { hospital })
+    const next = { ...it, priceCheck: check }
+    if (check.status === 'listed' && check.rebate && !String(it.rebateCode || '').trim()) next.rebateCode = check.rebate
+    if (check.status === 'other-distributor') {
+      const why = `code is on ${check.distributor}'s price list`
+      next.manualReview = true
+      next.resolved = false
+      next.reviewReasons = [...new Set([...(it.reviewReasons || []), why])]
+    }
+    return next
+  })
+}
+
+/** The one line the review shows under an item, while its code is the one checked. */
+export function priceCheckLine(item) {
+  const c = item?.priceCheck
+  if (!c || codeKey(c.code) !== codeKey(item.referenceCode)) return null
+  if (c.status === 'listed') return { tone: 'ok', text: `On the price list${c.range ? ` · ${c.range}` : ''}${c.rebate ? ` · ${c.rebate}` : ''}` }
+  if (c.status === 'other-distributor') return { tone: 'warn', text: `This code is on ${c.distributor}'s price list, not this distributor's.`, move: c.distributorKey, moveLabel: `Send to ${c.distributor}` }
+  if (c.status === 'not-listed') return { tone: 'warn', text: `Not on ${c.distributor || 'the distributor'}'s price list — check the code.`, near: c.near }
+  return null
+}

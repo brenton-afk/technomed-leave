@@ -9,6 +9,7 @@ import NoticeSettings from './NoticeSettings.jsx'
 import Invoices from './Invoices.jsx'
 import AmendLeave from './AmendLeave.jsx'
 import Commissions from './Commissions.jsx'
+import PriceLists from './PriceLists.jsx'
 import { Header, Body, NavGroup, NavCard } from '../../design/Shell.jsx'
 import { IconLeave, IconClock, IconWallet, IconChart, IconChat, IconFile, IconLock, IconAdmin } from '../../design/icons.jsx'
 
@@ -102,7 +103,7 @@ function LeaveBalances({ who, balances }) {
 // The admin sections: id, chip label, page title.
 const SECTIONS = [
   ['leave', 'Leave', 'Leave applications'], ['timesheets', 'Timesheets', 'Timesheets'], ['toil', 'TOIL', 'TOIL'],
-  ['invoices', 'Invoices', 'Invoices & quotes'], ['notices', 'Notices', 'Supplier notices'], ['email', 'Email', 'Sent email'],
+  ['invoices', 'Invoices', 'Invoices & quotes'], ['prices', 'Price lists', 'Price lists'], ['notices', 'Notices', 'Supplier notices'], ['email', 'Email', 'Sent email'],
   ['pins', 'Staff PINs', 'Staff PINs'], ['system', 'System', 'System']
 ]
 
@@ -260,6 +261,7 @@ export default function AdminPortal({ user, section, onExit }) {
           </NavGroup>
           <NavGroup label="Money">
             <NavCard icon={IconWallet} tint="amber" label="Invoices & quotes" detail="POs, self-funding quotes, supplier quotes, sales reports" onClick={() => setDomain('invoices')} />
+            <NavCard icon={IconFile} tint="teal" label="Price lists" detail="Every distributor's prices and rebate codes, from Dropbox" onClick={() => setDomain('prices')} />
             {canCommission && (
               <NavCard icon={IconChart} tint="navy" label="Commissions" detail="Worked out from Xero before the 1st of each month" onClick={() => setDomain('commissions')} />
             )}
@@ -283,6 +285,7 @@ export default function AdminPortal({ user, section, onExit }) {
         {domain === 'toil' && <ToilLedger user={user} />}
         {domain === 'notices' && <NoticeSettings user={user} />}
         {domain === 'invoices' && <Invoices user={user} />}
+        {domain === 'prices' && <PriceLists user={user} />}
         {domain === 'commissions' && canCommission && <Commissions user={user} />}
         {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}

@@ -1654,6 +1654,37 @@ admin-only; no new function).
   spreadsheet (code, description, qty, price, discount; `src/invoiceLines.js`),
   skipping headers and total rows and never guessing a price.
 
+### Distributor price lists, kept in the portal (Brent, 18 Nov 2026)
+
+"We need this data saved somewhere in the portal as a resource to cross check
+when usages are sent and also for future reference for all of the stock
+control processes." Toni's `TechnoMed_Distributor_Price_Lists.xlsx` in Dropbox
+`/Admin/Accounts` stays the master (one tab per distributor, one layout: range,
+type, description, code, rebate (PL) code, price, price setting, UDI, ARTG,
+supply, notes; KT on two tabs — Private and RHH; a Read me and a Rebate codes
+tab, both skipped). `api/_priceStore.js` reads **every line** (`parsePriceBook`;
+$0 kept, "-" / blank = no charge, `null`) into Redis, one key per list
+(`prices:list:{signus|e4|globus|kt-private|kt-rhh|device}`, packed arrays, no
+expiry) plus `prices:meta` (file, modified, readAt, counts, each tab's note);
+`loadPriceBook` is one MGET, memoised 10 min. Read again by the nightly cron
+when the file's name/modified changed (`refreshPriceBook`) and by Admin →
+**Price lists** → Read it again (`guides.js?prices=status|search|refresh`,
+**admins only**, 404 otherwise; `admin/PriceLists.jsx`: counts, a search by
+code / description / range / rebate code with price, rebate, setting, supply,
+ARTG and notes). Self-funding quotes (`priceList` in `_priceList.js`) now price
+from it first, the 12-hour Dropbox read as fallback. **No pricing in the repo
+or tests** — fixtures are invented; the real workbook was checked locally
+(counts match its Read me: 282 / 587 / 1639 / 803 / 692 / 1001).
+**Every scanned usage line is checked** (`src/usagePriceCheck.js`, in
+`action=scan` after the loan check, never fatal): `listed` (rebate code filled
+where blank; "✓ On the price list · Diplomat · QQ741"), `other-distributor`
+(the code is on another company's list → to review, "Send to E4 Surgical"
+button), `not-listed` ("check the code", with **Use {code}** when one is a
+single character away) — advisory, since lists are incomplete (Boost, some KT
+ranges). KT uses the RHH list at the RHH. Device Boost → Device's list; DTBV →
+KT private. **Never a price** on the review or in any email. The line shows
+only while the code is the one checked (`priceCheckLine`).
+
 ### Commissions (Brent only, 15 Nov 2026)
 
 "Build an auto commission pay calculator, based on the commission tables saved
