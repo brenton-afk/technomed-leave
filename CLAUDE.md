@@ -523,6 +523,10 @@ booking unless its date or hospital changed; a new booking and a
 cancellation still offer as before, and loan-set emails keep their own rules
 (new set, set changed, date/hospital changed, no longer needed).
 
+**Every notice lists the case in one order** (Brent, 18 Nov 2026):
+Patient, Surgeon, Date, Hospital, Procedure, then Kit (booking notices,
+`NOTICE_ORDER`) or Loan set (loan set requests and hospital loan notices).
+
 **A supplier is judged on the booking as it now stands** (the hospital, before
 or after): a case switched from Diplomat to Mariner offers Signus nothing — Brent
 does not want them told about a case that is no longer theirs — and Device gets

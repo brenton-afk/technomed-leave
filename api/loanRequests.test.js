@@ -88,8 +88,22 @@ describe('what the loan emails say', async () => {
 
   it('lists the loan set as its own line with the case details, and carries no reference', () => {
     const [n] = hospitalLoanNoticesFor({ kind: 'new', after, eventId: 'evt-1', settings })
-    expect(n.text).toMatch(/Patient: Testa\nLoan set: Mariner MIS \(Device Technologies\)/)
+    expect(n.text).toMatch(/Patient: Testa\nSurgeon: Dubey\nDate: [^\n]+\nHospital: CLV\nProcedure: L4\/5 TLIF\nLoan set: Mariner MIS \(Device Technologies\)/)
     expect(n.html).toContain('Loan set')
     expect(`${n.subject}\n${n.text}\n${n.html}`).not.toMatch(/Reference|TM-|Ref /)
+  })
+})
+
+describe('the order a notice lists the case in (Brent, 18 Nov 2026)', async () => {
+  const { noticesFor } = await import('./_bookingNotices.js')
+  it('patient, surgeon, date, hospital, procedure, kit', () => {
+    const settings = {
+      contacts: [{ id: 'signus', name: 'Signus', to: ['x@example.com'], cc: [] }],
+      rules: [{ id: 'r', contactId: 'signus', events: ['new'], distributor: 'signus' }]
+    }
+    const after = { hospital: 'CLV', date: '2026-11-23', surgeon: 'Thani', procedure: 'L3/4 PLIF', kit: 'Diplomat', patient: 'Testa', distributors: ['signus'] }
+    const [n] = noticesFor({ kind: 'new', after, settings, eventId: 'e1' })
+    const labels = n.text.split('\n').filter(l => /^\w[\w ]*: /.test(l)).map(l => l.split(':')[0])
+    expect(labels).toEqual(['Patient', 'Surgeon', 'Date', 'Hospital', 'Procedure', 'Kit'])
   })
 })

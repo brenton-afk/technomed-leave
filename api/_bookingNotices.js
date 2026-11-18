@@ -293,6 +293,9 @@ export function describeBooking(event) {
 }
 
 const FIELDS = [['date', 'Date'], ['hospital', 'Hospital'], ['surgeon', 'Surgeon'], ['procedure', 'Procedure'], ['kit', 'Kit']]
+// The order every notice lists the case in, after the patient (Brent, 18 Nov
+// 2026: "patient, surgeon, date, hospital, surgery, kit").
+const NOTICE_ORDER = ['surgeon', 'date', 'hospital', 'procedure', 'kit']
 
 // Compared as a supplier reads it: "DIPLOMAT ON STANDBY" and "Diplomat on
 // standby" are the same booking, and an email saying one became the other is
@@ -359,8 +362,10 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
     if (!contact) continue
 
     const title = `${WORD[kind]} — ${subject.patient || 'patient TBC'} ${shortDate(subject.date)} ${subject.hospital}`
-    const rows = FIELDS.map(([key, label]) => [label, key === 'date' ? shortDate(subject[key]) : subject[key]])
-      .concat([['Patient', subject.patient || 'To be confirmed']])
+    // Patient, surgeon, date, hospital, procedure, kit (Brent, 18 Nov 2026).
+    const field = key => FIELDS.find(([k]) => k === key)
+    const rows = [['Patient', subject.patient || 'To be confirmed']]
+      .concat(NOTICE_ORDER.map(key => { const [, label] = field(key); return [label, key === 'date' ? shortDate(subject[key]) : subject[key]] }))
     const changeLines = changes.map(c => `${c.label}: ${c.key === 'date' ? shortDate(c.was) : c.was} → ${c.key === 'date' ? shortDate(c.now) : c.now}`)
     const text = [
       `Hi ${contact.name.split(/[\s(/]/)[0]} team,`, '',
@@ -547,8 +552,8 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
     // sentence above: the loans team works down these rows ("it still needs
     // to be in the main body of the booking with Pt:, Surg:, Date:").
     const rows = [
-      ['Surgery', shortDate(b?.date)], ['Surgeon', b?.surgeon], ['Procedure', b?.procedure],
-      ['Patient', b?.patient || 'To be confirmed'],
+      ['Patient', b?.patient || 'To be confirmed'], ['Surgeon', b?.surgeon],
+      ['Date', shortDate(b?.date)], ['Hospital', b?.hospital], ['Procedure', b?.procedure],
       [status === 'cancel' ? 'Loan set (not coming)' : 'Loan set', systems.join(' + ')],
       ...(arrive ? [['Due at the hospital by', `${shortDate(arrive.date)} ${arrive.time}`]] : [])
     ]
@@ -610,8 +615,8 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
           + `${setChanged(had.systems, systems) ? ` Set: ${(had.systems || []).join(' + ') || '—'} → ${systems.join(' + ')}.` : ''}`
         : `This case ${kind === 'cancelled' ? 'has been cancelled' : 'no longer needs the loan set'} — please do not send ${systems.join(' + ')}, or recall it if it is on its way.`
     const rows = [
-      ['Surgery', shortDate(b?.date)], ['Hospital', b?.hospital], ['Surgeon', b?.surgeon],
-      ['Procedure', b?.procedure], ['Patient', b?.patient || 'To be confirmed'],
+      ['Patient', b?.patient || 'To be confirmed'], ['Surgeon', b?.surgeon],
+      ['Date', shortDate(b?.date)], ['Hospital', b?.hospital], ['Procedure', b?.procedure],
       [status === 'cancel' ? 'Loan set (not needed)' : 'Loan set', systems.join(' + ')],
       ...(status !== 'cancel' && arrive ? [['Needed at the hospital by', rush
         ? 'As soon as possible — less than 48 hours to surgery'
