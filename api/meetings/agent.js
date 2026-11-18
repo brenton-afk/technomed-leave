@@ -3,6 +3,7 @@ import { del } from '@vercel/blob'
 import { readTrayList } from '../_trayLists.js'
 import { dropboxConfigured, ensureFolder, uploadFile } from '../_dropbox.js'
 import { agendaSuggestions } from '../../src/projects/agendaSuggest.js'
+import { liveAgenda } from '../../src/projects/agendaLive.js'
 import { STAFF, isSameStaff } from '../../src/staffConfig.js'
 import {
   saveMeeting, getMeeting, getAllMeetings, updateMeetingStatus,
@@ -296,9 +297,13 @@ async function agendaExtras(agenda) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
   let previous = null
   try { previous = previousRaw ? JSON.parse(previousRaw) : null } catch { previous = null }
+  // Project items' task points as the projects page has them now (Brent,
+  // 18 Nov 2026: a task updated in our own tasks updates the agenda).
+  const live = liveAgenda(agenda, { projects: projects || [], tasks: items, today })
   return {
+    agenda: live,
     actions: last ? agendaActions(meetingReport(items, last, { to: until, today })) : null,
-    suggestions: agendaSuggestions({ projects: projects || [], tasks: items, previous, current: agenda, today })
+    suggestions: agendaSuggestions({ projects: projects || [], tasks: items, previous, current: live, today })
   }
 }
 
@@ -307,7 +312,7 @@ async function handleAgenda(req, res, session) {
   if (req.method === 'GET') {
     const agenda = await getAgenda()
     const extras = await agendaExtras(agenda).catch(() => ({ actions: null, suggestions: [] }))
-    return res.status(200).json({ agenda, actions: extras.actions, suggestions: canEdit ? extras.suggestions : [], canEdit })
+    return res.status(200).json({ agenda: extras.agenda || agenda, actions: extras.actions, suggestions: canEdit ? extras.suggestions : [], canEdit })
   }
   if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' })
   if (!canEdit) return res.status(403).json({ error: 'Only Erin edits the agenda' })
@@ -315,7 +320,7 @@ async function handleAgenda(req, res, session) {
     const by = STAFF.find(s => s.email === session?.email)?.firstName || ''
     const agenda = await saveAgenda(req.body?.agenda, { version: req.body?.version, by })
     const extras = await agendaExtras(agenda).catch(() => ({ actions: undefined, suggestions: undefined }))
-    return res.status(200).json({ agenda, ...extras })
+    return res.status(200).json({ ...extras, agenda: extras.agenda || agenda })
   } catch (err) {
     if (err.code === 'conflict') return res.status(409).json({ error: err.message, agenda: err.current })
     return res.status(err.code === 'busy' ? 409 : 500).json({ error: err.message })
@@ -337,7 +342,8 @@ async function handleAgendaSetup(req, res, session) {
     const fresh = newAgendaFor({ date, time, location, chair, attendees: attendees ?? previous?.attendees, apologies, previous: standingOnly })
     const agenda = await saveAgenda(fresh, { version: previous?.version || 0, by })
     if (previous) await redisSetBody('agenda:previous', JSON.stringify(previous)).catch(() => {})
-    return res.status(200).json({ agenda, ...(await agendaExtras(agenda).catch(() => ({ actions: null, suggestions: [] }))) })
+    const extras = await agendaExtras(agenda).catch(() => ({ actions: null, suggestions: [] }))
+    return res.status(200).json({ ...extras, agenda: extras.agenda || agenda })
   } catch (err) {
     return res.status(err.code === 'busy' || err.code === 'conflict' ? 409 : 500).json({ error: err.message })
   }

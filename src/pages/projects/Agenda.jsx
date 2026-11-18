@@ -4,6 +4,7 @@ import { colour, text, space, radius, border, face } from '../../design/tokens.j
 import { useLiveRefresh } from '../../liveRefresh.js'
 import { useIsDesktop } from '../../design/viewport.js'
 import { STAFF } from '../../staffConfig.js'
+import { itemPoints } from '../../projects/agendaLive.js'
 import { orderedItems, isWelcome, isGeneral, isNextMeeting } from '../../projects/agendaOrder.js'
 
 // ─── The next meeting's agenda (Brent, 11 and 12 Nov 2026) ───────────────────
@@ -40,7 +41,9 @@ export function agendaSections(a, actions) {
   const at = items.findIndex(i => /general\s+business/i.test(i.title))
   const cut = at >= 0 ? at + 1 : Math.min(items.length, 1)
   const outstanding = { kind: 'actions', title: 'Actions not yet completed', rows: actions?.notDone || [], since: actions?.since || null }
-  return [...items.slice(0, cut).map(i => ({ kind: 'item', ...i })), outstanding, ...items.slice(cut).map(i => ({ kind: 'item', ...i }))]
+  // A project item's points are its live tasks then Erin's own (src/projects/agendaLive.js).
+  const item = i => ({ kind: 'item', ...i, points: itemPoints(i) })
+  return [...items.slice(0, cut).map(item), outstanding, ...items.slice(cut).map(item)]
 }
 
 const actionLine = t => `${t.task} — ${first(t.assignee)}${t.due_date ? `, due ${short(t.due_date)}${t.overdue ? ' (overdue)' : ''}` : ''}`
@@ -220,7 +223,13 @@ const isStanding = t => isWelcome(t) || isGeneral(t) || isNextMeeting(t)
 export function editItems(agenda, op) {
   const items = orderedItems(agenda?.items || []).map(i => ({ ...i, points: [...(i.points || [])] }))
   const at = items.findIndex(i => i.id === op.id)
-  if (op.type === 'add') return { ...agenda, items: [...items.slice(0, -1), { title: op.title, points: op.points || [], lead: op.lead || '' }, items[items.length - 1]] }
+  if (op.type === 'add') {
+    // A project goes on linked, its tasks as live points worked out by the server.
+    const added = op.projectId
+      ? { title: op.title, points: [], lead: op.lead || '', projectId: String(op.projectId), live: (op.points || []).map((t, k) => ({ id: `new-${k}`, text: t })) }
+      : { title: op.title, points: op.points || [], lead: op.lead || '' }
+    return { ...agenda, items: [...items.slice(0, -1), added, items[items.length - 1]] }
+  }
   if (at < 0) return agenda
   if (op.type === 'update') items[at] = { ...items[at], ...op.patch }
   if (op.type === 'remove' && !isStanding(items[at].title)) items.splice(at, 1)
@@ -255,6 +264,19 @@ function ItemEditor({ item, n, first: isFirst, last: isLast, onChange, onMove, o
         </>}
       </div>
       <div style={{ paddingLeft: 30, marginTop: 6 }}>
+        {/* Live from the projects page: changes when the task changes. ✕ takes it off this agenda only. */}
+        {(item.live || []).filter(l => !(item.hidden || []).includes(l.id)).map(l => (
+          <div key={`live-${l.id}`} data-live-point={l.id} style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+            <div style={{ ...field, flex: 1, background: colour.accentSoft, border: '1px solid transparent', color: colour.ink }}>
+              {l.text}
+              <span style={{ ...text('caption'), color: colour.accentDeep, marginLeft: 6 }}>· from tasks</span>
+            </div>
+            {!String(l.id).startsWith('new-') && (
+              <button type="button" aria-label="Take this task off the agenda"
+                onClick={() => onChange({ hidden: [...(item.hidden || []), l.id] })} style={small}>✕</button>
+            )}
+          </div>
+        ))}
         {points.map((p, j) => (
           <div key={`${item.id}-${j}-${p}`} style={{ display: 'flex', gap: 6, marginTop: 4 }}>
             <input defaultValue={p} aria-label="Discussion point" data-item-point
@@ -476,7 +498,7 @@ export default function Agenda({ user, onClose, today }) {
           <div style={label}>Tap to add</div>
           {suggestions.map(sug => (
             <button key={sug.key} type="button" data-suggestion={sug.kind}
-              onClick={() => edit({ type: 'add', title: sug.title, points: sug.points, lead: sug.lead }, `Added "${sug.title}".`)}
+              onClick={() => edit({ type: 'add', title: sug.title, points: sug.points, lead: sug.lead, projectId: sug.projectId }, `Added "${sug.title}".`)}
               style={{ display: 'flex', alignItems: 'flex-start', gap: space.sm, width: '100%', textAlign: 'left', padding: `${space.xs}px 0`, border: 'none', borderBottom: border.hairlineSoft, background: 'none', cursor: 'pointer' }}>
               <span style={{ ...text('heading'), color: colour.accent, lineHeight: 1 }}>+</span>
               <span style={{ flex: 1, minWidth: 0 }}>

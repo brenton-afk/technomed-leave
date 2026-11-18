@@ -12,16 +12,17 @@ const standing = t => isWelcome(t) || isGeneral(t) || isNextMeeting(t)
 
 export function agendaSuggestions({ projects = [], tasks = [], previous = null, current = null, today = '' } = {}) {
   const onAgenda = new Set((current?.items || []).map(i => norm(i.title)))
+  const linked = new Set((current?.items || []).map(i => String(i.projectId || '')).filter(Boolean))
   const out = []
   for (const p of projects) {
-    if (!p || p.private || p.archived || !p.name || onAgenda.has(norm(p.name))) continue
+    if (!p || p.private || p.archived || !p.name || onAgenda.has(norm(p.name)) || linked.has(String(p.id))) continue
     const open = tasks.filter(t => String(t.projectId || '') === String(p.id) && t.status !== 'done' && !t.archived)
     if (!open.length) continue
     const overdue = t => Boolean(t.due_date && today && t.due_date < today)
     open.sort((a, b) => Number(overdue(b)) - Number(overdue(a)) || String(a.due_date || '9').localeCompare(String(b.due_date || '9')))
     const late = open.filter(overdue).length
     out.push({
-      key: `project:${p.id}`, kind: 'project', title: p.name,
+      key: `project:${p.id}`, kind: 'project', title: p.name, projectId: String(p.id),
       points: open.slice(0, 8).map(t => `${t.task}${t.assignee ? ` — ${first(t.assignee)}` : ''}${overdue(t) ? ' (overdue)' : ''}`),
       lead: p.owner && p.owner !== 'Unassigned' ? first(p.owner) : '',
       note: `${open.length} open${late ? ` · ${late} overdue` : ''}`

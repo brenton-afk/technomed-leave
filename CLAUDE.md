@@ -926,6 +926,18 @@ fixed** by `orderedItems` (`src/projects/agendaOrder.js`). Word, Print
 (erin@) change it. The chat, Claude draft and past-agenda import
 (`agenda-chat`, `agenda-draft`, `agenda-import`) were removed with it.
 
+**The agenda follows the tasks** (Brent, 18 Nov 2026: "if we update a task
+in our own tasks, we want it to auto update the agenda in the meeting"). A
+project item is linked (`projectId`, kept by `cleanAgenda`) and its task
+points are worked out on every read (`liveAgenda` in
+`src/projects/agendaLive.js`, applied in `agendaExtras`): open tasks of that
+project as `live` (`{id, text}`, never stored) — done or archived off, new
+ones on, wording / owner / overdue as now. Erin's typed points stay in
+`points`; a task point she ✕s goes in `hidden`. `itemPoints` joins them for
+the screen, Word and Copy. Items tapped on before this are linked by project
+name on read and their copied task lines dropped. Private-board projects are
+never linked.
+
 **The Word export copies Erin's own agenda document** (Brent, 12 Nov 2026:
 "the formatting is very poor … This is what we want the format to look
 like"). `agendaWordDoc` in `projects/Agenda.jsx`, colours in `WORD`: A4 with

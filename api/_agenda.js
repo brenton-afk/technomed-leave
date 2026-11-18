@@ -38,7 +38,10 @@ export function cleanAgenda(raw = {}) {
       id: clip(it?.id, 40) || `i${i + 1}-${Math.random().toString(36).slice(2, 7)}`,
       title: clip(it?.title, 160),
       points: lines(it?.points, 20, 240),
-      lead: clip(it?.lead, 80)
+      lead: clip(it?.lead, 80),
+      // Linked to a project: its open tasks are the live points (src/projects/agendaLive.js).
+      ...(it?.projectId ? { projectId: clip(it.projectId, 60) } : {}),
+      ...(Array.isArray(it?.hidden) && it.hidden.length ? { hidden: it.hidden.map(h => clip(h, 60)).filter(Boolean).slice(0, 100) } : {})
     })).filter(it => it.title)),
     notes: clip(raw.notes, 2000)
   }
