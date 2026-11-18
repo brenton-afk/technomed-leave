@@ -22,7 +22,9 @@ let calls
 beforeEach(() => {
   calls = []
   localStorage.clear()
-  localStorage.setItem('tm_scan_kind', 'resupply')
+  sessionStorage.clear()
+  // The tab opens on Usage; a link may ask for Resupply for the next opening.
+  sessionStorage.setItem('tm_scan_kind', 'resupply')
   global.fetch = vi.fn(async (url, init) => {
     const action = new URL(url, 'http://x').searchParams.get('action')
     calls.push({ action, body: init?.body ? JSON.parse(init.body) : null })
@@ -74,6 +76,72 @@ describe('the resupply scanner', () => {
   it('switches back to usage scanning', async () => {
     render(<ScanTab user={{ token: 't' }} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Usage' }))
-    expect(localStorage.getItem('tm_scan_kind')).toBe('usage')
+    expect(screen.getByRole('tab', { name: 'Usage' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('always opens on Usage, whatever was scanned last (Brent, 18 Nov 2026)', () => {
+    sessionStorage.clear()
+    localStorage.setItem('tm_scan_kind', 'resupply') // what older builds remembered
+    render(<ScanTab user={{ token: 't' }} />)
+    expect(screen.getByRole('tab', { name: 'Usage' })).toHaveAttribute('aria-selected', 'true')
+    expect(localStorage.getItem('tm_scan_kind')).toBeNull()
+  })
+
+  it('a usage form read here asks, and "Read it as a usage" reads the same pages there', async () => {
+    const usageCase = { id: 'c1', patientSurname: 'Testa', surgeonSurname: 'Thani', hospital: 'CLV', date: '2026-11-05', items: [] }
+    global.fetch = vi.fn(async (url, init) => {
+      const action = new URL(url, 'http://x').searchParams.get('action')
+      calls.push({ action, body: init?.body ? JSON.parse(init.body) : null })
+      const body = {
+        'resupply-read': { resupply: { ...RESUPPLY, documentKind: 'usage' }, candidates: [], matchedId: null },
+        scan: { case: usageCase, documentKind: 'usage' }
+      }[action] || { records: [] }
+      return { ok: true, json: async () => body }
+    })
+    const { container } = render(<ScanTab user={{ token: 't' }} />)
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
+    expect(await screen.findByText(/This looks like a usage form, not a resupply/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record and file in the case folder' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Read it as a usage' }))
+    await waitFor(() => expect(calls.some(c => c.action === 'scan')).toBe(true))
+    const scan = calls.find(c => c.action === 'scan')
+    const read = calls.find(c => c.action === 'resupply-read')
+    expect(scan.body.pages).toEqual(read.body.pages)
+  })
+
+  it('"It is a resupply — carry on" goes to the review', async () => {
+    global.fetch = vi.fn(async (url, init) => {
+      const action = new URL(url, 'http://x').searchParams.get('action')
+      calls.push({ action })
+      const body = { 'resupply-read': { resupply: { ...RESUPPLY, documentKind: 'usage' }, candidates: [{ ...CASE, why: ['surname'] }], matchedId: 'u1', comparison: COMPARISON } }[action] || { records: [] }
+      return { ok: true, json: async () => body }
+    })
+    const { container } = render(<ScanTab user={{ token: 't' }} />)
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'It is a resupply — carry on' }))
+    expect(await screen.findByRole('button', { name: 'Record and file in the case folder' })).toBeInTheDocument()
+  })
+
+  it('a docket read in the Usage scanner asks, and "Read it as a resupply" reads it there', async () => {
+    sessionStorage.clear()
+    global.fetch = vi.fn(async (url, init) => {
+      const action = new URL(url, 'http://x').searchParams.get('action')
+      calls.push({ action, body: init?.body ? JSON.parse(init.body) : null })
+      const body = {
+        scan: { case: { id: 'c1', patientSurname: 'Testa', items: [] }, documentKind: 'resupply' },
+        'resupply-read': { resupply: RESUPPLY, candidates: [{ ...CASE, why: ['surname'] }], matchedId: 'u1', comparison: COMPARISON }
+      }[action] || { records: [] }
+      return { ok: true, json: async () => body }
+    })
+    const { container } = render(<ScanTab user={{ token: 't' }} />)
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })
+    const read = await screen.findByRole('button', { name: /^Read 1 page/ })
+    fireEvent.click(read)
+    expect(await screen.findByText(/This looks like a resupply docket, not a usage form/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Read it as a resupply' }))
+    expect(await screen.findByRole('button', { name: 'Record and file in the case folder' })).toBeInTheDocument()
+    expect(calls.find(c => c.action === 'resupply-read').body.pages).toEqual(calls.find(c => c.action === 'scan').body.pages)
   })
 })

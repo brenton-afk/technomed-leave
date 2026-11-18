@@ -10,7 +10,7 @@ import {
   claimUsageSend, releaseUsageSend, releaseResupply
 } from '../_redis.js'
 import {
-  RESUPPLY_PROMPT, normaliseResupply, candidateCases, compareResupply, findCases,
+  RESUPPLY_PROMPT, normaliseResupply, documentKindOf, documentKindOfPages, candidateCases, compareResupply, findCases,
   resupplyFileName, itemsFor
 } from '../_resupply.js'
 import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped, knownSurgeon } from '../_usageCase.js'
@@ -47,8 +47,11 @@ The document is a "Record of Implantable/Rebatable Items Used" form from Calvary
 
 Accuracy matters more than completeness of detail. Never invent a value: if a field is not legible, return an empty string for it. If you are not confident you have read an item correctly, set "confidence" to "low" and "manualReview" to true rather than guessing — a human will check every flagged row.
 
+Also say what the document is, as "documentKind": "usage" if it is the hospital's record of implantable / rebatable / chargeable items used in an operation (stickers stuck on, filled in in theatre) or a Boost allograft patient tracking form; "resupply" if it is instead something a supplier sent with or about stock — a delivery docket, packing slip, consignment replenishment note, sales order or invoice; "other" for anything else. People sometimes scan a supplier's docket here by mistake, so say "resupply" whenever it is one.
+
 Return ONLY a JSON object (no markdown fences, no preamble, no trailing commentary) of exactly this shape:
 {
+  "documentKind": "usage | resupply | other",
   "patientSurname": "",
   "surgeonName": "",
   "date": "YYYY-MM-DD, or the raw text if you cannot resolve it",
@@ -217,7 +220,7 @@ export function mergeExtractions(readings) {
 async function readForm(pages) {
   if (!FAST) {
     const whole = await readOnce(pages, 'high')
-    return { ...whole, boostPages: boostPagesFromWhole(whole.extracted, pages.length) }
+    return { ...whole, boostPages: boostPagesFromWhole(whole.extracted, pages.length), documentKind: documentKindOf(whole.extracted?.documentKind) }
   }
   const readPage = async (page, i) => {
     const note = pages.length > 1
@@ -240,7 +243,8 @@ async function readForm(pages) {
   return {
     extracted: mergeExtractions(split.readings),
     truncated: readings.some(r => r.truncated),
-    boostPages: split.boostPages
+    boostPages: split.boostPages,
+    documentKind: documentKindOfPages(readings.map(r => r.extracted?.documentKind))
   }
 }
 
@@ -264,7 +268,7 @@ async function handleScan(req, res, session) {
 
   const pages = validatePages(req.body?.pages)
 
-  const { extracted, truncated, boostPages = [] } = await readForm(pages)
+  const { extracted, truncated, boostPages = [], documentKind = '' } = await readForm(pages)
   const caseRecord = normaliseCase(extracted, {
     // The device's own date. The server has none to offer: Vercel runs in UTC, so
     // through a Hobart evening its "today" is already tomorrow here, and a case
@@ -291,7 +295,10 @@ async function handleScan(req, res, session) {
   return res.status(200).json({
     case: caseRecord,
     pageCount: pages.length,
-    truncated
+    truncated,
+    // 'resupply' when the pages are a supplier's docket: the screen asks
+    // before going on (Brent, 18 Nov 2026).
+    documentKind
   })
 }
 

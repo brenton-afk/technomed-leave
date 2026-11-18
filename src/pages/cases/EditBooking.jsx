@@ -24,6 +24,7 @@ import { queueBookingSave, isNetworkFailure } from '../../offlineQueue.js'
 import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 import { offerNotices } from '../../notices.js'
 import { isRhh, etbsFrom } from '../../clinicalPlan/etbs.js'
+import { useBackLayer } from '../../backButton.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
 // Tap a case, change it, and it lands on the calendar the whole team reads.
@@ -478,6 +479,7 @@ export function prefetchBooking(eventId, token) {
 export default function EditBooking({
   eventId, user, onClose, onSaved, onPreferences, hasPreferences
 }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   // The booking's own thread. Opened from here because this is where somebody
   // already is when they think of the question.
   const [thread, setThread] = useState(false)

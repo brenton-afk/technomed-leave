@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { cachedDoc, keepDoc, downloadWithProgress, dropboxAppLink } from './docCache.js'
+import { useBackLayer } from '../backButton.js'
 
 // ─── Read a kit's document in the portal (Brent, 11 Nov 2026) ───────────────
 // "The kit room needs a viewer built in so you don't need to download the
@@ -100,6 +101,7 @@ img{max-width:100%;height:auto}h1,h2,h3{line-height:1.25}</style>${value}`
 }
 
 export default function DocViewer({ name, url, onClose, onShare, path = '', rev = '' }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   const kind = viewKind(name)
   const pages = useRef(null)
   const scroller = useRef(null)

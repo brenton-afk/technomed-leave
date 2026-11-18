@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
+import { useBackLayer } from '../../backButton.js'
 
 // ─── One task, opened ────────────────────────────────────────────────────────
 // "I need to click and then be able to interact and tell the portal I have
@@ -16,6 +17,7 @@ function shortDate(dateStr) {
 }
 
 export default function TaskSheet({ task, onClose, onDone, kind = 'Task' }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')

@@ -3,6 +3,7 @@ import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
+import { useBackLayer } from '../../backButton.js'
 
 // ─── One kit: its trays, the stock-take, and editing ─────────────────────────
 // The stock-take lives here because it is done standing in front of the kit:
@@ -12,6 +13,7 @@ const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 const KINDS = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
 
 export default function KitDetail({ kit, canEdit, canRemove = canEdit, user, post, onClose, onChanged, onMove, focus = '' }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   // A tile's "Tray list" or "Agreement" chip opens the kit at that part.
   const trayRef = useRef(null)
   const docsRef = useRef(null)

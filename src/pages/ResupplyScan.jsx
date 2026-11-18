@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import CameraSheet from './scan/CameraSheet.jsx'
 import ScanKindSwitch from './scan/ScanKind.jsx'
+import WrongKind from './scan/WrongKind.jsx'
 import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
 import { reorder } from './scan/pageList.js'
 import { fileToPage, pageFromPreview, filingPages, payloadBytes } from './UsageScan.jsx'
@@ -132,7 +133,7 @@ function FindCase({ headers, exclude = [], onPick }) {
   )
 }
 
-export default function ResupplyScan({ user, kind, onKind }) {
+export default function ResupplyScan({ user, kind, onKind, initialPages, onReadAsUsage }) {
   const [step, setStep] = useState('home')
   const [pages, setPages] = useState([])
   const pagesRef = useRef([])
@@ -144,12 +145,24 @@ export default function ResupplyScan({ user, kind, onKind }) {
   const [usageId, setUsageId] = useState(null)
   const [comparison, setComparison] = useState(null)
   const [saved, setSaved] = useState(null)
+  // The reader says these pages are a usage form (scan/WrongKind.jsx).
+  const [wrongKind, setWrongKind] = useState(false)
   const scanId = useRef(newId())
   const uploadRef = useRef(null)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${user?.token || ''}` }
 
   useEffect(() => () => releaseCamera(), [])
+
+  // Pages brought across from the Usage scanner ("Read it as a resupply"): read straight away.
+  useEffect(() => {
+    if (!initialPages?.length) return
+    pagesRef.current = initialPages
+    setPages(initialPages)
+    setStep('capture')
+    setReadWhenReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const addPages = useCallback(added => {
     const next = [...pagesRef.current, ...added]
@@ -198,6 +211,7 @@ export default function ResupplyScan({ user, kind, onKind }) {
       setRead({ resupply: data.resupply, candidates: data.candidates || [] })
       setUsageId(data.matchedId || null)
       setComparison(data.comparison || null)
+      setWrongKind(data.resupply.documentKind === 'usage' && Boolean(onReadAsUsage))
       setStep('review')
     } catch (err) {
       setError(err.message); setStep('capture')
@@ -252,6 +266,18 @@ export default function ResupplyScan({ user, kind, onKind }) {
     return (
       <Page>
         {header('Reading the resupply…', 'Finding the case it belongs to. This can take up to a minute.')}
+      </Page>
+    )
+  }
+
+  // ── The paper is a usage form: ask before matching or filing anything ──
+  if (step === 'review' && read && wrongKind) {
+    return (
+      <Page>
+        {header('Is this a resupply?', `${pages.length} page${pages.length === 1 ? '' : 's'} read`)}
+        <div style={{ padding: space.lg }}>
+          <WrongKind looksLike="usage" onMove={() => onReadAsUsage(pagesRef.current)} onStay={() => setWrongKind(false)} />
+        </div>
       </Page>
     )
   }

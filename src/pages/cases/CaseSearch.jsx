@@ -3,6 +3,7 @@ import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { IconSearch } from '../../design/icons.jsx'
 import { weekdayName, parseDateStr, todayStr } from '../../clinicalPlan/week.js'
+import { useBackLayer } from '../../backButton.js'
 
 // ─── Search the whole portal (Brent, 6 Nov 2026) ─────────────────────────────
 // "Make the search hourglass at the top super powerful so it can search
@@ -168,6 +169,7 @@ function Result({ result, onOpen }) {
 }
 
 export default function CaseSearch({ user, onClose, onOpen, onOpenPortal = () => {} }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   const [query, setQuery] = useState('')
   const [state, setState] = useState({ status: 'idle', results: [], more: false, error: '', groups: [] })
   const latest = useRef(0)

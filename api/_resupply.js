@@ -25,10 +25,13 @@ Extract:
 - the case it replaces, from any reference on it: the patient's SURNAME only, the surgeon, the hospital (CLV for Calvary, RHH for Royal Hobart), the surgery date, any reference in the form "Surname_DDMMYYYY_Surgeon_Procedure_Hospital", and any PO or customer reference;
 - every line supplied: catalogue / reference code, description, lot or serial number, quantity supplied, and any quantity marked back-ordered or to follow.
 
+Also say what the document is, as "documentKind": "resupply" for anything a supplier sends with or about stock (docket, packing slip, replenishment note, sales order, invoice, a photo of supplied items); "usage" if it is instead the hospital's own record of implantable / rebatable / chargeable items used in an operation — a form with implant stickers stuck on it, filled in in theatre — or a Boost allograft patient tracking form; "other" for anything else. People sometimes scan a usage form here by mistake, so say "usage" whenever it is one.
+
 Do NOT extract the patient's first name, UR number, date of birth or any other identifier — the surname is the only patient identifier this system holds. Never invent a value: return an empty string for anything not legible. If you are unsure of a line, set "confidence" to "low".
 
 Return ONLY a JSON object (no markdown fences, no commentary) of exactly this shape:
 {
+  "documentKind": "resupply | usage | other",
   "supplier": "",
   "documentNumber": "",
   "documentDate": "YYYY-MM-DD, or the raw text if you cannot resolve it",
@@ -68,6 +71,22 @@ export function isoDate(value) {
 }
 
 /** What the model read, typed and tidied. Never invents a field. */
+/** What a page was read as: 'usage', 'resupply', 'other', or '' when not said. */
+export function documentKindOf(value) {
+  const v = str(value).toLowerCase()
+  return ['usage', 'resupply', 'other'].includes(v) ? v : ''
+}
+
+/**
+ * One answer for several pages (Brent, 18 Nov 2026: usage forms scanned with
+ * the resupply scanner). A kind only when every page that said anything
+ * agrees; a mixed bundle says nothing, so nobody is stopped on a guess.
+ */
+export function documentKindOfPages(kinds = []) {
+  const said = [...new Set(kinds.map(documentKindOf).filter(k => k && k !== 'other'))]
+  return said.length === 1 ? said[0] : ''
+}
+
 export function normaliseResupply(raw = {}) {
   const lines = (Array.isArray(raw.lines) ? raw.lines : [])
     .map((l, i) => ({
@@ -85,6 +104,7 @@ export function normaliseResupply(raw = {}) {
   const reference = str(raw.caseReference)
   const folder = reference ? parseFolderName(reference) : null
   return {
+    documentKind: documentKindOf(raw.documentKind),
     distributorKey: distributorKey || null,
     distributor: distributorKey ? distributorName(distributorKey) : str(raw.supplier),
     supplier: str(raw.supplier),

@@ -4,8 +4,9 @@ import { colour, text, radius } from '../../design/tokens.js'
 // ─── What is being scanned (Brent, 6 Nov 2026) ───────────────────────────────
 // One Scan tab, one camera, and a choice of what the paper is. Usage first, as
 // it always was; Resupply beside it. Tray restock and stock-take join this row
-// later. Remembered per phone, because the person who scans resupplies at the
-// office is rarely the one scanning usage in theatre.
+// later. Not remembered (Brent, 18 Nov 2026): a phone left on Resupply had
+// usage forms scanned into it, so the tab always opens on Usage. A link from
+// search may ask for one kind for the next opening only (`saveScanKind`).
 
 export const SCAN_KINDS = [
   { id: 'usage', label: 'Usage' },
@@ -14,15 +15,19 @@ export const SCAN_KINDS = [
 
 const KEY = 'tm_scan_kind'
 
+/** The kind to open on: Usage, unless a link asked for another just now (read once). */
 export function readScanKind() {
   try {
-    const saved = localStorage.getItem(KEY)
-    return SCAN_KINDS.some(k => k.id === saved) ? saved : 'usage'
+    const asked = sessionStorage.getItem(KEY)
+    sessionStorage.removeItem(KEY)
+    localStorage.removeItem(KEY) // what older builds remembered
+    return SCAN_KINDS.some(k => k.id === asked) ? asked : 'usage'
   } catch { return 'usage' }
 }
 
+/** Open the Scan tab on this kind, once (search → a resupply). */
 export function saveScanKind(kind) {
-  try { localStorage.setItem(KEY, kind) } catch { /* private mode: not remembered */ }
+  try { sessionStorage.setItem(KEY, kind) } catch { /* private mode: opens on Usage */ }
 }
 
 /** The two-way switch, drawn on the navy header of either scan screen. */

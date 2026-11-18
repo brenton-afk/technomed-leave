@@ -6,6 +6,7 @@ import { usePush, installHint, installed } from '../push.js'
 import { upload } from '@vercel/blob/client'
 import { shrink } from '../chat/photo.js'
 import { fileTypeOf, previewable } from '../chat/fileTypes.js'
+import { useBackLayer } from '../backButton.js'
 
 // ─── The team's messages (Brent, 6 Nov 2026) ─────────────────────────────────
 // "It needs to run faultlessly and seamlessly like WhatsApp … share photos,
@@ -177,6 +178,7 @@ export function downloadUrl(file) {
  * closes it.
  */
 export function FileViewer({ file, onClose }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   useEffect(() => {
     const key = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', key)
@@ -1070,6 +1072,8 @@ export default function Chat({ user, onBack, onRead }) {
     const timer = setInterval(() => { if (document.visibilityState === 'visible' && !open) load() }, 10000)
     return () => clearInterval(timer)
   }, [load, open])
+  // The phone's back button: from a conversation back to the list.
+  useBackLayer(Boolean(open), () => setOpen(null))
 
   if (open) {
     return (

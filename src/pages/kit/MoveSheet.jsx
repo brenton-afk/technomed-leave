@@ -3,6 +3,7 @@ import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { readBooking, detectHospital, isCancelled } from '../../clinicalPlan/parse.js'
 import { parseDateStr, addCivilDays, toDateStr } from '../../clinicalPlan/week.js'
+import { useBackLayer } from '../../backButton.js'
 
 // ─── Moving a kit ────────────────────────────────────────────────────────────
 // Two steps, and the second is the safeguard: where it is going and what is
@@ -18,6 +19,7 @@ function shortDay(dateStr) {
 }
 
 export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone, initialTo = '' }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   // A tile dragged onto a place arrives with that place already chosen.
   const [to, setTo] = useState(initialTo && initialTo !== kit.at ? initialTo : (kit.at === kit.home ? '' : kit.home))
   const [trays, setTrays] = useState(kit.trays || [])

@@ -114,3 +114,21 @@ describe('the filed name, as the team writes it', () => {
     expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'device_boost', partial: false, n: 1 })).toBe('Testa Boost resupply.pdf')
   })
 })
+
+describe('what the paper is (Brent, 18 Nov 2026: usage forms in the resupply scanner)', async () => {
+  const { documentKindOf, documentKindOfPages, normaliseResupply: norm, RESUPPLY_PROMPT: prompt } = await import('./_resupply.js')
+  it('keeps only the kinds it knows', () => {
+    expect(documentKindOf('Usage')).toBe('usage')
+    expect(documentKindOf('docket')).toBe('')
+    expect(norm({ documentKind: 'usage' }).documentKind).toBe('usage')
+  })
+  it('says a kind for several pages only when they agree', () => {
+    expect(documentKindOfPages(['resupply', 'resupply', ''])).toBe('resupply')
+    expect(documentKindOfPages(['usage', 'resupply'])).toBe('')
+    expect(documentKindOfPages(['other', 'usage'])).toBe('usage')
+    expect(documentKindOfPages([])).toBe('')
+  })
+  it('the reader is asked for it', () => {
+    expect(prompt).toMatch(/"documentKind"/)
+  })
+})

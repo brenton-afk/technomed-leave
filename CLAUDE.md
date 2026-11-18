@@ -28,6 +28,18 @@ A mobile-first PWA staff portal for TechnoMed (a Tasmanian surgical device distr
 
 `src/App.jsx` holds `{tab, sub}` in state — no router, and `react-router-dom` is no longer imported. **Six tabs since 12 Nov 2026 (Brent): Cases · Scan · Projects · Kit · Resources · Me.** Projects and Resources have their own tabs; **Kit is only kit** (Kit room, Stock take, Theatre guides); **Team leader is under Cases** (`{tab:'cases', sub:'teamlead'}`, opened from the "who's leading" sheet — `onOpenGuide` on `TeamLeaderStrip`); **Messages is a card at the top of Me** (`{tab:'me', sub:'messages'}`, the unread badge on the Me tab) until it has its own app. `movedTarget` sends links written to the old places to the new ones (applied in `navigate` and `renderTarget`). Checked in a real 360px render: six tabs, 60px each, no label clipped. **The sidebar shows from 760px on a computer with a mouse or trackpad** (`DESKTOP_QUERY` in `design/viewport.js` and the same `@media` in `index.css` — keep them in step; Brent, 12 Nov 2026: Erin's laptop, display scaling put it under 1024 CSS px and the tabs went to the bottom); a touch screen still needs 1024. Admin is reached from Me. A tab with no `sub` renders its **hub**; a `sub` renders one screen.
 
+**The phone's back button walks back through the portal** (Brent, 18 Nov
+2026: "it exits the entire app"). `src/backButton.js`: every page change
+(`navigate` → `pushPage`) is a history entry carrying `{tmNav, tmSeq}`, and
+`popstate` sets the page back. Anything opened on top of a page calls
+`useBackLayer(open, onClose)` — Edit booking, New booking, both task sheets,
+search, a kit and its move sheet, DocViewer, FileViewer, an open chat, an
+Admin section — so back closes it first; closed by its own ✕ it takes its
+step back off, and one left behind by a navigation is skipped. A deep link
+(`?go=approvals`) gets Cases put underneath. The on-screen back arrow
+(`backTo`) is the same step when the page behind is the hub. A new overlay
+should call `useBackLayer` too.
+
 Hubs (`src/pages/Hubs.jsx`) are lists of `NavCard`s, deliberately **not** nested tab bars — two competing "where am I" signals is most of what made the old eight-tab bar feel cluttered. Adding a screen means adding a `NavCard` to a hub plus a `case` in the relevant `switch`.
 
 Screens built on `design/Shell.jsx`'s `Header` draw their own back arrow; older pages predate it and get a floating one, listed in `SELF_BACK`. If you migrate a page to `Header`, add its key to that set or it will show two.
@@ -1912,6 +1924,15 @@ retry saves once. The pages are filed **in the usage case's own Dropbox folder,
 the way the team already names them**: `{Surname} {Distributor} resupply.pdf`,
 `{Surname} partial {Distributor} resupply {n}.pdf` (`resupplyFileName`; the
 second and later are "partial … n").
+**Usage forms scanned as resupplies** (Brent, 18 Nov 2026: "people are
+scanning their usage with the resupply scanner"). The Scan tab **always opens
+on Usage** — `tm_scan_kind` is no longer remembered; `saveScanKind` asks for a
+kind for the next opening only (search → a resupply, sessionStorage). And both
+readers return `documentKind` (usage / resupply / other; several pages only
+when they agree, `documentKindOfPages`): the wrong one stops before review on
+`scan/WrongKind.jsx` — "This looks like a usage form, not a resupply" — with
+**Read it as a usage** / **Read it as a resupply**, which hands the same pages
+to the other scanner (`ScanTab` `carry`, read at once), or carry on.
 **Matching to usage only** (Brent, 10 Nov 2026: "remove the owed items … the
 previous system is in place … at this stage let's just match it to usage").
 The **Still owed** list, `action=resupply-owing` and the Decisions "Resupply

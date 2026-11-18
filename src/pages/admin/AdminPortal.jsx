@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import TimesheetApprovals from './TimesheetApprovals.jsx'
 import StaffPins from './StaffPins.jsx'
 import SystemStatus from './SystemStatus.jsx'
@@ -129,6 +130,9 @@ export default function AdminPortal({ user, section, onExit }) {
     // null is the hub; Dropbox's return lands straight on System.
     try { return new URLSearchParams(window.location.search).get('dropbox') ? 'system' : (section || null) } catch { return section || null }
   })
+  // The phone's back button: from a section back to the hub (src/backButton.js).
+  // A section the portal was opened on is its own page already.
+  useBackLayer(Boolean(domain) && domain !== section, () => setDomain(null))
 
   // The admin endpoints authorise on the session token minted at PIN login —
   // there is no shared password in the client bundle.

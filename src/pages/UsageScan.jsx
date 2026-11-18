@@ -4,6 +4,7 @@ import RegistrarText from './scan/RegistrarText.jsx'
 import AmendUsage from './scan/AmendUsage.jsx'
 import BoostForm from './scan/BoostForm.jsx'
 import CaseFiles from './scan/CaseFiles.jsx'
+import WrongKind from './scan/WrongKind.jsx'
 import CameraSheet from './scan/CameraSheet.jsx'
 import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
@@ -332,7 +333,7 @@ export function AlreadyFiled({ duplicate, busy, onDiscard, onAmend, onSeparate }
   )
 }
 
-export default function UsageScan({ user, switcher }) {
+export default function UsageScan({ user, switcher, initialPages, onReadAsResupply }) {
   // Usage forms are scanned on a phone, held over the paper on a theatre bench.
   // Nobody has ever scanned one with a laptop and nobody is going to — there is
   // no camera pointed at the right thing and no hand free to hold it.
@@ -373,6 +374,8 @@ export default function UsageScan({ user, switcher }) {
   // to actually be in `pages` — reading here and now would read the page before
   // this one, or none at all.
   const [readWhenReady, setReadWhenReady] = useState(false)
+  // The reader says these pages are a supplier's docket (scan/WrongKind.jsx).
+  const [wrongKind, setWrongKind] = useState(false)
 
   const uploadRef = useRef(null)
 
@@ -458,6 +461,16 @@ export default function UsageScan({ user, switcher }) {
   // something has to close it when the scanner is actually finished with.
   useEffect(() => () => releaseCamera(), [])
 
+  // Pages brought across from the Resupply scanner ("Read it as a usage"): read straight away.
+  useEffect(() => {
+    if (!initialPages?.length) return
+    pagesRef.current = initialPages
+    setPages(initialPages)
+    setStep('capture')
+    setReadWhenReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function startNew() {
     pagesRef.current = []
     setPages([]); setCaseRecord(null); setResult(null); setDuplicate(null); setNote('')
@@ -506,6 +519,7 @@ export default function UsageScan({ user, switcher }) {
       }
 
       setCaseRecord(data.case)
+      setWrongKind(data.documentKind === 'resupply' && Boolean(onReadAsResupply))
       if (data.truncated) setNotice('The document was long and extraction may be incomplete — check every row carefully.')
       setStep('review')
     } catch (err) {
@@ -839,6 +853,18 @@ export default function UsageScan({ user, switcher }) {
   }
 
   // ── Review ───────────────────────────────────────────────
+  // The paper is a supplier's docket: ask before anything is filed or sent.
+  if (step === 'review' && caseRecord && wrongKind) {
+    return (
+      <div style={{ minHeight: '100%', background: colour.canvas }}>
+        <Header title="Is this a usage form?" subtitle={`${pages.length} page${pages.length === 1 ? '' : 's'} read`} />
+        <div style={{ padding: 20 }}>
+          <WrongKind looksLike="resupply" onMove={() => onReadAsResupply(pagesRef.current)} onStay={() => setWrongKind(false)} />
+        </div>
+      </div>
+    )
+  }
+
   if (step === 'review' && caseRecord) {
     const { inReview, outstanding, clean, excluded, sendable } = partitionItems(caseRecord.items)
     const loanFlags = loanStampFlags(caseRecord.items, caseRecord.bookingKit)

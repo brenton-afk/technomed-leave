@@ -3,6 +3,7 @@ import { colour, text, space, radius } from '../../design/tokens.js'
 import { columnOf } from '../../projects/model.js'
 import { STAFF } from '../../staffConfig.js'
 import { PRIORITY_LABELS, formatDate, tintOf } from './shared.js'
+import { useBackLayer } from '../../backButton.js'
 
 // ─── One task, opened ────────────────────────────────────────────────────────
 // Two things live here that the card deliberately does not show.
@@ -44,6 +45,7 @@ const control = {
 export default function TaskSheet({
   task, project, projects, busy, onChange, onComment, onArchive, onDelete, onClose
 }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   const [update, setUpdate] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const thread = Array.isArray(task.comments) ? task.comments : []

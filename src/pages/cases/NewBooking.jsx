@@ -13,6 +13,7 @@ import { INVENTORY, loanNeed, kitArrivalBy, dayShortfall, SYSTEM_BUTTONS } from 
 import { drawsOnLocalStock, SUPPLY_OPTIONS } from '../../clinicalPlan/kitSupply.js'
 import { systemsInKit } from '../../clinicalPlan/systems.js'
 import { todayStr, parseDateStr, toDateStr, addCivilDays, civilWeekday, weekdayName } from '../../clinicalPlan/week.js'
+import { useBackLayer } from '../../backButton.js'
 
 // ─── Adding a booking ─────────────────────────────────────────────────────────
 // Meant to beat typing it into Google, which is the thing it replaces.
@@ -192,6 +193,7 @@ function siteOf(text) {
 }
 
 export default function NewBooking({ user, date: openOn, alreadyBooked = [], spoken, onClose, onCreated }) {
+  useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   // Opens on the day being looked at, which is the booking most likely being
   // made. Falls back to the next weekday when opened from nowhere in particular.
   const [date, setDate] = useState(() => openOn || defaultDate())

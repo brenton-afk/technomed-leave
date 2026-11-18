@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import PinScreen from './pages/PinScreen.jsx'
 import LockScreen from './pages/LockScreen.jsx'
 import { trimCachedPlans } from './clinicalPlan/provider.js'
@@ -34,6 +34,7 @@ import { isFrozenCopy, canonicalUrl } from './canonicalHost.js'
 import { watchZoom, blockPinch } from './lockZoom.js'
 import { useUnread } from './chat/unread.js'
 import { weekdayName } from './clinicalPlan/week.js'
+import { startBackButton, pushPage, replacePage, backTo } from './backButton.js'
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 // Five destinations, because a bottom bar stops being scannable past about five.
@@ -300,12 +301,14 @@ export default function App() {
     // the one place the device's person is recorded.
     rememberUser(userData.email)
     saveSession(userData)
+    replacePage({ tab: 'cases', sub: null })
     setNav({ tab: 'cases', sub: null })
   }
 
   function handleLogout() {
     const token = user?.token
     setUser(null)
+    replacePage({ tab: 'cases', sub: null })
     setNav({ tab: 'cases', sub: null })
     clearSession()
     if (token) {
@@ -335,11 +338,22 @@ export default function App() {
     // Asked for on the way in rather than inside, so the portal never renders
     // behind the prompt.
     if (next.tab === 'admin' && !openAdmin()) return
+    pushPage(next)
     setNav(next)
     window.scrollTo?.(0, 0)
   }, [openAdmin])
 
-  const back = useCallback(() => setNav(n => ({ tab: n.tab, sub: null })), [])
+  // The phone's back button walks back through the pages (src/backButton.js).
+  useEffect(() => startBackButton(nav, page => { setSubmitted(null); setNav(page) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [])
+
+  const navRef = useRef(nav)
+  navRef.current = nav
+  const back = useCallback(() => {
+    const hub = { tab: navRef.current.tab, sub: null }
+    if (!backTo(hub)) setNav(hub)
+  }, [])
 
   if (!user) return <PinScreen onLogin={handleLogin} />
 
