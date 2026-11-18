@@ -210,7 +210,7 @@ async function followUp(id, rec, persist = async () => {}) {
     await sendBookingNotice({
       to: d.to, subject: `Self-funding quote sent — ${surname}${next.surgeon ? ` · ${next.surgeon}` : ''}`,
       text: lines.join('\n'), html: lines.map(l => (l ? `<p style="margin:0 0 6px">${escapeHtml(l)}</p>` : '')).join(''),
-      sender: SENDER, caseId: `quote:${q.number}`, label: `Self-funding quote ${q.number} → ${d.name}`,
+      sender: SENDER, caseId: `quote:${q.number}`, label: `Self-funding quote ${q.number} → ${d.name}`, badge: 'Self-funding quote',
       attachments: [{ filename: quoteFileName(next.patient, q.number), content: pdf, content_type: 'application/pdf' }]
     })
     done.add(key)

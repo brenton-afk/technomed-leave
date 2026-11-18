@@ -2,6 +2,7 @@ import { STAFF, leaveApprovers } from '../src/staffConfig.js'
 import { recordEmail } from './_emailLog.js'
 import { usageEmailContent } from './_usageEmailBody.js'
 import { EMAIL_LOGO_PNG_BASE64 } from './_emailLogo.js'
+import { emailShell, para, factsPanel, bullets, button, aside, signoff, shellFromText, LOGO_CID } from './_emailLayout.js'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -10,21 +11,27 @@ const LEAVE_LABELS = {
 }
 
 const VARIANTS = {
-  submitted: { heading: 'Leave Application', badge: '#e6f4f2', badgeText: '#1a7a6e', banner: null },
+  submitted: { heading: 'Leave Application', label: 'Leave request', badge: '#e6f4f2', badgeText: '#1a7a6e', banner: null },
   approved: {
     heading: 'Leave Approved',
+    label: 'Leave approved',
+    tone: 'success',
     badge: '#e6f4f2',
     badgeText: '#1a7a6e',
     banner: { bg: '#e6f4f2', text: '#1a7a6e', label: '✅ This leave has been approved.' }
   },
   amended: {
     heading: 'Leave Amended',
+    label: 'Leave amended',
+    tone: 'warning',
     badge: '#e6f4f2',
     badgeText: '#1a7a6e',
     banner: { bg: '#fff4e5', text: '#8a5200', label: '✏️ This leave has been changed — the details below replace the earlier ones.' }
   },
   declined: {
     heading: 'Leave Declined',
+    label: 'Leave declined',
+    tone: 'danger',
     badge: '#fdecea',
     badgeText: '#c0392b',
     banner: { bg: '#fdecea', text: '#c0392b', label: '❌ This leave request was declined.' }
@@ -103,33 +110,17 @@ function buildEmailHtml(application, variant, declineReason) {
   // For an amendment, `declineReason` carries what changed and who changed it.
   if (variant === 'amended' && declineReason) rows.push(['Changed', declineReason])
 
-  const rowHtml = rows.map(([label, value], i) => `
-  <tr${i % 2 === 0 ? ' style="background:#f8f9fc;"' : ''}><td style="padding:11px 14px;font-size:12px;color:#6b7a8d;width:140px;">${escapeHtml(label)}</td><td style="padding:11px 14px;font-size:13px;color:#1a2b4a;font-weight:500;">${escapeHtml(value)}</td></tr>`).join('')
-
-  const bannerHtml = v.banner ? `
-  <tr><td style="padding:0 32px 4px;">
-  <div style="background:${v.banner.bg};color:${v.banner.text};padding:12px 14px;border-radius:10px;font-size:13px;font-weight:600;">${v.banner.label}</div>
-  </td></tr>` : ''
-
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#1a2b4a;padding:28px 32px;">
-  <div style="font-size:22px;font-weight:700;color:#ffffff;">${v.heading}</div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-top:4px;">TechnoMed Staff Portal</div>
-  </td></tr>
-  <tr><td style="padding:24px 32px 0;">
-  <span style="background:${v.badge};color:${v.badgeText};padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;">${escapeHtml(leaveLabel)}</span>
-  </td></tr>${bannerHtml}
-  <tr><td style="padding:20px 32px;">
-  <table width="100%" style="border:1px solid rgba(26,43,74,0.1);border-radius:10px;overflow:hidden;">${rowHtml}
-  </table></td></tr>${variant === 'submitted' ? `
-  <tr><td style="padding:0 32px 24px;" align="center">
-  <a href="${APPROVE_URL}" style="display:inline-block;background:#189a85;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:12px 28px;border-radius:10px;">Approve or decline</a>
-  </td></tr>` : ''}
-  <tr><td style="padding:0 32px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Leave Portal · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`
+  // The portal's one letterhead (api/_emailLayout.js), labelled LEAVE.
+  return emailShell({
+    label: v.label,
+    banner: v.banner ? { tone: v.tone, title: v.banner.label.replace(/^[^A-Za-z]+/, '') } : null,
+    body: [
+      para(v.heading, { strong: true }),
+      factsPanel([['Leave type', leaveLabel], ...rows]),
+      variant === 'submitted' ? button('Approve or decline', APPROVE_URL) : '',
+      signoff()
+    ].join('\n')
+  })
 }
 
 // ─── Who an email comes from ─────────────────────────────────────────────────
@@ -227,7 +218,11 @@ async function send({
   const payload = { from, to: recipients, subject, html, text }
   if (replyTo) payload.reply_to = replyTo
   if (copies.length) payload.cc = copies
-  if (attachments?.length) payload.attachments = attachments
+  // Every email wears the letterhead (api/_emailLayout.js), whose logo travels
+  // inside the message — attached here once, whoever built the email.
+  const files = [...(attachments || [])]
+  if (String(html || '').includes(`cid:${LOGO_CID}`) && !files.some(a => a?.content_id === LOGO_CID)) files.unshift(signatureLogo())
+  if (files.length) payload.attachments = files
 
   const note = (status, extra) => recordEmail({
     kind,
@@ -361,24 +356,14 @@ export async function sendLeaveAmendedEmail(application, change = '') {
 // the admins to clear it, so a locked-out staff member is not a dead end.
 export async function sendPinResetRequestEmail(staff) {
   const approvers = ['brenton@technomed.com.au', 'erin@technomed.com.au']
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#042746;padding:26px 30px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Staff Portal</div>
-  <div style="font-size:19px;font-weight:700;color:#ffffff;">PIN reset requested</div>
-  </td></tr>
-  <tr><td style="padding:24px 30px;font-size:14px;color:#042746;line-height:1.65;">
-  <strong>${escapeHtml(staff.name)}</strong> can't sign in and has asked for their PIN to be reset.
-  <div style="margin-top:16px;padding:14px 16px;background:#f8f9fc;border-radius:10px;font-size:13px;color:#6b7a8d;line-height:1.6;">
-  Open the portal → <strong style="color:#042746;">Admin</strong> → <strong style="color:#042746;">Staff PINs</strong> →
-  ${escapeHtml(staff.name.split(' ')[0])} → <strong style="color:#042746;">Reset PIN</strong>.<br>
-  They'll then be able to create a new one next time they sign in.
-  </div>
-  </td></tr>
-  <tr><td style="padding:0 30px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Staff Portal · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`
+  const html = emailShell({
+    label: 'PIN reset',
+    body: [
+      para(`${staff.name} can't sign in and has asked for their PIN to be reset.`, { strong: true }),
+      para(`Open the portal → Admin → Staff PINs → ${staff.name.split(' ')[0]} → Reset PIN. They'll then be able to create a new one next time they sign in.`),
+      signoff()
+    ].join('\n')
+  })
 
   return send({
     kind: 'pin',
@@ -393,21 +378,15 @@ export async function sendPinResetRequestEmail(staff) {
 // the staff member's own address, which is the whole point: whoever reads that
 // inbox is the person the account belongs to.
 export async function sendSignInCodeEmail(staff, code) {
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#042746;padding:26px 30px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Staff Portal</div>
-  <div style="font-size:19px;font-weight:700;color:#ffffff;">Your sign-in code</div>
-  </td></tr>
-  <tr><td style="padding:24px 30px;font-size:14px;color:#042746;line-height:1.65;">
-  Hi ${escapeHtml(staff.firstName || staff.name.split(' ')[0])}, enter this code in the portal to finish setting your PIN:
-  <div style="margin:18px 0;font-size:30px;font-weight:700;letter-spacing:8px;color:#042746;">${escapeHtml(code)}</div>
-  <div style="font-size:13px;color:#6b7a8d;">It works for 15 minutes. If you did not ask for it, tell Brenton — somebody tried to set up your account.</div>
-  </td></tr>
-  <tr><td style="padding:0 30px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Staff Portal · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`
+  const html = emailShell({
+    label: 'Sign-in code',
+    body: [
+      para(`Hi ${staff.firstName || staff.name.split(' ')[0]}, enter this code in the portal to finish setting your PIN:`),
+      `<div style="margin:6px 0 18px;font-size:30px;font-weight:700;letter-spacing:8px;color:#042746">${escapeHtml(code)}</div>`,
+      aside('It works for 15 minutes. If you did not ask for it, tell Brenton — somebody tried to set up your account.'),
+      signoff()
+    ].join('\n')
+  })
   return send({
     kind: 'pin',
     to: [staff.email],
@@ -433,23 +412,16 @@ function timesheetSummaryRows(record) {
 }
 
 function timesheetHtml({ heading, banner, record, extraRows = [] }) {
-  const rows = [...timesheetSummaryRows(record), ...extraRows].map(([label, value], i) => `
-  <tr${i % 2 === 0 ? ' style="background:#f8f9fc;"' : ''}><td style="padding:11px 14px;font-size:12px;color:#6b7a8d;width:150px;">${escapeHtml(label)}</td><td style="padding:11px 14px;font-size:13px;color:#1a2b4a;font-weight:500;">${escapeHtml(value)}</td></tr>`).join('')
-
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#042746;padding:26px 30px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Timesheet</div>
-  <div style="font-size:19px;font-weight:700;color:#ffffff;">${escapeHtml(heading)}</div>
-  </td></tr>
-  ${banner ? `<tr><td style="padding:20px 30px 0;"><div style="background:${banner.bg};color:${banner.fg};padding:12px 14px;border-radius:10px;font-size:13px;font-weight:600;">${escapeHtml(banner.text)}</div></td></tr>` : ''}
-  <tr><td style="padding:20px 30px;">
-  <table width="100%" style="border:1px solid rgba(26,43,74,0.1);border-radius:10px;overflow:hidden;">${rows}</table>
-  </td></tr>
-  <tr><td style="padding:0 30px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Staff Portal · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`
+  // The portal's one letterhead (api/_emailLayout.js), labelled TIMESHEET.
+  return emailShell({
+    label: 'Timesheet',
+    banner: banner ? { tone: banner.bg === '#fdecea' ? 'danger' : 'success', title: banner.text.replace(/^[^A-Za-z]+/, '') } : null,
+    body: [
+      para(heading, { strong: true }),
+      factsPanel([...timesheetSummaryRows(record), ...extraRows]),
+      signoff()
+    ].join('\n')
+  })
 }
 
 export async function sendTimesheetSubmittedEmail(record) {
@@ -542,7 +514,6 @@ export async function sendUsageEmail({
     html,
     text,
     attachments: [
-      signatureLogo(),
       ...(xlsx ? [{ filename: xlsxFilename, content: xlsx.toString('base64') }] : []),
       // The scanned form, where the pages were supplied. Most distributors need
       // the signed original for traceability, not only the transcription of it.
@@ -568,22 +539,16 @@ export async function sendBoostTrackingEmail({ to, cc, subject, pdf, pdfFilename
     + 'so please do not process or resupply from this email.'
   const heading = `${test ? '[TEST] ' : ''}Boost tracking only – ${subject}`
   const wouldHaveGone = test ? `Would have gone to: ${test.wouldSendTo.join(', ')}` : ''
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#042746;padding:24px 28px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Boost tracking only</div>
-  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(heading)}</div>
-  </td></tr>
-  ${test ? `<tr><td style="padding:14px 28px;background:#fff3cd;color:#856404;font-size:13px;font-weight:700;line-height:1.5;">
-  TEST — not sent to the Boost team<div style="font-weight:400;margin-top:4px;">${escapeHtml(wouldHaveGone)}</div></td></tr>` : ''}
-  <tr><td style="padding:24px 28px;font-size:14px;color:#042746;line-height:1.6;">
-  <div style="font-weight:700;margin-bottom:10px;">For tracking only — not a usage. Please do not resupply from this email.</div>
-  ${escapeHtml(body)}<div style="margin-top:16px;color:#6b7a8d;font-size:13px;">Warm regards,<br>TechnoMed</div>
-  </td></tr>
-  <tr><td style="padding:0 28px 22px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`
+  const html = emailShell({
+    label: 'Boost tracking only',
+    banner: test ? { tone: 'warning', title: 'TEST — not sent to the Boost team', detail: wouldHaveGone } : null,
+    body: [
+      para('Hi Boost team,'),
+      para('For tracking only — not a usage. Please do not resupply from this email.', { strong: true }),
+      para(body),
+      signoff({ closing: 'Thanks,', ...personSignoff(sender) })
+    ].join('\n')
+  })
   return send({
     to,
     cc,
@@ -608,38 +573,19 @@ const PRIORITY_LABELS = { urgent: 'Urgent', normal: 'Normal', low: 'Low' }
 // typed by staff, and the summary / task / notes come back from the transcript
 // analysis, which is prompted for prose and never markup.
 function buildMeetingEmailHtml(staff, meeting, myItems) {
-  const itemsHtml = myItems.length
-    ? myItems.map(it => `
-      <tr><td style="padding:11px 14px;border-bottom:1px solid rgba(26,43,74,0.06);">
-        <div style="font-size:13px;font-weight:600;color:#1a2b4a;">${escapeHtml(it.task)}</div>
-        <div style="font-size:11px;margin-top:3px;">
-          <span style="color:${PRIORITY_COLORS[it.priority] || '#6b7a8d'};font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">${escapeHtml(PRIORITY_LABELS[it.priority] || it.priority)}</span>
-          ${it.due_date ? `<span style="color:#6b7a8d;"> · Due ${escapeHtml(formatDate(it.due_date))}</span>` : ''}
-        </div>
-        ${it.notes ? `<div style="font-size:12px;color:#6b7a8d;margin-top:5px;line-height:1.5;">${escapeHtml(it.notes)}</div>` : ''}
-      </td></tr>`).join('')
-    : `<tr><td style="padding:20px 14px;font-size:13px;color:#6b7a8d;text-align:center;">No action items assigned to you from this meeting.</td></tr>`
-
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#1a2b4a;padding:28px 32px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Meeting minutes</div>
-  <div style="font-size:20px;font-weight:700;color:#ffffff;">${escapeHtml(meeting.title)}</div>
-  <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-top:4px;">${escapeHtml(formatDate(meeting.date))}</div>
-  </td></tr>
-  <tr><td style="padding:24px 32px 4px;">
-  <div style="font-size:13px;color:#1a2b4a;line-height:1.65;">${escapeHtml(meeting.summary)}</div>
-  </td></tr>
-  <tr><td style="padding:20px 32px 8px;">
-  <div style="font-size:11px;color:#6b7a8d;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Hi ${escapeHtml(staff.name.split(' ')[0])}, your action items</div>
-  </td></tr>
-  <tr><td style="padding:0 32px 24px;">
-  <table width="100%" style="border:1px solid rgba(26,43,74,0.1);border-radius:10px;overflow:hidden;">${itemsHtml}</table>
-  </td></tr>
-  <tr><td style="padding:0 32px 24px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Operations Hub · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`
+  // The portal's one letterhead (api/_emailLayout.js), labelled MEETING MINUTES.
+  const items = myItems.map(it => [it.task,
+    [PRIORITY_LABELS[it.priority] || it.priority, it.due_date ? `due ${formatDate(it.due_date)}` : '', it.notes || ''].filter(Boolean).join(' · ')])
+  return emailShell({
+    label: 'Meeting minutes',
+    body: [
+      para(`${meeting.title} — ${formatDate(meeting.date)}`, { strong: true }),
+      para(meeting.summary || ''),
+      para(`Hi ${staff.name.split(' ')[0]}, your action items:`, { strong: true }),
+      items.length ? factsPanel(items) : aside('No action items assigned to you from this meeting.'),
+      signoff()
+    ].join('\n')
+  })
 }
 
 /**
@@ -709,22 +655,17 @@ export async function sendServiceAlertEmail({ feature, fault, detail }) {
     kind: 'notification',
     label: `Alert: ${what.toLowerCase()} is down`,
     subject: `Portal: ${what.toLowerCase()} is down`,
-    html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;font-family:-apple-system,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
-  <table width="100%" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
-  <tr><td style="background:#b42318;padding:22px 28px;">
-  <div style="font-size:11px;color:rgba(255,255,255,0.6);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;">Portal alert</div>
-  <div style="font-size:17px;font-weight:700;color:#ffffff;">${escapeHtml(line)}</div>
-  </td></tr>
-  <tr><td style="padding:22px 28px;font-size:14px;color:#042746;line-height:1.6;">
-  ${escapeHtml(action)}
-  <div style="margin-top:14px;font-size:12px;color:#6b7a8d;">Staff are being shown a message asking them to do it by hand instead, so nothing is lost — but the feature is off until this is sorted.</div>
-  ${detail ? `<div style="margin-top:14px;padding:10px 12px;background:#f6f8fa;border-radius:8px;font-family:ui-monospace,monospace;font-size:11.5px;color:#4b5b68;word-break:break-word;">${escapeHtml(String(detail).slice(0, 300))}</div>` : ''}
-  <div style="margin-top:14px;font-size:12px;color:#aab0bb;">One of these is sent per feature per day, however many times it fails.</div>
-  </td></tr>
-  <tr><td style="padding:0 28px 22px;font-size:11px;color:#aab0bb;text-align:center;">TechnoMed Portal · technomed.com.au</td></tr>
-  </table></td></tr></table>
-  </body></html>`,
+    html: emailShell({
+      label: 'Portal alert',
+      banner: { tone: 'danger', title: line },
+      body: [
+        para(action),
+        aside('Staff are being shown a message asking them to do it by hand instead, so nothing is lost — but the feature is off until this is sorted.'),
+        detail ? `<div style="margin:0 0 12px;padding:10px 12px;background:#f6f8fa;border-radius:8px;font-family:ui-monospace,monospace;font-size:11.5px;color:#4b5b68;word-break:break-word">${escapeHtml(String(detail).slice(0, 300))}</div>` : '',
+        aside('One of these is sent per feature per day, however many times it fails.'),
+        signoff()
+      ].join('\n')
+    }),
     text: `${line}\n\n${action}\n\n${detail ? String(detail).slice(0, 300) + '\n\n' : ''}`
       + 'Staff are being asked to do it by hand instead. One alert per feature per day.'
   })
@@ -757,21 +698,27 @@ const signatureLogo = () => ({
   content_id: SIGNATURE_LOGO_CID, content_type: 'image/png'
 })
 
+/** Who signs: name, role and contact from the roster. */
+export function personSignoff(sender) {
+  const staff = STAFF.find(s => s.email.toLowerCase() === String(sender?.email || '').toLowerCase())
+  return {
+    name: staff?.name || String(sender?.name || '').trim() || 'TechnoMed',
+    role: staff?.role || '',
+    contact: [staff?.phone, staff?.email || sender?.email].filter(Boolean).join(' · ')
+  }
+}
+
 export function bookingSignature(sender) {
   const staff = STAFF.find(s => s.email.toLowerCase() === String(sender?.email || '').toLowerCase())
   const name = staff?.name || String(sender?.name || '').trim()
   const lines = [name, staff?.role, 'TechnoMed Pty Ltd', 'Hobart, Tasmania',
     [staff?.phone, staff?.email || sender?.email].filter(Boolean).join(' · ')].filter(Boolean)
   const text = ['', 'Kind regards,', '', ...lines].join('\n')
-  const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.45;color:#042746;margin-top:18px">
-<p style="margin:0 0 10px">Kind regards,</p>${lines.map((l, i) => i === 0
-    ? `<div style="font-weight:700">${escapeHtml(l)}</div>`
-    : `<div style="color:#6b7a8d">${escapeHtml(l)}</div>`).join('')}
-<img src="cid:${SIGNATURE_LOGO_CID}" alt="TechnoMed — Surgical Solutions &amp; Support" width="200" height="50" style="display:block;margin-top:12px;border:0;width:200px;height:50px"></div>`
+  const html = signoff({ closing: 'Kind regards,', ...personSignoff(sender) })
   return { text, html }
 }
 
-export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId, attachments = [], label = '' }) {
+export async function sendBookingNotice({ to, cc, subject, html, text, sender, caseId, attachments = [], label = '', badge = '' }) {
   const sig = bookingSignature(sender)
   const lower = a => String(a).toLowerCase()
   const addressed = new Set((to || []).map(lower))
@@ -779,9 +726,13 @@ export async function sendBookingNotice({ to, cc, subject, html, text, sender, c
   return send({
     kind: 'notification',
     to, cc: copies, subject, caseId, sender, label,
-    html: `${html || ''}${sig.html}`,
+    // The portal's one letterhead, labelled for what this is (New booking,
+    // Loan set request …). Plain text — an edited draft — becomes paragraphs.
+    html: html
+      ? emailShell({ label: badge || 'Notice', body: `${html}\n${sig.html}` })
+      : shellFromText({ label: badge || 'Notice', text, signature: sig.html }),
     text: `${String(text || '').replace(/\s+$/, '')}\n${sig.text}`,
-    attachments: [signatureLogo(), ...attachments],
+    attachments,
     replyTo: [sender?.email, BOOKINGS_INBOX].filter(Boolean)
   })
 }
@@ -802,12 +753,15 @@ export async function sendInSituAlert({ to, case: c, answer }) {
   const intro = 'A case in a week needs what is already in the patient known before the day:'
   const text = [intro, '', caseLine, `Why: ${c.inSitu}`, '', `In situ: ${sentence}`, confirmed, '',
     'Open the booking in the portal to see it or confirm it.', PORTAL_URL].join('\n')
-  const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746;line-height:1.5">
-<p>${escapeHtml(intro)}</p>
-<p><strong>${escapeHtml(caseLine)}</strong><br><span style="color:#6b7a8d">Why: ${escapeHtml(c.inSitu)}</span></p>
-<p style="background:#f3faf8;border:1px solid #dbe7e4;border-radius:8px;padding:10px 14px"><strong>In situ:</strong> ${escapeHtml(sentence)}</p>
-<p style="color:${answer?.confirmed ? '#189a85' : '#9b2c1f'}">${escapeHtml(confirmed)}</p>
-<p><a href="${PORTAL_URL}">Open the portal</a></p></div>`
+  const html = emailShell({
+    label: 'In situ check',
+    body: [
+      para(intro),
+      factsPanel([['Case', caseLine], ['Why', c.inSitu], ['In situ', sentence], ['Confirmed', confirmed]]),
+      button('Open the portal', PORTAL_URL),
+      signoff()
+    ].join('\n')
+  })
   return send({
     kind: 'notification', to: [to],
     label: `In situ check · ${caseLine}`,
@@ -824,10 +778,16 @@ export async function sendUsageReminderEmail({ to, firstName, lines, escalation 
   const text = [intro, '', ...lines.map(l => `• ${l}`), '',
     'Send it from Scan in the portal, or open the booking and tap "No usage" if there was none.',
     PORTAL_URL].join('\n')
-  const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
-<p>${escapeHtml(intro)}</p><ul>${lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
-<p>Send it from <strong>Scan</strong> in the portal, or open the booking and tap <strong>No usage</strong> if there was none.</p>
-<p><a href="${PORTAL_URL}">Open the portal</a></p></div>`
+  const html = emailShell({
+    label: 'Usage reminder',
+    body: [
+      para(intro),
+      bullets(lines),
+      para('Send it from Scan in the portal, or open the booking and tap "No usage" if there was none.'),
+      button('Open the portal', PORTAL_URL),
+      signoff()
+    ].join('\n')
+  })
   return send({
     kind: 'notification', to: [to],
     label: escalation ? 'Reminder: usage still not sent from yesterday' : 'Reminder: usage not sent yet today',

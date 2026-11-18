@@ -4,7 +4,7 @@ import { readBooking, detectHospital } from '../src/clinicalPlan/parse.js'
 import { systemsInKit } from '../src/clinicalPlan/systems.js'
 import { inventoryFor, kitArrivalBy, isRush, suggestSupply } from '../src/clinicalPlan/inventory.js'
 import { parseKitSupplies } from '../src/clinicalPlan/kitSupply.js'
-import { escapeHtml } from './_email.js'
+import { para, factsPanel, bullets } from './_emailLayout.js'
 
 // ─── Telling suppliers about bookings (Tasks 8 and 9) ────────────────────────
 // "Signus bookings, and KT Medical bookings at RHH, must be emailed to Signus
@@ -370,16 +370,17 @@ export function noticesFor({ kind, before, after, eventId, settings }) {
       ...(changeLines.length ? ['', ...changeLines] : []),
       '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`)
     ].join('\n')
-    const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
-<p>Hi ${escapeHtml(contact.name.split(/[\s(/]/)[0])} team,</p>
-<p>${kind === 'cancelled' ? 'This booking has been <strong>cancelled</strong>.' : kind === 'new' ? 'A new case has been booked.' : 'This booking has changed.'}</p>
-${rule.ask && kind === 'new' ? `<p>${escapeHtml(rule.ask)}</p>` : ''}
-${changeLines.length ? `<ul>${changeLines.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
-<table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
-  `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-</div>`
+    // The body inside the portal's letterhead (api/_emailLayout.js); the
+    // shell, label and signature go on in sendBookingNotice.
+    const html = [
+      para(`Hi ${contact.name.split(/[\s(/]/)[0]} team,`),
+      para(kind === 'cancelled' ? 'This booking has been cancelled.' : kind === 'new' ? 'A new case has been booked.' : 'This booking has changed.', { strong: kind === 'cancelled' }),
+      rule.ask && kind === 'new' ? para(rule.ask) : '',
+      bullets(changeLines),
+      factsPanel(rows.map(([l, v]) => [l, v || '—']))
+    ].join('\n')
     out.push({ ruleId: rule.id, contactId: contact.id, name: contact.name, to: contact.to, cc: contact.cc,
-      subject: title, text, html, autoSend: rule.autoSend, eventId, kind,
+      subject: title, text, html, badge: WORD[kind], autoSend: rule.autoSend, eventId, kind,
       // For the sent-email log: which email, without the patient.
       label: [`${WORD[kind]} → ${contact.name}`, subject.surgeon, subject.hospital, shortDate(subject.date)].filter(Boolean).join(' · ') })
   }
@@ -555,13 +556,9 @@ export function hospitalLoanNoticesFor({ kind, before, after, eventId, settings,
     const subject = `${{ request: 'Loan set ordered', update: 'Loan set — case changed', cancel: 'Loan set not coming' }[status]}`
       + ` — ${systems.join(' + ')} — ${shortDate(b?.date)} — Pt ${b?.patient || 'TBC'}`
     const text = [greeting, '', ...lines, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`)].join('\n')
-    const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
-<p>${escapeHtml(greeting)}</p>${lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')}
-<table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
-  `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-</div>`
+    const html = [para(greeting), ...lines.map(l => para(l)), factsPanel(rows.map(([l, v]) => [l, v || '—']))].join('\n')
     out.push({ ruleId: key, contactId: contact.id, name: `${contact.name} — ${status === 'request' ? 'loan set ordered' : status === 'update' ? 'case changed' : 'loan set not coming'}`,
-      to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
+      to: contact.to, cc: contact.cc, subject, text, html, badge: { request: 'Loan set notice', update: 'Loan set notice — changed', cancel: 'Loan set notice — not coming' }[status], autoSend: false, eventId, kind,
       label: [`${{ request: 'Loan set ordered', update: 'Loan set — case changed', cancel: 'Loan set not coming' }[status]} → ${contact.name}`, systems.join(' + '), b?.hospital, shortDate(b?.date)].filter(Boolean).join(' · '),
       loan: { distributor: key, status, date: b?.date, hospital: b?.hospital, systems } })
   }
@@ -623,13 +620,9 @@ export function loanRequestsFor({ kind, before, after, eventId, settings, sent =
     const greeting = `Hi ${contact.name.split(/[\s(/]/)[0]} team,`
     const text = [greeting, '', ask, '', ...rows.map(([l, v]) => `${l}: ${v || '—'}`), '',
       'Please reply to confirm.'].join('\n')
-    const html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">
-<p>${escapeHtml(greeting)}</p><p><strong>${escapeHtml(ask)}</strong></p>
-<table cellpadding="6" style="border-collapse:collapse">${rows.map(([l, v]) =>
-  `<tr><td style="color:#6b7a8d">${escapeHtml(l)}</td><td><strong>${escapeHtml(v || '—')}</strong></td></tr>`).join('')}</table>
-<p>Please reply to confirm.</p></div>`
+    const html = [para(greeting), para(ask, { strong: true }), factsPanel(rows.map(([l, v]) => [l, v || '—'])), para('Please reply to confirm.')].join('\n')
     out.push({ ruleId: `loan-${d}`, contactId: contact.id, name: `${contact.name} — ${LOAN_WORD[status].toLowerCase()}`,
-      to: contact.to, cc: contact.cc, subject, text, html, autoSend: false, eventId, kind,
+      to: contact.to, cc: contact.cc, subject, text, html, badge: LOAN_WORD[status], autoSend: false, eventId, kind,
       label: [`${LOAN_WORD[status]} → ${contact.name}`, systems.join(' + '), b?.surgeon, b?.hospital, shortDate(b?.date)].filter(Boolean).join(' · '),
       loan: { distributor: d, status, date: b?.date, hospital: b?.hospital, systems } })
   }

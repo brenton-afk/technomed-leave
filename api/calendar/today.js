@@ -2911,8 +2911,8 @@ async function handleNotify(req, res) {
       const textBody = typeof edit.text === 'string' ? edit.text.slice(0, 8000) : notice.text
       notice.text = textBody
       notice.subject = typeof edit.subject === 'string' && edit.subject.trim() ? edit.subject.trim().slice(0, 300) : notice.subject
-      notice.html = `<div style="font-family:-apple-system,sans-serif;font-size:14px;color:#042746">${
-        escapeHtml(textBody).replace(/\n/g, '<br>')}</div>`
+      // Rebuilt from the edited words inside the same letterhead (sendBookingNotice).
+      notice.html = ''
     }
     try {
       await sendBookingNotice({ ...notice, sender: staffSender(session), caseId: notice.eventId })

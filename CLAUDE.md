@@ -1384,6 +1384,28 @@ needs technomed.com.au verified as a domain in Resend. `explainSendFailure()`
 names the cause for the two failures this app actually hits, because Resend
 reports both as a flat 403.
 
+### One letterhead for every email (Brent, 18 Nov 2026)
+
+"Make the notification emails and the usage emails (and all emails) a
+consistent template similar to the usage one … labeled clearly (booking,
+usage, loan set request)." `api/_emailLayout.js` (pure, `emailLayout.test.js`):
+`emailShell({ label, body, banner })` — the inline logo top left, the label in
+teal capitals top right (`data-email-label`), a teal rule, the body, the
+address — and the pieces a body is built from: `para`, `factsPanel` (the
+label/value panel), `bullets`, `button`, `aside`, `signoff` (a person from
+the roster via `personSignoff`, or "Sent by the TechnoMed staff portal").
+Everything is escaped there. Every email uses it: usage (Usage / Usage
+correction), Boost tracking only, booking notices (`badge` = `WORD[kind]`:
+New booking / Booking changed / Booking moved / Booking cancelled), loan set
+requests (`LOAN_WORD`), hospital loan notices (Loan set notice …), kit moves,
+self-funding quote heads-ups, leave (Leave request / approved / declined /
+amended), timesheets, meeting minutes, sign-in code, PIN reset, in-situ
+check, usage reminder, portal alert. `sendBookingNotice` wraps a notice body
+(or, for a draft someone edited, its plain text via `shellFromText`) with
+the label and signature; `send()` attaches the logo whenever the html uses
+`cid:technomed-logo`. A new email builds its body from these helpers and
+passes a label — never its own outer HTML.
+
 ### Staff roster is the shared source of truth
 
 `src/staffConfig.js` is a hardcoded `STAFF` array (name, `firstName`, email,

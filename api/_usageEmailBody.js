@@ -13,9 +13,8 @@
 
 import { findSystems } from '../src/clinicalPlan/systems.js'
 import { STAFF } from '../src/staffConfig.js'
+import { emailShell, para, factsPanel, signoff, ADDRESS } from './_emailLayout.js'
 
-const escapeHtml = value => String(value ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 /** How each distributor's email opens: "Hi {greeting},". Edited in Admin → Supplier notices. */
 export const DEFAULT_USAGE_GREETINGS = {
@@ -85,7 +84,6 @@ export function signoffFor(sender = {}) {
   }
 }
 
-const ADDRESS = 'TechnoMed Pty Ltd · 295 Elizabeth Street, North Hobart TAS 7000 · technomed.com.au'
 
 /**
  * The email, html and text. `logoCid` is the inline logo's content id.
@@ -105,36 +103,20 @@ export function usageEmailContent({
       : 'Here’s the usage from the case below. The usage sheet is attached.')
   const close = 'Any questions, reply here and it comes straight to me.'
 
-  const factRows = facts.map(([k, v]) => `<tr>
-<td style="padding:7px 14px;border-bottom:1px solid #e1ece9;color:#5d6d7c;width:34%;white-space:nowrap;font-size:13px">${escapeHtml(k)}</td>
-<td style="padding:7px 14px;border-bottom:1px solid #e1ece9;color:#042746;font-weight:700;font-size:13px">${escapeHtml(v)}</td></tr>`).join('')
-
-  const bannerHtml = banner
-    ? `<tr><td style="padding:12px 30px;background:${banner.tone === 'danger' ? '#fdecea' : '#fff3cd'};color:${banner.tone === 'danger' ? '#9b2c1f' : '#856404'};font-size:13px;font-weight:700;line-height:1.5">${escapeHtml(banner.title)}${banner.detail ? `<div style="font-weight:400;margin-top:4px">${escapeHtml(banner.detail)}</div>` : ''}</td></tr>`
-    : ''
-
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f3f7;">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center" style="padding:28px 12px;">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#23313e;">
-<tr><td style="padding:20px 30px 16px;border-bottom:2px solid #189a85;">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr>
-<td><img src="cid:${logoCid}" alt="TechnoMed — Surgical Solutions &amp; Support" width="190" height="48" style="display:block;border:0;width:190px;height:48px"></td>
-<td align="right" style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#189a85">${correctionText ? 'Usage correction' : 'Usage'}</td>
-</tr></table></td></tr>
-${bannerHtml}
-<tr><td style="padding:24px 30px;font-size:14px;line-height:1.6;">
-<p style="margin:0 0 12px">Hi ${escapeHtml(greeting)},</p>
-${correctionText ? `<p style="margin:0 0 12px;font-weight:700">${escapeHtml(correctionText)}</p>` : `<p style="margin:0 0 12px">${escapeHtml(lead)}</p>`}
-${facts.length ? `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border:1px solid #dbe7e4;background:#f3faf8;border-collapse:separate;border-radius:8px;margin:4px 0 16px">${factRows}</table>` : ''}
-${typed ? `<p style="margin:0 0 12px;white-space:pre-line">${escapeHtml(typed)}</p>` : ''}
-<p style="margin:0 0 12px">${escapeHtml(close)}</p>
-<div style="margin-top:22px;padding-top:16px;border-top:1px solid #e3e8ed;font-size:13px;line-height:1.5;color:#5d6d7c">
-Thanks,<div style="font-size:15px;font-weight:700;color:#042746">${escapeHtml(sig.name)}</div>
-${sig.role ? `<div style="color:#189a85;font-weight:700">${escapeHtml(sig.role)}</div>` : ''}
-${sig.contact ? `<div>${escapeHtml(sig.contact)}</div>` : ''}
-</div>
-<div style="font-size:11px;color:#94a1ad;line-height:1.5;padding-top:14px">${escapeHtml(ADDRESS)}</div>
-</td></tr></table></td></tr></table></body></html>`
+  // The portal's one letterhead (api/_emailLayout.js), labelled USAGE.
+  const html = emailShell({
+    label: correctionText ? 'Usage correction' : 'Usage',
+    logoCid,
+    banner,
+    body: [
+      para(`Hi ${greeting},`),
+      correctionText ? para(correctionText, { strong: true }) : para(lead),
+      factsPanel(facts),
+      typed ? para(typed) : '',
+      para(close),
+      signoff({ closing: 'Thanks,', name: sig.name, role: sig.role, contact: sig.contact })
+    ].join('\n')
+  })
 
   const text = [
     banner ? `${banner.title}${banner.detail ? ` ${banner.detail}` : ''}\n` : '',
