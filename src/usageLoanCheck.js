@@ -30,7 +30,7 @@ function bookedSupplies(kit) {
   return { loans, others }
 }
 
-/** What is stamped or written against a line, as read: 'loan', 'consignment' or ''. */
+/** What TechnoMed's stamp on a line says, as read: 'loan' (red LOAN), 'consignment' (blue CONSIGNMENT) or ''. */
 export function markingOf(item) {
   const m = String(item?.stockMarking || '').toLowerCase()
   if (/loan/.test(m)) return 'loan'

@@ -273,7 +273,7 @@ export function normaliseItem(raw, index) {
     quantity,
     rebateCode,
     notes,
-    // What is stamped or written against the sticker — LOAN or consignment —
+    // Which of TechnoMed's stamps is on the sticker — red LOAN or blue CONSIGNMENT —
     // for the loan check (src/usageLoanCheck.js).
     stockMarking: str(raw.stockMarking || raw.stock || ''),
     handwritten: raw.handwritten === true,

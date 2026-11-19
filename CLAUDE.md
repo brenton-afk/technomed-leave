@@ -1903,8 +1903,10 @@ Invariants worth preserving:
   a Stock column when they differ, nothing when no row knows.
   **LOAN read against a consigned system** (Toni, 19 Nov 2026: a Mariner
   case at RHH — consigned there — went to Device as loan). The reader's
-  `stockMarking` now counts only a stamp, handwriting or a tick, never a
-  printed heading or empty box offering "Loan"; `stockConflicts` flags lines
+  `stockMarking` counts **only TechnoMed's own stamps** — the red LOAN stamp
+  or the blue CONSIGNMENT stamp (Brent, same day: the hospital's "Loan
+  instruments/implants" box had been ticked) — never a tick box, printed
+  label or handwriting; `stockConflicts` flags lines
   read LOAN whose system the booking has as Consignment / RHH Loan / Calvary
   Loan, and the review asks **Loan or consignment?** — **It's consignment**
   (`asConsignment`) or **It really is a loan** (`stockConfirmed`); save refuses
