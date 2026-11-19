@@ -73,6 +73,36 @@ describe('the resupply scanner', () => {
     expect(save.body.pages).toHaveLength(1)
   })
 
+  // Brent, 19 Nov 2026: "the resupply scanner must use the list also".
+  it('checks the paper’s codes against the price list, and a near code is one tap', async () => {
+    const checked = {
+      ...RESUPPLY,
+      lines: [
+        { ...RESUPPLY.lines[0], priceCheck: { status: 'listed', code: 'RF-4535', range: 'Reform', rebate: 'EY001' } },
+        { ...RESUPPLY.lines[1], priceCheck: { status: 'not-listed', code: 'RF-ROD-120', distributor: 'E4 Surgical', near: 'RF-ROD-12O' } }
+      ]
+    }
+    global.fetch = vi.fn(async (url, init) => {
+      const action = new URL(url, 'http://x').searchParams.get('action')
+      const body = init?.body ? JSON.parse(init.body) : null
+      calls.push({ action, body })
+      if (action === 'resupply-read') return { ok: true, json: async () => ({ resupply: checked, candidates: [{ ...CASE, why: ['surname'] }], matchedId: 'u1', comparison: COMPARISON }) }
+      if (action === 'resupply-compare') return { ok: true, json: async () => ({ comparison: COMPARISON, resupply: { ...body.resupply, lines: body.resupply.lines.map(l => ({ ...l, priceCheck: { status: 'listed', code: l.referenceCode } })) } }) }
+      return { ok: true, json: async () => ({}) }
+    })
+    const { container } = render(<ScanTab user={{ token: 't' }} />)
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
+    await screen.findByText('Codes on the price list')
+    expect(screen.getByText(/1 of 2 codes on E4 Surgical's list/)).toBeInTheDocument()
+    expect(screen.getByText(/Not on E4 Surgical's price list/)).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/\$/)
+    fireEvent.click(screen.getByRole('button', { name: 'Use RF-ROD-12O' }))
+    await waitFor(() => expect(screen.getByText(/2 of 2 codes/)).toBeInTheDocument())
+    const compare = calls.find(c => c.action === 'resupply-compare')
+    expect(compare.body.resupply.lines[1].referenceCode).toBe('RF-ROD-12O')
+  })
+
   it('switches back to usage scanning', async () => {
     render(<ScanTab user={{ token: 't' }} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Usage' }))

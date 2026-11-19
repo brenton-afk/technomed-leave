@@ -8,6 +8,7 @@ import { fileToPage, pageFromPreview, filingPages, payloadBytes } from './UsageS
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { Page, Header, Banner, Button } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
+import { priceCheckLine } from '../usagePriceCheck.js'
 
 // ─── Resupply scanning (Brent, 6 Nov 2026) ───────────────────────────────────
 // The paperwork that comes back with the stock — a delivery docket, a packing
@@ -89,6 +90,52 @@ function Comparison({ comparison }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The paper's codes against the distributor price lists the portal keeps
+ * (Brent, 19 Nov 2026). Lines that check out are counted; a code on another
+ * distributor's list, or on none, is shown with what to do. Never a price.
+ */
+function PriceCodes({ resupply, onUseCode, onUseDistributor }) {
+  const lines = resupply.lines.filter(l => priceCheckLine(l))
+  if (!lines.length && !resupply.listSuggests) return null
+  const ok = lines.filter(l => priceCheckLine(l).tone === 'ok')
+  const warn = lines.filter(l => priceCheckLine(l).tone !== 'ok')
+  const btn = { ...text('caption'), fontWeight: 600, marginLeft: space.xs, padding: '2px 8px', borderRadius: radius.control,
+    border: `1px solid ${colour.accent}`, background: colour.surface, color: colour.accentDeep, cursor: 'pointer' }
+  const suggest = resupply.listSuggests && resupply.listSuggests.distributorKey !== resupply.distributorKey ? resupply.listSuggests : null
+  return (
+    <div data-resupply-price-codes style={panel}>
+      <div style={{ ...text('heading'), color: colour.ink, marginBottom: space.xs }}>Codes on the price list</div>
+      {resupply.distributorFromList && resupply.distributor && (
+        <div style={{ ...text('caption'), color: colour.inkFaint }}>Distributor taken from the codes: {resupply.distributor}.</div>
+      )}
+      {suggest && (
+        <div data-price-suggest style={{ ...text('caption'), color: colour.warning, marginTop: space.xs }}>
+          ⚠ Most of these codes are on {suggest.distributor}'s price list.
+          <button type="button" style={btn} onClick={() => onUseDistributor(suggest.distributorKey)}>It's from {suggest.distributor}</button>
+        </div>
+      )}
+      {ok.length > 0 && (
+        <div style={{ ...text('caption'), color: colour.accentDeep, marginTop: space.xs }}>
+          ✓ {ok.length} of {lines.length} code{lines.length === 1 ? '' : 's'} on {resupply.distributor || 'the distributor'}'s list
+        </div>
+      )}
+      {warn.map(l => {
+        const pc = priceCheckLine(l)
+        return (
+          <div key={l.id} data-price-check={l.priceCheck.status} style={{ ...text('caption'), color: colour.warning, padding: '6px 0', borderTop: `1px solid ${colour.lineSoft}`, marginTop: space.xs }}>
+            <span style={{ color: colour.ink, fontWeight: 700 }}>{l.referenceCode}</span>
+            {l.description && <span style={{ color: colour.inkFaint }}> · {l.description}</span>}
+            <div>⚠ {pc.text}
+              {pc.near && <button type="button" data-price-near style={btn} onClick={() => onUseCode(l.id, pc.near)}>Use {pc.near}</button>}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -219,23 +266,33 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
     setBusy(false)
   }
 
-  async function compareWith(id, resupply = read.resupply) {
+  // With a case: the comparison and the codes checked again. Without one
+  // (`recheck`): the codes only — after a code is corrected or the
+  // distributor changed.
+  async function compareWith(id, resupply = read.resupply, { recheck = false } = {}) {
     setUsageId(id); setComparison(null)
-    if (!id) return
+    if (!id && !recheck) return
     try {
       const res = await fetch('/api/usage/agent?action=resupply-compare', {
         method: 'POST', headers, body: JSON.stringify({ usageId: id, resupply })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      setComparison(data.comparison)
+      if (id) setComparison(data.comparison)
+      if (data.resupply) setRead(r => ({ ...r, resupply: { ...data.resupply, distributorKey: resupply.distributorKey } }))
     } catch (err) { setError(err.message) }
   }
 
   function setDistributor(key) {
-    const resupply = { ...read.resupply, distributorKey: key }
+    const resupply = { ...read.resupply, distributorKey: key, distributorFromList: false }
     setRead({ ...read, resupply })
-    if (usageId) compareWith(usageId, resupply)
+    compareWith(usageId, resupply, { recheck: true })
+  }
+
+  function useCode(lineId, code) {
+    const resupply = { ...read.resupply, lines: read.resupply.lines.map(l => (l.id === lineId ? { ...l, referenceCode: code } : l)) }
+    setRead({ ...read, resupply })
+    compareWith(usageId, resupply, { recheck: true })
   }
 
   async function save() {
@@ -331,6 +388,8 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
             setRead(r => ({ ...r, candidates: [...r.candidates.filter(x => x.id !== c.id), { ...c, why: ['found by name'] }] }))
             compareWith(c.id)
           }} />
+
+          <PriceCodes resupply={resupply} onUseCode={useCode} onUseDistributor={setDistributor} />
 
           {usageId && !comparison && <div style={{ ...text('caption'), color: colour.inkFaint }}>Comparing…</div>}
           {chosen && <Comparison comparison={comparison} />}

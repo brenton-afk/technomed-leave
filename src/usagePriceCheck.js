@@ -123,3 +123,46 @@ export function priceCheckLine(item) {
   if (c.status === 'not-listed') return { tone: 'warn', text: `Not on ${c.distributor || 'the distributor'}'s price list — check the code.`, near: c.near }
   return null
 }
+
+// ─── A resupply paper against the price lists (Brent, 19 Nov 2026) ───────────
+// "The resupply scanner must use the list also." Every line of a docket or
+// packing slip is checked the same way as a usage line. Two things more:
+//   - a paper whose distributor was not recognised takes the one most of its
+//     codes are listed under (`infer`, only on the first read — a person who
+//     cleared the choice is not overruled);
+//   - when most checked lines sit on one other distributor's list, the paper
+//     is probably from them: `listSuggests` says so for the screen to offer.
+// Advisory, never a stop, and never a price.
+
+export function priceCheckResupply(resupply, book, { hospital = '', infer = false, nameOf = k => LABELS[k] || k } = {}) {
+  if (!book || !resupply) return resupply
+  const index = indexPriceBook(book)
+  let { distributorKey } = resupply
+  let distributor = resupply.distributor
+  const tally = keys => {
+    const n = {}
+    for (const k of keys) if (k) n[k] = (n[k] || 0) + 1
+    const [best, count] = Object.entries(n).sort((a, b) => b[1] - a[1])[0] || []
+    return best && count * 2 > keys.length ? best : ''
+  }
+  if (infer && !distributorKey) {
+    const owners = resupply.lines.map(l => {
+      const hits = index.get(codeKey(l.referenceCode)) || []
+      const owners = [...new Set(hits.map(h => distributorOfList(h.list)).filter(Boolean))]
+      return owners.length === 1 ? owners[0] : ''
+    }).filter(Boolean)
+    const found = tally(owners)
+    if (found) { distributorKey = found; distributor = nameOf(found) }
+  }
+  const lines = resupply.lines.map(l => ({ ...l, priceCheck: priceCheckItem({ referenceCode: l.referenceCode, distributorKey }, book, index, { hospital }) }))
+  const checked = lines.filter(l => ['listed', 'other-distributor', 'not-listed'].includes(l.priceCheck.status))
+  const elsewhere = tally(checked.map(l => (l.priceCheck.status === 'other-distributor' ? l.priceCheck.distributorKey : '')))
+  return {
+    ...resupply,
+    distributorKey,
+    distributor,
+    ...(distributorKey !== resupply.distributorKey ? { distributorFromList: true } : {}),
+    lines,
+    listSuggests: elsewhere && checked.length ? { distributorKey: elsewhere, distributor: nameOf(elsewhere) } : null
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { priceCheckCase, priceCheckItem, priceCheckLine, indexPriceBook } from './usagePriceCheck.js'
+import { priceCheckCase, priceCheckItem, priceCheckLine, indexPriceBook, priceCheckResupply } from './usagePriceCheck.js'
 
 // A usage line against the distributor's price list (Brent, 18 Nov 2026).
 // Invented codes.
@@ -56,5 +56,29 @@ describe('a whole case', () => {
   it('leaves the case alone when the portal holds no lists', () => {
     const items = [{ referenceCode: 'x' }]
     expect(priceCheckCase(items, null)).toBe(items)
+  })
+})
+
+describe('a resupply paper', () => {
+  const paper = (distributorKey, codes) => ({ distributorKey, distributor: distributorKey ? 'Named' : '', lines: codes.map((c, i) => ({ id: `line-${i}`, referenceCode: c, quantity: 1 })) })
+  it('checks every line, never carrying a price', () => {
+    const out = priceCheckResupply(paper('signus', ['AB0010-11111', 'AB0010-11117']), book)
+    expect(out.lines.map(l => l.priceCheck.status)).toEqual(['listed', 'not-listed'])
+    expect(out.lines[1].priceCheck.near).toBe('AB0010-11111')
+    expect(JSON.stringify(out)).not.toMatch(/"price"/)
+  })
+  it('takes the distributor from the codes when the supplier was not recognised, on the first read only', () => {
+    const out = priceCheckResupply(paper(null, ['71-PIN-01', 'ZZZ']), book, { infer: true })
+    expect(out).toMatchObject({ distributorKey: 'e4', distributor: 'E4 Surgical', distributorFromList: true })
+    expect(priceCheckResupply(paper(null, ['71-PIN-01']), book).distributorKey).toBeNull()
+  })
+  it('says when the paper looks like another distributor’s', () => {
+    const out = priceCheckResupply(paper('signus', ['71-PIN-01', '71-PIN-01', 'AB0010-11111']), book)
+    expect(out.listSuggests).toMatchObject({ distributorKey: 'e4' })
+    expect(priceCheckResupply(paper('signus', ['AB0010-11111']), book).listSuggests).toBeNull()
+  })
+  it('leaves the paper alone with no lists', () => {
+    const p = paper('signus', ['x'])
+    expect(priceCheckResupply(p, null)).toBe(p)
   })
 })

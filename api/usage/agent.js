@@ -14,9 +14,9 @@ import {
   resupplyFileName, itemsFor
 } from '../_resupply.js'
 import { loadPriceBook } from '../_priceStore.js'
-import { priceCheckCase } from '../../src/usagePriceCheck.js'
+import { priceCheckCase, priceCheckResupply } from '../../src/usagePriceCheck.js'
 import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped, knownSurgeon } from '../_usageCase.js'
-import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
+import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor, distributorName } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
 import { loanStampFlags, stockConflicts, withStock } from '../../src/usageLoanCheck.js'
@@ -1099,6 +1099,21 @@ function caseSummary(record) {
   }
 }
 
+/**
+ * The paper's lines against the price lists (Brent, 19 Nov 2026: "the
+ * resupply scanner must use the list also"). Never fatal: a price book that
+ * cannot be read leaves the paper as it was read.
+ */
+async function checkResupplyCodes(resupply, { hospital = '', infer = false } = {}) {
+  try {
+    const book = await loadPriceBook()
+    return priceCheckResupply(resupply, book, { hospital: hospital || resupply.hospital, infer, nameOf: distributorName })
+  } catch (err) {
+    console.error('Resupply price check failed:', err.message)
+    return resupply
+  }
+}
+
 async function comparisonFor(usageId, resupply) {
   const record = await getUsageRecord(usageId)
   if (!record) return null
@@ -1126,7 +1141,9 @@ async function handleResupplyRead(req, res) {
   const textBlock = message.content.find(b => b.type === 'text')
   if (!textBlock) throw new Error('No data was returned from the document')
 
-  const resupply = normaliseResupply(parseExtraction(textBlock.text))
+  // Checked before matching: a docket whose supplier was not recognised
+  // takes the distributor its codes are listed under, which matching uses.
+  const resupply = await checkResupplyCodes(normaliseResupply(parseExtraction(textBlock.text)), { infer: true })
   const records = await getUsageHistory(RESUPPLY_LOOKBACK)
   const candidates = candidateCases(resupply, records)
   const best = candidates[0]
@@ -1162,11 +1179,17 @@ const RESUPPLY_FIND_LIMIT = 600
 async function handleResupplyCompare(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { usageId } = req.body || {}
-  if (!usageId) throw badRequest('No usage case chosen')
-  const resupply = normaliseResupply(req.body?.resupply || {})
-  const found = await comparisonFor(usageId, { ...resupply, distributorKey: req.body?.resupply?.distributorKey || resupply.distributorKey })
+  const given = req.body?.resupply || {}
+  const read = normaliseResupply(given)
+  const resupply = { ...read, distributorKey: given.distributorKey === undefined ? read.distributorKey : (given.distributorKey || null) }
+  if (given.distributorKey) resupply.distributor = distributorName(given.distributorKey)
+  // No case: only the codes are checked again (a code corrected, or the
+  // distributor changed, on a paper not matched to a usage).
+  if (!usageId) return res.status(200).json({ resupply: await checkResupplyCodes(resupply) })
+  const found = await comparisonFor(usageId, resupply)
   if (!found) return res.status(404).json({ error: 'That usage case could not be found' })
-  return res.status(200).json({ comparison: found.comparison, earlierCount: found.earlier.length, case: caseSummary(found.record) })
+  const checked = await checkResupplyCodes(resupply, { hospital: found.record.hospital })
+  return res.status(200).json({ comparison: found.comparison, earlierCount: found.earlier.length, case: caseSummary(found.record), resupply: checked })
 }
 
 async function handleResupplySave(req, res, session) {
@@ -1174,7 +1197,8 @@ async function handleResupplySave(req, res, session) {
   const { id, usageId } = req.body || {}
   if (!/^[a-z0-9-]{8,64}$/i.test(String(id || ''))) throw badRequest('Missing resupply id')
   const given = req.body?.resupply || {}
-  const resupply = { ...normaliseResupply(given), distributorKey: given.distributorKey || normaliseResupply(given).distributorKey }
+  const read = normaliseResupply(given)
+  const resupply = await checkResupplyCodes({ ...read, distributorKey: given.distributorKey || read.distributorKey }, { hospital: given.hospital })
   if (!resupply.lines.length) throw badRequest('There are no lines to record')
 
   // Saved once, whatever happens to the connection: a retry of the same scan
@@ -1238,8 +1262,11 @@ async function saveClaimedResupply(req, res, session, { id, usageId, resupply })
     distributor: resupply.distributor,
     documentNumber: resupply.documentNumber,
     documentDate: resupply.documentDate,
-    lines: resupply.lines.map(({ referenceCode, description, lotNumber, quantity, backordered }) =>
-      ({ referenceCode, description, lotNumber, quantity, backordered })),
+    // The price-list verdict per line is kept (status and rebate code, never
+    // a price) for the stock processes to come.
+    lines: resupply.lines.map(({ referenceCode, description, lotNumber, quantity, backordered, priceCheck }) =>
+      ({ referenceCode, description, lotNumber, quantity, backordered,
+        ...(priceCheck ? { listed: priceCheck.status, ...(priceCheck.rebate ? { rebate: priceCheck.rebate } : {}) } : {}) })),
     owingAfter: comparison ? comparison.totals.owing : null,
     filed,
     scannedBy: session.name,

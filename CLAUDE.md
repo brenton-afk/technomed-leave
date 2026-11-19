@@ -1705,6 +1705,18 @@ single character away) — advisory, since lists are incomplete (Boost, some KT
 ranges). KT uses the RHH list at the RHH. Device Boost → Device's list; DTBV →
 KT private. **Never a price** on the review or in any email. The line shows
 only while the code is the one checked (`priceCheckLine`).
+**Every resupply line is checked too** (Brent, 19 Nov 2026: "the resupply
+scanner must use the list also"). `priceCheckResupply` (same file) on
+`resupply-read` (before matching, `infer: true` — a docket whose supplier was
+not recognised takes the distributor most of its codes are listed under,
+`distributorFromList`), on `resupply-compare` (now also called with no case,
+just to re-check after a code is corrected or the distributor changed; it
+returns the checked `resupply`) and on save. `listSuggests` when most checked
+lines are on one other distributor's list. The review's **Codes on the price
+list** panel (`PriceCodes` in `ResupplyScan.jsx`): "✓ N of M codes on X's
+list", each wrong or unlisted code with **Use {code}**, and "It's from
+{distributor}". Advisory, never a stop, never a price. Saved lines keep
+`listed` (the status) and `rebate` for the stock processes to come.
 
 ### Commissions (Brent only, 15 Nov 2026)
 
