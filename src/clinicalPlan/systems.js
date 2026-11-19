@@ -249,7 +249,16 @@ const AIRO_SIGNALS = [
   // reduced and fixated — that spin IS the AIRO, and it is most of what this
   // service calls us for at all.
   /post[\s-]?op(?:erative)?[\s-]*(?:spin|ct|scan|image|imaging)/,
-  /\bspin\b(?!\w)/
+  /\bspin\b(?!\w)/,
+
+  // Brent, 20 Nov 2026: "AIRO … labelled on all cases involving screws and
+  // for max fax post op spins and the SIJ cases for orthopaedics, or where it
+  // is otherwise written in the booking." The SI joint, by every name the
+  // rooms use, and screws anywhere in the spine or pelvis — a level, the
+  // sacrum, the ilium, the pelvis, the pars or a percutaneous approach named
+  // beside them. Screws in a hand or an ankle are not this.
+  /\bsij\b|\bsi[\s-]?joint\b|sacro[\s-]?iliac|\bifuse\b|\brialto\b/,
+  /(?:\b[ctls]\d{1,2}\b|\bspin(?:al|e)\b|\bsacr\w*|\biliac\b|\bilio\w*|\bpelvi\w*|\bpars\b|\bpercutaneous\b)[^\n.]{0,60}\bscrews?\b|\bscrews?\b[^\n.]{0,60}(?:\b[ctls]\d{1,2}\b|\bsacr\w*|\biliac\b|\bilio\w*|\bpelvi\w*)/
 ]
 
 // ─── Taking screws out does not need navigation ──────────────────────────────
@@ -280,6 +289,9 @@ const IS_REMOVAL = /\b(?:removal|remove|removing|removed|explant(?:ation)?|r\s*\
 const ALSO_GOING_IN =
   /\b(?:insert(?:ion)?|re-?insert\w*|revision|revise|refixation|re-?fix\w*|fixation|fusion|instrumentation|extension|extend\w*|augmentation|replace\w*)\b|(?:^|[^a-z])(?:[pta]lif|acdf|accf|psf)/i
 
+const ANTERIOR_ONLY = /\b(?:acdf|accf|alif|olif|xlif|llif|anterior|corpectomy|disc\s*replacement|arthroplasty|dakota|lonestar|shoreline|cylox|catenary)\b/i
+const POSTERIOR_TOO = /\b(?:pedicle|posterior|lateral\s+mass|psf|s2ai|percutaneous|sij|sacro[\s-]?iliac|mariner|diplomat|firebird|reform\s+cervical)\b|(?:^|[^a-z])[pt]lif/i
+
 export const NAVIGATION = [
   {
     name: 'AIRO',
@@ -287,7 +299,10 @@ export const NAVIGATION = [
     // A missed badge is the worse error everywhere else in this file, and this
     // is the one place that is not true: a scanner and a radiographer booked
     // for an operation that cannot use them costs a theatre an hour.
-    notWhen: text => IS_REMOVAL.test(text) && !ALSO_GOING_IN.test(text)
+    notWhen: text => (IS_REMOVAL.test(text) && !ALSO_GOING_IN.test(text))
+      // A plate on the front of the neck has screws too, and is not navigated:
+      // an anterior-only case is labelled only when AIRO is written on it.
+      || (ANTERIOR_ONLY.test(text) && !POSTERIOR_TOO.test(text) && !/\bairo\b/i.test(text))
   },
   {
     name: 'Curve',
@@ -336,7 +351,7 @@ const LEFTOVER_ONLY = /^(?:(?:spinal|spine|cranial)\s*)+$/i
 
 /** Words that describe navigation without naming anything of ours. */
 const NAVIGATION_FILLER =
-  /\b(?:spinal|spine|cranial|cervical|lumbar|system|platform|scanner|support|required|req|and|with|the|for|only|case)\b/gi
+  /\b(?:spinal|spine|cranial|cervical|lumbar|system|platform|scanner|support|required|req|and|with|the|for|only|case|spins?|scans?|ct|post|intra|op|operative|image|imaging)\b/gi
 
 /**
  * Whether a kit-line entry is a navigation platform and nothing more.

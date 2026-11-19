@@ -45,3 +45,23 @@ describe('Reform, however it is written on a booking', () => {
     expect(systemsInKit('Diplomat and E4 Cages')).toEqual(['Diplomat', 'Global BMD PLIF'])
   })
 })
+
+// Brent, 20 Nov 2026: "Airo spin is not an implant. It is navigation … All I
+// want is for AIRO to be labelled on all cases involving screws and for max
+// fax post op spins and the SIJ cases for orthopaedics, or where it is
+// otherwise written in the booking. It shouldn't be included as a system."
+import { isNavigationOnly as navOnly, findNavigation as findNav } from './systems.js'
+describe('AIRO, a label and never a system', () => {
+  it('reads "Airo-Spin" as navigation, so it gets no supply buttons', () => {
+    expect(navOnly('Airo-Spin')).toBe(true)
+    expect(navOnly('AIRO post-op spin')).toBe(true)
+    expect(navOnly('Mariner + AIRO')).toBe(false)
+  })
+  it.each([
+    'L5/S1 SIJ fusion', 'Right sacroiliac joint fusion iFuse', 'Percutaneous screws T11-L1',
+    'Iliosacral screw fixation pelvis', 'Mandible ORIF post op spin', 'ACDF C5/6 + AIRO', 'L4/5 PLIF'
+  ])('labels %s', t => expect(findNav(t)).toContain('AIRO'))
+  it.each([
+    'C5/6 ACDF plate and screws', 'C5/6 ACDF Dakota', 'ORIF ankle plate and screws', 'L1-3 pedicle screw removal'
+  ])('not %s', t => expect(findNav(t)).not.toContain('AIRO'))
+})

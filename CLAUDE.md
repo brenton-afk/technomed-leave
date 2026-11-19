@@ -652,6 +652,24 @@ or kit; Add booking shows the AIRO + Curve button pressed (attendance
 required) with "AIRO added automatically" until someone changes it. Kit gains
 `BRAINLAB AIRO & CURVE` once; any navigation already there is kept. "No AIRO"
 / "Brainlab not required" in the notes leaves it off.
+**Replaced 20 Nov 2026 — AIRO is a label, never a system or a button**
+(Brent: "Airo spin is not an implant … I think the AIRO buttons are a waste
+of space … All I want is for AIRO to be labelled on all cases involving
+screws and for max fax post op spins and the SIJ cases for orthopaedics, or
+where it is otherwise written in the booking. It shouldn't be included as a
+system"). `writeBooking` and `handleSave` no longer call `kitWithAutoAiro`
+(left in `brainlab.js`, unused); Add booking and the Inbox card lost the
+AIRO + Curve / Curve only / Other buttons — Add booking keeps one **No F2F**
+toggle (whether anybody from TechnoMed is needed), and an email's AIRO goes
+into the notes as "Navigation: AIRO + Curve" instead of the kit. The label is
+`findNavigation` in `systems.js` (`navigation` on the case, shown in Edit
+booking and the desktop week card), now also for the SI joint (SIJ, SI joint,
+sacroiliac, iFuse, Rialto) and screws anywhere in the spine or pelvis (a
+level, sacrum, ilium, iliosacral, pelvis, pars or percutaneous beside
+"screw"); an anterior-only case (ACDF, ALIF, corpectomy, Dakota, Lonestar,
+Shoreline, CYLOX, Catenary — plate screws) is labelled only where AIRO is
+written. "Airo-Spin", "post-op spin", "scan" and "CT" are navigation filler
+(`NAVIGATION_FILLER`), so such a kit entry never gets supply buttons.
 
 ### The portal face lift, direction A (Brent, 12 Nov 2026)
 

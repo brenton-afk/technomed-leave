@@ -460,10 +460,10 @@ describe('saying a case is already booked', () => {
   })
 })
 
-// "AIRO doesn't need to transcribe into the booking from the email, just needs
-// to automatically tap the AIRO button in the booking."
+// Brent, 20 Nov 2026: AIRO is a label, never a system or a button. What an
+// email wrote about it becomes a note, so the label shows on the booking.
 describe('navigation in an email', () => {
-  it('taps the AIRO button and stays off the kit line', async () => {
+  it('stays off the kit line, has no buttons, and is kept as a note', async () => {
     const AIRO_CASE = { ...PENDING[0], id: 'bk_airo', kit: 'Mariner MIS / AIRO' }
     global.fetch = vi.fn(async (url, init) => {
       const text = String(url)
@@ -472,11 +472,13 @@ describe('navigation in an email', () => {
       return { ok: true, status: 200, json: async () => ({ ok: true }) }
     })
     show()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'AIRO + Curve' })).toHaveAttribute('aria-pressed', 'true'))
-    expect(screen.queryByText(/Mariner MIS \/ AIRO/)).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add to calendar' })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'AIRO + Curve' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Add to calendar' }))
     await waitFor(() => expect(calls.some(c => c.url.includes('action=accept'))).toBe(true))
-    expect(calls.find(c => c.url.includes('action=accept')).body.fields.kit).toBe('Mariner MIS + BRAINLAB AIRO & CURVE')
+    const body = calls.find(c => c.url.includes('action=accept')).body
+    expect(body.fields.kit).toBe('Mariner MIS')
+    expect(body.notes).toMatch(/Navigation: AIRO \+ Curve/)
   })
 })
 

@@ -70,7 +70,6 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
-import { kitWithAutoAiro } from '../../src/clinicalPlan/brainlab.js'
 import { kitWithAutoOutrigger } from '../../src/clinicalPlan/outrigger.js'
 import { kitWithDaySupplies } from '../../src/clinicalPlan/kitSupply.js'
 import { cleanListPlace, withListPlace, bySession, moveWithinList, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
@@ -615,14 +614,14 @@ async function handleSave(req, res) {
           : value)
     }
 
-    // AIRO on an RHH pedicle-screw / lateral-mass case (Brent, 11 Nov 2026),
-    // checked whenever an edit touches the hospital, operation or kit — so a
-    // case moved to RHH, or retyped as a fixation, picks it up. "No AIRO" in
-    // the notes leaves it off.
+    // Whenever an edit touches the hospital, operation or kit: the Outrigger
+    // on standby, then a supply for every system by the day.
     if (['hospital', 'procedure', 'kit'].some(f => Object.prototype.hasOwnProperty.call(body.fields || {}, f))) {
       const now = parseLabelledDescription(description)
       const editNotes = typeof body.notes === 'string' ? body.notes : [].concat(descriptionNotes(description)).join('\n')
-      let kit = kitWithAutoAiro({ hospital: now.hospital || current.location, procedure: now.procedure, kit: now.kit, notes: editNotes })
+      // AIRO is a label worked out from the booking, never a kit entry (Brent,
+      // 20 Nov 2026: "It shouldn't be included as a system"; systems.js).
+      let kit = String(now.kit || '')
       // The Mariner Outrigger on standby (DNO) for an extension, revision or
       // connecting case (Brent, 19 Nov 2026; outrigger.js).
       kit = kitWithAutoOutrigger({ procedure: now.procedure, kit, notes: editNotes })
@@ -864,11 +863,11 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
   // written from a stale candidate or from a route that never drew a card, and
   // what lands in Google has to name a system somebody can bring.
   if (fields.kit) fields = { ...fields, kit: resolveKit(fields.kit, fields.procedure || '') }
-  // AIRO on every RHH pedicle-screw / lateral-mass case, without a tap (Brent,
-  // 11 Nov 2026) — see kitWithAutoAiro in src/clinicalPlan/brainlab.js.
   {
-    let kit = kitWithAutoAiro({ hospital: fields.hospital, procedure: fields.procedure, kit: fields.kit, notes })
-    // And the Mariner Outrigger on standby (DNO) for an extension, revision or
+    // AIRO is not written into the kit: it is a label worked out from the
+    // booking (findNavigation in systems.js; Brent, 20 Nov 2026).
+    let kit = String(fields.kit || '')
+    // The Mariner Outrigger on standby (DNO) for an extension, revision or
     // connecting case (Brent, 19 Nov 2026) — its supply is set below with the
     // rest: Consignment at Calvary, Calvary Loan (a transfer) at RHH.
     kit = kitWithAutoOutrigger({ procedure: fields.procedure, kit, notes })

@@ -387,38 +387,29 @@ describe('a dictated booking that would leave a case without a kit', () => {
   })
 })
 
+// Brent, 20 Nov 2026: "I think the AIRO buttons are a waste of space … It
+// shouldn't be included as a system." No platform buttons; AIRO is a label
+// worked out from the booking. No F2F stays — only a person can say it.
 describe('Brainlab', () => {
-  it('needs an answer about attendance before it can be added', async () => {
+  it('has no AIRO buttons and never writes navigation into the kit', async () => {
     show()
     fill()
-    fireEvent.click(screen.getByRole('button', { name: 'AIRO + Curve' }))
-    expect(screen.getByRole('button', { name: /Add to calendar/ })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
-    expect(screen.getByRole('button', { name: /Add to calendar/ })).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'AIRO + Curve' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Curve only' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
+    await waitFor(() => expect(posted).toBeTruthy())
+    expect(posted.fields.kit || '').not.toMatch(/BRAINLAB|AIRO/)
+    expect(posted.attendance).toBeUndefined()
   })
 
-  it('a No F2F booking says so in the kit, the notes and to the server', async () => {
+  it('a No F2F booking says so in the notes and to the server', async () => {
     show()
     fill()
-    fireEvent.click(screen.getByRole('button', { name: 'AIRO + Curve' }))
     fireEvent.click(screen.getByRole('button', { name: 'No F2F' }))
     fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
     await waitFor(() => expect(posted).toBeTruthy())
-    expect(posted.fields.kit).toMatch(/BRAINLAB AIRO & CURVE$/)
     expect(posted.notes).toMatch(/No F2F required/)
     expect(posted.attendance).toBe('No F2F')
-  })
-
-  it('an attended case does not', async () => {
-    show()
-    fill()
-    fireEvent.click(screen.getByRole('button', { name: 'Curve only' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Attendance required' }))
-    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
-    await waitFor(() => expect(posted).toBeTruthy())
-    expect(posted.fields.kit).toMatch(/BRAINLAB CURVE$/)
-    expect(posted.notes || '').not.toMatch(/F2F/)
-    expect(posted.attendance).toBeUndefined()
   })
 
   it('offers the Calvary and RHH loans for a system', async () => {
@@ -459,38 +450,10 @@ describe('suggested systems (Brent, 4 Nov 2026)', () => {
 })
 
 describe('a grey Add to calendar says why (Brent, 8 Nov 2026)', () => {
-  it('names what is missing, including the Brainlab attendance answer', async () => {
+  it('names what is missing', async () => {
     const { missingForBooking } = await import('./NewBooking.jsx')
-    expect(missingForBooking({ patient: 'Giana', surgeon: 'Fowler', date: '2026-11-10', brainlab: 'AIRO + Curve', attendance: '' }))
-      .toEqual(['Attendance required or No F2F (under Brainlab)'])
-    expect(missingForBooking({ patient: 'Giana', surgeon: 'Fowler', date: '2026-11-10', brainlab: 'AIRO + Curve', attendance: 'No F2F' })).toEqual([])
+    expect(missingForBooking({ patient: 'Giana', surgeon: 'Fowler', date: '2026-11-10' })).toEqual([])
     expect(missingForBooking({ patient: ' ', surgeon: '', date: '2026-11-10' })).toEqual(['the surgeon', 'the patient surname'])
   })
 })
 
-// Brent, 11 Nov 2026: "All Pedicle screw and lateral mass cases at RHH should
-// have auto AIRO booked and not rely on someone tapping it."
-describe('AIRO at RHH without a tap', () => {
-  it('presses AIRO + Curve for an RHH pedicle-screw case and writes it to the kit', async () => {
-    show()
-    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
-    fireEvent.change(screen.getByLabelText(/Surgeon/), { target: { value: 'Ibbett' } })
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
-    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'T10-L2 pedicle screw fixation' } })
-    fireEvent.change(screen.getByLabelText(/Patient surname/), { target: { value: 'Marsh' } })
-    expect(await screen.findByText(/AIRO added automatically/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Add to calendar/ }))
-    await waitFor(() => expect(posted).not.toBeNull())
-    expect(posted.fields.kit).toMatch(/BRAINLAB AIRO & CURVE/)
-    expect(posted.attendance).toBeUndefined()
-  })
-  it('does not press it at Calvary or for an ACDF', () => {
-    show()
-    fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'L4/5 PLIF' } })
-    expect(screen.queryByText(/AIRO added automatically/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
-    fireEvent.change(screen.getByLabelText(/Procedure/), { target: { value: 'C4/5 ACDF' } })
-    expect(screen.queryByText(/AIRO added automatically/)).toBeNull()
-  })
-})

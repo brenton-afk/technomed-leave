@@ -6,7 +6,7 @@ import { colour, text, space, radius } from '../../design/tokens.js'
 import { SURGEON_SERVICES } from '../../clinicalPlan/colours.js'
 import { withoutPreOpNoise } from '../../clinicalPlan/preOpNoise.js'
 import { resolveKit, systemsInKit } from '../../clinicalPlan/systems.js'
-import { BRAINLAB, navigationChoice, kitWithoutNavigation, kitWithNavigation } from '../../clinicalPlan/brainlab.js'
+import { navigationChoice, kitWithoutNavigation } from '../../clinicalPlan/brainlab.js'
 import { loanNeed, siteCode } from '../../clinicalPlan/inventory.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { distributorNameOf } from '../../clinicalPlan/bookingSources.js'
@@ -196,8 +196,11 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
     kit: kitWithoutNavigation(resolveKit(candidate.kit || '', candidate.procedure || '')) || assumed?.kit || '',
     hospital: candidate.hospital || ''
   })
-  // Pre-tapped from what the email said: "AIRO" is the AIRO + Curve button.
-  const [brainlab, setBrainlab] = useState(() => navigationChoice(candidate.kit || ''))
+  // AIRO is a label, not a system or a button (Brent, 20 Nov 2026). What the
+  // email wrote about navigation is kept as a note, so the label still shows
+  // on a case the rules would not otherwise label ("or where it is otherwise
+  // written in the booking").
+  const navigationWritten = navigationChoice(candidate.kit || '')
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState(null)
 
@@ -244,10 +247,10 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
       patient: fields.patient.trim(),
       surgeon: fields.surgeon.trim(),
       procedure: fields.procedure.trim(),
-      kit: kitWithNavigation(fields.kit, brainlab),
+      kit: kitWithoutNavigation(fields.kit),
       hospital: fields.hospital.trim()
     },
-    notes: candidate.note
+    notes: [candidate.note, navigationWritten ? `Navigation: ${navigationWritten === 'Other' ? 'Brainlab' : navigationWritten}` : ''].filter(Boolean).join('\n')
   })
 
   const busy = status !== 'ready'
@@ -348,24 +351,6 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
         <KitPicker kit={fields.kit} onChange={v => set('kit', v)}
           operation={fields.procedure} surgeon={fields.surgeon} hospital={fields.hospital} />
       </details>
-      <div style={{ marginBottom: space.xs }}>
-        <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: 4 }}>Brainlab navigation</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {BRAINLAB.map(option => {
-            const on = brainlab === option
-            return (
-              <button key={option} type="button" aria-pressed={on}
-                onClick={() => setBrainlab(on ? '' : option)}
-                style={{
-                  padding: '7px 11px', borderRadius: radius.pill, cursor: 'pointer',
-                  border: `1px solid ${on ? colour.accent : colour.line}`,
-                  background: on ? colour.accentSoft : colour.surface,
-                  ...text('caption'), fontWeight: on ? 700 : 400, color: on ? colour.accentDeep : colour.inkMuted
-                }}>{option}</button>
-            )
-          })}
-        </div>
-      </div>
       {candidate.attendance === 'No F2F' && (
         <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.xs }}>
           <strong>Brainlab · No F2F</strong> — the list says nobody from TechnoMed is needed.

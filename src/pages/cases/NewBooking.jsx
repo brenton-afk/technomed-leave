@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { BRAINLAB, BRAINLAB_KIT, needsAutoAiro } from '../../clinicalPlan/brainlab.js'
 import { isRhh } from '../../clinicalPlan/etbs.js'
 import { assumedKit } from '../../clinicalPlan/deduceKit.js'
 import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggestions.js'
@@ -43,23 +42,23 @@ const SUPPLY = SUPPLY_OPTIONS
 
 // ─── Brainlab ───────────────────────────────────────────────────────────────
 // "Adding a non-face-to-face Brainlab booking from an email was difficult."
-// Which platform, then whether anybody from here is wanted in the room — a
-// required answer, because the second decides whether a rep goes and whether
-// the case is invoiced as clinical support.
-// AIRO always comes with the Curve cart; the Curve can be used on its own.
-// The options and their kit wording live in clinicalPlan/brainlab.js, shared
-// with the bookings inbox.
+// Whether anybody from here is wanted in the room decides whether a rep goes
+// and whether the case is invoiced as clinical support, so it stays (No F2F).
 /** What still stops Add to calendar, in words a person can act on. */
-export function missingForBooking({ patient, surgeon, date, brainlab, attendance }) {
+//
+// Brent, 20 Nov 2026: "I think the AIRO buttons are a waste of space … AIRO
+// [should] be labelled on all cases involving screws … It shouldn't be
+// included as a system." The platform is no longer chosen here: it is a label
+// worked out from the booking (findNavigation in systems.js), shown inside the
+// booking. What stays is the one answer only a person can give — whether
+// anybody from TechnoMed is needed in the room (No F2F).
+export function missingForBooking({ patient, surgeon, date }) {
   return [
     !date && 'the date',
     !surgeon && 'the surgeon',
-    !String(patient || '').trim() && 'the patient surname',
-    brainlab && !attendance && 'Attendance required or No F2F (under Brainlab)'
+    !String(patient || '').trim() && 'the patient surname'
   ].filter(Boolean)
 }
-
-const ATTENDANCE = ['Attendance required', 'No F2F']
 
 /** The next weekday, since a booking is far more often ahead than today. */
 function defaultDate() {
@@ -207,20 +206,8 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const [patient, setPatient] = useState('')
   const [procedure, setProcedure] = useState('')
   const [notes, setNotes] = useState('')
-  const [brainlab, setBrainlab] = useState('')
-  const [attendance, setAttendance] = useState('')
+  const [noF2FOn, setNoF2F] = useState(false)
   const [etbs, setEtbs] = useState(false)
-  // AIRO pressed by itself on an RHH pedicle-screw / lateral-mass case (Brent,
-  // 11 Nov 2026), until somebody touches the Brainlab choice themselves.
-  const brainlabTouched = useRef(false)
-  const [autoAiro, setAutoAiro] = useState(false)
-  useEffect(() => {
-    if (brainlabTouched.current) return
-    const due = needsAutoAiro({ hospital, procedure, notes })
-    if (due && !brainlab) { setBrainlab('AIRO + Curve'); setAttendance('Attendance required'); setAutoAiro(true) }
-    if (!due && autoAiro) { setBrainlab(''); setAttendance(''); setAutoAiro(false) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hospital, procedure, notes])
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
   const [dictating, setDictating] = useState(false)
@@ -375,12 +362,11 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
 
 
   const colourId = guideColorIdFor(surgeon)
-  // A Brainlab case has to say whether we are wanted in the room.
-  const ready = patient.trim() && surgeon && date && (!brainlab || attendance)
+  const ready = patient.trim() && surgeon && date
   // Say what is still needed rather than leave a grey button to puzzle over
   // (Brent, 8 Nov 2026: details all in, Add to calendar stayed grey — the
   // Brainlab case had no answer to "is anyone needed in the room?").
-  const missing = missingForBooking({ patient, surgeon, date, brainlab, attendance })
+  const missing = missingForBooking({ patient, surgeon, date })
 
   /**
    * @param {object} [over] values to send instead of what is on screen.
@@ -393,14 +379,13 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
     setStatus('saving'); setError('')
     try {
       const use = {
-        date, notes, patient, surgeon, procedure, hospital, systems, brainlab, attendance, ...over
+        date, notes, patient, surgeon, procedure, hospital, systems, noF2F: noF2FOn, ...over
       }
       // "Diplomat (Consignment) + Global BMD PLIF (Loan)" — each system with the
       // supply that actually applies to it, and Brainlab last.
-      const noF2F = use.brainlab && use.attendance === 'No F2F'
+      const noF2F = Boolean(use.noF2F)
       const kit = [
         ...use.systems.map(s => [s.name, s.supply ? `(${s.supply})` : ''].filter(Boolean).join(' ')),
-        use.brainlab ? BRAINLAB_KIT[use.brainlab] : ''
       ].filter(Boolean).join(' + ')
       const res = await fetch('/api/calendar/today?action=create', {
         method: 'POST',
@@ -616,22 +601,11 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
             </div>
 
             <div style={{ marginBottom: space.md }}>
-              <Label>Brainlab navigation</Label>
-              <Choice options={BRAINLAB} value={brainlab}
-                onChange={v => { brainlabTouched.current = true; setAutoAiro(false); setBrainlab(v); if (!v) setAttendance('') }} />
-              {autoAiro && (
-                <div data-auto-airo style={{ ...text('caption'), color: colour.inkMuted, marginTop: 4 }}>
-                  AIRO added automatically — pedicle screw / lateral mass case at RHH
-                </div>
-              )}
-              {brainlab && (
-                <div style={{ marginTop: space.sm }}>
-                  <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: 4 }}>
-                    Is anyone from TechnoMed needed in the room?
-                  </div>
-                  <Choice options={ATTENDANCE} value={attendance} onChange={setAttendance} />
-                </div>
-              )}
+              <Label>Is anyone from TechnoMed needed in the room?</Label>
+              <Choice options={['No F2F']} value={noF2FOn ? 'No F2F' : ''} onChange={v => setNoF2F(Boolean(v))} />
+              <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 4 }}>
+                AIRO is labelled on the booking by itself — screw cases, SIJ, max fax post-op spins, or where it is written.
+              </div>
             </div>
 
             {/* ETBS, RHH only (Brent, 8 Nov 2026): shown on the case card. */}
