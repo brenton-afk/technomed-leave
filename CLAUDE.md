@@ -1418,6 +1418,23 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   opens with **no network trip** (`hasDoc`). **Open in Dropbox**
   (`dropboxAppLink`, `dropbox.com/preview/TECHNOMED/…?role=work`) hands it to
   the Dropbox app. Measured: a 120-page PDF, first page in ~1.4s, 0.2s kept.
+- **A Drive-style viewer** (Brent, 19 Nov 2026, from an iPhone: "I can only
+  move the page around … make it a seamless viewer like on Dropbox or Google
+  Drive … download and print etc at the press of a button"). `DocViewer` lays
+  everything out to the screen's width and scrolls down only — a Word
+  document's frame (`sandbox="allow-same-origin"`, no scripts, no touches)
+  takes its content's height, and its HTML is cut to plain formatting first
+  (`cleanWordHtml`: no links, handlers or outside images). Zoom is the
+  viewer's own (`data-zoomable` is gone, the page zoom stays locked): pinch,
+  double-tap fit ↔ 2×, ctrl-wheel, − / + — a transform on the stage inside a
+  sizer of the zoomed size, and a PDF's pages drawn again sharp once a zoom
+  settles (`rescale`). A PDF shows "Page n of N" (`pageAt`). One bottom bar:
+  **Share** (the file from the phone's copy; `onShare` still wins), **Download**
+  (a blob of that copy), **Print** (`printAlone`: a print-only copy in
+  `#tm-print-root`, everything else hidden by `html.tm-printing`, a PDF drawn
+  at ~150 dpi per page first) and **Dropbox**. Checked in an iPhone-sized
+  render: no sideways scroll at fit, zoom widens, Print gives the document
+  alone, every page.
 - **TM loan kits have no consignment agreement** (Brent, same day: "Just tray
   lists for these kits"): `needsAgreement` (`src/kit/agreements.js`, kind
   `floating` → false) hides the tile's Agreement chip (its Tray list chip
