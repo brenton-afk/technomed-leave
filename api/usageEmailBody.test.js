@@ -30,15 +30,16 @@ describe('the usage email', () => {
     expect(html).toContain('src="cid:technomed-logo"')
   })
 
-  it('lists the case facts, never the patient', () => {
+  it('lists the case facts, the patient by surname first (Toni, 19 Nov 2026)', () => {
+    expect(text).toContain('Patient: Testa')
+    expect(text.indexOf('Patient: Testa')).toBeLessThan(text.indexOf('Surgeon: Ibbett'))
     expect(text).toContain('Surgeon: Ibbett')
     expect(text).toContain('Hospital: Calvary')
     expect(text).toContain('Date of surgery: Tue 17 Nov 2026')
     expect(text).toContain('Your systems: Dakota')
     expect(text).not.toContain('E4 Cages')
     expect(text).toContain('Items: 2 lines · consignment')
-    expect(text).not.toMatch(/Testa/)
-    expect(html).not.toMatch(/Testa/)
+    expect(html).toContain('Testa')
   })
 
   it("carries the rep's note and signs off as them", () => {

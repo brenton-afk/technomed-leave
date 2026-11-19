@@ -13,7 +13,7 @@ import { partitionItems } from '../usageReview.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { Header as ShellHeader } from '../design/Shell.jsx'
 import { itemGaps, suggestedCode } from '../usageItemCheck.js'
-import { loanStampFlags } from '../usageLoanCheck.js'
+import { loanStampFlags, stockConflicts, asConsignment } from '../usageLoanCheck.js'
 import { SURGEON_KEYS, normaliseSurgeon } from '../clinicalPlan/parse.js'
 import { colour } from '../design/tokens.js'
 
@@ -589,7 +589,9 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           // A surgeon the portal does not know, confirmed as new on review.
           newSurgeonConfirmed: Boolean(caseRecord.newSurgeonConfirmed),
           // Loan stock marked LOAN on the form, confirmed on review.
-          loanConfirmed: Boolean(caseRecord.loanConfirmed)
+          loanConfirmed: Boolean(caseRecord.loanConfirmed),
+          // LOAN on the form against a consigned system, confirmed as a loan.
+          stockConfirmed: Boolean(caseRecord.stockConfirmed)
         })
       })
       const saved = await saveRes.json()
@@ -869,7 +871,10 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
   if (step === 'review' && caseRecord) {
     const { inReview, outstanding, clean, excluded, sendable } = partitionItems(caseRecord.items)
     const loanFlags = loanStampFlags(caseRecord.items, caseRecord.bookingKit)
-    const loanBlocked = loanFlags.length > 0 && !caseRecord.loanConfirmed
+    // LOAN read on the form for a system the booking has as consignment (Toni,
+    // 19 Nov 2026): the rep says which it is before it goes.
+    const conflicts = stockConflicts(caseRecord.items, caseRecord.bookingKit)
+    const loanBlocked = (loanFlags.length > 0 && !caseRecord.loanConfirmed) || (conflicts.length > 0 && !caseRecord.stockConfirmed)
 
     return (
       <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
@@ -1076,6 +1081,27 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
                   style={{ width: 18, height: 18, fontSize: 16 }} />
                 I've marked these LOAN on the form
               </label>
+            </div>
+          )}
+          {conflicts.length > 0 && !caseRecord.stockConfirmed && (
+            <div data-stock-conflict style={{ background: '#fff4e5', border: `1px solid ${AMBER_TEXT}`, borderRadius: 12, padding: 14, marginTop: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: AMBER_TEXT, marginBottom: 6 }}>Loan or consignment?</div>
+              {conflicts.map(c => (
+                <div key={c.system} style={{ fontSize: 12.5, color: NAVY, lineHeight: 1.5, marginBottom: 6 }}>{c.message}</div>
+              ))}
+              <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, marginBottom: 8 }}>
+                The distributor restocks from what the usage says, so it has to be right.
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" data-stock-consignment onClick={() => setCaseRecord(c => ({ ...c, items: asConsignment(c.items, conflicts) }))}
+                  style={{ fontSize: 13, fontWeight: 600, padding: '8px 14px', minHeight: 40, borderRadius: 10, border: 'none', background: TEAL, color: 'white', cursor: 'pointer' }}>
+                  It's consignment
+                </button>
+                <button type="button" data-stock-loan onClick={() => updateCase('stockConfirmed', true)}
+                  style={{ fontSize: 13, fontWeight: 600, padding: '8px 14px', minHeight: 40, borderRadius: 10, border: `1px solid ${BORDER}`, background: 'white', color: NAVY, cursor: 'pointer' }}>
+                  It really is a loan
+                </button>
+              </div>
             </div>
           )}
           {/* The rep's own note to the distributor (Brent, 17 Nov 2026). It goes

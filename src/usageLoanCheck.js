@@ -74,6 +74,46 @@ export function loanStampFlags(items = [], kit = '') {
   }))
 }
 
+// ─── LOAN read on the form, consignment on the booking (Toni, 19 Nov 2026) ───
+// "The referral to loan in both the summary and the csv file, isn't that
+// incorrect for this case? … Mariner RHH. Worried this will cause resupply
+// issues." Mariner is consigned at RHH; the form was read as LOAN. When the
+// booking has a system as consignment (Consignment, RHH Loan, Calvary Loan)
+// and lines of it read LOAN, the rep says which it is before it is sent.
+
+const CONSIGNED = new Set(['Consignment', 'RHH Loan', 'Calvary Loan'])
+
+/** Lines read as LOAN whose system the booking has as consignment, by system. */
+export function stockConflicts(items = [], kit = '') {
+  const consigned = parseKitSupplies(kit).filter(e => !e.navigation && CONSIGNED.has(e.supply))
+    .map(e => inventoryFor(e.system)).filter(Boolean)
+  if (!consigned.length) return []
+  const groups = new Map()
+  for (const item of items) {
+    if (!item || item.excluded || item.distributorKey === 'device_boost' || markingOf(item) !== 'loan') continue
+    const inv = inventoryFor(textOf(item))
+    let hit = inv && consigned.includes(inv) ? inv : null
+    if (!inv) {
+      const same = consigned.filter(c => c.distributor && c.distributor === item.distributorKey)
+      if (same.length === 1) hit = same[0]
+    }
+    if (!hit) continue
+    if (!groups.has(hit.system)) groups.set(hit.system, { system: hit.system, itemIds: [] })
+    groups.get(hit.system).itemIds.push(item.id)
+  }
+  return [...groups.values()].map(g => ({
+    ...g,
+    count: g.itemIds.length,
+    message: `The form reads LOAN for ${g.itemIds.length === 1 ? '1 item' : `${g.itemIds.length} items`} of ${g.system}, but the booking has ${g.system} as consignment.`
+  }))
+}
+
+/** The items with those lines set to consignment ("It's consignment"). */
+export function asConsignment(items = [], conflicts = []) {
+  const ids = new Set(conflicts.flatMap(c => c.itemIds))
+  return items.map(it => (ids.has(it.id) ? { ...it, stockMarking: 'consignment' } : it))
+}
+
 // ─── Loan or consignment, on the usage sheet (Brent, 13 Nov 2026) ────────────
 // "If it's marked as consignment that should be included in the usage
 // templates (as well as Loan being mentioned)." Each line's stock: what the

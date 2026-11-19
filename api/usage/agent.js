@@ -19,7 +19,7 @@ import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksS
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf } from '../_usagePdf.js'
-import { loanStampFlags, withStock } from '../../src/usageLoanCheck.js'
+import { loanStampFlags, stockConflicts, withStock } from '../../src/usageLoanCheck.js'
 import { splitBoostReadings, boostPagesFromWhole, cleanBoostPages, splitPages } from '../_boostPages.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
@@ -43,7 +43,7 @@ const VISION_MODEL = process.env.USAGE_VISION_MODEL || 'claude-opus-5'
 const MAX_PAGES = 8
 const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given. For each item also return \`stockMarking\`: \"loan\" if LOAN is stamped or written against that item (or across the whole form), \"consignment\" if consignment or CONS is written or ticked for it, otherwise \"\".
+const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given. For each item also return \`stockMarking\`: \"loan\" only if LOAN is stamped, handwritten or ticked against that item (or stamped across the whole form), \"consignment\" if consignment or CONS is written, stamped or ticked for it, otherwise \"\". A printed column heading, a printed label or an empty tick box that merely offers \"Loan\" or \"Consignment\" is NOT a marking — return \"\" unless someone has actually marked it.
 
 The document is a "Record of Implantable/Rebatable Items Used" form from Calvary Health Care Tasmania (CLV) or Royal Hobart Hospital (RHH). It mixes printed implant stickers with handwritten quantities ("x1", "x3", "×4"), handwritten product names, a printed patient ID label, and a handwritten date, procedure and rep name.
 
@@ -359,6 +359,13 @@ async function handleSave(req, res, session) {
   const loanFlags = loanStampFlags(caseRecord.items, incoming.bookingKit || '')
   if (loanFlags.length && !req.body?.loanConfirmed) {
     blocking.push(`LOAN marked on the form — ${loanFlags.map(f => f.message).join(' ')}`)
+  }
+  // The form reads LOAN for a system the booking has as consignment (Toni,
+  // 19 Nov 2026: a Mariner case at RHH went to Device as loan). The rep says
+  // which it is: consignment changes the lines, loan is confirmed.
+  const conflicts = stockConflicts(caseRecord.items, incoming.bookingKit || '')
+  if (conflicts.length && !req.body?.stockConfirmed) {
+    blocking.push(`loan or consignment — ${conflicts.map(c => c.message).join(' ')}`)
   }
   if (blocking.length) {
     return res.status(400).json({ error: `Complete these before saving: ${blocking.join(', ')}` })

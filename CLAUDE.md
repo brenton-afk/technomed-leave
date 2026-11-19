@@ -1901,6 +1901,16 @@ Invariants worth preserving:
   → Consignment; Boost is always Consignment — consigned to TechnoMed), a confirmed flagged line Loan. `buildUsageWorkbook` writes a
   "Stock" header line when every row agrees ("LOAN — distributor loan set"),
   a Stock column when they differ, nothing when no row knows.
+  **LOAN read against a consigned system** (Toni, 19 Nov 2026: a Mariner
+  case at RHH — consigned there — went to Device as loan). The reader's
+  `stockMarking` now counts only a stamp, handwriting or a tick, never a
+  printed heading or empty box offering "Loan"; `stockConflicts` flags lines
+  read LOAN whose system the booking has as Consignment / RHH Loan / Calvary
+  Loan, and the review asks **Loan or consignment?** — **It's consignment**
+  (`asConsignment`) or **It really is a loan** (`stockConfirmed`); save refuses
+  until one is chosen. `findBookingFacts` now also looks two days either side
+  when the form's day has no booking for the surname (the form was dated a day
+  after the booking, so the kit came back empty).
 - **The surgeon must be one the portal knows** (Brent, same day: a case was
   read with the surgeon as the patient and the patient as the surgeon, and
   filed under a new surgeon folder named after the patient — "the portal needs
@@ -1950,14 +1960,15 @@ Invariants worth preserving:
   letterhead, "Hi {greeting}," per distributor (`DEFAULT_USAGE_GREETINGS`;
   Signus is Jasper and Amanda, E4 Roy and the E4 team; edited in Admin →
   Supplier notices, stored as `usageGreetings` in `notices:settings`,
-  `usageGreetingsFrom`), a panel of surgeon, hospital, date, their systems and
-  item count — never the patient — the rep's optional **Note to the
+  `usageGreetingsFrom`), a panel of patient (surname only — added 19 Nov 2026,
+  Toni via Brent: "so you don't have to look back at the subject line"),
+  surgeon, hospital, date, their systems and item count, the rep's optional **Note to the
   distributor** (a box above Confirm on the review, `note` on `action=email`,
   escaped, 600 characters), and the rep's signature from `staffConfig.js`
   (name, role, phone, email) — no closing line before it (Brent, 18 Nov 2026:
   "Any questions, reply here…" was "a bit unprofessional"). Corrections and tests use the same layout, the
   correction line first, TEST at the top.
-- **Patient data never reaches a log or an email body.** Identifiers travel only inside the Excel attachment. Error strings never interpolate extracted content — keep it that way when adding to this module.
+- **Patient data never reaches a log.** Identifiers travel inside the Excel attachment; the usage email's panel carries the surname only (19 Nov 2026), never a first name, UR or date of birth. Error strings never interpolate extracted content — keep it that way when adding to this module.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
 ### Resupply scanning (Brent, 6 Nov 2026)

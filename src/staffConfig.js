@@ -47,7 +47,7 @@ export const STAFF = [
   // never displayed; it is what lets an old worklist item assigned to
   // "Matthew Usher" still be his, and what lets a transcript saying "Matt"
   // find him. Removing them would fix the display and break the reading.
-  { name: 'Mat Usher', earnsToil: true, salaried: true, paidOnCall: true, paidCallIns: true, email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', acrossDivisions: true, role: 'Business Development and Director', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
+  { name: 'Mat Usher', earnsToil: true, salaried: true, paidOnCall: true, paidCallIns: true, email: 'mat@technomed.com.au', firstName: 'Mat', aka: ['Matt', 'Matthew', 'Matthew Usher'], division: 'CMF', acrossDivisions: true, role: 'Business Development and Director CMF', isAdmin: false, isClinicalTeam: true, hasTimesheets: true, contract: FULL_TIME_TOIL, phone: '0420 458 837', mobileNumber: '' },
   // Salaried; no timesheet (Brent, 14 Nov 2026).
   { name: 'Jeremy Sharpen', email: 'jeremy@technomed.com.au', firstName: 'Jeremy', division: 'Orthopaedics', role: 'Director of Orthopaedics', isAdmin: false, hasTimesheets: false, mobileNumber: '' },
   // Casual: enters her hours; paid the on-call allowance and call-ins (14 Nov 2026).

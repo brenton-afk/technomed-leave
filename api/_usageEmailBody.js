@@ -7,9 +7,11 @@
 // typed one, and their signature.
 //
 // Pure: no I/O, so the layout is tested directly (usageEmailBody.test.js).
-// The patient is never in the body. The subject (the case folder name) and
-// the attachments carry the surname, as before; the panel says surgeon,
-// hospital, date, the distributor's systems and the item count.
+// The panel says patient (surname only), surgeon, hospital, date, the
+// distributor's systems and the item count. The patient's surname was left
+// out until 19 Nov 2026 (Toni, approved by Brent: "include patient surname,
+// so you don't have to look back at the subject line"); the subject already
+// carried it. Never a first name, UR or date of birth.
 
 import { findSystems } from '../src/clinicalPlan/systems.js'
 import { STAFF } from '../src/staffConfig.js'
@@ -52,7 +54,7 @@ export function surgeryDay(date) {
   return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
 }
 
-/** The case facts the panel shows. Never the patient. */
+/** The case facts the panel shows: the patient by surname only. */
 export function caseFacts(record = {}, items = []) {
   // Per line: "E4 SURGICAL DAKOTA screw" names the maker and the system, and
   // "E4" alone also matches E4 Cages — a maker's name counts only when the
@@ -66,6 +68,7 @@ export function caseFacts(record = {}, items = []) {
   const stocks = [...new Set(items.map(i => String(i?.stock || '')).filter(Boolean))]
   const stock = stocks.length === 1 ? (stocks[0] === 'Loan' ? 'loan' : 'consignment') : ''
   return [
+    ['Patient', String(record.patientSurname || '').trim()],
     ['Surgeon', String(record.surgeonSurname || record.surgeonName || '').trim()],
     ['Hospital', HOSPITALS[record.hospital] || String(record.hospital || '').trim()],
     ['Date of surgery', surgeryDay(record.date)],

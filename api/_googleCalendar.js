@@ -511,9 +511,13 @@ export async function findBookingFacts({ date, patientSurname }) {
   const calendarId = getCalendarId()
   if (!calendarId) return null
   const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+  // The day itself, then two days either side: a form's date is handwritten
+  // and is sometimes a day out (Toni, 19 Nov 2026: a form dated the 19th for a
+  // case booked on the 18th found no booking, so its kit said nothing).
+  const shift = n => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
   const params = new URLSearchParams({
-    timeMin: `${date}T00:00:00+11:00`,
-    timeMax: `${date}T23:59:59+10:00`,
+    timeMin: `${shift(-2)}T00:00:00+11:00`,
+    timeMax: `${shift(2)}T23:59:59+10:00`,
     singleEvents: 'true',
     maxResults: '250'
   })
@@ -521,6 +525,9 @@ export async function findBookingFacts({ date, patientSurname }) {
     { headers: { Authorization: `Bearer ${token}` } })
   if (!listed.ok) return null
   const matches = ((await listed.json()).items || []).filter(e => String(e.summary || '').toLowerCase().includes(surname))
+  const dayOf = e => String(e.start?.dateTime || e.start?.date || '').slice(0, 10)
+  const sameDay = matches.filter(e => dayOf(e) === date)
+  if (sameDay.length) return sameDay.length === 1 ? bookingFacts(sameDay[0]) : null
   return matches.length === 1 ? bookingFacts(matches[0]) : null
 }
 

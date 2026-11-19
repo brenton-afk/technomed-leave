@@ -60,3 +60,27 @@ describe('each line\'s stock', () => {
     expect(unconfirmed.stock).toBe('Consignment')
   })
 })
+
+describe('LOAN on the form, consignment on the booking (Toni, 19 Nov 2026)', async () => {
+  const { stockConflicts, asConsignment, withStock } = await import('./usageLoanCheck.js')
+  const kit = 'BRAINLAB AIRO & CURVE / Mariner Open (Consignment)'
+  const items = [
+    { id: 'a', productName: 'Mariner pedicle screw', distributorKey: 'device', stockMarking: 'loan' },
+    { id: 'b', productName: 'Mariner rod', distributorKey: 'device', stockMarking: 'LOAN' }
+  ]
+  it('is flagged, by system', () => {
+    const c = stockConflicts(items, kit)
+    expect(c).toHaveLength(1)
+    expect(c[0]).toMatchObject({ system: 'Mariner', count: 2 })
+    expect(c[0].message).toMatch(/booking has Mariner as consignment/)
+  })
+  it("\"It's consignment\" clears it and the sheet says Consignment", () => {
+    const fixed = asConsignment(items, stockConflicts(items, kit))
+    expect(stockConflicts(fixed, kit)).toEqual([])
+    expect(withStock(fixed, kit).map(i => i.stock)).toEqual(['Consignment', 'Consignment'])
+  })
+  it('says nothing when the booking has it as a distributor loan, or the form is not marked', () => {
+    expect(stockConflicts(items, 'Mariner MIS (Distributor Loan)')).toEqual([])
+    expect(stockConflicts(items.map(i => ({ ...i, stockMarking: '' })), kit)).toEqual([])
+  })
+})
