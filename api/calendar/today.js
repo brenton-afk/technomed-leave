@@ -71,6 +71,7 @@ import {
 } from '../../src/clinicalPlan/dayLayout.js'
 import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
 import { kitWithAutoAiro } from '../../src/clinicalPlan/brainlab.js'
+import { kitWithAutoOutrigger } from '../../src/clinicalPlan/outrigger.js'
 import { kitWithDaySupplies } from '../../src/clinicalPlan/kitSupply.js'
 import { cleanListPlace, withListPlace, bySession, moveWithinList, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
 import { weekOf, cleanLeader, turnOf } from '../../src/clinicalPlan/teamLeader.js'
@@ -620,8 +621,11 @@ async function handleSave(req, res) {
     // the notes leaves it off.
     if (['hospital', 'procedure', 'kit'].some(f => Object.prototype.hasOwnProperty.call(body.fields || {}, f))) {
       const now = parseLabelledDescription(description)
-      const kit = kitWithAutoAiro({ hospital: now.hospital || current.location, procedure: now.procedure, kit: now.kit,
-        notes: typeof body.notes === 'string' ? body.notes : [].concat(descriptionNotes(description)).join('\n') })
+      const editNotes = typeof body.notes === 'string' ? body.notes : [].concat(descriptionNotes(description)).join('\n')
+      let kit = kitWithAutoAiro({ hospital: now.hospital || current.location, procedure: now.procedure, kit: now.kit, notes: editNotes })
+      // The Mariner Outrigger on standby (DNO) for an extension, revision or
+      // connecting case (Brent, 19 Nov 2026; outrigger.js).
+      kit = kitWithAutoOutrigger({ procedure: now.procedure, kit, notes: editNotes })
       if (kit !== String(now.kit || '')) description = setLabelledValue(description, 'kit', kit)
       // And any system left without a supply gets one, the day considered
       // (Brent, 16 Nov 2026) — the same rule as a new booking.
@@ -863,7 +867,11 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
   // AIRO on every RHH pedicle-screw / lateral-mass case, without a tap (Brent,
   // 11 Nov 2026) — see kitWithAutoAiro in src/clinicalPlan/brainlab.js.
   {
-    const kit = kitWithAutoAiro({ hospital: fields.hospital, procedure: fields.procedure, kit: fields.kit, notes })
+    let kit = kitWithAutoAiro({ hospital: fields.hospital, procedure: fields.procedure, kit: fields.kit, notes })
+    // And the Mariner Outrigger on standby (DNO) for an extension, revision or
+    // connecting case (Brent, 19 Nov 2026) — its supply is set below with the
+    // rest: Consignment at Calvary, Calvary Loan (a transfer) at RHH.
+    kit = kitWithAutoOutrigger({ procedure: fields.procedure, kit, notes })
     if (kit !== String(fields.kit || '')) fields = { ...fields, kit }
   }
 

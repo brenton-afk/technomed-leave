@@ -1209,6 +1209,27 @@ more not ours"; more named than the hospital's number allows: listed
 unnumbered. Only words nothing recognises fall back to a count, with the words
 beside it — two craniotomies and two carpal tunnels are very different waits.
 
+### The Mariner Outrigger on standby (Brent, 19 Nov 2026)
+
+"Extension, revision and connecting cases get an automatic allocation of
+Mariner outrigger as a DNO (Do not open) tray … At Calvary it lives on shelf
+as a consignment. If the extension case is at RHH … transferred from Calvary
+to RHH." `kitWithAutoOutrigger` / `needsOutrigger` in
+`src/clinicalPlan/outrigger.js` add `Mariner Outrigger (DNO)` to the kit line
+in `writeBooking` (Add booking, Inbox Accept, a pasted message) and in
+`handleSave` whenever hospital, operation or kit change — beside AIRO. The
+rule: extension / extend, revision / revise / redo, connecting to or with an
+existing construct; **not** a removal alone, a case naming only cervical
+levels, or an anterior-only case (an ACDF or ALIF revision) — the Outrigger
+connects to a posterior construct. "No Outrigger" in the notes leaves it off;
+a kit line already naming it is untouched. The supply is set like any other
+(`kitWithDaySupplies`): the Outrigger is now `movesBetweenSites`, and
+`suggestSupply` borrows such a kit from whichever hospital holds it — so
+Consignment at Calvary, **Calvary Loan** at RHH, and `tmLoanDispatches` puts
+"Transfer the Mariner Outrigger kit from Calvary to RHH" on the working day
+before. The Add booking buttons offer it on the same rule (ONLY_WHEN, now also
+for PLIF). `outrigger.test.js`.
+
 ### TM loan kits are sent ahead (Brent, 5 Nov 2026)
 
 When a case takes a **TM Loan** kit — written on the booking, or the

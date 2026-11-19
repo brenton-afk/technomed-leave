@@ -85,7 +85,11 @@ export const INVENTORY = [
     // "Mariner Outrigger now lives at Calvary as a consignment kit." — Brent,
     // 2 Nov 2026. It was a TechnoMed floating kit.
     consigned: { CLV: 1 },
-    note: 'Connector set. Consigned at Calvary.'
+    // On standby (DNO) for every extension, revision or connecting case
+    // (Brent, 19 Nov 2026) — an RHH case borrows it from Calvary, a transfer
+    // the working day before (outrigger.js, dispatch.js).
+    movesBetweenSites: true,
+    note: 'Connector set. Consigned at Calvary; goes to RHH for an RHH case.'
   },
 
   // ── E4 Surgical ──
@@ -528,6 +532,12 @@ export function suggestSupply(system, hospital) {
     // loan kits. Somebody puts it in a car and no request is made at all,
     // which is a different job from fetching a tray out of RHH.
     if (item.floatingAt === 'office') return 'TM Loan'
+    // A kit that moves between the two hospitals is borrowed from whichever
+    // holds it — Athlet from RHH, the Mariner Outrigger from Calvary.
+    if (item.movesBetweenSites) {
+      const other = site === 'RHH' ? 'CLV' : 'RHH'
+      if ((item.consigned?.[other] || 0) > 0) return other === 'CLV' ? 'Calvary Loan' : 'RHH Loan'
+    }
     if (item.movesBetweenSites || item.floating) return 'RHH Loan'
   }
 

@@ -59,7 +59,8 @@ export const SYSTEM_GROUPS = {
     // is predominantly JPW's. MOBIS is only the back-up when two PLIF cages
     // will not go in and it becomes a TLIF — extremely rare, so not offered.
     systems: ['Global BMD PLIF', 'Forza XP', 'Diplomat', 'Mariner MIS', 'Mariner Open', 'Orthofix Firebird'],
-    extras: ['TM Screw Removal']
+    // The Outrigger only for an extension, revision or connecting case (ONLY_WHEN).
+    extras: ['Mariner Outrigger', 'TM Screw Removal']
   },
   alif: {
     label: 'ALIF',
@@ -175,13 +176,16 @@ function surgeonRow(surgeon, group, hospital) {
 //   · "TM removal should only be flagged for cases that have the words
 //     extension or revision in them" (or that say removal outright). The
 //     Mariner Outrigger, an extension piece, likewise only for an extension.
+import { needsOutrigger } from './outrigger.js'
 const ONLY_FOR = {
   'Orthofix Firebird': [{ surgeon: 'JPW' }, { surgeon: 'Atallah', hospital: 'RHH' }],
   'Forza XP': [{ surgeon: 'JPW' }, { surgeon: 'Atallah', hospital: 'RHH' }]
 }
 const ONLY_WHEN = {
   'TM Screw Removal': /\b(?:extension|extend(?:ed|ing)?|revision|revise|removal|remove)\b/i,
-  'Mariner Outrigger': /\b(?:extension|extend(?:ed|ing)?)\b/i
+  // Revised 19 Nov 2026: extension, revision or connecting — the same rule
+  // that now puts it on standby by itself (outrigger.js).
+  'Mariner Outrigger': { test: operation => needsOutrigger({ procedure: operation }) }
 }
 
 function fits(system, { operation, surgeon, hospital }) {
