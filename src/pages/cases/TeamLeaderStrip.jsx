@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
@@ -46,6 +47,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
     setOpenState(value)
     if (!value && sheetOnly) onSheetClose?.()
   }
+  useBackLayer(Boolean(open), () => setOpen(false))
   const [busy, setBusy] = useState(false)
   const [scope, setScope] = useState('day')
   const forDay = Boolean(day) && scope === 'day'

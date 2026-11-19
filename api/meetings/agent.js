@@ -16,7 +16,8 @@ import { flagRepeats } from '../_worklistMatch.js'
 import { settleWorklistItem } from '../_taskDone.js'
 import { visibleTo, hiddenProjectIdsFor, canSeePrivate } from '../_privateBoard.js'
 import {
-  getAgenda, saveAgenda, canEditAgenda, agendaActions, newAgendaFor, isWelcome, isGeneral, isNextMeeting
+  getAgenda, saveAgenda, canEditAgenda, agendaActions, newAgendaFor, isWelcome, isGeneral, isNextMeeting,
+  freezeAgenda, blankAfter, storeSavedAgenda, listSavedAgendas, getSavedAgenda
 } from '../_agenda.js'
 import { meetingReport } from '../../src/projects/report.js'
 import { readActionList } from '../_actionItems.js'
@@ -90,6 +91,8 @@ export default async function handler(req, res) {
   // The next meeting's agenda: everyone reads it, Erin writes it.
   if (action === 'agenda') return handleAgenda(req, res, session)
   if (action === 'agenda-setup') return handleAgendaSetup(req, res, session)
+  if (action === 'agenda-save') return handleAgendaSave(req, res, session)
+  if (action === 'agendas') return handleSavedAgendas(req, res)
   // The live meeting: what is said becomes suggestions; a tap puts one on the board.
   if (action === 'live') return handleLive(req, res, session)
   if (action === 'live-say') return handleLiveSay(req, res, session)
@@ -325,6 +328,42 @@ async function handleAgenda(req, res, session) {
     if (err.code === 'conflict') return res.status(409).json({ error: err.message, agenda: err.current })
     return res.status(err.code === 'busy' ? 409 : 500).json({ error: err.message })
   }
+}
+
+/**
+ * Erin's Save (Brent, 19 Nov 2026): the agenda as it reads now is kept as a
+ * saved agenda, and a blank one is started for the next meeting. Refused if
+ * the agenda changed on another device since it was shown (409).
+ */
+async function handleAgendaSave(req, res, session) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!canEditAgenda(session?.email)) return res.status(403).json({ error: 'Only Erin saves the agenda' })
+  const current = await getAgenda()
+  if (!current) return res.status(400).json({ error: 'There is no agenda to save' })
+  if (Number(req.body?.version) !== Number(current.version)) {
+    return res.status(409).json({ error: 'The agenda was changed on another device — it has been reloaded', agenda: current })
+  }
+  const by = STAFF.find(s => s.email === session?.email)?.firstName || ''
+  try {
+    const extras = await agendaExtras(current).catch(() => ({ agenda: current, actions: null }))
+    const saved = await storeSavedAgenda(freezeAgenda(extras.agenda || current, extras.actions), { by, byEmail: session?.email })
+    const agenda = await saveAgenda(blankAfter(current), { version: current.version, by })
+    await redisSetBody('agenda:previous', JSON.stringify(current)).catch(() => {})
+    const next = await agendaExtras(agenda).catch(() => ({ actions: null, suggestions: [] }))
+    return res.status(200).json({ ...next, agenda: next.agenda || agenda, saved: { id: saved.id, title: saved.title, date: saved.date } })
+  } catch (err) {
+    return res.status(err.code === 'busy' || err.code === 'conflict' ? 409 : 500).json({ error: err.message })
+  }
+}
+
+/** Saved agendas, for everyone signed in: the list, or one with ?id=. */
+async function handleSavedAgendas(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.query.id) {
+    const agenda = await getSavedAgenda(req.query.id)
+    return agenda ? res.status(200).json({ agenda }) : res.status(404).json({ error: 'That agenda could not be found' })
+  }
+  return res.status(200).json({ agendas: await listSavedAgendas() })
 }
 
 /** Erin sets the next meeting's date and time; the agenda is made for it. */

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
@@ -86,6 +87,7 @@ function SuggestionCard({ s, onAct, busy }) {
 }
 
 export default function LiveMeeting({ user, onClose, onChanged }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const auth = { Authorization: `Bearer ${user?.token || ''}`, 'Content-Type': 'application/json' }
   const [live, setLive] = useState(undefined)
   const [error, setError] = useState('')

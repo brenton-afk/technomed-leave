@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import { useLiveRefresh } from '../../liveRefresh.js'
@@ -159,7 +160,7 @@ export async function agendaWordDoc(a, actions) {
   })
 }
 
-async function agendaWord(a, actions) {
+export async function agendaWord(a, actions) {
   const { Packer } = await import('docx')
   return Packer.toBlob(await agendaWordDoc(a, actions))
 }
@@ -323,6 +324,7 @@ function TickBox({ on, onTick, tone }) {
 }
 
 export default function Agenda({ user, onClose, today }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const auth = { Authorization: `Bearer ${user?.token || ''}` }
   const wide = useIsDesktop()
   const [data, setData] = useState(null)
@@ -332,6 +334,7 @@ export default function Agenda({ user, onClose, today }) {
   const [undo, setUndo] = useState(null)
   const [newTitle, setNewTitle] = useState('')
   const [pane, setPane] = useState('edit') // a phone shows one at a time
+  const [confirmSave, setConfirmSave] = useState(false)
   const latest = useRef(null)
   const queue = useRef(Promise.resolve())
   // Tasks ticked from the agenda (Brent, 18 Nov 2026: "Can I also tick them
@@ -413,6 +416,24 @@ export default function Agenda({ user, onClose, today }) {
       const out = await call('agenda-setup', 'POST', { date, time: cur?.time || '', location: cur?.location || '', chair: cur?.chair || '' })
       setUndo(cur); latest.current = out.agenda; setData(d => took(out, d)); setNote('New agenda started — tap items below to add them.')
     } catch (err) { setNote(err.message) }
+    setBusy('')
+  }
+
+  // Save (Brent, 19 Nov 2026): kept under Saved agendas as it reads now, and
+  // a blank agenda started for the next meeting.
+  async function saveAndStartNext() {
+    await queue.current // any edit still on its way goes first
+    const cur = latest.current
+    if (!cur) return
+    setBusy('save'); setNote(''); setConfirmSave(false)
+    try {
+      const out = await call('agenda-save', 'POST', { version: cur.version || 0 })
+      setUndo(null); latest.current = out.agenda; setData(d => took(out, d)); setPane('edit')
+      setNote('Saved — it is under Saved agendas on the Meeting tab. A blank agenda is ready: pick the next date and tap items to add.')
+    } catch (err) {
+      if (err.status === 409 && err.out?.agenda) { latest.current = err.out.agenda; setData(d => ({ ...d, agenda: err.out.agenda })) }
+      setNote(err.message)
+    }
     setBusy('')
   }
 
@@ -512,6 +533,26 @@ export default function Agenda({ user, onClose, today }) {
   const addNew = () => { const t = newTitle.trim(); if (!t) return; setNewTitle(''); edit({ type: 'add', title: t }, `Added "${t}".`) }
   const editor = canEdit && (
     <div data-agenda-editor data-no-print style={{ display: 'flex', flexDirection: 'column', gap: space.sm }}>
+      {agenda && (
+        <div style={{ ...card, borderColor: colour.accent }} data-agenda-save>
+          {!confirmSave ? (
+            <>
+              <button type="button" onClick={() => setConfirmSave(true)} disabled={Boolean(busy)} style={{ ...btn(true), width: '100%' }}>Save agenda</button>
+              <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 6 }}>Keeps it under Saved agendas and starts a blank one for the next meeting.</div>
+            </>
+          ) : (
+            <>
+              <div style={{ ...text('bodyStrong'), color: colour.ink }}>Save this agenda and start a blank one?</div>
+              <div style={{ ...text('caption'), color: colour.inkFaint, margin: '4px 0 8px' }}>It is kept as it reads now, with the outstanding actions written in. The next agenda keeps the standing items, time, place and attendees.</div>
+              <div style={{ display: 'flex', gap: space.xs }}>
+                <button type="button" data-agenda-save-confirm onClick={saveAndStartNext} style={btn(true)}>Save and start the next</button>
+                <button type="button" onClick={() => setConfirmSave(false)} style={btn(false)}>Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div style={card}>
         <div style={label}>The meeting</div>
         <input type="date" aria-label="Meeting date" value={agenda?.date || ''} onChange={e => newMeeting(e.target.value)} style={{ ...field, maxWidth: 220 }} />

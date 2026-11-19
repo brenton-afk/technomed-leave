@@ -117,3 +117,27 @@ describe('sheets and viewers', () => {
     expect(pages.at(-1)).toMatchObject({ tab: 'cases', sub: null })
   })
 })
+
+// Brent, 19 Nov 2026: back from Meetings → agenda went to Cases. Every screen
+// drawn over the page (a fixed, full-screen layer) must take the back button.
+describe('every overlay takes the back button', () => {
+  it('each full-screen layer in the pages calls useBackLayer', async () => {
+    const { readFileSync, readdirSync, statSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const EXEMPT = {
+      'src/pages/cases/NoticeSheet.jsx': 'supplier emails waiting to send — closed only by choosing send or skip',
+      'src/pages/voice/VoiceSheet.jsx': 'unreachable since the microphone was removed',
+      'src/pages/PreferenceCards.jsx': 'opened only through GuideView, which holds the layer'
+    }
+    const files = []
+    const walk = d => readdirSync(d).forEach(f => {
+      const p = join(d, f)
+      if (statSync(p).isDirectory()) walk(p)
+      else if (/\.jsx$/.test(f) && !/\.test\./.test(f)) files.push(p)
+    })
+    walk('src/pages'); walk('src/kit')
+    const missing = files.filter(f => /position: 'fixed',? *inset: 0/.test(readFileSync(f, 'utf8'))
+      && !/useBackLayer/.test(readFileSync(f, 'utf8')) && !EXEMPT[f])
+    expect(missing).toEqual([])
+  })
+})

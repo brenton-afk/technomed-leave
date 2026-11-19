@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useBackLayer } from '../backButton.js'
 import { upload } from '@vercel/blob/client'
 import { Page, Header, Body, Banner, EmptyState, Skeleton, Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../design/tokens.js'
@@ -47,6 +48,7 @@ export default function Resources({ user, onOpenKit }) {
   const [choices, setChoices] = useState(null)
   const [note, setNote] = useState('')
   const [uploading, setUploading] = useState('')
+  useBackLayer(Boolean(changing), () => { if (!uploading) setChanging(null) })
   const fileInput = useRef(null)
 
   const load = useCallback(async (fresh = false) => {

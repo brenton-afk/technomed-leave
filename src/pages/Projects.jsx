@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useBackLayer } from '../backButton.js'
 import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { upload } from '@vercel/blob/client'
@@ -10,6 +11,7 @@ import Workspace from './projects/Workspace.jsx'
 import ProjectBoard from './projects/ProjectBoard.jsx'
 import MeetingReport from './projects/MeetingReport.jsx'
 import Agenda from './projects/Agenda.jsx'
+import SavedAgendas from './projects/SavedAgendas.jsx'
 import LiveMeeting from './projects/LiveMeeting.jsx'
 import TaskSheet from './projects/TaskSheet.jsx'
 import { DIVISIONS } from '../projects/model.js'
@@ -79,11 +81,16 @@ export default function Projects({ user, onBack }) {
   const [view, setView] = useState('projects')
   const [showReport, setShowReport] = useState(false)
   const [showAgenda, setShowAgenda] = useState(false)
+  const [showSaved, setShowSaved] = useState(false)
   const [showLive, setShowLive] = useState(false)
   const [canPrivate, setCanPrivate] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [openTaskId, setOpenTaskId] = useState(null)
   const [savingProject, setSavingProject] = useState(false)
+  // The phone's back button closes what is open on top, one step at a time
+  // (Brent, 19 Nov 2026: back from the agenda went to Cases, not Meetings).
+  useBackLayer(Boolean(openId), () => setOpenId(null))
+  useBackLayer(view === 'capture', () => setView('projects'))
   const today = todayISO()
   const wide = useIsDesktop()
   // Which of the phone's tabs is open, remembered with the rest of the
@@ -569,6 +576,7 @@ export default function Projects({ user, onBack }) {
           {[
             ['live', 'Live meeting', 'Record the room — tasks to accept as you talk', () => setShowLive(true), colour.dangerSoft, colour.danger, '●', { 'data-open-live-meeting': true }],
             ['agenda', 'Next meeting agenda', 'Tap to build — date, who is coming, items from the projects', () => setShowAgenda(true), colour.accentSoft, colour.accentDeep, '≡', { 'data-open-agenda': true }],
+            ['saved', 'Saved agendas', 'Every agenda Erin saved — open, Word or print', () => setShowSaved(true), colour.lineSoft, colour.navy, '▤', { 'data-open-saved-agendas': true }],
             ['report', 'Report since a meeting', 'Done and still outstanding — copy, Word or print', () => setShowReport(true), colour.lineSoft, colour.navy, '✓', { 'data-open-meeting-report': true }]
           ].map(([key, title, sub, go, wash, ink, mark, attrs], i) => (
             <button key={key} type="button" onClick={go} {...attrs}
@@ -978,6 +986,7 @@ export default function Projects({ user, onBack }) {
 
       {showLive && <LiveMeeting user={user} onClose={() => { setShowLive(false); loadWorklist() }} onChanged={loadWorklist} />}
       {showAgenda && <Agenda user={user} today={today} onClose={() => setShowAgenda(false)} />}
+      {showSaved && <SavedAgendas user={user} onClose={() => setShowSaved(false)} />}
       {showReport && <MeetingReport user={user} items={worklist} today={today} onClose={() => setShowReport(false)} />}
 
       {/* One task, opened. Over the top rather than pushed, because you come

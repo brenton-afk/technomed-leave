@@ -1,5 +1,6 @@
 import PreferenceCards from './PreferenceCards.jsx'
 import React, { useState, useEffect, useCallback } from 'react'
+import { useBackLayer } from '../backButton.js'
 import { Page, Header, Body, SectionLabel, Banner, Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 
@@ -128,6 +129,7 @@ export function scrollTo(html, id) {
 }
 
 export function GuideView({ guide, user, onClose, focus }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   // The surgeon preferences are editable data now (Task 18), not a page.
   if (guide?.slug === 'surgeon-preferences') {
     return <PreferenceCards user={user} focus={focus} onClose={onClose} />

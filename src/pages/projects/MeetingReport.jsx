@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border, face } from '../../design/tokens.js'
 import { meetingReport, reportText } from '../../projects/report.js'
@@ -60,6 +61,7 @@ function Section({ title, list, note }) {
 }
 
 export default function MeetingReport({ user, items, today, onClose }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const [meetings, setMeetings] = useState(null)
   const [error, setError] = useState('')
   const [fromId, setFromId] = useState('')

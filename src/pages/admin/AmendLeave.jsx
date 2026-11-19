@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { leaveDays, totalHours } from '../../leaveHours.js'
 import { workPatternFor } from '../../staffConfig.js'
 import { Overlay } from '../../design/Shell.jsx'
@@ -37,6 +38,7 @@ export function daysFor(start, end, saved = [], pattern = STANDARD) {
 }
 
 export default function AmendLeave({ app, authHeaders, onClose, onDone }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const pattern = workPatternFor(app.email) || STANDARD
   const [start, setStart] = useState(app.startDate)
   const [end, setEnd] = useState(app.endDate)

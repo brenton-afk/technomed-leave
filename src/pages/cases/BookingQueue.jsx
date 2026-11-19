@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
@@ -520,6 +521,7 @@ function Candidate({ candidate, user, onDone, nth = 1 }) {
 }
 
 export default function BookingQueue({ user, onClose, onAccepted }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const [pending, setPending] = useState(null)
   const nths = useMemo(() => kitOrderOnDay((pending || []).filter(c => !c.cancels)), [pending])
   const [error, setError] = useState(null)

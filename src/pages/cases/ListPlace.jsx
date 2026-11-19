@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay, SectionLabel, Button, Banner } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { SESSIONS, ordinal, cleanListPlace } from '../../clinicalPlan/listPlace.js'
@@ -61,6 +62,7 @@ function Field({ label, hint, children }) {
  * @param {(place: object|null) => Promise<void>} onSave  null clears it
  */
 export default function ListPlace({ surgicalCase, onSave, onClose }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const existing = surgicalCase?.listPlace || {}
   const [position, setPosition] = useState(existing.position || null)
   const [session, setSession] = useState(existing.session || null)

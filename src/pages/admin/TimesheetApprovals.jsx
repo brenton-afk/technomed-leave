@@ -2,6 +2,7 @@ import { flagsFor, needsDecision } from '../../timesheetFlags.js'
 import { STAFF } from '../../staffConfig.js'
 import Timesheets from '../Timesheets.jsx'
 import React, { useState, useEffect, useMemo } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 
 const NAVY = '#042746'
@@ -237,6 +238,7 @@ export default function TimesheetApprovals({ user }) {
   const [tab, setTab] = useState('submitted')
   const [open, setOpen] = useState(null)
   const [rejectFor, setRejectFor] = useState(null)
+  useBackLayer(Boolean(rejectFor), () => setRejectFor(null))
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState('')
   // Leave as it stands now, per opened timesheet, to show what changed since
@@ -245,6 +247,7 @@ export default function TimesheetApprovals({ user }) {
   // Pay or bank, per timesheet with overtime claimed.
   const [otChoice, setOtChoice] = useState({})
   const [tryAs, setTryAs] = useState(null)
+  useBackLayer(Boolean(tryAs), () => { setTryAs(null); load() })
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${user?.token || ''}` }), [user])
 

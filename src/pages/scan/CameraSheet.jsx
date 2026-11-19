@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
 import { detectDocument, cornersAreSupported } from '../../scanner/documentDetect.js'
@@ -851,6 +852,7 @@ async function sharpestPicture(video, corners) {
 }
 
 export default function CameraSheet({ pageCount, onCapture, onDone, onRead, onCancel, onFallback }) {
+  useBackLayer(true, () => onCancel?.()) // the phone's back button closes it
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const detectCanvasRef = useRef(null)

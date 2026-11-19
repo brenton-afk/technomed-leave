@@ -48,7 +48,7 @@ export function cleanAgenda(raw = {}) {
 }
 
 export { orderedItems, isWelcome, isGeneral, isNextMeeting } from '../src/projects/agendaOrder.js'
-import { orderedItems } from '../src/projects/agendaOrder.js'
+import { orderedItems, isWelcome as isWelcomeT, isGeneral as isGeneralT, isNextMeeting as isNextMeetingT } from '../src/projects/agendaOrder.js'
 
 export async function getAgenda() {
   const raw = await redis('get', AGENDA_KEY)
@@ -120,4 +120,65 @@ export function newAgendaFor({ date, time, location, chair, attendees, apologies
       { title: 'Next meeting' }
     ]
   })
+}
+
+// ─── Saved agendas (Brent, 19 Nov 2026) ──────────────────────────────────────
+// "We need a save button for meeting agendas and then they stay in the
+// meetings tab as saved agendas from meetings and then Erin should have a
+// blank slate to build the next agenda from the projects list."
+//
+// Saving freezes the agenda as it reads at that moment — the live task points
+// and the actions not yet completed are written in as text, so the record
+// never changes as tasks are ticked later — keeps it under agenda:saved:{id}
+// (newest first on agenda:saved, last 200), and starts a blank agenda: the
+// three standing items, the same time, place, chair and attendees, no date,
+// no apologies. Everyone reads saved agendas; only Erin saves.
+
+export const SAVED_LIST = 'agenda:saved'
+export const savedKey = id => `agenda:saved:${id}`
+
+/** The agenda as it reads now, with nothing left to change under it. Pure. */
+export function freezeAgenda(agenda, actions = null) {
+  const items = (agenda?.items || []).map(it => {
+    const hidden = new Set(it.hidden || [])
+    const live = (it.live || []).filter(l => !hidden.has(l.id)).map(l => l.text)
+    return { id: it.id, title: it.title, lead: it.lead || '', points: [...live, ...(it.points || [])] }
+  })
+  return {
+    title: agenda?.title || 'TechnoMed Staff Meeting',
+    date: agenda?.date || '', time: agenda?.time || '', location: agenda?.location || '',
+    chair: agenda?.chair || '', attendees: agenda?.attendees || '', apologies: agenda?.apologies || '',
+    items,
+    actions: actions ? { since: actions.since || null, notDone: (actions.notDone || []).map(({ task, assignee, due_date, overdue }) => ({ task, assignee, due_date, overdue })) } : null
+  }
+}
+
+/** A blank agenda for the next meeting after one is saved. Pure. */
+export function blankAfter(agenda) {
+  const standing = { ...(agenda || {}), items: (agenda?.items || []).filter(i => isWelcomeT(i.title) || isGeneralT(i.title) || isNextMeetingT(i.title)) }
+  return { ...newAgendaFor({ date: '', time: agenda?.time || '', location: agenda?.location, chair: agenda?.chair, attendees: agenda?.attendees, apologies: '', previous: standing }) }
+}
+
+export async function storeSavedAgenda(frozen, { by, byEmail }) {
+  const id = `${frozen.date || new Date().toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 8)}`
+  const record = { ...frozen, id, savedAt: new Date().toISOString(), savedBy: by || '', savedByEmail: byEmail || '' }
+  await redisSetBody(savedKey(id), JSON.stringify(record))
+  await redis('lpush', SAVED_LIST, id)
+  await redis('ltrim', SAVED_LIST, '0', '199').catch(() => {})
+  return record
+}
+
+/** Newest first, as the list shows them: one LRANGE and one MGET. */
+export async function listSavedAgendas(limit = 60) {
+  const ids = (await redis('lrange', SAVED_LIST, '0', String(limit - 1))) || []
+  if (!ids.length) return []
+  const raws = (await redis('mget', ...ids.map(savedKey))) || []
+  return raws.map(r => { try { return r ? JSON.parse(r) : null } catch { return null } }).filter(Boolean)
+    .map(a => ({ id: a.id, title: a.title, date: a.date, time: a.time, savedAt: a.savedAt, savedBy: a.savedBy, items: a.items.length }))
+}
+
+export async function getSavedAgenda(id) {
+  if (!/^[\w-]{4,40}$/.test(String(id || ''))) return null
+  const raw = await redis('get', savedKey(id))
+  try { return raw ? JSON.parse(raw) : null } catch { return null }
 }

@@ -154,7 +154,7 @@ describe('no screen is left out', () => {
     // Suggested to-dos, drawn in the body of the Projects page under its Header.
     'projects/Suggested.jsx',
     // The microphone in the quick-add, inside the Projects page.
-    'projects/VoiceTask.jsx', 'projects/MeetingReport.jsx', 'projects/Agenda.jsx', 'projects/LiveMeeting.jsx',
+    'projects/VoiceTask.jsx', 'projects/MeetingReport.jsx', 'projects/Agenda.jsx', 'projects/SavedAgendas.jsx', 'projects/LiveMeeting.jsx',
   ])
 
   it('accounts for every screen that does not use the shared header', () => {

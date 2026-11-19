@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 
@@ -12,6 +13,7 @@ import { colour, text, space, radius, border } from '../../design/tokens.js'
 const short = path => path.split('/').slice(-2).join(' › ')
 
 export default function AttachAgreements({ user, post, onClose, onDone }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const [plan, setPlan] = useState(null)
   const [ticked, setTicked] = useState({})
   const [chosen, setChosen] = useState({})

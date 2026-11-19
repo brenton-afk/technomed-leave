@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
@@ -75,6 +76,7 @@ function dayChoices(from) {
 }
 
 export default function NewTask({ user, date: openOn, days = [], preset = null, onClose, onCreated }) {
+  useBackLayer(true, () => onClose?.()) // the phone's back button closes it
   const [date, setDate] = useState(() => openOn || todayStr())
   const [kind, setKind] = useState(preset?.kind || '')
   const [thing, setThing] = useState(preset?.thing || '')

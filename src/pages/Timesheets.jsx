@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useBackLayer } from '../backButton.js'
 import { Page, Header, Overlay } from '../design/Shell.jsx'
 import { colour as tokenColour, text as typeToken } from '../design/tokens.js'
 import { useIsDesktop } from '../design/viewport.js'
@@ -417,6 +418,8 @@ export default function Timesheets({ user, onBack, actAs = null }) {
   const desktop = useIsDesktop()
   const [showOnCall, setShowOnCall] = useState(false)
   const [showSplit, setShowSplit] = useState(false)
+  useBackLayer(Boolean(padCell), () => setPadCell(null))
+  useBackLayer(showSplit, () => setShowSplit(false))
   const [callIns, setCallIns] = useState([])
   const [dismissedCallIns, setDismissedCallIns] = useState([])
   // How long each call-in ran, keyed by the calendar event. The allowance

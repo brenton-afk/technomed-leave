@@ -39,6 +39,14 @@ step back off, and one left behind by a navigation is skipped. A deep link
 (`?go=approvals`) gets Cases put underneath. The on-screen back arrow
 (`backTo`) is the same step when the page behind is the hub. A new overlay
 should call `useBackLayer` too.
+**Every overlay, not only the first few** (Brent, 19 Nov 2026: back from
+Meetings → agenda went to Cases): the agenda, live meeting, meeting report,
+a project's board and Capture a meeting (in `Projects.jsx`), Add a task, list
+place, Inbox, team leader sheet, guides and preference cards (`GuideView`),
+Attach agreements, Amend leave, the Resources Change sheet, the timesheet
+keypad, split and "Try a timesheet as…", Return a timesheet, and the camera.
+`backButton.test.jsx` fails on any `position: 'fixed', inset: 0` screen in
+`src/pages` or `src/kit` without `useBackLayer` (three named exemptions).
 
 Hubs (`src/pages/Hubs.jsx`) are lists of `NavCard`s, deliberately **not** nested tab bars — two competing "where am I" signals is most of what made the old eight-tab bar feel cluttered. Adding a screen means adding a `NavCard` to a hub plus a `case` in the relevant `switch`.
 
@@ -929,6 +937,20 @@ fixed** by `orderedItems` (`src/projects/agendaOrder.js`). Word, Print
 (`[data-no-print]` hidden) and Copy for everyone; only `AGENDA_EDITORS`
 (erin@) change it. The chat, Claude draft and past-agenda import
 (`agenda-chat`, `agenda-draft`, `agenda-import`) were removed with it.
+
+**Saved agendas** (Brent, 19 Nov 2026: "a save button for meeting agendas …
+they stay in the meetings tab as saved agendas … then Erin should have a
+blank slate to build the next agenda from the projects list"). Erin's
+**Save agenda** (top of her editor, asked once more before it acts) →
+`action=agenda-save` (version-checked, 409 if changed elsewhere):
+`freezeAgenda` in `api/_agenda.js` writes the live task points (hidden ones
+left out) and the actions not yet completed in as text, so the record never
+changes as tasks are ticked later; kept at `agenda:saved:{id}`, newest first
+on `agenda:saved` (last 200); then `blankAfter` — the three standing items,
+same time, place, chair and attendees, no date, no apologies — and the old
+one becomes `agenda:previous` (its items offered as taps). Meeting tab →
+**Saved agendas** (`projects/SavedAgendas.jsx`, `action=agendas`, `&id=` for
+one; everyone signed in, read-only) with Word, Print and Copy.
 
 **The agenda follows the tasks** (Brent, 18 Nov 2026: "if we update a task
 in our own tasks, we want it to auto update the agenda in the meeting"). A
