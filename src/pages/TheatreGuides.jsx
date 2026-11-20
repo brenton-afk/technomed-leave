@@ -49,7 +49,8 @@ const DISTRIBUTOR_NAMES = {
 // somewhere visible, and dropping Spine from here made DIPLOMAT disappear from
 // the app entirely the moment it lost its tag. A guide in the wrong section is
 // a tidying job; a guide nobody can find is a guide that does not exist.
-const GROUP_ORDER = ['Spine', 'Navigation', 'Orthopaedics', 'Restricted']
+// TechnoMed is our own kits' guides (the Mariner Outrigger, 20 Nov 2026).
+const GROUP_ORDER = ['Spine', 'TechnoMed', 'Navigation', 'Orthopaedics', 'Restricted']
 
 /**
  * One guide, open full-screen over the list.

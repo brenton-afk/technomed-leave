@@ -103,3 +103,18 @@ describe('the guides endpoint serves pages, not downloads', () => {
     expect(vercel.functions['api/guides.js'].includeFiles).toBe('theatre-guides/**')
   })
 })
+
+describe('the Mariner Outrigger guide (Brent, 20 Nov 2026)', () => {
+  const guide = GUIDES.find(g => g.slug === 'mariner-outrigger')
+  it('is listed with the TechnoMed guides, not under a distributor', () => {
+    expect(guide).toBeTruthy()
+    expect(guide.group).toBe('TechnoMed')
+    expect(guide.distributor).toBeUndefined()
+  })
+  it('is a whole, self-contained document', () => {
+    const html = readFileSync(join(ROOT, guide.file), 'utf8')
+    expect(html.slice(0, 20).toLowerCase()).toContain('<!doctype html>')
+    expect(html.trimEnd().endsWith('</html>')).toBe(true)
+    expect(html).not.toMatch(/src="https?:|href="https?:[^"]*\.(?:css|js)/)
+  })
+})

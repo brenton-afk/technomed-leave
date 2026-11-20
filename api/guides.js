@@ -87,6 +87,18 @@ export const GUIDES = [
     file: 'xcore-vbr/index.html',
     keywords: 'Corpectomy · vertebral body replacement · expandable'
   },
+  // TechnoMed's own guides (Brent, 20 Nov 2026: "add this to the portal into
+  // the technomed guides"). The Mariner Outrigger is SeaSpine hardware, but
+  // the kit is ours — on the shelf at Calvary, sent to RHH for extension and
+  // revision cases as a DNO tray — so it sits with TechnoMed, not Device.
+  {
+    slug: 'mariner-outrigger',
+    name: 'MARINER Outrigger',
+    maker: 'SeaSpine',
+    group: 'TechnoMed',
+    file: 'mariner-outrigger/index.html',
+    keywords: 'Revision · extension · connectors to an existing construct · DNO tray · L-connectors · axial · Z-rod · T-25 · T-30 · torque'
+  },
   { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation', file: 'brainlab/index.html' },
   { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', file: 'clavicle-2.7/index.html', revision: 'SE_825567 AF · 2025/07' },
   // Two plates in one guide — the lateral VA-LCP and the medial LCP — which

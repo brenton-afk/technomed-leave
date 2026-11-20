@@ -1481,6 +1481,16 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   documents stay; Add from Dropbox suggests tray lists instead), and keeps
   loan kits out of **Attach agreements from Dropbox**.
 
+### TechnoMed guides (Brent, 20 Nov 2026)
+
+Theatre guides has a **TechnoMed** section (`GROUP_ORDER` in
+`TheatreGuides.jsx`, after Spine) for guides to our own kits. First: the
+**Mariner Outrigger** (`theatre-guides/mariner-outrigger/index.html`, slug
+`mariner-outrigger`, maker SeaSpine, no distributor — the kit is ours, the
+DNO tray for extension and revision cases), Brent's self-contained page as
+given. A new TechnoMed guide is a folder there plus a `GUIDES` row with
+`group: 'TechnoMed'` and no `distributor`.
+
 ### Surgeon preference cards (Task 18)
 
 Editable data, not a page. `api/_preferences.js` keeps them in Redis
