@@ -1,6 +1,6 @@
 import { placesFromLoc, applyMove, trayPlace, movingFrom } from '../src/kit/trayPlaces.js'
 import { uniqueTrayNames } from '../src/trayNames.js'
-import { DEFAULT_COURIERS, cleanCouriers } from '../src/kit/couriers.js'
+import { DEFAULT_COURIERS, cleanCouriers, withKnownNumbers } from '../src/kit/couriers.js'
 import { redis, redisSetBody } from './_redis.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
 import { STAFF } from '../src/staffConfig.js'
@@ -148,7 +148,7 @@ const COURIERS = 'kits:couriers'
 export async function getCouriers() {
   try {
     const raw = await redis('get', COURIERS)
-    if (raw) return JSON.parse(raw)
+    if (raw) return withKnownNumbers(JSON.parse(raw))
   } catch { /* defaults */ }
   return DEFAULT_COURIERS
 }

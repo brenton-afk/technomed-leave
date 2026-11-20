@@ -7,18 +7,35 @@
 //
 // Jet and the Smartways office are from the office's freight document (April
 // 2026): Jet for around Hobart, Smartways for Launceston and beyond and for
-// anything urgent. The contractors' mobiles live in Brent's phone, so their
-// rows start without a number and are filled in on the Courier numbers sheet.
+// anything urgent. The three Smartways contractors' mobiles are Brent's (same
+// day).
 // No account password is ever kept here — the list is shown to every
 // signed-in phone.
 
 export const DEFAULT_COURIERS = [
   { id: 'jet', name: 'Jet Couriers', phone: '03 6228 1900', note: 'Around Hobart · account "Tech"' },
   { id: 'smartways', name: 'Smartways (office)', phone: '02 9808 2750', note: 'Launceston and beyond, urgent · branch "Technomed"' },
-  { id: 'smartways-clayton', name: 'Clayton (Smartways)', phone: '', note: '' },
-  { id: 'smartways-stefan', name: 'Stefan (Smartways)', phone: '', note: '' },
-  { id: 'smartways-3', name: 'Smartways contractor', phone: '', note: '' }
+  { id: 'smartways-chetan', name: 'Chetan (Smartways)', phone: '0452 601 993', note: '' },
+  { id: 'smartways-clayton', name: 'Clayton (Smartways)', phone: '0431 635 575', note: '' },
+  { id: 'smartways-stefan', name: 'Stefan (Smartways)', phone: '0474 448 488', note: '' }
 ]
+
+/**
+ * A list saved before the contractors' numbers were known: the placeholder
+ * row goes, and a contractor row still without a number takes the default.
+ * A number someone typed is never changed.
+ */
+export function withKnownNumbers(list) {
+  if (!Array.isArray(list)) return DEFAULT_COURIERS
+  const byId = new Map(DEFAULT_COURIERS.map(c => [c.id, c]))
+  const out = list.filter(c => c.id !== 'smartways-3' || c.phone)
+    .map(c => (!c.phone && byId.get(c.id)?.phone ? { ...c, phone: byId.get(c.id).phone } : c))
+  if (!out.some(c => c.id === 'smartways-chetan')) {
+    const at = out.findIndex(c => c.id === 'smartways-clayton')
+    out.splice(at < 0 ? out.length : at, 0, byId.get('smartways-chetan'))
+  }
+  return out
+}
 
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n)
 

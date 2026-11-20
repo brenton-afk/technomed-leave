@@ -1588,9 +1588,10 @@ history (`kits=courier-called`, `logCourierCall`); **No courier needed** /
 **Done** closes. The list is `kits:couriers` (`getCouriers` / `saveCouriers`,
 returned with `kits=list`), seeded from `DEFAULT_COURIERS` in
 `src/kit/couriers.js`: Jet Couriers 03 6228 1900 and the Smartways office
-02 9808 2750, both from the office's freight document (April 2026), and
-Clayton, Stefan and a third Smartways contractor with **no number yet** — their
-mobiles are in Brent's phone. Edited on Kit room → **Courier numbers**
+02 9808 2750, both from the office's freight document (April 2026), and the
+Smartways contractors Chetan, Clayton and Stefan (numbers from Brent, same
+day; `withKnownNumbers` fills them into a list saved before, never over a
+typed number). Edited on Kit room → **Courier numbers**
 (`kit/CourierNumbers.jsx`, admins and the clinical team, `kits=couriers`);
 `cleanCouriers` refuses a bad number and any "password" — every phone sees it.
 
