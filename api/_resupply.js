@@ -125,7 +125,8 @@ const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY)
 const same = (a, b) => str(a).toLowerCase() === str(b).toLowerCase() && str(a) !== ''
 
 /** The usage items a distributor supplied on a case. */
-export function itemsFor(record, distributorKey) {
+export function itemsFor(record, distributorKey, { strict = false } = {}) {
+  if (strict) return (record?.items || []).filter(i => !i.excluded && i.distributorKey === distributorKey)
   return (record?.items || []).filter(i => !i.excluded
     && (!distributorKey || i.distributorKey === distributorKey
       // Boost comes back from Device's Boost desk; either key is the same company.
@@ -262,8 +263,8 @@ export function pairLines(items, lines) {
  * and still owed. Lines on the document that the case did not use are listed
  * apart — a consignment top-up or a substitute, for a person to look at.
  */
-export function compareResupply(record, distributorKey, lines, earlier = []) {
-  const items = itemsFor(record, distributorKey)
+export function compareResupply(record, distributorKey, lines, earlier = [], { strict = false } = {}) {
+  const items = itemsFor(record, distributorKey, { strict })
 
   // One row a product: the same code used twice is one row with both counted.
   const rows = []
@@ -311,13 +312,84 @@ const SHORT_NAMES = {
   kt: 'KT', globus: 'Globus', dtbv: 'DTBV'
 }
 
+// ─── Named for the team, never by them (Brent, 20 Nov 2026) ─────────────────
+// Toni: "this resupply was saved as partial device resupply, it should be
+// 'Matthews Boost resupply'". Brent: "Don't let the staff label things,
+// automatically suggest the label based on the information in the resupply
+// paperwork and how it matches to the usage." The names below are the ones
+// the team has used in Dropbox since 2020, read from the folders:
+//   Testa Signus resupply.pdf            – everything back in one go
+//   Testa partial Signus resupply.pdf    – the first of several, some still owed
+//   Testa partial Signus resupply 2.pdf  – a later one, some still owed
+//   Testa remaining Signus resupply.pdf  – the one that finishes it
+// Boost is its own word ("Testa Boost resupply"), never "Device": Device's
+// Boost desk sends the allograft separately from Device's implants.
+
+/** Device or Boost, from the paper's own lines and the usage they pair with. */
+export function familyKey(resupply, record) {
+  const key = resupply?.distributorKey
+  if (key !== 'device' && key !== 'device_boost') return key || null
+  const lines = resupply.lines || []
+  const items = itemsFor(record, 'device')
+  const pairs = record ? pairLines(items, lines) : new Map()
+  let boost = 0
+  let device = 0
+  lines.forEach((l, li) => {
+    const said = detectDistributor(`${l.description} ${l.referenceCode}`)
+    const paired = pairs.has(li) ? items[pairs.get(li)].distributorKey : null
+    const k = said === 'device_boost' ? 'device_boost' : (paired || (said === 'device' ? 'device' : null))
+    if (k === 'device_boost') boost++
+    else if (k === 'device') device++
+  })
+  if (boost || device) return boost > device ? 'device_boost' : 'device'
+  // Nothing on the paper settles it: the usage does, if it had only one.
+  const used = new Set(items.map(i => i.distributorKey))
+  if (used.size === 1) return [...used][0]
+  if (/\bboost\b/i.test(resupply.supplier || '')) return 'device_boost'
+  return key
+}
+
 /**
- * The filed name, the way the team already names them:
- * "Curtain E4 resupply.pdf", "Housego partial Device resupply 2.pdf".
+ * Where this paper stands among the case's resupplies from one supplier:
+ * 'complete' (all back in one), 'partial' (some still owed), 'remaining'
+ * (the one that finishes it) — and its number among that supplier's.
+ * Without a case, or with nothing of theirs on the usage, it is 'complete':
+ * nothing says otherwise.
  */
-export function resupplyFileName({ patientSurname, distributorKey, partial, n }) {
+export function resupplyStage({ record, distributorKey, lines, earlier = [] }) {
+  const n = earlier.length + 1
+  if (!record || !itemsFor(record, distributorKey, { strict: true }).length) return { stage: 'complete', n }
+  const { totals } = compareResupply(record, distributorKey, lines, earlier, { strict: true })
+  if (totals.owing > 0) return { stage: 'partial', n, owing: totals.owing }
+  return { stage: earlier.length ? 'remaining' : 'complete', n }
+}
+
+/** The filed name, the way the team already names them. */
+export function resupplyFileName({ patientSurname, distributorKey, stage = 'complete', n = 1, partial }) {
   const who = str(patientSurname).replace(/[\\/:*?"<>|]/g, '') || 'Case'
   const company = SHORT_NAMES[distributorKey] || DISTRIBUTORS[distributorKey]?.name || 'Supplier'
-  const number = n > 1 || partial ? ` ${n}` : ''
-  return `${who} ${partial ? 'partial ' : ''}${company} resupply${number}.pdf`
+  const s = partial === true && stage === 'complete' ? 'partial' : stage
+  if (s === 'partial') return `${who} partial ${company} resupply${n > 1 ? ` ${n}` : ''}.pdf`
+  if (s === 'remaining') return `${who} remaining ${company} resupply.pdf`
+  return `${who} ${company} resupply.pdf`
+}
+
+/** The name and the reason for it, for the review screen and the filing. */
+export function resupplyNaming({ record, resupply, earlierAll = [] }) {
+  const key = familyKey(resupply, record)
+  const earlier = earlierAll.filter(e => e.distributorKey === key)
+  const { stage, n, owing } = resupplyStage({ record, distributorKey: key, lines: resupply.lines || [], earlier })
+  const company = SHORT_NAMES[key] || DISTRIBUTORS[key]?.name || 'Supplier'
+  const why = [
+    key === 'device_boost' ? 'Boost allograft — filed as Boost, apart from Device implants'
+      : key === 'device' ? 'Device implants — Boost is filed separately' : `From ${company}`,
+    stage === 'partial' ? `${owing} still owed after this one` : stage === 'remaining' ? 'finishes what was owed' : 'everything used is back',
+    earlier.length ? `${earlier.length} earlier ${company} resupply${earlier.length === 1 ? '' : 's'} on this case` : ''
+  ].filter(Boolean)
+  return {
+    distributorKey: key,
+    stage, n,
+    fileName: record ? resupplyFileName({ patientSurname: record.patientSurname, distributorKey: key, stage, n }) : '',
+    why
+  }
 }

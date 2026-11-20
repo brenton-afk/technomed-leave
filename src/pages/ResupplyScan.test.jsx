@@ -61,6 +61,30 @@ describe('the resupply scanner', () => {
     expect(screen.getByRole('radio', { checked: true })).toBeInTheDocument()
   })
 
+  // Toni, 20 Nov 2026: a Boost resupply filed as "partial Device resupply".
+  // The portal names it, from the paper and the usage; nobody types a name.
+  it('shows the name it will be filed under, and the supplier it settled on', async () => {
+    global.fetch = vi.fn(async (url) => {
+      const action = new URL(url, 'http://x').searchParams.get('action')
+      const body = {
+        'resupply-read': {
+          resupply: { ...RESUPPLY, distributorKey: 'device', distributor: 'Device Technologies' },
+          candidates: [{ ...CASE, why: ['surname'] }], matchedId: 'u1', comparison: COMPARISON,
+          naming: { distributorKey: 'device_boost', stage: 'complete', n: 1, fileName: 'Testa Boost resupply.pdf',
+            why: ['Boost allograft — filed as Boost, apart from Device implants', 'everything used is back'] }
+        }
+      }[action] || { records: [] }
+      return { ok: true, json: async () => body }
+    })
+    const { container } = render(<ScanTab user={{ token: 't' }} />)
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
+    const name = await waitFor(() => { const el = container.querySelector('[data-resupply-name]'); expect(el).toBeTruthy(); return el })
+    expect(name.textContent).toContain('Testa Boost resupply.pdf')
+    expect(name.querySelector('input')).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Distributor' })).toHaveValue('device_boost')
+  })
+
   it('records it once, against the chosen case, with the pages for filing', async () => {
     const { container } = render(<ScanTab user={{ token: 't' }} />)
     fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })

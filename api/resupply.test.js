@@ -103,15 +103,70 @@ describe('what is still owed', () => {
 
 describe('the filed name, as the team writes it', () => {
   it('names a complete resupply plainly', () => {
-    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'e4', partial: false, n: 1 })).toBe('Testa E4 resupply.pdf')
+    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'e4', stage: 'complete', n: 1 })).toBe('Testa E4 resupply.pdf')
   })
 
-  it('names a partial one and numbers it', () => {
-    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'device', partial: true, n: 2 })).toBe('Testa partial Device resupply 2.pdf')
+  it('names the first of several "partial", unnumbered, and later ones numbered', () => {
+    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'signus', stage: 'partial', n: 1 })).toBe('Testa partial Signus resupply.pdf')
+    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'device', stage: 'partial', n: 2 })).toBe('Testa partial Device resupply 2.pdf')
+  })
+
+  it('names the one that finishes it "remaining"', () => {
+    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'device', stage: 'remaining', n: 3 })).toBe('Testa remaining Device resupply.pdf')
   })
 
   it('calls Boost Boost', () => {
-    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'device_boost', partial: false, n: 1 })).toBe('Testa Boost resupply.pdf')
+    expect(resupplyFileName({ patientSurname: 'Testa', distributorKey: 'device_boost', stage: 'complete', n: 1 })).toBe('Testa Boost resupply.pdf')
+  })
+})
+
+describe('named by the portal, never by staff (Toni, 20 Nov 2026)', async () => {
+  const { resupplyNaming, familyKey } = await import('./_resupply.js')
+  const record = {
+    patientSurname: 'Testa',
+    items: [
+      { id: 'i1', referenceCode: 'DEV-SCREW-645', productName: 'Pedicle screw 6.5 x 45', quantity: 4, distributorKey: 'device' },
+      { id: 'i2', referenceCode: 'DEV-ROD-100', productName: 'Rod 100mm', quantity: 2, distributorKey: 'device' },
+      { id: 'i3', referenceCode: 'BUF-10', productName: 'Boost Ultrafibres 10cc', quantity: 1, distributorKey: 'device_boost' }
+    ]
+  }
+  const boostPaper = { distributorKey: 'device', supplier: 'Device Technologies', lines: [{ referenceCode: 'BUF-10', description: 'Ultrafibres 10cc', quantity: 1 }] }
+
+  it('files a Boost paper as Boost even when the supplier reads as Device', () => {
+    const n = resupplyNaming({ record, resupply: boostPaper, earlierAll: [] })
+    expect(n.distributorKey).toBe('device_boost')
+    expect(n.fileName).toBe('Testa Boost resupply.pdf')
+  })
+
+  it('does not count Device implant resupplies towards Boost', () => {
+    const earlierAll = [{ distributorKey: 'device', lines: [{ referenceCode: 'DEV-SCREW-645', quantity: 4 }] }]
+    expect(resupplyNaming({ record, resupply: boostPaper, earlierAll }).fileName).toBe('Testa Boost resupply.pdf')
+  })
+
+  it('partial, then partial 2, then remaining for Device implants', () => {
+    const p1 = { distributorKey: 'device', lines: [{ referenceCode: 'DEV-SCREW-645', description: 'Pedicle screw', quantity: 2 }] }
+    expect(resupplyNaming({ record, resupply: p1 }).fileName).toBe('Testa partial Device resupply.pdf')
+    const done1 = [{ distributorKey: 'device', lines: p1.lines }]
+    const p2 = { distributorKey: 'device', lines: [{ referenceCode: 'DEV-SCREW-645', description: 'Pedicle screw', quantity: 2 }] }
+    expect(resupplyNaming({ record, resupply: p2, earlierAll: done1 }).fileName).toBe('Testa partial Device resupply 2.pdf')
+    const done2 = [...done1, { distributorKey: 'device', lines: p2.lines }]
+    const p3 = { distributorKey: 'device', lines: [{ referenceCode: 'DEV-ROD-100', description: 'Rod', quantity: 2 }] }
+    expect(resupplyNaming({ record, resupply: p3, earlierAll: done2 }).fileName).toBe('Testa remaining Device resupply.pdf')
+  })
+
+  it('everything back at once is plain', () => {
+    const all = { distributorKey: 'device', lines: [
+      { referenceCode: 'DEV-SCREW-645', quantity: 4 }, { referenceCode: 'DEV-ROD-100', quantity: 2 }] }
+    expect(resupplyNaming({ record, resupply: all }).fileName).toBe('Testa Device resupply.pdf')
+  })
+
+  it('a Device paper with nothing to go on follows the usage when it had only one kind', () => {
+    const onlyBoost = { ...record, items: [record.items[2]] }
+    expect(familyKey({ distributorKey: 'device', lines: [{ referenceCode: 'X1', description: 'graft', quantity: 1 }] }, onlyBoost)).toBe('device_boost')
+  })
+
+  it('leaves other suppliers as they are', () => {
+    expect(familyKey({ distributorKey: 'signus', lines: [] }, record)).toBe('signus')
   })
 })
 

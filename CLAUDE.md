@@ -2097,6 +2097,22 @@ retry saves once. The pages are filed **in the usage case's own Dropbox folder,
 the way the team already names them**: `{Surname} {Distributor} resupply.pdf`,
 `{Surname} partial {Distributor} resupply {n}.pdf` (`resupplyFileName`; the
 second and later are "partial … n").
+**Named by the portal, never by staff** (Toni and Brent, 20 Nov 2026: a
+Boost resupply filed as "partial Device resupply 2"; "Don't let the staff label
+things"). `resupplyNaming` in `api/_resupply.js` (pure, `resupply.test.js`),
+from the names the team has used in Dropbox since 2020: `{Surname} {Supplier}
+resupply` (all back in one), `{Surname} partial {Supplier} resupply` (the
+first of several, still owed), `… partial … resupply {n}` (later ones),
+`{Surname} remaining {Supplier} resupply` (the one that finishes it). Supplier
+words: Signus, E4, Device, **Boost**, KT, Globus, DTBV. `familyKey` decides
+Device vs Boost from each line (Boost words, else the usage item it pairs
+with), else the usage's only kind; that key is the one recorded and counted
+(`resupplyStage` counts owing per exact key — `itemsFor(…, { strict })` — so
+Device implants never make a Boost paper "partial"). `comparisonFor` returns
+`naming`; read, compare and save use it, and the review shows "Will be filed
+in the case folder as …" with why (`data-resupply-name`) — no box to type a
+name, and the supplier picker snaps to the settled supplier. Staff guide:
+`docs/resupply-naming-guide.md`.
 **Usage forms scanned as resupplies** (Brent, 18 Nov 2026: "people are
 scanning their usage with the resupply scanner"). The Scan tab **always opens
 on Usage** — `tm_scan_kind` is no longer remembered; `saveScanKind` asks for a

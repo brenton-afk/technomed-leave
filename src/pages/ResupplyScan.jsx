@@ -191,6 +191,7 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
   const [read, setRead] = useState(null)        // { resupply, candidates }
   const [usageId, setUsageId] = useState(null)
   const [comparison, setComparison] = useState(null)
+  const [naming, setNaming] = useState(null)
   const [saved, setSaved] = useState(null)
   // The reader says these pages are a usage form (scan/WrongKind.jsx).
   const [wrongKind, setWrongKind] = useState(false)
@@ -234,7 +235,7 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
   function startNew() {
     pagesRef.current = []
     scanId.current = newId()
-    setPages([]); setRead(null); setUsageId(null); setComparison(null); setSaved(null); setError('')
+    setPages([]); setRead(null); setUsageId(null); setComparison(null); setNaming(null); setSaved(null); setError('')
     setStep('capture'); setShowCamera(true)
   }
 
@@ -255,9 +256,11 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       if (!data.resupply) throw new Error('The resupply came back empty. Try the photograph again.')
-      setRead({ resupply: data.resupply, candidates: data.candidates || [] })
+      const settled = (data.matchedId && data.naming?.distributorKey) || data.resupply.distributorKey
+      setRead({ resupply: { ...data.resupply, distributorKey: settled }, candidates: data.candidates || [] })
       setUsageId(data.matchedId || null)
       setComparison(data.comparison || null)
+      setNaming(data.matchedId ? data.naming || null : null)
       setWrongKind(data.resupply.documentKind === 'usage' && Boolean(onReadAsUsage))
       setStep('review')
     } catch (err) {
@@ -270,7 +273,7 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
   // (`recheck`): the codes only — after a code is corrected or the
   // distributor changed.
   async function compareWith(id, resupply = read.resupply, { recheck = false } = {}) {
-    setUsageId(id); setComparison(null)
+    setUsageId(id); setComparison(null); setNaming(null)
     if (!id && !recheck) return
     try {
       const res = await fetch('/api/usage/agent?action=resupply-compare', {
@@ -279,7 +282,12 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       if (id) setComparison(data.comparison)
-      if (data.resupply) setRead(r => ({ ...r, resupply: { ...data.resupply, distributorKey: resupply.distributorKey } }))
+      setNaming(id ? data.naming || null : null)
+      // The supplier the name settles on (Device or Boost, from the paper and
+      // the usage) is the one shown — the portal decides it, not the picker.
+      const settled = (id && data.naming?.distributorKey) || resupply.distributorKey
+      if (data.resupply) setRead(r => ({ ...r, resupply: { ...data.resupply, distributorKey: settled } }))
+      else if (settled !== resupply.distributorKey) setRead(r => ({ ...r, resupply: { ...r.resupply, distributorKey: settled } }))
     } catch (err) { setError(err.message) }
   }
 
@@ -391,6 +399,13 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
 
           <PriceCodes resupply={resupply} onUseCode={useCode} onUseDistributor={setDistributor} />
 
+          {chosen && naming?.fileName && (
+            <div data-resupply-name style={{ ...panel, borderColor: colour.accent }}>
+              <div style={{ ...text('caption'), color: colour.inkFaint }}>Will be filed in the case folder as</div>
+              <div style={{ ...text('bodyStrong'), color: colour.ink, wordBreak: 'break-word' }}>{naming.fileName}</div>
+              <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>{naming.why.join(' · ')}</div>
+            </div>
+          )}
           {usageId && !comparison && <div style={{ ...text('caption'), color: colour.inkFaint }}>Comparing…</div>}
           {chosen && <Comparison comparison={comparison} />}
 

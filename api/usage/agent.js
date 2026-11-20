@@ -11,7 +11,7 @@ import {
 } from '../_redis.js'
 import {
   RESUPPLY_PROMPT, normaliseResupply, documentKindOf, documentKindOfPages, candidateCases, compareResupply, findCases,
-  resupplyFileName, itemsFor
+  resupplyNaming, itemsFor
 } from '../_resupply.js'
 import { loadPriceBook } from '../_priceStore.js'
 import { priceCheckCase, priceCheckResupply } from '../../src/usagePriceCheck.js'
@@ -1117,9 +1117,14 @@ async function checkResupplyCodes(resupply, { hospital = '', infer = false } = {
 async function comparisonFor(usageId, resupply) {
   const record = await getUsageRecord(usageId)
   if (!record) return null
-  const earlier = (await getCaseResupplies(usageId))
-    .filter(e => !resupply.distributorKey || e.distributorKey === resupply.distributorKey)
-  return { record, earlier, comparison: compareResupply(record, resupply.distributorKey, resupply.lines, earlier) }
+  const all = await getCaseResupplies(usageId)
+  // The name is the portal's, never typed (Brent, 20 Nov 2026): Device or
+  // Boost from the paper and the usage, partial / remaining from what is
+  // still owed. The supplier it settles on is the one recorded.
+  const naming = resupplyNaming({ record, resupply, earlierAll: all })
+  const key = naming.distributorKey || resupply.distributorKey
+  const earlier = all.filter(e => !key || e.distributorKey === key)
+  return { record, earlier, naming, comparison: compareResupply(record, key, resupply.lines, earlier) }
 }
 
 async function handleResupplyRead(req, res) {
@@ -1158,6 +1163,7 @@ async function handleResupplyRead(req, res) {
     candidates: candidates.map(c => ({ ...caseSummary(c.record), why: c.why })),
     matchedId: matched ? best.record.id : null,
     comparison: matched?.comparison || null,
+    naming: matched?.naming || null,
     earlierCount: matched?.earlier.length || 0
   })
 }
@@ -1189,7 +1195,7 @@ async function handleResupplyCompare(req, res) {
   const found = await comparisonFor(usageId, resupply)
   if (!found) return res.status(404).json({ error: 'That usage case could not be found' })
   const checked = await checkResupplyCodes(resupply, { hospital: found.record.hospital })
-  return res.status(200).json({ comparison: found.comparison, earlierCount: found.earlier.length, case: caseSummary(found.record), resupply: checked })
+  return res.status(200).json({ comparison: found.comparison, earlierCount: found.earlier.length, case: caseSummary(found.record), resupply: checked, naming: found.naming })
 }
 
 async function handleResupplySave(req, res, session) {
@@ -1218,11 +1224,13 @@ async function handleResupplySave(req, res, session) {
   }
 }
 
-async function saveClaimedResupply(req, res, session, { id, usageId, resupply }) {
+async function saveClaimedResupply(req, res, session, { id, usageId, resupply: given }) {
+  let resupply = given
 
   let record = null
   let comparison = null
   let earlier = []
+  let naming = null
   if (usageId) {
     const found = await comparisonFor(usageId, resupply)
     if (!found) {
@@ -1230,6 +1238,10 @@ async function saveClaimedResupply(req, res, session, { id, usageId, resupply })
       return res.status(404).json({ error: 'That usage case could not be found' })
     }
     ;({ record, comparison, earlier } = found)
+    naming = found.naming
+    if (naming.distributorKey && naming.distributorKey !== resupply.distributorKey) {
+      resupply = { ...resupply, distributorKey: naming.distributorKey, distributor: distributorName(naming.distributorKey) }
+    }
   }
 
   // Filed beside the usage, named the way the team names them. Dropbox first,
@@ -1239,12 +1251,7 @@ async function saveClaimedResupply(req, res, session, { id, usageId, resupply })
   if (record?.dropboxPath && dropboxConfigured() && Array.isArray(req.body?.pages) && req.body.pages.length) {
     try {
       const pdf = await buildScanPdf(validatePages(req.body.pages))
-      const name = resupplyFileName({
-        patientSurname: record.patientSurname,
-        distributorKey: resupply.distributorKey,
-        partial: earlier.length > 0,
-        n: earlier.length + 1
-      })
+      const name = naming.fileName
       // Kept, never overwritten: a second document of the same name (a
       // partial resupply scanned twice, or a count that missed one) is added
       // beside it as "… (1).pdf" rather than replacing the first.
@@ -1268,13 +1275,14 @@ async function saveClaimedResupply(req, res, session, { id, usageId, resupply })
       ({ referenceCode, description, lotNumber, quantity, backordered,
         ...(priceCheck ? { listed: priceCheck.status, ...(priceCheck.rebate ? { rebate: priceCheck.rebate } : {}) } : {}) })),
     owingAfter: comparison ? comparison.totals.owing : null,
+    ...(naming ? { stage: naming.stage } : {}),
     filed,
     scannedBy: session.name,
     scannedByEmail: session.email,
     at: new Date().toISOString()
   }
   await saveResupply(entry)
-  return res.status(200).json({ entry, comparison, fileError, case: record ? caseSummary(record) : null })
+  return res.status(200).json({ entry, comparison, fileError, naming, case: record ? caseSummary(record) : null })
 }
 
 // ─── Removing a duplicate case (Brent, 6 Nov 2026) ─────────────────────────
