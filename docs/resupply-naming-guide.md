@@ -42,6 +42,7 @@ If the **From** box shows the wrong supplier, change it. The portal checks it ag
 - **No usage was scanned for the case:** it records the resupply but can't file it in a case folder. Tell the team leader so the usage can be scanned first.
 - **Wrong case offered:** tap **Find the case** and search by surname, surgeon or folder name.
 - **Not a resupply at all:** if it is really a usage form, the portal stops and offers **Read it as a usage**.
+- **E4's reprinted chargeable form:** E4 send a reprint of the hospital's chargeable-items form back as their resupply. That *is* the E4 resupply: scan it under **Resupply** as normal and it is filed as `Testa E4 resupply.pdf`.
 
 ## Things that are still filed by hand (for now)
 

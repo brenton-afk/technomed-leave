@@ -186,4 +186,12 @@ describe('what the paper is (Brent, 18 Nov 2026: usage forms in the resupply sca
   it('the reader is asked for it', () => {
     expect(prompt).toMatch(/"documentKind"/)
   })
+  // Brent, 21 Nov 2026: "E4 use the chargeable form reprint as a resupply document".
+  it("never stops E4's reprinted chargeable form as a usage", () => {
+    expect(prompt).toMatch(/E4 Surgical send a reprint/)
+    const e4 = norm({ documentKind: 'usage', supplier: 'E4 Surgical', lines: [{ referenceCode: 'X1', description: 'Cage' }] })
+    expect(e4.distributorKey).toBe('e4')
+    expect(e4.documentKind).toBe('resupply')
+    expect(norm({ documentKind: 'usage', supplier: 'Signus' }).documentKind).toBe('usage')
+  })
 })

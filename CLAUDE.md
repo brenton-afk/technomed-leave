@@ -2274,6 +2274,10 @@ when they agree, `documentKindOfPages`): the wrong one stops before review on
 `scan/WrongKind.jsx` — "This looks like a usage form, not a resupply" — with
 **Read it as a usage** / **Read it as a resupply**, which hands the same pages
 to the other scanner (`ScanTab` `carry`, read at once), or carry on.
+**E4's resupply is a reprint of the chargeable form** (Brent, 21 Nov 2026):
+`RESUPPLY_PROMPT` says an E4 form printed or photocopied (not the original
+with stickers) is `resupply`, and `normaliseResupply` never returns `usage`
+for a paper whose distributor is E4 — it is not stopped as a usage.
 **Matching to usage only** (Brent, 10 Nov 2026: "remove the owed items … the
 previous system is in place … at this stage let's just match it to usage").
 The **Still owed** list, `action=resupply-owing` and the Decisions "Resupply
