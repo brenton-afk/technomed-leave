@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "bench:scanner": "node scripts/scanner-bench.mjs",
     "check:engine": "node scripts/opencv-handshake.mjs",
+    "check:back": "node scripts/back-button-race.mjs",
     "lint": "eslint ."
   },
   "dependencies": {

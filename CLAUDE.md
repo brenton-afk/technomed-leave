@@ -45,12 +45,21 @@ a project's board and Capture a meeting (in `Projects.jsx`), Add a task, list
 place, Inbox, team leader sheet, guides and preference cards (`GuideView`),
 Attach agreements, Amend leave, the Resources Change sheet, the timesheet
 keypad, split and "Try a timesheet as…", Return a timesheet, and the camera.
-**Never close one overlay in the same tap that opens another** (Brent, 20 Nov
-2026: Move in a kit "nothing happens"): the closing layer's `history.back()`
-is still queued when the new layer pushes, and in a real browser it lands on
-the step before — popping the new layer's entry and closing it. Leave the
-first open underneath (higher `zIndex` on the second), as the kit room's
-system does under the move sheet (`systemRoom.test.jsx`).
+**Closing one overlay and opening another in the same tap now works**
+(Brent, 20 Nov 2026: Move in a kit "nothing happens"). A real browser's
+`history.back()` is queued, and a `pushState` before it runs does not cancel
+it — it landed on the step before and popped the new overlay. So a layer
+closed by its ✕ no longer goes back at once: `stepOff` waits a turn, and a
+layer or page pushed meanwhile takes over the closed layer's entry
+(`takeOver`, a replaceState); anything pushed while our own back is on its
+way waits for it (`afterBack` / `goBack`, 500ms fallback), and the page that
+back lands on is not applied over a page queued behind it. jsdom cancels the
+queued back on pushState and cannot show any of this: **`npm run check:back`**
+(`scripts/back-button-race.mjs`) runs the real module in Chromium — the old
+code fails 4 of its 9 scenarios. Live cases it fixed: CaseWeek's search →
+booking / task / Inbox, and Edit booking → Preferences. The kit room still
+keeps the system open under the move sheet (`systemRoom.test.jsx`); that is
+fine, and so is closing first now.
 `backButton.test.jsx` fails on any `position: 'fixed', inset: 0` screen in
 `src/pages` or `src/kit` without `useBackLayer` (three named exemptions).
 
