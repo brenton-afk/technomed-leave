@@ -49,4 +49,28 @@ describe('one tile per system', () => {
     expect(dialog).toHaveTextContent('Diplomat')
     expect(dialog).not.toHaveTextContent('Diplomat 2')
   })
+
+  it('shows a tray moved on its own under Transferred trays, not in the other set, and ticks several to move', async () => {
+    const moved = [KITS[0], { ...KITS[1], trayAt: { 'Diplomat Pedicle Screws 2': { at: 'CLV', byName: 'Aimee', since: '2026-11-20T01:00:00Z' } } }]
+    global.fetch = vi.fn(async url => {
+      const u = String(url)
+      if (u.includes('kits=traylist')) return { ok: true, json: async () => ({ list: null }) }
+      return { ok: true, json: async () => ({ kits: moved, settings: { emailsOn: false }, canEdit: true, isAdmin: false, today: '2026-11-20' }) }
+    })
+    render(<KitRoom user={{ token: 't' }} onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Diplomat' }))
+    const box = document.querySelector('[data-transferred]')
+    await waitFor(() => expect(box).toHaveTextContent('Diplomat Pedicle Screws 2'))
+    expect(box).toHaveTextContent('Now at Calvary')
+    expect(box).toHaveTextContent('From the RHH set · moved by Aimee')
+    expect(box).not.toHaveTextContent('Diplomat Pedicle Screws 1')
+    const rhh = document.querySelector('[data-system-set="d2"]')
+    expect(rhh).toHaveTextContent('Diplomat Pedicle Screws 1')
+    expect(rhh).not.toHaveTextContent('Diplomat Pedicle Screws 2')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Diplomat Pedicle Screws 1' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Diplomat Pedicle Screws 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Move 2 trays' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('Diplomat')
+  })
 })

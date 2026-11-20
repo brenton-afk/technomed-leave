@@ -8,6 +8,7 @@ import AttachAgreements from './kit/AttachAgreements.jsx'
 import SystemDetail from './kit/SystemDetail.jsx'
 import AddTraySheet from './kit/AddTraySheet.jsx'
 import { groupSystems, traysByPlace, systemOf, PLACE_ORDER } from '../kit/systems.js'
+import { movingFrom } from '../kit/trayPlaces.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
 import { systemsInKit } from '../clinicalPlan/systems.js'
 
@@ -331,7 +332,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
         <SystemDetail system={openGroup} canEdit={Boolean(data?.canEdit)} user={user} post={post}
           onClose={() => setOpenSystem('')} onChanged={load}
           onAddTray={() => setAddingTray({ system: openGroup })}
-          onMoveTray={(kit, tray) => { setMoveTo(''); setMoveTrays([tray]); setMoving(kit) }}
+          onMoveTray={(kit, trays) => { setMoveTo(''); setMoveTrays(trays); setMoving(kit) }}
           onMoveKit={kit => { setMoveTo(''); setMoveTrays(null); setMoving(kit) }}
           onKitDetails={kit => { setOpenFocus(''); setOpen(kit) }} />
       )}
@@ -340,7 +341,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           onClose={() => setAddingTray(null)} onDone={load} />
       )}
       {moving && (
-        <MoveSheet kit={{ ...moving, name: systemOf(moving) }} initialTo={moveTo} initialTrays={moveTrays} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
+        <MoveSheet kit={{ ...moving, name: systemOf(moving), at: moveTrays?.length ? movingFrom(moving, moveTrays) : moving.at }} initialTo={moveTo} initialTrays={moveTrays} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
           post={post} onClose={() => setMoving(null)} onDone={() => { setMoving(null); load() }} />
       )}
       {open && (

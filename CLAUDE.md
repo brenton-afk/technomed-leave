@@ -1533,6 +1533,26 @@ its first set does); moving between hospitals is tray by tray or Move all.
 The kit-move email already names the system. The set names ("Diplomat 1") still
 appear in the movement history.
 
+**Trays have their own place, ticked to move, shown apart once moved**
+(Brent, same day: "a tick box option so we can select multiple trays to
+move … when we move the tray to RHH or Calvary … we don't want it to be
+absorbed into the other Diplomat kit block … a section that is transferred
+trays"; "mostly just transfer individual trays … but we do need the ability
+to transfer an entire kit"). `src/kit/trayPlaces.js` (pure,
+`trayPlaces.test.js`): a set's stored location keeps `at` for the set and
+`trayAt: {tray: {at, since, byName, …}}` for a tray gone on its own
+(`applyMove` in `confirmMove`; `placesFromLoc` in `listKits`, which reads the
+old shape — set away with some `trays` — as those trays away). Every tray of
+the set moves the set and brings strays home; a tray moved to where its set
+is rejoins it; two trays can be at two places. `prepareMove` refuses only
+when every tray chosen is already there, and `from` is the trays' place
+(`movingFrom`). In a system: **Transferred trays** at the top, by "Now at
+Calvary / RHH / TM office", each with "From the RHH set · moved by … " and
+the tray itself (TrayList `compact only=`); the set's own list leaves them
+out (`except=`). Every tray has a tick box (`data-select-tray`, one set at a
+time) and the bar says **Move N trays**. The tray list's source line (file
+names, saved by, Dropbox path) is no longer drawn.
+
 ### TechnoMed guides (Brent, 20 Nov 2026)
 
 Theatre guides has a **TechnoMed** section (`GROUP_ORDER` in

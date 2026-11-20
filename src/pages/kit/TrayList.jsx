@@ -6,6 +6,7 @@ import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { trayFilePayload, originalIfSmall } from './readTrayFile.js'
 import EditableTray from './EditableTray.jsx'
+import { trayPlace } from '../../kit/trayPlaces.js'
 import RepairSheet from './RepairSheet.jsx'
 import { printTrayList } from './printTrayList.js'
 import { useLiveRefresh } from '../../liveRefresh.js'
@@ -73,7 +74,7 @@ function ItemThumb({ src, alt, onOpen }) {
 // "It would be better in a table with the instrument description and the qty
 // next to it. Nice and neat." Code, description, quantity — one row per line,
 // ruled, the quantity right-aligned so a column of numbers reads down.
-function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit, onPrint, where, onMove, onRepair, onRepaired }) {
+function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit, onPrint, where, onMove, onRepair, onRepaired, checked, onCheck }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
   const cell = { ...text('caption'), padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairlineSoft, verticalAlign: 'top' }
   const head = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairline, textAlign: 'left', background: colour.canvas }
@@ -88,6 +89,11 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
   return (
     <div style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control, marginBottom: space.sm, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px` }}>
+        {/* Tick several trays to move them together (Brent, 20 Nov 2026). */}
+        {onCheck && !editing && (
+          <input type="checkbox" checked={Boolean(checked)} onChange={onCheck} aria-label={`Select ${tray.name}`} data-select-tray
+            style={{ width: 22, height: 22, flexShrink: 0, accentColor: colour.accent, fontSize: 16, cursor: 'pointer' }} />
+        )}
         <button onClick={onToggle} aria-expanded={open} style={{ flex: 1, background: 'none', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }}>
           <div style={{ ...text('bodyStrong'), color: colour.ink }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
@@ -187,7 +193,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
   )
 }
 
-export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray, title = 'Trays' }) {
+export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray, title = 'Trays', only = null, except = null, selected = null, onSelect = null, compact = false }) {
   const [list, setList] = useState(undefined)
   const [repairing, setRepairing] = useState(null)
   const [open, setOpen] = useState('')
@@ -530,27 +536,25 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
   // the kit names that no document has filled yet.
   const listed = list?.trays || []
   const allTrays = [...listed, ...(kit.trays || []).filter(n => !listed.some(t => t.name === n)).map(n => ({ name: n, lines: [] }))]
+    // A system shows a set's transferred trays apart (Brent, 20 Nov 2026).
+    .filter(t => (!only || only.includes(t.name)) && (!except || !except.includes(t.name)))
   // Where a tray is: with the kit, unless it went somewhere on its own.
-  const trayAt = name => (kit.away?.trays?.length ? (kit.away.trays.includes(name) ? kit.at : kit.home) : kit.at)
+  const trayAt = name => trayPlace(kit, name)
   const whereIs = name => PLACES[trayAt(name)] || ''
 
   return (
     <div>
-      <div style={label}>{title} · {allTrays.length}</div>
+      {!compact && <div style={label}>{title} · {allTrays.length}</div>}
       {list === undefined && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}
-      {list !== undefined && !allTrays.length && (
+      {!compact && list !== undefined && !allTrays.length && (
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
           No trays yet{canEdit ? ' — upload the hospital’s copy below, or tap Edit on the kit to add a tray.' : '.'}
         </div>
       )}
-      {list && (
+      {list && !compact && (
         <>
-          <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
-            From {list.source?.file || 'an upload'}{list.source?.hospital ? ` (${PLACES[list.source.hospital]}'s copy)` : ''}
-            {list.source?.by ? `, saved by ${list.source.by}` : ''}
-            {list.source?.at ? ` on ${new Date(list.source.at).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short', year: 'numeric' })}` : ''}.
-            {list.source?.dropboxPath ? ` Original in Dropbox: ${list.source.dropboxPath}` : ''}
-          </div>
+          {/* Where the list came from (file names, who, Dropbox path) is no longer
+              drawn — Brent, 20 Nov 2026: "all the small writing … it's not useful". */}
           {/* "Ability to print tray lists from portal" — Brent, 3 Nov 2026. */}
           <div style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', marginBottom: space.sm }}>
             <button type="button" onClick={shareList} disabled={Boolean(shareMsg && shareMsg.endsWith('…'))} data-share-tray-list
@@ -589,6 +593,8 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
       {list !== undefined && allTrays.map(t => (
         <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
           where={whereIs(t.name)}
+          checked={selected ? selected.has(t.name) : undefined}
+          onCheck={onSelect && (kit.trays || []).includes(t.name) ? () => onSelect(t.name) : undefined}
           editing={editingTray === t.name} onStartEdit={canEdit ? () => { setEditingTray(t.name); setOpen(t.name) } : undefined}
           onEditDone={() => setEditingTray('')} onEdit={editList}
           onMove={onMoveTray && (kit.trays || []).includes(t.name) ? () => onMoveTray(t.name) : undefined}
@@ -605,7 +611,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
           onDone={next => { setRepairing(null); if (next) setList(next); onSaved?.() }} />
       )}
 
-      {canEdit && (
+      {canEdit && !compact && (
         <div style={{ marginTop: space.sm }}>
           <div style={{ display: 'flex', gap: space.sm, alignItems: 'center', marginBottom: space.sm }}>
             <span style={{ ...text('caption'), color: colour.inkFaint }}>Whose copy:</span>

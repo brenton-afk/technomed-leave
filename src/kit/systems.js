@@ -7,6 +7,8 @@
 // what knows where a tray physically is — but the room shows one tile per
 // system and a person never sees "Diplomat 2".
 
+import { trayPlace } from './trayPlaces.js'
+
 export const PLACE_ORDER = ['CLV', 'RHH', 'office']
 
 /** The system a kit belongs to: its system, else its name without a set number. */
@@ -34,9 +36,8 @@ export function groupSystems(kits) {
 export function traysByPlace(kits) {
   const out = {}
   for (const k of kits || []) {
-    const moved = new Set(k.away?.trays || [])
     for (const t of k.trays || []) {
-      const at = k.away && (!moved.size || moved.has(t)) ? k.at : k.home
+      const at = trayPlace(k, t)
       out[at] = (out[at] || 0) + 1
     }
   }

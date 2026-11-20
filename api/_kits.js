@@ -1,3 +1,4 @@
+import { placesFromLoc, applyMove, trayPlace, movingFrom } from '../src/kit/trayPlaces.js'
 import { uniqueTrayNames } from '../src/trayNames.js'
 import { redis, redisSetBody } from './_redis.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
@@ -168,10 +169,10 @@ export async function listKits() {
   return defs.map((kit, i) => {
     let loc = null
     try { loc = locs[i] ? JSON.parse(locs[i]) : null } catch { loc = null }
+    const { at, away, trayAt } = placesFromLoc(kit, loc)
     return {
       ...kit,
-      at: loc?.at || kit.home,
-      away: loc?.at && loc.at !== kit.home ? loc : null,
+      at, away, trayAt,
       checkedAt: loc?.checkedAt || null,
       checkedBy: loc?.checkedBy || null
     }
@@ -369,14 +370,18 @@ export async function prepareMove({ kitId, to, trays, date, today, caseDate, sur
   if (!PLACES[to]) throw new Error('Choose where the kit is going')
   const kit = (await listKits()).find(k => k.id === kitId)
   if (!kit) throw new Error('No such kit')
-  if (kit.at === to) throw new Error(`${kit.name} is already at ${PLACES[to].short}`)
   const validTrays = (trays || []).filter(t => (kit.trays || []).includes(t))
   if ((kit.trays || []).length && !validTrays.length) throw new Error('Tick at least one tray')
+  // Trays move on their own now (Brent, 20 Nov 2026): refused only when every
+  // tray chosen is already there.
+  const already = (kit.trays || []).length ? validTrays.every(t => trayPlace(kit, t) === to) : kit.at === to
+  if (already) throw new Error(`${validTrays.length === 1 ? validTrays[0] : kit.name} ${validTrays.length > 1 ? 'are' : 'is'} already at ${PLACES[to].short}`)
+  const from = (kit.trays || []).length ? movingFrom(kit, validTrays) : kit.at
   const settings = await getKitSettings()
   const { contacts } = await getNoticeSettings()
   const isReturn = to === kit.home
   const email = isReturn ? null : draftKitEmail({
-    kit, from: kit.at, to, trays: validTrays, date, today,
+    kit, from, to, trays: validTrays, date, today,
     caseDate: /^\d{4}-\d{2}-\d{2}$/.test(caseDate || '') ? caseDate : '',
     surname: String(surname || '').trim().slice(0, 40),
     note: String(note || '').slice(0, 500), sender, contacts,
@@ -384,7 +389,7 @@ export async function prepareMove({ kitId, to, trays, date, today, caseDate, sur
   })
   const id = `${kitId}-${Date.now().toString(36)}`
   const pending = {
-    id, kitId, kitName: kit.name, from: kit.at, to, trays: validTrays, date: date || today,
+    id, kitId, kitName: kit.name, from, to, trays: validTrays, date: date || today,
     note: String(note || '').slice(0, 500), caseDate: caseDate || '', surname: String(surname || '').slice(0, 40),
     email, by: sender?.email
   }
@@ -413,21 +418,20 @@ export async function confirmMove({ id, send, text }, sender, sendEmail) {
   const kit = (await getDefs()).find(k => k.id === pending.kitId)
   const isReturn = kit && pending.to === kit.home
   const before = (await getLoc(pending.kitId)) || {}
-  const checked = { checkedAt: before.checkedAt || null, checkedBy: before.checkedBy || null }
-  await setLoc(pending.kitId, isReturn
-    ? { at: pending.to, ...checked }
-    : {
-      ...checked,
-      at: pending.to, since: new Date().toISOString(), by: sender?.email, byName: sender?.firstName,
-      trays: pending.trays, caseDate: pending.caseDate, surname: pending.surname, note: pending.note,
-      date: pending.date
-    })
+  await setLoc(pending.kitId, applyMove(kit || { home: pending.to, trays: [] }, before, {
+    to: pending.to, trays: pending.trays,
+    meta: {
+      since: new Date().toISOString(), by: sender?.email, byName: sender?.firstName,
+      caseDate: pending.caseDate, surname: pending.surname, note: pending.note, date: pending.date
+    }
+  }))
   await redis('del', PENDING(id))
   await addHistory({
     kind: isReturn ? 'return' : 'move', kitId: pending.kitId, kitName: pending.kitName,
     from: pending.from, to: pending.to, trays: pending.trays, by: sender?.firstName || sender?.email,
     emailed, emailTo: emailed ? pending.email.to : [],
     text: `${isReturn ? 'Returned' : 'Moved'} ${PLACES[pending.from]?.short || pending.from} → ${PLACES[pending.to].short}`
+      + (kit && pending.trays?.length && pending.trays.length < (kit.trays || []).length ? ` (${pending.trays.join(', ')})` : '')
       + (emailed ? ' · hospital emailed' : pending.email ? ' · no email sent' : '')
   })
   return { ok: true, emailed }

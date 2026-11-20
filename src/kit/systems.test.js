@@ -7,7 +7,7 @@ const kits = [
   { id: 'd2', name: 'Diplomat 2', system: 'Diplomat', home: 'RHH', at: 'RHH', kind: 'consignment', trays: ['Diplomat Pedicle Screws 1'] },
   { id: 'd1', name: 'Diplomat 1', system: 'Diplomat', home: 'CLV', at: 'CLV', kind: 'consignment', trays: ['Diplomat Rods', 'Diplomat Instruments'] },
   { id: 'dl', name: 'Dakota (TM loan)', system: 'Dakota', home: 'office', at: 'office', kind: 'floating', trays: [] },
-  { id: 'dk', name: 'Dakota', system: 'Dakota', home: 'RHH', at: 'CLV', kind: 'consignment', trays: ['Dakota 1', 'Dakota 2'], away: { trays: ['Dakota 1'] } }
+  { id: 'dk', name: 'Dakota', system: 'Dakota', home: 'RHH', at: 'RHH', kind: 'consignment', trays: ['Dakota 1', 'Dakota 2'], trayAt: { 'Dakota 1': { at: 'CLV' } } }
 ]
 
 describe('the kit room by system', () => {

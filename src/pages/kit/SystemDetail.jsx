@@ -4,6 +4,7 @@ import { colour, text, space, radius, border, face, site } from '../../design/to
 import { useBackLayer } from '../../backButton.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
+import { PLACE_ORDER } from '../../kit/systems.js'
 
 // ─── One system: every tray, wherever it is (Brent, 20 Nov 2026) ─────────────
 // One tab per system, the trays inside it. Each hospital's set is a section
@@ -18,6 +19,26 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [docsOpen, setDocsOpen] = useState('')
+  // Ticked trays, one hospital set at a time (a move is one set's trays).
+  const [picked, setPicked] = useState({ kitId: '', trays: [] })
+  const toggle = (kit, tray) => setPicked(p => {
+    if (p.kitId !== kit.id) return { kitId: kit.id, trays: [tray] }
+    const trays = p.trays.includes(tray) ? p.trays.filter(t => t !== tray) : [...p.trays, tray]
+    return { kitId: trays.length ? kit.id : '', trays }
+  })
+  const selectedFor = kit => new Set(picked.kitId === kit.id ? picked.trays : [])
+  const pickedKit = system.kits.find(k => k.id === picked.kitId)
+
+  // Trays that have gone somewhere on their own, by where they are now —
+  // "we want to be able to see the tray sitting at Calvary clearly".
+  const transferred = PLACE_ORDER.map(place => ({
+    place,
+    groups: system.kits.map(kit => ({
+      kit, trays: Object.entries(kit.trayAt || {}).filter(([, p]) => p.at === place).map(([t]) => t)
+    })).filter(g => g.trays.length)
+  })).filter(x => x.groups.length)
+  const awayFrom = kit => Object.keys(kit.trayAt || {})
+  const when = iso => (iso ? new Date(iso).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' }) : '')
 
   async function check(kit) {
     setBusy(kit.id); setError('')
@@ -48,6 +69,33 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
             {canEdit && (
               <button onClick={onAddTray} data-add-tray aria-label={`Add a tray to ${system.name}`} style={{ ...pillBtn(true), padding: '10px 14px', marginBottom: space.sm }}>+ Add a tray</button>
             )}
+            {transferred.length > 0 && (
+              <section data-transferred style={{ marginTop: space.md, padding: space.sm, borderRadius: radius.card,
+                background: colour.warningSoft, border: `1px solid ${colour.warning}` }}>
+                <div style={{ ...text('bodyStrong'), color: colour.ink }}>Transferred trays</div>
+                <div style={{ ...text('caption'), color: colour.inkMuted }}>Moved on their own, away from their own set. Move one back when it returns.</div>
+                {transferred.map(({ place, groups }) => (
+                  <div key={place} style={{ marginTop: space.sm }}>
+                    <div style={{ ...text('bodyStrong'), color: (site[place] || site.office).ink }}>Now at {PLACES[place]}</div>
+                    {groups.map(({ kit, trays }) => {
+                      const p = kit.trayAt[trays[0]] || {}
+                      return (
+                        <div key={kit.id} style={{ marginTop: space.xs }}>
+                          <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: 4 }}>
+                            From the {PLACES[kit.home] || kit.home}{kit.kind === 'floating' ? ' TM loan' : ''} set
+                            {p.byName ? ` · moved by ${p.byName}` : ''}{p.since ? ` ${when(p.since)}` : ''}
+                            {p.caseDate ? ` · for a case on ${p.caseDate.split('-').reverse().slice(0, 2).join('/')}` : ''}
+                          </div>
+                          <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} compact only={trays}
+                            selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
+                            onMoveTray={tray => onMoveTray?.(kit, [tray])} />
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </section>
+            )}
             {system.kits.map(kit => {
               const look = site[kit.home] || site.office
               const heading = `${PLACES[kit.home] || kit.home}${kit.kind === 'floating' ? ' · TM loan' : ''}`
@@ -64,7 +112,9 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
                     <button onClick={() => onMoveKit?.(kit)} aria-label={`Move all ${heading} trays`} style={pillBtn(false)}>Move all</button>
                   </div>
                   <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged}
-                    title={`Trays at ${PLACES[kit.home] || kit.home}`} onMoveTray={tray => onMoveTray?.(kit, tray)} />
+                    title={`Trays at ${PLACES[kit.at] || kit.at}`} except={awayFrom(kit)}
+                    selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
+                    onMoveTray={tray => onMoveTray?.(kit, [tray])} />
                   <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.xs }}>
                     <button onClick={() => setDocsOpen(docsOpen === kit.id ? '' : kit.id)} style={pillBtn(false)}>
                       {docsOpen === kit.id ? 'Hide documents' : (kit.kind !== 'floating' && !kit.docs?.consignment ? 'Documents · no agreement yet' : 'Documents')}
@@ -76,6 +126,16 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
               )
             })}
           </div>
+          {pickedKit && picked.trays.length > 0 && (
+            <div data-selection-bar style={{ padding: space.md, borderTop: border.hairline, display: 'flex', gap: space.sm, alignItems: 'center', background: colour.surface }}>
+              <div style={{ flex: 1, minWidth: 0, ...text('caption'), color: colour.inkMuted }}>
+                {picked.trays.length} {picked.trays.length === 1 ? 'tray' : 'trays'} ticked
+              </div>
+              <button onClick={() => setPicked({ kitId: '', trays: [] })} style={pillBtn(false)}>Clear</button>
+              <button onClick={() => { const trays = picked.trays; setPicked({ kitId: '', trays: [] }); onMoveTray?.(pickedKit, trays) }}
+                style={{ ...pillBtn(true), padding: '10px 16px' }}>Move {picked.trays.length} {picked.trays.length === 1 ? 'tray' : 'trays'}</button>
+            </div>
+          )}
         </div>
       </div>
     </Overlay>
