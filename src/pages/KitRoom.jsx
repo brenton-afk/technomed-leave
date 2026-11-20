@@ -324,6 +324,12 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.lg }}>
             <button onClick={() => setAttaching(true)} data-attach-agreements style={pill(false)}>Attach agreements from Dropbox</button>
             <button onClick={() => setEditingCouriers(true)} data-courier-numbers style={pill(false)}>Courier numbers</button>
+            {/* Brent, 20 Nov 2026: "reset all trays to their original locations in one tap". */}
+            <button data-reset-all disabled={busy === 'reset' || !awaySets && !kits.some(k => Object.keys(k.trayAt || {}).length)}
+              onClick={() => {
+                if (!window.confirm('Put every tray back where it lives? Nobody is emailed.')) return
+                act('reset', () => post('reset-all', {}))
+              }} style={pill(false)}>{busy === 'reset' ? 'Resetting…' : 'Reset all trays to home'}</button>
           </div>
         )}
 

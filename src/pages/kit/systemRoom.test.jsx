@@ -136,4 +136,20 @@ describe('one tile per system', () => {
     await waitFor(() => expect(posted.some(([w, b]) => w === 'courier-called' && b.courierId === 'jet')).toBe(true))
     expect(within(sheet).getByRole('button', { name: 'Done' })).toBeInTheDocument()
   })
+
+  it('resets every tray to where it lives in one tap, after asking', async () => {
+    const posted = []
+    const moved = [KITS[0], { ...KITS[1], trayAt: { 'Diplomat Pedicle Screws 2': { at: 'CLV' } } }]
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url)
+      if (init?.body) posted.push(u.split('kits=')[1])
+      if (u.includes('kits=reset-all')) return { ok: true, json: async () => ({ reset: 1, trays: 1 }) }
+      return { ok: true, json: async () => ({ kits: moved, settings: { emailsOn: false }, canEdit: true, canRemove: true, isAdmin: true, today: '2026-11-20' }) }
+    })
+    window.confirm = vi.fn(() => true)
+    render(<KitRoom user={{ token: 't' }} onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset all trays to home' }))
+    expect(window.confirm).toHaveBeenCalled()
+    await waitFor(() => expect(posted).toContain('reset-all'))
+  })
 })

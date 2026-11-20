@@ -1594,6 +1594,11 @@ day; `withKnownNumbers` fills them into a list saved before, never over a
 typed number). Edited on Kit room → **Courier numbers**
 (`kit/CourierNumbers.jsx`, admins and the clinical team, `kits=couriers`);
 `cleanCouriers` refuses a bad number and any "password" — every phone sees it.
+**Reset all trays to home** (Brent, same day: "reset all trays to their
+original locations in one tap"): a Kit room button for admins and the
+clinical team, asked once (`kits=reset-all`, `resetAllLocations`): every set
+away and every tray moved on its own goes back to its set's home, no email,
+stock-take ticks kept, one history line (`kitReset.test.js`).
 
 ### TechnoMed guides (Brent, 20 Nov 2026)
 

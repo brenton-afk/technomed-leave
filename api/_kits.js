@@ -479,6 +479,27 @@ export async function returnKit(kitId, sender) {
   })
 }
 
+/**
+ * Every set and every tray back where it lives, in one go (Brent, 20 Nov
+ * 2026: "a button to reset all trays to their original locations in one
+ * tap"). Nobody is emailed; the stock-take ticks are kept. One history line.
+ */
+export async function resetAllLocations(by) {
+  const kits = await listKits()
+  const moved = kits.filter(k => k.away || Object.keys(k.trayAt || {}).length)
+  if (!moved.length) return { reset: 0, trays: 0 }
+  const locs = await redis('mget', ...moved.map(k => LOC(k.id)))
+  let trays = 0
+  for (const [i, k] of moved.entries()) {
+    let before = {}
+    try { before = locs[i] ? JSON.parse(locs[i]) : {} } catch { before = {} }
+    trays += k.away ? (k.trays || []).length || 1 : Object.keys(k.trayAt || {}).length
+    await setLoc(k.id, { at: k.home, checkedAt: before.checkedAt || null, checkedBy: before.checkedBy || null })
+  }
+  await addHistory({ kind: 'return', by, text: `Every tray reset to where it lives (${moved.length} ${moved.length === 1 ? 'set' : 'sets'}, ${trays} ${trays === 1 ? 'tray' : 'trays'})` })
+  return { reset: moved.length, trays }
+}
+
 // ─── Tray lists ──────────────────────────────────────────────────────────────
 // What each tray in a kit should hold, read from the hospital's own copy (or
 // ours) by api/_trayLists.js and checked by a person before it is saved. Kept
