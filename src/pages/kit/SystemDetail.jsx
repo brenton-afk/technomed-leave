@@ -14,7 +14,12 @@ import { PLACE_ORDER } from '../../kit/systems.js'
 
 const PLACES = { CLV: 'Calvary', RHH: 'RHH', office: 'TM office / Warehouse' }
 
-export default function SystemDetail({ system, canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails }) {
+export default function SystemDetail({ system, canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails, place = 'all' }) {
+  // Opened from a hospital's filter, the system shows that hospital's trays
+  // only (Brent, 20 Nov 2026: "why is Calvary listed in a kit when I click a
+  // kit from RHH?"); the rest are one tap away.
+  const [showAll, setShowAll] = useState(!place || place === 'all')
+  const here = p => showAll || p === place
   useBackLayer(true, onClose)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -31,7 +36,7 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
 
   // Trays that have gone somewhere on their own, by where they are now —
   // "we want to be able to see the tray sitting at Calvary clearly".
-  const transferred = PLACE_ORDER.map(place => ({
+  const transferred = PLACE_ORDER.filter(here).map(place => ({
     place,
     groups: system.kits.map(kit => ({
       kit, trays: Object.entries(kit.trayAt || {}).filter(([, p]) => p.at === place).map(([t]) => t)
@@ -96,7 +101,7 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
                 ))}
               </section>
             )}
-            {system.kits.map(kit => {
+            {system.kits.filter(kit => here(kit.at)).map(kit => {
               const look = site[kit.home] || site.office
               const heading = `${PLACES[kit.home] || kit.home}${kit.kind === 'floating' ? ' · TM loan' : ''}`
               return (
@@ -125,6 +130,12 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
                 </section>
               )
             })}
+            {!showAll && system.kits.some(k => k.at !== place || Object.values(k.trayAt || {}).some(p => p.at !== place)) && (
+              <button onClick={() => setShowAll(true)} data-show-all-places
+                style={{ ...pillBtn(false), marginTop: space.lg, width: '100%', padding: '10px 14px' }}>
+                Also show {system.name} at the other places
+              </button>
+            )}
           </div>
           {pickedKit && picked.trays.length > 0 && (
             <div data-selection-bar style={{ padding: space.md, borderTop: border.hairline, display: 'flex', gap: space.sm, alignItems: 'center', background: colour.surface }}>

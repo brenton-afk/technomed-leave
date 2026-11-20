@@ -1550,7 +1550,10 @@ when every tray chosen is already there, and `from` is the trays' place
 Calvary / RHH / TM office", each with "From the RHH set · moved by … " and
 the tray itself (TrayList `compact only=`); the set's own list leaves them
 out (`except=`). Every tray has a tick box (`data-select-tray`, one set at a
-time) and the bar says **Move N trays**. The tray list's source line (file
+time) and the bar says **Move N trays**. Opened with a place filter on (the
+Calvary / RHH / office tiles), a system shows only that place's trays
+(`SystemDetail place=`), with **Also show … at the other places** (Brent:
+"why is Calvary listed in a kit when I click a kit from RHH?"). The tray list's source line (file
 names, saved by, Dropbox path) is no longer drawn.
 
 ### TechnoMed guides (Brent, 20 Nov 2026)

@@ -73,4 +73,14 @@ describe('one tile per system', () => {
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Diplomat')
   })
+
+  it('opened from the RHH filter, shows RHH only, the rest one tap away', async () => {
+    render(<KitRoom user={{ token: 't' }} onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: /RHH/, pressed: false }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Diplomat' }))
+    await waitFor(() => expect(document.querySelector('[data-system-set="d2"]')).toBeTruthy())
+    expect(document.querySelector('[data-system-set="d1"]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Also show Diplomat at the other places' }))
+    expect(document.querySelector('[data-system-set="d1"]')).toBeTruthy()
+  })
 })

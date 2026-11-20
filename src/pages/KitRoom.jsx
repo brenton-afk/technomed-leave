@@ -329,7 +329,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
 
       {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
       {openGroup && !open && !moving && !addingTray && (
-        <SystemDetail system={openGroup} canEdit={Boolean(data?.canEdit)} user={user} post={post}
+        <SystemDetail key={openGroup.key} system={openGroup} place={place} canEdit={Boolean(data?.canEdit)} user={user} post={post}
           onClose={() => setOpenSystem('')} onChanged={load}
           onAddTray={() => setAddingTray({ system: openGroup })}
           onMoveTray={(kit, trays) => { setMoveTo(''); setMoveTrays(trays); setMoving(kit) }}
