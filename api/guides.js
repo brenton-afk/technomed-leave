@@ -89,15 +89,15 @@ export const GUIDES = [
     file: 'xcore-vbr/index.html',
     keywords: 'Corpectomy · vertebral body replacement · expandable'
   },
-  // TechnoMed's own guides (Brent, 20 Nov 2026: "add this to the portal into
-  // the technomed guides"). The Mariner Outrigger is SeaSpine hardware, but
-  // the kit is ours — on the shelf at Calvary, sent to RHH for extension and
-  // revision cases as a DNO tray — so it sits with TechnoMed, not Device.
+  // The Mariner Outrigger (Brent, 20 Nov 2026). First filed under TechnoMed
+  // on its own; then "needs to be with the other SeaSpine trays … not by
+  // itself" — so it sits under Device with the Mariner guides.
   {
     slug: 'mariner-outrigger',
+    distributor: 'device',
     name: 'MARINER Outrigger',
     maker: 'SeaSpine',
-    group: 'TechnoMed',
+    group: 'Spine',
     file: 'mariner-outrigger/index.html',
     keywords: 'Revision · extension · connectors to an existing construct · DNO tray · L-connectors · axial · Z-rod · T-25 · T-30 · torque'
   },

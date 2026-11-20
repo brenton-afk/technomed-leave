@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupSystems, systemOf, traysByPlace, kitForNewTray } from './systems.js'
+import { groupSystems, systemOf, traysByPlace, kitForNewTray, setLabel } from './systems.js'
 
 // Brent, 20 Nov 2026: one tab per system, trays inside it, "Add a tray" within
 // the system. Invented kits.
@@ -37,5 +37,17 @@ describe('the kit room by system', () => {
     expect(() => kitForNewTray(diplomat, { system: 'Diplomat', place: 'CLV', tray: 'diplomat rods' })).toThrow(/already has/)
     expect(kitForNewTray(null, { system: 'Shoreline', place: 'CLV', tray: 'Shoreline 1', distributor: 'device' }).kit)
       .toMatchObject({ name: 'Shoreline', distributor: 'device', home: 'CLV' })
+  })
+
+  it('shows the Mariner Outrigger inside the Mariner tile, and adds new trays to Mariner\'s own set', () => {
+    const kits = [
+      { id: 'o', name: 'Mariner Outrigger', system: 'Mariner Outrigger', home: 'CLV', kind: 'technomed', trays: ['Outrigger'] },
+      { id: 'm', name: 'Mariner', system: 'Mariner', home: 'CLV', kind: 'consignment', trays: ['Mariner Screws 1'] }
+    ]
+    const g = groupSystems(kits)
+    expect(g.map(x => x.name)).toEqual(['Mariner'])
+    expect(setLabel(kits[0])).toBe('Mariner Outrigger')
+    expect(setLabel(kits[1])).toBe('')
+    expect(kitForNewTray(g[0], { system: 'Mariner', place: 'CLV', tray: 'Mariner Screws 2' }).kit.id).toBe('m')
   })
 })

@@ -1570,16 +1570,22 @@ Calvary / RHH / office tiles), a system shows only that place's trays
 (`SystemDetail place=`), with **Also show … at the other places** (Brent:
 "why is Calvary listed in a kit when I click a kit from RHH?"). The tray list's source line (file
 names, saved by, Dropbox path) is no longer drawn.
+**The Mariner Outrigger is inside the Mariner tile** (same day): `INSIDE`
+in `src/kit/systems.js` shows a kit under another system's tile —
+display only; bookings, supplies and moves keep its own system. Its section
+reads "Calvary · Mariner Outrigger" (`setLabel`), the move sheet names it, and
+Add a tray never puts a Mariner tray in it.
 
 ### TechnoMed guides (Brent, 20 Nov 2026)
 
 Theatre guides has a **TechnoMed** section (`GROUP_ORDER` in
-`TheatreGuides.jsx`, after Spine) for guides to our own kits. First: the
-**Mariner Outrigger** (`theatre-guides/mariner-outrigger/index.html`, slug
-`mariner-outrigger`, maker SeaSpine, no distributor — the kit is ours, the
-DNO tray for extension and revision cases), Brent's self-contained page as
-given. A new TechnoMed guide is a folder there plus a `GUIDES` row with
-`group: 'TechnoMed'` and no `distributor`.
+`TheatreGuides.jsx`, after Spine) for guides to our own kits; it shows only
+when a guide is in it. The **Mariner Outrigger** guide
+(`theatre-guides/mariner-outrigger/index.html`, slug `mariner-outrigger`,
+maker SeaSpine) was first filed there, then moved (Brent, same day: "needs to
+be with the other SeaSpine trays … not by itself") to `distributor: 'device'`,
+`group: 'Spine'`, beside the Mariner guide. A TechnoMed guide is a folder
+there plus a `GUIDES` row with `group: 'TechnoMed'` and no `distributor`.
 
 ### Surgeon preference cards (Task 18)
 

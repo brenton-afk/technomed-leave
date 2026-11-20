@@ -106,10 +106,12 @@ describe('the guides endpoint serves pages, not downloads', () => {
 
 describe('the Mariner Outrigger guide (Brent, 20 Nov 2026)', () => {
   const guide = GUIDES.find(g => g.slug === 'mariner-outrigger')
-  it('is listed with the TechnoMed guides, not under a distributor', () => {
+  it('is listed with the other SeaSpine Mariner guides, under Device', () => {
     expect(guide).toBeTruthy()
-    expect(guide.group).toBe('TechnoMed')
-    expect(guide.distributor).toBeUndefined()
+    const mariner = GUIDES.find(g => g.slug === 'mariner')
+    expect(guide.distributor).toBe(mariner.distributor)
+    expect(guide.maker).toBe('SeaSpine')
+    expect(guide.group).toBe(mariner.group)
   })
   it('is a whole, self-contained document', () => {
     const html = readFileSync(join(ROOT, guide.file), 'utf8')

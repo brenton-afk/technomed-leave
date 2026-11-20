@@ -4,7 +4,7 @@ import { colour, text, space, radius, border, face, site } from '../../design/to
 import { useBackLayer } from '../../backButton.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
-import { PLACE_ORDER } from '../../kit/systems.js'
+import { PLACE_ORDER, setLabel } from '../../kit/systems.js'
 
 // ─── One system: every tray, wherever it is (Brent, 20 Nov 2026) ─────────────
 // One tab per system, the trays inside it. Each hospital's set is a section
@@ -87,7 +87,7 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
                       return (
                         <div key={kit.id} style={{ marginTop: space.xs }}>
                           <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: 4 }}>
-                            From the {PLACES[kit.home] || kit.home}{kit.kind === 'floating' ? ' TM loan' : ''} set
+                            From the {PLACES[kit.home] || kit.home}{setLabel(kit) ? ` ${setLabel(kit)}` : ''}{kit.kind === 'floating' ? ' TM loan' : ''} set
                             {p.byName ? ` · moved by ${p.byName}` : ''}{p.since ? ` ${when(p.since)}` : ''}
                             {p.caseDate ? ` · for a case on ${p.caseDate.split('-').reverse().slice(0, 2).join('/')}` : ''}
                           </div>
@@ -103,7 +103,7 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
             )}
             {system.kits.filter(kit => here(kit.at)).map(kit => {
               const look = site[kit.home] || site.office
-              const heading = `${PLACES[kit.home] || kit.home}${kit.kind === 'floating' ? ' · TM loan' : ''}`
+              const heading = `${PLACES[kit.home] || kit.home}${setLabel(kit) ? ` · ${setLabel(kit)}` : ''}${kit.kind === 'floating' ? ' · TM loan' : ''}`
               return (
                 <section key={kit.id} data-system-set={kit.id} style={{ marginTop: space.lg }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', paddingBottom: 6, borderBottom: `2px solid ${look.line}` }}>
