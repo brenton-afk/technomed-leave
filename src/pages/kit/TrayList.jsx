@@ -6,6 +6,7 @@ import { upload } from '@vercel/blob/client'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { trayFilePayload, originalIfSmall } from './readTrayFile.js'
 import EditableTray from './EditableTray.jsx'
+import RepairSheet from './RepairSheet.jsx'
 import { printTrayList } from './printTrayList.js'
 import { useLiveRefresh } from '../../liveRefresh.js'
 
@@ -72,7 +73,7 @@ function ItemThumb({ src, alt, onOpen }) {
 // "It would be better in a table with the instrument description and the qty
 // next to it. Nice and neat." Code, description, quantity — one row per line,
 // ruled, the quantity right-aligned so a column of numbers reads down.
-function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit, onPrint }) {
+function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit, onPrint, where, onMove, onRepair, onRepaired }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
   const cell = { ...text('caption'), padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairlineSoft, verticalAlign: 'top' }
   const head = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairline, textAlign: 'left', background: colour.canvas }
@@ -90,7 +91,8 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
         <button onClick={onToggle} aria-expanded={open} style={{ flex: 1, background: 'none', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }}>
           <div style={{ ...text('bodyStrong'), color: colour.ink }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
-            {tray.lines.length} items · {implants} implant{implants === 1 ? '' : 's'}{hasPhoto ? ' · photo' : ' · no photo'}
+            {where ? `${where} · ` : ''}{tray.lines.length ? `${tray.lines.length} items · ${implants} implant${implants === 1 ? '' : 's'}${hasPhoto ? ' · photo' : ' · no photo'}` : 'Nothing listed yet — tap Edit to add what it holds'}
+            {tray.lines.some(l => l.repair) ? ` · ${tray.lines.filter(l => l.repair).length} away for repair` : ''}
             {pictured ? ` · ${pictured} item picture${pictured === 1 ? '' : 's'}` : ''}
             {tray.updatedBy ? ` · updated by ${tray.updatedBy}${tray.updatedAt ? ` ${new Date(tray.updatedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}` : ''}` : ''}
           </div>
@@ -99,6 +101,11 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
           <button onClick={onPrint} aria-label={`Print ${tray.name}`}
             style={{ ...text('caption'), fontWeight: 600, color: colour.inkMuted, background: 'none', border: border.hairline,
               borderRadius: radius.pill, padding: '4px 12px', cursor: 'pointer' }}>Print</button>
+        )}
+        {onMove && !editing && (
+          <button onClick={onMove} aria-label={`Move ${tray.name}`} data-move-tray
+            style={{ ...text('caption'), fontWeight: 600, color: 'white', background: colour.navy, border: 'none',
+              borderRadius: radius.pill, padding: '4px 12px', cursor: 'pointer' }}>Move</button>
         )}
         {onStartEdit && !editing && (
           <button onClick={onStartEdit} aria-label={`Edit ${tray.name}`}
@@ -124,10 +131,10 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               {withPictures && <col style={{ width: 56 }} />}
-              <col style={{ width: '30%' }} /><col /><col style={{ width: 48 }} />{onRemoveLine && <col style={{ width: 28 }} />}
+              <col style={{ width: '30%' }} /><col /><col style={{ width: 48 }} />{onRepair && <col style={{ width: 96 }} />}{onRemoveLine && <col style={{ width: 28 }} />}
             </colgroup>
             <thead>
-              <tr>{withPictures && <th style={head} aria-label="Picture" />}<th style={head}>Code</th><th style={head}>Description</th><th style={{ ...head, textAlign: 'right' }}>Qty</th>{onRemoveLine && <th style={head} />}</tr>
+              <tr>{withPictures && <th style={head} aria-label="Picture" />}<th style={head}>Code</th><th style={head}>Description</th><th style={{ ...head, textAlign: 'right' }}>Qty</th>{onRepair && <th style={head} aria-label="Repair" />}{onRemoveLine && <th style={head} />}</tr>
             </thead>
             <tbody>
               {tray.lines.map((l, i) => (
@@ -146,6 +153,23 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
                     {l.kind === 'implant' && <span style={{ ...text('micro'), color: colour.accentDeep, marginLeft: 6, textTransform: 'uppercase' }}>implant</span>}
                   </td>
                   <td style={{ ...cell, textAlign: 'right', fontWeight: 600, color: colour.ink }}>{l.qty}</td>
+                  {onRepair && (
+                    <td style={{ ...cell, textAlign: 'right', padding: 4 }}>
+                      {l.repair ? (
+                        <button onClick={() => onRepaired(i, l)} data-repair-back title={`Away for repair since ${new Date(l.repair.since).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}${l.repair.fault ? ` — ${l.repair.fault}` : ''}`}
+                          style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, fontWeight: 700, color: colour.warning, background: colour.warningSoft,
+                            border: `1px solid ${colour.warning}`, borderRadius: radius.pill, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          At repair · back?
+                        </button>
+                      ) : l.kind !== 'implant' && (
+                        <button onClick={() => onRepair(i, l)} data-repair-line aria-label={`Send ${l.description || l.code} for repair`}
+                          style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: colour.inkMuted, background: 'none',
+                            border: border.hairline, borderRadius: radius.pill, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          Repair
+                        </button>
+                      )}
+                    </td>
+                  )}
                   {onRemoveLine && (
                     <td style={{ ...cell, textAlign: 'center' }}>
                       <button onClick={() => onRemoveLine(i)} aria-label={`Remove ${l.description}`}
@@ -163,8 +187,9 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
   )
 }
 
-export default function TrayList({ kit, canEdit, user, post, onSaved }) {
+export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray }) {
   const [list, setList] = useState(undefined)
+  const [repairing, setRepairing] = useState(null)
   const [open, setOpen] = useState('')
   const [stage, setStage] = useState('')
   const [review, setReview] = useState(null)
@@ -501,13 +526,21 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
     )
   }
 
+  // The kit's trays, each once: those the list holds (in its order), then any
+  // the kit names that no document has filled yet.
+  const listed = list?.trays || []
+  const allTrays = [...listed, ...(kit.trays || []).filter(n => !listed.some(t => t.name === n)).map(n => ({ name: n, lines: [] }))]
+  // Where a tray is: with the kit, unless it went somewhere on its own.
+  const trayAt = name => (kit.away?.trays?.length ? (kit.away.trays.includes(name) ? kit.at : kit.home) : kit.at)
+  const whereIs = name => PLACES[trayAt(name)] || ''
+
   return (
     <div>
-      <div style={label}>What is in each tray</div>
+      <div style={label}>Trays · {allTrays.length}</div>
       {list === undefined && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}
-      {list === null && (
+      {list !== undefined && !allTrays.length && (
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
-          No tray list yet{canEdit ? ' — upload the hospital’s copy below.' : '.'}
+          No trays yet{canEdit ? ' — upload the hospital’s copy below, or tap Edit on the kit to add a tray.' : '.'}
         </div>
       )}
       {list && (
@@ -547,13 +580,29 @@ export default function TrayList({ kit, canEdit, user, post, onSaved }) {
           )}
           {shareMsg && shareMsg !== 'ready' && <div role="status" style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>{shareMsg}</div>}
           {editError && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{editError}</div>}
-          {list.trays.map(t => (
-            <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
-              editing={editingTray === t.name} onStartEdit={() => { setEditingTray(t.name); setOpen(t.name) }}
-              onEditDone={() => setEditingTray('')} onEdit={editList}
-              onPrint={() => printTrayList(kit, list, { only: t.name, printedBy: user?.firstName || user?.name || '', token: user?.token })} />
-          ))}
         </>
+      )}
+      {editError && !list && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{editError}</div>}
+      {/* Every tray of the kit is a button (Brent, 20 Nov 2026): open it to see
+          what it holds, edit it, move it on its own, or send an instrument in
+          it for repair — whether or not a document was ever uploaded for it. */}
+      {list !== undefined && allTrays.map(t => (
+        <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
+          where={whereIs(t.name)}
+          editing={editingTray === t.name} onStartEdit={canEdit ? () => { setEditingTray(t.name); setOpen(t.name) } : undefined}
+          onEditDone={() => setEditingTray('')} onEdit={editList}
+          onMove={onMoveTray && (kit.trays || []).includes(t.name) ? () => onMoveTray(t.name) : undefined}
+          onRepair={canEdit ? (i, l) => setRepairing({ tray: t.name, index: i, line: l, at: trayAt(t.name) }) : undefined}
+          onRepaired={(i, l) => {
+            if (window.confirm(`Mark ${l.description || l.code} back from repair and in ${t.name}?`)) {
+              editList({ op: 'repaired', tray: t.name, index: i, expect: { code: l.code, description: l.description } })
+            }
+          }}
+          onPrint={list ? () => printTrayList(kit, list, { only: t.name, printedBy: user?.firstName || user?.name || '', token: user?.token }) : undefined} />
+      ))}
+      {repairing && (
+        <RepairSheet kit={kit} job={repairing} headers={headers} onClose={() => setRepairing(null)}
+          onDone={next => { setRepairing(null); if (next) setList(next); onSaved?.() }} />
       )}
 
       {canEdit && (

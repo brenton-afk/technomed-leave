@@ -1481,6 +1481,33 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   documents stay; Add from Dropbox suggests tray lists instead), and keeps
   loan kits out of **Attach agreements from Dropbox**.
 
+### Trays are the list, and instruments go for repair (Brent, 20 Nov 2026)
+
+"The list of trays at the top when you open a kit should be removed. The
+list we want to see is the list of the interactive tray buttons … click all
+of the trays and edit them, as well as move individual trays … the trays to
+represent exactly what's on shelf at the hospitals." `KitDetail` no longer
+draws the plain tray-name list; `TrayList` (heading "Trays · N", first on the
+kit) shows **every tray the kit names** — those with no document get an empty
+one ("Nothing listed yet"), and `editTrayListNow` starts such a tray (and the
+list) on its first change. Each tray says where it is (`whereIs`: with the
+kit, or its own place from `kit.away.trays`), has **Move** (`onMoveTray` →
+`MoveSheet initialTrays`, only that tray ticked) and Edit for anyone signed in.
+**Repair** (`kit/RepairSheet.jsx`, `kits=repair` on `api/guides.js`,
+`api/_kitRepairs.js`): any instrument line → hospital (RHH / Calvary,
+preset from where the tray is) and the fault → the email shown → **Send and
+mark it away for repair**; sent first, then the line marked (`op: 'repair'`,
+`line.repair = {since, by, hospital, fault}`, kept through edits), shown
+"At repair · back?" → `op: 'repaired'`. Recipients are contacts in Admin →
+Supplier notices: `rhh_repairs` (Kirsty Patmore, Chris Calverley, RHH CSD
+loan coordinator, Toby Long) and `calvary_repairs` (Gerardo Lacapra, Brett
+Battersby, Julie Robinson), added to saved settings by
+`kit-repairs-2026-11-20`; copied to the clinical team, the sender and
+**projects@technomed.com.au** (`PROJECTS_MAILBOX` — on every instrument
+enquiry from the portal, never on tray transfers; a test holds `_kits.js`
+free of it). Sent regardless of the kit-move hospital-email switch. A stock-
+take module, edited in the portal, is to come.
+
 ### TechnoMed guides (Brent, 20 Nov 2026)
 
 Theatre guides has a **TechnoMed** section (`GROUP_ORDER` in

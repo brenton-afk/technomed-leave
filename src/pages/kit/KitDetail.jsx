@@ -124,28 +124,17 @@ export default function KitDetail({ kit, canEdit, canRemove = canEdit, user, pos
                   </>
                 )}
 
-                <div style={label}>Trays · {(kit.trays || []).length}</div>
-                {(kit.trays || []).length === 0 && (
-                  <div style={{ ...text('caption'), color: colour.inkFaint }}>No trays listed yet{canEdit ? ' — tap Edit to add them.' : '.'}</div>
-                )}
-                {(kit.trays || []).map(t => {
-                  const away = kit.away?.trays?.length && kit.away.trays.includes(t)
-                  return (
-                    <div key={t} style={{ display: 'flex', ...text('body'), color: colour.ink, padding: `${space.xs + 2}px 0`, borderBottom: border.hairlineSoft }}>
-                      <span style={{ flex: 1 }}>{t}</span>
-                      {kit.away?.trays?.length > 0 && <span style={{ ...text('caption'), color: away ? colour.warning : colour.inkFaint }}>{away ? `at ${PLACES[kit.at]}` : `at ${PLACES[kit.home]}`}</span>}
-                    </div>
-                  )
-                })}
-
+                {/* The plain list of tray names that was here is gone (Brent, 20 Nov
+                    2026): the trays below are the list — each one opens, edits,
+                    moves on its own and sends an instrument for repair. */}
                 {!isNew && (
-                  <div ref={docsRef} style={{ scrollMarginTop: 8 }}>
-                    <KitDocs kit={kit} user={user} post={post} onChanged={onChanged} />
+                  <div ref={trayRef} style={{ scrollMarginTop: 8 }}>
+                    <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} onMoveTray={tray => onMove?.(tray)} />
                   </div>
                 )}
                 {!isNew && (
-                  <div ref={trayRef} style={{ scrollMarginTop: 8 }}>
-                    <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} />
+                  <div ref={docsRef} style={{ scrollMarginTop: 8 }}>
+                    <KitDocs kit={kit} user={user} post={post} onChanged={onChanged} />
                   </div>
                 )}
               </>
@@ -192,7 +181,7 @@ export default function KitDetail({ kit, canEdit, canRemove = canEdit, user, pos
           </div>
 
           <div style={{ padding: space.md, borderTop: border.hairline, display: 'flex', gap: space.sm, flexWrap: 'wrap' }}>
-            {!editing && <button onClick={onMove} style={{ ...btn(true), flex: 2 }}>Move</button>}
+            {!editing && <button onClick={() => onMove?.()} style={{ ...btn(true), flex: 2 }}>Move</button>}
             {!editing && canEdit && <button onClick={startEdit} style={{ ...btn(false), flex: 1 }}>Edit</button>}
             {editing && (
               <>

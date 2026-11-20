@@ -109,3 +109,46 @@ describe('deleting a whole tray (Aimee, 16 Nov 2026)', () => {
     expect(screen.getByText('Only')).toBeInTheDocument()
   })
 })
+
+// Brent, 20 Nov 2026: "The list we want to see is the list of the interactive
+// tray buttons … click all of the trays and edit them, as well as move
+// individual trays … when we take an instrument off the kit for repair, it
+// automatically emails the respective departments."
+describe('every tray is a button: open, edit, move, repair', () => {
+  const kit2 = { id: 'k1', name: 'Diplomat', home: 'RHH', at: 'RHH', trays: ['Existing', 'Empty tray'] }
+
+  it('shows a tray the kit names even with nothing uploaded for it, and moves one tray on its own', async () => {
+    const onMoveTray = vi.fn()
+    render(<TrayList kit={kit2} canEdit user={{ token: 't' }} post={vi.fn()} onMoveTray={onMoveTray} />)
+    expect(await screen.findByText('Empty tray')).toBeInTheDocument()
+    expect(screen.getByText(/Nothing listed yet/)).toBeInTheDocument()
+    expect(screen.getByText('Trays · 2')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Move Empty tray' }))
+    expect(onMoveTray).toHaveBeenCalledWith('Empty tray')
+    expect(screen.getByRole('button', { name: 'Edit Empty tray' })).toBeInTheDocument()
+  })
+
+  it('sends an instrument for repair: the email is shown first, then sent', async () => {
+    const calls = []
+    const email = { to: ['kirsty.patmore@ths.tas.gov.au'], cc: ['projects@technomed.com.au'], subject: 'Instrument for repair – Diplomat · Existing · X', text: 'Fault: bent' }
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url)
+      if (u.includes('kits=traylist')) return reply({ list: { trays: [{ name: 'Existing', lines: [{ code: 'E', description: 'X', qty: 1, kind: 'instrument' }] }], source: {} } })
+      if (u.includes('kits=repair')) {
+        const body = JSON.parse(init.body); calls.push(body)
+        return reply(body.preview ? { email } : { list: { trays: [{ name: 'Existing', lines: [{ code: 'E', description: 'X', qty: 1, kind: 'instrument', repair: { since: '2026-11-20T00:00:00Z', fault: 'bent' } }] }], source: {} } })
+      }
+      return reply({})
+    })
+    render(<TrayList kit={kit2} canEdit user={{ token: 't' }} post={vi.fn()} />)
+    fireEvent.click(await screen.findByText('Existing'))
+    fireEvent.click(screen.getByRole('button', { name: 'Send X for repair' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'What is wrong with it' }), { target: { value: 'bent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Check the email' }))
+    expect(await screen.findByText('kirsty.patmore@ths.tas.gov.au')).toBeInTheDocument()
+    expect(calls[0]).toMatchObject({ preview: true, hospital: 'RHH', tray: 'Existing', index: 0, fault: 'bent' })
+    fireEvent.click(screen.getByRole('button', { name: 'Send and mark it away for repair' }))
+    expect(await screen.findByText('At repair · back?')).toBeInTheDocument()
+    expect(calls[1].preview).toBe(false)
+  })
+})

@@ -46,7 +46,17 @@ export const DEFAULT_CONTACTS = [
   { id: 'calvary_loans', name: 'Calvary loans team', greeting: 'Sharon and Loans team',
     note: 'Kit movements into or out of Calvary', to: ['Sharon.Ashworth@calvarycare.org.au', 'TAS-LVH-Loansets@calvarycare.org.au'], cc: [] },
   { id: 'rhh_loans', name: 'RHH loans coordinator', greeting: 'Katelin',
-    note: 'Kit movements into or out of RHH', to: ['rhhcsdloancoordinator@ths.tas.gov.au'], cc: [] }
+    note: 'Kit movements into or out of RHH', to: ['rhhcsdloancoordinator@ths.tas.gov.au'], cc: [] },
+  // Instruments off a kit for repair (Brent, 20 Nov 2026): "For RHH … Kirsty
+  // at RHH, Chris and RHH loans coordinator as well as Toby Long. For Calvary
+  // … Gerardo, Brett, Julie". Addresses from their own emails to us. Our team
+  // and projects@ are copied by the portal (api/_kitRepairs.js).
+  { id: 'rhh_repairs', name: 'RHH instrument repairs', greeting: 'Kirsty, Chris and Toby',
+    note: 'An instrument taken off a kit at RHH for repair',
+    to: ['kirsty.patmore@ths.tas.gov.au', 'christopher.calverle@ths.tas.gov.au', 'rhhcsdloancoordinator@ths.tas.gov.au', 'tobias.long@ths.tas.gov.au'], cc: [] },
+  { id: 'calvary_repairs', name: 'Calvary instrument repairs', greeting: 'Gerardo, Brett and Julie',
+    note: 'An instrument taken off a kit at Calvary for repair',
+    to: ['Gerardo.Lacapra@calvarycare.org.au', 'Brett.Battersby@calvarycare.org.au', 'Julie.Robinson@calvarycare.org.au'], cc: [] }
 ]
 
 // Corrections to contacts already saved in Redis. A saved copy replaces the
@@ -62,6 +72,8 @@ export const CONTACT_CORRECTIONS = [
   // The kit room's two hospital contacts, added to a copy saved before they
   // existed.
   { id: 'kit-hospitals-2026-11-01', addContacts: ['calvary_loans', 'rhh_loans'] },
+  // The instrument-repair contacts, added to a copy saved before they existed.
+  { id: 'kit-repairs-2026-11-20', addContacts: ['rhh_repairs', 'calvary_repairs'] },
   // Device loan requests on, in a copy saved while they were offered but off.
   { id: 'device-loans-on-2026-11-02', enableLoans: 'device' },
   // The Dubey neurophys rule, added to a copy saved before it existed.

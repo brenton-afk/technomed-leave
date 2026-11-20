@@ -16,6 +16,8 @@ import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
 import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath, uploadPathFor } from './_resources.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
+import { repairEmail } from './_kitRepairs.js'
+import { getNoticeSettings } from './_bookingNotices.js'
 import { listKitDocs, docCounts, keepKitDoc, removeKitDoc, setKitDocKind, kitDocLink, DOC_KINDS,
   dropboxCatalogue, suggestFor, searchCatalogue, linkKitDoc, proposeAgreements } from './_kitDocs.js'
 
@@ -416,6 +418,37 @@ async function handleKits(req, res, session) {
     }
     if (what === 'return') { await returnKit(body.kitId, sender); return res.status(200).json({ ok: true }) }
     if (what === 'check') { await checkKit(body.kitId, body.at, sender.firstName || sender.email); return res.status(200).json({ ok: true }) }
+
+    // An instrument off a kit for repair, and back (Brent, 20 Nov 2026). With
+    // `preview` the email is drafted and shown; without it, it is sent to the
+    // hospital's repair contacts and only then is the line marked away — a
+    // send that fails marks nothing, so it can be tried again.
+    if (what === 'repair') {
+      if (!canEdit) return res.status(403).json({ error: 'Sign in to send an instrument for repair' })
+      const kit = await kitById(body.kitId)
+      if (!kit) return res.status(404).json({ error: 'That kit is no longer listed' })
+      const hospital = body.hospital === 'RHH' ? 'RHH' : body.hospital === 'CLV' ? 'CLV' : ''
+      if (!hospital) return res.status(400).json({ error: 'Which hospital is the kit at — RHH or Calvary?' })
+      if (!String(body.fault || '').trim()) return res.status(400).json({ error: 'Say what is wrong with it' })
+      const list = await getTrayList(kit.id)
+      const tray = (list?.trays || []).find(t => t.name === String(body.tray || ''))
+      const line = tray?.lines?.[Number(body.index)]
+      if (!line || line.code !== String(body.expect?.code ?? '') || line.description !== String(body.expect?.description ?? '')) {
+        return res.status(409).json({ error: 'That tray has just changed — it has been reloaded, try again', list })
+      }
+      const { contacts } = await getNoticeSettings()
+      const email = repairEmail({ hospital, kitName: kit.name, tray: tray.name, line, fault: body.fault, by: sender.name || who }, contacts, sender)
+      if (!email.to.length) return res.status(400).json({ error: 'No repair contacts are set for that hospital — add them in Admin → Supplier notices' })
+      if (body.preview) return res.status(200).json({ email })
+      await sendBookingNotice({
+        to: email.to, cc: email.cc, subject: email.subject, text: email.text,
+        sender: { name: sender.name, email: sender.email },
+        label: `Instrument repair · ${kit.name} · ${hospital}`, badge: 'Instrument repair'
+      })
+      const next = await editTrayList(kit.id, { op: 'repair', tray: tray.name, index: Number(body.index), expect: body.expect,
+        repair: { hospital, fault: body.fault } }, who)
+      return res.status(200).json({ list: next, sent: { to: email.to, cc: email.cc } })
+    }
 
     // Anyone signed in may keep a tray list up to date — "the staff have
     // freedom to make changes as the kits change". Every change is logged

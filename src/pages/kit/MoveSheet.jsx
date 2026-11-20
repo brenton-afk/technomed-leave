@@ -18,11 +18,12 @@ function shortDay(dateStr) {
   return d.toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone, initialTo = '' }) {
+export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone, initialTo = '', initialTrays = null }) {
   useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   // A tile dragged onto a place arrives with that place already chosen.
   const [to, setTo] = useState(initialTo && initialTo !== kit.at ? initialTo : (kit.at === kit.home ? '' : kit.home))
-  const [trays, setTrays] = useState(kit.trays || [])
+  // One tray when it was moved from its own Move button; else every tray.
+  const [trays, setTrays] = useState(initialTrays?.length ? (kit.trays || []).filter(t => initialTrays.includes(t)) : (kit.trays || []))
   const [date, setDate] = useState(today || '')
   const [caseChoice, setCaseChoice] = useState('')
   const [cases, setCases] = useState(null)

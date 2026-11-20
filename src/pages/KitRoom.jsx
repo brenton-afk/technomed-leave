@@ -90,6 +90,8 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
   const [moving, setMoving] = useState(null)
   const [open, setOpen] = useState(null)
   const [openFocus, setOpenFocus] = useState('')
+  // One tray moved on its own, from its Move button in the kit (Brent, 20 Nov 2026).
+  const [moveTrays, setMoveTrays] = useState(null)
   const [moveTo, setMoveTo] = useState('')
   const [dragging, setDragging] = useState(null)   // { kit, x, y, over }
   const [order, setOrder] = useState(null)
@@ -215,7 +217,7 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
 
   const tile = (k, extra) => (
     <KitTile key={k.id} kit={k} onOpen={(focus = '') => { setOpenFocus(focus); setOpen(k) }}
-      onMove={() => { setMoveTo(''); setMoving(k) }} busy={busy === k.id}
+      onMove={() => { setMoveTo(''); setMoveTrays(null); setMoving(k) }} busy={busy === k.id}
       onGrab={e => startDrag(k, e)} lifted={dragging?.kit.id === k.id} target={dragging?.over?.tile === k.id}
       {...extra} />
   )
@@ -360,14 +362,14 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
 
       {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
       {moving && (
-        <MoveSheet kit={moving} initialTo={moveTo} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
+        <MoveSheet kit={moving} initialTo={moveTo} initialTrays={moveTrays} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
           post={post} onClose={() => setMoving(null)} onDone={() => { setMoving(null); load() }} />
       )}
       {open && (
         <KitDetail key={open.id || 'new'} kit={(open.id && kits.find(k => k.id === open.id)) || open} canEdit={Boolean(data?.canEdit)}
           canRemove={Boolean(data?.canRemove)} focus={openFocus} user={user} post={post}
           onClose={() => setOpen(null)} onChanged={load}
-          onMove={() => { setMoveTo(''); setMoving(kits.find(k => k.id === open.id) || open); setOpen(null) }} />
+          onMove={(tray = '') => { setMoveTo(''); setMoveTrays(tray ? [tray] : null); setMoving(kits.find(k => k.id === open.id) || open); setOpen(null) }} />
       )}
     </Page>
   )

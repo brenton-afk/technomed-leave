@@ -580,13 +580,20 @@ export async function editTrayList(kitId, change, by) {
 
 const DELETED_TRAYS = kitId => `kits:list:deleted:${kitId}`
 
-async function editTrayListNow(kitId, { op, tray, index, line, expect, name }, by) {
-  const list = await getTrayList(kitId)
-  if (!list) throw new Error('This kit has no tray list yet')
-  const t = list.trays.find(x => x.name === tray)
-  if (!t) throw stale()
+async function editTrayListNow(kitId, { op, tray, index, line, expect, name, repair }, by) {
   const defs = await getDefs()
   const kit = defs.find(k => k.id === kitId)
+  // Every tray of the kit can be edited, whether or not a document was ever
+  // uploaded for it (Brent, 20 Nov 2026: "the ability to click all of the
+  // trays and edit them"): a tray the kit names but the list does not hold is
+  // started empty on its first change.
+  const list = (await getTrayList(kitId)) || { trays: [], source: {} }
+  let t = list.trays.find(x => x.name === tray)
+  if (!t && (kit?.trays || []).includes(tray)) {
+    t = { name: tray, lines: [] }
+    list.trays.push(t)
+  }
+  if (!t) throw stale()
   let note = ''
 
   const at = Number(index)
@@ -598,8 +605,9 @@ async function editTrayListNow(kitId, { op, tray, index, line, expect, name }, b
     const next = cleanLine(line)
     if (!next.code && !next.description) throw new Error('A line needs a code or a description')
     const was = t.lines[at]
-    // An edit to the words keeps the item's picture.
+    // An edit to the words keeps the item's picture, and its repair.
     if (was.photo) next.photo = was.photo
+    if (was.repair) next.repair = was.repair
     t.lines[at] = next
     const what = next.description || next.code
     note = was.qty !== next.qty && was.code === next.code && was.description === next.description && was.kind === next.kind
@@ -630,6 +638,24 @@ async function editTrayListNow(kitId, { op, tray, index, line, expect, name }, b
       if (loc?.trays?.length) await setLoc(kitId, { ...loc, trays: loc.trays.map(n => (n === from ? to : n)) })
     }
     note = `tray renamed ${from} → ${to}`
+  } else if (op === 'repair' || op === 'repaired') {
+    // An instrument off the kit for repair, and back (Brent, 20 Nov 2026).
+    // The email to the hospital is sent by the caller first (see
+    // sendRepairNotice); this only marks the line.
+    if (!matches()) throw stale()
+    const l = t.lines[at]
+    if (op === 'repair') {
+      l.repair = {
+        since: new Date().toISOString(), by,
+        hospital: repair?.hospital === 'RHH' ? 'RHH' : 'CLV',
+        fault: String(repair?.fault || '').trim().slice(0, 400)
+      }
+      note = `${l.description || l.code}: off for repair (${PLACES[l.repair.hospital]?.short || l.repair.hospital}) — ${l.repair.fault}`
+    } else {
+      if (!l.repair) throw new Error('That instrument is not marked away for repair')
+      delete l.repair
+      note = `${l.description || l.code}: back from repair`
+    }
   } else if (op === 'deleteTray') {
     // A whole tray off the list (Aimee, 16 Nov 2026: "I accidentally loaded
     // the Ascot into the Athlet tray and there's no way for me to delete
