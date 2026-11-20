@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { looksBlank, release } from '../scanner/blankCheck.js'
 import { reorder } from './scan/pageList.js'
 import RegistrarText from './scan/RegistrarText.jsx'
 import AmendUsage from './scan/AmendUsage.jsx'
@@ -108,14 +109,25 @@ export async function fileToPage(file) {
     ctx.drawImage(bitmap.source || bitmap, 0, 0, canvas.width, canvas.height)
     return canvas
   }
-  const dataUrl = drawn(MAX_IMAGE_DIM).toDataURL('image/jpeg', JPEG_QUALITY)
+  const reading = drawn(MAX_IMAGE_DIM)
+  if (looksBlank(reading)) {
+    release(reading)
+    throw new Error('That picture came out blank on this phone — close other apps or tabs and try it again.')
+  }
+  const dataUrl = reading.toDataURL('image/jpeg', JPEG_QUALITY)
+  release(reading)
   // The copy that is filed and sent to the distributor, as sharp as the photo
   // allows: a photo from the phone's own camera is 12 megapixels, and this
   // shrank it to the 1568-pixel reading size like everything else, which is
   // about 130 dpi on an A4 form — too soft for a sticker's lot number.
-  const full = Math.max(bitmap.width, bitmap.height) > MAX_IMAGE_DIM
-    ? drawn(FILE_IMAGE_DIM).toDataURL('image/jpeg', FILE_JPEG_QUALITY).split(',')[1]
-    : null
+  // A sharp copy that came out blank (an iPhone short of memory) is dropped:
+  // the reading copy is filed instead, never a black page.
+  let full = null
+  if (Math.max(bitmap.width, bitmap.height) > MAX_IMAGE_DIM) {
+    const sharp = drawn(FILE_IMAGE_DIM)
+    if (!looksBlank(sharp)) full = sharp.toDataURL('image/jpeg', FILE_JPEG_QUALITY).split(',')[1]
+    release(sharp)
+  }
   if (typeof bitmap.close === 'function') bitmap.close()
 
   return {

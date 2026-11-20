@@ -1,4 +1,5 @@
 import { streamClaude } from '../_anthropic.js'
+import { looksLikeBlankJpeg } from '../_blankPage.js'
 import { requireSession, requireAdmin } from '../_auth.js'
 import { checkSalesReport } from '../_salesCheck.js'
 import { markAttendance, findBookingFacts } from '../_googleCalendar.js'
@@ -18,7 +19,7 @@ import { priceCheckCase, priceCheckResupply } from '../../src/usagePriceCheck.js
 import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped, knownSurgeon } from '../_usageCase.js'
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor, distributorName } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
-import { buildScanPdf } from '../_usagePdf.js'
+import { buildScanPdf, stampLines } from '../_usagePdf.js'
 import { loanStampFlags, stockConflicts, withStock } from '../../src/usageLoanCheck.js'
 import { splitBoostReadings, boostPagesFromWhole, cleanBoostPages, splitPages } from '../_boostPages.js'
 import {
@@ -139,6 +140,9 @@ function validatePages(pages) {
     }
     if (typeof page.data !== 'string' || page.data.length < 32) {
       throw badRequest(`Page ${i + 1} is empty or unreadable`)
+    }
+    if (mediaType === 'image/jpeg' && looksLikeBlankJpeg(page.data)) {
+      throw badRequest(`Page ${i + 1} came out blank on the phone — take that page again (closing other apps or tabs first helps).`)
     }
     return { mediaType, data: page.data }
   })
@@ -1250,7 +1254,7 @@ async function saveClaimedResupply(req, res, session, { id, usageId, resupply: g
   let fileError = ''
   if (record?.dropboxPath && dropboxConfigured() && Array.isArray(req.body?.pages) && req.body.pages.length) {
     try {
-      const pdf = await buildScanPdf(validatePages(req.body.pages))
+      const pdf = await buildScanPdf(validatePages(req.body.pages), { stamp: stampLines({ name: session.name }) })
       const name = naming.fileName
       // Kept, never overwritten: a second document of the same name (a
       // partial resupply scanned twice, or a count that missed one) is added

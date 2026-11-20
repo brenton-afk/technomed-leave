@@ -85,6 +85,20 @@ describe('the resupply scanner', () => {
     expect(screen.getByRole('combobox', { name: 'Distributor' })).toHaveValue('device_boost')
   })
 
+  // Toni, 20 Nov 2026: a photo of the usage page, no E4 implant on it, filed as E4's resupply.
+  it('says so when nothing on the paper matches the usage', async () => {
+    const none = { ...COMPARISON, rows: COMPARISON.rows.map(r => ({ ...r, now: 0, owing: r.used })), totals: { ...COMPARISON.totals, now: 0 } }
+    global.fetch = vi.fn(async (url) => {
+      const action = new URL(url, 'http://x').searchParams.get('action')
+      const body = { 'resupply-read': { resupply: RESUPPLY, candidates: [{ ...CASE, why: ['surname'] }], matchedId: 'u1', comparison: none } }[action] || { records: [] }
+      return { ok: true, json: async () => body }
+    })
+    const { container } = render(<ScanTab user={{ token: 't' }} />)
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Read 1 page' }))
+    expect(await screen.findByText(/Nothing on this paper matches this supplier's items/)).toBeInTheDocument()
+  })
+
   it('records it once, against the chosen case, with the pages for filing', async () => {
     const { container } = render(<ScanTab user={{ token: 't' }} />)
     fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [pdf()] } })

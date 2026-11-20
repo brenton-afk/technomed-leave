@@ -57,6 +57,17 @@ function Comparison({ comparison }) {
   const { rows, extras } = comparison
   const onPaper = rows.filter(r => r.now > 0).length
   return (
+    <>
+    {/* Toni, 20 Nov 2026: an E4 photo of the usage page, with no E4 implant on
+        it, was matched and filed as the E4 resupply. The case is found by the
+        patient on the paper; this says plainly when nothing on it is that
+        supplier's product from the usage. */}
+    {rows.length > 0 && onPaper === 0 && (
+      <Banner tone="warning" data-nothing-matched>
+        Nothing on this paper matches this supplier's items on the usage. Check it is the resupply
+        itself (the docket, or a photo of the stock), not the usage form or another supplier's paper.
+      </Banner>
+    )}
     <div style={panel}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, marginBottom: space.sm }}>
         <span style={{ ...text('heading'), color: colour.ink }}>Matched to the usage</span>
@@ -91,6 +102,7 @@ function Comparison({ comparison }) {
         </div>
       )}
     </div>
+    </>
   )
 }
 

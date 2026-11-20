@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { looksBlank, release } from '../../scanner/blankCheck.js'
 import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { loadOpenCv, openCvReady } from '../../scanner/opencvLoader.js'
@@ -470,18 +471,26 @@ export function CropReview({ capture, cv, onConfirm, onRetake, onAddAnother, onC
     try {
       // One warp at filing resolution; the copy that is read is shrunk from it.
       const { canvas } = flattenCapture(cv, capture.source, corners, { maxDimension: FILE_IMAGE_DIM })
+      // A warp that came out blank (an iPhone short of canvas memory) is never
+      // filed: the page flattened at capture goes instead (Toni, 20 Nov 2026 —
+      // black delivery notes). See scanner/blankCheck.js.
+      if (looksBlank(canvas)) { release(canvas); return { preview, full: null } }
       // The filed copy at 0.92: at 0.85 the compression smudged the small print
       // on the stickers, which is the print the copy is filed for.
       const full = canvas.toDataURL('image/jpeg', FILE_JPEG_QUALITY)
       const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(canvas.width, canvas.height))
-      if (scale >= 1) return { preview: full, full }
+      if (scale >= 1) { release(canvas); return { preview: full, full } }
       const small = document.createElement('canvas')
       small.width = Math.round(canvas.width * scale)
       small.height = Math.round(canvas.height * scale)
       const ctx = small.getContext('2d')
       ctx.imageSmoothingQuality = 'high'
       ctx.drawImage(canvas, 0, 0, small.width, small.height)
-      return { preview: small.toDataURL('image/jpeg', 0.85), full }
+      release(canvas)
+      if (looksBlank(small)) { release(small); return { preview, full: null } }
+      const shown = small.toDataURL('image/jpeg', 0.85)
+      release(small)
+      return { preview: shown, full }
     } catch {
       // Never nothing. A tap that goes forward must go forward — if the warp
       // fails, the page already flattened at capture is sent instead of the

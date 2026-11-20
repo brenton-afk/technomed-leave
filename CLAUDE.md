@@ -2113,6 +2113,21 @@ Device implants never make a Boost paper "partial"). `comparisonFor` returns
 in the case folder as …" with why (`data-resupply-name`) — no box to type a
 name, and the supplier picker snaps to the settled supplier. Staff guide:
 `docs/resupply-naming-guide.md`.
+**Toni's three (20 Nov 2026).** *Black pages*: two Signus resupplies were
+filed with page 2 pure black — the 2400 px filing copy; an iPhone short of
+canvas memory encodes an empty canvas as black. `src/scanner/blankCheck.js`
+(`looksBlank`, `release`) checks every sharp copy before use (`fileToPage`,
+CameraSheet's `asItWillBeSaved`) and falls back to the reading copy, frees
+each canvas once encoded, and refuses a blank reading copy; the server
+refuses a flat page in `validatePages` (`looksLikeBlankJpeg` in
+`api/_blankPage.js`: bytes per pixel under 0.03 on 400k+ pixels — the black
+pages were 0.016, real ones 0.53). *Received stamp*: every filed resupply
+carries "RECEIVED 20 Nov 2026 / UPLOADED BY TH" boxed in teal, top right of
+page 1 (`stampLines` + `buildScanPdf(pages, { stamp })` in `_usagePdf.js`,
+Hobart date, initials from the session; an uploaded PDF is stamped too).
+*Nothing matched*: the review warns when no line on the paper matches that
+supplier's items on the usage (`data-nothing-matched`) — an E4 photo of the
+usage page had been filed as the E4 resupply.
 **Usage forms scanned as resupplies** (Brent, 18 Nov 2026: "people are
 scanning their usage with the resupply scanner"). The Scan tab **always opens
 on Usage** — `tm_scan_kind` is no longer remembered; `saveScanKind` asks for a
