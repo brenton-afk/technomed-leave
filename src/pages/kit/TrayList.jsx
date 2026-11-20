@@ -187,7 +187,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
   )
 }
 
-export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray }) {
+export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray, title = 'Trays' }) {
   const [list, setList] = useState(undefined)
   const [repairing, setRepairing] = useState(null)
   const [open, setOpen] = useState('')
@@ -536,7 +536,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
 
   return (
     <div>
-      <div style={label}>Trays · {allTrays.length}</div>
+      <div style={label}>{title} · {allTrays.length}</div>
       {list === undefined && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}
       {list !== undefined && !allTrays.length && (
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>

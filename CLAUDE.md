@@ -1508,6 +1508,31 @@ enquiry from the portal, never on tray transfers; a test holds `_kits.js`
 free of it). Sent regardless of the kit-move hospital-email switch. A stock-
 take module, edited in the portal, is to come.
 
+### One tile per system, Add a tray (Brent, 20 Nov 2026)
+
+"Remove the multiple kit options, like Diplomat 1, 2 and 3 … a system tab and
+then you open that and within that you have the individual trays listed";
+"We will just have Diplomat and then under that we will label each tray as
+Diplomat Pedicle Screws 1-5 … No set numbers"; "the add kit button to be an
+add tray button". The Kit room draws one `SystemTile` per system
+(`groupSystems` / `systemOf` / `traysByPlace` in `src/kit/systems.js`, pure,
+`systems.test.js`) with its tray count and where the trays are; tapping opens
+`kit/SystemDetail.jsx`: **Add a tray**, then a section per hospital set,
+headed by the place (Calvary / RHH / TM office, "· TM loan") — never
+"Diplomat 2" — with its stock-take tick, **Move all** (the whole set), its
+TrayList (Edit, Move one tray, Repair), Documents and Set details (the old
+`KitDetail`). Each hospital set is still its own kit record underneath —
+that is what knows where a tray is. **Add a tray** (`kit/AddTraySheet.jsx`,
+also on the room for any system or a new one): `kitForNewTray` adds it to
+that system's set at the chosen place, or starts a set there
+(`kits=save`); a name the system already has is refused. "+ Add a kit" is
+gone. The move sheet shows the system name and has **Entire kit** (tick every
+tray at once — "a Dakota kit transfer from RHH to Calvary"). Dragging a tile
+now only reorders systems (`kits:order` is still kit ids; a system sits where
+its first set does); moving between hospitals is tray by tray or Move all.
+The kit-move email already names the system. The set names ("Diplomat 1") still
+appear in the movement history.
+
 ### TechnoMed guides (Brent, 20 Nov 2026)
 
 Theatre guides has a **TechnoMed** section (`GROUP_ORDER` in

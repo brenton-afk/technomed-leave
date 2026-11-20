@@ -22,11 +22,12 @@ beforeEach(() => {
 })
 
 describe('the stock-take', () => {
-  it('is one tap from the list, and the kit shows as checked', async () => {
+  it('is one tap from the system, and the set shows as checked', async () => {
     render(<KitRoom user={{ token: 't' }} onBack={() => {}} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Diplomat 1 is here' }))
-    await waitFor(() => expect(screen.getByText(/✓ checked by Ben/)).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: 'Diplomat 1 is here' })).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Diplomat' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Calvary trays are here' }))
+    await waitFor(() => expect(screen.getByText('✓ checked', { selector: 'span' })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Calvary trays are here' })).not.toBeInTheDocument()
   })
 
   it('in the kit sheet, confirms in green and closes itself', async () => {

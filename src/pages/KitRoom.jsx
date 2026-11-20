@@ -5,7 +5,9 @@ import { IconKit, IconSearch } from '../design/icons.jsx'
 import MoveSheet from './kit/MoveSheet.jsx'
 import KitDetail from './kit/KitDetail.jsx'
 import AttachAgreements from './kit/AttachAgreements.jsx'
-import { needsAgreement } from '../kit/agreements.js'
+import SystemDetail from './kit/SystemDetail.jsx'
+import AddTraySheet from './kit/AddTraySheet.jsx'
+import { groupSystems, traysByPlace, systemOf, PLACE_ORDER } from '../kit/systems.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
 import { systemsInKit } from '../clinicalPlan/systems.js'
 
@@ -20,13 +22,7 @@ import { systemsInKit } from '../clinicalPlan/systems.js'
 // page is most often opened to answer.
 
 export const PLACE_NAMES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
-// Calvary first, RHH second, the office third (Brent, 2 Nov 2026).
-const PLACE_ORDER = ['CLV', 'RHH', 'office']
-
-// A hospital's own logo where one has been added to public/logos, else its
-// name in its colour. Replace by dropping calvary.png / rhh.png in that folder
-// and naming it here.
-const PLACE_LOGOS = { office: '/email-logo.png' }
+// Calvary first, RHH second, the office third (Brent, 2 Nov 2026) — PLACE_ORDER in kit/systems.js.
 
 export const DISTRIBUTORS = {
   signus: { name: 'Signus', logo: '/logos/signus.png' },
@@ -71,17 +67,7 @@ function logoFor(kit) {
   return SYSTEM_LOGOS[kit.system] || DISTRIBUTORS[distributorOf(kit)]?.logo || null
 }
 
-const KIND = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
-
-function sinceText(iso) {
-  if (!iso) return ''
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  if (days <= 0) return 'today'
-  if (days === 1) return 'yesterday'
-  return `${days} days`
-}
-
-export default function KitRoom({ user, onBack, openKit = '', openFocus: startFocus = '' }) {
+export default function KitRoom({ user, onBack, openKit = '' }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [place, setPlace] = useState('all')
@@ -89,6 +75,9 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
   const [distributor, setDistributor] = useState('')
   const [moving, setMoving] = useState(null)
   const [open, setOpen] = useState(null)
+  // The kit room is one tile per system (Brent, 20 Nov 2026); this is the one open.
+  const [openSystem, setOpenSystem] = useState('')
+  const [addingTray, setAddingTray] = useState(null)
   const [openFocus, setOpenFocus] = useState('')
   // One tray moved on its own, from its Move button in the kit (Brent, 20 Nov 2026).
   const [moveTrays, setMoveTrays] = useState(null)
@@ -115,8 +104,8 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
   useEffect(() => {
     if (opened.current || !openKit || !data?.kits) return
     const k = data.kits.find(x => x.id === openKit)
-    if (k) { opened.current = true; setOpenFocus(startFocus || ''); setOpen(k) }
-  }, [data, openKit, startFocus])
+    if (k) { opened.current = true; setOpenSystem(systemOf(k).toLowerCase()) }
+  }, [data, openKit])
 
   async function post(what, body) {
     const res = await fetch(`/api/guides?kits=${what}`, {
@@ -134,37 +123,36 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
   }
 
   const kits = data?.kits || []
-  const counts = useMemo(() => Object.fromEntries(PLACE_ORDER.map(p => [p, kits.filter(k => k.at === p).length])), [kits])
+  const systems = useMemo(() => groupSystems(kits), [kits])
+  const counts = useMemo(() => Object.fromEntries(PLACE_ORDER.map(p => [p, systems.filter(g => (traysByPlace(g.kits)[p] || 0) > 0).length])), [systems])
   const unchecked = kits.filter(k => !k.checkedAt).length
 
-  const shown = kits.filter(k => (place === 'all' || k.at === place)
-    && (!distributor || distributorOf(k) === distributor)
-    && (!query || `${k.name} ${k.system} ${(k.trays || []).join(' ')} ${DISTRIBUTORS[k.distributor]?.name || ''}`
+  const shown = systems.filter(g => (place === 'all' || (traysByPlace(g.kits)[place] || 0) > 0 || g.kits.some(k => k.at === place))
+    && (!distributor || g.kits.some(k => distributorOf(k) === distributor))
+    && (!query || `${g.name} ${g.kits.map(k => `${(k.trays || []).join(' ')} ${DISTRIBUTORS[distributorOf(k)]?.name || ''}`).join(' ')}`
       .toLowerCase().includes(query.toLowerCase())))
-  // The shared order a person dragged, where there is one; anything not in it
-  // keeps its place by distributor after the ordered ones.
+  // The shared order a person dragged (kept as kit ids — a system sits where
+  // its first set does); anything not in it keeps its place by distributor.
   const arrange = list => {
-    const sorted = byDistributor(list)
+    const name = g => DISTRIBUTORS[distributorOf(g.kits[0])]?.name || 'zz'
+    const sorted = [...list].sort((a, b) => name(a).localeCompare(name(b)) || a.name.localeCompare(b.name))
     const at = new Map((order || []).map((id, i) => [id, i]))
-    return [...sorted].sort((a, b) => (at.has(a.id) ? at.get(a.id) : 1e6 + sorted.indexOf(a)) - (at.has(b.id) ? at.get(b.id) : 1e6 + sorted.indexOf(b)))
+    const pos = g => Math.min(...g.kits.map(k => (at.has(k.id) ? at.get(k.id) : Infinity)))
+    return [...sorted].sort((a, b) => {
+      const pa = pos(a); const pb = pos(b)
+      if (pa === pb) return sorted.indexOf(a) - sorted.indexOf(b)
+      return pa - pb
+    })
   }
-  const away = shown.filter(k => k.away)
-  const home = shown.filter(k => !k.away)
 
-  // ─── Dragging a tile (Brent, 11 Nov 2026: "the tiles … need to be able to be
-  // moved easily") ── hold the ⋮⋮ grip and drag: onto another kit to put it
-  // there in the order, onto another place to move it there (the move sheet
-  // opens with that place chosen — a move still sends its email). Pointer
-  // events, so a finger and a mouse work the same.
-  function startDrag(kit, e) {
+  // ─── Dragging a tile (Brent, 11 Nov 2026) ── hold a system and drop it on
+  // another to change the order. Moving between hospitals is done tray by tray
+  // (or "Move all") inside the system, since a system now spans the hospitals.
+  function startDrag(group, e) {
     e.preventDefault?.()
-    // A phone gets a small buzz when the tile comes up, as on a home screen.
     try { navigator.vibrate?.(15) } catch { /* not every phone */ }
-    setDragging({ kit, x: e.clientX, y: e.clientY, over: null })
+    setDragging({ group, x: e.clientX, y: e.clientY, over: null })
     let lastY = e.clientY
-    // While a tile is held the page must not scroll under the finger —
-    // and near the top or bottom edge it scrolls on purpose, so a tile can be
-    // carried further than one screen.
     const noScroll = ev => ev.preventDefault()
     window.addEventListener('touchmove', noScroll, { passive: false })
     const scroller = document.querySelector('.tm-scroll')
@@ -183,19 +171,14 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
       setDragging(null)
     }
     const target = (x, y) => {
-      const el = document.elementFromPoint(x, y)
-      const tile = el?.closest?.('[data-kit-tile]')
-      if (tile && tile.dataset.kitTile !== kit.id) return { tile: tile.dataset.kitTile, place: tile.dataset.place }
-      const place = el?.closest?.('[data-drop-place]')
-      return place ? { place: place.dataset.dropPlace } : null
+      const tile = document.elementFromPoint(x, y)?.closest?.('[data-system-tile]')
+      return tile && tile.dataset.systemTile !== group.key ? { tile: tile.dataset.systemTile } : null
     }
     const move = ev => { lastY = ev.clientY; setDragging(d => d && { ...d, x: ev.clientX, y: ev.clientY, over: target(ev.clientX, ev.clientY) }) }
     const up = ev => {
       stop()
       const over = target(ev.clientX, ev.clientY)
-      if (!over) return
-      if (over.place && over.place !== kit.at) { setMoveTo(over.place); setMoving(kit); return }
-      if (over.tile) reorder(kit.id, over.tile)
+      if (over?.tile) reorder(group.key, over.tile)
     }
     const cancel = () => stop()
     window.addEventListener('pointermove', move)
@@ -203,30 +186,27 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
     window.addEventListener('pointercancel', cancel)
   }
 
-  async function reorder(id, beforeId) {
-    // The whole room's order as it is drawn now, with the one tile moved.
-    const drawn = [...arrange(kits.filter(k => k.away)), ...PLACE_ORDER.flatMap(p => arrange(kits.filter(k => !k.away && k.at === p)))].map(k => k.id)
-    const without = drawn.filter(x => x !== id)
-    const at = without.indexOf(beforeId)
-    const next = [...without.slice(0, at), id, ...without.slice(at)]
-    if (next.join() === drawn.join()) return
+  async function reorder(key, beforeKey) {
+    const drawn = arrange(systems).map(g => g.key)
+    const without = drawn.filter(x => x !== key)
+    const at = without.indexOf(beforeKey)
+    const nextKeys = [...without.slice(0, at), key, ...without.slice(at)]
+    if (nextKeys.join() === drawn.join()) return
+    const byKey = new Map(systems.map(g => [g.key, g]))
+    const next = nextKeys.flatMap(k => byKey.get(k).kits.map(x => x.id))
     const was = order
     setOrder(next)
     try { await post('order', { ids: next }) } catch (err) { setOrder(was); setError(err.message) }
   }
 
-  const tile = (k, extra) => (
-    <KitTile key={k.id} kit={k} onOpen={(focus = '') => { setOpenFocus(focus); setOpen(k) }}
-      onMove={() => { setMoveTo(''); setMoveTrays(null); setMoving(k) }} busy={busy === k.id}
-      onGrab={e => startDrag(k, e)} lifted={dragging?.kit.id === k.id} target={dragging?.over?.tile === k.id}
-      {...extra} />
-  )
   const presentDistributors = [...new Set(kits.map(distributorOf).filter(Boolean))]
+  const openGroup = openSystem && systems.find(g => g.key === openSystem)
+  const awaySets = kits.filter(k => k.away).length
 
   return (
     <Page>
       <Header eyebrow="Kit and stock" title="Kit room" onBack={onBack}
-        subtitle={data ? `${kits.length} kits · ${kits.filter(k => k.away).length} away from home` : 'Loading…'} />
+        subtitle={data ? `${systems.length} systems · ${kits.reduce((n, k) => n + (k.trays || []).length, 0)} trays${awaySets ? ` · ${awaySets} away from home` : ''}` : 'Loading…'} />
       <div className="tm-measure" style={{ padding: space.lg, paddingBottom: space.xxxl }}>
 
         {error && <Banner tone="danger">{error}</Banner>}
@@ -255,10 +235,10 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
 
         {data && unchecked > 0 && (
           <div style={{ ...card(), padding: space.md, marginBottom: space.md }}>
-            <div style={{ ...text('bodyStrong'), color: colour.ink }}>Stock-take: {kits.length - unchecked} of {kits.length} checked</div>
+            <div style={{ ...text('bodyStrong'), color: colour.ink }}>Stock-take: {kits.length - unchecked} of {kits.length} hospital sets checked</div>
             <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>
-              Tap <strong>It's here</strong> on each kit you can see where the list says it is — it turns green.
-              If it is somewhere else, open it and pick where it really is.
+              Open a system and tap <strong>It's here</strong> beside each hospital's trays you can see — it turns green.
+              A tray somewhere else: Move it to where it really is.
             </div>
             <div style={{ height: 6, background: colour.lineSoft, borderRadius: radius.pill, marginTop: space.sm, overflow: 'hidden' }}>
               <div style={{ width: `${((kits.length - unchecked) / Math.max(kits.length, 1)) * 100}%`, height: '100%', background: colour.accent }} />
@@ -285,7 +265,7 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
 
         <div style={{ position: 'relative', marginBottom: space.sm }}>
           <span style={{ position: 'absolute', left: 12, top: 11, color: colour.inkFainter, display: 'flex' }}><IconSearch size={18} /></span>
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search kits or trays"
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search systems or trays"
             aria-label="Search kits" style={{
               width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 38px', ...text('field'),
               border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink
@@ -301,9 +281,9 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
           ))}
         </div>
 
-        {data && kits.length > 1 && (
-          <div style={{ ...text('caption'), color: colour.inkFaint, margin: `-${space.sm}px 0 ${space.md}px` }}>
-            Press and hold a tile to pick it up — drop it on another kit to change the order, or on Calvary, RHH or the office to move it there.
+        {data?.canEdit && (
+          <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md }}>
+            <button onClick={() => setAddingTray({ system: null })} data-add-tray style={pill(true)}>+ Add a tray</button>
           </div>
         )}
 
@@ -312,57 +292,55 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
         )}
 
         {data && shown.length === 0 && (
-          <EmptyState icon={IconKit} title="No kits match" detail="Try another place, distributor or search." />
+          <EmptyState icon={IconKit} title="No systems match" detail="Try another place, distributor or search." />
         )}
 
-        {away.length > 0 && (
-          <>
-            <SectionTitle>Away from home · {away.length}</SectionTitle>
-            <TileGrid>
-              {arrange(away).map(k => tile(k, { onReturn: () => act(k.id, () => post('return', { kitId: k.id })) }))}
-            </TileGrid>
-          </>
+        {shown.length > 0 && (
+          <TileGrid>
+            {arrange(shown).map(g => (
+              <SystemTile key={g.key} group={g} onOpen={() => setOpenSystem(g.key)}
+                onGrab={e => startDrag(g, e)} lifted={dragging?.group.key === g.key} target={dragging?.over?.tile === g.key} />
+            ))}
+          </TileGrid>
         )}
-
-        {PLACE_ORDER.filter(p => home.some(k => k.at === p) || dragging).map(p => (
-          <div key={p} data-drop-place={p} style={{
-            borderRadius: radius.card,
-            outline: dragging && dragging.over?.place === p && !dragging.over?.tile && p !== dragging.kit.at ? `2px dashed ${colour.accent}` : 'none',
-            outlineOffset: 4
-          }}>
-            <PlaceHeading place={p} count={home.filter(k => k.at === p).length} />
-            {dragging && p !== dragging.kit.at && (
-              <div style={{ ...text('caption'), color: colour.accentDeep, marginBottom: space.xs }}>Drop here to move {dragging.kit.name} to {PLACE_NAMES[p]}</div>
-            )}
-            <TileGrid>
-              {arrange(home.filter(k => k.at === p)).map(k => tile(k, { onCheck: () => act(k.id, () => post('check', { kitId: k.id, at: k.at })) }))}
-            </TileGrid>
+        {data && shown.length > 1 && (
+          <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: space.sm }}>
+            Press and hold a system to change the order.
           </div>
-        ))}
+        )}
 
         {dragging && (
           <div aria-hidden="true" style={{
             position: 'fixed', left: dragging.x - 70, top: dragging.y - 24, width: 140, zIndex: 4000, pointerEvents: 'none',
             ...card(), padding: space.sm, background: colour.surface, boxShadow: '0 8px 24px rgba(4,39,70,0.25)', transform: 'rotate(-2deg)',
             ...text('bodyStrong'), color: colour.ink
-          }}>{dragging.kit.name}</div>
+          }}>{dragging.group.name}</div>
         )}
 
-        <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.lg }}>
-          {data?.canEdit && (
-            <button onClick={() => setOpen({ id: '', name: '', trays: [] })} style={pill(false)}>+ Add a kit</button>
-          )}
-          {data?.canRemove && (
+        {data?.canRemove && (
+          <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.lg }}>
             <button onClick={() => setAttaching(true)} data-attach-agreements style={pill(false)}>Attach agreements from Dropbox</button>
-          )}
-        </div>
+          </div>
+        )}
 
         {data && <HistoryLink user={user} />}
       </div>
 
       {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
+      {openGroup && !open && !moving && !addingTray && (
+        <SystemDetail system={openGroup} canEdit={Boolean(data?.canEdit)} user={user} post={post}
+          onClose={() => setOpenSystem('')} onChanged={load}
+          onAddTray={() => setAddingTray({ system: openGroup })}
+          onMoveTray={(kit, tray) => { setMoveTo(''); setMoveTrays([tray]); setMoving(kit) }}
+          onMoveKit={kit => { setMoveTo(''); setMoveTrays(null); setMoving(kit) }}
+          onKitDetails={kit => { setOpenFocus(''); setOpen(kit) }} />
+      )}
+      {addingTray && (
+        <AddTraySheet system={addingTray.system} systems={systems} post={post}
+          onClose={() => setAddingTray(null)} onDone={load} />
+      )}
       {moving && (
-        <MoveSheet kit={moving} initialTo={moveTo} initialTrays={moveTrays} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
+        <MoveSheet kit={{ ...moving, name: systemOf(moving) }} initialTo={moveTo} initialTrays={moveTrays} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
           post={post} onClose={() => setMoving(null)} onDone={() => { setMoving(null); load() }} />
       )}
       {open && (
@@ -375,35 +353,6 @@ export default function KitRoom({ user, onBack, openKit = '', openFocus: startFo
   )
 }
 
-function PlaceBadge({ place, size = 'heading' }) {
-  const look = site[place] || site.office
-  if (PLACE_LOGOS[place]) {
-    return <img src={PLACE_LOGOS[place]} alt={look.name} style={{ height: 28, maxWidth: 120, objectFit: 'contain' }} />
-  }
-  // Until the logo is added: a block of the hospital's colour. Its name in a
-  // badge beside its name in the heading said the same thing twice.
-  return <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 4, background: look.ink, flexShrink: 0 }} />
-}
-
-/** A place's heading: bigger than a section label, with its badge and colour. */
-function PlaceHeading({ place, count }) {
-  const look = site[place] || site.office
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: space.sm,
-      margin: `${space.xl}px 0 ${space.sm}px`, paddingBottom: 6, borderBottom: `2px solid ${look.line}`
-    }}>
-      <PlaceBadge place={place} />
-      <span style={{ ...text('heading'), color: look.ink }}>{PLACE_NAMES[place]}</span>
-      <span style={{ ...text('caption'), color: colour.inkFaint }}>{count} {count === 1 ? 'kit' : 'kits'}</span>
-    </div>
-  )
-}
-
-function SectionTitle({ children }) {
-  return <div style={{ ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }}>{children}</div>
-}
-
 // ─── Tiles, not rows ─────────────────────────────────────────────────────────
 // "The tabs in a list are hard to find. I'd prefer tiles on the page or similar
 // so you can see more kits on the screen at once." — Brent, 2 Nov 2026.
@@ -412,12 +361,6 @@ function SectionTitle({ children }) {
 // because it is what the eye finds first on a shelf of trays; within each place
 // the kits run distributor by distributor, so the logos fall into runs and a
 // kit is found by its maker before its name is read.
-
-/** Within a place, grouped by distributor, then by name. */
-function byDistributor(kits) {
-  const name = k => DISTRIBUTORS[distributorOf(k)]?.name || 'zz'
-  return [...kits].sort((a, b) => name(a).localeCompare(name(b)) || String(a.name).localeCompare(String(b.name)))
-}
 
 function TileGrid({ children }) {
   return (
@@ -456,92 +399,49 @@ function useHold(onGrab) {
   }
 }
 
-function KitTile({ kit, onOpen, onMove, onReturn, onCheck, busy, onGrab, lifted, target }) {
+/** One system: its logo, name, trays and where they are. */
+function SystemTile({ group, onOpen, onGrab, lifted, target }) {
   const hold = useHold(onGrab)
-  const dist = DISTRIBUTORS[distributorOf(kit)]
-  const logo = logoFor(kit)
-  const trayCount = (kit.trays || []).length
-  const awayTrays = kit.away?.trays?.length
-  const checked = !kit.away && kit.checkedAt
-  const tint = site[kit.at] || site.office
-  const status = kit.away
-    ? `At ${PLACE_NAMES[kit.at]} · ${sinceText(kit.away.since)}${awayTrays && awayTrays < trayCount ? ` · ${awayTrays}/${trayCount} trays` : ''}`
-    : `${KIND[kit.kind] || ''}${trayCount ? ` · ${trayCount} ${trayCount === 1 ? 'tray' : 'trays'}` : ''}`
-  const small = { ...pill(false), padding: '5px 8px', flex: 1, textAlign: 'center' }
-
+  const first = group.kits[0]
+  const dist = DISTRIBUTORS[distributorOf(first)]
+  const logo = SYSTEM_LOGOS[group.name] || logoFor(first)
+  const where = traysByPlace(group.kits)
+  const total = Object.values(where).reduce((a, b) => a + b, 0)
+  const awaySets = group.kits.filter(k => k.away).length
+  const checked = group.kits.filter(k => k.checkedAt).length
+  const allChecked = checked === group.kits.length
   return (
-    <div data-kit-tile={kit.id} data-place={kit.at} {...hold} style={{
+    <div data-system-tile={group.key} {...hold} style={{
       ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative',
       opacity: lifted ? 0.4 : 1, WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none',
       boxShadow: target ? `0 0 0 2px ${colour.accent}` : undefined,
-      // Tinted by where it is now, so a Calvary set reads as Calvary wherever
-      // it is listed; the top edge carries its state.
-      background: tint.soft, borderColor: tint.line,
-      borderTop: `3px solid ${kit.away ? colour.warning : checked ? colour.accent : tint.line}`
+      borderTop: `3px solid ${awaySets ? colour.warning : allChecked ? colour.accent : colour.line}`
     }}>
-      {onGrab && (
-        <span role="button" aria-label={`Drag ${kit.name}`} title="Drag to move or reorder"
-          onPointerDown={e => { e.stopPropagation(); onGrab(e) }}
-          style={{
-            position: 'absolute', top: 4, right: 4, zIndex: 1, width: 36, height: 36, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', touchAction: 'none', cursor: 'grab', color: colour.inkMuted, ...text('bodyStrong'), userSelect: 'none',
-            borderRadius: radius.control, background: 'rgba(255,255,255,0.7)'
-          }}>⋮⋮</span>
-      )}
-      <button onClick={() => onOpen()} aria-label={`Open ${kit.name}`} style={{
+      <button onClick={onOpen} aria-label={`Open ${group.name}`} style={{
         background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer',
-        padding: `${space.sm}px ${space.sm}px 6px`, flex: 1, minWidth: 0,
-        // A button centres its content; a tile beside a taller one must not
-        // have its logo and name drift down to meet it.
+        padding: space.sm, flex: 1, minWidth: 0,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch'
       }}>
-        <div style={{
-          height: 34, marginBottom: 6, display: 'flex', alignItems: 'center',
-          justifyContent: 'flex-start', overflow: 'hidden'
-        }}>
+        <div style={{ height: 34, marginBottom: 6, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
           {logo
             ? <img src={logo} alt={dist?.name || ''} style={{ maxWidth: '78%', maxHeight: '100%', objectFit: 'contain' }} />
-            : <span style={{ ...text('micro'), color: colour.navy, letterSpacing: '0.6px' }}>
-                {(dist?.name || kit.system || '').toUpperCase()}
-              </span>}
+            : <span style={{ ...text('micro'), color: colour.navy, letterSpacing: '0.6px' }}>{(dist?.name || group.name).toUpperCase()}</span>}
         </div>
-        <div style={{
-          ...text('bodyStrong'), color: colour.ink, lineHeight: 1.25,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
-        }}>{kit.name}</div>
-        <div style={{ ...text('caption'), color: kit.away ? colour.warning : colour.inkFaint, marginTop: 2 }}>
-          {status}
+        <div style={{ ...text('bodyStrong'), color: colour.ink, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {group.name}
         </div>
-        {checked && (
-          <div style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600 }}>
-            ✓ checked{kit.checkedBy ? ` by ${kit.checkedBy}` : ''}
-          </div>
-        )}
+        <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>{total} {total === 1 ? 'tray' : 'trays'}</div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+          {PLACE_ORDER.filter(p => where[p]).map(p => (
+            <span key={p} style={{ ...text('caption'), fontWeight: 600, padding: '1px 6px', borderRadius: radius.pill,
+              background: site[p].soft, color: site[p].ink, border: `1px solid ${site[p].line}`, whiteSpace: 'nowrap' }}>
+              {p === 'office' ? 'Office' : PLACE_NAMES[p]} {where[p]}
+            </span>
+          ))}
+        </div>
+        {awaySets > 0 && <div style={{ ...text('caption'), color: colour.warning, fontWeight: 600, marginTop: 4 }}>Trays away from home</div>}
+        {allChecked && !awaySets && <div style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600, marginTop: 4 }}>✓ checked</div>}
       </button>
-      {/* The tray list and the agreement, one tap from the tile. */}
-      {/* One row, never wrapping: a tile is as short as it can be. */}
-      <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px 6px` }}>
-        <button onClick={() => onOpen('trays')} data-tile-trays
-          style={needsAgreement(kit) ? { ...chip, flex: '0 0 auto' } : chip}>{needsAgreement(kit) ? 'Trays' : 'Tray list'}</button>
-        {needsAgreement(kit) && <button onClick={() => onOpen('docs')} data-tile-docs
-          aria-label={kit.docs?.consignment ? 'Agreement on file' : 'Add an agreement'}
-          style={{ ...chip, ...(kit.docs?.consignment ? {} : { color: colour.inkFaint, borderStyle: 'dashed' }) }}>
-          {kit.docs?.consignment ? 'Agreement ✓' : 'Agreement'}
-        </button>}
-      </div>
-      <div style={{ display: 'flex', gap: 4, padding: `0 ${space.sm}px ${space.sm}px` }}>
-        {kit.away && onReturn && (
-          <button onClick={onReturn} disabled={busy} style={small}>{busy ? '…' : 'Returned'}</button>
-        )}
-        {/* The stock-take from the tile itself: one tap, it goes green. */}
-        {!kit.away && !kit.checkedAt && onCheck && (
-          <button onClick={onCheck} disabled={busy} aria-label={`${kit.name} is here`}
-            style={{ ...small, border: `1px solid ${colour.accent}`, color: colour.accentDeep }}>
-            {busy ? '…' : "It's here"}
-          </button>
-        )}
-        <button onClick={onMove} style={{ ...pill(true), padding: '5px 8px', flex: 1, textAlign: 'center' }}>Move</button>
-      </div>
     </div>
   )
 }
@@ -580,12 +480,6 @@ export function pill(on) {
     border: on ? 'none' : border.hairline, background: on ? colour.navy : colour.surface,
     color: on ? 'white' : colour.ink, cursor: 'pointer'
   }
-}
-
-const chip = {
-  ...text('caption'), fontWeight: 600, padding: '3px 6px', borderRadius: radius.pill, cursor: 'pointer',
-  border: `1px solid ${colour.line}`, background: colour.surface, color: colour.accentDeep, whiteSpace: 'nowrap',
-  flex: '1 1 0', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center'
 }
 
 const linkButton = { background: 'none', border: 'none', padding: 0, color: colour.accentDeep, cursor: 'pointer', ...text('caption'), fontWeight: 600 }

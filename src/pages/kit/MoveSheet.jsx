@@ -133,7 +133,17 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
 
                 {to && !isReturn && (kit.trays || []).length > 0 && (
                   <>
-                    <div style={label}>Trays going · {trays.length} of {kit.trays.length}</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm }}>
+                      <div style={{ ...label, flex: 1 }}>Trays going · {trays.length} of {kit.trays.length}</div>
+                      {/* "Select all, entire kit … a Dakota kit transfer from RHH to
+                          Calvary would need to transfer all trays in one go" (Brent, 20 Nov 2026). */}
+                      <button type="button" data-entire-kit onClick={() => setTrays(trays.length === kit.trays.length ? [] : [...kit.trays])}
+                        style={{ ...text('caption'), fontWeight: 600, padding: '5px 10px', borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap',
+                          border: `1px solid ${colour.accent}`, background: trays.length === kit.trays.length ? colour.accent : colour.surface,
+                          color: trays.length === kit.trays.length ? 'white' : colour.accentDeep }}>
+                        {trays.length === kit.trays.length ? '✓ Entire kit' : 'Entire kit'}
+                      </button>
+                    </div>
                     <div style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control }}>
                       {kit.trays.map((t, i) => (
                         <label key={t} style={{ display: 'flex', gap: space.sm, alignItems: 'center', padding: `${space.sm}px ${space.md}px`, borderTop: i ? border.hairlineSoft : 'none', ...text('body'), color: colour.ink }}>
