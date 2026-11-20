@@ -7,6 +7,7 @@ import KitDetail from './kit/KitDetail.jsx'
 import AttachAgreements from './kit/AttachAgreements.jsx'
 import SystemDetail from './kit/SystemDetail.jsx'
 import AddTraySheet from './kit/AddTraySheet.jsx'
+import CourierNumbers from './kit/CourierNumbers.jsx'
 import { groupSystems, traysByPlace, systemOf, setLabel, PLACE_ORDER } from '../kit/systems.js'
 import { movingFrom } from '../kit/trayPlaces.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
@@ -86,6 +87,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
   const [dragging, setDragging] = useState(null)   // { kit, x, y, over }
   const [order, setOrder] = useState(null)
   const [attaching, setAttaching] = useState(false)
+  const [editingCouriers, setEditingCouriers] = useState(false)
   const [busy, setBusy] = useState('')
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
@@ -321,12 +323,14 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
         {data?.canRemove && (
           <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.lg }}>
             <button onClick={() => setAttaching(true)} data-attach-agreements style={pill(false)}>Attach agreements from Dropbox</button>
+            <button onClick={() => setEditingCouriers(true)} data-courier-numbers style={pill(false)}>Courier numbers</button>
           </div>
         )}
 
         {data && <HistoryLink user={user} />}
       </div>
 
+      {editingCouriers && <CourierNumbers couriers={data?.couriers || []} post={post} onClose={() => setEditingCouriers(false)} onSaved={load} />}
       {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
       {/* Stays open under the move sheet: closing it as the sheet opened took
           the sheet's back-button step with it, and Move did nothing (Brent,
@@ -344,7 +348,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           onClose={() => setAddingTray(null)} onDone={load} />
       )}
       {moving && (
-        <MoveSheet kit={{ ...moving, name: setLabel(moving) || systemOf(moving), at: moveTrays?.length ? movingFrom(moving, moveTrays) : moving.at }} initialTo={moveTo} initialTrays={moveTrays} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
+        <MoveSheet kit={{ ...moving, name: setLabel(moving) || systemOf(moving), at: moveTrays?.length ? movingFrom(moving, moveTrays) : moving.at }} initialTo={moveTo} initialTrays={moveTrays} couriers={data?.couriers || []} onMoved={load} user={user} emailsOn={Boolean(data?.settings?.emailsOn)} today={data?.today}
           post={post} onClose={() => setMoving(null)} onDone={() => { setMoving(null); load() }} />
       )}
       {open && (

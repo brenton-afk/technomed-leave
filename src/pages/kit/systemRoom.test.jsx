@@ -106,4 +106,34 @@ describe('one tile per system', () => {
       expect(within(sheet).getByText(/Trays going · 1 of 1/)).toBeInTheDocument()
     } finally { stop(); resetBackButton() }
   })
+
+  // Brent, 20 Nov 2026: "move the kit, send the email, and then have the
+  // option to call the courier."
+  it('after the move, offers to call a courier, and logs the call', async () => {
+    const posted = []
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url)
+      if (init?.body) posted.push([u.split('kits=')[1], JSON.parse(init.body)])
+      if (u.includes('kits=traylist')) return { ok: true, json: async () => ({ list: null }) }
+      if (u.includes('kits=move')) return { ok: true, json: async () => ({ id: 'mv1', to: 'CLV', from: 'RHH', trays: ['Diplomat Pedicle Screws 1'], email: null, isReturn: false }) }
+      if (u.includes('kits=confirm')) return { ok: true, json: async () => ({ ok: true, emailed: false }) }
+      if (u.includes('kits=courier-called')) return { ok: true, json: async () => ({ ok: true }) }
+      return { ok: true, json: async () => ({ kits: KITS, settings: { emailsOn: false }, canEdit: true, isAdmin: false, today: '2026-11-20',
+        couriers: [{ id: 'jet', name: 'Jet Couriers', phone: '03 6228 1900', note: 'Around Hobart' }, { id: 'c', name: 'Clayton (Smartways)', phone: '', note: '' }] }) }
+    })
+    render(<KitRoom user={{ token: 't' }} onBack={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Diplomat' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Move Diplomat Pedicle Screws 1' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Move Diplomat' })
+    fireEvent.click(within(sheet).getByRole('button', { name: /Calvary/ }))
+    fireEvent.click(within(sheet).getByRole('button', { name: /Next/ }))
+    fireEvent.click(await within(sheet).findByRole('button', { name: 'Move' }))
+    expect(await within(sheet).findByText(/Moved to Calvary/)).toBeInTheDocument()
+    const call = within(sheet).getByRole('link', { name: /Call Jet Couriers/ })
+    expect(call).toHaveAttribute('href', 'tel:0362281900')
+    expect(within(sheet).getByText(/Clayton \(Smartways\) — no number yet/)).toBeInTheDocument()
+    fireEvent.click(call)
+    await waitFor(() => expect(posted.some(([w, b]) => w === 'courier-called' && b.courierId === 'jet')).toBe(true))
+    expect(within(sheet).getByRole('button', { name: 'Done' })).toBeInTheDocument()
+  })
 })

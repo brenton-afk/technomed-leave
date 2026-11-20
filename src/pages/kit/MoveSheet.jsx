@@ -4,6 +4,7 @@ import { colour, text, space, radius, border } from '../../design/tokens.js'
 import { readBooking, detectHospital, isCancelled } from '../../clinicalPlan/parse.js'
 import { parseDateStr, addCivilDays, toDateStr } from '../../clinicalPlan/week.js'
 import { useBackLayer } from '../../backButton.js'
+import { dialable, bookingWords } from '../../kit/couriers.js'
 
 // ─── Moving a kit ────────────────────────────────────────────────────────────
 // Two steps, and the second is the safeguard: where it is going and what is
@@ -18,7 +19,10 @@ function shortDay(dateStr) {
   return d.toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone, initialTo = '', initialTrays = null }) {
+export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone, onMoved, couriers = [], initialTo = '', initialTrays = null }) {
+  // After the move: who to ring to collect it (Brent, 20 Nov 2026).
+  const [moved, setMoved] = useState(null)
+  const [called, setCalled] = useState('')
   useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   // A tile dragged onto a place arrives with that place already chosen.
   const [to, setTo] = useState(initialTo && initialTo !== kit.at ? initialTo : (kit.at === kit.home ? '' : kit.home))
@@ -78,9 +82,19 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
   async function confirm(send) {
     setBusy(true); setError('')
     try {
-      await post('confirm', { id: preview.id, send, text: body })
-      onDone()
+      const result = await post('confirm', { id: preview.id, send, text: body })
+      // A return home, or a move to the office, may still need a courier; the
+      // step is offered for every move and "No courier needed" closes it.
+      setMoved({ emailed: Boolean(result?.emailed), to: preview.to, from: preview.from, trays: preview.trays || [], date: preview.date })
+      setBusy(false)
+      onMoved?.()
     } catch (err) { setError(err.message); setBusy(false) }
+  }
+
+  function callCourier(c) {
+    setCalled(c.id)
+    // Logged on the movement history; a failure to log never stops the call.
+    post('courier-called', { kitId: kit.id, courierId: c.id }).catch(() => {})
   }
 
   const label = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }
@@ -95,16 +109,16 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
         }}>
           <div style={{ padding: space.md, borderBottom: border.hairline, display: 'flex', alignItems: 'baseline', gap: space.sm }}>
             <div style={{ flex: 1 }}>
-              <div style={{ ...text('heading'), color: colour.ink }}>{preview ? 'Check before it goes' : `Move ${kit.name}`}</div>
-              <div style={{ ...text('caption'), color: colour.inkFaint }}>Now at {PLACES[kit.at]} · home {PLACES[kit.home]}</div>
+              <div style={{ ...text('heading'), color: colour.ink }}>{moved ? 'Book a courier' : preview ? 'Check before it goes' : `Move ${kit.name}`}</div>
+              {!moved && <div style={{ ...text('caption'), color: colour.inkFaint }}>Now at {PLACES[kit.at]} · home {PLACES[kit.home]}</div>}
             </div>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', ...text('bodyStrong'), color: colour.inkFaint, cursor: 'pointer' }}>Cancel</button>
+            <button onClick={moved ? onDone : onClose} style={{ background: 'none', border: 'none', ...text('bodyStrong'), color: colour.inkFaint, cursor: 'pointer' }}>{moved ? 'Close' : 'Cancel'}</button>
           </div>
 
           <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
             {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{error}</div>}
 
-            {!preview && (
+            {!moved && !preview && (
               <>
                 <div style={{ ...label, marginTop: 0 }}>Going to</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: space.sm }}>
@@ -189,7 +203,41 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
               </>
             )}
 
-            {preview && !preview.email && (
+            {moved && (
+              <div data-courier-step>
+                <div role="status" style={{ ...text('bodyStrong'), background: colour.successSoft, color: colour.accentDeep,
+                  border: `1px solid ${colour.accent}`, borderRadius: radius.control, padding: space.md }}>
+                  ✓ Moved to {PLACES[moved.to]}{moved.emailed ? ' · email sent' : ''}
+                </div>
+                <div style={label}>Book the collection</div>
+                <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
+                  {bookingWords({ kitName: kit.name, trays: moved.trays, from: moved.from, to: moved.to, places: PLACES })}
+                  {' '}Ask for a job ID.
+                </div>
+                <div style={{ display: 'grid', gap: space.sm }}>
+                  {couriers.map(c => {
+                    const tel = dialable(c.phone)
+                    return tel ? (
+                      <a key={c.id} href={`tel:${tel}`} onClick={() => callCourier(c)} data-call-courier={c.id}
+                        style={{ ...secondary, display: 'flex', alignItems: 'center', gap: space.sm, textDecoration: 'none',
+                          ...(called === c.id ? { borderColor: colour.accent, color: colour.accentDeep } : {}) }}>
+                        <span aria-hidden="true">📞</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block' }}>Call {c.name}{called === c.id ? ' ✓' : ''}</span>
+                          <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}>{c.phone}{c.note ? ` · ${c.note}` : ''}</span>
+                        </span>
+                      </a>
+                    ) : (
+                      <div key={c.id} style={{ ...text('caption'), color: colour.inkFaint, padding: `${space.xs}px ${space.sm}px` }}>
+                        {c.name} — no number yet (Kit room → Courier numbers)
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!moved && preview && !preview.email && (
               <div style={{ ...text('body'), color: colour.ink }}>
                 {preview.isReturn
                   ? `${kit.name} goes back to ${PLACES[kit.home]}. Nobody is emailed for a return.`
@@ -197,7 +245,7 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
               </div>
             )}
 
-            {preview?.email && (
+            {!moved && preview?.email && (
               <>
                 {!emailsOn && (
                   <div style={{ ...text('caption'), background: colour.warningSoft, color: colour.warning, border: `1px solid ${colour.warningLine}`, borderRadius: radius.control, padding: space.sm, marginBottom: space.md }}>
@@ -216,20 +264,23 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
           </div>
 
           <div style={{ padding: space.md, borderTop: border.hairline, display: 'grid', gap: space.sm }}>
-            {!preview && (
+            {moved && (
+              <button onClick={onDone} style={primary(false)} data-courier-done>{called ? 'Done' : 'No courier needed'}</button>
+            )}
+            {!moved && !preview && (
               <button disabled={!to || busy || ((kit.trays || []).length > 0 && !isReturn && !trays.length)} onClick={next} style={primary(!to || busy)}>
                 {busy ? 'Working…' : isReturn ? 'Next' : 'Next: check the email'}
               </button>
             )}
-            {preview && preview.email && emailsOn && (
+            {!moved && preview && preview.email && emailsOn && (
               <button disabled={busy} onClick={() => confirm(true)} style={primary(busy)}>{busy ? 'Sending…' : 'Send email and move'}</button>
             )}
-            {preview && (
+            {!moved && preview && (
               <button disabled={busy} onClick={() => confirm(false)} style={preview.email && emailsOn ? secondary : primary(busy)}>
                 {preview.isReturn ? 'Mark returned' : preview.email ? 'Move without emailing' : 'Move'}
               </button>
             )}
-            {preview && (
+            {!moved && preview && (
               <button disabled={busy} onClick={() => setPreview(null)} style={{ ...secondary, border: 'none', background: 'none' }}>Back</button>
             )}
           </div>

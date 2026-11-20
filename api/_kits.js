@@ -1,5 +1,6 @@
 import { placesFromLoc, applyMove, trayPlace, movingFrom } from '../src/kit/trayPlaces.js'
 import { uniqueTrayNames } from '../src/trayNames.js'
+import { DEFAULT_COURIERS, cleanCouriers } from '../src/kit/couriers.js'
 import { redis, redisSetBody } from './_redis.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
 import { STAFF } from '../src/staffConfig.js'
@@ -138,6 +139,33 @@ export async function saveKitSettings({ emailsOn }, by) {
   await redisSetBody(SETTINGS, JSON.stringify(settings))
   await addHistory({ kind: 'setting', text: `Hospital emails turned ${settings.emailsOn ? 'on' : 'off'}`, by })
   return settings
+}
+
+// ─── Courier numbers (Brent, 20 Nov 2026) ── one shared list, offered after a
+// move is confirmed. See src/kit/couriers.js.
+const COURIERS = 'kits:couriers'
+
+export async function getCouriers() {
+  try {
+    const raw = await redis('get', COURIERS)
+    if (raw) return JSON.parse(raw)
+  } catch { /* defaults */ }
+  return DEFAULT_COURIERS
+}
+
+export async function saveCouriers(list, by) {
+  const clean = cleanCouriers(list)
+  await redisSetBody(COURIERS, JSON.stringify(clean))
+  await addHistory({ kind: 'setting', text: 'Courier numbers changed', by })
+  return clean
+}
+
+/** A courier called for a move, on the movement history. */
+export async function logCourierCall({ kitId, courierId }, by) {
+  const [kit, couriers] = await Promise.all([listKits().then(ks => ks.find(k => k.id === kitId)), getCouriers()])
+  const courier = couriers.find(c => c.id === courierId)
+  if (!kit || !courier) throw new Error('No such kit or courier')
+  await addHistory({ kind: 'courier', kitId, kitName: kit.name, by, text: `Courier called: ${courier.name}` })
 }
 
 const APPLIED = 'kits:applied'

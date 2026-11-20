@@ -1576,6 +1576,24 @@ display only; bookings, supplies and moves keep its own system. Its section
 reads "Calvary · Mariner Outrigger" (`setLabel`), the move sheet names it, and
 Add a tray never puts a Mariner tray in it.
 
+### Call a courier after a move (Brent, 20 Nov 2026)
+
+"Build in a call courier button when you confirm the kit move … Jet courier
+… the three Smartways contractors … move the kit, send the email, and then
+have the option to call the courier." The move sheet's last step, after
+`confirm`: "✓ Moved to Calvary · email sent", the move in a few words to read
+out (`bookingWords`) and a **Call …** button per courier (`tel:` link,
+`dialable`) — tapping logs "Courier called: Jet Couriers" on the movement
+history (`kits=courier-called`, `logCourierCall`); **No courier needed** /
+**Done** closes. The list is `kits:couriers` (`getCouriers` / `saveCouriers`,
+returned with `kits=list`), seeded from `DEFAULT_COURIERS` in
+`src/kit/couriers.js`: Jet Couriers 03 6228 1900 and the Smartways office
+02 9808 2750, both from the office's freight document (April 2026), and
+Clayton, Stefan and a third Smartways contractor with **no number yet** — their
+mobiles are in Brent's phone. Edited on Kit room → **Courier numbers**
+(`kit/CourierNumbers.jsx`, admins and the clinical team, `kits=couriers`);
+`cleanCouriers` refuses a bad number and any "password" — every phone sees it.
+
 ### TechnoMed guides (Brent, 20 Nov 2026)
 
 Theatre guides has a **TechnoMed** section (`GROUP_ORDER` in

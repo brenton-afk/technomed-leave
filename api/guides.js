@@ -9,6 +9,7 @@ import {
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import {
   listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit, getKitOrder, saveKitOrder, logKitEvent,
+  getCouriers, saveCouriers, logCourierCall,
   saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
 import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, uploadFile } from './_dropbox.js'
@@ -340,11 +341,11 @@ async function handleKits(req, res, session) {
   const kitById = async id => (await listKits()).find(k => k.id === String(id || ''))
   try {
     if (what === 'list') {
-      const [kits, settings, order] = await Promise.all([listKits(), getKitSettings(), getKitOrder()])
+      const [kits, settings, order, couriers] = await Promise.all([listKits(), getKitSettings(), getKitOrder(), getCouriers()])
       const counts = await docCounts(kits.map(k => k.id))
       return res.status(200).json({
         kits: kits.map(k => ({ ...k, docs: counts[k.id] || { docs: 0, consignment: 0 } })),
-        order, settings, canEdit, canRemove, isAdmin: Boolean(staff.isAdmin), today: hobartToday()
+        order, settings, couriers, canEdit, canRemove, isAdmin: Boolean(staff.isAdmin), today: hobartToday()
       })
     }
     if (what === 'docs' && req.method === 'GET') {
@@ -529,6 +530,16 @@ async function handleKits(req, res, session) {
       if (what === 'remove' && !canRemove) return res.status(403).json({ error: 'Only admins and the clinical team can take a kit off the list' })
       if (what === 'save') return res.status(200).json({ kit: await saveKitDef(body.kit, sender.firstName, body.renames) })
       await removeKitDef(body.kitId, sender.firstName)
+      return res.status(200).json({ ok: true })
+    }
+    // Couriers (Brent, 20 Nov 2026): the list is changed by admins and the
+    // clinical team; a call from the move sheet is logged by anyone.
+    if (what === 'couriers') {
+      if (!canRemove) return res.status(403).json({ error: 'Only admins and the clinical team can change courier numbers' })
+      return res.status(200).json({ couriers: await saveCouriers(body.couriers, who) })
+    }
+    if (what === 'courier-called') {
+      await logCourierCall({ kitId: String(body.kitId || ''), courierId: String(body.courierId || '') }, who)
       return res.status(200).json({ ok: true })
     }
     if (what === 'settings') {
