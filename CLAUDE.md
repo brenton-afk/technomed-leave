@@ -2672,6 +2672,17 @@ makes `/ALL SURGEON USAGE/...` and `/Tray Lists/...` land in /TECHNOMED.
 `DROPBOX_USAGE_READS=on`. Filing new usage (writes) is unaffected. Do not read
 those folders — through the app or otherwise — without Brent's explicit say-so.
 
+**One usage tree from November 2026** (Brent, 20 Nov 2026: Toni found one
+case filed twice). The team had kept filing by hand into the old tree
+(`/ALL SURGEON USAGE/SPINE Usage/{SURGEON} - SPINE/{YYYY} {Surgeon}/{MM}. {Month
+YYYY} {Surgeon}/{Surname} {Dth Month YYYY}`) while the portal filed the same
+case into `SPINE/{Surgeon}/{Month YYYY}/…`, and the portal's duplicate check
+only looks in its own tree. The team now stops filing by hand. November's
+hand-filed copies were moved into the portal's case folders (cases filed
+before the portal started, whole folders, names kept) and the old
+"11. November 2026 …" month folders removed; everything before November stays
+in the old tree as history. Usage and resupplies from now on: the portal tree only.
+
 ### Treasury (private)
 
 A financial and Bitcoin dashboard for Brent alone, under Me → Treasury.
