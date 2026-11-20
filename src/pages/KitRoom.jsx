@@ -328,7 +328,10 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
       </div>
 
       {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
-      {openGroup && !open && !moving && !addingTray && (
+      {/* Stays open under the move sheet: closing it as the sheet opened took
+          the sheet's back-button step with it, and Move did nothing (Brent,
+          20 Nov 2026). */}
+      {openGroup && (
         <SystemDetail key={openGroup.key} system={openGroup} place={place} canEdit={Boolean(data?.canEdit)} user={user} post={post}
           onClose={() => setOpenSystem('')} onChanged={load}
           onAddTray={() => setAddingTray({ system: openGroup })}
@@ -348,7 +351,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
         <KitDetail key={open.id || 'new'} kit={(open.id && kits.find(k => k.id === open.id)) || open} canEdit={Boolean(data?.canEdit)}
           canRemove={Boolean(data?.canRemove)} focus={openFocus} user={user} post={post}
           onClose={() => setOpen(null)} onChanged={load}
-          onMove={(tray = '') => { setMoveTo(''); setMoveTrays(tray ? [tray] : null); setMoving(kits.find(k => k.id === open.id) || open); setOpen(null) }} />
+          onMove={(tray = '') => { setMoveTo(''); setMoveTrays(tray ? [tray] : null); setMoving(kits.find(k => k.id === open.id) || open) }} />
       )}
     </Page>
   )

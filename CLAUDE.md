@@ -45,6 +45,12 @@ a project's board and Capture a meeting (in `Projects.jsx`), Add a task, list
 place, Inbox, team leader sheet, guides and preference cards (`GuideView`),
 Attach agreements, Amend leave, the Resources Change sheet, the timesheet
 keypad, split and "Try a timesheet as…", Return a timesheet, and the camera.
+**Never close one overlay in the same tap that opens another** (Brent, 20 Nov
+2026: Move in a kit "nothing happens"): the closing layer's `history.back()`
+is still queued when the new layer pushes, and in a real browser it lands on
+the step before — popping the new layer's entry and closing it. Leave the
+first open underneath (higher `zIndex` on the second), as the kit room's
+system does under the move sheet (`systemRoom.test.jsx`).
 `backButton.test.jsx` fails on any `position: 'fixed', inset: 0` screen in
 `src/pages` or `src/kit` without `useBackLayer` (three named exemptions).
 

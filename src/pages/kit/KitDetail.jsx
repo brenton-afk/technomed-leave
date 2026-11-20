@@ -67,7 +67,7 @@ export default function KitDetail({ kit, canEdit, canRemove = canEdit, user, pos
 
   return (
     <Overlay>
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.45)', zIndex: 3100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.45)', zIndex: 3150, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
         <div role="dialog" aria-label={kit.name} className="tm-sheet" style={{
           background: colour.canvas, width: '100%', maxWidth: 520, borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
           display: 'flex', flexDirection: 'column'
