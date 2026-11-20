@@ -43,9 +43,15 @@ export function groupSystems(kits) {
   return [...map.values()]
 }
 
-/** Trays at each place, counting trays that have travelled on their own. */
+/**
+ * Trays at each place, counting trays that have travelled on their own. A set
+ * with no trays named yet still counts its place, at 0 (Brent, 21 Nov 2026:
+ * "why does it show only one kit at TM office" — the TM loan sets there had no
+ * trays listed, so they counted for nothing).
+ */
 export function traysByPlace(kits) {
   const out = {}
+  for (const k of kits || []) if (!(k.trays || []).length) out[k.at || k.home] = out[k.at || k.home] || 0
   for (const k of kits || []) {
     for (const t of k.trays || []) {
       const at = trayPlace(k, t)

@@ -1570,6 +1570,13 @@ Calvary / RHH / office tiles), a system shows only that place's trays
 (`SystemDetail place=`), with **Also show … at the other places** (Brent:
 "why is Calvary listed in a kit when I click a kit from RHH?"). The tray list's source line (file
 names, saved by, Dropbox path) is no longer drawn.
+**The place counts and tile chips** (Brent, 21 Nov 2026: "why does it show
+only one kit at TM office … what do the numbers next to Calvary and RHH
+mean?"): the Calvary / RHH / office tiles count **systems** with a set or a
+tray at that place — a set with no trays named yet counts too
+(`traysByPlace` gives it 0), so the TM loan sets at the office are no longer
+missed — and the filter uses the same test. A system tile's chips read
+"RHH · 4 trays", or "Office · no trays listed".
 **The Mariner Outrigger is inside the Mariner tile** (same day): `INSIDE`
 in `src/kit/systems.js` shows a kit under another system's tile —
 display only; bookings, supplies and moves keep its own system. Its section

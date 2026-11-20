@@ -24,7 +24,7 @@ describe('the kit room by system', () => {
   })
 
   it('counts trays where they are, a tray moved on its own included', () => {
-    expect(traysByPlace(groupSystems(kits)[1].kits)).toEqual({ CLV: 1, RHH: 1 })
+    expect(traysByPlace(groupSystems(kits)[1].kits)).toEqual({ CLV: 1, RHH: 1, office: 0 })
   })
 
   it('adds a tray to the set at that place, or starts a set there', () => {
@@ -49,5 +49,9 @@ describe('the kit room by system', () => {
     expect(setLabel(kits[0])).toBe('Mariner Outrigger')
     expect(setLabel(kits[1])).toBe('')
     expect(kitForNewTray(g[0], { system: 'Mariner', place: 'CLV', tray: 'Mariner Screws 2' }).kit.id).toBe('m')
+  })
+
+  it('counts a place where a set sits with no trays listed yet, at 0', () => {
+    expect(traysByPlace([{ home: 'office', at: 'office', trays: [] }, { home: 'RHH', at: 'RHH', trays: ['A'] }])).toEqual({ office: 0, RHH: 1 })
   })
 })

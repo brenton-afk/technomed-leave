@@ -127,10 +127,10 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
 
   const kits = data?.kits || []
   const systems = useMemo(() => groupSystems(kits), [kits])
-  const counts = useMemo(() => Object.fromEntries(PLACE_ORDER.map(p => [p, systems.filter(g => (traysByPlace(g.kits)[p] || 0) > 0).length])), [systems])
+  const counts = useMemo(() => Object.fromEntries(PLACE_ORDER.map(p => [p, systems.filter(g => p in traysByPlace(g.kits)).length])), [systems])
   const unchecked = kits.filter(k => !k.checkedAt).length
 
-  const shown = systems.filter(g => (place === 'all' || (traysByPlace(g.kits)[place] || 0) > 0 || g.kits.some(k => k.at === place))
+  const shown = systems.filter(g => (place === 'all' || place in traysByPlace(g.kits))
     && (!distributor || g.kits.some(k => distributorOf(k) === distributor))
     && (!query || `${g.name} ${g.kits.map(k => `${(k.trays || []).join(' ')} ${DISTRIBUTORS[distributorOf(k)]?.name || ''}`).join(' ')}`
       .toLowerCase().includes(query.toLowerCase())))
@@ -446,10 +446,12 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
         </div>
         <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>{total} {total === 1 ? 'tray' : 'trays'}</div>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-          {PLACE_ORDER.filter(p => where[p]).map(p => (
+          {/* Trays at each place — "RHH · 4 trays" (Brent, 21 Nov 2026: "what do
+              the numbers … mean?"). A set with none listed yet says so. */}
+          {PLACE_ORDER.filter(p => p in where).map(p => (
             <span key={p} style={{ ...text('caption'), fontWeight: 600, padding: '1px 6px', borderRadius: radius.pill,
               background: site[p].soft, color: site[p].ink, border: `1px solid ${site[p].line}`, whiteSpace: 'nowrap' }}>
-              {p === 'office' ? 'Office' : PLACE_NAMES[p]} {where[p]}
+              {p === 'office' ? 'Office' : PLACE_NAMES[p]} · {where[p] ? `${where[p]} ${where[p] === 1 ? 'tray' : 'trays'}` : 'no trays listed'}
             </span>
           ))}
         </div>
