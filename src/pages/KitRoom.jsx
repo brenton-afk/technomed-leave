@@ -11,6 +11,7 @@ import CourierNumbers from './kit/CourierNumbers.jsx'
 import KitSettings from './kit/KitSettings.jsx'
 import FillAgreements from './kit/FillAgreements.jsx'
 import { groupSystems, traysByPlace, systemOf, setLabel, awayLines, PLACE_ORDER } from '../kit/systems.js'
+import { brandFor } from '../kit/brands.js'
 import { movingFrom } from '../kit/trayPlaces.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
 import { systemsInKit } from '../clinicalPlan/systems.js'
@@ -394,6 +395,7 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
   const hold = useHold(onGrab)
   const first = group.kits[0]
   const dist = DISTRIBUTORS[distributorOf(first)]
+  const brand = brandFor(group.name)
   const where = traysByPlace(group.kits)
   const total = Object.values(where).reduce((a, b) => a + b, 0)
   const away = awayLines(group.kits)
@@ -410,11 +412,26 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
     }}>
       <button onClick={onOpen} aria-label={`Open ${group.name}`} style={{
         background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer',
-        padding: space.md, flex: 1, minWidth: 0,
-        display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch', gap: 6
+        padding: 0, flex: 1, minWidth: 0,
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch'
       }}>
-        <div style={{ ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.6px', color: colour.inkFaint,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dist?.name || 'No distributor'}</div>
+        {/* Option B (Brent, 21 Nov 2026): the system's picture across the top,
+            the maker's logo in its corner — stacked in one grid cell, never
+            positioned absolutely (see wash.test.js). */}
+        <div data-tile-art style={{ display: 'grid', height: 88, background: '#ffffff', borderBottom: border.hairlineSoft }}>
+          {brand.pic
+            ? <img src={brand.pic} alt="" draggable={false} loading="lazy" style={{ gridArea: '1 / 1', width: '100%', height: 88, objectFit: 'contain', pointerEvents: 'none' }} />
+            : <span aria-hidden="true" style={{ gridArea: '1 / 1', placeSelf: 'center', ...text('display'), color: brand.ink || colour.accentDeep }}>{brand.initial}</span>}
+          {brand.logo && (
+            <span data-tile-logo style={{ gridArea: '1 / 1', justifySelf: 'end', alignSelf: 'start', margin: 6, height: 20, padding: '0 6px',
+              borderRadius: 6, background: brand.logoBg, display: 'flex', alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+              <img src={brand.logo} alt={brand.maker} draggable={false} style={{ height: 12, width: 'auto', pointerEvents: 'none' }} />
+            </span>
+          )}
+        </div>
+        <div style={{ padding: `${space.sm}px ${space.md}px ${space.md}px`, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+        <div data-tile-maker style={{ ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.6px', color: brand.ink || colour.inkFaint,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brand.maker || dist?.name || 'No distributor'}</div>
         <div style={{ ...text('heading'), color: colour.ink, lineHeight: 1.2,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{group.name}</div>
         <div aria-hidden="true" data-place-bar style={{ display: 'flex', height: 8, borderRadius: radius.pill, overflow: 'hidden', background: colour.lineSoft }}>
@@ -425,6 +442,7 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
         <div style={{ ...text('caption'), color: colour.inkMuted }}>{total ? words : 'No trays listed yet'}</div>
         {away.map(line => <div key={line} data-away-line style={{ ...text('caption'), fontWeight: 600, color: colour.warning }}>{line}</div>)}
         {allChecked && !moving && <div style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep }}>✓ checked</div>}
+        </div>
       </button>
     </div>
   )

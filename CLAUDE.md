@@ -1625,6 +1625,19 @@ for consignment, amber for loan) with the set's name at heading size, a line
 saying what it is (`setNote`: "Consigned to Calvary", "TechnoMed loan set, on
 loan to Calvary", "Borrowed from RHH") and a CONSIGNMENT / TM LOAN / LOAN chip;
 a loan set's Move all reads **Send it back**.
+**Branded tiles, option B** (Brent, 21 Nov 2026, from the mock-up
+`claude.ai/artifact/Mc1sUce8kyQEGGFGHh8Uuc`: "B looks good … do the changes and
+I'll tell you which ones to change"). Each system tile has the system's
+product picture across the top (`data-tile-art`, 88px, from the theatre
+guides) and the maker above its name in the maker's colour (`data-tile-maker`,
+falling back to the distributor); a real logo sits in the picture's corner
+(`data-tile-logo`) only for Brainlab, Precision Spine and Global Biomedica —
+the only makers whose logos the guides carry. `brandFor` in `src/kit/brands.js`
+(pure, `brands.test.js`): `RULES` system words → maker and picture, `MAKERS`
+name, ink, logo. No picture → the system's initial. Pictures are 240×240
+JPEGs in `public/kit-art/` — **to change one, replace the file**; a new logo is
+a PNG there plus `logo`/`logoBg` on its maker. The logo is stacked in the
+picture's grid cell, never positioned absolutely.
 **A finished move is not "on the move"** (Brent, same day: the Dakota TM loan
 set moved to Calvary read "3 trays on the move"). The tile says where things
 are now — `awayLines` in `src/kit/systems.js`: "TM loan set at Calvary", "RHH
