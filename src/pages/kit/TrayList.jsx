@@ -26,7 +26,7 @@ const ACCEPT = '.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf,image/*'
 
 
 /** A saved photo, from Dropbox by a link fetched when it is shown. */
-function SavedPhoto({ path, user, alt }) {
+function SavedPhoto({ path, user, alt, onOpen, maxHeight = 320 }) {
   const [url, setUrl] = useState('')
   useEffect(() => {
     let live = true
@@ -35,7 +35,12 @@ function SavedPhoto({ path, user, alt }) {
     return () => { live = false }
   }, [path, user?.token])
   if (!url) return <div style={{ height: 120, background: colour.lineSoft, borderRadius: radius.control, marginBottom: space.sm }} />
-  return <img src={url} alt={alt} style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: radius.control, background: colour.canvas, marginBottom: space.sm }} />
+  const img = <img src={url} alt={alt} style={{ display: 'block', width: '100%', maxHeight, objectFit: 'contain', borderRadius: radius.control, background: colour.canvas }} />
+  if (!onOpen) return <div style={{ marginBottom: space.sm }}>{img}</div>
+  return (
+    <button type="button" onClick={() => onOpen(url)} aria-label={`${alt} — full size`} data-tray-photo
+      style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}>{img}</button>
+  )
 }
 
 /**
@@ -76,8 +81,6 @@ function ItemThumb({ src, alt, onOpen }) {
 // ruled, the quantity right-aligned so a column of numbers reads down.
 function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, user, onEdit, editing, onEditDone, onStartEdit, onPrint, where, onMove, onRepair, onRepaired, checked, onCheck }) {
   const implants = tray.lines.filter(l => l.kind === 'implant').length
-  const cell = { ...text('caption'), padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairlineSoft, verticalAlign: 'top' }
-  const head = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, padding: `${space.xs + 2}px ${space.sm}px`, borderBottom: border.hairline, textAlign: 'left', background: colour.canvas }
   const hasPhoto = Boolean(photoData || tray.photo)
   // Item pictures (Brent, 11 Nov 2026): on the phone while checking, from
   // Dropbox once saved.
@@ -87,7 +90,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
   const pictured = tray.lines.filter(l => l.photoData || l.photo).length
   const [zoom, setZoom] = useState(null)
   return (
-    <div style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control, marginBottom: space.sm, overflow: 'hidden' }}>
+    <div style={{ background: colour.surface, border: border.hairline, borderRadius: radius.control, marginBottom: space.sm, overflow: 'clip' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px` }}>
         {/* Tick several trays to move them together (Brent, 20 Nov 2026). */}
         {onCheck && !editing && (
@@ -139,62 +142,77 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
         </div>
       )}
       {open && !editing && (
-        <div style={{ borderTop: border.hairlineSoft, padding: space.sm }}>
-          {photoData && <img src={`data:image/jpeg;base64,${photoData}`} alt={`${tray.name}`}
-            style={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: radius.control, background: colour.canvas, marginBottom: space.sm }} />}
-          {!photoData && tray.photo && <SavedPhoto path={tray.photo} user={user} alt={tray.name} />}
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <colgroup>
-              {withPictures && <col style={{ width: 56 }} />}
-              <col style={{ width: '30%' }} /><col /><col style={{ width: 48 }} />{onRepair && <col style={{ width: 96 }} />}{onRemoveLine && <col style={{ width: 28 }} />}
-            </colgroup>
-            <thead>
-              <tr>{withPictures && <th style={head} aria-label="Picture" />}<th style={head}>Code</th><th style={head}>Description</th><th style={{ ...head, textAlign: 'right' }}>Qty</th>{onRepair && <th style={head} aria-label="Repair" />}{onRemoveLine && <th style={head} />}</tr>
-            </thead>
-            <tbody>
-              {tray.lines.map((l, i) => (
-                <tr key={`${l.code}-${i}`} style={{ background: i % 2 ? colour.canvas : colour.surface }}>
+        <div style={{ borderTop: border.hairlineSoft, padding: `0 ${space.sm}px ${space.sm}px` }}>
+          {/* The photo stays at the top while the list scrolls under it, a
+              third of the screen at most; tap it for full size (Brent,
+              21 Nov 2026: "It's just a long way to scroll"). */}
+          {(photoData || tray.photo) && (
+            <div data-sticky-photo style={{ position: 'sticky', top: -space.md, zIndex: 2, background: colour.surface,
+              padding: `${space.md}px 0 ${space.xs}px`, borderBottom: border.hairlineSoft }}>
+              {photoData
+                ? <button type="button" data-tray-photo aria-label={`${tray.name} — full size`}
+                    onClick={() => setZoom({ url: `data:image/jpeg;base64,${photoData}`, name: `${tray.name}.jpg` })}
+                    style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}>
+                    <img src={`data:image/jpeg;base64,${photoData}`} alt={`${tray.name}`}
+                      style={{ display: 'block', width: '100%', maxHeight: 'min(30vh, 240px)', objectFit: 'contain', borderRadius: radius.control, background: colour.canvas }} />
+                  </button>
+                : <SavedPhoto path={tray.photo} user={user} alt={tray.name} maxHeight="min(30vh, 240px)"
+                    onOpen={url => setZoom({ url, name: `${tray.name}.jpg` })} />}
+            </div>
+          )}
+          {/* One compact row per line: the photo's number, what it is with
+              its code beneath, the quantity, and Repair. */}
+          <div role="list" data-tray-lines>
+            {tray.lines.map((l, i) => {
+              const m = /^#(\d+)\s+/.exec(l.description || '')
+              const ref = m ? m[1] : ''
+              const what = m ? l.description.slice(m[0].length) : l.description
+              return (
+                <div role="listitem" key={`${l.code}-${i}`} data-tray-line
+                  style={{ display: 'flex', alignItems: 'center', gap: space.sm, padding: '5px 2px', borderBottom: border.hairlineSoft }}>
                   {withPictures && (
-                    <td style={{ ...cell, padding: 4 }}>
+                    <div style={{ width: 44, flexShrink: 0 }}>
                       {(l.photoData || l.photo) && (
                         <ItemThumb src={itemSrc(l)} alt={l.description || l.code}
                           onOpen={() => setZoom({ url: itemSrc(l), name: `${l.description || l.code || 'Item'}.jpg` })} />
                       )}
-                    </td>
+                    </div>
                   )}
-                  <td style={{ ...cell, color: colour.inkMuted, overflowWrap: 'anywhere' }}>{l.code || '—'}</td>
-                  <td style={{ ...cell, color: colour.ink }}>
-                    {l.description}
-                    {l.kind === 'implant' && <span style={{ ...text('micro'), color: colour.accentDeep, marginLeft: 6, textTransform: 'uppercase' }}>implant</span>}
-                  </td>
-                  <td style={{ ...cell, textAlign: 'right', fontWeight: 600, color: colour.ink }}>{l.qty}</td>
-                  {onRepair && (
-                    <td style={{ ...cell, textAlign: 'right', padding: 4 }}>
-                      {l.repair ? (
-                        <button onClick={() => onRepaired(i, l)} data-repair-back title={`Away for repair since ${new Date(l.repair.since).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}${l.repair.fault ? ` — ${l.repair.fault}` : ''}`}
-                          style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, fontWeight: 700, color: colour.warning, background: colour.warningSoft,
-                            border: `1px solid ${colour.warning}`, borderRadius: radius.pill, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          At repair · back?
-                        </button>
-                      ) : l.kind !== 'implant' && (
-                        <button onClick={() => onRepair(i, l)} data-repair-line aria-label={`Send ${l.description || l.code} for repair`}
-                          style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: colour.inkMuted, background: 'none',
-                            border: border.hairline, borderRadius: radius.pill, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          Repair
-                        </button>
-                      )}
-                    </td>
+                  {ref && (
+                    <span aria-label={`Number ${ref} on the photo`} style={{ ...text('micro'), fontWeight: 700, color: colour.navy, background: colour.lineSoft,
+                      borderRadius: 6, minWidth: 22, textAlign: 'center', padding: '2px 4px', flexShrink: 0 }}>{ref}</span>
                   )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ ...text('caption'), color: colour.ink, lineHeight: 1.25 }}>
+                      {what}
+                    </div>
+                    <div style={{ ...text('micro'), color: colour.inkFaint, letterSpacing: 0, overflowWrap: 'anywhere' }}>
+                      {l.code || '—'}
+                      {l.kind === 'implant' && <span style={{ color: colour.accentDeep, marginLeft: 6, textTransform: 'uppercase' }}>· implant</span>}
+                    </div>
+                  </div>
+                  <div style={{ ...text('caption'), fontWeight: 700, color: colour.ink, minWidth: 28, textAlign: 'right', flexShrink: 0 }}>×{l.qty}</div>
+                  {onRepair && (l.repair ? (
+                    <button onClick={() => onRepaired(i, l)} data-repair-back title={`Away for repair since ${new Date(l.repair.since).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}${l.repair.fault ? ` — ${l.repair.fault}` : ''}`}
+                      style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, fontWeight: 700, color: colour.warning, background: colour.warningSoft,
+                        border: `1px solid ${colour.warning}`, borderRadius: radius.pill, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      At repair · back?
+                    </button>
+                  ) : l.kind !== 'implant' ? (
+                    <button onClick={() => onRepair(i, l)} data-repair-line aria-label={`Send ${l.description || l.code} for repair`}
+                      style={{ ...text('micro'), textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: colour.inkMuted, background: 'none',
+                        border: border.hairline, borderRadius: radius.pill, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      Repair
+                    </button>
+                  ) : <span style={{ width: 52, flexShrink: 0 }} />)}
                   {onRemoveLine && (
-                    <td style={{ ...cell, textAlign: 'center' }}>
-                      <button onClick={() => onRemoveLine(i)} aria-label={`Remove ${l.description}`}
-                        style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>×</button>
-                    </td>
+                    <button onClick={() => onRemoveLine(i)} aria-label={`Remove ${l.description}`}
+                      style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>×</button>
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </div>
+              )
+            })}
+          </div>
           {zoom && <DocViewer name={zoom.name} url={zoom.url} onClose={() => setZoom(null)} />}
         </div>
       )}

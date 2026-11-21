@@ -1636,6 +1636,15 @@ offered), `loanNeed` says `need: 'ask'` ("RHH has a Mariner Open add-on tray —
 borrow it (RHH Loan), or ask the distributor for a loan set?"), and the person
 picks RHH Loan or Distributor Loan on the booking.
 
+**An open tray reads like a checklist** (Brent, 21 Nov 2026: "It's just a long
+way to scroll to get to the bottom of the list"). In `TrayBlock` the tray
+photo is `position: sticky` (`data-sticky-photo`, `top: -space.md` to cover
+SystemDetail's padding; the block is `overflow: clip`, not hidden, or sticky
+breaks), at most `min(30vh, 240px)`, tapped for full size in `DocViewer`. The
+lines are compact rows (`data-tray-line`), not a table: the photo's number
+from a `#n` description as a badge, the description with code (and "implant")
+beneath, ×qty, Repair. About twice as many lines on a phone screen.
+
 ### Call a courier after a move (Brent, 20 Nov 2026)
 
 "Build in a call courier button when you confirm the kit move … Jet courier
