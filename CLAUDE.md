@@ -1631,7 +1631,9 @@ as `aka`), `systems.js`, `systemSuggestions.js` and the kit room
 (`catenary-name-2026-11-21` → `renameSystem`); "catenary" now routes to E4 in
 `_distributors.js` (it did not — a Catenary kit line got no E4 notice). Its
 picture is the cage from E4's brochure; Firebird has the coloured screws and
-Ascot the plate with green screws (his files).
+Ascot the plate with green screws (his files). Later the same day: Shoreline's picture became
+his single cage-and-plate shot, and Mariner's screw was cut out of its grey
+studio background (OpenCV GrabCut, run once here; the file is plain white).
 **A set is never a system** (Brent, 21 Nov 2026: "Cylox and Cylox set 2
 should both be put under Cylox"): `systemOf` drops a trailing "Set N" from a
 system name, and `set-n-systems-2026-11-21` stored CYLOX Set 2's system as
