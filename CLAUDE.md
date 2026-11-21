@@ -1819,10 +1819,14 @@ Brent, same day: "get rid of 0 implants").
 **Sterile implants last, in their own section** (Brent, same day: "Sterile
 implants for Shoreline, Catenary ALIF, Global PLIF, MOBIS and Athlet need to
 be listed separately at the bottom"): `isSterileTray` / `STERILE_SYSTEMS` in
-`trayKind.js` — for those systems every implant tray (or one named implants,
-interbodies, cages), anywhere a tray named "sterile" — goes under
-"Sterile implants · N" after the implant trays (`groupTrays(trays,
-{ system })`).
+`trayKind.js` — for those systems only the boxed interbodies and cages (a
+tray named interbody / cage / spacer, or whose implants are mostly those),
+anywhere a tray named "sterile" — goes under "Sterile implants · N" after the
+implant trays (`groupTrays(trays, { system })`). **Not every implant tray**
+(Brent, same day: "Not all implant trays are sterile … only … sterile
+implants (in boxes) like the shoreline interbodies"): a plate-and-screw tray
+stays with the instrument and implant trays; other sterile implants to be
+added later.
 
 **The kit room filled from the consignment agreements** (Brent, 21 Nov 2026:
 "I'm ok for the unsigned copies to be used to populate the kit room"; chose

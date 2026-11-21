@@ -46,7 +46,7 @@ describe('sterile implants in their own section at the bottom (Brent, 21 Nov 202
     const g = group([imp('MOBIS Implants'), inst('MOBIS Insertion')], { system: 'MOBIS' })
     expect(g.map(x => x.label)).toEqual(['Instrument trays', 'Sterile implants'])
     expect(g[1].trays.map(t => t.name)).toEqual(['MOBIS Implants'])
-    for (const [system, tray] of [['Shoreline', 'Shoreline Sterile Interbodies'], ['Catenary ALIF', 'Catenary ALIF Implants'], ['Global BMD PLIF', 'Global BMD PLIF Implants'], ['Athlet', 'Athlet Implants']]) {
+    for (const [system, tray] of [['Shoreline', 'Shoreline Sterile Interbodies'], ['Catenary ALIF', 'Catenary ALIF Cages'], ['Global BMD PLIF', 'Global BMD PLIF Interbodies'], ['Athlet', 'Athlet Cages']]) {
       expect(isSterileTray({ name: tray, lines: [] }, system)).toBe(true)
     }
   })
@@ -55,5 +55,12 @@ describe('sterile implants in their own section at the bottom (Brent, 21 Nov 202
     expect(g.map(x => x.label)).toEqual(['Instrument trays', 'Implant trays'])
     expect(isSterileTray({ name: 'Dakota Sterile Plates', lines: [] }, 'Dakota')).toBe(true)
     expect(isSterileTray(inst('Shoreline Instruments'), 'Shoreline')).toBe(false)
+  })
+  it('keeps a plate-and-screw tray of those systems with the other trays — only boxed interbodies are sterile', () => {
+    const plates = { name: 'Shoreline Plate & Screw 1', lines: [{ code: 'P', description: 'Anterior plate 2 level', qty: 1, kind: 'implant' }, { code: 'S', description: 'Screw 4.0 x 14', qty: 8, kind: 'implant' }] }
+    expect(isSterileTray(plates, 'Shoreline')).toBe(false)
+    expect(isSterileTray({ name: 'Catenary ALIF Implants', lines: [] }, 'Catenary ALIF')).toBe(false)
+    const g = group([inst('Shoreline Instruments'), plates, { name: 'Shoreline Sterile Interbodies', lines: [] }], { system: 'Shoreline' })
+    expect(g.map(x => x.label)).toEqual(['Instrument trays', 'Implant trays', 'Sterile implants'])
   })
 })

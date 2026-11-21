@@ -24,14 +24,20 @@ export function trayKind(tray) {
 // Sterile implants apart, at the bottom (Brent, 21 Nov 2026: "Sterile
 // implants for Shoreline, Catenary ALIF, Global PLIF, MOBIS and Athlet need
 // to be listed separately at the bottom of the trays in their own section").
-// For those systems every implant tray is the sterile stock; anywhere else a
-// tray that says "sterile" in its name is.
+// Only the boxed sterile implants — the interbodies and cages — go there
+// (Brent, same day: "Not all implant trays are sterile … It's only implants
+// listed above that have sterile implants (in boxes) like the shoreline
+// interbodies"). A plate-and-screw tray stays with the other trays. Anywhere
+// else a tray that says "sterile" in its name is.
 export const STERILE_SYSTEMS = /shoreline|catenary|\balif\b|global|\bbmd\b|mobis|athlet/i
+const BOXED = /\b(interbod(y|ies)|cages?|spacers?)\b/i
 export function isSterileTray(tray, system = '') {
   const name = String(tray?.name || '')
   if (/sterile/i.test(name)) return true
   if (!STERILE_SYSTEMS.test(`${system} ${name}`)) return false
-  return trayKind(tray) === 'implant' || /\b(implants?|interbod(y|ies)|cages?)\b/i.test(name)
+  if (BOXED.test(name)) return true
+  const implants = (tray?.lines || []).filter(l => l.kind === 'implant')
+  return implants.length > 0 && trayKind(tray) === 'implant' && implants.filter(l => BOXED.test(l.description || '')).length * 2 > implants.length
 }
 
 /** The trays as groups — instruments, implants, then sterile implants — each in the order given. */
