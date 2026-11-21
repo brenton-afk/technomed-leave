@@ -567,6 +567,17 @@ async function handleKits(req, res, session) {
       if (!canRemove) return res.status(403).json({ error: 'Only admins and the clinical team can reset every tray' })
       return res.status(200).json(await resetAllLocations(who))
     }
+    // Say a move (Brent, 21 Nov 2026): the recording to words, primed with
+    // every system and tray name. The phone reads the words against the kits
+    // and opens the move sheet; nothing moves from here.
+    if (what === 'hear' && req.method === 'POST') {
+      const audio = String(body.audio || '')
+      if (!audio || audio.length > 4_000_000) return res.status(400).json({ error: 'Nothing was recorded — try again.' })
+      const { transcribe } = await import('./_readDictatedBooking.js')
+      const { kitVocabulary } = await import('../src/kit/moveRequest.js')
+      const text = await transcribe(audio, String(body.contentType || 'audio/webm'), kitVocabulary(await listKits()))
+      return res.status(200).json({ text })
+    }
     if (what === 'courier-called') {
       await logCourierCall({ kitId: String(body.kitId || ''), courierId: String(body.courierId || '') }, who)
       return res.status(200).json({ ok: true })

@@ -36,3 +36,24 @@ describe('a system with a loan set on site', () => {
     expect(document.querySelector('[data-set-group="own"]')).toHaveTextContent('Consigned to RHH')
   })
 })
+
+describe('finding a tray inside a system', () => {
+  it('shows only the sets and trays that match every word, at any place', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const system = { name: 'Diplomat', kits: [
+      { id: 'd-rhh', name: 'Diplomat 2', system: 'Diplomat', home: 'RHH', at: 'RHH', kind: 'consignment', trays: ['Diplomat Torque & Reduction', 'Diplomat Rods'] },
+      { id: 'd-clv', name: 'Diplomat 1', system: 'Diplomat', home: 'CLV', at: 'CLV', kind: 'consignment', trays: ['Diplomat Rods'] }
+    ] }
+    render(<SystemDetail system={system} canEdit user={{ token: 't' }} post={vi.fn()} onClose={() => {}} place="CLV" onSayMove={() => {}} />)
+    expect(document.querySelector('[data-system-set="d-rhh"]')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Find a tray'), { target: { value: 'torque' } })
+    expect(document.querySelector('[data-system-set="d-rhh"]')).toBeTruthy()
+    expect(document.querySelector('[data-system-set="d-clv"]')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Find a tray'), { target: { value: 'rods calvary' } })
+    expect(document.querySelector('[data-system-set="d-clv"]')).toBeTruthy()
+    expect(document.querySelector('[data-system-set="d-rhh"]')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Find a tray'), { target: { value: 'cage' } })
+    expect(document.querySelector('[data-find-none]')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Say a move' })).toBeTruthy()
+  })
+})

@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border, face, site } from '../../design/tokens.js'
 import { displayName } from '../../kit/brands.js'
+import { matchesSearch } from '../../kit/moveRequest.js'
+import { Mic } from '../voice/VoiceSheet.jsx'
 import { useBackLayer } from '../../backButton.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
@@ -19,7 +21,7 @@ import { PLACE_ORDER, setLabel, traysByPlace, caseFor } from '../../kit/systems.
 
 const PLACES = { CLV: 'Calvary', RHH: 'RHH', office: 'TM office' }
 
-export default function SystemDetail({ system, distributor = '', canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails, onRenamed, place = 'all' }) {
+export default function SystemDetail({ system, distributor = '', canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails, onRenamed, onSayMove, place = 'all' }) {
   useBackLayer(true, onClose)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -36,7 +38,12 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
   // Opened from a hospital's filter, the system shows that hospital's trays
   // only (Brent, 20 Nov 2026); the rest are one tap away.
   const [showAll, setShowAll] = useState(!place || place === 'all')
-  const here = p => showAll || p === place
+  // Find a tray quickly to move it (Brent, 21 Nov 2026): every word must be in
+  // the tray's name, its set or where it is — "torque rhh". A search looks at
+  // every place.
+  const [find, setFind] = useState('')
+  const searching = find.trim().length > 0
+  const here = p => showAll || searching || p === place
   // Ticked trays, one hospital set at a time (a move is one set's trays).
   const [picked, setPicked] = useState({ kitId: '', trays: [] })
   const toggle = (kit, tray) => setPicked(p => {
@@ -57,11 +64,14 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
   const trayCount = system.kits.reduce((n, k) => n + (k.trays || []).length, 0)
 
   // Each place: the sets that are there, and trays from other sets moved in.
+  const hit = (kit, tray, p) => !searching || matchesSearch(find, `${system.name} ${setName(kit)} ${PLACES[p] || p} ${p} ${tray}`)
+  const shownHere = (kit, p) => (kit.trays || []).filter(t => !(kit.trayAt || {})[t] && hit(kit, t, p))
   const places = PLACE_ORDER.filter(here).map(p => ({
     place: p,
-    sets: system.kits.filter(k => k.at === p),
+    sets: system.kits.filter(k => k.at === p && (!searching || shownHere(k, p).length
+      || Object.keys(k.trayAt || {}).some(t => hit(k, t, k.trayAt[t].at)))),
     movedIn: system.kits.filter(k => k.at !== p)
-      .map(kit => ({ kit, trays: Object.entries(kit.trayAt || {}).filter(([, at]) => at.at === p).map(([t]) => t) }))
+      .map(kit => ({ kit, trays: Object.entries(kit.trayAt || {}).filter(([t, at]) => at.at === p && hit(kit, t, p)).map(([t]) => t) }))
       .filter(g => g.trays.length)
   })).filter(x => x.sets.length || x.movedIn.length)
 
@@ -123,6 +133,15 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
             <div style={{ display: 'grid', gridTemplateColumns: canEdit ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: space.sm }}>
               {canEdit && <button onClick={onAddTray} data-add-tray aria-label={`Add a tray to ${system.name}`} style={bigBtn(true)}>+ Add a tray</button>}
               <button onClick={() => setDocs(d => !d)} aria-expanded={docs} data-system-docs style={bigBtn(false)}>{docs ? 'Hide documents' : 'Documents'}</button>
+            </div>
+            <div style={{ display: 'flex', gap: space.sm }}>
+              <input value={find} onChange={e => setFind(e.target.value)} placeholder={`Find a ${system.name} tray`} aria-label="Find a tray" data-find-tray
+                type="search" style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '10px 12px', ...text('field'), border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink }} />
+              {onSayMove && (
+                <button onClick={onSayMove} aria-label="Say a move" data-say-move-open title="Say a move" style={{
+                  width: 44, flexShrink: 0, borderRadius: radius.control, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', ...face.secondary, color: colour.accentDeep
+                }}><Mic size={20} /></button>
+              )}
             </div>
           </div>
 
@@ -195,9 +214,9 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
                           </div>
                           <div style={{ padding: `0 ${space.sm}px ${space.sm}px`, display: 'flex', flexDirection: 'column', gap: space.xs }}>
                             <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} compact showWhere={false}
-                              except={awayFrom(kit)} selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
+                              except={awayFrom(kit)} only={searching ? shownHere(kit, p) : null} selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
                               onMoveTray={tray => onMoveTray?.(kit, [tray])} />
-                            {awayFrom(kit).map(t => (
+                            {awayFrom(kit).filter(t => hit(kit, t, kit.trayAt[t].at)).map(t => (
                               <div key={t} data-away-tray style={{ ...amber, display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px` }}>
                                 <span style={{ flex: 1, minWidth: 0, ...text('caption'), color: colour.ink }}>
                                   <strong>{t}</strong> is at {PLACES[kit.trayAt[t].at]}{kit.trayAt[t].byName ? ` · moved by ${kit.trayAt[t].byName}` : ''}{kit.trayAt[t].since ? `, ${when(kit.trayAt[t].since)}` : ''}
@@ -235,7 +254,10 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
               )
             })}
 
-            {!showAll && system.kits.some(k => k.at !== place || Object.values(k.trayAt || {}).some(p => p.at !== place)) && (
+            {searching && places.length === 0 && (
+              <div data-find-none style={{ ...text('body'), color: colour.inkMuted, textAlign: 'center', padding: space.lg }}>No {system.name} tray matches “{find.trim()}”.</div>
+            )}
+            {!showAll && !searching && system.kits.some(k => k.at !== place || Object.values(k.trayAt || {}).some(p => p.at !== place)) && (
               <button onClick={() => setShowAll(true)} data-show-all-places
                 style={{ ...pillBtn(false), width: '100%', padding: '10px 14px' }}>
                 Also show {system.name} at the other places

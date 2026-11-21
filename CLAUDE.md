@@ -1823,6 +1823,24 @@ is not in any document we hold.
 be underneath the Calvary instrument kit; not listed first") — `groupSystems`
 ranks an `INSIDE` set half a place later.
 
+### Find a tray, and say a move (Brent, 21 Nov 2026)
+
+"Within each kit … a search function so you can find a kit quickly to do a
+transfer. Also … a speech function … 'I want to move the Diplomat torque and
+reduction tray from RHH to Calvary.'" Inside a system, **Find a tray**
+(`data-find-tray`): every word must be in the tray's name, its set or where it
+is ("torque rhh"), loosely (`matchesSearch` in `src/kit/moveRequest.js` —
+prefixes, one letter out); a search looks at every place and hides sets with
+nothing matching. **Say a move** (`kit/SayMove.jsx`, on the kit room and the
+mic beside the search): tap, speak, tap — the recording goes to
+`kits=hear` on `api/guides.js` (`transcribe`, primed with every system and tray
+name, `kitVocabulary`) — or type it. `readMoveRequest` (pure, no model) takes
+the places from "from … to …" (Calvary / RHH / Royal Hobart / office) and
+scores every tray (and "the whole … kit") against the rest; what is already at
+the destination drops out; up to five choices, best first, a To row to change
+the place. **Move it** opens the ordinary move sheet with that tray and
+destination chosen — the email step still decides, nothing moves from here.
+
 ### Call a courier after a move (Brent, 20 Nov 2026)
 
 "Build in a call courier button when you confirm the kit move … Jet courier

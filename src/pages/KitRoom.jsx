@@ -6,6 +6,8 @@ import MoveSheet from './kit/MoveSheet.jsx'
 import KitDetail from './kit/KitDetail.jsx'
 import AttachAgreements from './kit/AttachAgreements.jsx'
 import SystemDetail from './kit/SystemDetail.jsx'
+import SayMove from './kit/SayMove.jsx'
+import { Mic } from './voice/VoiceSheet.jsx'
 import AddTraySheet from './kit/AddTraySheet.jsx'
 import CourierNumbers from './kit/CourierNumbers.jsx'
 import KitSettings from './kit/KitSettings.jsx'
@@ -85,6 +87,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
   const [filling, setFilling] = useState(false)
   const [editingCouriers, setEditingCouriers] = useState(false)
   const [settings, setSettings] = useState(false)
+  const [saying, setSaying] = useState(false)
   const [busy, setBusy] = useState('')
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
@@ -251,6 +254,11 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           <div style={{ flex: 1, ...text('caption'), color: colour.inkFaint }}>
             {data ? `${shown.length} ${shown.length === 1 ? 'system' : 'systems'}${place !== 'all' ? ` at ${PLACE_NAMES[place]}` : ''}` : 'Loading…'}
           </div>
+          {data && (
+            <button onClick={() => setSaying(true)} data-say-move-open aria-label="Say a move" style={{ ...pill(false), padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Mic size={16} /> Say a move
+            </button>
+          )}
           {data?.canEdit && (
             <button onClick={() => setAddingTray({ system: null })} data-add-tray style={{ ...pill(true), padding: '8px 14px' }}>+ Add a tray</button>
           )}
@@ -320,7 +328,12 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           onAddTray={() => setAddingTray({ system: openGroup })}
           onMoveTray={(kit, trays, to = '') => { setMoveTo(to); setMoveTrays(trays); setMoving(kit) }}
           onMoveKit={kit => { setMoveTo(''); setMoveTrays(null); setMoving(kit) }}
-          onKitDetails={kit => { setOpenFocus(''); setOpen(kit) }} />
+          onKitDetails={kit => { setOpenFocus(''); setOpen(kit) }}
+          onSayMove={() => setSaying(true)} />
+      )}
+      {saying && (
+        <SayMove kits={kits} user={user} onClose={() => setSaying(false)}
+          onMove={(kit, trays, to) => { setSaying(false); setMoveTo(to || ''); setMoveTrays(trays); setMoving(kit) }} />
       )}
       {addingTray && (
         <AddTraySheet system={addingTray.system} systems={systems} post={post}
