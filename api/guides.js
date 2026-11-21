@@ -9,7 +9,7 @@ import {
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import {
   listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit, getKitOrder, saveKitOrder, logKitEvent,
-  getCouriers, saveCouriers, logCourierCall, resetAllLocations,
+  getCouriers, saveCouriers, logCourierCall, resetAllLocations, renameSystem,
   saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
 import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, uploadFile } from './_dropbox.js'
@@ -537,6 +537,10 @@ async function handleKits(req, res, session) {
     if (what === 'couriers') {
       if (!canRemove) return res.status(403).json({ error: 'Only admins and the clinical team can change courier numbers' })
       return res.status(200).json({ couriers: await saveCouriers(body.couriers, who) })
+    }
+    if (what === 'rename-system') {
+      if (!canEdit) return res.status(403).json({ error: 'Sign in to rename a system' })
+      return res.status(200).json(await renameSystem(body.from, body.to, who))
     }
     if (what === 'reset-all') {
       if (!canRemove) return res.status(403).json({ error: 'Only admins and the clinical team can reset every tray' })

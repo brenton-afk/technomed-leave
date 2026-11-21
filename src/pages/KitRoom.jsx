@@ -342,7 +342,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           the sheet's back-button step with it, and Move did nothing (Brent,
           20 Nov 2026). */}
       {openGroup && (
-        <SystemDetail key={openGroup.key} system={openGroup} place={place} canEdit={Boolean(data?.canEdit)} user={user} post={post}
+        <SystemDetail key={openGroup.key} system={openGroup} place={place} onRenamed={to => setOpenSystem(to.toLowerCase())} canEdit={Boolean(data?.canEdit)} user={user} post={post}
           onClose={() => setOpenSystem('')} onChanged={load}
           onAddTray={() => setAddingTray({ system: openGroup })}
           onMoveTray={(kit, trays) => { setMoveTo(''); setMoveTrays(trays); setMoving(kit) }}

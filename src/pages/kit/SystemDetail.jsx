@@ -14,7 +14,16 @@ import { PLACE_ORDER, setLabel } from '../../kit/systems.js'
 
 const PLACES = { CLV: 'Calvary', RHH: 'RHH', office: 'TM office / Warehouse' }
 
-export default function SystemDetail({ system, canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails, place = 'all' }) {
+export default function SystemDetail({ system, canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails, onRenamed, place = 'all' }) {
+  // Rename the system itself — the name on its tile (Brent, 21 Nov 2026).
+  const [naming, setNaming] = useState(null)
+  async function rename() {
+    const to = String(naming || '').trim()
+    if (!to || to === system.name) { setNaming(null); return }
+    setBusy('rename'); setError('')
+    try { await post('rename-system', { from: system.name, to }); setNaming(null); onRenamed?.(to); await onChanged?.() } catch (err) { setError(err.message) }
+    setBusy('')
+  }
   // Opened from a hospital's filter, the system shows that hospital's trays
   // only (Brent, 20 Nov 2026: "why is Calvary listed in a kit when I click a
   // kit from RHH?"); the rest are one tap away.
@@ -63,7 +72,20 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
         }}>
           <div style={{ padding: space.md, borderBottom: border.hairline, display: 'flex', alignItems: 'baseline', gap: space.sm }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ ...text('heading'), color: colour.ink }}>{system.name}</div>
+              {naming === null ? (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' }}>
+                  <div style={{ ...text('heading'), color: colour.ink }}>{system.name}</div>
+                  {canEdit && <button onClick={() => setNaming(system.name)} data-rename-system
+                    style={{ background: 'none', border: 'none', padding: 0, ...text('caption'), fontWeight: 600, color: colour.accentDeep, cursor: 'pointer' }}>Rename</button>}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
+                  <input value={naming} onChange={e => setNaming(e.target.value)} aria-label="System name" autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setNaming(null) }}
+                    style={{ flex: 1, minWidth: 0, padding: '8px 10px', ...text('field'), border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink }} />
+                  <button onClick={rename} disabled={busy === 'rename'} style={pillBtn(true)}>{busy === 'rename' ? '…' : 'Save'}</button>
+                </div>
+              )}
               <div style={{ ...text('caption'), color: colour.inkFaint }}>{trayCount} {trayCount === 1 ? 'tray' : 'trays'}</div>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', ...text('bodyStrong'), color: colour.inkFaint, cursor: 'pointer' }}>Close</button>

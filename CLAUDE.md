@@ -1577,6 +1577,12 @@ tray at that place — a set with no trays named yet counts too
 (`traysByPlace` gives it 0), so the TM loan sets at the office are no longer
 missed — and the filter uses the same test. A system tile's chips read
 "RHH · 4 trays", or "Office · no trays listed".
+**Renaming** (Brent, 21 Nov 2026: "editing the tray name isn't editing the
+display name on the kit tile"): the tile shows the **system**, which no
+screen could change — Set details edits one set's own name. **Rename** beside
+the name on a system (`kits=rename-system`, `renameSystem`) changes `system`
+on every set of it, and a set name that starts with it. A tray renamed in its
+list now keeps its place if it was moved on its own (`trayAt` key renamed).
 **The Mariner Outrigger is inside the Mariner tile** (same day): `INSIDE`
 in `src/kit/systems.js` shows a kit under another system's tile —
 display only; bookings, supplies and moves keep its own system. Its section

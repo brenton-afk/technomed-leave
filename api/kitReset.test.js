@@ -7,6 +7,7 @@ vi.mock('./_redis.js', () => ({
   redis: vi.fn(async (cmd, ...args) => {
     if (cmd === 'get') return store.get(args[0]) ?? null
     if (cmd === 'mget') return args.map(k => store.get(k) ?? null)
+    if (cmd === 'set') { store.set(args[0], args[1]); return 'OK' }
     if (cmd === 'lpush' || cmd === 'ltrim' || cmd === 'del' || cmd === 'expire') return 1
     return null
   }),
@@ -14,7 +15,7 @@ vi.mock('./_redis.js', () => ({
 }))
 vi.mock('./_bookingNotices.js', () => ({ getNoticeSettings: async () => ({ contacts: [] }) }))
 
-const { resetAllLocations, listKits } = await import('./_kits.js')
+const { resetAllLocations, listKits, renameSystem, editTrayList } = await import('./_kits.js')
 
 beforeEach(() => {
   store.clear()
@@ -34,5 +35,22 @@ describe('reset every tray to home', () => {
     const after = await listKits()
     expect(after.every(k => k.at === k.home && !k.away && !Object.keys(k.trayAt || {}).length)).toBe(true)
     expect(JSON.parse(store.get('kits:loc:a'))).toMatchObject({ at: 'CLV', checkedBy: 'Ben' })
+  })
+})
+
+// Brent, 21 Nov 2026: the name on a system's tile could not be changed.
+describe('renaming', () => {
+  it('renames a system on every set of it', async () => {
+    await renameSystem('Diplomat', 'Diplomat Screws', 'Brent')
+    const kits = await listKits()
+    expect(kits.find(k => k.id === 'a')).toMatchObject({ system: 'Diplomat Screws', name: 'Diplomat Screws 1' })
+    expect(kits.find(k => k.id === 'b').system).toBe('Dakota')
+    await expect(renameSystem('Dakota', 'diplomat screws', 'Brent')).rejects.toThrow(/already a system/)
+  })
+  it('a tray moved on its own keeps its place when renamed', async () => {
+    await editTrayList('a', { op: 'rename', tray: 'T1', name: 'Tray One' }, 'Brent')
+    const a = (await listKits()).find(k => k.id === 'a')
+    expect(a.trays).toContain('Tray One')
+    expect(a.trayAt['Tray One']).toMatchObject({ at: 'RHH' })
   })
 })

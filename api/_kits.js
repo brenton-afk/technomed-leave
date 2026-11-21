@@ -480,6 +480,33 @@ export async function returnKit(kitId, sender) {
 }
 
 /**
+ * A system's name, on every set of it (Brent, 21 Nov 2026: the name on a
+ * system's tile could not be changed — it is the sets' `system`, and Set
+ * details only edited one set's own name). A set's name that starts with the
+ * old system name takes the new one too.
+ */
+export async function renameSystem(from, to, by) {
+  const old = String(from || '').trim()
+  const name = String(to || '').trim().slice(0, 60)
+  if (!old || !name) throw new Error('A system needs a name')
+  const defs = await getDefs()
+  const same = s => String(s || '').trim().toLowerCase() === old.toLowerCase()
+  const hit = defs.filter(k => same(k.system) || (!k.system && same(k.name)))
+  if (!hit.length) throw new Error(`No system called "${old}"`)
+  if (name.toLowerCase() !== old.toLowerCase() && defs.some(k => !hit.includes(k) && String(k.system || k.name).trim().toLowerCase() === name.toLowerCase())) {
+    throw new Error(`There is already a system called "${name}"`)
+  }
+  const next = defs.map(k => {
+    if (!hit.includes(k)) return k
+    const kitName = String(k.name || '').toLowerCase().startsWith(old.toLowerCase()) ? name + String(k.name).slice(old.length) : k.name
+    return { ...k, system: name, name: kitName }
+  })
+  await redisSetBody(DEFS, JSON.stringify(next))
+  await addHistory({ kind: 'edit', by, text: `System renamed ${old} → ${name}` })
+  return { renamed: hit.length }
+}
+
+/**
  * Every set and every tray back where it lives, in one go (Brent, 20 Nov
  * 2026: "a button to reset all trays to their original locations in one
  * tap"). Nobody is emailed; the stock-take ticks are kept. One history line.
@@ -688,7 +715,12 @@ async function editTrayListNow(kitId, { op, tray, index, line, expect, name, rep
       await redisSetBody(DEFS, JSON.stringify(defs.map(k => (k.id === kitId
         ? { ...k, trays: (k.trays || []).map(n => (n === from ? to : n)) } : k))))
       const loc = await getLoc(kitId)
-      if (loc?.trays?.length) await setLoc(kitId, { ...loc, trays: loc.trays.map(n => (n === from ? to : n)) })
+      // A tray moved on its own keeps its place under its new name.
+      if (loc?.trays?.length || loc?.trayAt?.[from]) {
+        const trayAt = { ...(loc.trayAt || {}) }
+        if (trayAt[from]) { trayAt[to] = trayAt[from]; delete trayAt[from] }
+        await setLoc(kitId, { ...loc, ...(loc.trays ? { trays: loc.trays.map(n => (n === from ? to : n)) } : {}), trayAt })
+      }
     }
     note = `tray renamed ${from} → ${to}`
   } else if (op === 'repair' || op === 'repaired') {
