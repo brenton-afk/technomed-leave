@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Page, Header, Banner, EmptyState, Skeleton } from '../design/Shell.jsx'
+import { Page, Header, Banner, EmptyState, Skeleton, BAND_RAISED } from '../design/Shell.jsx'
 import { colour, text, space, radius, border, card, site } from '../design/tokens.js'
 import { IconKit, IconSearch } from '../design/icons.jsx'
 import MoveSheet from './kit/MoveSheet.jsx'
@@ -8,6 +8,7 @@ import AttachAgreements from './kit/AttachAgreements.jsx'
 import SystemDetail from './kit/SystemDetail.jsx'
 import AddTraySheet from './kit/AddTraySheet.jsx'
 import CourierNumbers from './kit/CourierNumbers.jsx'
+import KitSettings from './kit/KitSettings.jsx'
 import { groupSystems, traysByPlace, systemOf, setLabel, PLACE_ORDER } from '../kit/systems.js'
 import { movingFrom } from '../kit/trayPlaces.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
@@ -37,10 +38,6 @@ export const DISTRIBUTORS = {
   technomed: { name: 'TechnoMed', logo: '/logos/technomed.png' }
 }
 
-// A system made by somebody other than its distributor shows its maker: KT
-// distribute Firebird, but the tray says Orthofix.
-const SYSTEM_LOGOS = { 'Orthofix Firebird': '/logos/orthofix.png' }
-
 /**
  * The distributor, from the kit, else from what the inventory says its system
  * is, else from the systems its name or system mentions ("Dakota TM loan",
@@ -65,16 +62,12 @@ export function distributorOf(kit) {
   return ''
 }
 
-function logoFor(kit) {
-  return SYSTEM_LOGOS[kit.system] || DISTRIBUTORS[distributorOf(kit)]?.logo || null
-}
 
 export default function KitRoom({ user, onBack, openKit = '' }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [place, setPlace] = useState('all')
   const [query, setQuery] = useState('')
-  const [distributor, setDistributor] = useState('')
   const [moving, setMoving] = useState(null)
   const [open, setOpen] = useState(null)
   // The kit room is one tile per system (Brent, 20 Nov 2026); this is the one open.
@@ -88,6 +81,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
   const [order, setOrder] = useState(null)
   const [attaching, setAttaching] = useState(false)
   const [editingCouriers, setEditingCouriers] = useState(false)
+  const [settings, setSettings] = useState(false)
   const [busy, setBusy] = useState('')
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
@@ -131,7 +125,6 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
   const unchecked = kits.filter(k => !k.checkedAt).length
 
   const shown = systems.filter(g => (place === 'all' || place in traysByPlace(g.kits))
-    && (!distributor || g.kits.some(k => distributorOf(k) === distributor))
     && (!query || `${g.name} ${g.kits.map(k => `${(k.trays || []).join(' ')} ${DISTRIBUTORS[distributorOf(k)]?.name || ''}`).join(' ')}`
       .toLowerCase().includes(query.toLowerCase())))
   // The shared order a person dragged (kept as kit ids — a system sits where
@@ -202,100 +195,79 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
     try { await post('order', { ids: next }) } catch (err) { setOrder(was); setError(err.message) }
   }
 
-  const presentDistributors = [...new Set(kits.map(distributorOf).filter(Boolean))]
   const openGroup = openSystem && systems.find(g => g.key === openSystem)
-  const awaySets = kits.filter(k => k.away).length
+
+  const trayTotals = useMemo(() => {
+    const out = { CLV: 0, RHH: 0, office: 0 }
+    for (const g of systems) for (const [p, n] of Object.entries(traysByPlace(g.kits))) out[p] = (out[p] || 0) + n
+    return out
+  }, [systems])
+  const setupDue = data && (unchecked > 0 || !data.settings?.emailsOn)
 
   return (
     <Page>
-      <Header eyebrow="Kit and stock" title="Kit room" onBack={onBack}
-        subtitle={data ? `${systems.length} systems · ${kits.reduce((n, k) => n + (k.trays || []).length, 0)} trays${awaySets ? ` · ${awaySets} away from home` : ''}` : 'Loading…'} />
-      <div className="tm-measure" style={{ padding: space.lg, paddingBottom: space.xxxl }}>
-
-        {error && <Banner tone="danger">{error}</Banner>}
-
-        {data && !data.settings?.emailsOn && (
-          <Banner tone="warning">
-            <strong>Hospital emails are off.</strong> Moves are recorded and you will see the email that would go
-            to Calvary or RHH, but nothing is sent. {data.isAdmin
-              ? 'Turn them on once the stock-take below is finished.'
-              : 'Brent or Erin will turn them on once the stock-take is done.'}
-            {data.isAdmin && unchecked === 0 && (
-              <div style={{ marginTop: space.sm }}>
-                <button onClick={() => act('emails', () => post('settings', { emailsOn: true }))}
-                  disabled={busy === 'emails'} style={pill(true)}>Turn hospital emails on</button>
-              </div>
-            )}
-          </Banner>
-        )}
-        {data?.settings?.emailsOn && data.isAdmin && (
-          <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.md }}>
-            Hospital emails are on.{' '}
-            <button onClick={() => act('emails', () => post('settings', { emailsOn: false }))}
-              style={{ ...linkButton }}>Turn off</button>
-          </div>
-        )}
-
-        {data && unchecked > 0 && (
-          <div style={{ ...card(), padding: space.md, marginBottom: space.md }}>
-            <div style={{ ...text('bodyStrong'), color: colour.ink }}>Stock-take: {kits.length - unchecked} of {kits.length} hospital sets checked</div>
-            <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>
-              Open a system and tap <strong>It's here</strong> beside each hospital's trays you can see — it turns green.
-              A tray somewhere else: Move it to where it really is.
-            </div>
-            <div style={{ height: 6, background: colour.lineSoft, borderRadius: radius.pill, marginTop: space.sm, overflow: 'hidden' }}>
-              <div style={{ width: `${((kits.length - unchecked) / Math.max(kits.length, 1)) * 100}%`, height: '100%', background: colour.accent }} />
-            </div>
-          </div>
-        )}
-
-        {/* The three places: summary and filter at once. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: space.sm, marginBottom: space.md }}>
+      {/* Option C (Brent, 21 Nov 2026): the stock-take and hospital-email
+          banners moved behind the ⚙; the band carries the tray counts. */}
+      <Header title="Kit room" onBack={onBack}
+        right={(
+          <button onClick={() => setSettings(true)} aria-label="Kit room settings" data-kit-settings style={{
+            width: 40, height: 40, borderRadius: radius.control, ...BAND_RAISED, color: 'white', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+            </svg>
+            {setupDue && <span aria-hidden="true" style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 4, background: colour.warning }} />}
+          </button>
+        )}>
+        {/* The three places: tray counts and the filter at once. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.sm, marginTop: space.sm }}>
           {PLACE_ORDER.map(p => {
             const on = place === p
+            const n = trayTotals[p] || 0
             return (
-              <button key={p} onClick={() => setPlace(on ? 'all' : p)} aria-pressed={on}
+              <button key={p} onClick={() => setPlace(on ? 'all' : p)} aria-pressed={on} data-place-tile={p}
                 style={{
-                  ...card(), padding: `${space.md}px ${space.sm}px`, textAlign: 'left', cursor: 'pointer',
-                  background: on ? site[p].ink : site[p].soft, borderColor: on ? site[p].ink : site[p].line
+                  padding: `${space.sm}px ${space.sm + 2}px`, textAlign: 'left', cursor: 'pointer', borderRadius: radius.control,
+                  ...BAND_RAISED, border: `1px solid ${on ? 'white' : site[p].ink}`,
+                  ...(on ? { background: site[p].ink } : {})
                 }}>
-                <div style={{ ...text('title'), color: on ? 'white' : site[p].ink }}>{data ? counts[p] : '–'}</div>
-                <div style={{ ...text('caption'), fontWeight: 600, color: on ? 'rgba(255,255,255,0.85)' : site[p].ink }}>{PLACE_NAMES[p]}</div>
+                <div style={{ ...text('title'), color: 'white' }}>{data ? n : '–'}</div>
+                <div style={{ ...text('caption'), color: 'rgba(255,255,255,0.8)' }}>{p === 'office' ? 'at the office' : `${n === 1 ? 'tray' : 'trays'} at ${PLACE_NAMES[p]}`}</div>
               </button>
             )
           })}
         </div>
+      </Header>
+      <div className="tm-measure" style={{ padding: space.lg, paddingBottom: space.xxxl }}>
 
-        <div style={{ position: 'relative', marginBottom: space.sm }}>
+        {error && <Banner tone="danger">{error}</Banner>}
+
+        <div style={{ display: 'flex', gap: space.sm, alignItems: 'center', marginBottom: space.sm }}>
+          <div style={{ flex: 1, ...text('caption'), color: colour.inkFaint }}>
+            {data ? `${shown.length} ${shown.length === 1 ? 'system' : 'systems'}${place !== 'all' ? ` at ${PLACE_NAMES[place]}` : ''}` : 'Loading…'}
+          </div>
+          {data?.canEdit && (
+            <button onClick={() => setAddingTray({ system: null })} data-add-tray style={{ ...pill(true), padding: '8px 14px' }}>+ Add a tray</button>
+          )}
+        </div>
+
+        <div style={{ position: 'relative', marginBottom: space.md }}>
           <span style={{ position: 'absolute', left: 12, top: 11, color: colour.inkFainter, display: 'flex' }}><IconSearch size={18} /></span>
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search systems or trays"
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search systems, trays or distributors"
             aria-label="Search kits" style={{
               width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 38px', ...text('field'),
               border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink
             }} />
         </div>
 
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, marginBottom: space.lg }}>
-          <button onClick={() => setDistributor('')} style={pill(!distributor)}>All</button>
-          {presentDistributors.map(d => (
-            <button key={d} onClick={() => setDistributor(distributor === d ? '' : d)} style={pill(distributor === d)}>
-              {DISTRIBUTORS[d]?.name || d}
-            </button>
-          ))}
-        </div>
-
-        {data?.canEdit && (
-          <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginBottom: space.md }}>
-            <button onClick={() => setAddingTray({ system: null })} data-add-tray style={pill(true)}>+ Add a tray</button>
-          </div>
-        )}
-
         {!data && !error && (
           <TileGrid>{[0, 1, 2, 3, 4, 5].map(i => <Skeleton key={i} height={132} style={{ borderRadius: radius.card }} />)}</TileGrid>
         )}
 
         {data && shown.length === 0 && (
-          <EmptyState icon={IconKit} title="No systems match" detail="Try another place, distributor or search." />
+          <EmptyState icon={IconKit} title="No systems match" detail="Try another place or search." />
         )}
 
         {shown.length > 0 && (
@@ -319,33 +291,29 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
             ...text('bodyStrong'), color: colour.ink
           }}>{dragging.group.name}</div>
         )}
-
-        {data?.canRemove && (
-          <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.lg }}>
-            <button onClick={() => setAttaching(true)} data-attach-agreements style={pill(false)}>Attach agreements from Dropbox</button>
-            <button onClick={() => setEditingCouriers(true)} data-courier-numbers style={pill(false)}>Courier numbers</button>
-            {/* Brent, 20 Nov 2026: "reset all trays to their original locations in one tap". */}
-            <button data-reset-all disabled={busy === 'reset' || !awaySets && !kits.some(k => Object.keys(k.trayAt || {}).length)}
-              onClick={() => {
-                if (!window.confirm('Put every tray back where it lives? Nobody is emailed.')) return
-                act('reset', () => post('reset-all', {}))
-              }} style={pill(false)}>{busy === 'reset' ? 'Resetting…' : 'Reset all trays to home'}</button>
-          </div>
-        )}
-
-        {data && <HistoryLink user={user} />}
       </div>
 
+      {settings && (
+        <KitSettings data={data} kits={kits} busy={busy} onClose={() => setSettings(false)}
+          onEmails={on => act('emails', () => post('settings', { emailsOn: on }))}
+          onCouriers={() => setEditingCouriers(true)}
+          onAgreements={() => setAttaching(true)}
+          onReset={() => {
+            if (!window.confirm('Put every tray back where it lives? Nobody is emailed.')) return
+            act('reset', () => post('reset-all', {}))
+          }}
+          history={<HistoryLink user={user} />} />
+      )}
       {editingCouriers && <CourierNumbers couriers={data?.couriers || []} post={post} onClose={() => setEditingCouriers(false)} onSaved={load} />}
       {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
       {/* Stays open under the move sheet: closing it as the sheet opened took
           the sheet's back-button step with it, and Move did nothing (Brent,
           20 Nov 2026). */}
       {openGroup && (
-        <SystemDetail key={openGroup.key} system={openGroup} place={place} onRenamed={to => setOpenSystem(to.toLowerCase())} canEdit={Boolean(data?.canEdit)} user={user} post={post}
+        <SystemDetail key={openGroup.key} system={openGroup} distributor={DISTRIBUTORS[distributorOf(openGroup.kits[0])]?.name || ''} place={place} onRenamed={to => setOpenSystem(to.toLowerCase())} canEdit={Boolean(data?.canEdit)} user={user} post={post}
           onClose={() => setOpenSystem('')} onChanged={load}
           onAddTray={() => setAddingTray({ system: openGroup })}
-          onMoveTray={(kit, trays) => { setMoveTo(''); setMoveTrays(trays); setMoving(kit) }}
+          onMoveTray={(kit, trays, to = '') => { setMoveTo(to); setMoveTrays(trays); setMoving(kit) }}
           onMoveKit={kit => { setMoveTo(''); setMoveTrays(null); setMoving(kit) }}
           onKitDetails={kit => { setOpenFocus(''); setOpen(kit) }} />
       )}
@@ -413,50 +381,45 @@ function useHold(onGrab) {
   }
 }
 
-/** One system: its logo, name, trays and where they are. */
+/**
+ * One system (option C, Brent 21 Nov 2026): its distributor, its name, a bar
+ * of where its trays are — Calvary, RHH, the office — the same in words, and
+ * a line when any tray is on the move.
+ */
 function SystemTile({ group, onOpen, onGrab, lifted, target }) {
   const hold = useHold(onGrab)
   const first = group.kits[0]
   const dist = DISTRIBUTORS[distributorOf(first)]
-  const logo = SYSTEM_LOGOS[group.name] || logoFor(first)
   const where = traysByPlace(group.kits)
   const total = Object.values(where).reduce((a, b) => a + b, 0)
-  const awaySets = group.kits.filter(k => k.away).length
+  const moving = group.kits.reduce((n, k) => n + (k.away ? (k.trays || []).length || 1 : Object.keys(k.trayAt || {}).length), 0)
   const checked = group.kits.filter(k => k.checkedAt).length
   const allChecked = checked === group.kits.length
+  const words = PLACE_ORDER.filter(p => p in where)
+    .map(p => `${p === 'office' ? 'Office' : PLACE_NAMES[p]} ${where[p] || 0}`).join(' · ')
   return (
     <div data-system-tile={group.key} {...hold} style={{
-      ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative',
+      ...card(), display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
       opacity: lifted ? 0.4 : 1, WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none',
-      boxShadow: target ? `0 0 0 2px ${colour.accent}` : undefined,
-      borderTop: `3px solid ${awaySets ? colour.warning : allChecked ? colour.accent : colour.line}`
+      boxShadow: target ? `0 0 0 2px ${colour.accent}` : undefined
     }}>
       <button onClick={onOpen} aria-label={`Open ${group.name}`} style={{
         background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer',
-        padding: space.sm, flex: 1, minWidth: 0,
-        display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch'
+        padding: space.md, flex: 1, minWidth: 0,
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch', gap: 6
       }}>
-        <div style={{ height: 34, marginBottom: 6, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
-          {logo
-            ? <img src={logo} alt={dist?.name || ''} style={{ maxWidth: '78%', maxHeight: '100%', objectFit: 'contain' }} />
-            : <span style={{ ...text('micro'), color: colour.navy, letterSpacing: '0.6px' }}>{(dist?.name || group.name).toUpperCase()}</span>}
-        </div>
-        <div style={{ ...text('bodyStrong'), color: colour.ink, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {group.name}
-        </div>
-        <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>{total} {total === 1 ? 'tray' : 'trays'}</div>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-          {/* Trays at each place — "RHH · 4 trays" (Brent, 21 Nov 2026: "what do
-              the numbers … mean?"). A set with none listed yet says so. */}
-          {PLACE_ORDER.filter(p => p in where).map(p => (
-            <span key={p} style={{ ...text('caption'), fontWeight: 600, padding: '1px 6px', borderRadius: radius.pill,
-              background: site[p].soft, color: site[p].ink, border: `1px solid ${site[p].line}`, whiteSpace: 'nowrap' }}>
-              {p === 'office' ? 'Office' : PLACE_NAMES[p]} · {where[p] ? `${where[p]} ${where[p] === 1 ? 'tray' : 'trays'}` : 'no trays listed'}
-            </span>
+        <div style={{ ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.6px', color: colour.inkFaint,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{dist?.name || 'No distributor'}</div>
+        <div style={{ ...text('heading'), color: colour.ink, lineHeight: 1.2,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{group.name}</div>
+        <div aria-hidden="true" data-place-bar style={{ display: 'flex', height: 8, borderRadius: radius.pill, overflow: 'hidden', background: colour.lineSoft }}>
+          {total > 0 && PLACE_ORDER.filter(p => where[p]).map(p => (
+            <div key={p} style={{ width: `${(where[p] / total) * 100}%`, background: site[p].ink }} />
           ))}
         </div>
-        {awaySets > 0 && <div style={{ ...text('caption'), color: colour.warning, fontWeight: 600, marginTop: 4 }}>Trays away from home</div>}
-        {allChecked && !awaySets && <div style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600, marginTop: 4 }}>✓ checked</div>}
+        <div style={{ ...text('caption'), color: colour.inkMuted }}>{total ? words : 'No trays listed yet'}</div>
+        {moving > 0 && <div style={{ ...text('caption'), fontWeight: 600, color: colour.warning }}>{moving} {moving === 1 ? 'tray' : 'trays'} on the move</div>}
+        {allChecked && !moving && <div style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep }}>✓ checked</div>}
       </button>
     </div>
   )

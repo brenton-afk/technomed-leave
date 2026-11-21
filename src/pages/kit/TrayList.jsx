@@ -97,32 +97,41 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
         <button onClick={onToggle} aria-expanded={open} style={{ flex: 1, background: 'none', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }}>
           <div style={{ ...text('bodyStrong'), color: colour.ink }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
-            {where ? `${where} · ` : ''}{tray.lines.length ? `${tray.lines.length} items · ${implants} implant${implants === 1 ? '' : 's'}${hasPhoto ? ' · photo' : ' · no photo'}` : 'Nothing listed yet — tap Edit to add what it holds'}
+            {where ? `${where} · ` : ''}{tray.lines.length ? `${tray.lines.length} ${tray.lines.length === 1 ? 'item' : 'items'} · ${implants} implant${implants === 1 ? '' : 's'}${hasPhoto ? ' · photo' : ' · no photo'}` : 'Nothing listed yet'}
             {tray.lines.some(l => l.repair) ? ` · ${tray.lines.filter(l => l.repair).length} away for repair` : ''}
             {pictured ? ` · ${pictured} item picture${pictured === 1 ? '' : 's'}` : ''}
             {tray.updatedBy ? ` · updated by ${tray.updatedBy}${tray.updatedAt ? ` ${new Date(tray.updatedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}` : ''}` : ''}
           </div>
         </button>
-        {onPrint && open && !editing && (
-          <button onClick={onPrint} aria-label={`Print ${tray.name}`}
-            style={{ ...text('caption'), fontWeight: 600, color: colour.inkMuted, background: 'none', border: border.hairline,
-              borderRadius: radius.pill, padding: '4px 12px', cursor: 'pointer' }}>Print</button>
-        )}
-        {onMove && !editing && (
-          <button onClick={onMove} aria-label={`Move ${tray.name}`} data-move-tray
-            style={{ ...text('caption'), fontWeight: 600, color: 'white', background: colour.navy, border: 'none',
-              borderRadius: radius.pill, padding: '4px 12px', cursor: 'pointer' }}>Move</button>
-        )}
-        {onStartEdit && !editing && (
-          <button onClick={onStartEdit} aria-label={`Edit ${tray.name}`}
-            style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: 'none', border: `1px solid ${colour.accent}`,
-              borderRadius: radius.pill, padding: '4px 12px', cursor: 'pointer' }}>Edit</button>
+        {/* The tray's actions are inside it (Brent, 21 Nov 2026, the system
+            screen he picked): a row is the tick, the name and what it holds. */}
+        {(onMove || onStartEdit || onPrint) && !editing && (
+          <span aria-hidden="true" style={{ color: colour.inkFainter, ...text('heading'), transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>›</span>
         )}
         {onRemove && (
           <button onClick={onRemove} aria-label={`Leave out ${tray.name}`}
             style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer' }}>Leave out</button>
         )}
       </div>
+      {open && !editing && (onMove || onStartEdit || onPrint) && (
+        <div data-tray-actions style={{ display: 'flex', gap: space.xs, flexWrap: 'wrap', padding: `0 ${space.md}px ${space.sm}px` }}>
+          {onMove && (
+            <button onClick={onMove} aria-label={`Move ${tray.name}`} data-move-tray
+              style={{ ...text('caption'), fontWeight: 600, color: 'white', background: colour.navy, border: 'none',
+                borderRadius: radius.pill, padding: '6px 14px', cursor: 'pointer' }}>Move</button>
+          )}
+          {onStartEdit && (
+            <button onClick={onStartEdit} aria-label={`Edit ${tray.name}`}
+              style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: 'none', border: `1px solid ${colour.accent}`,
+                borderRadius: radius.pill, padding: '6px 14px', cursor: 'pointer' }}>Edit</button>
+          )}
+          {onPrint && (
+            <button onClick={onPrint} aria-label={`Print ${tray.name}`}
+              style={{ ...text('caption'), fontWeight: 600, color: colour.inkMuted, background: 'none', border: border.hairline,
+                borderRadius: radius.pill, padding: '6px 14px', cursor: 'pointer' }}>Print</button>
+          )}
+        </div>
+      )}
       {editing && (
         <div style={{ borderTop: border.hairlineSoft }}>
           {tray.photo && <div style={{ padding: `${space.sm}px ${space.sm}px 0` }}><SavedPhoto path={tray.photo} user={user} alt={tray.name} /></div>}
@@ -193,7 +202,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
   )
 }
 
-export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray, title = 'Trays', only = null, except = null, selected = null, onSelect = null, compact = false }) {
+export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray, title = 'Trays', only = null, except = null, selected = null, onSelect = null, compact = false, showWhere = true, rows = true }) {
   const [list, setList] = useState(undefined)
   const [repairing, setRepairing] = useState(null)
   const [open, setOpen] = useState('')
@@ -544,9 +553,9 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
 
   return (
     <div>
-      {!compact && <div style={label}>{title} · {allTrays.length}</div>}
+      {!compact && rows && <div style={label}>{title} · {allTrays.length}</div>}
       {list === undefined && <div style={{ ...text('caption'), color: colour.inkFaint }}>Loading…</div>}
-      {!compact && list !== undefined && !allTrays.length && (
+      {!compact && rows && list !== undefined && !allTrays.length && (
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
           No trays yet{canEdit ? ' — upload the hospital’s copy below, or tap Edit on the kit to add a tray.' : '.'}
         </div>
@@ -590,9 +599,9 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
       {/* Every tray of the kit is a button (Brent, 20 Nov 2026): open it to see
           what it holds, edit it, move it on its own, or send an instrument in
           it for repair — whether or not a document was ever uploaded for it. */}
-      {list !== undefined && allTrays.map(t => (
+      {rows && list !== undefined && allTrays.map(t => (
         <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
-          where={whereIs(t.name)}
+          where={showWhere ? whereIs(t.name) : ''}
           checked={selected ? selected.has(t.name) : undefined}
           onCheck={onSelect && (kit.trays || []).includes(t.name) ? () => onSelect(t.name) : undefined}
           editing={editingTray === t.name} onStartEdit={canEdit ? () => { setEditingTray(t.name); setOpen(t.name) } : undefined}

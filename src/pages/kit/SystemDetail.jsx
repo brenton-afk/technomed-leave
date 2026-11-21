@@ -4,17 +4,25 @@ import { colour, text, space, radius, border, face, site } from '../../design/to
 import { useBackLayer } from '../../backButton.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
-import { PLACE_ORDER, setLabel } from '../../kit/systems.js'
+import { PLACE_ORDER, setLabel, traysByPlace } from '../../kit/systems.js'
 
-// ─── One system: every tray, wherever it is (Brent, 20 Nov 2026) ─────────────
-// One tab per system, the trays inside it. Each hospital's set is a section
-// headed by the place — never "Diplomat 2" — with its stock-take tick, "Move
-// all trays" (a whole kit still goes in one move) and its documents. The trays
-// themselves are where the work is: open, edit, move one tray, repair.
+// ─── One system: every tray, by the shelf it is on ──────────────────────────
+// Brent, 21 Nov 2026, from the layouts he picked ("Inside a system"): a plain
+// header — the system's name with Rename, its distributor and tray count,
+// + Add a tray and Documents — then one section per place, "On the shelf at
+// Calvary · 5". A set's trays are listed where the set is; a tray moved on
+// its own is listed where it now is, marked with where it came from and a
+// Back button, and its own set says it is away. Each row is a tick, the name
+// and what it holds; opening it shows Move, Edit and Print. Tick several and
+// the bar at the bottom moves them together.
 
-const PLACES = { CLV: 'Calvary', RHH: 'RHH', office: 'TM office / Warehouse' }
+const PLACES = { CLV: 'Calvary', RHH: 'RHH', office: 'TM office' }
 
-export default function SystemDetail({ system, canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails, onRenamed, place = 'all' }) {
+export default function SystemDetail({ system, distributor = '', canEdit, user, post, onClose, onChanged, onMoveTray, onMoveKit, onAddTray, onKitDetails, onRenamed, place = 'all' }) {
+  useBackLayer(true, onClose)
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [docs, setDocs] = useState(false)
   // Rename the system itself — the name on its tile (Brent, 21 Nov 2026).
   const [naming, setNaming] = useState(null)
   async function rename() {
@@ -25,14 +33,9 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
     setBusy('')
   }
   // Opened from a hospital's filter, the system shows that hospital's trays
-  // only (Brent, 20 Nov 2026: "why is Calvary listed in a kit when I click a
-  // kit from RHH?"); the rest are one tap away.
+  // only (Brent, 20 Nov 2026); the rest are one tap away.
   const [showAll, setShowAll] = useState(!place || place === 'all')
   const here = p => showAll || p === place
-  useBackLayer(true, onClose)
-  const [busy, setBusy] = useState('')
-  const [error, setError] = useState('')
-  const [docsOpen, setDocsOpen] = useState('')
   // Ticked trays, one hospital set at a time (a move is one set's trays).
   const [picked, setPicked] = useState({ kitId: '', trays: [] })
   const toggle = (kit, tray) => setPicked(p => {
@@ -43,16 +46,20 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
   const selectedFor = kit => new Set(picked.kitId === kit.id ? picked.trays : [])
   const pickedKit = system.kits.find(k => k.id === picked.kitId)
 
-  // Trays that have gone somewhere on their own, by where they are now —
-  // "we want to be able to see the tray sitting at Calvary clearly".
-  const transferred = PLACE_ORDER.filter(here).map(place => ({
-    place,
-    groups: system.kits.map(kit => ({
-      kit, trays: Object.entries(kit.trayAt || {}).filter(([, p]) => p.at === place).map(([t]) => t)
-    })).filter(g => g.trays.length)
-  })).filter(x => x.groups.length)
   const awayFrom = kit => Object.keys(kit.trayAt || {})
-  const when = iso => (iso ? new Date(iso).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' }) : '')
+  const when = iso => (iso ? new Date(iso).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', weekday: 'short', day: 'numeric', month: 'short' }) : '')
+  const setName = kit => `${PLACES[kit.home] || kit.home}${setLabel(kit) ? ` ${setLabel(kit)}` : ''}${kit.kind === 'floating' ? ' TM loan' : ''} set`
+  const counts = traysByPlace(system.kits)
+  const trayCount = system.kits.reduce((n, k) => n + (k.trays || []).length, 0)
+
+  // Each place: the sets that are there, and trays from other sets moved in.
+  const places = PLACE_ORDER.filter(here).map(p => ({
+    place: p,
+    sets: system.kits.filter(k => k.at === p),
+    movedIn: system.kits.filter(k => k.at !== p)
+      .map(kit => ({ kit, trays: Object.entries(kit.trayAt || {}).filter(([, at]) => at.at === p).map(([t]) => t) }))
+      .filter(g => g.trays.length)
+  })).filter(x => x.sets.length || x.movedIn.length)
 
   async function check(kit) {
     setBusy(kit.id); setError('')
@@ -60,8 +67,9 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
     setBusy('')
   }
 
-  const pillBtn = on => ({ ...text('caption'), fontWeight: 600, padding: '6px 10px', borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap', ...(on ? face.primary : face.secondary) })
-  const trayCount = system.kits.reduce((n, k) => n + (k.trays || []).length, 0)
+  const pillBtn = on => ({ ...text('caption'), fontWeight: 600, padding: '6px 12px', borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap', ...(on ? face.primary : face.secondary) })
+  const bigBtn = on => ({ ...text('bodyStrong'), padding: `${space.sm + 2}px ${space.md}px`, borderRadius: radius.control, cursor: 'pointer', ...(on ? face.navy : face.secondary) })
+  const amber = { background: colour.warningSoft, border: `1px solid ${colour.warningLine}`, borderRadius: radius.control }
 
   return (
     <Overlay>
@@ -70,91 +78,112 @@ export default function SystemDetail({ system, canEdit, user, post, onClose, onC
           background: colour.canvas, width: '100%', maxWidth: 560, borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`,
           display: 'flex', flexDirection: 'column', overflowX: 'hidden'
         }}>
-          <div style={{ padding: space.md, borderBottom: border.hairline, display: 'flex', alignItems: 'baseline', gap: space.sm }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {naming === null ? (
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' }}>
-                  <div style={{ ...text('heading'), color: colour.ink }}>{system.name}</div>
-                  {canEdit && <button onClick={() => setNaming(system.name)} data-rename-system
-                    style={{ background: 'none', border: 'none', padding: 0, ...text('caption'), fontWeight: 600, color: colour.accentDeep, cursor: 'pointer' }}>Rename</button>}
+          <div style={{ padding: space.md, background: colour.surface, borderBottom: border.hairline, display: 'flex', flexDirection: 'column', gap: space.sm }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+              <button onClick={onClose} aria-label="Back to the kit room" style={{
+                width: 40, height: 40, borderRadius: radius.control, border: 'none', background: colour.canvas, color: colour.ink,
+                cursor: 'pointer', ...text('heading'), flexShrink: 0
+              }}>‹</button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {naming === null ? (
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' }}>
+                    <div style={{ ...text('title'), color: colour.ink }}>{system.name}</div>
+                    {canEdit && <button onClick={() => setNaming(system.name)} data-rename-system
+                      style={{ background: 'none', border: 'none', padding: 0, ...text('caption'), fontWeight: 600, color: colour.accentDeep, cursor: 'pointer' }}>Rename</button>}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
+                    <input value={naming} onChange={e => setNaming(e.target.value)} aria-label="System name" autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setNaming(null) }}
+                      style={{ flex: 1, minWidth: 0, padding: '8px 10px', ...text('field'), border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink }} />
+                    <button onClick={rename} disabled={busy === 'rename'} style={pillBtn(true)}>{busy === 'rename' ? '…' : 'Save'}</button>
+                  </div>
+                )}
+                <div style={{ ...text('caption'), color: colour.inkFaint }}>
+                  {distributor ? `${distributor} · ` : ''}{trayCount} {trayCount === 1 ? 'tray' : 'trays'}
                 </div>
-              ) : (
-                <div style={{ display: 'flex', gap: space.sm, alignItems: 'center' }}>
-                  <input value={naming} onChange={e => setNaming(e.target.value)} aria-label="System name" autoFocus
-                    onKeyDown={e => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setNaming(null) }}
-                    style={{ flex: 1, minWidth: 0, padding: '8px 10px', ...text('field'), border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink }} />
-                  <button onClick={rename} disabled={busy === 'rename'} style={pillBtn(true)}>{busy === 'rename' ? '…' : 'Save'}</button>
-                </div>
-              )}
-              <div style={{ ...text('caption'), color: colour.inkFaint }}>{trayCount} {trayCount === 1 ? 'tray' : 'trays'}</div>
+              </div>
             </div>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', ...text('bodyStrong'), color: colour.inkFaint, cursor: 'pointer' }}>Close</button>
+            <div style={{ display: 'grid', gridTemplateColumns: canEdit ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: space.sm }}>
+              {canEdit && <button onClick={onAddTray} data-add-tray aria-label={`Add a tray to ${system.name}`} style={bigBtn(true)}>+ Add a tray</button>}
+              <button onClick={() => setDocs(d => !d)} aria-expanded={docs} data-system-docs style={bigBtn(false)}>{docs ? 'Hide documents' : 'Documents'}</button>
+            </div>
           </div>
 
           <div style={{ padding: space.md, overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
             {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{error}</div>}
-            {canEdit && (
-              <button onClick={onAddTray} data-add-tray aria-label={`Add a tray to ${system.name}`} style={{ ...pillBtn(true), padding: '10px 14px', marginBottom: space.sm }}>+ Add a tray</button>
-            )}
-            {transferred.length > 0 && (
-              <section data-transferred style={{ marginTop: space.md, padding: space.sm, borderRadius: radius.card,
-                background: colour.warningSoft, border: `1px solid ${colour.warning}` }}>
-                <div style={{ ...text('bodyStrong'), color: colour.ink }}>Transferred trays</div>
-                <div style={{ ...text('caption'), color: colour.inkMuted }}>Moved on their own, away from their own set. Move one back when it returns.</div>
-                {transferred.map(({ place, groups }) => (
-                  <div key={place} style={{ marginTop: space.sm }}>
-                    <div style={{ ...text('bodyStrong'), color: (site[place] || site.office).ink }}>Now at {PLACES[place]}</div>
-                    {groups.map(({ kit, trays }) => {
-                      const p = kit.trayAt[trays[0]] || {}
-                      return (
-                        <div key={kit.id} style={{ marginTop: space.xs }}>
-                          <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: 4 }}>
-                            From the {PLACES[kit.home] || kit.home}{setLabel(kit) ? ` ${setLabel(kit)}` : ''}{kit.kind === 'floating' ? ' TM loan' : ''} set
-                            {p.byName ? ` · moved by ${p.byName}` : ''}{p.since ? ` ${when(p.since)}` : ''}
-                            {p.caseDate ? ` · for a case on ${p.caseDate.split('-').reverse().slice(0, 2).join('/')}` : ''}
-                          </div>
-                          <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} compact only={trays}
-                            selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
-                            onMoveTray={tray => onMoveTray?.(kit, [tray])} />
-                        </div>
-                      )
-                    })}
+
+            {docs && (
+              <section data-docs-panel style={{ marginBottom: space.lg, display: 'flex', flexDirection: 'column', gap: space.md }}>
+                {system.kits.map(kit => (
+                  <div key={kit.id} style={{ background: colour.surface, border: border.hairline, borderRadius: radius.card, padding: space.md }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+                      <div style={{ flex: 1, ...text('bodyStrong'), color: colour.ink }}>{setName(kit)}</div>
+                      <button onClick={() => onKitDetails?.(kit)} style={pillBtn(false)}>Set details</button>
+                    </div>
+                    <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} rows={false} />
+                    <KitDocs kit={kit} user={user} post={post} onChanged={onChanged} />
                   </div>
                 ))}
               </section>
             )}
-            {system.kits.filter(kit => here(kit.at)).map(kit => {
-              const look = site[kit.home] || site.office
-              const heading = `${PLACES[kit.home] || kit.home}${setLabel(kit) ? ` · ${setLabel(kit)}` : ''}${kit.kind === 'floating' ? ' · TM loan' : ''}`
+
+            {places.map(({ place: p, sets, movedIn }) => {
+              const look = site[p] || site.office
+              const n = counts[p] || 0
               return (
-                <section key={kit.id} data-system-set={kit.id} style={{ marginTop: space.lg }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap', paddingBottom: 6, borderBottom: `2px solid ${look.line}` }}>
+                <section key={p} data-place-section={p} style={{ marginBottom: space.lg, display: 'flex', flexDirection: 'column', gap: space.xs }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, paddingBottom: 2 }}>
                     <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: 3, background: look.ink }} />
-                    <span style={{ ...text('bodyStrong'), color: look.ink, flex: 1, minWidth: 0 }}>{heading}</span>
-                    {kit.away && <span style={{ ...text('caption'), color: colour.warning, fontWeight: 600 }}>at {PLACES[kit.at]}</span>}
-                    {!kit.away && (kit.checkedAt
-                      ? <span style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600 }}>✓ checked</span>
-                      : <button disabled={busy === kit.id} onClick={() => check(kit)} aria-label={`${heading} trays are here`}
-                          style={{ ...pillBtn(false), border: `1px solid ${colour.accent}`, color: colour.accentDeep }}>{busy === kit.id ? '…' : "It's here"}</button>)}
-                    <button onClick={() => onMoveKit?.(kit)} aria-label={`Move all ${heading} trays`} style={pillBtn(false)}>Move all</button>
+                    <h3 style={{ margin: 0, flex: 1, ...text('heading'), color: look.ink }}>On the shelf at {PLACES[p]} · {n}</h3>
                   </div>
-                  <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged}
-                    title={`Trays at ${PLACES[kit.at] || kit.at}`} except={awayFrom(kit)}
-                    selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
-                    onMoveTray={tray => onMoveTray?.(kit, [tray])} />
-                  <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.xs }}>
-                    <button onClick={() => setDocsOpen(docsOpen === kit.id ? '' : kit.id)} style={pillBtn(false)}>
-                      {docsOpen === kit.id ? 'Hide documents' : (kit.kind !== 'floating' && !kit.docs?.consignment ? 'Documents · no agreement yet' : 'Documents')}
-                    </button>
-                    <button onClick={() => onKitDetails?.(kit)} style={pillBtn(false)}>Set details</button>
-                  </div>
-                  {docsOpen === kit.id && <KitDocs kit={kit} user={user} post={post} onChanged={onChanged} />}
+
+                  {sets.map(kit => (
+                    <div key={kit.id} data-system-set={kit.id} style={{ display: 'flex', flexDirection: 'column', gap: space.xs }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' }}>
+                        <span style={{ flex: 1, minWidth: 0, ...text('caption'), color: colour.inkMuted }}>
+                          {setName(kit)}{kit.away ? ` · here since ${when(kit.away.since)}` : ''}
+                        </span>
+                        {!kit.away && (kit.checkedAt
+                          ? <span style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600 }}>✓ Checked</span>
+                          : <button disabled={busy === kit.id} onClick={() => check(kit)} aria-label={`${setName(kit)}: it's here`}
+                              style={{ ...pillBtn(false), border: `1px solid ${colour.accent}`, color: colour.accentDeep }}>{busy === kit.id ? '…' : "It's here"}</button>)}
+                        <button onClick={() => onMoveKit?.(kit)} aria-label={`Move all of the ${setName(kit)}`} style={pillBtn(false)}>Move all</button>
+                      </div>
+                      <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} compact showWhere={false}
+                        except={awayFrom(kit)} selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
+                        onMoveTray={tray => onMoveTray?.(kit, [tray])} />
+                      {awayFrom(kit).map(t => (
+                        <div key={t} data-away-tray style={{ ...amber, display: 'flex', alignItems: 'center', gap: space.sm, padding: `${space.sm}px ${space.md}px` }}>
+                          <span style={{ flex: 1, minWidth: 0, ...text('caption'), color: colour.ink }}>
+                            <strong>{t}</strong> is at {PLACES[kit.trayAt[t].at]}{kit.trayAt[t].byName ? ` · moved by ${kit.trayAt[t].byName}` : ''}{kit.trayAt[t].since ? `, ${when(kit.trayAt[t].since)}` : ''}
+                          </span>
+                          <button onClick={() => onMoveTray?.(kit, [t], kit.at)} aria-label={`Bring ${t} back`} style={pillBtn(true)}>Back</button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
+                  {movedIn.map(({ kit, trays }) => (
+                    <div key={kit.id} data-transferred style={{ ...amber, padding: space.sm, display: 'flex', flexDirection: 'column', gap: space.xs }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+                        <span style={{ flex: 1, minWidth: 0, ...text('caption'), color: colour.ink }}>
+                          From the {setName(kit)}{kit.trayAt[trays[0]]?.byName ? ` · moved by ${kit.trayAt[trays[0]].byName}` : ''}{kit.trayAt[trays[0]]?.since ? `, ${when(kit.trayAt[trays[0]].since)}` : ''}
+                        </span>
+                        <button onClick={() => onMoveTray?.(kit, trays, kit.at)} aria-label={`Send ${trays.join(', ')} back to ${PLACES[kit.at]}`} style={pillBtn(true)}>Back</button>
+                      </div>
+                      <TrayList kit={kit} canEdit={canEdit} user={user} post={post} onSaved={onChanged} compact only={trays} showWhere={false}
+                        selected={selectedFor(kit)} onSelect={t => toggle(kit, t)}
+                        onMoveTray={tray => onMoveTray?.(kit, [tray])} />
+                    </div>
+                  ))}
                 </section>
               )
             })}
+
             {!showAll && system.kits.some(k => k.at !== place || Object.values(k.trayAt || {}).some(p => p.at !== place)) && (
               <button onClick={() => setShowAll(true)} data-show-all-places
-                style={{ ...pillBtn(false), marginTop: space.lg, width: '100%', padding: '10px 14px' }}>
+                style={{ ...pillBtn(false), width: '100%', padding: '10px 14px' }}>
                 Also show {system.name} at the other places
               </button>
             )}

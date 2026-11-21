@@ -25,9 +25,9 @@ describe('the stock-take', () => {
   it('is one tap from the system, and the set shows as checked', async () => {
     render(<KitRoom user={{ token: 't' }} onBack={() => {}} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Open Diplomat' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Calvary trays are here' }))
-    await waitFor(() => expect(screen.getByText('✓ checked', { selector: 'span' })).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: 'Calvary trays are here' })).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: "Calvary set: it's here" }))
+    await waitFor(() => expect(screen.getByText('✓ Checked', { selector: 'span' })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: "Calvary set: it's here" })).not.toBeInTheDocument()
   })
 
   it('in the kit sheet, confirms in green and closes itself', async () => {

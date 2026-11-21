@@ -1577,6 +1577,26 @@ tray at that place — a set with no trays named yet counts too
 (`traysByPlace` gives it 0), so the TM loan sets at the office are no longer
 missed — and the filter uses the same test. A system tile's chips read
 "RHH · 4 trays", or "Office · no trays listed".
+**Option C and the system screen** (Brent, 21 Nov 2026: "get rid of the two
+warnings/alerts at the top … put them somewhere else"; from the mock-ups
+`claude.ai/artifact/NyuHARFe7bPotZhjG7jmve` he picked C and "Inside a
+system"). The kit room's band carries three **tray** counts (Calvary / RHH /
+office — the filter) and a ⚙ (`data-kit-settings`, an amber dot while the
+stock-take is unfinished or emails are off) that opens `kit/KitSettings.jsx`:
+stock-take progress, the hospital-email switch, Courier numbers, Reset all
+trays, Attach agreements, Movement history. The distributor chips are gone
+(search covers distributors). A tile is the distributor in small capitals, the
+system's name, a bar split by where its trays are (`data-place-bar`), the
+same in words, and "N trays on the move". Inside a system
+(`kit/SystemDetail.jsx`): a white header (back, name, **Rename**, distributor
+· trays, **+ Add a tray** and **Documents** — each set's tray-list tools,
+`TrayList rows={false}`, its documents and Set details), then **"On the shelf
+at {place} · N"** per place: each set there (its tick, Move all) with its
+trays, a tray of that set that is elsewhere as an amber "… is at Calvary"
+line with **Back**, and trays of other sets moved in, in an amber box "From
+the RHH set · moved by …" with **Back** (`onMoveTray(kit, trays, to)`). A tray
+row is the tick, the name and what it holds, and a chevron; **Move, Edit and
+Print are inside it** once opened (`data-tray-actions`).
 **Renaming** (Brent, 21 Nov 2026: "editing the tray name isn't editing the
 display name on the kit tile"): the tile shows the **system**, which no
 screen could change — Set details edits one set's own name. **Rename** beside
