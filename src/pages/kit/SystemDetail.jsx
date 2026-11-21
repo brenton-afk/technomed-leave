@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border, face, site } from '../../design/tokens.js'
+import { displayName } from '../../kit/brands.js'
 import { useBackLayer } from '../../backButton.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
@@ -102,7 +103,7 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
               <div style={{ flex: 1, minWidth: 0 }}>
                 {naming === null ? (
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' }}>
-                    <div style={{ ...text('title'), color: colour.ink }}>{system.name}</div>
+                    <div style={{ ...text('title'), color: colour.ink }}>{displayName(system.name)}</div>
                     {canEdit && <button onClick={() => setNaming(system.name)} data-rename-system
                       style={{ background: 'none', border: 'none', padding: 0, ...text('caption'), fontWeight: 600, color: colour.accentDeep, cursor: 'pointer' }}>Rename</button>}
                   </div>

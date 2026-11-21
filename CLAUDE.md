@@ -1663,9 +1663,13 @@ its name in its colour (`data-tile-maker`, falling back to the distributor).
 Then (same day): SIGNUS (from Dropbox `/Distributors/Signus/Signus Logos`),
 TechnoMed on every TM kit, Arthrex (and the Arthrex drill as the Mini Drill's
 picture), Newclip (its mark beside its name, so it reads at tile size), the
-Cercess retractors' picture, Boost UltraFibres (the fibres and Australian
+Cercess retractors' picture (a SIGNUS product — SIGNUS logo, Brent same day), Boost UltraFibres (the fibres and Australian
 Biotechnologies' logo from the Device brochure in Dropbox), Catenary under
 Global Biomedica, and Firebird's screws cut out of their grey studio background.
+A tile whose logo already names the maker does not repeat it (`tileName`:
+Newclip, Arthrex, Orthofix — "Trans-Articular Screw", "Firebird"), and the
+Arthrex Mini Drill 300 is shown as "Drill Saw Mini 300" (`displayName`,
+display only — the record keeps its name).
 Logos are drawn to about the same area, not one height (Brent, same day:
 "make the logos for the company names consistent sizes"): `logoAspect` per
 maker, `logoHeight` gives 14–24px (SeaSpine ~16, Global/Orthofix/Precision

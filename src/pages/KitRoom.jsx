@@ -11,7 +11,7 @@ import CourierNumbers from './kit/CourierNumbers.jsx'
 import KitSettings from './kit/KitSettings.jsx'
 import FillAgreements from './kit/FillAgreements.jsx'
 import { groupSystems, traysByPlace, systemOf, setLabel, awayLines, PLACE_ORDER } from '../kit/systems.js'
-import { brandFor } from '../kit/brands.js'
+import { brandFor, tileName } from '../kit/brands.js'
 import { movingFrom } from '../kit/trayPlaces.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
 import { systemsInKit } from '../clinicalPlan/systems.js'
@@ -435,7 +435,7 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
           : <div data-tile-maker style={{ ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.6px', color: brand.ink || colour.inkFaint,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brand.maker || dist?.name || 'No distributor'}</div>}
         <div style={{ ...text('heading'), color: colour.ink, lineHeight: 1.2,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{group.name}</div>
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{tileName(group.name)}</div>
         <div aria-hidden="true" data-place-bar style={{ display: 'flex', height: 8, borderRadius: radius.pill, overflow: 'hidden', background: colour.lineSoft }}>
           {total > 0 && PLACE_ORDER.filter(p => where[p]).map(p => (
             <div key={p} style={{ width: `${(where[p] / total) * 100}%`, background: site[p].ink }} />

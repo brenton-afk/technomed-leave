@@ -42,6 +42,7 @@ const RULES = [
   [/athlet/, 'signus', 'athlet.jpg'],
   [/cylox/, 'signus', 'cylox.jpg'],
   [/mobis/, 'signus', 'mobis.jpg'],
+  [/cerc+ess/, 'signus', 'cercess.jpg'],
   [/signus/, 'signus', null],
   [/dakota/, 'precision', 'dakota.jpg'],
   [/reform/, 'precision', 'reform.jpg'],
@@ -59,7 +60,6 @@ const RULES = [
   [/newclip/, 'newclip', null],
   [/boost|ultrafib/, 'ausbiotech', 'boost.jpg'],
   [/synthes|clavicle|tibia/, 'synthes', null],
-  [/cerc+ess/, 'technomed', 'cercess.jpg'],
   [/^tm\b|technomed/, 'technomed', null]
 ]
 
@@ -82,4 +82,21 @@ export function brandFor(systemName) {
     logoH: maker?.logo ? logoHeight(maker.logoAspect) : 0,
     pic: hit && hit[2] ? ART(hit[2]) : '', initial
   }
+}
+
+// What the kit is called on screen, where it differs from its record (Brent,
+// 21 Nov 2026: "the drill saw mini 300"). Display only — bookings, agreements
+// and moves keep the system's own name.
+const DISPLAY = { 'arthrex mini drill 300': 'Arthrex Drill Saw Mini 300' }
+export const displayName = name => DISPLAY[String(name || '').trim().toLowerCase()] || String(name || '')
+
+// A tile whose logo already says the maker does not say it again in words
+// (Brent, same day: "Don't double up with Newclip logo and then Newclip the
+// word"): "NewClip Trans-Articular Screw" → "Trans-Articular Screw".
+const SAID_BY_LOGO = /^(newclip|arthrex|orthofix)\s+/i
+export function tileName(name) {
+  const shown = displayName(name)
+  if (!brandFor(name).logo) return shown
+  const rest = shown.replace(SAID_BY_LOGO, '').trim()
+  return rest || shown
 }

@@ -15,7 +15,7 @@ describe('the maker and picture on a kit tile', () => {
     expect(brandFor('Athlet')).toMatchObject({ pic: '/kit-art/athlet.jpg' })
     expect(brandFor('Catenary ALIF')).toMatchObject({ maker: 'Global Biomedica', logo: '/kit-art/logo-global-biomedica.png', pic: '/kit-art/catenary.jpg' })
     expect(brandFor('Diplomat')).toMatchObject({ maker: 'SIGNUS', logo: '/kit-art/logo-signus.png' })
-    expect(brandFor('TM Cercess')).toMatchObject({ maker: 'TechnoMed', logo: '/kit-art/logo-technomed.png', pic: '/kit-art/cercess.jpg' })
+    expect(brandFor('TM Cercess')).toMatchObject({ maker: 'SIGNUS', logo: '/kit-art/logo-signus.png', pic: '/kit-art/cercess.jpg' })
     expect(brandFor('Arthrex Mini Drill 300')).toMatchObject({ maker: 'Arthrex', logo: '/kit-art/logo-arthrex.png', pic: '/kit-art/arthrex-drill.jpg' })
     expect(brandFor('NewClip Trans-Articular Screw')).toMatchObject({ maker: 'Newclip Technics', logo: '/kit-art/logo-newclip.png' })
     expect(brandFor('Boost UltraFibres')).toMatchObject({ maker: 'Australian Biotechnologies', pic: '/kit-art/boost.jpg' })
@@ -41,5 +41,17 @@ describe('logos drawn to about the same size', () => {
     expect(Math.max(...areas) / Math.min(...areas)).toBeLessThan(1.35)
     expect(logoHeight(1)).toBe(24)
     expect(brandFor('Nuvasive').logoH).toBe(0)
+  })
+})
+
+describe('the name on a tile', () => {
+  it('does not repeat the maker its logo already shows', async () => {
+    const { tileName, displayName } = await import('./brands.js')
+    expect(tileName('NewClip Trans-Articular Screw')).toBe('Trans-Articular Screw')
+    expect(tileName('Arthrex Mini Drill 300')).toBe('Drill Saw Mini 300')
+    expect(displayName('Arthrex Mini Drill 300')).toBe('Arthrex Drill Saw Mini 300')
+    expect(tileName('Orthofix Firebird')).toBe('Firebird')
+    expect(tileName('Diplomat')).toBe('Diplomat')
+    expect(tileName('Nuvasive')).toBe('Nuvasive')
   })
 })
