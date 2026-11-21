@@ -37,3 +37,23 @@ describe('grouping', () => {
     expect(groupTrays([{ name: 'Insertion', lines: m(1) }]).map(x => x.kind)).toEqual(['instrument'])
   })
 })
+
+describe('sterile implants in their own section at the bottom (Brent, 21 Nov 2026)', async () => {
+  const { groupTrays: group, isSterileTray } = await import('./trayKind.js')
+  const imp = name => ({ name, lines: [{ code: 'A', description: 'Cage', qty: 1, kind: 'implant' }] })
+  const inst = name => ({ name, lines: [{ code: 'B', description: 'Inserter', qty: 1, kind: 'instrument' }] })
+  it('puts the implant trays of Shoreline, Catenary, Global PLIF, MOBIS and Athlet last, under Sterile implants', () => {
+    const g = group([imp('MOBIS Implants'), inst('MOBIS Insertion')], { system: 'MOBIS' })
+    expect(g.map(x => x.label)).toEqual(['Instrument trays', 'Sterile implants'])
+    expect(g[1].trays.map(t => t.name)).toEqual(['MOBIS Implants'])
+    for (const [system, tray] of [['Shoreline', 'Shoreline Sterile Interbodies'], ['Catenary ALIF', 'Catenary ALIF Implants'], ['Global BMD PLIF', 'Global BMD PLIF Implants'], ['Athlet', 'Athlet Implants']]) {
+      expect(isSterileTray({ name: tray, lines: [] }, system)).toBe(true)
+    }
+  })
+  it('leaves other systems’ implant trays where they were, unless named sterile', () => {
+    const g = group([imp('Diplomat Pedicle Screws 1-5'), inst('Diplomat Torque & Reduction')], { system: 'Diplomat' })
+    expect(g.map(x => x.label)).toEqual(['Instrument trays', 'Implant trays'])
+    expect(isSterileTray({ name: 'Dakota Sterile Plates', lines: [] }, 'Dakota')).toBe(true)
+    expect(isSterileTray(inst('Shoreline Instruments'), 'Shoreline')).toBe(false)
+  })
+})

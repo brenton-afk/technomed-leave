@@ -1816,6 +1816,13 @@ draws "Instrument trays · N" then "Implant trays · N" (`data-tray-group`),
 each in the kit's order. A tray's line under its name gives the
 implant count only when it mixes implants and instruments (`implantNote`;
 Brent, same day: "get rid of 0 implants").
+**Sterile implants last, in their own section** (Brent, same day: "Sterile
+implants for Shoreline, Catenary ALIF, Global PLIF, MOBIS and Athlet need to
+be listed separately at the bottom"): `isSterileTray` / `STERILE_SYSTEMS` in
+`trayKind.js` — for those systems every implant tray (or one named implants,
+interbodies, cages), anywhere a tray named "sterile" — goes under
+"Sterile implants · N" after the implant trays (`groupTrays(trays,
+{ system })`).
 
 **The kit room filled from the consignment agreements** (Brent, 21 Nov 2026:
 "I'm ok for the unsigned copies to be used to populate the kit room"; chose

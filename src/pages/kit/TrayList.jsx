@@ -679,7 +679,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
           it for repair — whether or not a document was ever uploaded for it. */}
       {/* Instrument trays, then implant trays, each in the kit's order
           (Brent, 21 Nov 2026). */}
-      {rows && list !== undefined && groupTrays(allTrays).map(g => (
+      {rows && list !== undefined && groupTrays(allTrays, { system: kit.system || kit.name }).map(g => (
         <div key={g.kind} data-tray-group={g.kind}>
           <div style={{ ...text('micro'), fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: colour.inkFaint,
             margin: `${space.sm}px 0 ${space.xs}px` }}>{g.label} · {g.trays.length}</div>

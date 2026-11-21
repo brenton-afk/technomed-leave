@@ -21,12 +21,29 @@ export function trayKind(tray) {
   return 'instrument'
 }
 
-/** The trays as two groups, instruments first, each in the order given. */
-export function groupTrays(trays) {
+// Sterile implants apart, at the bottom (Brent, 21 Nov 2026: "Sterile
+// implants for Shoreline, Catenary ALIF, Global PLIF, MOBIS and Athlet need
+// to be listed separately at the bottom of the trays in their own section").
+// For those systems every implant tray is the sterile stock; anywhere else a
+// tray that says "sterile" in its name is.
+export const STERILE_SYSTEMS = /shoreline|catenary|\balif\b|global|\bbmd\b|mobis|athlet/i
+export function isSterileTray(tray, system = '') {
+  const name = String(tray?.name || '')
+  if (/sterile/i.test(name)) return true
+  if (!STERILE_SYSTEMS.test(`${system} ${name}`)) return false
+  return trayKind(tray) === 'implant' || /\b(implants?|interbod(y|ies)|cages?)\b/i.test(name)
+}
+
+/** The trays as groups — instruments, implants, then sterile implants — each in the order given. */
+export function groupTrays(trays, { system = '' } = {}) {
   const groups = [
     { kind: 'instrument', label: 'Instrument trays', trays: [] },
-    { kind: 'implant', label: 'Implant trays', trays: [] }
+    { kind: 'implant', label: 'Implant trays', trays: [] },
+    { kind: 'sterile', label: 'Sterile implants', trays: [] }
   ]
-  for (const t of trays || []) groups[trayKind(t) === 'implant' ? 1 : 0].trays.push(t)
+  for (const t of trays || []) {
+    if (isSterileTray(t, system)) groups[2].trays.push(t)
+    else groups[trayKind(t) === 'implant' ? 1 : 0].trays.push(t)
+  }
   return groups.filter(g => g.trays.length)
 }
