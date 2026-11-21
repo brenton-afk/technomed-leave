@@ -17,7 +17,7 @@ const ART = name => `/kit-art/${name}`
 
 const MAKERS = {
   seaspine: { name: 'SeaSpine', ink: '#b8500e', logo: ART('logo-seaspine.png'), logoBg: '#ffffff', logoAspect: 5.25 },
-  signus: { name: 'SIGNUS', ink: '#c8102e', logo: ART('logo-signus.png'), logoBg: '#ffffff', logoAspect: 3.04 },
+  signus: { name: 'SIGNUS', ink: '#c8102e', logo: ART('logo-signus.png'), logoBg: '#ffffff', logoAspect: 2.66 },
   precision: { name: 'Precision Spine', ink: '#1f3c88', logo: ART('logo-precision-spine.png'), logoBg: '#ffffff', logoAspect: 3.12 },
   global: { name: 'Global Biomedica', ink: '#3f7d2c', logo: ART('logo-global-biomedica.png'), logoBg: '#ffffff', logoAspect: 3.07 },
   orthofix: { name: 'Orthofix', ink: '#003da5', logo: ART('logo-orthofix.png'), logoBg: '#ffffff', logoAspect: 2.8 },
