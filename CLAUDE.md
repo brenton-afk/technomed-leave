@@ -1489,6 +1489,18 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   at ~150 dpi per page first) and **Dropbox**. Checked in an iPhone-sized
   render: no sideways scroll at fit, zoom widens, Print gives the document
   alone, every page.
+- **Never stuck on "Opening the first page…"** (Brent, 21 Nov 2026: a signed
+  consignment agreement sat there for minutes on his iPhone). Three causes,
+  three fixes: the viewer waited one tick for its page area and silently gave
+  up if the phone had not drawn it (`waitForElement`, up to ~3s); pdf.js chose
+  the browser's own image decoder on everything but Chrome — iPhone Safari
+  included — so `openPdf` passes `isImageDecoderSupported: false` and
+  `isOffscreenCanvasSupported: false`; and nothing limited a slow open — after
+  12s (`SLOW_MS`) it says "big scanned document, tap Dropbox or Download",
+  after 90s (`GIVE_UP_MS`, `withDeadline`) it fails with that sentence. A later
+  page that fails to draw is left blank, not thrown. Checked in Chromium on the
+  signed Outrigger agreement (7 pages, first page ~1s); Safari itself is not
+  available here.
 - **TM loan kits have no consignment agreement** (Brent, same day: "Just tray
   lists for these kits"): `needsAgreement` (`src/kit/agreements.js`, kind
   `floating` → false) hides the tile's Agreement chip (its Tray list chip

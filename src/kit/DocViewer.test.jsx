@@ -87,3 +87,26 @@ describe('the viewer, Drive-style', () => {
     vi.useRealTimers()
   })
 })
+
+// Brent, 21 Nov 2026: a consignment agreement sat on "Opening the first
+// page…" for minutes. The viewer waited one tick for its page area and gave up
+// silently, and nothing put a limit on a slow or stuck PDF.
+describe('opening never hangs', () => {
+  it('waits for the page area to appear rather than giving up at once', async () => {
+    const { waitForElement } = await import('./DocViewer.jsx')
+    let el = null
+    setTimeout(() => { el = { id: 'pages' } }, 60)
+    expect(await waitForElement(() => el)).toEqual({ id: 'pages' })
+  })
+  it('stops waiting when the viewer closes', async () => {
+    const { waitForElement } = await import('./DocViewer.jsx')
+    let live = true
+    setTimeout(() => { live = false }, 30)
+    expect(await waitForElement(() => null, () => live)).toBeNull()
+  })
+  it('gives up on a document that never opens, with a sentence', async () => {
+    const { withDeadline } = await import('./DocViewer.jsx')
+    await expect(withDeadline(new Promise(() => {}), 20)).rejects.toThrow(/took too long to open/)
+    await expect(withDeadline(Promise.resolve(7), 1000)).resolves.toBe(7)
+  })
+})

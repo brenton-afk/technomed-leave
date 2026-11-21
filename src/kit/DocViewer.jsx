@@ -95,11 +95,37 @@ async function wordBody(buffer) {
 const MAX_PAGES = 400
 const SHARPNESS = 1.5
 
+const SLOW_MS = 12000
+const GIVE_UP_MS = 90000
+
+/** Resolves with the element once it exists (up to ~3s), else null. */
+export async function waitForElement(get, isLive = () => true, tries = 180) {
+  for (let i = 0; i < tries && isLive(); i++) {
+    const el = get()
+    if (el) return el
+    await new Promise(r => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 16)))
+  }
+  return get() || null
+}
+
+/** The promise, or an error once `ms` has passed. */
+export function withDeadline(promise, ms) {
+  let t
+  return Promise.race([
+    promise,
+    new Promise((_, no) => { t = setTimeout(() => no(new Error('This document took too long to open here')), ms) })
+  ]).finally(() => clearTimeout(t))
+}
+
 async function openPdf(buffer) {
   const pdfjs = await import('pdfjs-dist')
   const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
-  return pdfjs.getDocument({ data: buffer }).promise
+  // pdf.js decodes pictures itself: left to choose, it hands them to the
+  // browser's own decoder on anything but Chrome — an iPhone included — and a
+  // signed, scanned agreement then sat on its first page for minutes there
+  // (Brent, 21 Nov 2026). Same for drawing pictures off the main thread.
+  return pdfjs.getDocument({ data: buffer, isImageDecoderSupported: false, isOffscreenCanvasSupported: false }).promise
 }
 
 async function layoutPdf(doc, into, scroller, isLive) {
@@ -140,11 +166,11 @@ async function layoutPdf(doc, into, scroller, isLive) {
   }
 
   await draw(1)
-  if (count > 1) draw(2)
+  if (count > 1) draw(2).catch(() => {})
   let observer = null
   if (typeof IntersectionObserver !== 'undefined') {
     observer = new IntersectionObserver(entries => {
-      for (const e of entries) if (e.isIntersecting) draw(Number(e.target.dataset.page))
+      for (const e of entries) if (e.isIntersecting) draw(Number(e.target.dataset.page)).catch(() => {})
     }, { root: scroller || null, rootMargin: '1200px 0px' })
     sheets.forEach(s => observer.observe(s))
   } else {
@@ -263,12 +289,25 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
           return
         }
         setState({ phase: 'pdf' })
-        // The container is drawn first, so the pages know how wide to be.
-        await new Promise(r => setTimeout(r, 0))
-        if (!pages.current) return
-        const doc = await openPdf(buf)
+        // The container is drawn first, so the pages know how wide to be. A
+        // phone can take longer than one tick to draw it — waiting a single
+        // tick and giving up left "Opening the first page…" up for ever
+        // (Brent, 21 Nov 2026).
+        const area = await waitForElement(() => pages.current, isLive)
         if (!live) return
-        const laid = await layoutPdf(doc, pages.current, scroller.current, isLive)
+        if (!area) throw new Error('The viewer did not open')
+        const opening = (async () => {
+          const doc = await openPdf(buf)
+          if (!live) return null
+          const laid = await layoutPdf(doc, area, scroller.current, isLive)
+          return { doc, laid }
+        })()
+        // A big scan can take a while: say so, and never wait for ever.
+        const slow = setTimeout(() => { if (live) setState(st => (st.phase === 'pdf' && !st.done ? { ...st, slow: true } : st)) }, SLOW_MS)
+        let opened
+        try { opened = await withDeadline(opening, GIVE_UP_MS) } finally { clearTimeout(slow) }
+        if (!live || !opened) return
+        const { doc, laid } = opened
         pdf.current = { doc, laid }
         stop = laid.stop
         if (live) setState({ phase: 'pdf', done: true, total: laid.total, more: laid.total > MAX_PAGES ? laid.total - MAX_PAGES : 0 })
@@ -488,7 +527,7 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
               </div>
             : message('Opening…'))}
           {state.phase === 'cannot' && message('This kind of file cannot be shown in the portal — Download it to open it.')}
-          {state.phase === 'failed' && message(`${state.error}. Download it instead.`)}
+          {state.phase === 'failed' && message(`${state.error}. Tap Dropbox below to open it in the Dropbox app, or Download it.`)}
 
           {['image', 'text', 'word', 'pdf'].includes(state.phase) && (
             // The stage is laid out at the screen's width and scaled; the sizer
@@ -514,7 +553,9 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
                 {state.phase === 'pdf' && (
                   <>
                     <div ref={pages} data-pdf-pages style={{ maxWidth: 900, margin: '0 auto' }} />
-                    {!state.done && message('Opening the first page…')}
+                    {!state.done && message(state.slow
+                      ? 'Still opening — this is a big scanned document. Tap Dropbox below to open it in the Dropbox app, or Download it.'
+                      : 'Opening the first page…')}
                     {state.more > 0 && message(`${state.more} more pages — Download to see them all.`)}
                   </>
                 )}
