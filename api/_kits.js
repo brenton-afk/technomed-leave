@@ -72,7 +72,11 @@ export const KIT_CORRECTIONS = [
   // Three of the seven photos did not reach Dropbox (sent all at once); filed
   // again one at a time (Brent, 21 Nov 2026: "The photos for these trays
   // didn't come across").
-  { id: 'mariner-mis-photos-2026-11-21', seed: 'mariner-mis-photos' }
+  { id: 'mariner-mis-photos-2026-11-21', seed: 'mariner-mis-photos' },
+  // Shoreline at both hospitals as the trays are now — trials merged into the
+  // instrument trays, Extras / DNO back-up, Calvary's wrong photos gone
+  // (Brent, 21 Nov 2026; api/_kitShorelineFix.js).
+  { id: 'shoreline-trays-2026-11-21', seed: 'shoreline' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -209,6 +213,11 @@ export async function getDefs() {
  * cannot be filed is saved without it.
  */
 async function runSeed(name) {
+  if (name === 'shoreline') {
+    const { runShorelineFix } = await import('./_kitShorelineFix.js')
+    await runShorelineFix()
+    return
+  }
   if (name !== 'mariner-mis' && name !== 'mariner-mis-photos') return
   const { MARINER_MIS_KIT: kit, MARINER_MIS_TRAYS: trays, MARINER_MIS_FILE: file } = await import('./_kitSeedMarinerMis.js')
   const { PHOTOS } = await import('./_kitSeedMarinerMisPhotos.js')

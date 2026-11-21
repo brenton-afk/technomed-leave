@@ -166,6 +166,30 @@ export async function fillFromAgreement(docSlug, byName, deps = {}) {
   return record
 }
 
+// A code as the hospital and the agreement both print it: "2SEA-86-0020",
+// "SEA-86-0020" and "86-0020" are one instrument.
+const codeKey = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^2?SEA/, '')
+
+/**
+ * The agreement tray holding the same instruments as a tray named another way
+ * (Brent, 21 Nov 2026: Aimee typed in the RHH Mariner lists by hand — the
+ * names are hers, the codes are the same). At least half the codes of the
+ * smaller tray in common, and the best such tray only. Pure.
+ */
+export function byCodes(tray, candidates) {
+  const mine = new Set((tray.lines || []).map(l => codeKey(l.code)).filter(k => k.length >= 4))
+  if (mine.size < 2) return null
+  let best = null
+  for (const c of candidates) {
+    const theirs = new Set((c.lines || []).map(l => codeKey(l.code)).filter(k => k.length >= 4))
+    if (theirs.size < 2) continue
+    const both = [...mine].filter(k => theirs.has(k)).length
+    const score = both / Math.min(mine.size, theirs.size)
+    if (score >= 0.5 && (!best || score > best.score)) best = { c, score }
+  }
+  return best ? best.c : null
+}
+
 /**
  * Puts on the photos a fill missed (Brent, 21 Nov 2026: "I can't see any of
  * the new tray image additions"). For each set of the agreement, a tray with no
@@ -191,7 +215,7 @@ export async function addMissingPhotos(docSlug, byName, deps = {}) {
     if (!own.length) continue
     const list = await getTrayList(kit.id)
     const needs = (list?.trays || []).filter(t => !t.photo)
-      .map(t => ({ tray: t, from: own.find(x => x.name === t.name) || own.find(x => sameTray(x.name, t.name, a.kit)) }))
+      .map(t => ({ tray: t, from: own.find(x => x.name === t.name) || own.find(x => sameTray(x.name, t.name, a.kit)) || byCodes(t, own) }))
       .filter(x => x.from)
     if (!needs.length) continue
     if (budget <= 0) { more = true; break }

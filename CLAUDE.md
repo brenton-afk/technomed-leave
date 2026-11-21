@@ -1726,6 +1726,28 @@ true}`, `addMissingPhotos`) gives every tray without a photo whose name is one
 of its set's agreement trays (exact, else `sameTray` — so a tray that was there
 before gets one too) its photo, 8 uploads a request with `more`, the list
 re-read before writing; a photo already on a tray is never replaced.
+A tray typed in under another name (Aimee's RHH Mariner lists) is matched by
+its codes too — `byCodes`: half the smaller tray's codes in common, the maker's
+`2SEA-` / `SEA-` prefix ignored (`codeKey`).
+**Shoreline as the trays are now** (Brent, same day: "you still have trials
+separate from instruments, but everything has been merged into one instrument
+tray with a DNO tray as back up"; the photos did not match). `KIT_CORRECTIONS`
+`shoreline-trays-2026-11-21` runs `runShorelineFix` (`api/_kitShorelineFix.js`,
+pure `plannedShoreline`): **Calvary** from Gerardo's CSSD sheets of 29 Oct
+(`api/_kitSeedShorelineClv.js`: Shoreline Inst 1 / Inst 2 / Extras 1, codes as
+the sheet prints them, totals checked) — set 1 Inst 1, Plate & Screw 1, Extras
+1; set 2 Inst 2, Plate & Screw 2; a filled plate tray keeps its lines under the
+new name, with the plate-caddy photo; **RHH** from Mat's agreement of 20 Nov —
+Shoreline Instruments (trials inside, one variable drill guide, as Kirsty and
+Mat settled), Instruments Extras DNO, Plate & Screw. Trays named trials or
+insertion come off (kept in `kits:list:deleted:{kit}`); anything else stays,
+sterile implants last. The Calvary sheets carry no whole-tray photo, so its
+Inst and Extras trays have none until one is taken; its old photos were
+close-ups of the retired trays. "Shoreline No Profile" (on Calvary's tray list)
+is not in any document we hold.
+**The Outrigger sits after the Calvary Mariner set** (Brent, same day: "should
+be underneath the Calvary instrument kit; not listed first") — `groupSystems`
+ranks an `INSIDE` set half a place later.
 
 ### Call a courier after a move (Brent, 20 Nov 2026)
 

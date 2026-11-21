@@ -27,13 +27,13 @@ vi.mock('./_kitAgreementData.js', () => ({
   PHOTO_LOADERS: { 'clv-widget': async () => ({ PHOTOS: { 'p4_1.jpg': Buffer.from('jpg').toString('base64') } }) }
 }))
 
-const { planForSet, sameTray, fillFromAgreement, agreementStatus, addMissingPhotos } = await import('./_kitAgreements.js')
+const { planForSet, sameTray, fillFromAgreement, agreementStatus, addMissingPhotos, byCodes } = await import('./_kitAgreements.js')
 const { getTrayList, getDefs } = await import('./_kits.js')
 
 const deps = { upload: vi.fn(async () => {}), listDocs: vi.fn(async () => []), link: vi.fn(async () => {}) }
 beforeEach(() => {
   store.clear()
-  store.set('kits:applied', JSON.stringify(['outrigger-consigned-clv-2026-11-02', 'reform-lumbar-returned-2026-11-02', 'mariner-mis-clv-2026-11-21', 'mariner-mis-photos-2026-11-21']))
+  store.set('kits:applied', JSON.stringify(['outrigger-consigned-clv-2026-11-02', 'reform-lumbar-returned-2026-11-02', 'mariner-mis-clv-2026-11-21', 'mariner-mis-photos-2026-11-21', 'shoreline-trays-2026-11-21']))
   store.set('kits:defs', JSON.stringify([
     { id: 'widget-clv-1', name: 'Widget 1', system: 'Widget', home: 'CLV', kind: 'consignment', trays: ['Insertion 1-1'] },
     { id: 'widget-clv-2', name: 'Widget 2', system: 'Widget', home: 'CLV', kind: 'consignment', trays: ['Insertion 2-1'] }
@@ -113,6 +113,18 @@ describe('photos the fill missed (Brent, 21 Nov 2026)', () => {
     const upload = vi.fn(async () => {})
     expect((await addMissingPhotos('clv-widget', 'Brent', { upload })).added).toBe(0)
     expect(upload).not.toHaveBeenCalled()
+  })
+})
+
+describe('a tray typed in by hand under another name', () => {
+  it('is matched to its agreement tray by the codes it holds', () => {
+    const agreement = [
+      { name: 'Mariner Instruments 1', lines: [{ code: '2SEA-12-0001' }, { code: '2SEA-12-0002' }, { code: '2SEA-12-0003' }] },
+      { name: 'Mariner Screws', lines: [{ code: '2SEA-55-0001' }, { code: '2SEA-55-0002' }] }
+    ]
+    const aimees = { name: 'RHH MARINER INST TRAY A', lines: [{ code: '12-0001' }, { code: 'SEA-12-0002' }, { code: '99-9999' }] }
+    expect(byCodes(aimees, agreement).name).toBe('Mariner Instruments 1')
+    expect(byCodes({ name: 'Other', lines: [{ code: '77-0001' }, { code: '77-0002' }] }, agreement)).toBeNull()
   })
 })
 

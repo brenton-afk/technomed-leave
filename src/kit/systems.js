@@ -38,7 +38,10 @@ export function groupSystems(kits) {
     if (!map.has(key)) map.set(key, { key, name, kits: [] })
     map.get(key).kits.push(k)
   }
-  const rank = k => (k.kind === 'floating' ? 10 : 0) + Math.max(0, PLACE_ORDER.indexOf(k.home))
+  // A set shown inside another system's tile (the Mariner Outrigger) comes
+  // after that system's own set at the same place (Brent, 21 Nov 2026: "should
+  // be underneath the Calvary instrument kit; not listed first").
+  const rank = k => (k.kind === 'floating' ? 10 : 0) + Math.max(0, PLACE_ORDER.indexOf(k.home)) + (setLabel(k) ? 0.5 : 0)
   for (const g of map.values()) g.kits.sort((a, b) => rank(a) - rank(b))
   return [...map.values()]
 }

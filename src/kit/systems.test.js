@@ -10,6 +10,17 @@ const kits = [
   { id: 'dk', name: 'Dakota', system: 'Dakota', home: 'RHH', at: 'RHH', kind: 'consignment', trays: ['Dakota 1', 'Dakota 2'], trayAt: { 'Dakota 1': { at: 'CLV' } } }
 ]
 
+describe('the Mariner Outrigger inside the Mariner tile', () => {
+  it('comes after the Calvary Mariner set, not before it', () => {
+    const kits = [
+      { id: 'out', system: 'Mariner Outrigger', home: 'CLV', kind: 'consignment' },
+      { id: 'mar-rhh', system: 'Mariner', home: 'RHH', kind: 'consignment' },
+      { id: 'mar-clv', system: 'Mariner', home: 'CLV', kind: 'consignment' }
+    ]
+    expect(groupSystems(kits)[0].kits.map(k => k.id)).toEqual(['mar-clv', 'out', 'mar-rhh'])
+  })
+})
+
 describe('the kit room by system', () => {
   it('makes one entry per system, sets in place order with a TM loan last', () => {
     const g = groupSystems(kits)
