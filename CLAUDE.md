@@ -1656,6 +1656,13 @@ back arrow (`data-tray-back`) and the phone's back button (`useBackLayer`)
 return to the list; Move, Edit, Print, the photo (sticky at the page's top)
 and only that tray's lines. A tray being checked after an upload still
 opens in place.
+**Instrument trays, then implant trays** (Brent, same day: "group instrument
+trays and implant trays together. With the order of trays"). `groupTrays` /
+`trayKind` in `src/kit/trayKind.js` (pure, `trayKind.test.js`): an implant
+tray is one where most lines are implants; a tray with nothing listed goes by
+its name, instrument words first ("Screw Removal" is instruments). TrayList
+draws "Instrument trays · N" then "Implant trays · N" (`data-tray-group`),
+each in the kit's order.
 
 ### Call a courier after a move (Brent, 20 Nov 2026)
 

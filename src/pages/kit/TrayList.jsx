@@ -12,6 +12,7 @@ import { printTrayList } from './printTrayList.js'
 import { useLiveRefresh } from '../../liveRefresh.js'
 import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
+import { groupTrays } from '../../kit/trayKind.js'
 
 // ─── What is in each tray ────────────────────────────────────────────────────
 // A kit's tray list: uploaded from the hospital's own copy (a PDF, a Word
@@ -662,7 +663,13 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
       {/* Every tray of the kit is a button (Brent, 20 Nov 2026): open it to see
           what it holds, edit it, move it on its own, or send an instrument in
           it for repair — whether or not a document was ever uploaded for it. */}
-      {rows && list !== undefined && allTrays.map(t => (
+      {/* Instrument trays, then implant trays, each in the kit's order
+          (Brent, 21 Nov 2026). */}
+      {rows && list !== undefined && groupTrays(allTrays).map(g => (
+        <div key={g.kind} data-tray-group={g.kind}>
+          <div style={{ ...text('micro'), fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: colour.inkFaint,
+            margin: `${space.sm}px 0 ${space.xs}px` }}>{g.label} · {g.trays.length}</div>
+          {g.trays.map(t => (
         <TrayBlock key={t.name} tray={t} user={user} open={open === t.name} onToggle={() => setOpen(open === t.name ? '' : t.name)}
           where={showWhere ? whereIs(t.name) : ''}
           checked={selected ? selected.has(t.name) : undefined}
@@ -677,6 +684,8 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
             }
           }}
           onPrint={list ? () => printTrayList(kit, list, { only: t.name, printedBy: user?.firstName || user?.name || '', token: user?.token }) : undefined} />
+          ))}
+        </div>
       ))}
       {repairing && (
         <RepairSheet kit={kit} job={repairing} headers={headers} onClose={() => setRepairing(null)}
