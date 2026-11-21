@@ -10,6 +10,18 @@ const kits = [
   { id: 'dk', name: 'Dakota', system: 'Dakota', home: 'RHH', at: 'RHH', kind: 'consignment', trays: ['Dakota 1', 'Dakota 2'], trayAt: { 'Dakota 1': { at: 'CLV' } } }
 ]
 
+describe('a set saved as a system of its own', () => {
+  it('"CYLOX Set 2" sits under CYLOX', () => {
+    const g = groupSystems([
+      { id: 'c1', name: 'CYLOX', system: 'CYLOX', home: 'CLV' },
+      { id: 'c2', name: 'CYLOX Set 2', system: 'CYLOX Set 2', home: 'CLV' }
+    ])
+    expect(g).toHaveLength(1)
+    expect(g[0].name).toBe('CYLOX')
+    expect(g[0].kits.map(k => k.id)).toEqual(['c1', 'c2'])
+  })
+})
+
 describe('the Mariner Outrigger inside the Mariner tile', () => {
   it('comes after the Calvary Mariner set, not before it', () => {
     const kits = [

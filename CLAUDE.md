@@ -1632,6 +1632,10 @@ as `aka`), `systems.js`, `systemSuggestions.js` and the kit room
 `_distributors.js` (it did not — a Catenary kit line got no E4 notice). Its
 picture is the cage from E4's brochure; Firebird has the coloured screws and
 Ascot the plate with green screws (his files).
+**A set is never a system** (Brent, 21 Nov 2026: "Cylox and Cylox set 2
+should both be put under Cylox"): `systemOf` drops a trailing "Set N" from a
+system name, and `set-n-systems-2026-11-21` stored CYLOX Set 2's system as
+CYLOX — a second Calvary set under one tile.
 **Branded tiles, option B** (Brent, 21 Nov 2026, from the mock-up
 `claude.ai/artifact/Mc1sUce8kyQEGGFGHh8Uuc`: "B looks good … do the changes and
 I'll tell you which ones to change"). Each system tile has the system's

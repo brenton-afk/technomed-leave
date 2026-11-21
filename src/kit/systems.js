@@ -18,7 +18,9 @@ const INSIDE = { 'mariner outrigger': 'Mariner' }
 
 /** The system a kit is shown under: its system, else its name without a set number. */
 export function systemOf(kit) {
-  const s = String(kit?.system || '').trim()
+  // "CYLOX Set 2" is a second set of CYLOX, not a system of its own (Brent,
+  // 21 Nov 2026: "Cylox and Cylox set 2 should both be put under Cylox").
+  const s = String(kit?.system || '').trim().replace(/\s+set\s*\d+$/i, '')
   if (s) return INSIDE[s.toLowerCase()] || s
   return String(kit?.name || '').replace(/\s*\(TM loan\)\s*$/i, '').replace(/\s+\d+$/, '').trim()
 }

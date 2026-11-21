@@ -82,7 +82,10 @@ export const KIT_CORRECTIONS = [
   { id: 'shoreline-photos-clv-2026-11-21', seed: 'shoreline-photos' },
   // "This is the Global BMD ALIF. It needs to be called Catenary ALIF" (Brent,
   // 21 Nov 2026) — the inventory and bookings were renamed with it.
-  { id: 'catenary-name-2026-11-21', seed: 'catenary-name' }
+  { id: 'catenary-name-2026-11-21', seed: 'catenary-name' },
+  // "CYLOX Set 2" saved as its own system: its system is CYLOX (Brent, 21 Nov
+  // 2026), so bookings and supplies count it as a second CYLOX set too.
+  { id: 'set-n-systems-2026-11-21', seed: 'set-n-systems' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -222,6 +225,22 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'set-n-systems') {
+    const defs = await getDefs()
+    let changed = 0
+    const next = defs.map(k => {
+      const sys = String(k.system || '')
+      const base = sys.replace(/\s+set\s*\d+$/i, '')
+      if (base === sys || !base) return k
+      changed += 1
+      return { ...k, system: base }
+    })
+    if (changed) {
+      await redisSetBody(DEFS, JSON.stringify(next))
+      await addHistory({ kind: 'edit', by: 'Claude (sets under their system)', text: `${changed} set(s) put under their system (e.g. CYLOX Set 2 → CYLOX)` })
+    }
     return
   }
   if (name === 'catenary-name') {
