@@ -144,9 +144,9 @@ describe('a booking changed from Diplomat to Mariner', () => {
 })
 
 // "It added to the calendar correctly from the email but didn't ask if I
-// wanted to send email requests. Make sure you include Mariner MIS in the
+// wanted to send email requests. Make sure you include Mariner Open in the
 // request email to DT." Fake patient only.
-describe('a Calvary case read from an email as "Mariner MIS", no supply written', () => {
+describe('a Calvary case read from an email as "Mariner Open", no supply written', () => {
   const event = (kit, hospital = 'CLV') => ({
     summary: `Testa ${kit} - Thani`,
     description: `Surgeon: Thani\nPatient: Testa\nDate: 10/11/2026\nHospital: ${hospital}\nProcedure: L4/5 TLIF\nKit: ${kit}`,
@@ -155,24 +155,29 @@ describe('a Calvary case read from an email as "Mariner MIS", no supply written'
 
   it('is read as a Device loan, named as written', async () => {
     const { describeBooking } = await import('./_bookingNotices.js')
-    expect(describeBooking(event('Mariner MIS')).loans).toEqual({ device: ['Mariner MIS'] })
+    expect(describeBooking(event('Mariner Open')).loans).toEqual({ device: ['Mariner Open'] })
   })
 
-  it('offers the request to Device with Mariner MIS in it, and tells Calvary', async () => {
+  it('offers the request to Device with Mariner Open in it, and tells Calvary', async () => {
     const { describeBooking, loanRequestsFor, hospitalLoanNoticesFor, DEFAULT_CONTACTS, DEFAULT_LOAN_REQUESTS } = await import('./_bookingNotices.js')
-    const after = describeBooking(event('Mariner MIS'))
+    const after = describeBooking(event('Mariner Open'))
     const settings = { contacts: DEFAULT_CONTACTS, loanRequests: DEFAULT_LOAN_REQUESTS }
     const [req] = loanRequestsFor({ kind: 'new', after, eventId: 'e1', settings })
     expect(req.contactId).toBe('device')
-    expect(req.text).toContain('Please send the following loan set: Mariner MIS.')
-    expect(req.subject).toContain('Mariner MIS')
+    expect(req.text).toContain('Please send the following loan set: Mariner Open.')
+    expect(req.subject).toContain('Mariner Open')
     const [clv] = hospitalLoanNoticesFor({ kind: 'new', after, eventId: 'e1', settings })
-    expect(clv.text).toContain('Mariner MIS (Device Technologies)')
+    expect(clv.text).toContain('Mariner Open (Device Technologies)')
+  })
+
+  it('asks Device for nothing on a Calvary Mariner MIS — it is on the shelf (21 Nov 2026)', async () => {
+    const { describeBooking } = await import('./_bookingNotices.js')
+    expect(describeBooking(event('Mariner MIS')).loans).toEqual({})
   })
 
   it('asks for nothing where the hospital holds the set', async () => {
     const { describeBooking } = await import('./_bookingNotices.js')
-    expect(describeBooking(event('Mariner MIS', 'RHH')).loans).toEqual({})
+    expect(describeBooking(event('Mariner Open', 'RHH')).loans).toEqual({})
     expect(describeBooking(event('Diplomat')).loans).toEqual({})
   })
 })

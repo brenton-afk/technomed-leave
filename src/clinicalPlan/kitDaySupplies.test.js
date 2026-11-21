@@ -11,7 +11,9 @@ describe('a new booking says where its kit comes from', () => {
   })
   it('a second Mariner at RHH that day is not the same shelf set', () => {
     const sameDay = [{ hospital: 'RHH', supplies: [{ system: 'Mariner', supply: 'Consignment' }] }]
-    expect(kitWithDaySupplies({ kit: 'Mariner MIS', hospital: 'RHH', sameDay })).toBe('Mariner MIS (Distributor Loan)')
+    // An MIS can borrow Calvary's MIS set; an Open has to be requested.
+    expect(kitWithDaySupplies({ kit: 'Mariner MIS', hospital: 'RHH', sameDay })).toBe('Mariner MIS (Calvary Loan)')
+    expect(kitWithDaySupplies({ kit: 'Mariner Open', hospital: 'RHH', sameDay })).toBe('Mariner Open (Distributor Loan)')
   })
   it('a case already on loan takes no shelf set', () => {
     const sameDay = [{ hospital: 'RHH', supplies: [{ system: 'Mariner', supply: 'Distributor Loan' }] }]
@@ -30,7 +32,8 @@ describe('a new booking says where its kit comes from', () => {
     expect(kitWithDaySupplies({ kit: 'Something new', hospital: 'RHH' })).toBe('Something new')
     expect(kitWithDaySupplies({ kit: 'Mariner', hospital: '' })).toBe('Mariner')
   })
-  it('a Mariner at Calvary is a loan, there is none on the shelf', () => {
-    expect(kitWithDaySupplies({ kit: 'Mariner MIS', hospital: 'CLV' })).toMatch(/\(Distributor Loan\)$/)
+  it('a Mariner MIS at Calvary is its consignment set; an Open is a loan', () => {
+    expect(kitWithDaySupplies({ kit: 'Mariner MIS', hospital: 'CLV' })).toMatch(/\(Consignment\)$/)
+    expect(kitWithDaySupplies({ kit: 'Mariner Open', hospital: 'CLV' })).toMatch(/\(Distributor Loan\)$/)
   })
 })

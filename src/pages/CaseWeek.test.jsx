@@ -1328,7 +1328,7 @@ describe('a supply on every booking', () => {
 
   it('knows a Calvary Mariner case needs a distributor set', async () => {
     // Which is what Loane and O'Brien both actually have.
-    events = [booking('Mariner', 'CLV', 'Loane')]
+    events = [booking('Mariner Open', 'CLV', 'Loane')]
     expect(await cardFor('Loane')).toMatch(/· Distributor Loan\?/)
   })
 

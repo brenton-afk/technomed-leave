@@ -18,7 +18,9 @@ describe('where the sets are', () => {
     ['Diplomat', 'CLV', 'none'],     // three consigned
     ['Diplomat', 'RHH', 'none'],     // one consigned
     ['Mariner', 'RHH', 'none'],      // one consigned
-    ['Mariner', 'CLV', 'order'],     // none at Calvary — this one needs a loan
+    ['Mariner', 'CLV', 'none'],      // one Mariner MIS at Calvary (21 Nov 2026)
+    ['Mariner MIS', 'CLV', 'none'],
+    ['Mariner Open', 'CLV', 'order'], // only MIS at Calvary — Open needs a loan
     ['Reform Cervical', 'RHH', 'none'],
     ['Reform Cervical', 'CLV', 'order'],   // RHH only, so Calvary must request
     ['Global BMD ALIF', 'CLV', 'none'],
@@ -196,9 +198,9 @@ describe('two cases, one kit, same day', () => {
   })
 
   it('asks for a loan when there is nothing to borrow', () => {
-    // Calvary holds no Mariner, so a second one at RHH cannot be covered by
-    // moving a set across.
-    const short = dayShortfall('Mariner', 'RHH', 2)
+    // Calvary holds only a Mariner MIS, so a second Mariner Open at RHH cannot
+    // be covered by moving a set across.
+    const short = dayShortfall('Mariner Open', 'RHH', 2)
     expect(short.from).toBeNull()
     expect(short.reason).toMatch(/loan set has to be requested/)
   })
@@ -390,11 +392,12 @@ describe('working out the supply from what is where', () => {
     expect(suggestSupply('Diplomat', 'CLV')).toBe('Consignment')
   })
 
-  it('calls a Calvary Mariner case a distributor loan', () => {
-    // Not "there is one at RHH, go and get it". Mariner is consigned at RHH
-    // and a Calvary case still gets a distributor set — which is exactly what
-    // Loane and O'Brien both have.
-    expect(suggestSupply('Mariner', 'CLV')).toBe('Distributor Loan')
+  it('calls a Calvary Mariner Open case a distributor loan, and MIS consignment', () => {
+    // Not "there is one at RHH, go and get it". Calvary holds one Mariner MIS
+    // (21 Nov 2026); an Open case there still gets a distributor set.
+    expect(suggestSupply('Mariner Open', 'CLV')).toBe('Distributor Loan')
+    expect(suggestSupply('Mariner MIS', 'CLV')).toBe('Consignment')
+    expect(suggestSupply('Mariner', 'CLV')).toBe('Consignment')
   })
 
   it('calls the office loan kits ours', () => {

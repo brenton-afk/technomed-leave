@@ -2,7 +2,7 @@ import { redis, redisSetBody } from './_redis.js'
 import { DEFAULT_USAGE_GREETINGS } from './_usageEmailBody.js'
 import { readBooking, detectHospital } from '../src/clinicalPlan/parse.js'
 import { systemsInKit } from '../src/clinicalPlan/systems.js'
-import { inventoryFor, kitArrivalBy, isRush, suggestSupply } from '../src/clinicalPlan/inventory.js'
+import { inventoryFor, kitArrivalBy, isRush, suggestSupply, consignedAt } from '../src/clinicalPlan/inventory.js'
 import { parseKitSupplies } from '../src/clinicalPlan/kitSupply.js'
 import { para, factsPanel, bullets } from './_emailLayout.js'
 
@@ -284,7 +284,7 @@ export function describeBooking(event) {
   for (const { system, supply } of (read.supplies?.length ? read.supplies : parseKitSupplies(kit))) {
     const item = inventoryFor(system)
     const site = hospital === 'CLV' || hospital === 'RHH' ? hospital : ''
-    const inferred = !supply && item && site && !((item.consigned?.[site] || 0) > 0)
+    const inferred = !supply && item && site && !(consignedAt(item, site, system) > 0)
       && suggestSupply(system, site) === 'Distributor Loan'
     if (supply !== 'Distributor Loan' && !inferred) continue
     const d = item?.distributor

@@ -68,8 +68,12 @@ export const INVENTORY = [
   // ── Device Technologies (SeaSpine) ──
   {
     system: 'Mariner', distributor: 'device',
-    consigned: { RHH: 1 },
-    note: 'Calvary has none — a Mariner case there needs a loan set.'
+    // A Mariner MIS consignment set went to Calvary on 21 Nov 2026 (Brent:
+    // "Bookings should treat Calvary as having one Mariner MIS kit"). Only MIS
+    // there — a Mariner Open case at Calvary is still a Device loan.
+    consigned: { RHH: 1, CLV: 1 },
+    consignedVariants: { CLV: ['MIS'] },
+    note: 'One at RHH; one Mariner MIS at Calvary — a Mariner Open case at Calvary needs a loan set.'
   },
   {
     system: 'Shoreline', distributor: 'device',
@@ -227,6 +231,25 @@ export const INVENTORY = [
 const byName = new Map(INVENTORY.map(item => [item.system.toLowerCase(), item]))
 
 /** What the app knows about a system, by name. */
+const BUTTON_VARIANTS_RAW = { Mariner: ['Mariner MIS', 'Mariner Open'] }
+
+/**
+ * How many sets of this system are on the shelf at a site, for this booking's
+ * wording. Where only some variants are consigned (Calvary holds Mariner MIS,
+ * not Open), a booking naming another variant counts none. A plain "Mariner"
+ * counts the shelf's set.
+ */
+export function consignedAt(item, site, system = '') {
+  const n = item?.consigned?.[site] || 0
+  const only = item?.consignedVariants?.[site]
+  if (!n || !only) return n
+  const others = (BUTTON_VARIANTS_RAW[item.system] || [])
+    .map(v => v.slice(item.system.length).trim())
+    .filter(v => v && !only.includes(v))
+  const named = others.some(v => new RegExp(`\\b${v}\\b`, 'i').test(String(system)))
+  return named ? 0 : n
+}
+
 export function inventoryFor(system) {
   const name = String(system || '').trim().toLowerCase()
   if (!name) return null
@@ -309,7 +332,7 @@ export function loanNeed(system, hospital) {
     }
   }
 
-  const consigned = item.consigned?.[site] || 0
+  const consigned = consignedAt(item, site, system)
   if (consigned > 0) {
     // Consignment and a long-term loan both mean the kit is on the shelf and
     // nobody has to do anything — but they are not the same thing to say, and
@@ -413,11 +436,11 @@ export function dayShortfall(system, hospital, demand) {
   if (item.ours === false && item.weCover && !item.weCover[site]) return null
 
   // The floating kit counts: it is a real set, it just has no permanent home.
-  const held = (item.consigned?.[site] || 0) + (item.floating || 0)
+  const held = consignedAt(item, site, system) + (item.floating || 0)
   if (demand <= held) return null
 
   const other = site === 'RHH' ? 'CLV' : 'RHH'
-  const spareElsewhere = item.consigned?.[other] || 0
+  const spareElsewhere = consignedAt(item, other, system)
   const otherName = other === 'CLV' ? 'Calvary' : 'RHH'
 
   return {
@@ -508,7 +531,7 @@ export function suggestSupply(system, hospital) {
   if (item.ours === false && item.weCover && !item.weCover[site]) return null
 
   // On the shelf at this hospital. Nothing to arrange.
-  if ((item.consigned?.[site] || 0) > 0) {
+  if (consignedAt(item, site, system) > 0) {
     // Unless it is there on long-term loan, which is a different answer to
     // the question the buttons ask even though it means the same work: none.
     return item.longTermLoan?.[site] ? 'Distributor Loan' : 'Consignment'
@@ -536,7 +559,7 @@ export function suggestSupply(system, hospital) {
     // holds it — Athlet from RHH, the Mariner Outrigger from Calvary.
     if (item.movesBetweenSites) {
       const other = site === 'RHH' ? 'CLV' : 'RHH'
-      if ((item.consigned?.[other] || 0) > 0) return other === 'CLV' ? 'Calvary Loan' : 'RHH Loan'
+      if (consignedAt(item, other, system) > 0) return other === 'CLV' ? 'Calvary Loan' : 'RHH Loan'
     }
     if (item.movesBetweenSites || item.floating) return 'RHH Loan'
   }
@@ -560,12 +583,12 @@ export function suggestSupplyOnDay(system, hospital, nth = 1) {
   const item = inventoryFor(system)
   const site = siteCode(hospital)
   if (!item || !site || first !== 'Consignment') return first
-  const held = item.consigned?.[site] || 0
+  const held = consignedAt(item, site, system)
   if (nth <= held) return first
   const over = nth - held
   if (item.floating && item.floatingAt === 'office' && over <= item.floating) return 'TM Loan'
   const other = site === 'RHH' ? 'CLV' : site === 'CLV' ? 'RHH' : null
-  if (other && (item.consigned?.[other] || 0) > 0) return other === 'RHH' ? 'RHH Loan' : 'Calvary Loan'
+  if (other && consignedAt(item, other, system) > 0) return other === 'RHH' ? 'RHH Loan' : 'Calvary Loan'
   return 'Distributor Loan'
 }
 
@@ -576,7 +599,7 @@ export function suggestSupplyOnDay(system, hospital, nth = 1) {
  * which ("make sure you include Mariner MIS in the request email to DT").
  * Both are still the one Mariner here: same distributor, same consignment.
  */
-const BUTTON_VARIANTS = { Mariner: ['Mariner MIS', 'Mariner Open'] }
+const BUTTON_VARIANTS = BUTTON_VARIANTS_RAW
 export const SYSTEM_BUTTONS = INVENTORY.filter(i => !i.competitor).flatMap(i => BUTTON_VARIANTS[i.system] || [i.system])
 
 /** The plain name a button stands in for: "Mariner MIS" → "Mariner". */

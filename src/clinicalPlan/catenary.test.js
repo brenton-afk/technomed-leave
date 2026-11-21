@@ -43,12 +43,13 @@ describe('Mariner MIS and Mariner Open', () => {
     expect(SYSTEM_BUTTONS).toContain('Mariner Outrigger')
   })
 
-  it('are both Device\'s Mariner, needing a loan at Calvary and not at RHH', async () => {
+  it('are both Device\'s Mariner; Calvary holds only the MIS set', async () => {
     const { inventoryFor, suggestSupply } = await import('./inventory.js')
     for (const s of ['Mariner MIS', 'Mariner Open']) {
       expect(inventoryFor(s).distributor).toBe('device')
-      expect(suggestSupply(s, 'CLV')).toBe('Distributor Loan')
       expect(suggestSupply(s, 'RHH')).toBe('Consignment')
     }
+    expect(suggestSupply('Mariner MIS', 'CLV')).toBe('Consignment')
+    expect(suggestSupply('Mariner Open', 'CLV')).toBe('Distributor Loan')
   })
 })

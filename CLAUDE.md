@@ -1619,8 +1619,15 @@ into the portal"). From Appendix 1 of the consignment agreement:
 `mariner-mis-clv`, system Mariner) and `runSeed` files each photo at
 `/Tray Lists/Tray Photos/Mariner MIS/{tray}.jpg` and saves the list — only if
 the set has none. The agreement itself (unsigned, carries prices) is not in
-the repo; attach the signed copy in the set's Documents. `inventory.js` still
-says Calvary has no Mariner — bookings are unchanged until Brent says.
+the repo; attach the signed copy in the set's Documents. **Bookings count it** (Brent,
+same day: "Bookings should treat Calvary as having one Mariner MIS kit"):
+`inventory.js` Mariner is `consigned: { RHH: 1, CLV: 1 }` with
+`consignedVariants: { CLV: ['MIS'] }`, read through `consignedAt(item, site,
+system)` (suggestSupply, suggestSupplyOnDay, loanNeed, dayShortfall,
+dispatch, the notices' inferred loan): a Mariner MIS or plain Mariner at
+Calvary is Consignment and asks Device for nothing; a **Mariner Open** there
+is still a Distributor Loan. A second MIS at RHH the same day borrows
+Calvary's (Calvary Loan, transfer the day before); a second Open is a loan.
 
 ### Call a courier after a move (Brent, 20 Nov 2026)
 

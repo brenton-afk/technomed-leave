@@ -10,7 +10,7 @@
 // with it. One tap turns it into a real task (prefilled Move a kit), and once
 // that task exists the suggestion steps aside.
 
-import { suggestSupplyOnDay, inventoryFor, siteCode } from './inventory.js'
+import { suggestSupplyOnDay, inventoryFor, siteCode, consignedAt } from './inventory.js'
 import { parseDateStr, toDateStr, addCivilDays, weekdayName } from './week.js'
 
 const PLACES = { CLV: 'Calvary', RHH: 'RHH' }
@@ -71,7 +71,7 @@ export function tmLoanDispatches(cases = []) {
           taken.set(item, nth)
           // Written as Consignment past the sets on the shelf is still a
           // borrowed kit — the shelf cannot hold two cases' worth of one.
-          const held = item.consigned?.[siteCode(c.hospital)] || 0
+          const held = consignedAt(item, siteCode(c.hospital), entry.system)
           supply = !supply || nth > held ? suggestSupplyOnDay(entry.system, c.hospital, nth) : supply
         }
         const place = PLACES[siteCode(c.hospital)]

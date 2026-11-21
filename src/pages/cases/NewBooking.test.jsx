@@ -68,7 +68,7 @@ describe('the question a booking raises', () => {
     // made rather than discovered later.
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner Open' } })
     expect((await screen.findAllByText(/a loan set has to be requested/)).length).toBeGreaterThan(0)
     expect(screen.getByText(/Nothing consigned at CLV/)).toBeInTheDocument()
   })
@@ -76,7 +76,7 @@ describe('the question a booking raises', () => {
   it('gives the arrival deadline with it', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner Open' } })
     // Thursday 24 September, so the kit is due the Tuesday.
     expect(await screen.findByText(/2026-09-22/)).toBeInTheDocument()
   })
@@ -84,7 +84,7 @@ describe('the question a booking raises', () => {
   it('says nothing to order for the same system at RHH', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'RHH' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner Open' } })
     expect(await screen.findByText(/nothing to order/)).toBeInTheDocument()
   })
 
@@ -100,7 +100,7 @@ describe('the question a booking raises', () => {
   it('fills the supply in from the inventory', async () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner Open' } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Distributor Loan' })).toHaveAttribute('aria-pressed', 'true'))
   })
 })
@@ -137,11 +137,11 @@ describe('a case needing two systems', () => {
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Calvary' }))
     fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Diplomat' } })
-    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner MIS' } })
+    fireEvent.change(screen.getByLabelText(/Add a system/), { target: { value: 'Mariner Open' } })
     // One is consigned at Calvary and the other has to be ordered. A combined
     // answer would hide the one that matters.
     expect(await screen.findByText(/Diplomat — nothing to order/)).toBeInTheDocument()
-    expect(screen.getByText(/Mariner MIS — a loan set has to be requested/)).toBeInTheDocument()
+    expect(screen.getByText(/Mariner Open — a loan set has to be requested/)).toBeInTheDocument()
   })
 
   it('lets one be taken off again', async () => {
@@ -163,7 +163,8 @@ describe('what gets created', () => {
     expect(posted.fields.patient).toBe('Marsh')
     expect(posted.fields.surgeon).toBe('Ibbett')
     expect(posted.fields.hospital).toBe('CLV')
-    expect(posted.fields.kit).toBe('Mariner MIS (Distributor Loan)')
+    // Ibbett's usual Mariner MIS — on the shelf at Calvary since 21 Nov 2026.
+    expect(posted.fields.kit).toBe('Mariner MIS (Consignment)')
     expect(posted.date).toBe('2026-09-24')
   })
 
