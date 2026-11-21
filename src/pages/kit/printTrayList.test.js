@@ -62,3 +62,17 @@ describe('photos and page breaks on the printout (Brent, 4 Nov 2026)', async () 
     expect(await photoLinks(trays, 'tok', fetcher)).toEqual({ A: 'https://dl.example/a' })
   })
 })
+
+describe('the print button (Brent, 21 Nov 2026: "Print button isn\'t working")', () => {
+  it('prints inside the page, scoped, with the photos — no hidden frame', async () => {
+    const { printTrayList } = await import('./printTrayList.js')
+    let printed = null
+    const ok = await printTrayList(KIT, LIST, { only: LIST.trays[0].name, token: '' }, { printAlone: node => { printed = node } })
+    expect(ok).toBe(true)
+    expect(printed.className).toBe('tm-tray-print')
+    expect(printed.innerHTML).toContain(LIST.trays[0].name)
+    expect(printed.querySelector('style').textContent).toMatch(/#tm-print-root \.tm-tray-print h1/)
+    expect(printed.querySelector('style').textContent).not.toMatch(/(^|\n)\s*h1 \{/)
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+})

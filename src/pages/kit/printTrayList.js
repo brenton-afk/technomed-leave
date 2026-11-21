@@ -7,16 +7,22 @@
 // or tick the line, which is what a stock-take or a return check is done with.
 // A tray never splits across pages if it fits on one.
 //
-// Built as its own document and printed from a hidden frame, so the app's own
-// layout — the fixed shell, the tab bar — never reaches the paper.
+// Printed inside the app's page with everything else hidden (printAlone), so
+// the app's own layout — the fixed shell, the tab bar — never reaches the paper.
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
 const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 
-/** The printable document, as HTML. `only` prints one tray by name. */
-export function trayListHtml(kit, list, { only = '', printedBy = '', at = new Date(), photos = {} } = {}) {
+/**
+ * The sheet's style and body, apart. `scope` prefixes every rule, so the same
+ * sheet can be printed inside the app's own page without touching its screen
+ * styles; '' is the standalone document.
+ */
+export function trayListParts(kit, list, { only = '', printedBy = '', at = new Date(), photos = {}, scope = '' } = {}) {
+  const S = scope ? `${scope} ` : ''
+  const ROOT = scope || 'body'
   const trays = (list?.trays || []).filter(t => !only || t.name === only)
   const when = at.toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Hobart' })
   const source = [
@@ -46,43 +52,51 @@ export function trayListHtml(kit, list, { only = '', printedBy = '', at = new Da
 </section>`
   }
 
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<title>${escape(kit?.name || 'Tray list')} — tray list</title>
-<style>
+  const css = `
   @page { size: A4; margin: 14mm 12mm; }
-  * { box-sizing: border-box; }
-  body { font: 10.5pt/1.35 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #0f1e2b; margin: 0; }
-  header { border-bottom: 2px solid #042746; padding-bottom: 6px; margin-bottom: 10px; }
-  h1 { font-size: 16pt; margin: 0; color: #042746; }
-  .sub { color: #4b5b68; margin-top: 2px; }
+  ${S}* { box-sizing: border-box; }
+  ${ROOT} { font: 10.5pt/1.35 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #0f1e2b; margin: 0; }
+  ${S}header { border-bottom: 2px solid #042746; padding-bottom: 6px; margin-bottom: 10px; }
+  ${S}h1 { font-size: 16pt; margin: 0; color: #042746; }
+  ${S}.sub { color: #4b5b68; margin-top: 2px; }
   /* A tray is allowed to run onto the next page. Keeping a whole tray together
      pushed any tray longer than the space under the title onto page 2 and left
      page 1 blank (Brent, 4 Nov 2026). Only its heading, photo and first rows are
      kept together, rows never split, and the column heads repeat. */
-  .tray { margin-bottom: 14px; }
-  h2 { font-size: 12pt; margin: 0 0 2px; break-after: avoid; page-break-after: avoid; }
-  .photo { display: block; max-width: 100%; max-height: 85mm; margin: 4px 0 6px; object-fit: contain;
+  ${S}.tray { margin-bottom: 14px; }
+  ${S}h2 { font-size: 12pt; margin: 0 0 2px; break-after: avoid; page-break-after: avoid; }
+  ${S}.photo { display: block; max-width: 100%; max-height: 85mm; margin: 4px 0 6px; object-fit: contain;
     border: 1px solid #e4e9ee; break-inside: avoid; break-after: avoid; page-break-after: avoid; }
-  .meta { color: #6b7a88; margin: 0 0 4px; font-size: 9pt; break-after: avoid; page-break-after: avoid; }
-  thead { display: table-header-group; }
-  tr { break-inside: avoid; page-break-inside: avoid; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  col.code { width: 22%; } col.kind { width: 13%; } col.qty { width: 8%; } col.check { width: 14%; }
-  th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; color: #4b5b68; border-bottom: 1px solid #93a1ad; padding: 3px 4px; }
-  td { padding: 4px; border-bottom: 1px solid #e4e9ee; vertical-align: top; overflow-wrap: anywhere; }
-  tr.implant td { font-weight: 600; }
-  .num { text-align: right; }
-  td.box { border: 1px solid #93a1ad; }
-  footer { color: #93a1ad; font-size: 8.5pt; margin-top: 8px; }
-</style></head>
-<body>
+  ${S}.meta { color: #6b7a88; margin: 0 0 4px; font-size: 9pt; break-after: avoid; page-break-after: avoid; }
+  ${S}thead { display: table-header-group; }
+  ${S}tr { break-inside: avoid; page-break-inside: avoid; }
+  ${S}table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  ${S}col.code { width: 22%; } ${S}col.kind { width: 13%; } ${S}col.qty { width: 8%; } ${S}col.check { width: 14%; }
+  ${S}th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; color: #4b5b68; border: 0; border-bottom: 1px solid #93a1ad; padding: 3px 4px; }
+  ${S}td { padding: 4px; border: 0; border-bottom: 1px solid #e4e9ee; vertical-align: top; overflow-wrap: anywhere; }
+  ${S}tr.implant td { font-weight: 600; }
+  ${S}.num { text-align: right; }
+  ${S}td.box { border: 1px solid #93a1ad; }
+  ${S}footer { color: #93a1ad; font-size: 8.5pt; margin-top: 8px; }
+`
+  const body = `
   <header>
     <h1>${escape(kit?.name || 'Tray list')}</h1>
     <div class="sub">${[kit?.at ? `At ${escape(PLACES[kit.at] || kit.at)}` : '', escape(source)].filter(Boolean).join(' · ')}</div>
   </header>
   ${trays.length ? trays.map(block).join('\n') : '<p>No trays on this list.</p>'}
-  <footer>Printed ${escape(when)}${printedBy ? ` by ${escape(printedBy)}` : ''} from the TechnoMed portal · Checked by ____________ · Date ____________</footer>
+  <footer>Printed ${escape(when)}${printedBy ? ` by ${escape(printedBy)}` : ''} from the TechnoMed portal · Checked by ____________ · Date ____________</footer>`
+  return { css, body }
+}
+
+/** The printable document, as HTML. `only` prints one tray by name. */
+export function trayListHtml(kit, list, opts = {}) {
+  const { css, body } = trayListParts(kit, list, { ...opts, scope: '' })
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>${escape(kit?.name || 'Tray list')} — tray list</title>
+<style>${css}</style></head>
+<body>${body}
 </body></html>`
 }
 
@@ -106,7 +120,7 @@ export async function photoLinks(trays = [], token = '', fetcher = globalThis.fe
 
 /** Resolves once every picture in the document has loaded or failed, or after `ms`. */
 function picturesReady(doc, ms = 10000) {
-  const pending = [...doc.images].filter(img => !img.complete)
+  const pending = [...(doc.images || doc.querySelectorAll('img'))].filter(img => !img.complete)
   if (!pending.length) return Promise.resolve()
   return Promise.race([
     Promise.all(pending.map(img => new Promise(done => { img.onload = done; img.onerror = done }))),
@@ -116,40 +130,31 @@ function picturesReady(doc, ms = 10000) {
 
 /**
  * Prints it, photos included (Brent, 4 Nov 2026: "the photo doesn't preview
- * in the print preview" — the sheet had never carried them). The links are
- * fetched first and the print waits for the pictures to load: printing the
- * moment the document is written prints empty boxes.
+ * in the print preview"). The links are fetched first and the print waits for
+ * the pictures to load: printing the moment the sheet is written prints empty
+ * boxes.
  *
- * A hidden frame where the browser allows one; a new window otherwise (some
- * phones will not print a frame). The window is opened before anything is
- * awaited, so a phone does not block it as a pop-up.
+ * Printed inside the app's own page with everything else hidden — the way the
+ * document viewer prints (`printAlone`). It used to print from a hidden frame,
+ * which an iPhone ignores or prints the app behind instead (Brent, 21 Nov
+ * 2026: "Print button isn't working for tray lists").
  */
-export async function printTrayList(kit, list, opts = {}) {
+export async function printTrayList(kit, list, opts = {}, deps = {}) {
   if (typeof document === 'undefined') return false
   const trays = (list?.trays || []).filter(t => !opts.only || t.name === opts.only)
-  const frame = document.createElement('iframe')
-  frame.setAttribute('aria-hidden', 'true')
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
-  document.body.appendChild(frame)
-  let target = frame.contentWindow
-  if (!target?.document) {
-    frame.remove()
-    target = window.open('', '_blank')
-    if (!target) return false
-  }
-
-  const photos = opts.token ? await photoLinks(trays, opts.token) : {}
-  const html = trayListHtml(kit, list, { ...opts, photos })
-  const doc = target.document
-  doc.open()
-  doc.write(html)
-  doc.close()
-  await picturesReady(doc)
-  try {
-    target.focus()
-    target.print()
-  } finally {
-    if (target === frame.contentWindow) setTimeout(() => frame.remove(), 60000)
-  }
+  const photos = opts.token ? await photoLinks(trays, opts.token, deps.fetcher) : {}
+  const { css, body } = trayListParts(kit, list, { ...opts, photos, scope: '#tm-print-root .tm-tray-print' })
+  const node = document.createElement('div')
+  node.className = 'tm-tray-print'
+  node.innerHTML = `<style>${css}</style>${body}`
+  const printAlone = deps.printAlone || (await import('../../kit/DocViewer.jsx')).printAlone
+  // Pictures load while the node sits (invisibly) in the page.
+  const holder = document.createElement('div')
+  holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;opacity:0;pointer-events:none'
+  holder.appendChild(node)
+  document.body.appendChild(holder)
+  await picturesReady(node)
+  holder.remove()
+  printAlone(node)
   return true
 }

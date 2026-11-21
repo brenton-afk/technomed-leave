@@ -1741,6 +1741,13 @@ offered), `loanNeed` says `need: 'ask'` ("RHH has a Mariner Open add-on tray —
 borrow it (RHH Loan), or ask the distributor for a loan set?"), and the person
 picks RHH Loan or Distributor Loan on the booking.
 
+**Print works on a phone** (Brent, 21 Nov 2026: "Print button isn't working
+for tray lists"): `printTrayList` no longer prints from a hidden frame (an
+iPhone ignores it or prints the app behind); it builds the sheet with
+`trayListParts` (CSS scoped under `#tm-print-root .tm-tray-print`), waits for
+the photos, and prints it alone in the app's page through DocViewer's
+`printAlone`, like the document viewer's Print. Checked in Chromium's print
+media: only the tray sheet is on the page.
 **An open tray reads like a checklist** (Brent, 21 Nov 2026: "It's just a long
 way to scroll to get to the bottom of the list"). In `TrayBlock` the tray
 photo is `position: sticky` (`data-sticky-photo`, `top: -space.md` to cover
