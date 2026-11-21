@@ -108,7 +108,7 @@ describe('deleting a whole tray (Aimee, 16 Nov 2026)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit Only' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Delete this tray' }))
     expect(calls).toHaveLength(0)
-    expect(screen.getByText('Only')).toBeInTheDocument()
+    expect(screen.getAllByText('Only').length).toBeGreaterThan(0)
   })
 })
 
@@ -153,5 +153,25 @@ describe('every tray is a button: open, edit, move, repair', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send and mark it away for repair' }))
     expect(await screen.findByText('At repair · back?')).toBeInTheDocument()
     expect(calls[1].preview).toBe(false)
+  })
+})
+
+// Brent, 21 Nov 2026: "when you open a tray that should open its own page …
+// Then you tap back to go back to the rest of the list".
+describe('a tray opens as its own page', () => {
+  it('opens over the list and goes back with the back arrow', async () => {
+    global.fetch = vi.fn(async () => reply({ list: { trays: [
+      { name: 'Tray A', lines: [{ code: 'A1', description: '#1 Driver', qty: 2, kind: 'instrument' }] },
+      { name: 'Tray B', lines: [{ code: 'B1', description: 'Rod', qty: 1, kind: 'implant' }] }
+    ], source: {} } }))
+    render(<TrayList kit={{ id: 'k1', name: 'Diplomat', home: 'RHH', trays: ['Tray A', 'Tray B'] }} canEdit user={{ token: 't' }} post={vi.fn()} onMoveTray={() => {}} />)
+    fireEvent.click(await screen.findByText('Tray A'))
+    const page = document.querySelector('[data-tray-page]')
+    expect(page).toBeTruthy()
+    expect(page.textContent).toContain('Driver')
+    expect(page.textContent).not.toContain('Tray B')
+    expect(page.querySelector('[data-move-tray]')).toBeTruthy()
+    fireEvent.click(page.querySelector('[data-tray-back]'))
+    expect(document.querySelector('[data-tray-page]')).toBeNull()
   })
 })

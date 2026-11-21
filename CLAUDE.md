@@ -1646,6 +1646,16 @@ breaks), at most `min(30vh, 240px)`, tapped for full size in `DocViewer`. The
 lines are compact rows (`data-tray-line`), not a table: the photo's number
 from a `#n` description as a badge, the description with code (and "implant")
 beneath, ×qty, Repair. About twice as many lines on a phone screen.
+**A tray opens as its own page** (Brent, same day: "when you open a tray that
+should open its own page rather than keeping the rest of the list at the
+bottom … tap back to go back to the rest of the list"). A saved tray
+(`asPage` in `TrayBlock`: it has Move/Edit/Print, not the upload review's
+Leave out) opens `TrayPage` — full screen in an `Overlay`, zIndex 3150
+(above SystemDetail 3100, under Repair 3200 / Move 3250 / DocViewer), the
+back arrow (`data-tray-back`) and the phone's back button (`useBackLayer`)
+return to the list; Move, Edit, Print, the photo (sticky at the page's top)
+and only that tray's lines. A tray being checked after an upload still
+opens in place.
 
 ### Call a courier after a move (Brent, 20 Nov 2026)
 
