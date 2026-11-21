@@ -37,7 +37,7 @@ describe('the Mariner MIS photos filed again', () => {
       '/Tray Lists/Tray Photos/Mariner MIS/Mariner MIS Reduction Towers.jpg'
     ])
     expect(list.trays[0].lines[0]).toMatchObject({ description: 'Edited', qty: 3 })
-    expect(uploadFile).toHaveBeenCalledTimes(3) // two trays, one refusal retried
+    expect(uploadFile.mock.calls.filter(c => String(c[0]).includes('/Mariner MIS/'))).toHaveLength(3) // two trays, one refusal retried
     expect(JSON.parse(store.get('kits:applied'))).toContain('mariner-mis-photos-2026-11-21')
   })
 })

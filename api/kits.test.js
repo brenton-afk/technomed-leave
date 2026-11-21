@@ -98,7 +98,7 @@ describe('the kit list as Brent corrected it on 2 Nov', () => {
     ]
     store.set('kits:defs', JSON.stringify(old))
     const kits = await listKits()
-    expect(kits.map(k => k.id)).toEqual(['mariner-outrigger-clv', 'mariner-mis-clv'])
+    expect(kits.map(k => k.id)).toEqual(['mariner-outrigger-clv', 'mariner-mis-clv', 'reform-e4-loan-clv'])
     // The Mariner MIS set arrives with its seven trays (21 Nov 2026).
     expect(kits[1].trays).toHaveLength(7)
     expect(kits[0]).toMatchObject({ id: 'mariner-outrigger-clv', kind: 'consignment', home: 'CLV', at: 'CLV', trays: ['Connectors'] })

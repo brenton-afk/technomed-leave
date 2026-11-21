@@ -10,7 +10,7 @@ import { useBackLayer } from '../../backButton.js'
 // "It's here" if the list is right, or the place it really is if not.
 
 const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
-const KINDS = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed' }
+const KINDS = { consignment: 'Consignment', floating: 'TM loan', technomed: 'TechnoMed', loan: 'Distributor loan' }
 
 export default function KitDetail({ kit, canEdit, canRemove = canEdit, user, post, onClose, onChanged, onMove, focus = '' }) {
   useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)

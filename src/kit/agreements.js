@@ -5,4 +5,4 @@
 // living on a hospital's shelf under an agreement. Shared by the screen and
 // the server, so the tile, the kit's documents and the one-pass attach agree.
 
-export const needsAgreement = kit => (kit?.kind || 'consignment') !== 'floating'
+export const needsAgreement = kit => !['floating', 'loan'].includes(kit?.kind || 'consignment')

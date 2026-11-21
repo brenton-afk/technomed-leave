@@ -7,7 +7,8 @@ import { Mic } from '../voice/VoiceSheet.jsx'
 import { useBackLayer } from '../../backButton.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
-import { PLACE_ORDER, setLabel, traysByPlace, caseFor } from '../../kit/systems.js'
+import { PLACE_ORDER, setLabel, traysByPlace, caseFor, DIST_SHORT } from '../../kit/systems.js'
+import { DISTRIBUTOR_NAMES as DIST_NAME } from '../../clinicalPlan/turnAround.js'
 
 // ─── One system: every tray, by the shelf it is on ──────────────────────────
 // Brent, 21 Nov 2026, from the layouts he picked ("Inside a system"): a plain
@@ -59,6 +60,7 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
   // A TM loan set has no hospital of its own: it is "the TM loan set" wherever it is.
   const setName = kit => (kit.kind === 'floating'
     ? `${setLabel(kit) ? `${setLabel(kit)} ` : ''}TM loan set`
+    : kit.kind === 'loan' ? `${DIST_SHORT[kit.distributor] || 'Distributor'} loan set`
     : `${PLACES[kit.home] || kit.home}${setLabel(kit) ? ` ${setLabel(kit)}` : ''} set`)
   const counts = traysByPlace(system.kits)
   const trayCount = system.kits.reduce((n, k) => n + (k.trays || []).length, 0)
@@ -86,8 +88,10 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
   const amber = { background: colour.warningSoft, border: `1px solid ${colour.warningLine}`, borderRadius: radius.control }
   // A set belongs to a hospital when it lives there and is not a loan set; at
   // the office every TechnoMed set is at home.
-  const isOwn = (kit, p) => (p === 'office' ? kit.home === 'office' : kit.home === p && kit.kind !== 'floating')
-  const setNote = (kit, p) => (kit.kind === 'floating'
+  const isOwn = (kit, p) => kit.kind !== 'loan' && (p === 'office' ? kit.home === 'office' : kit.home === p && kit.kind !== 'floating')
+  const setNote = (kit, p) => (kit.kind === 'loan'
+    ? `${DIST_NAME[kit.distributor] || 'Distributor'} loan set at ${PLACES[p]} — goes back to ${DIST_NAME[kit.distributor] || 'them'}`
+    : kit.kind === 'floating'
     ? (p === 'office' ? 'TechnoMed loan set, at home' : `TechnoMed loan set, on loan to ${PLACES[p]}`)
     : kit.home === p ? `Consigned to ${PLACES[p]}` : `Borrowed from ${PLACES[kit.home] || kit.home}`)
   const setCard = loan => ({ background: colour.surface, borderRadius: radius.card, overflow: 'clip',
@@ -196,20 +200,20 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
                                 <div style={{ ...text('caption'), color: colour.inkMuted }}>
                                   {setNote(kit, p)}{kit.away ? ` · here since ${when(kit.away.since)}` : ''}
                                 </div>
-                                {caseFor(kit.away) && (
+                                {caseFor(kit.away || kit.heldFor) && (
                                   <div data-set-case style={{ ...text('bodyStrong'), color: g.key === 'loan' ? colour.warning : colour.ink, marginTop: 2 }}>
-                                    For {caseFor(kit.away)}
+                                    For {caseFor(kit.away || kit.heldFor)}
                                   </div>
                                 )}
                               </div>
-                              <span data-set-kind style={{ ...kindChip(g.key === 'loan') }}>{g.key === 'loan' ? 'LOAN' : kit.kind === 'floating' ? 'TM LOAN' : 'CONSIGNMENT'}</span>
+                              <span data-set-kind style={{ ...kindChip(g.key === 'loan') }}>{kit.kind === 'loan' ? `${DIST_SHORT[kit.distributor] || ''} LOAN`.trim() : g.key === 'loan' ? 'LOAN' : kit.kind === 'floating' ? 'TM LOAN' : 'CONSIGNMENT'}</span>
                             </div>
                             <div style={{ display: 'flex', gap: space.sm, flexWrap: 'wrap', marginTop: space.sm }}>
                               {!kit.away && (kit.checkedAt
                                 ? <span style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600, alignSelf: 'center' }}>✓ Checked</span>
                                 : <button disabled={busy === kit.id} onClick={() => check(kit)} aria-label={`${setName(kit)}: it's here`}
                                     style={{ ...pillBtn(false), border: `1px solid ${colour.accent}`, color: colour.accentDeep }}>{busy === kit.id ? '…' : "It's here"}</button>)}
-                              <button onClick={() => onMoveKit?.(kit)} aria-label={`Move all of the ${setName(kit)}`} style={pillBtn(false)}>{g.key === 'loan' ? 'Send it back' : 'Move all'}</button>
+                              <button onClick={() => onMoveKit?.(kit)} aria-label={`Move all of the ${setName(kit)}`} style={pillBtn(false)}>{g.key === 'loan' && kit.kind !== 'loan' ? 'Send it back' : 'Move all'}</button>
                             </div>
                           </div>
                           <div style={{ padding: `0 ${space.sm}px ${space.sm}px`, display: 'flex', flexDirection: 'column', gap: space.xs }}>

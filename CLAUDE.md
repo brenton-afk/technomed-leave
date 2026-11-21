@@ -1908,6 +1908,24 @@ left off.
 be underneath the Calvary instrument kit; not listed first") — `groupSystems`
 ranks an `INSIDE` set half a place later.
 
+**A distributor's loan set in the kit room** (Brent, 21 Nov 2026: "put that
+Loan kit into the Kit room under Reform as a loan set so it can be turned
+around"). Kind `loan` (beside consignment / floating / technomed): never a
+hospital's own set (`isOwn`), under "On loan here" with an "E4 LOAN" chip,
+"E4 Surgical loan set at Calvary — goes back to E4 Surgical", no consignment
+agreement (`needsAgreement`), never chosen by Add a tray, always a line on the
+tile (`awayLines`: "E4 loan set at Calvary · for pt …, then pt …"). The case
+it is for sits on the def as `heldFor` (`{surname, surgeon, caseDate, then}`,
+kept through Set details edits; `caseFor` reads `then`). First one: E4's
+Reform loan set at Calvary (`api/_kitSeedReformLoan.js`, correction
+`reform-e4-loan-clv-2026-11-21`) — eight trays from E4's loan set CSSD
+checklist with their photos (`_kitSeedReformLoanPhotos.js`, filed under
+`/Tray Lists/Tray Photos/Reform E4 loan set/`), totals as the sheets give;
+`heldFor` read from the calendar when it runs (`reformCaseFrom`: the next two
+live Calvary bookings naming Reform), never written in the code. Bookings and
+supplies are unaffected — they come from `inventory.js`. When the set goes
+back, an admin takes it off the kit room.
+
 ### Find a tray, and say a move (Brent, 21 Nov 2026)
 
 "Within each kit … a search function so you can find a kit quickly to do a

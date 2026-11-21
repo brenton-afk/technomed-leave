@@ -43,7 +43,7 @@ export function groupSystems(kits) {
   // A set shown inside another system's tile (the Mariner Outrigger) comes
   // after that system's own set at the same place (Brent, 21 Nov 2026: "should
   // be underneath the Calvary instrument kit; not listed first").
-  const rank = k => (k.kind === 'floating' ? 10 : 0) + Math.max(0, PLACE_ORDER.indexOf(k.home)) + (setLabel(k) ? 0.5 : 0)
+  const rank = k => (k.kind === 'floating' || k.kind === 'loan' ? 10 : 0) + Math.max(0, PLACE_ORDER.indexOf(k.home)) + (setLabel(k) ? 0.5 : 0)
   for (const g of map.values()) g.kits.sort((a, b) => rank(a) - rank(b))
   return [...map.values()]
 }
@@ -80,7 +80,8 @@ export function kitForNewTray(group, { system, place, tray, distributor = '' }) 
     throw new Error(`${system} already has a tray called "${name}"`)
   }
   // The system's own set there, before a TM loan one or one shown inside it (the Outrigger).
-  const here = all.filter(k => k.home === place)
+  // Never a distributor's loan set: it goes back to them.
+  const here = all.filter(k => k.home === place && k.kind !== 'loan')
   const kit = here.find(k => k.kind !== 'floating' && !setLabel(k)) || here.find(k => !setLabel(k)) || here[0]
   if (kit) {
     const { id, name: kitName, system: sys, distributor: d, kind, home, trays } = kit
@@ -98,6 +99,7 @@ export function kitForNewTray(group, { system, place, tray, distributor = '' }) 
 }
 
 const SHORT_PLACE = { CLV: 'Calvary', RHH: 'RHH', office: 'the office' }
+export const DIST_SHORT = { e4: 'E4', signus: 'Signus', device: 'Device', kt: 'KT', globus: 'Globus' }
 
 /**
  * What of a system is away from home, said as where it is now (Brent, 21 Nov
@@ -117,7 +119,9 @@ export function caseFor(meta) {
   const day = /^\d{4}-\d{2}-\d{2}$/.test(meta.caseDate || '')
     ? new Date(`${meta.caseDate}T00:00:00Z`).toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
     : ''
-  return [meta.surname ? `pt ${meta.surname}` : '', meta.surgeon || '', day].filter(Boolean).join(' · ')
+  const one = [meta.surname ? `pt ${meta.surname}` : '', meta.surgeon || '', day].filter(Boolean).join(' · ')
+  // A loan set turned around: the case it came for, then the next one.
+  return meta.then ? `${one}, then ${caseFor(meta.then)}` : one
 }
 
 export function awayLines(kits) {
@@ -125,7 +129,11 @@ export function awayLines(kits) {
   const strays = {}
   for (const k of kits || []) {
     const at = k.at || k.home
-    if (at !== k.home) {
+    if (k.kind === 'loan') {
+      // A distributor's loan set is news wherever it is (Brent, 21 Nov 2026).
+      const held = k.away?.surname ? k.away : k.heldFor
+      lines.push(`${DIST_SHORT[k.distributor] || 'Distributor'} loan set at ${SHORT_PLACE[at] || at}${held?.surname ? ` · for pt ${held.surname}${held.then?.surname ? `, then pt ${held.then.surname}` : ''}` : ''}`)
+    } else if (at !== k.home) {
       const who = k.kind === 'floating' ? 'TM loan set' : setLabel(k) || `${SHORT_PLACE[k.home] === 'the office' ? 'Office' : SHORT_PLACE[k.home]} set`
       const forCase = k.away?.surname ? ` · for pt ${k.away.surname}` : ''
       lines.push(`${who} at ${SHORT_PLACE[at] || at}${forCase}`)

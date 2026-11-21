@@ -6,6 +6,7 @@ import { INVENTORY } from '../src/clinicalPlan/inventory.js'
 import { STAFF } from '../src/staffConfig.js'
 import { getNoticeSettings } from './_bookingNotices.js'
 import { MARINER_MIS_KIT } from './_kitSeedMarinerMis.js'
+import { REFORM_LOAN_KIT } from './_kitSeedReformLoan.js'
 
 // ─── The kit room: where every set is, and telling the hospitals ────────────
 // "We move the kit in the portal which updates the kit locations and then the
@@ -90,7 +91,10 @@ export const KIT_CORRECTIONS = [
   // (Brent, 21 Nov 2026: "It has the trays for the E4 Catenary trays").
   { id: 'catenary-trays-clv-2026-11-21', seed: 'catenary-trays' },
   // Calvary's Dakota set as it is on the shelf (Brent, 21 Nov 2026) — see _kitSeedDakotaClv.js.
-  { id: 'dakota-clv-shelf-2026-11-21', seed: 'dakota-clv' }
+  { id: 'dakota-clv-shelf-2026-11-21', seed: 'dakota-clv' },
+  // E4's Reform loan set at Calvary, from the checklist that came with it, so
+  // it can be turned around for the next Reform case (Brent, 21 Nov 2026).
+  { id: 'reform-e4-loan-clv-2026-11-21', add: REFORM_LOAN_KIT, seed: 'reform-loan' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -230,6 +234,11 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'reform-loan') {
+    const { runReformLoan } = await import('./_kitSeedReformLoan.js')
+    await runReformLoan()
     return
   }
   if (name === 'dakota-clv') {
@@ -391,8 +400,10 @@ export async function saveKitDef(kit, by, renames = []) {
   const clean = {
     id, name, system: String(kit.system || name).slice(0, 60),
     distributor: String(kit.distributor || '').slice(0, 30),
-    kind: ['consignment', 'floating', 'technomed'].includes(kit.kind) ? kit.kind : 'consignment',
-    home: kit.home, trays
+    kind: ['consignment', 'floating', 'technomed', 'loan'].includes(kit.kind) ? kit.kind : 'consignment',
+    home: kit.home, trays,
+    // The case a distributor's loan set is held for stays through an edit.
+    ...(defs.find(k => k.id === kit.id)?.heldFor ? { heldFor: defs.find(k => k.id === kit.id).heldFor } : {})
   }
   const at = defs.findIndex(k => k.id === id)
   const next = at >= 0 ? defs.map(k => (k.id === id ? clean : k)) : [...defs, clean]
@@ -465,7 +476,7 @@ function longDate(dateStr) {
 }
 const shortDate = s => { const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? `${Number(m[2])}/${Number(m[1])}` : '' }
 
-const KIND_WORD = { consignment: 'consignment', floating: 'TechnoMed loan', technomed: 'TechnoMed' }
+const KIND_WORD = { consignment: 'consignment', floating: 'TechnoMed loan', technomed: 'TechnoMed', loan: 'distributor loan' }
 
 /**
  * Who hears about a move, and the words they get. Pure, so it can be tested
