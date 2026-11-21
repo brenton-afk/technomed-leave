@@ -25,3 +25,16 @@ describe('the maker and picture on a kit tile', () => {
     }
   })
 })
+
+describe('logos drawn to about the same size', () => {
+  it('gives every logo a height from its shape, wide ones lower, stacked ones taller', async () => {
+    const { logoHeight } = await import('./brands.js')
+    const sea = brandFor('Mariner'), glob = brandFor('Global BMD PLIF'), ortho = brandFor('Lonestar')
+    for (const b of [sea, glob, ortho]) expect(b.logoH).toBeGreaterThanOrEqual(14)
+    expect(sea.logoH).toBeLessThan(glob.logoH)
+    const areas = [[sea, 5.25], [glob, 3.07], [ortho, 2.8]].map(([b, a]) => b.logoH * b.logoH * a)
+    expect(Math.max(...areas) / Math.min(...areas)).toBeLessThan(1.35)
+    expect(logoHeight(1)).toBe(24)
+    expect(brandFor('Diplomat').logoH).toBe(0)
+  })
+})

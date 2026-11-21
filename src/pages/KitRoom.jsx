@@ -426,9 +426,11 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
             the picture (Brent, 21 Nov 2026: the SeaSpine logo covered the
             screw); else its name in its colour. */}
         {brand.logo
-          ? <div data-tile-maker style={{ height: 15, display: 'flex', alignItems: 'center', alignSelf: 'flex-start',
-              ...(brand.logoBg && brand.logoBg.toLowerCase() !== '#ffffff' ? { background: brand.logoBg, borderRadius: 4, padding: '2px 5px', height: 19, boxSizing: 'border-box' } : {}) }}>
-              <img data-tile-logo src={brand.logo} alt={brand.maker} draggable={false} style={{ height: 15, width: 'auto', maxWidth: '100%', objectFit: 'contain', objectPosition: 'left', pointerEvents: 'none' }} />
+          ? <div data-tile-maker style={{ height: 24, display: 'flex', alignItems: 'center', alignSelf: 'flex-start' }}>
+              <span style={{ display: 'flex', alignItems: 'center',
+                ...(brand.logoBg && brand.logoBg.toLowerCase() !== '#ffffff' ? { background: brand.logoBg, borderRadius: 4, padding: '2px 5px' } : {}) }}>
+                <img data-tile-logo src={brand.logo} alt={brand.maker} draggable={false} style={{ height: brand.logoH - (brand.logoBg && brand.logoBg.toLowerCase() !== '#ffffff' ? 4 : 0), width: 'auto', maxWidth: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+              </span>
             </div>
           : <div data-tile-maker style={{ ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.6px', color: brand.ink || colour.inkFaint,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brand.maker || dist?.name || 'No distributor'}</div>}

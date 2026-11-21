@@ -1660,6 +1660,10 @@ guides) and the maker above its name — as its logo (`data-tile-logo`, 15px, on
 chip of `logoBg` when that is dark — Brainlab's is white), never over the
 picture (Brent, same day: "the Seaspine logo covers part of the images"), else
 its name in its colour (`data-tile-maker`, falling back to the distributor).
+Logos are drawn to about the same area, not one height (Brent, same day:
+"make the logos for the company names consistent sizes"): `logoAspect` per
+maker, `logoHeight` gives 14–24px (SeaSpine ~16, Global/Orthofix/Precision
+~21); logo files are trimmed to their edges. Global's is his full-colour one.
 Logos for Brainlab, Precision Spine and Global Biomedica (from
 the guides) and SeaSpine and Orthofix (Brent's files, same day — he also sent
 product shots for Mariner, Shoreline, Diplomat, Dakota, MOBIS (the curved

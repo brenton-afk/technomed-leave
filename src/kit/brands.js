@@ -16,14 +16,14 @@
 const ART = name => `/kit-art/${name}`
 
 const MAKERS = {
-  seaspine: { name: 'SeaSpine', ink: '#b8500e', logo: ART('logo-seaspine.png'), logoBg: '#ffffff' },
+  seaspine: { name: 'SeaSpine', ink: '#b8500e', logo: ART('logo-seaspine.png'), logoBg: '#ffffff', logoAspect: 5.25 },
   signus: { name: 'SIGNUS', ink: '#c8102e' },
-  precision: { name: 'Precision Spine', ink: '#1f3c88', logo: ART('logo-precision-spine.png'), logoBg: '#ffffff' },
-  global: { name: 'Global Biomedica', ink: '#3f7d2c', logo: ART('logo-global-biomedica.png'), logoBg: '#ffffff' },
-  orthofix: { name: 'Orthofix', ink: '#003da5', logo: ART('logo-orthofix.png'), logoBg: '#ffffff' },
+  precision: { name: 'Precision Spine', ink: '#1f3c88', logo: ART('logo-precision-spine.png'), logoBg: '#ffffff', logoAspect: 3.12 },
+  global: { name: 'Global Biomedica', ink: '#3f7d2c', logo: ART('logo-global-biomedica.png'), logoBg: '#ffffff', logoAspect: 3.07 },
+  orthofix: { name: 'Orthofix', ink: '#003da5', logo: ART('logo-orthofix.png'), logoBg: '#ffffff', logoAspect: 2.8 },
   nuvasive: { name: 'NuVasive', ink: '#6b2d8f' },
   globus: { name: 'Globus Medical', ink: '#0b4f8a' },
-  brainlab: { name: 'Brainlab', ink: '#3d4a5c', logo: ART('logo-brainlab.png'), logoBg: '#3d4a5c' },
+  brainlab: { name: 'Brainlab', ink: '#3d4a5c', logo: ART('logo-brainlab.png'), logoBg: '#3d4a5c', logoAspect: 1.4 },
   technomed: { name: 'TechnoMed', ink: '#0f6f60' },
   arthrex: { name: 'Arthrex', ink: '#1f2a37' },
   synthes: { name: 'DePuy Synthes', ink: '#c8102e' }
@@ -59,6 +59,14 @@ const RULES = [
   [/^tm\b|technomed/, 'technomed', null]
 ]
 
+// Logos come in every shape — SeaSpine is long and flat, Global and Orthofix
+// are stacked — so one height makes the wide ones loud and the stacked ones
+// small (Brent, 21 Nov 2026: "Make the logos for the company names consistent
+// sizes where possible"). Each is drawn to the same area instead: height from
+// its aspect, kept between 14 and 24px. Files are trimmed to their edges.
+const LOGO_AREA = 1300
+export const logoHeight = aspect => Math.round(Math.max(14, Math.min(24, Math.sqrt(LOGO_AREA / (aspect || 3)))))
+
 /** The tile's look for a system: { maker, ink, logo, logoBg, pic, initial }. Pure. */
 export function brandFor(systemName) {
   const n = String(systemName || '').toLowerCase()
@@ -67,6 +75,7 @@ export function brandFor(systemName) {
   const initial = String(systemName || '?').replace(/^TM\s+/i, '').trim().charAt(0).toUpperCase() || '?'
   return {
     maker: maker?.name || '', ink: maker?.ink || '', logo: maker?.logo || '', logoBg: maker?.logoBg || '',
+    logoH: maker?.logo ? logoHeight(maker.logoAspect) : 0,
     pic: hit && hit[2] ? ART(hit[2]) : '', initial
   }
 }
