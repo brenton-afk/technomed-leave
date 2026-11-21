@@ -79,7 +79,10 @@ export const KIT_CORRECTIONS = [
   { id: 'shoreline-trays-2026-11-21', seed: 'shoreline' },
   // The RHH Shoreline photos on Calvary's trays, which are the same trays now
   // (Brent, 21 Nov 2026: "This is accurate for the Shoreline kits").
-  { id: 'shoreline-photos-clv-2026-11-21', seed: 'shoreline-photos' }
+  { id: 'shoreline-photos-clv-2026-11-21', seed: 'shoreline-photos' },
+  // "This is the Global BMD ALIF. It needs to be called Catenary ALIF" (Brent,
+  // 21 Nov 2026) — the inventory and bookings were renamed with it.
+  { id: 'catenary-name-2026-11-21', seed: 'catenary-name' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -219,6 +222,10 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'catenary-name') {
+    try { await renameSystem('Global BMD ALIF', 'Catenary ALIF', 'Claude (the cage is Catenary ALIF)') } catch { /* none to rename */ }
     return
   }
   if (name === 'shoreline-photos') {

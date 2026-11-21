@@ -115,7 +115,7 @@ export const SYSTEM_DISTRIBUTOR = [
   // A bare "E4" counts: the RHH lists write "Diplomat + E4", meaning Diplomat
   // from Signus alongside E4 cages. Without it that booking routes to Signus
   // alone and the E4 half is silently lost.
-  { key: 'e4', pattern: /\b(?:global\s*bmd\s*(?:plif|alif)|dakota(?:\s*acdf)?|reform(?:\s*cervical)?|e4)\b/i }
+  { key: 'e4', pattern: /\b(?:global\s*bmd\s*(?:plif|alif)|catenary|dakota(?:\s*acdf)?|reform(?:\s*cervical)?|e4)\b/i }
 ]
 
 /**

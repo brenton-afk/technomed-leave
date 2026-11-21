@@ -23,7 +23,7 @@ describe('system suggestions', () => {
   })
 
   it('ALIF is Catenary only', () => {
-    expect(suggestSystems({ operation: 'L5/S1 ALIF' }).systems).toEqual(['Global BMD ALIF'])
+    expect(suggestSystems({ operation: 'L5/S1 ALIF' }).systems).toEqual(['Catenary ALIF'])
   })
 
   it('JPW PLIF leads with Forza XP and Firebird', () => {
@@ -53,7 +53,7 @@ describe('system suggestions', () => {
     expect(suggestSystems({ operation: 'C5/6 ACDF', surgeon: 'Thani' }).picks).toEqual(['CYLOX'])
     expect(suggestSystems({ operation: 'C6/7 ACDF', surgeon: 'Ibbett', hospital: 'CLV' }).picks).toEqual(['Dakota', 'TM Locking Distractor'])
     expect(suggestSystems({ operation: 'L4/5 PLIF', surgeon: 'Gupta' }).picks).toEqual(['Mariner MIS', 'Global BMD PLIF'])
-    expect(suggestSystems({ operation: 'L5/S1 ALIF', surgeon: 'Fowler' }).picks).toEqual(['Global BMD ALIF'])
+    expect(suggestSystems({ operation: 'L5/S1 ALIF', surgeon: 'Fowler' }).picks).toEqual(['Catenary ALIF'])
     // No usual system recorded: nothing ticked, the buttons are just narrowed.
     expect(suggestSystems({ operation: 'T10-L2 fixation', surgeon: 'Fowler' }).picks).toEqual([])
   })

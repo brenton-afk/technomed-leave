@@ -23,8 +23,8 @@ describe('where the sets are', () => {
     ['Mariner Open', 'CLV', 'ask'],   // only MIS at Calvary — borrow RHH's Open tray, or a loan?
     ['Reform Cervical', 'RHH', 'none'],
     ['Reform Cervical', 'CLV', 'order'],   // RHH only, so Calvary must request
-    ['Global BMD ALIF', 'CLV', 'none'],
-    ['Global BMD ALIF', 'RHH', 'order'],   // Calvary only
+    ['Catenary ALIF', 'CLV', 'none'],
+    ['Catenary ALIF', 'RHH', 'order'],   // Calvary only
     ['MOBIS', 'CLV', 'none'],
     ['MOBIS', 'RHH', 'order'],
     ['Ascot', 'CLV', 'none'],
@@ -238,8 +238,8 @@ describe('the names a system is written under', () => {
   })
 
   it('does the same for the ALIF cage', () => {
-    for (const written of ['Global BMD ALIF', 'E4 Global ALIF']) {
-      expect(systemsInKit(written), written).toContain('Global BMD ALIF')
+    for (const written of ['Catenary ALIF', 'Global BMD ALIF', 'E4 Global ALIF']) {
+      expect(systemsInKit(written), written).toContain('Catenary ALIF')
     }
   })
 
@@ -277,7 +277,7 @@ describe('what Thani writes', () => {
 
   it('does not override a product that was named outright', () => {
     expect(resolveE4Product('E4 Dakota', 'L4/5 PLIF')).toBeNull()
-    expect(resolveE4Product('Global BMD ALIF', 'L5/S1 PLIF')).toBeNull()
+    expect(resolveE4Product('Catenary ALIF', 'L5/S1 PLIF')).toBeNull()
   })
 })
 

@@ -113,8 +113,8 @@ export const INVENTORY = [
       + 'sites, though most of them are at Calvary.'
   },
   {
-    system: 'Global BMD ALIF', distributor: 'e4',
-    aka: ['Global ALIF', 'BMD ALIF', 'Catenary'],
+    system: 'Catenary ALIF', distributor: 'e4',
+    aka: ['Global BMD ALIF', 'Global ALIF', 'BMD ALIF', 'Catenary'],
     consigned: { CLV: 1 },
     note: 'Calvary only, with sterile implants.'
   },

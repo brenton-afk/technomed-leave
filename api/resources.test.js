@@ -48,7 +48,7 @@ describe('the Resources tab', () => {
     expect(by.Dakota.slots.technique.file.name).toBe('Dakota_Surgical Technique.pdf')
     expect(by.Dakota.trays).toEqual([{ id: 'dakota-clv', name: 'Dakota', trays: 3 }])
     expect(by.Ascot.trays).toEqual([])
-    expect(by['Global BMD ALIF'].slots.artg.file.name).toMatch(/323520/)
+    expect(by['Catenary ALIF'].slots.artg.file.name).toMatch(/323520/)
     expect(by.Diplomat.slots.rebate.file.name).toMatch(/DIPLOMAT Implants Rebate/)
     expect(by.REline.slots.rebate.file.name).toMatch(/Rebate codes with GTIN/)
     expect(by.Diplomat.slots.artg.file).toBe(null)

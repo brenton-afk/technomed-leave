@@ -1625,13 +1625,22 @@ for consignment, amber for loan) with the set's name at heading size, a line
 saying what it is (`setNote`: "Consigned to Calvary", "TechnoMed loan set, on
 loan to Calvary", "Borrowed from RHH") and a CONSIGNMENT / TM LOAN / LOAN chip;
 a loan set's Move all reads **Send it back**.
+**Catenary ALIF** (Brent, 21 Nov 2026: "This is the Global BMD ALIF. It
+needs to be called Catenary ALIF"): renamed in `inventory.js` (old names kept
+as `aka`), `systems.js`, `systemSuggestions.js` and the kit room
+(`catenary-name-2026-11-21` → `renameSystem`); "catenary" now routes to E4 in
+`_distributors.js` (it did not — a Catenary kit line got no E4 notice). Its
+picture is the cage from E4's brochure; Firebird has the coloured screws and
+Ascot the plate with green screws (his files).
 **Branded tiles, option B** (Brent, 21 Nov 2026, from the mock-up
 `claude.ai/artifact/Mc1sUce8kyQEGGFGHh8Uuc`: "B looks good … do the changes and
 I'll tell you which ones to change"). Each system tile has the system's
 product picture across the top (`data-tile-art`, 88px, from the theatre
-guides) and the maker above its name in the maker's colour (`data-tile-maker`,
-falling back to the distributor); a real logo sits in the picture's corner
-(`data-tile-logo`) for Brainlab, Precision Spine and Global Biomedica (from
+guides) and the maker above its name — as its logo (`data-tile-logo`, 15px, on a
+chip of `logoBg` when that is dark — Brainlab's is white), never over the
+picture (Brent, same day: "the Seaspine logo covers part of the images"), else
+its name in its colour (`data-tile-maker`, falling back to the distributor).
+Logos for Brainlab, Precision Spine and Global Biomedica (from
 the guides) and SeaSpine and Orthofix (Brent's files, same day — he also sent
 product shots for Mariner, Shoreline, Diplomat, Dakota, MOBIS (the curved
 ST-Line cage), CYLOX and Forza XP, which replaced or added those pictures). `brandFor` in `src/kit/brands.js`

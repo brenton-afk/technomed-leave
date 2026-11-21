@@ -66,7 +66,7 @@ export const SYSTEM_GROUPS = {
     label: 'ALIF',
     // Only ever Catenary. Back-up screws are rare and usually their own
     // booking (mostly Mariner MIS), so they are not offered here.
-    systems: ['Global BMD ALIF'],
+    systems: ['Catenary ALIF'],
     extras: []
   },
   deformity: {

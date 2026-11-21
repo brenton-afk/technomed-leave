@@ -59,7 +59,7 @@ export const SYSTEMS = [
   // Catenary is the cage's proper name and Nova writes it on his bookings. It
   // is the same cage as the E4 Global ALIF (Brent, 2 Nov 2026), so it is read
   // as that system — the booking keeps the word as typed.
-  { name: 'Global BMD ALIF', test: /\b(?:(?:e4\s*)?global\s*(?:bmd\s*)?alif|catenary)\b/i },
+  { name: 'Catenary ALIF', test: /\b(?:(?:e4\s*)?global\s*(?:bmd\s*)?alif|catenary)\b/i },
   { name: 'Global BMD PLIF', test: /\b(?:e4\s*)?global\s*(?:bmd\s*)?plif\b/i },
   { name: 'E4 Cages', test: /\be4\b(?:\s*global)?(?:\s*cages?)?/i },
   { name: 'Lonestar', test: /\blone\s*star\b/i },
@@ -405,7 +405,7 @@ export function findNavigation(text) {
  * Which E4 product a bare "E4" on a kit line means.
  *
  * The RHH lists write "Diplomat + E4" and "Mariner + E4", which names a
- * distributor but not a product — E4 supply Global BMD PLIF, Global BMD ALIF,
+ * distributor but not a product — E4 supply Global BMD PLIF, Catenary ALIF,
  * Dakota and Reform Cervical, and a loan request has to say which.
  *
  * Alongside Diplomat or Mariner it is a PLIF, so the cages are Global BMD PLIF.

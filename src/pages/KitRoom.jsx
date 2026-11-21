@@ -415,23 +415,23 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
         padding: 0, flex: 1, minWidth: 0,
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch'
       }}>
-        {/* Option B (Brent, 21 Nov 2026): the system's picture across the top,
-            the maker's logo in its corner — stacked in one grid cell, never
-            positioned absolutely (see wash.test.js). */}
+        {/* Option B (Brent, 21 Nov 2026): the system's picture across the top. */}
         <div data-tile-art style={{ display: 'grid', height: 88, background: '#ffffff', borderBottom: border.hairlineSoft }}>
           {brand.pic
             ? <img src={brand.pic} alt="" draggable={false} loading="lazy" style={{ gridArea: '1 / 1', width: '100%', height: 88, objectFit: 'contain', pointerEvents: 'none' }} />
             : <span aria-hidden="true" style={{ gridArea: '1 / 1', placeSelf: 'center', ...text('display'), color: brand.ink || colour.accentDeep }}>{brand.initial}</span>}
-          {brand.logo && (
-            <span data-tile-logo style={{ gridArea: '1 / 1', justifySelf: 'end', alignSelf: 'start', margin: 6, height: 20, padding: '0 6px',
-              borderRadius: 6, background: brand.logoBg, display: 'flex', alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-              <img src={brand.logo} alt={brand.maker} draggable={false} style={{ height: 12, width: 'auto', pointerEvents: 'none' }} />
-            </span>
-          )}
         </div>
         <div style={{ padding: `${space.sm}px ${space.md}px ${space.md}px`, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-        <div data-tile-maker style={{ ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.6px', color: brand.ink || colour.inkFaint,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brand.maker || dist?.name || 'No distributor'}</div>
+        {/* The maker as its logo where we have one, beside the text, never over
+            the picture (Brent, 21 Nov 2026: the SeaSpine logo covered the
+            screw); else its name in its colour. */}
+        {brand.logo
+          ? <div data-tile-maker style={{ height: 15, display: 'flex', alignItems: 'center', alignSelf: 'flex-start',
+              ...(brand.logoBg && brand.logoBg.toLowerCase() !== '#ffffff' ? { background: brand.logoBg, borderRadius: 4, padding: '2px 5px', height: 19, boxSizing: 'border-box' } : {}) }}>
+              <img data-tile-logo src={brand.logo} alt={brand.maker} draggable={false} style={{ height: 15, width: 'auto', maxWidth: '100%', objectFit: 'contain', objectPosition: 'left', pointerEvents: 'none' }} />
+            </div>
+          : <div data-tile-maker style={{ ...text('micro'), textTransform: 'uppercase', letterSpacing: '0.6px', color: brand.ink || colour.inkFaint,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{brand.maker || dist?.name || 'No distributor'}</div>}
         <div style={{ ...text('heading'), color: colour.ink, lineHeight: 1.2,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{group.name}</div>
         <div aria-hidden="true" data-place-bar style={{ display: 'flex', height: 8, borderRadius: radius.pill, overflow: 'hidden', background: colour.lineSoft }}>

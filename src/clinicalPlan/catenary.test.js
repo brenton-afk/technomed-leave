@@ -7,10 +7,10 @@ import { readBooking } from './parse.js'
 // bookings… the same cage as the E4 Global ALIF." Fake surnames only.
 
 describe('Catenary', () => {
-  it('is read as the E4 Global BMD ALIF', () => {
-    expect(systemsInKit('Catenary')).toEqual(['Global BMD ALIF'])
-    expect(systemsInKit('CATENARY cage')).toEqual(['Global BMD ALIF'])
-    expect(inventoryFor('Global BMD ALIF').distributor).toBe('e4')
+  it('is read as the E4 Catenary ALIF', () => {
+    expect(systemsInKit('Catenary')).toEqual(['Catenary ALIF'])
+    expect(systemsInKit('CATENARY cage')).toEqual(['Catenary ALIF'])
+    expect(inventoryFor('Catenary ALIF').distributor).toBe('e4')
   })
 
   it('is not mistaken for a PLIF cage when E4 is written beside it', () => {
@@ -19,7 +19,7 @@ describe('Catenary', () => {
 
   it('is recognised on a booking written by hand', () => {
     const b = readBooking('Testa L5/S1 ALIF Catenary - Dubey', '')
-    expect(systemsInKit(`${b.system || ''} ${b.kit || ''}`)).toContain('Global BMD ALIF')
+    expect(systemsInKit(`${b.system || ''} ${b.kit || ''}`)).toContain('Catenary ALIF')
   })
 })
 

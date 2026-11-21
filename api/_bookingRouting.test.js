@@ -12,7 +12,7 @@ describe('which distributor a kit belongs to', () => {
     ['Athlet', 'signus'], ['Ascot', 'signus'], ['Diplomat', 'signus'],
     ['MOBIS', 'signus'], ['CYLOX', 'signus'],
     ['Mariner', 'device'], ['Shoreline', 'device'],
-    ['Global BMD PLIF', 'e4'], ['Global BMD ALIF', 'e4'],
+    ['Global BMD PLIF', 'e4'], ['Catenary ALIF', 'e4'], ['Catenary', 'e4'], ['Global BMD ALIF', 'e4'],
     ['Dakota ACDF', 'e4'], ['Reform Cervical', 'e4']
   ])('%s is %s', (kit, expected) => {
     expect(distributorsForKit(kit)).toEqual([expected])

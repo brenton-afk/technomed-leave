@@ -2,8 +2,9 @@
 // "Use the imagery from the theatre guides of each of the systems to put a
 // small icon and a small company logo on the kit board main page" — option B
 // of the mock-up (claude.ai/artifact/Mc1sUce8kyQEGGFGHh8Uuc): a picture across
-// the top of each tile, the maker's logo in its corner, the maker above the
-// name. Pictures are the product shots from the theatre guides, in
+// the top of each tile and the maker above the name — as its logo where we
+// have one (Brent, 21 Nov 2026: a logo in the picture's corner covered the
+// product), else its name in its colour. Pictures are the product shots from the theatre guides, in
 // public/kit-art; a real logo only where a guide carries one (Brainlab,
 // Precision Spine, Global Biomedica) and, from Brent's own files (21 Nov
 // 2026), SeaSpine and Orthofix — SIGNUS and the rest are the maker's name in
@@ -35,16 +36,21 @@ const RULES = [
   [/shoreline|truprofile/, 'seaspine', 'shoreline.jpg'],
   [/fathom/, 'seaspine', 'fathom.jpg'],
   [/diplomat/, 'signus', 'diplomat.jpg'],
-  [/athlet|ascot/, 'signus', 'athlet.jpg'],
+  [/ascot/, 'signus', 'ascot.jpg'],
+  [/athlet/, 'signus', 'athlet.jpg'],
   [/cylox/, 'signus', 'cylox.jpg'],
   [/mobis/, 'signus', 'mobis.jpg'],
   [/signus/, 'signus', null],
   [/dakota/, 'precision', 'dakota.jpg'],
   [/reform/, 'precision', 'reform.jpg'],
+  // The ALIF is Catenary (Brent, 21 Nov 2026), E4's own brochure: its maker
+  // line falls back to the distributor.
+  [/catenary|alif/, null, 'catenary.jpg'],
   [/global|bmd/, 'global', 'global-plif.jpg'],
   [/lonestar/, 'orthofix', 'lonestar.jpg'],
   [/forza/, 'orthofix', 'forza.jpg'],
-  [/firebird|orthofix/, 'orthofix', null],
+  [/firebird/, 'orthofix', 'firebird.jpg'],
+  [/orthofix/, 'orthofix', null],
   [/nuvasive|xcore/, 'nuvasive', 'nuvasive.jpg'],
   [/reline|globus/, 'globus', null],
   [/brainlab|airo/, 'brainlab', 'brainlab.jpg'],
@@ -57,7 +63,7 @@ const RULES = [
 export function brandFor(systemName) {
   const n = String(systemName || '').toLowerCase()
   const hit = RULES.find(([re]) => re.test(n))
-  const maker = hit ? MAKERS[hit[1]] : null
+  const maker = hit && hit[1] ? MAKERS[hit[1]] : null
   const initial = String(systemName || '?').replace(/^TM\s+/i, '').trim().charAt(0).toUpperCase() || '?'
   return {
     maker: maker?.name || '', ink: maker?.ink || '', logo: maker?.logo || '', logoBg: maker?.logoBg || '',
