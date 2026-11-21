@@ -1405,6 +1405,11 @@ names and its location, the whole tray is kept in `kits:list:deleted:{kit}`
 with the line it was made against; if that line has changed meanwhile it is a
 409 with the current list. Every change is in `kits:history` with who made it,
 and the open list refreshes through `useLiveRefresh` (not while editing).
+**Each line reads in full** (Brent, 21 Nov 2026: "so you can read each item's
+full description, just make it a bit more compact"): in `EditableTray` the
+description is a box of its own that grows to fit (`textarea`, height from
+`scrollHeight`) and the code, Implant/Instr. chip, − qty + and a ✕ remove share
+one slim line under it (`data-edit-line`).
 
 ### The kit room is everyone's (Brent, 11 Nov 2026)
 

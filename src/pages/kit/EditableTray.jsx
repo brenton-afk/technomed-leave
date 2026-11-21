@@ -27,8 +27,19 @@ function Row({ line, index, onSet, onRemove, busy }) {
   useEffect(() => { setDraft(line); setQty(line.qty) }, [line])
   const sendQty = useDebounced(q => onSet(index, line, { ...line, qty: q }), 700)
 
-  const input = {
-    ...text('field'), width: '100%', boxSizing: 'border-box', padding: '6px 8px',
+  // Brent, 21 Nov 2026: "neaten up this edit screen so you can read each
+  // item's full description … a bit more compact". The description wraps on a
+  // line of its own (a box that grows to fit, never cut off); code, kind,
+  // quantity and remove share one slim line under it.
+  const descRef = useRef(null)
+  useEffect(() => {
+    const el = descRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [draft.description])
+  const box = {
+    ...text('field'), width: '100%', boxSizing: 'border-box', padding: '4px 8px',
     border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink
   }
   const step = d => {
@@ -42,36 +53,34 @@ function Row({ line, index, onSet, onRemove, busy }) {
   }
   const implant = line.kind === 'implant'
   const stepBtn = {
-    width: 32, height: 32, borderRadius: radius.control, border: border.hairline, background: colour.surface,
-    ...text('bodyStrong'), color: colour.ink, cursor: 'pointer', padding: 0
+    width: 28, height: 28, borderRadius: radius.control, border: border.hairline, background: colour.surface,
+    ...text('bodyStrong'), color: colour.ink, cursor: 'pointer', padding: 0, flex: '0 0 auto'
   }
+  const what = line.description || line.code
 
   return (
-    <div style={{ padding: `${space.sm}px 0`, borderBottom: border.hairlineSoft }}>
-      <div style={{ display: 'flex', gap: space.sm, marginBottom: space.xs }}>
+    <div data-edit-line style={{ padding: `${space.xs + 2}px 0`, borderBottom: border.hairlineSoft }}>
+      <textarea ref={descRef} rows={1} value={draft.description} placeholder="Description" aria-label={`Description, line ${index + 1}`}
+        onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} onBlur={commitText}
+        style={{ ...box, display: 'block', resize: 'none', overflow: 'hidden', lineHeight: 1.3, fontFamily: 'inherit', marginBottom: 4 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <input value={draft.code} placeholder="Code" aria-label={`Code, line ${index + 1}`}
           onChange={e => setDraft(d => ({ ...d, code: e.target.value }))} onBlur={commitText}
-          style={{ ...input, flex: '0 0 34%' }} />
-        <input value={draft.description} placeholder="Description" aria-label={`Description, line ${index + 1}`}
-          onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} onBlur={commitText}
-          style={{ ...input, flex: 1, minWidth: 0 }} />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+          style={{ ...box, flex: 1, minWidth: 0, color: colour.inkMuted }} />
         <button onClick={() => onSet(index, line, { ...line, qty, kind: implant ? 'instrument' : 'implant' })} disabled={busy}
-          aria-label={`${line.description || line.code} is ${implant ? 'an implant' : 'an instrument'} — change`}
+          aria-label={`${what} is ${implant ? 'an implant' : 'an instrument'} — change`}
           style={{
-            ...text('caption'), fontWeight: 600, padding: '5px 10px', borderRadius: radius.pill, cursor: 'pointer',
+            ...text('caption'), fontWeight: 600, padding: '4px 8px', borderRadius: radius.pill, cursor: 'pointer', flex: '0 0 auto',
             border: implant ? 'none' : border.hairline, background: implant ? colour.accentSoft : colour.surface,
             color: implant ? colour.accentDeep : colour.inkFaint
-          }}>{implant ? 'Implant' : 'Instrument'}</button>
-        <span style={{ flex: 1 }} />
-        <button onClick={() => step(-1)} aria-label={`One fewer ${line.description || line.code}`} style={stepBtn}>−</button>
-        <span aria-label={`Quantity of ${line.description || line.code}`}
-          style={{ ...text('heading'), minWidth: 36, textAlign: 'center', color: colour.ink }}>{qty}</span>
-        <button onClick={() => step(1)} aria-label={`One more ${line.description || line.code}`} style={stepBtn}>+</button>
-        <button onClick={() => { if (window.confirm(`Remove ${line.description || line.code} from this tray?`)) onRemove(index, line) }}
-          aria-label={`Remove ${line.description || line.code}`} disabled={busy}
-          style={{ ...text('caption'), color: colour.danger, background: 'none', border: 'none', cursor: 'pointer', marginLeft: space.xs }}>Remove</button>
+          }}>{implant ? 'Implant' : 'Instr.'}</button>
+        <button onClick={() => step(-1)} aria-label={`One fewer ${what}`} style={stepBtn}>−</button>
+        <span aria-label={`Quantity of ${what}`}
+          style={{ ...text('bodyStrong'), minWidth: 22, textAlign: 'center', color: colour.ink }}>{qty}</span>
+        <button onClick={() => step(1)} aria-label={`One more ${what}`} style={stepBtn}>+</button>
+        <button onClick={() => { if (window.confirm(`Remove ${what} from this tray?`)) onRemove(index, line) }}
+          aria-label={`Remove ${what}`} disabled={busy}
+          style={{ ...stepBtn, border: 'none', background: 'none', color: colour.danger }}>✕</button>
       </div>
     </div>
   )
