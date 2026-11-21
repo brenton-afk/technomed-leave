@@ -43,7 +43,7 @@
     },
     "api/guides.js": {
       "includeFiles": "theatre-guides/**",
-      "maxDuration": 30,
+      "maxDuration": 60,
       "memory": 1024
     },
     "api/treasury.js": {

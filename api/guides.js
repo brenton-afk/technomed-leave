@@ -554,6 +554,14 @@ async function handleKits(req, res, session) {
       if (!canEdit) return res.status(403).json({ error: 'Sign in to rename a system' })
       return res.status(200).json(await renameSystem(body.from, body.to, who))
     }
+    // Trays, photos and agreements from the consignment agreements (Brent,
+    // 21 Nov 2026) — one agreement per request; without `doc`, the list.
+    if (what === 'agreements') {
+      if (!canRemove) return res.status(403).json({ error: 'Admins and the clinical team only' })
+      const { agreementStatus, fillFromAgreement } = await import('./_kitAgreements.js')
+      if (!body.doc) return res.status(200).json({ agreements: await agreementStatus() })
+      return res.status(200).json(await fillFromAgreement(String(body.doc), who))
+    }
     if (what === 'reset-all') {
       if (!canRemove) return res.status(403).json({ error: 'Only admins and the clinical team can reset every tray' })
       return res.status(200).json(await resetAllLocations(who))

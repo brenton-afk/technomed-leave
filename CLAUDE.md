@@ -1676,6 +1676,33 @@ its name, instrument words first ("Screw Removal" is instruments). TrayList
 draws "Instrument trays · N" then "Implant trays · N" (`data-tray-group`),
 each in the kit's order.
 
+**The kit room filled from the consignment agreements** (Brent, 21 Nov 2026:
+"I'm ok for the unsigned copies to be used to populate the kit room"; chose
+trays, photos and agreement, filled trays left alone). 25 agreements in
+`/Admin/Consignment Agreements` (signed where we have one, else the latest
+draft, Word files converted) were read into `trays.json` and built by
+`scripts/build-agreement-seeds.py` into `api/_kitAgreementData.js`
+(`AGREEMENTS`: doc, kit, hospital, distributor, agreement path, trays with
+`set`, `#n` refs in descriptions; **no prices** — the build stops on any `$` /
+price / AUD) and `api/_kitAgreementPhotos_<doc>.js` (900 px, loaded one
+agreement at a time via `PHOTO_LOADERS`; every photo checked by eye — scanned
+pages cropped, the signature-page and price-column ones cropped or dropped).
+Kit room → ⚙ → **Fill from consignment agreements** (`kit/FillAgreements.jsx`,
+`kits=agreements` on `api/guides.js`, admins and the clinical team; guides.js
+`maxDuration` 60) runs `fillFromAgreement` in `api/_kitAgreements.js` one
+agreement per request: the sets of that system at that hospital (made if
+none — TM Corpectomy, TM Cercess, TM Fixed Nav Drills, NewClip, Arthrex Mini
+Drill 300, Boost UltraFibres), set n's trays into the nth set (more sets in
+the document than on the shelf → the first), `planForSet` (nothing filled →
+the agreement's trays replace the placeholders; some filled → only trays
+`sameTray` does not match are added; names with numbers must agree), photos
+filed three at a time to `/Tray Lists/Tray Photos/{set}/{tray}.jpg`, the
+agreement linked where the set has no consignment document. Once per
+agreement (`kits:agreements:done`). Document quirks the readers flagged are in
+the source `trays.json` checks (e.g. RHH Dakota totals copied from Calvary's,
+Mariner RHH two arithmetic errors); the Mariner Open update's iliac tray is the
+same tray as the Mariner set's and was left out.
+
 ### Call a courier after a move (Brent, 20 Nov 2026)
 
 "Build in a call courier button when you confirm the kit move … Jet courier

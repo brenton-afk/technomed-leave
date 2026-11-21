@@ -1,0 +1,107 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Brent, 21 Nov 2026: the kit room filled from the consignment agreements —
+// "only empty or missing trays are filled". Invented kits and trays.
+const store = new Map()
+vi.mock('./_redis.js', () => ({
+  redis: vi.fn(async (cmd, ...args) => {
+    if (cmd === 'get') return store.get(args[0]) ?? null
+    if (cmd === 'mget') return args.map(k => store.get(k) ?? null)
+    if (cmd === 'set') { store.set(args[0], args[1]); return 'OK' }
+    return 1
+  }),
+  redisSetBody: vi.fn(async (k, v) => { store.set(k, v) })
+}))
+vi.mock('./_bookingNotices.js', () => ({ getNoticeSettings: async () => ({ contacts: [] }) }))
+vi.mock('./_kitAgreementData.js', () => ({
+  AGREEMENTS: [
+    { doc: 'clv-widget', kit: 'Widget', hospital: 'CLV', distributor: 'signus', agreement: { path: '/Admin/Consignment Agreements/x.pdf', name: 'x.pdf' },
+      trays: [
+        { name: 'Widget Insertion', set: 1, photo: 'p4_1.jpg', lines: [{ code: 'A1', description: 'Driver', qty: 1, kind: 'instrument' }] },
+        { name: 'Widget Screws', set: 1, photo: null, lines: [{ code: 'S1', description: 'Screw', qty: 4, kind: 'implant' }] },
+        { name: 'Widget Insertion', set: 2, photo: null, lines: [{ code: 'A1', description: 'Driver', qty: 1, kind: 'instrument' }] }
+      ] },
+    { doc: 'rhh-gadget', kit: 'TM Gadget', hospital: 'RHH', agreement: { path: '/Admin/Consignment Agreements/g.pdf', name: 'g.pdf' },
+      trays: [{ name: 'TM Gadget Tray', set: 1, photo: null, lines: [{ code: 'G1', description: 'Gadget', qty: 1, kind: 'instrument' }] }] }
+  ],
+  PHOTO_LOADERS: { 'clv-widget': async () => ({ PHOTOS: { 'p4_1.jpg': Buffer.from('jpg').toString('base64') } }) }
+}))
+
+const { planForSet, sameTray, fillFromAgreement, agreementStatus } = await import('./_kitAgreements.js')
+const { getTrayList, getDefs } = await import('./_kits.js')
+
+const deps = { upload: vi.fn(async () => {}), listDocs: vi.fn(async () => []), link: vi.fn(async () => {}) }
+beforeEach(() => {
+  store.clear()
+  store.set('kits:applied', JSON.stringify(['outrigger-consigned-clv-2026-11-02', 'reform-lumbar-returned-2026-11-02', 'mariner-mis-clv-2026-11-21', 'mariner-mis-photos-2026-11-21']))
+  store.set('kits:defs', JSON.stringify([
+    { id: 'widget-clv-1', name: 'Widget 1', system: 'Widget', home: 'CLV', kind: 'consignment', trays: ['Insertion 1-1'] },
+    { id: 'widget-clv-2', name: 'Widget 2', system: 'Widget', home: 'CLV', kind: 'consignment', trays: ['Insertion 2-1'] }
+  ]))
+  vi.clearAllMocks()
+})
+
+describe('matching trays', () => {
+  it('knows the same tray under another name', () => {
+    expect(sameTray('Rods and tulips 1-3', 'Diplomat Rods & Tulips 1-3', 'Diplomat')).toBe(true)
+    expect(sameTray('Insertion 2-1', 'Diplomat Pedicle Screws 1-5', 'Diplomat')).toBe(false)
+  })
+  it('replaces a list with nothing filled; adds only missing trays to a filled one', () => {
+    const trays = [{ name: 'W Insertion', lines: [1] }, { name: 'W Screws', lines: [1] }]
+    expect(planForSet({ trays: [{ name: 'Placeholder', lines: [] }] }, trays, 'W')).toMatchObject({ mode: 'replace', skipped: 0 })
+    const plan = planForSet({ trays: [{ name: 'Insertion', lines: [{}] }] }, trays, 'W')
+    expect(plan).toMatchObject({ mode: 'add', skipped: 1 })
+    expect(plan.add.map(t => t.name)).toEqual(['W Screws'])
+  })
+})
+
+describe('filling', () => {
+  it('fills each set with its own trays, files the photo, attaches the agreement, once', async () => {
+    const rec = await fillFromAgreement('clv-widget', 'Brent', deps)
+    expect(rec.results.map(r => [r.kitId, r.added, r.attached])).toEqual([['widget-clv-1', 2, true], ['widget-clv-2', 1, true]])
+    const one = await getTrayList('widget-clv-1')
+    expect(one.trays.map(t => t.name)).toEqual(['Widget Insertion', 'Widget Screws'])
+    expect(one.trays[0].photo).toBe('/Tray Lists/Tray Photos/Widget 1/Widget Insertion.jpg')
+    expect(deps.upload).toHaveBeenCalledTimes(1)
+    // No prices anywhere on the list.
+    expect(JSON.stringify(one)).not.toMatch(/\$|price/i)
+    expect((await fillFromAgreement('clv-widget', 'Brent', deps)).already).toBe(true)
+    expect((await agreementStatus()).find(a => a.doc === 'clv-widget').done).toBeTruthy()
+  })
+  it('leaves a filled tray alone', async () => {
+    store.set('kits:list:widget-clv-1', JSON.stringify({ source: {}, trays: [{ name: 'Insertion 1-1', lines: [{ code: 'Z', description: 'Mine', qty: 9, kind: 'instrument' }] }] }))
+    await fillFromAgreement('clv-widget', 'Brent', deps)
+    const one = await getTrayList('widget-clv-1')
+    expect(one.trays.find(t => t.name === 'Insertion 1-1').lines[0].description).toBe('Mine')
+    expect(one.trays.map(t => t.name)).toContain('Widget Screws')
+    expect(one.trays.map(t => t.name)).not.toContain('Widget Insertion')
+  })
+  it('makes a set for a kit the room does not have yet', async () => {
+    await fillFromAgreement('rhh-gadget', 'Brent', deps)
+    const made = (await getDefs()).find(k => k.system === 'TM Gadget')
+    expect(made).toMatchObject({ home: 'RHH', kind: 'technomed' })
+    expect((await getTrayList(made.id)).trays[0].name).toBe('TM Gadget Tray')
+  })
+})
+
+describe('tray names with numbers', () => {
+  it('keeps tray 1 of 5 and tray 2 of 5 apart', () => {
+    expect(sameTray('Pedicle screws 2-5', 'Diplomat Pedicle Screws 1-5', 'Diplomat')).toBe(false)
+    expect(sameTray('Insertion 1-1', 'Widget Insertion', 'Widget')).toBe(true)
+  })
+})
+
+describe('the agreements as read (21 Nov 2026)', () => {
+  it('carry no prices, and every photo named has its file', async () => {
+    const real = await vi.importActual('./_kitAgreementData.js')
+    expect(real.AGREEMENTS.length).toBeGreaterThan(20)
+    expect(JSON.stringify(real.AGREEMENTS)).not.toMatch(/\$|\bprice\b|\bAUD\b/i)
+    for (const a of real.AGREEMENTS) {
+      expect(a.agreement.path.startsWith('/Admin/Consignment Agreements/')).toBe(true)
+      for (const t of a.trays) {
+        expect(t.lines.length).toBeGreaterThan(0)
+        if (t.photo) expect(real.PHOTO_LOADERS[a.doc]).toBeTypeOf('function')
+      }
+    }
+  })
+})

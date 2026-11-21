@@ -179,7 +179,7 @@ export async function logCourierCall({ kitId, courierId }, by) {
 
 const APPLIED = 'kits:applied'
 
-async function getDefs() {
+export async function getDefs() {
   const raw = await redis('get', DEFS)
   if (!raw) {
     const kits = seedKits()

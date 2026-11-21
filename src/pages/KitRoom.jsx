@@ -9,6 +9,7 @@ import SystemDetail from './kit/SystemDetail.jsx'
 import AddTraySheet from './kit/AddTraySheet.jsx'
 import CourierNumbers from './kit/CourierNumbers.jsx'
 import KitSettings from './kit/KitSettings.jsx'
+import FillAgreements from './kit/FillAgreements.jsx'
 import { groupSystems, traysByPlace, systemOf, setLabel, PLACE_ORDER } from '../kit/systems.js'
 import { movingFrom } from '../kit/trayPlaces.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
@@ -80,6 +81,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
   const [dragging, setDragging] = useState(null)   // { kit, x, y, over }
   const [order, setOrder] = useState(null)
   const [attaching, setAttaching] = useState(false)
+  const [filling, setFilling] = useState(false)
   const [editingCouriers, setEditingCouriers] = useState(false)
   const [settings, setSettings] = useState(false)
   const [busy, setBusy] = useState('')
@@ -298,6 +300,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           onEmails={on => act('emails', () => post('settings', { emailsOn: on }))}
           onCouriers={() => setEditingCouriers(true)}
           onAgreements={() => setAttaching(true)}
+          onFill={() => setFilling(true)}
           onReset={() => {
             if (!window.confirm('Put every tray back where it lives? Nobody is emailed.')) return
             act('reset', () => post('reset-all', {}))
@@ -305,6 +308,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           history={<HistoryLink user={user} />} />
       )}
       {editingCouriers && <CourierNumbers couriers={data?.couriers || []} post={post} onClose={() => setEditingCouriers(false)} onSaved={load} />}
+      {filling && <FillAgreements post={post} onClose={() => setFilling(false)} onDone={load} />}
       {attaching && <AttachAgreements user={user} post={post} onClose={() => setAttaching(false)} onDone={load} />}
       {/* Stays open under the move sheet: closing it as the sheet opened took
           the sheet's back-button step with it, and Move did nothing (Brent,

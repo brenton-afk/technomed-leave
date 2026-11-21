@@ -9,7 +9,7 @@ import { useBackLayer } from '../../backButton.js'
 // live here, behind the ⚙ on the kit room's band, with the courier numbers,
 // reset, agreements and the movement history.
 
-export default function KitSettings({ data, kits, busy, onClose, onEmails, onCouriers, onReset, onAgreements, history }) {
+export default function KitSettings({ data, kits, busy, onClose, onEmails, onCouriers, onReset, onAgreements, onFill, history }) {
   useBackLayer(true, onClose)
   const total = kits.length
   const checked = kits.filter(k => k.checkedAt).length
@@ -60,6 +60,7 @@ export default function KitSettings({ data, kits, busy, onClose, onEmails, onCou
                   {busy === 'reset' ? 'Resetting…' : 'Reset all trays to home'}
                 </button>
                 <button onClick={onAgreements} data-attach-agreements style={btn(false)}>Attach agreements from Dropbox</button>
+                {onFill && <button onClick={onFill} data-fill-agreements style={btn(true)}>Fill from consignment agreements</button>}
               </div>
             )}
             {history}
