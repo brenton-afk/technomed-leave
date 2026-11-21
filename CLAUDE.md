@@ -2163,6 +2163,13 @@ admin-only; no new function).
   with a logo, else any theme with a logo (`/BrandingThemes`, needs
   `accounting.settings.read`, remembered per instance). Unreadable → drafted as
   before. A PO being replaced keeps its own theme.
+- **The invoice form, tidied** (Brent, 21 Nov 2026: "looks a bit clunky"):
+  details in two even columns that never spill (PO number | Date, Due |
+  Account code, each with a one-line hint; date boxes drawn like the rest —
+  an iPhone drew them grey, centred and wider than the column); each line is
+  Code + ✕, the description (grows to fit), then Qty | Unit ex GST |
+  Discount % and the line's amount; "Paste from a spreadsheet" is a link
+  that opens the paste box only when wanted.
 - **Discount per line** (`DiscountRate`, 0–100) — self-funding quotes carry
   the standard 20% off implants. A quote's **Summary** holds the Surgeon /
   Patient / Procedure lines. **Paste lines** reads rows copied from a

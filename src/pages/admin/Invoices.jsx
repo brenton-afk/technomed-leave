@@ -12,7 +12,7 @@ import { parsePastedLines, lineAmount } from '../../invoiceLines.js'
 const NAVY = '#042746'
 const ACCENT = '#189a85'
 const card = { background: 'white', borderRadius: 10, padding: '11px 13px', marginBottom: 8, border: '1px solid rgba(26,43,74,0.08)' }
-const input = { padding: '7px 9px', borderRadius: 7, border: '1px solid rgba(26,43,74,0.18)', fontSize: 16, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }
+const input = { padding: '8px 10px', minHeight: 40, borderRadius: 8, border: '1px solid rgba(26,43,74,0.18)', fontSize: 16, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }
 const btn = (primary) => ({
   padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
   border: primary ? 'none' : '1px solid rgba(26,43,74,0.15)',
@@ -351,6 +351,7 @@ function Editor({ api, draft, onClose }) {
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
   const [paste, setPaste] = useState('')
+  const [pasting, setPasting] = useState(false)
   const [expiryDate, setExpiryDate] = useState('')
   const [lines, setLines] = useState(order.lines?.length ? order.lines.map(l => ({ ...l, unitPrice: l.unitPrice || '' })) : [blankLine()])
   const [busy, setBusy] = useState(false)
@@ -413,7 +414,11 @@ function Editor({ api, draft, onClose }) {
     )
   }
 
-  const label = { fontSize: 12, fontWeight: 600, color: '#5a6478', marginBottom: 3, display: 'block' }
+  const label = { fontSize: 12, fontWeight: 600, color: '#5a6478', marginBottom: 4, display: 'block' }
+  const cell = { minWidth: 0 }
+  const hint = { fontSize: 11.5, color: '#8a94a6', marginTop: 3 }
+  // An iPhone draws a date box grey, centred and wider than its column.
+  const dateInput = { ...input, WebkitAppearance: 'none', appearance: 'none', display: 'block', minWidth: 0, minHeight: 40, textAlign: 'left', backgroundColor: 'white', color: NAVY }
 
   return (
     <div>
@@ -447,21 +452,26 @@ function Editor({ api, draft, onClose }) {
           {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginTop: 10 }}>
-          <div><label style={label}>{isInvoice && !draft.blank ? 'Reference (PO number)' : 'Reference'}</label>
+        {/* Two even columns that never spill (Brent, 21 Nov 2026: "looks a bit
+            clunky"): an iPhone's date box has a width of its own, so every
+            cell is minWidth 0 and the date fields are drawn like the rest. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 10px', marginTop: 12 }}>
+          <div style={cell}><label style={label}>{isInvoice && !draft.blank ? 'PO number' : 'Reference'}</label>
             <input style={input} value={reference} onChange={e => setReference(e.target.value)} /></div>
-          <div><label style={label}>Date</label>
-            <input style={input} type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
+          <div style={cell}><label style={label}>Date</label>
+            <input style={{ ...dateInput, fontSize: 16 }} type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
           {isInvoice && <>
-            <div><label style={label}>Due</label>
-              <input style={input} type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></div>
-            <div><label style={label}>Account (lines without a code)</label>
-              <input style={input} value={accountCode} onChange={e => setAccountCode(e.target.value)} /></div>
+            <div style={cell}><label style={label}>Due</label>
+              <input style={{ ...dateInput, fontSize: 16 }} type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              {!dueDate && <div style={hint}>Blank: the customer’s usual terms</div>}</div>
+            <div style={cell}><label style={label}>Account code</label>
+              <input style={input} inputMode="numeric" value={accountCode} onChange={e => setAccountCode(e.target.value)} />
+              <div style={hint}>For lines that aren’t Xero items</div></div>
           </>}
           {!isInvoice && <>
-            <div><label style={label}>Expires</label>
-              <input style={input} type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} /></div>
-            <div><label style={label}>Title</label>
+            <div style={cell}><label style={label}>Expires</label>
+              <input style={{ ...dateInput, fontSize: 16 }} type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} /></div>
+            <div style={cell}><label style={label}>Title</label>
               <input style={input} value={title} onChange={e => setTitle(e.target.value)} /></div>
           </>}
         </div>
@@ -471,12 +481,20 @@ function Editor({ api, draft, onClose }) {
         </div>}
       </div>
 
-      <div style={card}>
-        <label style={label}>Paste lines from a spreadsheet</label>
-        <textarea style={{ ...input, minHeight: 60 }} value={paste} placeholder="Copy the rows (code, description, quantity, price, discount) and paste here"
-          onChange={e => setPaste(e.target.value)} />
-        <button style={{ ...btn(false), marginTop: 6 }} disabled={!paste.trim()} onClick={addPasted}>Add these lines</button>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '14px 2px 6px' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: NAVY, flex: 1 }}>Lines</div>
+        <button type="button" data-paste-toggle onClick={() => setPasting(p => !p)}
+          style={{ border: 'none', background: 'none', color: ACCENT, fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 }}>
+          {pasting ? 'Close paste' : 'Paste from a spreadsheet'}
+        </button>
       </div>
+      {pasting && (
+        <div style={card}>
+          <textarea style={{ ...input, minHeight: 70 }} value={paste} placeholder="Copy the rows (code, description, quantity, price, discount) and paste them here"
+            onChange={e => setPaste(e.target.value)} />
+          <button style={{ ...btn(false), marginTop: 8 }} disabled={!paste.trim()} onClick={() => { addPasted(); setPasting(false) }}>Add these lines</button>
+        </div>
+      )}
 
       <datalist id="xero-items">
         {items.map(i => <option key={i.code} value={i.code}>{i.name}</option>)}
@@ -486,31 +504,42 @@ function Editor({ api, draft, onClose }) {
         const item = itemFor(l.code)
         const xeroPrice = item && Number.isFinite(item.price) ? item.price : null
         return (
-          <div key={n} style={card}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 90px 64px auto', gap: 6, alignItems: 'end' }}>
-              <div><label style={label}>Code</label>
-                <input style={input} list="xero-items" value={l.code} onChange={e => {
+          <div key={n} style={card} data-invoice-line>
+            {/* Code and remove on one row, the description under it, then
+                quantity, price and discount in three even columns — the code
+                was cut to a few characters when it shared a row with all four. */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ ...cell, flex: 1 }}><label style={label}>Code</label>
+                <input style={input} list="xero-items" value={l.code} placeholder="Xero item code" onChange={e => {
                   const code = e.target.value
                   const it = itemFor(code)
                   setLine(n, { code, ...(it && !l.description ? { description: it.description || it.name } : {}), ...(it && l.unitPrice === '' && Number.isFinite(it.price) ? { unitPrice: it.price } : {}) })
                 }} /></div>
-              <div><label style={label}>Qty</label>
-                <input style={input} type="number" min="0" step="1" value={l.quantity} onChange={e => setLine(n, { quantity: e.target.value })} /></div>
-              <div><label style={label}>Unit ex GST</label>
-                <input style={input} type="number" min="0" step="0.01" value={l.unitPrice} onChange={e => setLine(n, { unitPrice: e.target.value })} /></div>
-              <div><label style={label}>Disc %</label>
-                <input style={input} type="number" min="0" max="100" step="1" value={l.discount ?? ''} onChange={e => setLine(n, { discount: e.target.value })} /></div>
-              <button style={{ ...btn(false), padding: '7px 10px' }} aria-label="Remove line" onClick={() => setLines(ls => ls.filter((_, i) => i !== n))}>✕</button>
+              <button style={{ ...btn(false), width: 40, height: 40, padding: 0, flexShrink: 0 }} aria-label="Remove line" onClick={() => setLines(ls => ls.filter((_, i) => i !== n))}>✕</button>
             </div>
-            <input style={{ ...input, marginTop: 6 }} placeholder="Description" value={l.description} onChange={e => setLine(n, { description: e.target.value })} />
-            <div style={{ fontSize: 12, marginTop: 4, color: item ? ACCENT : '#b54708' }}>
-              {!l.code ? 'No code — goes on as a description only.'
-                : item ? `Xero item: ${item.name}${xeroPrice != null ? ` · ${money(xeroPrice)}` : ''}`
-                  : 'Not a Xero item — the code goes into the description.'}
-              {xeroPrice != null && l.unitPrice !== '' && Math.abs(Number(l.unitPrice) - xeroPrice) > 0.005 && (
-                <> · <button style={{ border: 'none', background: 'none', color: ACCENT, textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 12 }}
-                  onClick={() => setLine(n, { unitPrice: xeroPrice })}>use Xero's {money(xeroPrice)}</button></>
-              )}
+            <div style={{ marginTop: 8 }}><label style={label}>Description</label>
+              <textarea rows={1} style={{ ...input, resize: 'none', minHeight: 40, lineHeight: 1.35 }} value={l.description}
+                ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px` } }}
+                onChange={e => setLine(n, { description: e.target.value })} /></div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 8 }}>
+              <div style={cell}><label style={label}>Qty</label>
+                <input style={input} type="number" inputMode="decimal" min="0" step="1" value={l.quantity} onChange={e => setLine(n, { quantity: e.target.value })} /></div>
+              <div style={cell}><label style={label}>Unit ex GST</label>
+                <input style={input} type="number" inputMode="decimal" min="0" step="0.01" value={l.unitPrice} onChange={e => setLine(n, { unitPrice: e.target.value })} /></div>
+              <div style={cell}><label style={label}>Discount %</label>
+                <input style={input} type="number" inputMode="decimal" min="0" max="100" step="1" value={l.discount ?? ''} placeholder="0" onChange={e => setLine(n, { discount: e.target.value })} /></div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginTop: 8 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: item ? ACCENT : '#b54708' }}>
+                {!l.code ? 'No code — goes on as a description only.'
+                  : item ? `Xero item: ${item.name}${xeroPrice != null ? ` · ${money(xeroPrice)}` : ''}`
+                    : 'Not a Xero item — the code goes into the description.'}
+                {xeroPrice != null && l.unitPrice !== '' && Math.abs(Number(l.unitPrice) - xeroPrice) > 0.005 && (
+                  <> · <button style={{ border: 'none', background: 'none', color: ACCENT, textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                    onClick={() => setLine(n, { unitPrice: xeroPrice })}>use Xero's {money(xeroPrice)}</button></>
+                )}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, whiteSpace: 'nowrap' }} data-line-amount>{money(lineAmount(l))}</div>
             </div>
           </div>
         )
