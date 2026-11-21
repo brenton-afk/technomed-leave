@@ -85,7 +85,10 @@ export const KIT_CORRECTIONS = [
   { id: 'catenary-name-2026-11-21', seed: 'catenary-name' },
   // "CYLOX Set 2" saved as its own system: its system is CYLOX (Brent, 21 Nov
   // 2026), so bookings and supplies count it as a second CYLOX set too.
-  { id: 'set-n-systems-2026-11-21', seed: 'set-n-systems' }
+  { id: 'set-n-systems-2026-11-21', seed: 'set-n-systems' },
+  // Calvary's three Catenary ALIF trays from Gerardo's renamed CSSD sheets
+  // (Brent, 21 Nov 2026: "It has the trays for the E4 Catenary trays").
+  { id: 'catenary-trays-clv-2026-11-21', seed: 'catenary-trays' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -225,6 +228,20 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'catenary-trays') {
+    const { CATENARY_CLV_TRAYS: trays, CATENARY_CLV_FILE: file } = await import('./_kitSeedCatenaryClv.js')
+    const by = 'Claude (Calvary CSSD sheets, Catenary ALIF)'
+    const sets = (await getDefs()).filter(k => /catenary|\balif\b/i.test(String(k.system || k.name)) && k.home === 'CLV' && k.kind !== 'floating')
+    const key = n => String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    for (const kit of sets.slice(0, 1)) {
+      const current = await getTrayList(kit.id)
+      const filled = (current?.trays || []).filter(t => (t.lines || []).length)
+      const missing = trays.filter(t => !filled.some(f => key(f.name) === key(t.name)))
+      if (!missing.length) continue
+      await saveTrayList(kit.id, { trays: missing.map(t => ({ ...t, file })), source: { file, hospital: 'CLV' }, mode: filled.length ? 'add' : 'replace' }, by)
+    }
     return
   }
   if (name === 'set-n-systems') {

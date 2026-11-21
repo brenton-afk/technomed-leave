@@ -33,7 +33,7 @@ const { getTrayList, getDefs } = await import('./_kits.js')
 const deps = { upload: vi.fn(async () => {}), listDocs: vi.fn(async () => []), link: vi.fn(async () => {}) }
 beforeEach(() => {
   store.clear()
-  store.set('kits:applied', JSON.stringify(['outrigger-consigned-clv-2026-11-02', 'reform-lumbar-returned-2026-11-02', 'mariner-mis-clv-2026-11-21', 'mariner-mis-photos-2026-11-21', 'shoreline-trays-2026-11-21', 'shoreline-photos-clv-2026-11-21', 'catenary-name-2026-11-21', 'set-n-systems-2026-11-21']))
+  store.set('kits:applied', JSON.stringify(['outrigger-consigned-clv-2026-11-02', 'reform-lumbar-returned-2026-11-02', 'mariner-mis-clv-2026-11-21', 'mariner-mis-photos-2026-11-21', 'shoreline-trays-2026-11-21', 'shoreline-photos-clv-2026-11-21', 'catenary-name-2026-11-21', 'set-n-systems-2026-11-21', 'catenary-trays-clv-2026-11-21']))
   store.set('kits:defs', JSON.stringify([
     { id: 'widget-clv-1', name: 'Widget 1', system: 'Widget', home: 'CLV', kind: 'consignment', trays: ['Insertion 1-1'] },
     { id: 'widget-clv-2', name: 'Widget 2', system: 'Widget', home: 'CLV', kind: 'consignment', trays: ['Insertion 2-1'] }

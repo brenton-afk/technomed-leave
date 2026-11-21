@@ -1641,6 +1641,13 @@ picture is the cage from E4's brochure; Firebird has the coloured screws and
 Ascot the plate with green screws (his files). Later the same day: Shoreline's picture became
 his single cage-and-plate shot, and Mariner's screw was cut out of its grey
 studio background (OpenCV GrabCut, run once here; the file is plain white).
+**Calvary's Catenary ALIF trays** (Brent, 21 Nov 2026: "Check my email
+from Gerardo. It has the trays for the E4 Catenary trays when he renamed
+them"): from his CSSD sheets of 8 Oct (`api/_kitSeedCatenaryClv.js`: E4
+Catenary ALIF Inst / Trials / Hyperlordotic Trials DNO — 13, 28 and 21 items
+as the sheets total, liner and tray tag left out). `catenary-trays-clv-2026-11-21`
+puts them into the Calvary Catenary set, adding only trays it does not
+already have filled. The sheets have no whole-tray photos.
 **A set is never a system** (Brent, 21 Nov 2026: "Cylox and Cylox set 2
 should both be put under Cylox"): `systemOf` drops a trailing "Set N" from a
 system name, and `set-n-systems-2026-11-21` stored CYLOX Set 2's system as
