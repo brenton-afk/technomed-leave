@@ -5,6 +5,7 @@ import { redis, redisSetBody } from './_redis.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
 import { STAFF } from '../src/staffConfig.js'
 import { getNoticeSettings } from './_bookingNotices.js'
+import { MARINER_MIS_KIT } from './_kitSeedMarinerMis.js'
 
 // ─── The kit room: where every set is, and telling the hospitals ────────────
 // "We move the kit in the portal which updates the kit locations and then the
@@ -64,7 +65,10 @@ export const KIT_CORRECTIONS = [
     replace: { from: 'mariner-outrigger-floating', to: {
       id: 'mariner-outrigger-clv', name: 'Mariner Outrigger', system: 'Mariner Outrigger',
       distributor: 'device', kind: 'consignment', home: 'CLV' } } },
-  { id: 'reform-lumbar-returned-2026-11-02', remove: 'reform-lumbar-office' }
+  { id: 'reform-lumbar-returned-2026-11-02', remove: 'reform-lumbar-office' },
+  // A Mariner MIS consignment set at Calvary, with its seven trays and their
+  // photos from the consignment agreement (Brent, 21 Nov 2026).
+  { id: 'mariner-mis-clv-2026-11-21', add: MARINER_MIS_KIT, seed: 'mariner-mis' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -74,6 +78,7 @@ export function correctKits(defs, applied = []) {
   let kits = defs
   for (const fix of due) {
     if (fix.remove) kits = kits.filter(k => k.id !== fix.remove)
+    if (fix.add && !kits.some(k => k.id === fix.add.id)) kits = [...kits, { trays: [], ...fix.add }]
     if (fix.replace) {
       const old = kits.find(k => k.id === fix.replace.from)
       const next = { trays: old?.trays || [], ...fix.replace.to }
@@ -187,7 +192,34 @@ async function getDefs() {
   await redisSetBody(APPLIED, JSON.stringify(corrected.applied))
   // Where the old kit was recorded, the new one starts fresh at its home.
   await redis('del', LOC('mariner-outrigger-floating')).catch(() => {})
-  return corrected.kits
+  for (const fix of KIT_CORRECTIONS.filter(c => c.seed && !applied.includes(c.id))) {
+    try { await runSeed(fix.seed) } catch (err) { console.error('kit seed failed', fix.id, err?.message) }
+  }
+  return JSON.parse((await redis('get', DEFS)) || '[]')
+}
+
+/**
+ * A set whose tray list came with it (the Mariner MIS agreement). The list is
+ * written only if the set has none, so somebody's edits are never replaced;
+ * each tray photo goes to Dropbox like an uploaded one, and a tray whose photo
+ * cannot be filed is saved without it.
+ */
+async function runSeed(name) {
+  if (name !== 'mariner-mis') return
+  const { MARINER_MIS_KIT: kit, MARINER_MIS_TRAYS: trays, MARINER_MIS_FILE: file } = await import('./_kitSeedMarinerMis.js')
+  if ((await getTrayList(kit.id))?.trays?.length) return
+  const { PHOTOS } = await import('./_kitSeedMarinerMisPhotos.js')
+  const { uploadFile } = await import('./_dropbox.js')
+  const withPhotos = await Promise.all(trays.map(async t => {
+    const path = `/Tray Lists/Tray Photos/${kit.name}/${t.name}.jpg`
+    try {
+      await uploadFile(path, Buffer.from(PHOTOS[t.photo], 'base64'))
+      return { name: t.name, file, photo: path, lines: t.lines }
+    } catch {
+      return { name: t.name, file, lines: t.lines }
+    }
+  }))
+  await saveTrayList(kit.id, { trays: withPhotos, source: { file, hospital: 'CLV' } }, 'Claude (from the consignment agreement)')
 }
 
 /** Every kit with where it is now. */

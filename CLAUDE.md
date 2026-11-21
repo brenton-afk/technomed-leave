@@ -1609,6 +1609,19 @@ display only; bookings, supplies and moves keep its own system. Its section
 reads "Calvary · Mariner Outrigger" (`setLabel`), the move sheet names it, and
 Add a tray never puts a Mariner tray in it.
 
+**The Mariner MIS set at Calvary** (Brent, 21 Nov 2026: "We have just added a
+Mariner consignment kit to Calvary … extract the images and data and enter it
+into the portal"). From Appendix 1 of the consignment agreement:
+`api/_kitSeedMarinerMis.js` (seven trays, codes, descriptions and quantities,
+`#n` = the number on the tray photo; **no prices**) and
+`_kitSeedMarinerMisPhotos.js` (the tray photos, imported only when it runs).
+`KIT_CORRECTIONS` `mariner-mis-clv-2026-11-21` adds the set (`add`, id
+`mariner-mis-clv`, system Mariner) and `runSeed` files each photo at
+`/Tray Lists/Tray Photos/Mariner MIS/{tray}.jpg` and saves the list — only if
+the set has none. The agreement itself (unsigned, carries prices) is not in
+the repo; attach the signed copy in the set's Documents. `inventory.js` still
+says Calvary has no Mariner — bookings are unchanged until Brent says.
+
 ### Call a courier after a move (Brent, 20 Nov 2026)
 
 "Build in a call courier button when you confirm the kit move … Jet courier

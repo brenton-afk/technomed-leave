@@ -54,3 +54,17 @@ describe('renaming', () => {
     expect(a.trayAt['Tray One']).toMatchObject({ at: 'RHH' })
   })
 })
+
+describe('the Mariner MIS set at Calvary (21 Nov 2026)', () => {
+  it('is added once, under the Mariner tile, with seven trays from the agreement', async () => {
+    const { correctKits } = await import('./_kits.js')
+    const { MARINER_MIS_TRAYS } = await import('./_kitSeedMarinerMis.js')
+    const out = correctKits([], ['outrigger-consigned-clv-2026-11-02', 'reform-lumbar-returned-2026-11-02'])
+    const set = out.kits.find(k => k.id === 'mariner-mis-clv')
+    expect(set).toMatchObject({ system: 'Mariner', home: 'CLV', kind: 'consignment', distributor: 'device' })
+    expect(correctKits(out.kits, out.applied)).toBeNull()
+    expect(MARINER_MIS_TRAYS.map(t => t.lines.reduce((n, l) => n + l.qty, 0))).toEqual([19, 13, 152, 107, 15, 7, 12])
+    // No prices come across from the agreement.
+    expect(JSON.stringify(MARINER_MIS_TRAYS)).not.toMatch(/\$|price/i)
+  })
+})
