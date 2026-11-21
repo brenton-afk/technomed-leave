@@ -1754,9 +1754,12 @@ new name, with the plate-caddy photo; **RHH** from Mat's agreement of 20 Nov —
 Shoreline Instruments (trials inside, one variable drill guide, as Kirsty and
 Mat settled), Instruments Extras DNO, Plate & Screw. Trays named trials or
 insertion come off (kept in `kits:list:deleted:{kit}`); anything else stays,
-sterile implants last. The Calvary sheets carry no whole-tray photo, so its
-Inst and Extras trays have none until one is taken; its old photos were
-close-ups of the retired trays. "Shoreline No Profile" (on Calvary's tray list)
+sterile implants last. Calvary's old photos were close-ups of the retired
+trays. **The RHH photos serve Calvary too** (Brent, same day, shown them:
+"This is accurate for the Shoreline kits"): `shoreline-photos-clv-2026-11-21`
+runs `runShorelinePhotos` after the tray fix — `rhhPhotoFor` by kind of tray
+(Inst → instruments, Extras/DNO → extras, Plate → plate and screw, Sterile →
+interbodies), filed under each Calvary set, replacing what was there. "Shoreline No Profile" (on Calvary's tray list)
 is not in any document we hold.
 **The Outrigger sits after the Calvary Mariner set** (Brent, same day: "should
 be underneath the Calvary instrument kit; not listed first") — `groupSystems`

@@ -76,7 +76,10 @@ export const KIT_CORRECTIONS = [
   // Shoreline at both hospitals as the trays are now — trials merged into the
   // instrument trays, Extras / DNO back-up, Calvary's wrong photos gone
   // (Brent, 21 Nov 2026; api/_kitShorelineFix.js).
-  { id: 'shoreline-trays-2026-11-21', seed: 'shoreline' }
+  { id: 'shoreline-trays-2026-11-21', seed: 'shoreline' },
+  // The RHH Shoreline photos on Calvary's trays, which are the same trays now
+  // (Brent, 21 Nov 2026: "This is accurate for the Shoreline kits").
+  { id: 'shoreline-photos-clv-2026-11-21', seed: 'shoreline-photos' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -216,6 +219,11 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'shoreline-photos') {
+    const { runShorelinePhotos } = await import('./_kitShorelineFix.js')
+    await runShorelinePhotos()
     return
   }
   if (name !== 'mariner-mis' && name !== 'mariner-mis-photos') return

@@ -150,3 +150,53 @@ export async function runShorelineFix(deps = {}) {
   }
   return done
 }
+
+/**
+ * The RHH tray photos on Calvary's Shoreline trays too (Brent, 21 Nov 2026,
+ * shown the RHH agreement's photos: "This is accurate for the Shoreline
+ * kits"). Calvary's trays are the same trays now — instruments with the trials
+ * inside, an extras tray, the plate and screw tray, the sterile interbodies —
+ * so each takes the matching photo, replacing the old close-ups. Pure part:
+ * which photo key for which tray name.
+ */
+export function rhhPhotoFor(name) {
+  const n = String(name || '').toLowerCase()
+  if (/extra|dno/.test(n)) return 'p9_1.jpg'
+  if (/sterile|interbod/.test(n)) return 'p10_1.jpg'
+  if (/plate/.test(n)) return 'p4_1.jpg'
+  if (/\binst(ruments?)?\b/.test(n)) return 'p7_1.jpg'
+  return null
+}
+
+export async function runShorelinePhotos(deps = {}) {
+  const { redisSetBody } = deps.redisMod || await import('./_redis.js')
+  const { getDefs, getTrayList, addHistory } = deps.kits || await import('./_kits.js')
+  const upload = deps.upload || (await import('./_dropbox.js')).uploadFile
+  const { PHOTO_LOADERS } = deps.data || await import('./_kitAgreementData.js')
+  let photos = {}
+  try { photos = (await PHOTO_LOADERS['rhh-shoreline']()).PHOTOS || {} } catch { return [] }
+  const by = 'Claude (Shoreline tray photos)'
+  const defs = await getDefs()
+  const sets = defs.filter(k => String(k.system || '').toLowerCase() === 'shoreline' && k.home === 'CLV' && k.kind !== 'floating')
+  const done = []
+  for (const kit of sets) {
+    const list = await getTrayList(kit.id)
+    const filed = {}
+    for (const t of list?.trays || []) {
+      const key = rhhPhotoFor(t.name)
+      if (!key || !photos[key]) continue
+      const path = `/Tray Lists/Tray Photos/${safe(kit.name)}/${safe(t.name)}.jpg`
+      for (let a = 0; a < 3; a += 1) {
+        try { await upload(path, Buffer.from(photos[key], 'base64')); filed[t.name] = path; break } catch {
+          await new Promise(r => setTimeout(r, process.env.VITEST ? 0 : 1500 * (a + 1)))
+        }
+      }
+    }
+    if (!Object.keys(filed).length) continue
+    const now = await getTrayList(kit.id)
+    await redisSetBody(`kits:list:${kit.id}`, JSON.stringify({ ...now, trays: now.trays.map(t => (filed[t.name] ? { ...t, photo: filed[t.name] } : t)) }))
+    await addHistory({ kind: 'edit', kitId: kit.id, kitName: kit.name, by, text: `Tray photos: ${Object.keys(filed).join(', ')}` })
+    done.push({ kitId: kit.id, trays: Object.keys(filed) })
+  }
+  return done
+}

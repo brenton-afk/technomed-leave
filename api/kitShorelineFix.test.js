@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { plannedShoreline, rhhInstrumentLines, runShorelineFix } from './_kitShorelineFix.js'
+import { plannedShoreline, rhhInstrumentLines, runShorelineFix, rhhPhotoFor, runShorelinePhotos } from './_kitShorelineFix.js'
 
 // Brent, 21 Nov 2026: Shoreline "still has trials separate from instruments,
 // but everything has been merged into one instrument tray with a DNO tray as
@@ -94,5 +94,34 @@ describe("Calvary's sheets as read", () => {
     const total = name => SHORELINE_CLV_TRAYS.find(t => t.name === name).lines.reduce((s, l) => s + l.qty, 0)
     // The sheets' totals less the basket liner and the tray tag.
     expect([total('Shoreline Inst 1'), total('Shoreline Inst 2'), total('Shoreline Extras 1')]).toEqual([41, 40, 6])
+  })
+})
+
+describe("the RHH photos on Calvary's Shoreline trays", () => {
+  it('picks the photo by the kind of tray', () => {
+    expect(['Shoreline Inst 1', 'Shoreline Inst 2', 'Shoreline Extras 1', 'Shoreline Plate & Screw 2', 'Shoreline Sterile Interbodies', 'Shoreline No Profile'].map(rhhPhotoFor))
+      .toEqual(['p7_1.jpg', 'p7_1.jpg', 'p9_1.jpg', 'p4_1.jpg', 'p10_1.jpg', null])
+  })
+  it('files them and puts them on the Calvary sets only, replacing the old close-ups', async () => {
+    const store = new Map([
+      ['kits:defs', JSON.stringify([
+        { id: 's1', name: 'Shoreline 1', system: 'Shoreline', home: 'CLV', kind: 'consignment' },
+        { id: 's3', name: 'Shoreline 3', system: 'Shoreline', home: 'RHH', kind: 'consignment' }])],
+      ['kits:list:s1', JSON.stringify({ trays: [
+        { name: 'Shoreline Inst 1', lines: [L('a')] },
+        { name: 'Shoreline Plate & Screw 1', photo: '/Tray Lists/Tray Photos/Shoreline 1/old.jpg', lines: [L('b')] }] })],
+      ['kits:list:s3', JSON.stringify({ trays: [{ name: 'Shoreline Instruments', photo: '/Tray Lists/Tray Photos/Shoreline 3/Shoreline Instruments.jpg', lines: [L('c')] }] })]
+    ])
+    const upload = vi.fn(async () => {})
+    await runShorelinePhotos({
+      redisMod: { redisSetBody: async (k, v) => store.set(k, v) },
+      kits: { getDefs: async () => JSON.parse(store.get('kits:defs')), getTrayList: async id => JSON.parse(store.get(`kits:list:${id}`)), addHistory: async () => {} },
+      upload,
+      data: { PHOTO_LOADERS: { 'rhh-shoreline': async () => ({ PHOTOS: { 'p7_1.jpg': 'eA==', 'p4_1.jpg': 'eA==' } }) } }
+    })
+    const s1 = JSON.parse(store.get('kits:list:s1')).trays
+    expect(s1.map(t => t.photo)).toEqual(['/Tray Lists/Tray Photos/Shoreline 1/Shoreline Inst 1.jpg', '/Tray Lists/Tray Photos/Shoreline 1/Shoreline Plate & Screw 1.jpg'])
+    expect(upload).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(store.get('kits:list:s3')).trays[0].photo).toBe('/Tray Lists/Tray Photos/Shoreline 3/Shoreline Instruments.jpg')
   })
 })
