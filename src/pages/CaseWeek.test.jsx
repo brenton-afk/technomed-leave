@@ -1326,9 +1326,9 @@ describe('a supply on every booking', () => {
     expect(card).not.toMatch(/Consignment\?/)
   })
 
-  it('knows a Calvary Mariner case needs a distributor set', async () => {
+  it('knows a Calvary Reform case (RHH only) needs a distributor set', async () => {
     // Which is what Loane and O'Brien both actually have.
-    events = [booking('Mariner Open', 'CLV', 'Loane')]
+    events = [booking('Reform Cervical', 'CLV', 'Loane')]
     expect(await cardFor('Loane')).toMatch(/· Distributor Loan\?/)
   })
 

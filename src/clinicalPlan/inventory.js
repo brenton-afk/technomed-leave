@@ -73,7 +73,10 @@ export const INVENTORY = [
     // there — a Mariner Open case at Calvary is still a Device loan.
     consigned: { RHH: 1, CLV: 1 },
     consignedVariants: { CLV: ['MIS'] },
-    note: 'One at RHH; one Mariner MIS at Calvary — a Mariner Open case at Calvary needs a loan set.'
+    // RHH also holds one Mariner Open add-on tray (Brent, 21 Nov 2026), so a
+    // Mariner Open case at Calvary asks: borrow that tray, or a Device loan?
+    addOnTrays: { RHH: ['Open'] },
+    note: 'One at RHH, with a Mariner Open add-on tray; one Mariner MIS at Calvary — a Mariner Open case at Calvary borrows the RHH tray or needs a loan set.'
   },
   {
     system: 'Shoreline', distributor: 'device',
@@ -250,6 +253,21 @@ export function consignedAt(item, site, system = '') {
   return named ? 0 : n
 }
 
+/**
+ * The other Hobart hospital, where it holds an add-on tray of the variant this
+ * booking names and this site has none — the Mariner Open tray at RHH for a
+ * Mariner Open case at Calvary. The booking then asks rather than assumes:
+ * borrow the tray, or order a loan.
+ */
+export function addOnElsewhere(item, site, system = '') {
+  if (!item?.addOnTrays || !(site === 'CLV' || site === 'RHH')) return null
+  if (consignedAt(item, site, system) > 0) return null
+  const other = site === 'RHH' ? 'CLV' : 'RHH'
+  const named = (item.addOnTrays[other] || [])
+    .find(v => new RegExp(`\\b${v}\\b`, 'i').test(String(system)))
+  return named ? { site: other, variant: named } : null
+}
+
 export function inventoryFor(system) {
   const name = String(system || '').trim().toLowerCase()
   if (!name) return null
@@ -333,6 +351,15 @@ export function loanNeed(system, hospital) {
   }
 
   const consigned = consignedAt(item, site, system)
+  const addOn = addOnElsewhere(item, site, system)
+  if (addOn) {
+    const where = addOn.site === 'RHH' ? 'RHH' : 'Calvary'
+    return {
+      need: 'ask',
+      reason: `${where} has a ${item.system} ${addOn.variant} add-on tray — borrow it (${where} Loan), or ask the distributor for a loan set?`,
+      item
+    }
+  }
   if (consigned > 0) {
     // Consignment and a long-term loan both mean the kit is on the shelf and
     // nobody has to do anything — but they are not the same thing to say, and
@@ -540,6 +567,10 @@ export function suggestSupply(system, hospital) {
   // One of TechnoMed's own kits, at the other hospital: somebody takes it
   // across. A TM loan, never a request to a distributor.
   if (item.tmKit) return 'TM Loan'
+
+  // An add-on tray at the other hospital: a question for a person, not a
+  // guess (the Mariner Open tray at RHH).
+  if (addOnElsewhere(item, site, system)) return null
 
   // Ours to move, and only where the kit actually travels.
   //

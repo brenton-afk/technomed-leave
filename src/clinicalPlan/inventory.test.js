@@ -20,7 +20,7 @@ describe('where the sets are', () => {
     ['Mariner', 'RHH', 'none'],      // one consigned
     ['Mariner', 'CLV', 'none'],      // one Mariner MIS at Calvary (21 Nov 2026)
     ['Mariner MIS', 'CLV', 'none'],
-    ['Mariner Open', 'CLV', 'order'], // only MIS at Calvary — Open needs a loan
+    ['Mariner Open', 'CLV', 'ask'],   // only MIS at Calvary — borrow RHH's Open tray, or a loan?
     ['Reform Cervical', 'RHH', 'none'],
     ['Reform Cervical', 'CLV', 'order'],   // RHH only, so Calvary must request
     ['Global BMD ALIF', 'CLV', 'none'],
@@ -395,7 +395,7 @@ describe('working out the supply from what is where', () => {
   it('calls a Calvary Mariner Open case a distributor loan, and MIS consignment', () => {
     // Not "there is one at RHH, go and get it". Calvary holds one Mariner MIS
     // (21 Nov 2026); an Open case there still gets a distributor set.
-    expect(suggestSupply('Mariner Open', 'CLV')).toBe('Distributor Loan')
+    expect(suggestSupply('Mariner Open', 'CLV')).toBeNull()
     expect(suggestSupply('Mariner MIS', 'CLV')).toBe('Consignment')
     expect(suggestSupply('Mariner', 'CLV')).toBe('Consignment')
   })
@@ -521,5 +521,20 @@ describe('a second case on the day (Toni, 4 Nov 2026)', () => {
     expect(suggestSupplyOnDay('Dakota', 'CLV', 1)).toBe('Consignment')
     expect(suggestSupplyOnDay('Dakota', 'CLV', 2)).toBe('TM Loan')
     expect(suggestSupplyOnDay('Dakota', 'CLV', 3)).toBe('RHH Loan')
+  })
+})
+
+describe('the Mariner Open add-on tray at RHH (Brent, 21 Nov 2026)', () => {
+  it('a Mariner Open case at Calvary asks: borrow the RHH tray, or a loan?', async () => {
+    const { loanNeed, suggestSupply } = await import('./inventory.js')
+    const v = loanNeed('Mariner Open', 'CLV')
+    expect(v.need).toBe('ask')
+    expect(v.reason).toMatch(/RHH has a Mariner Open add-on tray — borrow it \(RHH Loan\)/)
+    expect(suggestSupply('Mariner Open', 'CLV')).toBeNull()
+  })
+  it('at RHH it is on the shelf, and an MIS at Calvary is not asked', async () => {
+    const { loanNeed } = await import('./inventory.js')
+    expect(loanNeed('Mariner Open', 'RHH').need).toBe('none')
+    expect(loanNeed('Mariner MIS', 'CLV').need).toBe('none')
   })
 })

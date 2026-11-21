@@ -34,6 +34,6 @@ describe('a new booking says where its kit comes from', () => {
   })
   it('a Mariner MIS at Calvary is its consignment set; an Open is a loan', () => {
     expect(kitWithDaySupplies({ kit: 'Mariner MIS', hospital: 'CLV' })).toMatch(/\(Consignment\)$/)
-    expect(kitWithDaySupplies({ kit: 'Mariner Open', hospital: 'CLV' })).toMatch(/\(Distributor Loan\)$/)
+    expect(kitWithDaySupplies({ kit: 'Mariner Open', hospital: 'CLV' })).toBe('Mariner Open') // left for a person: RHH's tray or a loan
   })
 })

@@ -1628,6 +1628,13 @@ dispatch, the notices' inferred loan): a Mariner MIS or plain Mariner at
 Calvary is Consignment and asks Device for nothing; a **Mariner Open** there
 is still a Distributor Loan. A second MIS at RHH the same day borrows
 Calvary's (Calvary Loan, transfer the day before); a second Open is a loan.
+**RHH also holds one Mariner Open add-on tray** (Brent, same day: "the default
+should ask if we want to borrow the Mariner Open tray from RHH"):
+`addOnTrays: { RHH: ['Open'] }`, `addOnElsewhere` — a Mariner Open case at
+Calvary gets no supply by itself (`suggestSupply` null, so no Device request is
+offered), `loanNeed` says `need: 'ask'` ("RHH has a Mariner Open add-on tray —
+borrow it (RHH Loan), or ask the distributor for a loan set?"), and the person
+picks RHH Loan or Distributor Loan on the booking.
 
 ### Call a courier after a move (Brent, 20 Nov 2026)
 

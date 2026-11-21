@@ -149,6 +149,7 @@ function LoanVerdict({ system, hospital, date }) {
   const tone = {
     order: { bg: colour.dangerSoft, line: colour.dangerLine, ink: colour.danger },
     move: { bg: colour.warningSoft, line: colour.warningLine, ink: colour.warning },
+    ask: { bg: colour.warningSoft, line: colour.warningLine, ink: colour.warning },
     unknown: { bg: colour.warningSoft, line: colour.warningLine, ink: colour.warning },
     none: { bg: colour.accentSoft, line: 'rgba(24,154,133,0.28)', ink: colour.accentDeep }
   }[verdict.need]
@@ -167,6 +168,7 @@ function LoanVerdict({ system, hospital, date }) {
         {system}{' — '}
         {verdict.need === 'order' ? 'a loan set has to be requested'
           : verdict.need === 'move' ? 'check where the kit is'
+            : verdict.need === 'ask' ? 'borrow the tray, or order a loan?'
             : verdict.need === 'unknown' ? 'not sure, check this one'
               : 'nothing to order'}
       </strong>

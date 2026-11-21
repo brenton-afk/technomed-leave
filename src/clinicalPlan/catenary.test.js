@@ -50,6 +50,6 @@ describe('Mariner MIS and Mariner Open', () => {
       expect(suggestSupply(s, 'RHH')).toBe('Consignment')
     }
     expect(suggestSupply('Mariner MIS', 'CLV')).toBe('Consignment')
-    expect(suggestSupply('Mariner Open', 'CLV')).toBe('Distributor Loan')
+    expect(suggestSupply('Mariner Open', 'CLV')).toBeNull() // asks: RHH's Open tray, or a loan
   })
 })

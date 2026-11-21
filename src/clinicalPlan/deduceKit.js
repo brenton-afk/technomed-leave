@@ -30,7 +30,7 @@
 import { systemsToSupply } from './kitSupply.js'
 import { findImplantProcedures } from './procedureImplants.js'
 import { preferenceFor, hasRecordedPreferences } from './surgeonPreferences.js'
-import { inventoryFor, siteCode, suggestSupply, suggestSupplyOnDay } from './inventory.js'
+import { inventoryFor, siteCode, suggestSupply, suggestSupplyOnDay, consignedAt } from './inventory.js'
 import { suggestSystems, SYSTEM_GROUPS } from './systemSuggestions.js'
 
 /**
@@ -168,7 +168,7 @@ export function assumedKit({ surgeon, procedure, hospital, kit, fromRules = true
     what = SYSTEM_GROUPS[s.groups[0]].label.replace(/^([A-Z])(?=[a-z])/, c => c.toLowerCase())
   }
 
-  const held = site ? (inventoryFor(preference.system)?.consigned?.[site] || 0) : 0
+  const held = site ? consignedAt(inventoryFor(preference.system), site, preference.system) : 0
   // Booked to us, so it is a case we are covering: a set on the shelf there is
   // the answer even for a distributor's kit we do not usually attend with.
   // nth: this is the nth case using the kit at this hospital that day. Past
