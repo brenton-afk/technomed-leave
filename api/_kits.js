@@ -68,7 +68,11 @@ export const KIT_CORRECTIONS = [
   { id: 'reform-lumbar-returned-2026-11-02', remove: 'reform-lumbar-office' },
   // A Mariner MIS consignment set at Calvary, with its seven trays and their
   // photos from the consignment agreement (Brent, 21 Nov 2026).
-  { id: 'mariner-mis-clv-2026-11-21', add: MARINER_MIS_KIT, seed: 'mariner-mis' }
+  { id: 'mariner-mis-clv-2026-11-21', add: MARINER_MIS_KIT, seed: 'mariner-mis' },
+  // Three of the seven photos did not reach Dropbox (sent all at once); filed
+  // again one at a time (Brent, 21 Nov 2026: "The photos for these trays
+  // didn't come across").
+  { id: 'mariner-mis-photos-2026-11-21', seed: 'mariner-mis-photos' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -205,21 +209,47 @@ async function getDefs() {
  * cannot be filed is saved without it.
  */
 async function runSeed(name) {
-  if (name !== 'mariner-mis') return
+  if (name !== 'mariner-mis' && name !== 'mariner-mis-photos') return
   const { MARINER_MIS_KIT: kit, MARINER_MIS_TRAYS: trays, MARINER_MIS_FILE: file } = await import('./_kitSeedMarinerMis.js')
-  if ((await getTrayList(kit.id))?.trays?.length) return
   const { PHOTOS } = await import('./_kitSeedMarinerMisPhotos.js')
   const { uploadFile } = await import('./_dropbox.js')
-  const withPhotos = await Promise.all(trays.map(async t => {
-    const path = `/Tray Lists/Tray Photos/${kit.name}/${t.name}.jpg`
-    try {
-      await uploadFile(path, Buffer.from(PHOTOS[t.photo], 'base64'))
-      return { name: t.name, file, photo: path, lines: t.lines }
-    } catch {
-      return { name: t.name, file, lines: t.lines }
+  // One at a time, each tried three times: Dropbox refuses several writes at
+  // once into one folder (too_many_write_operations).
+  const file1 = async t => {
+    const path = `/Tray Lists/Tray Photos/${kit.name}/${t.name.replace(/[\\/:*?"<>|]/g, ' ')}.jpg`
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try { await uploadFile(path, Buffer.from(PHOTOS[t.photo], 'base64')); return path } catch {
+        await new Promise(res => setTimeout(res, process.env.VITEST ? 0 : 1500 * (attempt + 1)))
+      }
     }
+    return null
+  }
+  if (name === 'mariner-mis') {
+    if ((await getTrayList(kit.id))?.trays?.length) return
+    const withPhotos = []
+    for (const t of trays) {
+      const photo = await file1(t)
+      withPhotos.push({ name: t.name, file, ...(photo ? { photo } : {}), lines: t.lines })
+    }
+    await saveTrayList(kit.id, { trays: withPhotos, source: { file, hospital: 'CLV' } }, 'Claude (from the consignment agreement)')
+    return
+  }
+  // The photos missed: only trays of the agreement still without one, matched
+  // by name; the list is read again just before writing so no edit is lost.
+  const before = await getTrayList(kit.id)
+  const missing = trays.filter(t => before?.trays?.some(x => x.name === t.name && !x.photo))
+  const filed = new Map()
+  for (const t of missing) {
+    const photo = await file1(t)
+    if (photo) filed.set(t.name, photo)
+  }
+  if (!filed.size) return
+  const now = await getTrayList(kit.id)
+  await redisSetBody(LIST(kit.id), JSON.stringify({
+    ...now, trays: now.trays.map(t => (!t.photo && filed.has(t.name) ? { ...t, photo: filed.get(t.name) } : t))
   }))
-  await saveTrayList(kit.id, { trays: withPhotos, source: { file, hospital: 'CLV' } }, 'Claude (from the consignment agreement)')
+  await addHistory({ kind: 'edit', kitId: kit.id, kitName: kit.name, by: 'Claude (from the consignment agreement)',
+    text: `Tray photos added: ${[...filed.keys()].join(', ')}` })
 }
 
 /** Every kit with where it is now. */

@@ -1618,7 +1618,9 @@ into the portal"). From Appendix 1 of the consignment agreement:
 `KIT_CORRECTIONS` `mariner-mis-clv-2026-11-21` adds the set (`add`, id
 `mariner-mis-clv`, system Mariner) and `runSeed` files each photo at
 `/Tray Lists/Tray Photos/Mariner MIS/{tray}.jpg` and saves the list — only if
-the set has none. The agreement itself (unsigned, carries prices) is not in
+the set has none. Three photos missed on the first run (all seven sent at
+once); `mariner-mis-photos-2026-11-21` files the missing ones one at a time,
+three tries each, and photo uploads in the seed are sequential since. The agreement itself (unsigned, carries prices) is not in
 the repo; attach the signed copy in the set's Documents. **Bookings count it** (Brent,
 same day: "Bookings should treat Calvary as having one Mariner MIS kit"):
 `inventory.js` Mariner is `consigned: { RHH: 1, CLV: 1 }` with
