@@ -28,6 +28,11 @@ const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
 const ACCEPT = '.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf,image/*'
 
 
+// The implant count only where a tray mixes the two (Brent, 21 Nov 2026: "get
+// rid of 0 implants … that is implied because they are instrument trays") —
+// the Instrument trays / Implant trays headings already say which it is.
+const implantNote = (implants, items) => (implants > 0 && implants < items ? ` · ${implants} implant${implants === 1 ? '' : 's'}` : '')
+
 /** A saved photo, from Dropbox by a link fetched when it is shown. */
 function SavedPhoto({ path, user, alt, onOpen, maxHeight = 320 }) {
   const [url, setUrl] = useState('')
@@ -95,7 +100,7 @@ function TrayPage({ tray, where, onBack, children }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ ...text('heading'), color: colour.ink, lineHeight: 1.2 }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
-            {where ? `${where} · ` : ''}{tray.lines.length ? `${tray.lines.length} ${tray.lines.length === 1 ? 'item' : 'items'} · ${implants} implant${implants === 1 ? '' : 's'}` : 'Nothing listed yet'}
+            {where ? `${where} · ` : ''}{tray.lines.length ? `${tray.lines.length} ${tray.lines.length === 1 ? 'item' : 'items'}${implantNote(implants, tray.lines.length)}` : 'Nothing listed yet'}
           </div>
         </div>
       </div>
@@ -240,7 +245,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
         <button onClick={onToggle} aria-expanded={asPage ? undefined : open} style={{ flex: 1, background: 'none', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }}>
           <div style={{ ...text('bodyStrong'), color: colour.ink }}>{tray.name}</div>
           <div style={{ ...text('caption'), color: colour.inkFaint }}>
-            {where ? `${where} · ` : ''}{tray.lines.length ? `${tray.lines.length} ${tray.lines.length === 1 ? 'item' : 'items'} · ${implants} implant${implants === 1 ? '' : 's'}${hasPhoto ? ' · photo' : ' · no photo'}` : 'Nothing listed yet'}
+            {where ? `${where} · ` : ''}{tray.lines.length ? `${tray.lines.length} ${tray.lines.length === 1 ? 'item' : 'items'}${implantNote(implants, tray.lines.length)}${hasPhoto ? ' · photo' : ' · no photo'}` : 'Nothing listed yet'}
             {tray.lines.some(l => l.repair) ? ` · ${tray.lines.filter(l => l.repair).length} away for repair` : ''}
             {pictured ? ` · ${pictured} item picture${pictured === 1 ? '' : 's'}` : ''}
             {tray.updatedBy ? ` · updated by ${tray.updatedBy}${tray.updatedAt ? ` ${new Date(tray.updatedAt).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', day: 'numeric', month: 'short' })}` : ''}` : ''}

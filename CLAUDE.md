@@ -1686,7 +1686,9 @@ trays and implant trays together. With the order of trays"). `groupTrays` /
 tray is one where most lines are implants; a tray with nothing listed goes by
 its name, instrument words first ("Screw Removal" is instruments). TrayList
 draws "Instrument trays · N" then "Implant trays · N" (`data-tray-group`),
-each in the kit's order.
+each in the kit's order. A tray's line under its name gives the
+implant count only when it mixes implants and instruments (`implantNote`;
+Brent, same day: "get rid of 0 implants").
 
 **The kit room filled from the consignment agreements** (Brent, 21 Nov 2026:
 "I'm ok for the unsigned copies to be used to populate the kit room"; chose
