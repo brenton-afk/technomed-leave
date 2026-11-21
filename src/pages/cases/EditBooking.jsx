@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import LoanTrail from './LoanTrail.jsx'
+import KitAfterCase from './KitAfterCase.jsx'
 import KitPicker from './KitPicker.jsx'
 import { Overlay } from '../../design/Shell.jsx'
 import { useIsDesktop } from '../../design/viewport.js'
@@ -1184,6 +1185,9 @@ export default function EditBooking({
                     Loads by itself; shows nothing on a booking with no
                     distributor loan. See LoanTrail. */}
                 {loaded?.id && <LoanTrail eventId={loaded.id} user={user} />}
+                {/* Turn a loan kit around for the next case, or send it back
+                    (Brent, 21 Nov 2026). Shows nothing without a loan kit. */}
+                {loaded?.id && originalWhen?.date && <KitAfterCase user={user} id={loaded.id} date={originalWhen.date} title="The kit after this case" />}
 
                 {/* ── How this surgeon likes the room ──
                     

@@ -1275,6 +1275,37 @@ Consignment at Calvary, **Calvary Loan** at RHH, and `tmLoanDispatches` puts
 before. The Add booking buttons offer it on the same rule (ONLY_WHEN, now also
 for PLIF). `outrigger.test.js`.
 
+### Turn a kit around, and what happens to it after the case (Brent, 21 Nov 2026)
+
+"An option to 'turn a kit around' … When we do usage with a loan kit … look
+ahead and ask … 'Are you holding onto the kit for pt xyz, and do you need to
+let Sharon and Calvary loans know to hold onto it?' … prompt … priority tags
+… if it is being used the next day … If the portal can't see a booking …
+ask 'what's happening with the kit after the case?' … distributor loan kits
+go back to distributor and only our TM office kits come back to us."
+`src/clinicalPlan/turnAround.js` (pure, `turnAround.test.js`): `afterCase(case,
+bookings)` — every loan kit on the case (Distributor / TM / Calvary / RHH
+Loan, written or as `suggestSupply` would put it) with the next booking at the
+same hospital within `LOOK_AHEAD_DAYS` (28) that wants the same system, and a
+consignment kit only when it is wanted again the same or next day; `priority`
+when the next use is that day or the next. `kitAfterEmail` writes the hospital
+email (hold and turn around, with "please process it as a priority" when it
+is; or back to the distributor / leave it in our bay / back to the other
+hospital). `action=kit-after` on `api/calendar/today.js`: GET by `id`+`date`
+(Edit booking) or `surname`+`date` (usage, ±2 days, one match); POST
+`{key, outcome: hold|return|priority, email}` keeps the decision at
+`kitafter:{case}:{system}` (60 days), and **holding a distributor set marks
+the next booking's loan as arranged** (`loanreq:{next}:{distributor}` with
+`turnedAroundFrom`, only if none) so no new request to the distributor is
+offered for it. The email is drafted to `calvary_loans` (Sharon) or
+`rhh_loans` (Katelin) and goes through the ordinary notice sheet
+(`offerNotices`) — a person sees and sends it. `cases/KitAfterCase.jsx`
+(`data-kit-after`): on the usage Done screen (not a test send) and in Edit
+booking under the loan trail — "Are you holding onto the kit for pt …?" (Yes —
+hold it and tell them / No), "Needed again tomorrow — put priority tags on
+the trays" (Priority tags on), and with nothing ahead "What's happening with
+the kit after the case?" (Back to E4 Surgical — tell Calvary loans / no email).
+
 ### TM loan kits are sent ahead (Brent, 5 Nov 2026)
 
 When a case takes a **TM Loan** kit — written on the booking, or the

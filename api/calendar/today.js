@@ -49,8 +49,9 @@ import {
   bookingEmailRecord, markBookingEmailSeen, markBookingEmailFailed, saveBookingCandidate,
   getBookingCandidate, getBookingQueue, updateBookingCandidate,
   setTeamLeaderFor, setDayLeader, getWorklist, redis,
-  getUsageHistory, getRecentResupplies
+  getUsageHistory, getRecentResupplies, redisSetBody
 } from '../_redis.js'
+import { afterCase, kitAfterEmail, LOOK_AHEAD_DAYS } from '../../src/clinicalPlan/turnAround.js'
 import { listKits } from '../_kits.js'
 import { getPreferences } from '../_preferences.js'
 import { searchPortal } from '../_portalSearch.js'
@@ -204,6 +205,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'search') return handleSearch(req, res)
   if (req.query.action === 'find') return handleFind(req, res)
   if (req.query.action === 'notify') return handleNotify(req, res)
+  // After a case: hold a loan kit for the next case, priority tags, or send it back.
+  if (req.query.action === 'kit-after') return handleKitAfter(req, res)
   if (req.query.action === 'nousage') return handleNoUsage(req, res)
   if (req.query.action === 'noticesettings') return handleNoticeSettings(req, res)
 
@@ -2900,6 +2903,90 @@ async function prepareNotices({ kind, beforeEvent, afterEvent, eventId, session 
 }
 
 /** Sends notices a person has looked at and confirmed. */
+// ─── What happens to a kit after the case (Brent, 21 Nov 2026) ──────────────
+// See src/clinicalPlan/turnAround.js. GET: the case (by id, or by surname
+// near a date, as the usage screen knows it) and, per loan kit, the next
+// booking that wants it. POST: the decision — hold it for that case or send it
+// back, priority tags on — kept per case and kit, with the hospital's email
+// drafted for a person to send through the notice sheet. Holding a distributor
+// set for the next case marks that booking's loan as already arranged, so no
+// new request to the distributor is offered for it.
+const kitAfterKey = (caseId, key) => `kitafter:${caseId}:${key}`
+const surnameKey = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
+
+async function findCaseForKit({ id, date, surname }) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return null
+  const near = await bookingsOnCalendar(addDaysTo(date, -2), addDaysTo(date, 2))
+  if (id) return near.find(b => b.id === id) || null
+  const want = surnameKey(surname)
+  if (!want) return null
+  const hits = near.filter(b => !b.cancelled && surnameKey(b.patient).startsWith(want.slice(0, 4))
+    && (surnameKey(b.patient) === want || surnameKey(b.patient).startsWith(want) || want.startsWith(surnameKey(b.patient))))
+  const onDay = hits.filter(b => b.date === date)
+  if (onDay.length === 1) return onDay[0]
+  return hits.length === 1 ? hits[0] : null
+}
+
+async function handleKitAfter(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+  const q = req.method === 'POST' ? body : req.query
+  try {
+    const theCase = await findCaseForKit({ id: q.id, date: q.date, surname: q.surname })
+    if (!theCase) return res.status(200).json({ case: null, kits: [] })
+    const ahead = await bookingsOnCalendar(theCase.date, addDaysTo(theCase.date, LOOK_AHEAD_DAYS))
+    const kits = afterCase(theCase, ahead)
+    const caseOut = { id: theCase.id, patient: theCase.patient, surgeon: theCase.surgeon, date: theCase.date, hospital: theCase.hospital }
+    if (req.method !== 'POST') {
+      const saved = kits.length ? await redis('mget', ...kits.map(k => kitAfterKey(theCase.id, k.key))).catch(() => []) : []
+      return res.status(200).json({ case: caseOut, kits: kits.map((k, i) => {
+        let decision = null
+        try { decision = saved?.[i] ? JSON.parse(saved[i]) : null } catch { decision = null }
+        return { ...k, decision }
+      }) })
+    }
+    const entry = kits.find(k => k.key === String(body.key || ''))
+    if (!entry) return res.status(404).json({ error: 'That kit is not on this case any more' })
+    const outcome = ['hold', 'return', 'priority'].includes(body.outcome) ? body.outcome : null
+    if (!outcome) return res.status(400).json({ error: 'Say what is happening with the kit' })
+    if (outcome === 'hold' && !entry.next) return res.status(400).json({ error: 'No later case wants this kit' })
+    const by = firstNameFor(session.email) || session.email
+    const key = kitAfterKey(theCase.id, entry.key)
+    let was = null
+    try { was = JSON.parse((await redis('get', key)) || 'null') } catch { was = null }
+    const decision = { ...(was || {}), at: new Date().toISOString(), by }
+    if (outcome === 'priority') decision.priorityTagged = { at: decision.at, by }
+    else { decision.outcome = outcome; decision.nextId = outcome === 'hold' ? entry.next.id : null }
+    await redisSetBody(key, JSON.stringify(decision))
+    await redis('expire', key, String(60 * 86400)).catch(() => {})
+    // A distributor set kept for the next case: that booking's loan is arranged.
+    if (outcome === 'hold' && entry.kind === 'distributor' && entry.distributor) {
+      const lk = `loanreq:${entry.next.id}:${entry.distributor}`
+      if (!(await redis('get', lk).catch(() => null))) {
+        await redisSetBody(lk, JSON.stringify({ date: entry.next.date, hospital: theCase.hospital, systems: [entry.system],
+          sentAt: decision.at, by, turnedAroundFrom: theCase.id }))
+      }
+    }
+    let notices = []
+    if (body.email && outcome !== 'priority') {
+      const settings = await getNoticeSettings()
+      const contactId = entry.site === 'RHH' ? 'rhh_loans' : 'calvary_loans'
+      const contact = (settings.contacts || []).find(c => c.id === contactId)
+      if (contact?.to?.length) {
+        const mail = kitAfterEmail({ greeting: contact.greeting || contact.name, theCase: caseOut, entry, outcome })
+        const notice = { ruleId: 'kit-after', contactId, name: contact.name, to: contact.to, cc: contact.cc || [],
+          subject: mail.subject, text: mail.text, html: '', badge: mail.label, autoSend: false,
+          eventId: theCase.id, kind: 'kit-after', label: `${mail.label} → ${contact.name} · ${entry.system}` }
+        notices = [previewOf(notice, await holdNotice(notice))]
+      }
+    }
+    return res.status(200).json({ ok: true, decision, notices })
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Could not read the bookings' })
+  }
+}
+
 async function handleNotify(req, res) {
   const session = await requireSession(req, res)
   if (!session) return

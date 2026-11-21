@@ -127,6 +127,7 @@ describe('no screen is left out', () => {
     // The set-aside list inside the bookings Inbox sheet.
     'cases/SetAsideEmails.jsx',
     'cases/LoanTrail.jsx',
+    'cases/KitAfterCase.jsx',
     // A section of the usage screen after filing.
     'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx', 'scan/BoostForm.jsx', 'scan/CaseFiles.jsx',
     // The Scan tab's wrapper and its Usage | Resupply switch: drawn inside

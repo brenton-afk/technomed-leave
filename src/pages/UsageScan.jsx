@@ -15,6 +15,7 @@ import { useIsDesktop } from '../design/viewport.js'
 import { Header as ShellHeader } from '../design/Shell.jsx'
 import { itemGaps, suggestedCode } from '../usageItemCheck.js'
 import { loanStampFlags, stockConflicts, asConsignment } from '../usageLoanCheck.js'
+import KitAfterCase from './cases/KitAfterCase.jsx'
 import { SURGEON_KEYS, normaliseSurgeon } from '../clinicalPlan/parse.js'
 import { colour } from '../design/tokens.js'
 
@@ -1212,6 +1213,11 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           {caseRecord && (
             <RegistrarText key={caseRecord.id || caseRecord.folderName}
               caseRecord={caseRecord} booking={result.attendance?.booking || null} />
+          )}
+          {/* Holding a loan kit for the next case, priority tags, or where it
+              goes now (Brent, 21 Nov 2026). Not for a test send. */}
+          {caseRecord?.date && caseRecord?.patientSurname && !result.test && (
+            <KitAfterCase user={user} date={caseRecord.date} surname={caseRecord.patientSurname} />
           )}
 
           {/* Whether the booking was marked. Said either way: silently not
