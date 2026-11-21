@@ -120,3 +120,16 @@ describe('the Mariner Outrigger guide (Brent, 20 Nov 2026)', () => {
     expect(html).not.toMatch(/src="https?:|href="https?:[^"]*\.(?:css|js)/)
   })
 })
+
+describe('the Fathom retractor guide (Brent, 21 Nov 2026)', () => {
+  const guide = GUIDES.find(g => g.slug === 'fathom')
+  it('is listed under Device with the other SeaSpine guides', () => {
+    expect(guide).toMatchObject({ distributor: 'device', maker: 'SeaSpine', group: 'Spine' })
+  })
+  it('is a whole, self-contained document', () => {
+    const html = readFileSync(join(ROOT, guide.file), 'utf8')
+    expect(html.slice(0, 20).toLowerCase()).toContain('<!doctype html>')
+    expect(html.trimEnd().endsWith('</html>')).toBe(true)
+    expect(html).not.toMatch(/src="https?:|href="https?:[^"]*\.(?:css|js)/)
+  })
+})

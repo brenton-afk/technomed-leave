@@ -1679,7 +1679,9 @@ when a guide is in it. The **Mariner Outrigger** guide
 (`theatre-guides/mariner-outrigger/index.html`, slug `mariner-outrigger`,
 maker SeaSpine) was first filed there, then moved (Brent, same day: "needs to
 be with the other SeaSpine trays … not by itself") to `distributor: 'device'`,
-`group: 'Spine'`, beside the Mariner guide. A TechnoMed guide is a folder
+`group: 'Spine'`, beside the Mariner guide. The **Fathom retractor** guide (Brent, 21 Nov 2026), from his own artifact
+`claude.ai/artifact/X8pNFHHPHbnRB4HbH67Rso`, is `theatre-guides/fathom/`,
+slug `fathom`, also under Device/SeaSpine. A TechnoMed guide is a folder
 there plus a `GUIDES` row with `group: 'TechnoMed'` and no `distributor`.
 
 ### Surgeon preference cards (Task 18)

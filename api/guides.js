@@ -102,6 +102,18 @@ export const GUIDES = [
     file: 'mariner-outrigger/index.html',
     keywords: 'Revision · extension · connectors to an existing construct · DNO tray · L-connectors · axial · Z-rod · T-25 · T-30 · torque'
   },
+  // The Fathom pedicle-based retractor (Brent, 21 Nov 2026: "needs to be
+  // loaded into the portal under Seaspine with Mariner and Shoreline and
+  // Mariner Outrigger"). From Brent's own step-by-step guide.
+  {
+    slug: 'fathom',
+    distributor: 'device',
+    name: 'FATHOM Retractor',
+    maker: 'SeaSpine',
+    group: 'Spine',
+    file: 'fathom/index.html',
+    keywords: 'Pedicle-based retractor · MIS · C/C blades · medial blade · medial extension arm · base rack · blade sizing · Mariner'
+  },
   { slug: 'brainlab', name: 'Brainlab Navigation', maker: 'Brainlab', group: 'Navigation', file: 'brainlab/index.html' },
   { slug: 'clavicle-2.7', name: 'VA LCP Clavicle Plate 2.7', maker: 'DePuy Synthes', group: 'Orthopaedics', file: 'clavicle-2.7/index.html', revision: 'SE_825567 AF · 2025/07' },
   // Two plates in one guide — the lateral VA-LCP and the medial LCP — which
