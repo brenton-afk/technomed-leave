@@ -106,6 +106,20 @@ const SHORT_PLACE = { CLV: 'Calvary', RHH: 'RHH', office: 'the office' }
  * Calvary" / "RHH set at Calvary"; trays gone on their own: "2 trays moved to
  * RHH". A move is done once confirmed; nothing here is "on the move".
  */
+/**
+ * The case a set or tray was moved for, as the move sheet was told (Brent,
+ * 21 Nov 2026: "You need to tell me which case it's for as you asked the
+ * question in the portal when I did the move"). "pt Hart · Gupta · Tue 24
+ * Nov"; '' when the move named no case. Pure.
+ */
+export function caseFor(meta) {
+  if (!meta || (!meta.surname && !meta.caseDate)) return ''
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(meta.caseDate || '')
+    ? new Date(`${meta.caseDate}T00:00:00Z`).toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
+    : ''
+  return [meta.surname ? `pt ${meta.surname}` : '', meta.surgeon || '', day].filter(Boolean).join(' · ')
+}
+
 export function awayLines(kits) {
   const lines = []
   const strays = {}
@@ -113,7 +127,8 @@ export function awayLines(kits) {
     const at = k.at || k.home
     if (at !== k.home) {
       const who = k.kind === 'floating' ? 'TM loan set' : setLabel(k) || `${SHORT_PLACE[k.home] === 'the office' ? 'Office' : SHORT_PLACE[k.home]} set`
-      lines.push(`${who} at ${SHORT_PLACE[at] || at}`)
+      const forCase = k.away?.surname ? ` · for pt ${k.away.surname}` : ''
+      lines.push(`${who} at ${SHORT_PLACE[at] || at}${forCase}`)
     }
     for (const p of Object.values(k.trayAt || {})) {
       if (p?.at && p.at !== at) strays[p.at] = (strays[p.at] || 0) + 1

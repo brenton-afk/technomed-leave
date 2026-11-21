@@ -12,7 +12,7 @@ describe('a system with a loan set on site', () => {
   it('shows Calvary’s own set under Consignment and the TM loan set under On loan here, each with its own header', () => {
     const system = { name: 'Dakota', kits: [
       { id: 'dak-clv', name: 'Dakota 1', system: 'Dakota', home: 'CLV', at: 'CLV', kind: 'consignment', trays: ['Dakota Instruments'] },
-      { id: 'dak-loan', name: 'Dakota (TM loan)', system: 'Dakota', home: 'office', at: 'CLV', kind: 'floating', trays: ['Dakota Loan Tray'], away: { since: '2026-11-20T00:00:00Z' } }
+      { id: 'dak-loan', name: 'Dakota (TM loan)', system: 'Dakota', home: 'office', at: 'CLV', kind: 'floating', trays: ['Dakota Loan Tray'], away: { since: '2026-11-20T00:00:00Z', surname: 'Testcase', surgeon: 'Gupta', caseDate: '2026-11-24' } }
     ] }
     render(<SystemDetail system={system} distributor="E4 Surgical" canEdit user={{ token: 't' }} post={vi.fn()} onClose={() => {}} />)
     const own = document.querySelector('[data-set-group="own"]')
@@ -25,6 +25,8 @@ describe('a system with a loan set on site', () => {
     expect(loan.querySelector('[data-system-set="dak-loan"]')).toBeTruthy()
     expect(loan).toHaveTextContent('TechnoMed loan set, on loan to Calvary')
     expect(loan.querySelector('[data-set-kind]')).toHaveTextContent('LOAN')
+    // The case the move was for (Brent, 21 Nov 2026: "it's there for Pt Hart").
+    expect(loan.querySelector('[data-set-case]')).toHaveTextContent('For pt Testcase · Gupta · Tue 24 Nov')
     expect(screen.getByRole('button', { name: 'Move all of the TM loan set' })).toHaveTextContent('Send it back')
   })
   it('a hospital with only its own sets has no loan section', () => {

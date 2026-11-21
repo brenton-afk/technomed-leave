@@ -1625,6 +1625,13 @@ for consignment, amber for loan) with the set's name at heading size, a line
 saying what it is (`setNote`: "Consigned to Calvary", "TechnoMed loan set, on
 loan to Calvary", "Borrowed from RHH") and a CONSIGNMENT / TM LOAN / LOAN chip;
 a loan set's Move all reads **Send it back**.
+**Which case a loan is for** (Brent, 21 Nov 2026: "You need to tell me
+which case it's for as you asked the question in the portal when I did the
+move"). The move sheet's "For which case" (surname, day and now surgeon) is
+kept on the move (`META` in `trayPlaces.js`) and shown: on the set's card
+(`data-set-case`, "For pt … · Gupta · Tue 24 Nov", `caseFor` in
+`src/kit/systems.js`), on a moved tray's box, and on the tile ("TM loan set at
+Calvary · for pt …"). A move made before this has no surgeon.
 **Catenary ALIF** (Brent, 21 Nov 2026: "This is the Global BMD ALIF. It
 needs to be called Catenary ALIF"): renamed in `inventory.js` (old names kept
 as `aka`), `systems.js`, `systemSuggestions.js` and the kit room

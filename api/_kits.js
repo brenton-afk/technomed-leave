@@ -499,7 +499,7 @@ function clinicalTeam() {
  * Step one of a move: what will happen, and the email, held for an hour under
  * an id. Nothing is moved or sent yet.
  */
-export async function prepareMove({ kitId, to, trays, date, today, caseDate, surname, note }, sender) {
+export async function prepareMove({ kitId, to, trays, date, today, caseDate, surname, surgeon, note }, sender) {
   if (!PLACES[to]) throw new Error('Choose where the kit is going')
   const kit = (await listKits()).find(k => k.id === kitId)
   if (!kit) throw new Error('No such kit')
@@ -524,7 +524,7 @@ export async function prepareMove({ kitId, to, trays, date, today, caseDate, sur
   const pending = {
     id, kitId, kitName: kit.name, from, to, trays: validTrays, date: date || today,
     note: String(note || '').slice(0, 500), caseDate: caseDate || '', surname: String(surname || '').slice(0, 40),
-    email, by: sender?.email
+    surgeon: String(surgeon || '').trim().slice(0, 40), email, by: sender?.email
   }
   await redisSetBody(PENDING(id), JSON.stringify(pending))
   await redis('expire', PENDING(id), 3600)
@@ -555,7 +555,7 @@ export async function confirmMove({ id, send, text }, sender, sendEmail) {
     to: pending.to, trays: pending.trays,
     meta: {
       since: new Date().toISOString(), by: sender?.email, byName: sender?.firstName,
-      caseDate: pending.caseDate, surname: pending.surname, note: pending.note, date: pending.date
+      caseDate: pending.caseDate, surname: pending.surname, surgeon: pending.surgeon, note: pending.note, date: pending.date
     }
   }))
   await redis('del', PENDING(id))

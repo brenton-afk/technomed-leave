@@ -4,7 +4,7 @@ import { colour, text, space, radius, border, face, site } from '../../design/to
 import { useBackLayer } from '../../backButton.js'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
-import { PLACE_ORDER, setLabel, traysByPlace } from '../../kit/systems.js'
+import { PLACE_ORDER, setLabel, traysByPlace, caseFor } from '../../kit/systems.js'
 
 // ─── One system: every tray, by the shelf it is on ──────────────────────────
 // Brent, 21 Nov 2026, from the layouts he picked ("Inside a system"): a plain
@@ -176,6 +176,11 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
                                 <div style={{ ...text('caption'), color: colour.inkMuted }}>
                                   {setNote(kit, p)}{kit.away ? ` · here since ${when(kit.away.since)}` : ''}
                                 </div>
+                                {caseFor(kit.away) && (
+                                  <div data-set-case style={{ ...text('bodyStrong'), color: g.key === 'loan' ? colour.warning : colour.ink, marginTop: 2 }}>
+                                    For {caseFor(kit.away)}
+                                  </div>
+                                )}
                               </div>
                               <span data-set-kind style={{ ...kindChip(g.key === 'loan') }}>{g.key === 'loan' ? 'LOAN' : kit.kind === 'floating' ? 'TM LOAN' : 'CONSIGNMENT'}</span>
                             </div>
@@ -210,6 +215,9 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
                               <div style={{ ...text('caption'), color: colour.inkMuted }}>
                                 From the {setName(kit)}{kit.trayAt[trays[0]]?.byName ? ` · moved by ${kit.trayAt[trays[0]].byName}` : ''}{kit.trayAt[trays[0]]?.since ? `, ${when(kit.trayAt[trays[0]].since)}` : ''}
                               </div>
+                              {caseFor(kit.trayAt[trays[0]]) && (
+                                <div data-set-case style={{ ...text('bodyStrong'), color: colour.warning, marginTop: 2 }}>For {caseFor(kit.trayAt[trays[0]])}</div>
+                              )}
                             </div>
                             <button onClick={() => onMoveTray?.(kit, trays, kit.at)} aria-label={`Send ${trays.join(', ')} back to ${PLACES[kit.at]}`} style={pillBtn(true)}>Back</button>
                           </div>

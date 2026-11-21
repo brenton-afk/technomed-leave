@@ -7,7 +7,7 @@
 // kit room. The stored location before this held one `trays` list with the set
 // away; `placesFromLoc` reads that as the set at home and those trays away.
 
-const META = ['since', 'by', 'byName', 'date', 'note', 'caseDate', 'surname']
+const META = ['since', 'by', 'byName', 'date', 'note', 'caseDate', 'surname', 'surgeon']
 const pick = (o, keys) => Object.fromEntries(keys.filter(k => o?.[k] != null && o[k] !== '').map(k => [k, o[k]]))
 
 /** { at, away, trayAt } for a kit definition and its stored location. */

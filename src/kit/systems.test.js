@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupSystems, systemOf, traysByPlace, kitForNewTray, setLabel } from './systems.js'
+import { groupSystems, systemOf, traysByPlace, kitForNewTray, setLabel, caseFor, awayLines } from './systems.js'
 
 // Brent, 20 Nov 2026: one tab per system, trays inside it, "Add a tray" within
 // the system. Invented kits.
@@ -9,6 +9,14 @@ const kits = [
   { id: 'dl', name: 'Dakota (TM loan)', system: 'Dakota', home: 'office', at: 'office', kind: 'floating', trays: [] },
   { id: 'dk', name: 'Dakota', system: 'Dakota', home: 'RHH', at: 'RHH', kind: 'consignment', trays: ['Dakota 1', 'Dakota 2'], trayAt: { 'Dakota 1': { at: 'CLV' } } }
 ]
+
+describe('the case a move was for', () => {
+  it('reads as the move sheet was told, and rides on the tile line', () => {
+    expect(caseFor({ surname: 'Testcase', surgeon: 'Gupta', caseDate: '2026-11-24' })).toBe('pt Testcase · Gupta · Tue 24 Nov')
+    expect(caseFor({ since: 'x' })).toBe('')
+    expect(awayLines([{ kind: 'floating', home: 'office', at: 'CLV', away: { surname: 'Testcase' } }])).toEqual(['TM loan set at Calvary · for pt Testcase'])
+  })
+})
 
 describe('a set saved as a system of its own', () => {
   it('"CYLOX Set 2" sits under CYLOX', () => {

@@ -72,7 +72,7 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
     try {
       const result = await post('move', {
         kitId: kit.id, to, trays, date, note,
-        caseDate: chosenCase?.date || '', surname: chosenCase?.surname || ''
+        caseDate: chosenCase?.date || '', surname: chosenCase?.surname || '', surgeon: chosenCase?.surgeon || ''
       })
       setPreview(result); setBody(result.email?.text || '')
     } catch (err) { setError(err.message) }
