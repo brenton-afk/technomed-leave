@@ -1633,8 +1633,8 @@ guides) and the maker above its name in the maker's colour (`data-tile-maker`,
 falling back to the distributor); a real logo sits in the picture's corner
 (`data-tile-logo`) for Brainlab, Precision Spine and Global Biomedica (from
 the guides) and SeaSpine and Orthofix (Brent's files, same day — he also sent
-product shots for Mariner, Shoreline, Diplomat, Dakota, Ascot, CYLOX and Forza
-XP, which replaced or added those pictures). `brandFor` in `src/kit/brands.js`
+product shots for Mariner, Shoreline, Diplomat, Dakota, MOBIS (the curved
+ST-Line cage), CYLOX and Forza XP, which replaced or added those pictures). `brandFor` in `src/kit/brands.js`
 (pure, `brands.test.js`): `RULES` system words → maker and picture, `MAKERS`
 name, ink, logo. No picture → the system's initial. Pictures are 240×240
 JPEGs in `public/kit-art/` — **to change one, replace the file**; a new logo is

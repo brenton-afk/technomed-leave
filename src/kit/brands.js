@@ -8,7 +8,7 @@
 // Precision Spine, Global Biomedica) and, from Brent's own files (21 Nov
 // 2026), SeaSpine and Orthofix — SIGNUS and the rest are the maker's name in
 // its colour until we have the files. Brent's product shots replaced the guide
-// pictures for Mariner, Shoreline, Diplomat, Dakota and added Ascot (the
+// pictures for Mariner, Shoreline, Diplomat, Dakota and added MOBIS (the
 // curved ST-Line cage), CYLOX and Forza XP. A system with no picture shows its initial.
 // To change a picture, replace the file in public/kit-art (240 × 240 JPEG).
 
@@ -35,10 +35,10 @@ const RULES = [
   [/shoreline|truprofile/, 'seaspine', 'shoreline.jpg'],
   [/fathom/, 'seaspine', 'fathom.jpg'],
   [/diplomat/, 'signus', 'diplomat.jpg'],
-  [/ascot/, 'signus', 'ascot.jpg'],
-  [/athlet/, 'signus', 'athlet.jpg'],
+  [/athlet|ascot/, 'signus', 'athlet.jpg'],
   [/cylox/, 'signus', 'cylox.jpg'],
-  [/mobis|signus/, 'signus', null],
+  [/mobis/, 'signus', 'mobis.jpg'],
+  [/signus/, 'signus', null],
   [/dakota/, 'precision', 'dakota.jpg'],
   [/reform/, 'precision', 'reform.jpg'],
   [/global|bmd/, 'global', 'global-plif.jpg'],
