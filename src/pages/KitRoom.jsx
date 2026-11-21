@@ -10,7 +10,7 @@ import AddTraySheet from './kit/AddTraySheet.jsx'
 import CourierNumbers from './kit/CourierNumbers.jsx'
 import KitSettings from './kit/KitSettings.jsx'
 import FillAgreements from './kit/FillAgreements.jsx'
-import { groupSystems, traysByPlace, systemOf, setLabel, PLACE_ORDER } from '../kit/systems.js'
+import { groupSystems, traysByPlace, systemOf, setLabel, awayLines, PLACE_ORDER } from '../kit/systems.js'
 import { movingFrom } from '../kit/trayPlaces.js'
 import { inventoryFor } from '../clinicalPlan/inventory.js'
 import { systemsInKit } from '../clinicalPlan/systems.js'
@@ -388,7 +388,7 @@ function useHold(onGrab) {
 /**
  * One system (option C, Brent 21 Nov 2026): its distributor, its name, a bar
  * of where its trays are — Calvary, RHH, the office — the same in words, and
- * a line when any tray is on the move.
+ * a line for anything away from home, said as where it is now.
  */
 function SystemTile({ group, onOpen, onGrab, lifted, target }) {
   const hold = useHold(onGrab)
@@ -396,7 +396,8 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
   const dist = DISTRIBUTORS[distributorOf(first)]
   const where = traysByPlace(group.kits)
   const total = Object.values(where).reduce((a, b) => a + b, 0)
-  const moving = group.kits.reduce((n, k) => n + (k.away ? (k.trays || []).length || 1 : Object.keys(k.trayAt || {}).length), 0)
+  const away = awayLines(group.kits)
+  const moving = away.length
   const checked = group.kits.filter(k => k.checkedAt).length
   const allChecked = checked === group.kits.length
   const words = PLACE_ORDER.filter(p => p in where)
@@ -422,7 +423,7 @@ function SystemTile({ group, onOpen, onGrab, lifted, target }) {
           ))}
         </div>
         <div style={{ ...text('caption'), color: colour.inkMuted }}>{total ? words : 'No trays listed yet'}</div>
-        {moving > 0 && <div style={{ ...text('caption'), fontWeight: 600, color: colour.warning }}>{moving} {moving === 1 ? 'tray' : 'trays'} on the move</div>}
+        {away.map(line => <div key={line} data-away-line style={{ ...text('caption'), fontWeight: 600, color: colour.warning }}>{line}</div>)}
         {allChecked && !moving && <div style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep }}>✓ checked</div>}
       </button>
     </div>

@@ -55,3 +55,16 @@ describe('the kit room by system', () => {
     expect(traysByPlace([{ home: 'office', at: 'office', trays: [] }, { home: 'RHH', at: 'RHH', trays: ['A'] }])).toEqual({ office: 0, RHH: 1 })
   })
 })
+
+describe('what is away, said as where it is (21 Nov 2026)', () => {
+  it('names a moved TM loan set by where it is now, and trays moved on their own', async () => {
+    const { awayLines } = await import('./systems.js')
+    expect(awayLines([
+      { id: 'd-clv', home: 'CLV', at: 'CLV', kind: 'consignment', trays: ['A'] },
+      { id: 'd-loan', home: 'office', at: 'CLV', kind: 'floating', trays: ['B', 'C', 'D'] },
+      { id: 'd-rhh', home: 'RHH', at: 'RHH', kind: 'consignment', trays: ['E', 'F'], trayAt: { E: { at: 'CLV' }, F: { at: 'CLV' } } }
+    ])).toEqual(['TM loan set at Calvary', '2 trays moved to Calvary'])
+    expect(awayLines([{ home: 'RHH', at: 'CLV', kind: 'consignment', trays: ['A'] }])).toEqual(['RHH set at Calvary'])
+    expect(awayLines([{ home: 'CLV', at: 'CLV', trays: ['A'] }])).toEqual([])
+  })
+})

@@ -48,7 +48,10 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
 
   const awayFrom = kit => Object.keys(kit.trayAt || {})
   const when = iso => (iso ? new Date(iso).toLocaleDateString('en-AU', { timeZone: 'Australia/Hobart', weekday: 'short', day: 'numeric', month: 'short' }) : '')
-  const setName = kit => `${PLACES[kit.home] || kit.home}${setLabel(kit) ? ` ${setLabel(kit)}` : ''}${kit.kind === 'floating' ? ' TM loan' : ''} set`
+  // A TM loan set has no hospital of its own: it is "the TM loan set" wherever it is.
+  const setName = kit => (kit.kind === 'floating'
+    ? `${setLabel(kit) ? `${setLabel(kit)} ` : ''}TM loan set`
+    : `${PLACES[kit.home] || kit.home}${setLabel(kit) ? ` ${setLabel(kit)}` : ''} set`)
   const counts = traysByPlace(system.kits)
   const trayCount = system.kits.reduce((n, k) => n + (k.trays || []).length, 0)
 

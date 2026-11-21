@@ -1609,6 +1609,11 @@ line with **Back**, and trays of other sets moved in, in an amber box "From
 the RHH set · moved by …" with **Back** (`onMoveTray(kit, trays, to)`). A tray
 row is the tick, the name and what it holds, and a chevron; **Move, Edit and
 Print are inside it** once opened (`data-tray-actions`).
+**A finished move is not "on the move"** (Brent, same day: the Dakota TM loan
+set moved to Calvary read "3 trays on the move"). The tile says where things
+are now — `awayLines` in `src/kit/systems.js`: "TM loan set at Calvary", "RHH
+set at Calvary", "2 trays moved to RHH" (`data-away-line`); inside a system a
+TM loan set is "TM loan set", never "TM office TM loan set".
 **Renaming** (Brent, 21 Nov 2026: "editing the tray name isn't editing the
 display name on the kit tile"): the tile shows the **system**, which no
 screen could change — Set details edits one set's own name. **Rename** beside

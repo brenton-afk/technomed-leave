@@ -91,3 +91,29 @@ export function kitForNewTray(group, { system, place, tray, distributor = '' }) 
     }
   }
 }
+
+const SHORT_PLACE = { CLV: 'Calvary', RHH: 'RHH', office: 'the office' }
+
+/**
+ * What of a system is away from home, said as where it is now (Brent, 21 Nov
+ * 2026: a TM loan set moved to Calvary read "3 trays on the move" — "I should
+ * be able to see the TM loan set at Calvary"). A whole set: "TM loan set at
+ * Calvary" / "RHH set at Calvary"; trays gone on their own: "2 trays moved to
+ * RHH". A move is done once confirmed; nothing here is "on the move".
+ */
+export function awayLines(kits) {
+  const lines = []
+  const strays = {}
+  for (const k of kits || []) {
+    const at = k.at || k.home
+    if (at !== k.home) {
+      const who = k.kind === 'floating' ? 'TM loan set' : setLabel(k) || `${SHORT_PLACE[k.home] === 'the office' ? 'Office' : SHORT_PLACE[k.home]} set`
+      lines.push(`${who} at ${SHORT_PLACE[at] || at}`)
+    }
+    for (const p of Object.values(k.trayAt || {})) {
+      if (p?.at && p.at !== at) strays[p.at] = (strays[p.at] || 0) + 1
+    }
+  }
+  for (const [at, n] of Object.entries(strays)) lines.push(`${n} ${n === 1 ? 'tray' : 'trays'} moved to ${SHORT_PLACE[at] || at}`)
+  return lines
+}
