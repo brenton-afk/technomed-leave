@@ -88,7 +88,9 @@ export const KIT_CORRECTIONS = [
   { id: 'set-n-systems-2026-11-21', seed: 'set-n-systems' },
   // Calvary's three Catenary ALIF trays from Gerardo's renamed CSSD sheets
   // (Brent, 21 Nov 2026: "It has the trays for the E4 Catenary trays").
-  { id: 'catenary-trays-clv-2026-11-21', seed: 'catenary-trays' }
+  { id: 'catenary-trays-clv-2026-11-21', seed: 'catenary-trays' },
+  // Calvary's Dakota set as it is on the shelf (Brent, 21 Nov 2026) — see _kitSeedDakotaClv.js.
+  { id: 'dakota-clv-shelf-2026-11-21', seed: 'dakota-clv' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -228,6 +230,11 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'dakota-clv') {
+    const { runDakotaClv } = await import('./_kitSeedDakotaClv.js')
+    await runDakotaClv()
     return
   }
   if (name === 'catenary-trays') {

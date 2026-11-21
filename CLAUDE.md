@@ -1846,6 +1846,22 @@ runs `runShorelinePhotos` after the tray fix — `rhhPhotoFor` by kind of tray
 (Inst → instruments, Extras/DNO → extras, Plate → plate and screw, Sterile →
 interbodies), filed under each Calvary set, replacing what was there. "Shoreline No Profile" (on Calvary's tray list)
 is not in any document we hold.
+**Calvary's Dakota as it is on the shelf** (Brent, 21 Nov 2026: "The Dakota
+tray photos you have are from the loan kits"; chose to rebuild from the
+stocktake). The set had come from the 2023 agreement — E4 catalogue photos,
+an old tray split. `dakota-clv-shelf-2026-11-21` runs `runDakotaClv`
+(`api/_kitSeedDakotaClv.js`, pure `plannedDakotaClv`): Calvary CSSD's own
+**Dakota Inst** (every instrument, the drills and all nine trials, with
+Calvary's own tray photo, May 2025), the implants as E4's September 2026
+stocktake of the Calvary consignment counts them (Screws, Cages 14x12 and
+16x14, Cages 18x15), **Bed Arm 1 and 2**, and the cervical retractors
+(**TM ACDF** from the stocktake, **Ibbett 2** from CSSD TT31967). Quantities
+are what a tray should hold, not the day's count. Old trays go to
+`kits:list:deleted:{kit}`; photos (cut from the stocktake sheets, in
+`_kitSeedDakotaClvPhotos.js`) filed one at a time under
+`/Tray Lists/Tray Photos/Dakota Calvary/` — not `Dakota/`, which the RHH set
+shares. The stocktake also showed the E4-1169 cage impactor missing (count 0),
+left off.
 **The Outrigger sits after the Calvary Mariner set** (Brent, same day: "should
 be underneath the Calvary instrument kit; not listed first") — `groupSystems`
 ranks an `INSIDE` set half a place later.
