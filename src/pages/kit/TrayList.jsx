@@ -283,6 +283,15 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
   const [editError, setEditError] = useState('')
   const [shareMsg, setShareMsg] = useState('')
   const [viewing, setViewing] = useState(null)
+  // Printing: '' | 'making' | 'ready' (an iPhone wants one more tap) | a sentence.
+  const [printing, setPrinting] = useState('')
+  async function print(only = '') {
+    setPrinting('making')
+    try {
+      const out = await printTrayList(kit, list, { ...(only ? { only } : {}), printedBy: user?.firstName || user?.name || '', token: user?.token })
+      setPrinting(out === 'needs-tap' ? 'ready' : out === 'downloaded' ? 'Saved as a PDF — open it to print.' : '')
+    } catch (err) { setPrinting(`Could not print: ${err.message}`) }
+  }
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
   // Live: somebody else's changes appear within a minute, and at once when the
@@ -647,7 +656,7 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
                 View original
               </button>
             )}
-            <button type="button" onClick={() => printTrayList(kit, list, { printedBy: user?.firstName || user?.name || '', token: user?.token })}
+            <button type="button" onClick={() => print()}
               style={{ ...text('caption'), fontWeight: 600, color: colour.accentDeep, background: colour.accentSoft, border: 'none',
                 borderRadius: radius.pill, padding: '5px 12px', cursor: 'pointer' }}>
               Print tray list
@@ -688,10 +697,31 @@ export default function TrayList({ kit, canEdit, user, post, onSaved, onMoveTray
               editList({ op: 'repaired', tray: t.name, index: i, expect: { code: l.code, description: l.description } })
             }
           }}
-          onPrint={list ? () => printTrayList(kit, list, { only: t.name, printedBy: user?.firstName || user?.name || '', token: user?.token }) : undefined} />
+          onPrint={list ? () => print(t.name) : undefined} />
           ))}
         </div>
       ))}
+      {printing && (
+        <Overlay>
+          <div role="status" data-print-status style={{ position: 'fixed', left: space.md, right: space.md, bottom: `calc(${space.md}px + env(safe-area-inset-bottom))`, zIndex: 3400,
+            maxWidth: 520, margin: '0 auto', background: colour.navy, color: 'white', borderRadius: radius.card, padding: space.md,
+            display: 'flex', alignItems: 'center', gap: space.sm, boxShadow: '0 8px 24px rgba(4,39,70,0.3)' }}>
+            <div style={{ flex: 1, minWidth: 0, ...text('body') }}>
+              {printing === 'making' ? 'Making the tray list…' : printing === 'ready' ? 'Tray list ready' : printing}
+            </div>
+            {printing === 'ready' && (
+              <button type="button" data-print-ready onClick={async () => { setPrinting(''); try { await shareReady() } catch (err) { setPrinting(err.message) } }}
+                style={{ ...text('bodyStrong'), border: 'none', borderRadius: radius.pill, padding: '10px 16px', background: colour.accent, color: 'white', cursor: 'pointer' }}>
+                Print or share
+              </button>
+            )}
+            {printing !== 'making' && (
+              <button type="button" aria-label="Close" onClick={() => setPrinting('')}
+                style={{ border: 'none', background: 'none', color: 'white', ...text('heading'), cursor: 'pointer', padding: '0 4px' }}>✕</button>
+            )}
+          </div>
+        </Overlay>
+      )}
       {repairing && (
         <RepairSheet kit={kit} job={repairing} headers={headers} onClose={() => setRepairing(null)}
           onDone={next => { setRepairing(null); if (next) setList(next); onSaved?.() }} />

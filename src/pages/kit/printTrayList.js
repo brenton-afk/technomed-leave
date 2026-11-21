@@ -142,6 +142,22 @@ function picturesReady(doc, ms = 10000) {
 export async function printTrayList(kit, list, opts = {}, deps = {}) {
   if (typeof document === 'undefined') return false
   const trays = (list?.trays || []).filter(t => !opts.only || t.name === opts.only)
+  const { trayListPdf, isAppleMobile } = await import('./trayListPdf.js')
+  // An iPhone ignores a page's print — it gets the sheet as a PDF through its
+  // share sheet, which has Print (Brent, 21 Nov 2026: "still not working").
+  if (deps.asPdf ?? isAppleMobile()) {
+    const links = opts.token ? await photoLinks(trays, opts.token, deps.fetcher) : {}
+    const fetcher = deps.fetcher || globalThis.fetch
+    const photos = {}
+    await Promise.all(Object.entries(links).map(async ([name, url]) => {
+      try { const r = await fetcher(url); if (r.ok) photos[name] = new Uint8Array(await r.arrayBuffer()) } catch { /* without it */ }
+    }))
+    const bytes = await trayListPdf(kit, list, { ...opts, photos })
+    const safe = String(opts.only || kit?.name || 'Tray list').replace(/[\\/:*?"<>|]/g, ' ').trim()
+    const file = new File([bytes], `${safe} - tray list.pdf`, { type: 'application/pdf' })
+    const { shareFileObjects } = await import('../../kit/share.js')
+    return shareFileObjects([file], { title: `${safe} - tray list` }, deps.nav ? { nav: deps.nav } : undefined)
+  }
   const photos = opts.token ? await photoLinks(trays, opts.token, deps.fetcher) : {}
   const { css, body } = trayListParts(kit, list, { ...opts, photos, scope: '#tm-print-root .tm-tray-print' })
   const node = document.createElement('div')
@@ -156,5 +172,5 @@ export async function printTrayList(kit, list, opts = {}, deps = {}) {
   await picturesReady(node)
   holder.remove()
   printAlone(node)
-  return true
+  return 'printed'
 }

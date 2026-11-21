@@ -1748,6 +1748,14 @@ iPhone ignores it or prints the app behind); it builds the sheet with
 the photos, and prints it alone in the app's page through DocViewer's
 `printAlone`, like the document viewer's Print. Checked in Chromium's print
 media: only the tray sheet is on the page.
+**On an iPhone, Print is a PDF for the share sheet** (Brent, same evening:
+"Print button still not working" — a Home Screen web app ignores a page's
+print). `isAppleMobile` → `trayListPdf` (`src/pages/kit/trayListPdf.js`,
+pdf-lib, the same sheet: photo, code, description, type, qty, count box,
+Checked by) → `shareFileObjects` in `src/kit/share.js`; the share sheet has
+Print, AirDrop, Mail, Save to Files. If the phone refuses a share that came too
+long after the tap, a bar says "Tray list ready" with **Print or share**
+(`data-print-ready`, `shareReady`). Computers still print in the page.
 **An open tray reads like a checklist** (Brent, 21 Nov 2026: "It's just a long
 way to scroll to get to the bottom of the list"). In `TrayBlock` the tray
 photo is `position: sticky` (`data-sticky-photo`, `top: -space.md` to cover

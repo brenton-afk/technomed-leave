@@ -39,6 +39,11 @@ export async function shareFiles(items, { title } = {}, { nav = typeof navigator
     const blob = await res.blob()
     files.push(new File([blob], name || 'document', { type: blob.type && blob.type !== 'application/octet-stream' ? blob.type : typeOfName(name) }))
   }
+  return shareFileObjects(files, { title }, { nav })
+}
+
+/** Files already made (a tray list built as a PDF on the phone). */
+export async function shareFileObjects(files, { title } = {}, { nav = typeof navigator !== 'undefined' ? navigator : null } = {}) {
   if (nav?.canShare && nav.canShare({ files })) {
     try {
       await nav.share({ files, title: title || files[0]?.name })

@@ -68,11 +68,31 @@ describe('the print button (Brent, 21 Nov 2026: "Print button isn\'t working")',
     const { printTrayList } = await import('./printTrayList.js')
     let printed = null
     const ok = await printTrayList(KIT, LIST, { only: LIST.trays[0].name, token: '' }, { printAlone: node => { printed = node } })
-    expect(ok).toBe(true)
+    expect(ok).toBe('printed')
     expect(printed.className).toBe('tm-tray-print')
     expect(printed.innerHTML).toContain(LIST.trays[0].name)
     expect(printed.querySelector('style').textContent).toMatch(/#tm-print-root \.tm-tray-print h1/)
     expect(printed.querySelector('style').textContent).not.toMatch(/(^|\n)\s*h1 \{/)
     expect(document.querySelector('iframe')).toBeNull()
+  })
+})
+
+describe('on an iPhone, Print makes a PDF for the share sheet (Brent, 21 Nov 2026)', () => {
+  it('builds a real PDF of the tray and hands it to the share sheet', async () => {
+    const { printTrayList } = await import('./printTrayList.js')
+    let shared = null
+    const nav = { canShare: () => true, share: async d => { shared = d } }
+    const out = await printTrayList(KIT, LIST, { only: LIST.trays[0].name }, { asPdf: true, nav })
+    expect(out).toBe('shared')
+    const file = shared.files[0]
+    expect(file.type).toBe('application/pdf')
+    expect(file.name).toBe(`${LIST.trays[0].name} - tray list.pdf`)
+    const head = new Uint8Array(await file.arrayBuffer()).slice(0, 5)
+    expect(String.fromCharCode(...head)).toBe('%PDF-')
+  })
+  it('asks for one more tap when the phone refuses a share that came too late', async () => {
+    const { printTrayList } = await import('./printTrayList.js')
+    const nav = { canShare: () => true, share: async () => { const e = new Error('no'); e.name = 'NotAllowedError'; throw e } }
+    expect(await printTrayList(KIT, LIST, {}, { asPdf: true, nav })).toBe('needs-tap')
   })
 })
