@@ -1614,6 +1614,17 @@ line with **Back**, and trays of other sets moved in, in an amber box "From
 the RHH set · moved by …" with **Back** (`onMoveTray(kit, trays, to)`). A tray
 row is the tick, the name and what it holds, and a chevron; **Move, Edit and
 Print are inside it** once opened (`data-tray-actions`).
+**Consignment and loan, apart** (Brent, 21 Nov 2026: "The Calvary set is
+too small … If there's a loan set at Calvary that needs to be really clear …
+a consignment section and a loan section"). Each place in a system splits into
+**Consignment** (sets that live there and are not loan sets — `isOwn`; at the
+office, every set at home) and **On loan here** (a TM loan set or another
+hospital's set there, and trays moved in), `data-set-group`. Every set is its
+own card (`data-system-set`) under a coloured header (`data-set-header`: teal
+for consignment, amber for loan) with the set's name at heading size, a line
+saying what it is (`setNote`: "Consigned to Calvary", "TechnoMed loan set, on
+loan to Calvary", "Borrowed from RHH") and a CONSIGNMENT / TM LOAN / LOAN chip;
+a loan set's Move all reads **Send it back**.
 **A finished move is not "on the move"** (Brent, same day: the Dakota TM loan
 set moved to Calvary read "3 trays on the move"). The tile says where things
 are now — `awayLines` in `src/kit/systems.js`: "TM loan set at Calvary", "RHH
