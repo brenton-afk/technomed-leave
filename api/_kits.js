@@ -278,7 +278,7 @@ async function setLoc(id, loc) {
   await redisSetBody(LOC(id), JSON.stringify(loc))
 }
 
-async function addHistory(entry) {
+export async function addHistory(entry) {
   const line = JSON.stringify({ ...entry, at: new Date().toISOString() })
   await redis('lpush', HISTORY, line)
   await redis('ltrim', HISTORY, 0, 499)

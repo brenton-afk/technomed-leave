@@ -12,7 +12,7 @@
 // agreement is attached to each set that has none. Each agreement runs once.
 
 import { redis, redisSetBody } from './_redis.js'
-import { getDefs, getTrayList, saveTrayList, saveKitDef } from './_kits.js'
+import { getDefs, getTrayList, saveTrayList, saveKitDef, addHistory } from './_kits.js'
 import { listKitDocs, linkKitDoc } from './_kitDocs.js'
 import { AGREEMENTS, PHOTO_LOADERS } from './_kitAgreementData.js'
 
@@ -70,23 +70,36 @@ async function photosFor(doc) {
   try { return (await load()).PHOTOS || {} } catch { return {} }
 }
 
-/** Files each photo, three at a time, three tries each. Returns key → path. */
+/**
+ * Files each photo one at a time, three tries each — Dropbox refuses several
+ * writes at once (too_many_write_operations), which is how the first fill lost
+ * its photos without a word. Returns key → path, and the keys that missed.
+ */
 async function filePhotos(jobs, photos, upload) {
   const out = {}
-  const one = async ({ key, path }) => {
+  const missed = []
+  for (const { key, path } of jobs) {
     const data = photos[key]
-    if (!data) return
-    for (let i = 0; i < 3; i += 1) {
-      try { await upload(path, Buffer.from(data, 'base64')); out[key] = path; return } catch {
-        await new Promise(r => setTimeout(r, process.env.VITEST ? 0 : 1200 * (i + 1)))
+    if (!data) { missed.push(key); continue }
+    let ok = false
+    for (let i = 0; i < 3 && !ok; i += 1) {
+      try { await upload(path, Buffer.from(data, 'base64')); out[key] = path; ok = true } catch (err) {
+        if (i === 2) console.error('agreement photo not filed', path, err?.message)
+        else await new Promise(r => setTimeout(r, process.env.VITEST ? 0 : 1500 * (i + 1)))
       }
     }
+    if (!ok) missed.push(key)
   }
-  for (let i = 0; i < jobs.length; i += 3) await Promise.all(jobs.slice(i, i + 3).map(one))
-  return out
+  return { filed: out, missed }
 }
 
 const safe = s => String(s || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+const photoPath = (kit, tray) => `/Tray Lists/Tray Photos/${safe(kit.name)}/${safe(tray.name)}.jpg`
+
+/** The sets of this agreement's system at its hospital, in order. */
+const setsFor = (defs, a) => defs.filter(k => sameSystem(k.system, a.kit) && k.home === a.hospital).sort(byIdNatural)
+/** Set n's trays; a document listing fewer sets than the shelf holds fills the first. */
+const traysForSet = (a, n, count) => a.trays.filter(t => (t.set || 1) === n || (n === 1 && (t.set || 1) > count))
 
 export async function fillFromAgreement(docSlug, byName, deps = {}) {
   const a = AGREEMENTS.find(x => x.doc === docSlug)
@@ -98,7 +111,7 @@ export async function fillFromAgreement(docSlug, byName, deps = {}) {
 
   // The sets of this system at this hospital; made if there are none.
   let defs = await getDefs()
-  let sets = defs.filter(k => sameSystem(k.system, a.kit) && k.home === a.hospital).sort(byIdNatural)
+  let sets = setsFor(defs, a)
   const wanted = Math.max(1, ...a.trays.map(t => t.set || 1))
   if (!sets.length) {
     for (let n = 1; n <= wanted; n += 1) {
@@ -108,25 +121,23 @@ export async function fillFromAgreement(docSlug, byName, deps = {}) {
       }, by)
     }
     defs = await getDefs()
-    sets = defs.filter(k => sameSystem(k.system, a.kit) && k.home === a.hospital).sort(byIdNatural)
+    sets = setsFor(defs, a)
   }
 
   const photos = await photosFor(a.doc)
+  if (!Object.keys(photos).length && a.trays.some(t => t.photo)) console.error('agreement photos not loaded', a.doc)
   const results = []
   for (const [i, kit] of sets.entries()) {
     const n = i + 1
-    // Set n's trays; a document listing fewer sets than the shelf holds fills the first.
-    const trays = a.trays.filter(t => (t.set || 1) === n || (n === 1 && (t.set || 1) > sets.length))
+    const trays = traysForSet(a, n, sets.length)
     const result = { kitId: kit.id, kitName: kit.name, added: 0, skipped: 0, attached: false }
     if (trays.length) {
       const current = await getTrayList(kit.id)
       const plan = planForSet(current, trays, a.kit)
       result.skipped = plan.skipped
       if (plan.add.length) {
-        const jobs = plan.add.filter(t => t.photo).map(t => ({
-          key: t.photo, path: `/Tray Lists/Tray Photos/${safe(kit.name)}/${safe(t.name)}.jpg`
-        }))
-        const filed = await filePhotos(jobs, photos, upload)
+        const jobs = plan.add.filter(t => t.photo).map(t => ({ key: t.photo, path: photoPath(kit, t) }))
+        const { filed, missed } = await filePhotos(jobs, photos, upload)
         const file = a.agreement?.name || a.doc
         await saveTrayList(kit.id, {
           trays: plan.add.map(t => ({ name: t.name, file, lines: t.lines, ...(filed[t.photo] ? { photo: filed[t.photo] } : {}) })),
@@ -135,6 +146,7 @@ export async function fillFromAgreement(docSlug, byName, deps = {}) {
         }, by)
         result.added = plan.add.length
         result.photos = Object.keys(filed).length
+        result.photosMissed = missed.length
       }
     }
     // The agreement, where the set has none yet.
@@ -152,4 +164,52 @@ export async function fillFromAgreement(docSlug, byName, deps = {}) {
   const record = { at: new Date().toISOString(), by: byName, results }
   await redisSetBody(DONE, JSON.stringify({ ...(await doneMap()), [docSlug]: record }))
   return record
+}
+
+/**
+ * Puts on the photos a fill missed (Brent, 21 Nov 2026: "I can't see any of
+ * the new tray image additions"). For each set of the agreement, a tray with no
+ * photo whose name is one of that set's agreement trays gets the agreement's
+ * photo — whether the tray came from the fill or was there before. At most
+ * `max` uploads a request (the function's time limit); `more` says to ask
+ * again. The list is read again just before writing, so no edit is lost, and a
+ * photo someone has put on meanwhile is kept.
+ */
+export async function addMissingPhotos(docSlug, byName, deps = {}) {
+  const a = AGREEMENTS.find(x => x.doc === docSlug)
+  if (!a) throw Object.assign(new Error('No such agreement'), { status: 404 })
+  const max = deps.max || 8
+  const upload = deps.upload || (await import('./_dropbox.js')).uploadFile
+  const sets = setsFor(await getDefs(), a)
+  const photos = await photosFor(a.doc)
+  let budget = max
+  let more = false
+  let added = 0
+  let missed = 0
+  for (const [i, kit] of sets.entries()) {
+    const own = traysForSet(a, i + 1, sets.length).filter(t => t.photo && photos[t.photo])
+    if (!own.length) continue
+    const list = await getTrayList(kit.id)
+    const needs = (list?.trays || []).filter(t => !t.photo)
+      .map(t => ({ tray: t, from: own.find(x => x.name === t.name) || own.find(x => sameTray(x.name, t.name, a.kit)) }))
+      .filter(x => x.from)
+    if (!needs.length) continue
+    if (budget <= 0) { more = true; break }
+    const batch = needs.slice(0, budget)
+    if (needs.length > batch.length) more = true
+    budget -= batch.length
+    const jobs = batch.map(x => ({ key: x.tray.name, path: photoPath(kit, x.tray) }))
+    const data = Object.fromEntries(batch.map(x => [x.tray.name, photos[x.from.photo]]))
+    const { filed, missed: lost } = await filePhotos(jobs, data, upload)
+    missed += lost.length
+    if (!Object.keys(filed).length) continue
+    const now = await getTrayList(kit.id)
+    await redisSetBody(`kits:list:${kit.id}`, JSON.stringify({
+      ...now, trays: now.trays.map(t => (!t.photo && filed[t.name] ? { ...t, photo: filed[t.name] } : t))
+    }))
+    added += Object.keys(filed).length
+    await (deps.history || addHistory)({ kind: 'edit', kitId: kit.id, kitName: kit.name, by: BY(byName),
+      text: `Tray photos added: ${Object.keys(filed).join(', ')}` })
+  }
+  return { doc: a.doc, added, missed, more }
 }

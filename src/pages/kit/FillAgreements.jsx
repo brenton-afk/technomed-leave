@@ -16,6 +16,8 @@ function summary(rec) {
   return rec.results.map(r => {
     const bits = []
     if (r.added) bits.push(`${r.added} tray${r.added === 1 ? '' : 's'} added`)
+    if (r.photos) bits.push(`${r.photos} photo${r.photos === 1 ? '' : 's'}`)
+    if (r.photosMissed) bits.push(`${r.photosMissed} photo${r.photosMissed === 1 ? '' : 's'} missed`)
     if (r.skipped) bits.push(`${r.skipped} already there`)
     if (r.attached) bits.push('agreement attached')
     if (r.attachError) bits.push('agreement not attached')
@@ -28,6 +30,7 @@ export default function FillAgreements({ post, onClose, onDone }) {
   const [list, setList] = useState(null)
   const [running, setRunning] = useState('')
   const [error, setError] = useState('')
+  const [photoNote, setPhotoNote] = useState('')
 
   useEffect(() => { post('agreements', {}).then(d => setList(d.agreements)).catch(e => setError(e.message)) }, [])
 
@@ -44,6 +47,33 @@ export default function FillAgreements({ post, onClose, onDone }) {
       }
     }
     setRunning('')
+    onDone?.()
+  }
+
+  // Photos a fill missed (Brent, 21 Nov 2026: "I can't see any of the new tray
+  // image additions") — every agreement, a few uploads a request until done.
+  async function addPhotos() {
+    setError('')
+    setPhotoNote('')
+    let added = 0
+    let missed = 0
+    for (const a of list) {
+      setRunning(`photos:${a.doc}`)
+      try {
+        for (let round = 0; round < 12; round += 1) {
+          const r = await post('agreements', { doc: a.doc, photos: true })
+          added += r.added || 0
+          if (!r.more) { missed += r.missed || 0; break }
+        }
+      } catch (err) {
+        setError(`${a.kit} (${PLACE[a.hospital] || a.hospital}) photos: ${err.message}`)
+        break
+      }
+    }
+    setRunning('')
+    setPhotoNote(added || missed
+      ? `${added} photo${added === 1 ? '' : 's'} added${missed ? ` · ${missed} could not be filed — tap again to retry` : ''}`
+      : 'Every tray from the agreements already has its photo.')
     onDone?.()
   }
 
@@ -68,9 +98,16 @@ export default function FillAgreements({ post, onClose, onDone }) {
             {list && (
               <button data-fill-all disabled={Boolean(running) || !left} onClick={fillAll}
                 style={{ ...face.primary, ...text('bodyStrong'), width: '100%', padding: space.sm, borderRadius: radius.control, border: 'none', marginBottom: space.md, cursor: 'pointer', opacity: running || !left ? 0.6 : 1 }}>
-                {running ? 'Filling…' : left ? `Fill ${left} agreement${left === 1 ? '' : 's'}` : 'All done'}
+                {running && !running.startsWith('photos:') ? 'Filling…' : left ? `Fill ${left} agreement${left === 1 ? '' : 's'}` : 'All done'}
               </button>
             )}
+            {list && (
+              <button data-add-photos disabled={Boolean(running)} onClick={addPhotos}
+                style={{ ...face.secondary, ...text('bodyStrong'), width: '100%', padding: space.sm, borderRadius: radius.control, marginBottom: space.md, cursor: 'pointer', opacity: running ? 0.6 : 1 }}>
+                {running.startsWith('photos:') ? 'Adding photos…' : 'Add missing photos'}
+              </button>
+            )}
+            {photoNote && <div data-photo-note style={{ ...text('caption'), color: colour.accentDeep, marginBottom: space.sm }}>{photoNote}</div>}
             {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{error}</div>}
             {(list || []).map(a => (
               <div key={a.doc} data-agreement={a.doc} style={{ padding: `${space.sm}px 0`, borderBottom: border.hairlineSoft }}>

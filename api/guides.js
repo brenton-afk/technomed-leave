@@ -558,8 +558,9 @@ async function handleKits(req, res, session) {
     // 21 Nov 2026) — one agreement per request; without `doc`, the list.
     if (what === 'agreements') {
       if (!canRemove) return res.status(403).json({ error: 'Admins and the clinical team only' })
-      const { agreementStatus, fillFromAgreement } = await import('./_kitAgreements.js')
+      const { agreementStatus, fillFromAgreement, addMissingPhotos } = await import('./_kitAgreements.js')
       if (!body.doc) return res.status(200).json({ agreements: await agreementStatus() })
+      if (body.photos) return res.status(200).json(await addMissingPhotos(String(body.doc), who))
       return res.status(200).json(await fillFromAgreement(String(body.doc), who))
     }
     if (what === 'reset-all') {

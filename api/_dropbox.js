@@ -220,12 +220,19 @@ export async function ensureFolder(path) {
   return path
 }
 
+/**
+ * The Dropbox-API-Arg header must be plain ASCII: a tray called "Dakota 7°
+ * Interbodies" made every upload of its photo fail before it left the server.
+ * Dropbox's own answer is JSON with \uXXXX escapes.
+ */
+export const apiArg = obj => JSON.stringify(obj).replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
+
 /** One file's bytes (not under the locked usage tree). */
 export async function downloadFile(path) {
   assertUsageReadable(path)
   const res = await fetch('https://content.dropboxapi.com/2/files/download', {
     method: 'POST',
-    headers: { ...(await authHeaders()), 'Dropbox-API-Arg': JSON.stringify({ path }) }
+    headers: { ...(await authHeaders()), 'Dropbox-API-Arg': apiArg({ path }) }
   })
   if (!res.ok) {
     let summary = ''
@@ -248,7 +255,7 @@ export async function uploadFile(path, buffer, { keep = false } = {}) {
       ...(await authHeaders()),
       'Content-Type': 'application/octet-stream',
       // `overwrite` keeps a re-run from littering the folder with (1) copies.
-      'Dropbox-API-Arg': JSON.stringify({
+      'Dropbox-API-Arg': apiArg({
         path,
         mode: keep ? 'add' : 'overwrite',
         autorename: keep,

@@ -27,7 +27,7 @@ vi.mock('./_kitAgreementData.js', () => ({
   PHOTO_LOADERS: { 'clv-widget': async () => ({ PHOTOS: { 'p4_1.jpg': Buffer.from('jpg').toString('base64') } }) }
 }))
 
-const { planForSet, sameTray, fillFromAgreement, agreementStatus } = await import('./_kitAgreements.js')
+const { planForSet, sameTray, fillFromAgreement, agreementStatus, addMissingPhotos } = await import('./_kitAgreements.js')
 const { getTrayList, getDefs } = await import('./_kits.js')
 
 const deps = { upload: vi.fn(async () => {}), listDocs: vi.fn(async () => []), link: vi.fn(async () => {}) }
@@ -81,6 +81,47 @@ describe('filling', () => {
     const made = (await getDefs()).find(k => k.system === 'TM Gadget')
     expect(made).toMatchObject({ home: 'RHH', kind: 'technomed' })
     expect((await getTrayList(made.id)).trays[0].name).toBe('TM Gadget Tray')
+  })
+})
+
+describe('photos the fill missed (Brent, 21 Nov 2026)', () => {
+  it('says a photo was missed, and Add missing photos puts it on later', async () => {
+    const failing = { ...deps, upload: vi.fn(async () => { throw new Error('too_many_write_operations') }) }
+    const rec = await fillFromAgreement('clv-widget', 'Brent', failing)
+    expect(rec.results[0]).toMatchObject({ added: 2, photos: 0, photosMissed: 1 })
+    expect(failing.upload).toHaveBeenCalledTimes(3)
+    expect((await getTrayList('widget-clv-1')).trays[0].photo).toBeFalsy()
+
+    const upload = vi.fn(async () => {})
+    const r = await addMissingPhotos('clv-widget', 'Brent', { upload })
+    expect(r).toMatchObject({ added: 1, missed: 0, more: false })
+    expect(upload).toHaveBeenCalledWith('/Tray Lists/Tray Photos/Widget 1/Widget Insertion.jpg', expect.any(Buffer))
+    expect((await getTrayList('widget-clv-1')).trays[0].photo).toBe('/Tray Lists/Tray Photos/Widget 1/Widget Insertion.jpg')
+    // Nothing left to do the second time.
+    expect(await addMissingPhotos('clv-widget', 'Brent', { upload })).toMatchObject({ added: 0, more: false })
+  })
+  it('gives a tray that was already there, under its own name, the agreement photo', async () => {
+    store.set('kits:list:widget-clv-1', JSON.stringify({ source: {}, trays: [{ name: 'Insertion 1-1', lines: [{ code: 'Z', description: 'Mine', qty: 9, kind: 'instrument' }] }] }))
+    const r = await addMissingPhotos('clv-widget', 'Brent', { upload: vi.fn(async () => {}) })
+    expect(r.added).toBe(1)
+    const t = (await getTrayList('widget-clv-1')).trays[0]
+    expect(t).toMatchObject({ name: 'Insertion 1-1', photo: '/Tray Lists/Tray Photos/Widget 1/Insertion 1-1.jpg' })
+    expect(t.lines[0].description).toBe('Mine')
+  })
+  it('never replaces a photo a tray already has', async () => {
+    store.set('kits:list:widget-clv-1', JSON.stringify({ source: {}, trays: [{ name: 'Widget Insertion', photo: '/Tray Lists/Tray Photos/Mine.jpg', lines: [] }] }))
+    const upload = vi.fn(async () => {})
+    expect((await addMissingPhotos('clv-widget', 'Brent', { upload })).added).toBe(0)
+    expect(upload).not.toHaveBeenCalled()
+  })
+})
+
+describe('Dropbox header', () => {
+  it('escapes a degree sign so the upload is not refused', async () => {
+    const { apiArg } = await vi.importActual('./_dropbox.js')
+    const h = apiArg({ path: '/Tray Lists/Tray Photos/Dakota 1/Dakota 7° Interbodies.jpg' })
+    expect(h).toMatch(/^[\x20-\x7e]+$/)
+    expect(JSON.parse(h).path).toContain('7° Interbodies')
   })
 })
 

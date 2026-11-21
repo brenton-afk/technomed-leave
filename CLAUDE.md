@@ -1707,6 +1707,18 @@ agreement (`kits:agreements:done`). Document quirks the readers flagged are in
 the source `trays.json` checks (e.g. RHH Dakota totals copied from Calvary's,
 Mariner RHH two arithmetic errors); the Mariner Open update's iliac tray is the
 same tray as the Mariner set's and was left out.
+**The photos came across without a word lost** (Brent, same day: "I can't
+see any of the new tray image additions"). Two causes: the fill sent three
+uploads at once (Dropbox refuses — too_many_write_operations) and swallowed the
+failure, and a "°" in a tray name ("Dakota 7° Interbodies") broke the
+`Dropbox-API-Arg` header, which must be ASCII — `apiArg` in `_dropbox.js` now
+writes it with `\uXXXX` escapes (uploads and downloads). Photos now go one at a
+time, three tries each; a fill reports `photos` / `photosMissed` per set. **Add
+missing photos** on the same sheet (`kits=agreements` with `{doc, photos:
+true}`, `addMissingPhotos`) gives every tray without a photo whose name is one
+of its set's agreement trays (exact, else `sameTray` — so a tray that was there
+before gets one too) its photo, 8 uploads a request with `more`, the list
+re-read before writing; a photo already on a tray is never replaced.
 
 ### Call a courier after a move (Brent, 20 Nov 2026)
 
