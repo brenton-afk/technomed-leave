@@ -58,10 +58,10 @@ const TABS = [
   // Layout of 12 Nov 2026 (Brent): Projects gets its own tab, Kit is only kit
   // (Kit room, Stock take, Theatre guides), Resources gets its own tab, and
   // Messages leaves the bar for its own app — until then it is a card at the
-  // top of Me, which carries the unread badge.
+  // top of Me, which carries the unread badge. Resources moved into Kit beside
+  // the Kit room, Stock take and Theatre guides (Brent, 21 Nov 2026) — five tabs.
   { id: 'projects', label: 'Projects', Icon: IconTasks },
   { id: 'kit', label: 'Kit', Icon: IconKit },
-  { id: 'resources', label: 'Resources', Icon: IconFolder },
   { id: 'me', label: 'Me', Icon: IconMe }
   // Admin is deliberately not here any more. Five is the limit a bottom bar
   // stays scannable at, an admin is one of two people, and Admin has a card at
@@ -472,16 +472,15 @@ export default function App() {
 
     if (tab === 'projects') return <Projects user={user} />
 
-    if (tab === 'resources') {
-      // One card per system: ARTG, technique, rebate codes, tray list (Brent, 12 Nov 2026).
-      return <Resources user={user} onOpenKit={id => navigate({ tab: 'kit', sub: 'kitroom', kit: id, focus: 'trays' })} />
-    }
-
     if (tab === 'kit') {
       switch (sub) {
         case 'kitroom': return <KitRoom user={user} onBack={back} openKit={nav.kit} openFocus={nav.focus} />
         case 'guides':
           return <TheatreGuides user={user} onBack={back} />
+        // One card per system: ARTG, technique, rebate codes, tray list — in
+        // Kit since 21 Nov 2026 (Brent), its own tab before.
+        case 'resources':
+          return <Resources user={user} onBack={back} onOpenKit={id => navigate({ tab: 'kit', sub: 'kitroom', kit: id, focus: 'trays' })} />
         case 'stock':
           return <ComingSoonSection eyebrow="Kit and stock" title="Stock take" icon={IconStock} onBack={back}
             detail="Counting and reconciling consignment stock will live here. The section exists so the structure is right — tell me how you count today and I'll build it." />
@@ -744,7 +743,7 @@ export function renderTarget(nav, user) {
  */
 export function movedTarget(nav) {
   if (nav?.tab === 'kit' && nav.sub === 'projects') return { ...nav, tab: 'projects', sub: null }
-  if (nav?.tab === 'kit' && nav.sub === 'resources') return { ...nav, tab: 'resources', sub: null }
+  if (nav?.tab === 'resources') return { ...nav, tab: 'kit', sub: 'resources' }
   if (nav?.tab === 'kit' && nav.sub === 'teamlead') return { ...nav, tab: 'cases', sub: 'teamlead' }
   if (nav?.tab === 'messages') return { ...nav, tab: 'me', sub: 'messages' }
   return nav

@@ -26,7 +26,7 @@ A mobile-first PWA staff portal for TechnoMed (a Tasmanian surgical device distr
 
 ### Navigation is state, not routes
 
-`src/App.jsx` holds `{tab, sub}` in state — no router, and `react-router-dom` is no longer imported. **Six tabs since 12 Nov 2026 (Brent): Cases · Scan · Projects · Kit · Resources · Me.** Projects and Resources have their own tabs; **Kit is only kit** (Kit room, Stock take, Theatre guides); **Team leader is under Cases** (`{tab:'cases', sub:'teamlead'}`, opened from the "who's leading" sheet — `onOpenGuide` on `TeamLeaderStrip`); **Messages is a card at the top of Me** (`{tab:'me', sub:'messages'}`, the unread badge on the Me tab) until it has its own app. `movedTarget` sends links written to the old places to the new ones (applied in `navigate` and `renderTarget`). Checked in a real 360px render: six tabs, 60px each, no label clipped. **The sidebar shows from 760px on a computer with a mouse or trackpad** (`DESKTOP_QUERY` in `design/viewport.js` and the same `@media` in `index.css` — keep them in step; Brent, 12 Nov 2026: Erin's laptop, display scaling put it under 1024 CSS px and the tabs went to the bottom); a touch screen still needs 1024. Admin is reached from Me. A tab with no `sub` renders its **hub**; a `sub` renders one screen.
+`src/App.jsx` holds `{tab, sub}` in state — no router, and `react-router-dom` is no longer imported. **Five tabs since 21 Nov 2026 (Brent): Cases · Scan · Projects · Kit · Me.** Projects has its own tab; **Kit** is Kit room, Stock take, Theatre guides and **Resources** (`{tab:'kit', sub:'resources'}` — its own tab 12–21 Nov; `movedTarget` sends `tab: 'resources'` there); **Team leader is under Cases** (`{tab:'cases', sub:'teamlead'}`, opened from the "who's leading" sheet — `onOpenGuide` on `TeamLeaderStrip`); **Messages is a card at the top of Me** (`{tab:'me', sub:'messages'}`, the unread badge on the Me tab) until it has its own app. `movedTarget` sends links written to the old places to the new ones (applied in `navigate` and `renderTarget`). Checked in a real 360px render: six tabs, 60px each, no label clipped. **The sidebar shows from 760px on a computer with a mouse or trackpad** (`DESKTOP_QUERY` in `design/viewport.js` and the same `@media` in `index.css` — keep them in step; Brent, 12 Nov 2026: Erin's laptop, display scaling put it under 1024 CSS px and the tabs went to the bottom); a touch screen still needs 1024. Admin is reached from Me. A tab with no `sub` renders its **hub**; a `sub` renders one screen.
 
 **The phone's back button walks back through the portal** (Brent, 18 Nov
 2026: "it exits the entire app"). `src/backButton.js`: every page change
@@ -245,6 +245,18 @@ colours, which are the ones carrying real meaning.
 
 `src/pages/TodayFeed.jsx` is the home screen: a scrolling feed, not a dashboard. It surfaces today's cases, the day's flags, the signed-in user's action items and an unsubmitted-timesheet prompt. Every item is a pointer into a section — the feed never becomes a place to do work.
 
+**Rebate codes from the price list** (Brent, 21 Nov 2026: "When I uploaded all
+the rebate codes and prices the other day … add them to the resources under each
+system"): each card has a **Rebate codes** chip (`data-resource-slot="codes"`,
+"123 codes from the price list") opening `pages/RebateCodes.jsx` —
+`resources=codes&system=` on `api/guides.js`, `codesForSystem` / `codeCounts`
+in `api/_resourcePrices.js` (pure): the price store's lines given to a system
+by the workbook's Product range (`RANGE_RULES`; Global BMD split by "ALIF" in
+the description into Catenary ALIF and Global BMD PLIF; Mariner apart from its
+Outrigger; X-CORE → Nuvasive, FORTIFY/ACP → Globus), description, code, type
+and rebate code with a search; KT's Private and RHH lists are a switch.
+**Prices only for admins**, as the price store has always been — the server
+leaves `price` off for anyone else. The file slot is now "Rebate document".
 **Resources is one card per system we carry** (Brent, 12 Nov 2026: "ARTG
 certificates, the full surgical techniques, the rebate codes and prices and a
 tray list"; chose by system, systems we carry). `pages/Resources.jsx`, served by

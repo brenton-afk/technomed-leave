@@ -6,6 +6,7 @@ import { colour, text, space, radius, border } from '../design/tokens.js'
 import { IconFolder } from '../design/icons.jsx'
 import DocViewer from '../kit/DocViewer.jsx'
 import { hasDoc } from '../kit/docCache.js'
+import RebateCodes from './RebateCodes.jsx'
 
 // ─── Resources (Brent, 12 Nov 2026) ──────────────────────────────────────────
 // "The items I want in there are the ARTG certificates, the full surgical
@@ -31,9 +32,9 @@ function asBase64(file) {
 
 const CACHE_KEY = 'tm_resources_v1'
 
-export const SLOT_LABELS = { artg: 'ARTG', technique: 'Surgical technique', rebate: 'Rebate codes & prices' }
+export const SLOT_LABELS = { artg: 'ARTG', technique: 'Surgical technique', rebate: 'Rebate document' }
 
-export default function Resources({ user, onOpenKit }) {
+export default function Resources({ user, onOpenKit, onBack }) {
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
   // The last list this phone saw, drawn at once while the fresh one comes
   // (Brent, 18 Nov 2026: "The resources page takes AGES to load").
@@ -48,6 +49,7 @@ export default function Resources({ user, onOpenKit }) {
   const [choices, setChoices] = useState(null)
   const [note, setNote] = useState('')
   const [uploading, setUploading] = useState('')
+  const [codesFor, setCodesFor] = useState('')
   useBackLayer(Boolean(changing), () => { if (!uploading) setChanging(null) })
   const fileInput = useRef(null)
 
@@ -157,7 +159,7 @@ export default function Resources({ user, onOpenKit }) {
 
   return (
     <Page>
-      <Header eyebrow="Reference" title="Resources" subtitle="ARTG, surgical techniques, rebate codes and tray lists for every system we carry" />
+      <Header eyebrow="Kit" title="Resources" onBack={onBack} subtitle="ARTG, surgical techniques, rebate codes and tray lists for every system we carry" />
       <Body>
         <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Find a system or distributor" aria-label="Find a system"
           style={{ ...text('body'), fontSize: 16, width: '100%', boxSizing: 'border-box', padding: `${space.xs}px ${space.sm}px`, border: `1px solid ${colour.line}`, borderRadius: radius.control, background: colour.surface, color: colour.ink, marginBottom: space.sm }} />
@@ -189,6 +191,13 @@ export default function Resources({ user, onOpenKit }) {
                       </div>
                     )
                   })}
+                  {/* Rebate codes from the price list (Brent, 21 Nov 2026). */}
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 140px', minWidth: 0 }}>
+                    <button type="button" data-resource-slot="codes" disabled={!s.codes} onClick={() => setCodesFor(s.system)} style={chip(Boolean(s.codes))}>
+                      Rebate codes
+                      <span style={{ display: 'block', fontWeight: 400 }}>{s.codes ? `${s.codes} codes from the price list` : 'Not on the price list'}</span>
+                    </button>
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 140px', minWidth: 0 }}>
                     {s.trays.length ? s.trays.map(k => (
                       <button key={k.id} type="button" data-resource-slot="trays" onClick={() => onOpenKit?.(k.id)} style={{ ...chip(true), marginBottom: 4 }}>
@@ -209,6 +218,7 @@ export default function Resources({ user, onOpenKit }) {
         {data && <button type="button" onClick={() => { setData(null); load(true) }} style={link}>Look in Dropbox again</button>}
       </Body>
 
+      {codesFor && <RebateCodes system={codesFor} user={user} onClose={() => setCodesFor('')} />}
       {changing && (<Overlay>
         <div role="dialog" aria-label={`Choose the ${SLOT_LABELS[changing.slot]}`} onClick={() => !uploading && setChanging(null)}
           style={{ position: 'fixed', inset: 0, zIndex: 3600, background: 'rgba(4,39,70,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>

@@ -13,7 +13,7 @@ const PAGES_DIR = 'src/pages'
 // Screens migrated onto the design system. New screens should be added here.
 const MIGRATED = [
   'KitRoom.jsx', 'kit/MoveSheet.jsx', 'kit/SayMove.jsx', 'kit/RepairSheet.jsx', 'kit/SystemDetail.jsx', 'kit/AddTraySheet.jsx', 'kit/CourierNumbers.jsx', 'kit/KitSettings.jsx', 'kit/FillAgreements.jsx', 'kit/KitDetail.jsx', 'kit/TrayList.jsx', 'kit/EditableTray.jsx', 'kit/KitDocs.jsx', 'kit/FromDropbox.jsx', 'kit/AttachAgreements.jsx', 'cases/TaskSheet.jsx', 'cases/KitPicker.jsx', 'cases/LoanTrail.jsx', 'Projects.jsx', 'Timesheets.jsx',
-  'LeaveForm.jsx', 'LockScreen.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx', 'Resources.jsx',
+  'LeaveForm.jsx', 'LockScreen.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx', 'Resources.jsx', 'RebateCodes.jsx',
   'Cases.jsx', 'TeamLeader.jsx', 'CaseWeek.jsx', 'cases/EditBooking.jsx', 'cases/NewBooking.jsx',
   'cases/NewTask.jsx', 'cases/ListOrder.jsx',
   'cases/BookingQueue.jsx', 'cases/SetAsideEmails.jsx', 'cases/DictateBooking.jsx', 'cases/PasteMessage.jsx', 'cases/InSitu.jsx', 'cases/ListPlace.jsx',

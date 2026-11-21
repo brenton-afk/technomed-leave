@@ -13,8 +13,8 @@ import {
 // makes an app feel cluttered.
 
 export function KitHub({ user, onNavigate }) {
-  // Kit is only kit (Brent, 12 Nov 2026): Projects, Resources and Team leader
-  // moved to their own homes — their own tabs, and Cases.
+  // Kit is kit (Brent, 12 Nov 2026): Projects and Team leader moved to their
+  // own homes. Resources came back here on 21 Nov 2026 (Brent).
   return (
     <Page>
       <Header eyebrow="Kit" title="Kit" subtitle="What's where, and what to bring" />
@@ -29,6 +29,9 @@ export function KitHub({ user, onNavigate }) {
           <NavCard icon={IconFolder} label="Theatre guides" tint="ocean"
             detail="Field references and surgeon preference cards"
             onClick={() => onNavigate({ tab: 'kit', sub: 'guides' })} />
+          <NavCard icon={IconFile} label="Resources" tint="grape"
+            detail="ARTG, surgical techniques, rebate codes and tray lists per system"
+            onClick={() => onNavigate({ tab: 'kit', sub: 'resources' })} />
         </NavGroup>
       </Body>
     </Page>

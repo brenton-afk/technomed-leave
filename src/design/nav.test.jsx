@@ -28,9 +28,9 @@ beforeEach(() => {
 })
 
 describe('bottom navigation', () => {
-  // Layout of 12 Nov 2026 (Brent): Projects and Resources have their own
-  // tabs, Kit is only kit, Messages is reached from Me until its own app.
-  it('shows the same six tabs to everybody', async () => {
+  // Layout of 12 Nov 2026 (Brent): Projects has its own tab, Messages is
+  // reached from Me until its own app. Resources moved into Kit on 21 Nov 2026.
+  it('shows the same five tabs to everybody', async () => {
     // Including the admin. Admin used to hold the fifth slot and now lives at
     // the top of Me: five is the limit a bottom bar stays scannable at, an
     // admin is one of two people, and Messages is for all nine several times a
@@ -40,7 +40,7 @@ describe('bottom navigation', () => {
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Resources', 'Me'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Me'])
   })
 
   it('shows a rep the same bar', () => {
@@ -48,7 +48,7 @@ describe('bottom navigation', () => {
     render(<App />)
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const labels = [...nav.querySelectorAll('button')].map(b => b.textContent)
-    expect(labels).toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Resources', 'Me'])
+    expect(labels).toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Me'])
     expect(labels).not.toContain('Admin')
   })
 
@@ -119,7 +119,8 @@ describe('bottom navigation', () => {
 
   it('sends links written to the old places to the new ones', () => {
     expect(movedTarget({ tab: 'kit', sub: 'projects' })).toMatchObject({ tab: 'projects', sub: null })
-    expect(movedTarget({ tab: 'kit', sub: 'resources' })).toMatchObject({ tab: 'resources', sub: null })
+    expect(movedTarget({ tab: 'resources' })).toMatchObject({ tab: 'kit', sub: 'resources' })
+    expect(movedTarget({ tab: 'kit', sub: 'resources' })).toEqual({ tab: 'kit', sub: 'resources' })
     expect(movedTarget({ tab: 'kit', sub: 'teamlead' })).toMatchObject({ tab: 'cases', sub: 'teamlead' })
     expect(movedTarget({ tab: 'messages' })).toMatchObject({ tab: 'me', sub: 'messages' })
     expect(movedTarget({ tab: 'kit', sub: 'kitroom' })).toEqual({ tab: 'kit', sub: 'kitroom' })
@@ -127,23 +128,24 @@ describe('bottom navigation', () => {
 })
 
 describe('hub contents (the agreed structure)', () => {
-  it('Kit carries only kit: Kit room, Stock take and Theatre guides', async () => {
+  it('Kit carries Kit room, Stock take, Theatre guides and Resources', async () => {
     signIn(REP)
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /^Kit$/ }))
-    for (const label of ['Kit Room', 'Stock take', 'Theatre guides']) {
+    for (const label of ['Kit Room', 'Stock take', 'Theatre guides', 'Resources']) {
       await waitFor(() => expect(screen.getAllByText(label).length).toBeGreaterThan(0))
     }
     expect(screen.queryByText('Projects & actions')).not.toBeInTheDocument()
     expect(screen.queryByText('Team leader')).not.toBeInTheDocument()
   })
 
-  it('gives Projects and Resources their own tabs', async () => {
+  it('gives Projects its own tab, and Resources a card in Kit', async () => {
     signIn(REP)
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /^Projects$/ }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /^Resources$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Kit$/ }))
+    fireEvent.click(await screen.findByText('Resources'))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Resources' })).toBeInTheDocument())
   })
 

@@ -44,7 +44,7 @@ export const SCREENS = [
   { label: 'Patient history', words: 'patient history previous implants revision', to: { tab: 'me', sub: 'patient' } },
   { label: 'Kit Room', words: 'kit kits room tray trays move loan where', to: { tab: 'kit', sub: 'kitroom' } },
   { label: 'Theatre guides & preference cards', words: 'theatre guide guides preference preferences cards surgeon', to: { tab: 'kit', sub: 'guides' } },
-  { label: 'Resources', words: 'resources documents ifu brochures files', to: { tab: 'resources' } },
+  { label: 'Resources', words: 'resources documents ifu brochures files', to: { tab: 'kit', sub: 'resources' } },
   { label: 'Team leader', words: 'team leader run sheet runsheet rota', to: { tab: 'cases', sub: 'teamlead' } },
   { label: 'Projects & To Do', words: 'projects project tasks to do todo meeting minutes actions', to: { tab: 'projects' } },
   { label: 'Stock take', words: 'stock take count', to: { tab: 'kit', sub: 'stock' } },

@@ -53,7 +53,7 @@ describe('after a leave application has gone', () => {
     await fileLeave()
     const nav = screen.getByRole('navigation', { name: 'Main' })
     expect([...nav.querySelectorAll('button')].map(b => b.textContent))
-      .toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Resources', 'Me'])
+      .toEqual(['Cases', 'Scan', 'Projects', 'Kit', 'Me'])
   })
 
   it('offers two ways on, both saying what they do', async () => {

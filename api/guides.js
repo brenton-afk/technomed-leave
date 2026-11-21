@@ -15,6 +15,7 @@ import {
 import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, uploadFile } from './_dropbox.js'
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
+import { codesForSystem, codeCounts } from './_resourcePrices.js'
 import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath, uploadPathFor } from './_resources.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
 import { repairEmail } from './_kitRepairs.js'
@@ -283,7 +284,18 @@ async function handleResources(req, res, session) {
         try { n = (JSON.parse(lists?.[i] || 'null')?.trays || []).length } catch { n = 0 }
         return { id: k.id, name: k.name, system: k.system, trayCount: n }
       })
-      return res.status(200).json({ systems: resourcesBySystem({ catalogue, picks, kits: withTrays }), canEdit: Boolean(session?.email) })
+      const systems = resourcesBySystem({ catalogue, picks, kits: withTrays })
+      // Rebate codes from Toni's price list, counted per system (21 Nov 2026).
+      const counts = codeCounts(await loadPriceBook().catch(() => null), systems.map(x => x.system))
+      return res.status(200).json({ systems: systems.map(x => ({ ...x, codes: counts[x.system] || 0 })), canEdit: Boolean(session?.email) })
+    }
+    if (what === 'codes' && req.method === 'GET') {
+      // Codes and rebate codes for everyone; the price only for an admin.
+      const staff = STAFF.find(x => x.email === session?.email)
+      const withPrices = Boolean(staff?.isAdmin)
+      const book = await loadPriceBook()
+      if (!book) return res.status(404).json({ error: 'The price list has not been read into the portal yet' })
+      return res.status(200).json({ ...codesForSystem(book, String(req.query.system || ''), { withPrices }), withPrices })
     }
     if (what === 'files' && req.method === 'GET') {
       // Fresh: someone choosing a file has often just put it in Dropbox.
