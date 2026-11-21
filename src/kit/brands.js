@@ -5,18 +5,21 @@
 // the top of each tile, the maker's logo in its corner, the maker above the
 // name. Pictures are the product shots from the theatre guides, in
 // public/kit-art; a real logo only where a guide carries one (Brainlab,
-// Precision Spine, Global Biomedica) — the rest are the maker's name in its
-// colour until we have the files. A system with no picture shows its initial.
+// Precision Spine, Global Biomedica) and, from Brent's own files (21 Nov
+// 2026), SeaSpine and Orthofix — SIGNUS and the rest are the maker's name in
+// its colour until we have the files. Brent's product shots replaced the guide
+// pictures for Mariner, Shoreline, Diplomat, Dakota and added Ascot (the
+// curved ST-Line cage), CYLOX and Forza XP. A system with no picture shows its initial.
 // To change a picture, replace the file in public/kit-art (240 × 240 JPEG).
 
 const ART = name => `/kit-art/${name}`
 
 const MAKERS = {
-  seaspine: { name: 'SeaSpine', ink: '#b8500e' },
+  seaspine: { name: 'SeaSpine', ink: '#b8500e', logo: ART('logo-seaspine.png'), logoBg: '#ffffff' },
   signus: { name: 'SIGNUS', ink: '#c8102e' },
-  precision: { name: 'Precision Spine', ink: '#3d4a5c', logo: ART('logo-precision-spine.png'), logoBg: '#111111' },
+  precision: { name: 'Precision Spine', ink: '#1f3c88', logo: ART('logo-precision-spine.png'), logoBg: '#ffffff' },
   global: { name: 'Global Biomedica', ink: '#3f7d2c', logo: ART('logo-global-biomedica.png'), logoBg: '#ffffff' },
-  orthofix: { name: 'Orthofix', ink: '#003da5' },
+  orthofix: { name: 'Orthofix', ink: '#003da5', logo: ART('logo-orthofix.png'), logoBg: '#ffffff' },
   nuvasive: { name: 'NuVasive', ink: '#6b2d8f' },
   globus: { name: 'Globus Medical', ink: '#0b4f8a' },
   brainlab: { name: 'Brainlab', ink: '#3d4a5c', logo: ART('logo-brainlab.png'), logoBg: '#3d4a5c' },
@@ -32,13 +35,16 @@ const RULES = [
   [/shoreline|truprofile/, 'seaspine', 'shoreline.jpg'],
   [/fathom/, 'seaspine', 'fathom.jpg'],
   [/diplomat/, 'signus', 'diplomat.jpg'],
-  [/athlet|ascot/, 'signus', 'athlet.jpg'],
-  [/cylox|mobis|signus/, 'signus', null],
+  [/ascot/, 'signus', 'ascot.jpg'],
+  [/athlet/, 'signus', 'athlet.jpg'],
+  [/cylox/, 'signus', 'cylox.jpg'],
+  [/mobis|signus/, 'signus', null],
   [/dakota/, 'precision', 'dakota.jpg'],
   [/reform/, 'precision', 'reform.jpg'],
   [/global|bmd/, 'global', 'global-plif.jpg'],
   [/lonestar/, 'orthofix', 'lonestar.jpg'],
-  [/firebird|forza|orthofix/, 'orthofix', null],
+  [/forza/, 'orthofix', 'forza.jpg'],
+  [/firebird|orthofix/, 'orthofix', null],
   [/nuvasive|xcore/, 'nuvasive', 'nuvasive.jpg'],
   [/reline|globus/, 'globus', null],
   [/brainlab|airo/, 'brainlab', 'brainlab.jpg'],

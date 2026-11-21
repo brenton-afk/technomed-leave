@@ -1631,8 +1631,10 @@ I'll tell you which ones to change"). Each system tile has the system's
 product picture across the top (`data-tile-art`, 88px, from the theatre
 guides) and the maker above its name in the maker's colour (`data-tile-maker`,
 falling back to the distributor); a real logo sits in the picture's corner
-(`data-tile-logo`) only for Brainlab, Precision Spine and Global Biomedica —
-the only makers whose logos the guides carry. `brandFor` in `src/kit/brands.js`
+(`data-tile-logo`) for Brainlab, Precision Spine and Global Biomedica (from
+the guides) and SeaSpine and Orthofix (Brent's files, same day — he also sent
+product shots for Mariner, Shoreline, Diplomat, Dakota, Ascot, CYLOX and Forza
+XP, which replaced or added those pictures). `brandFor` in `src/kit/brands.js`
 (pure, `brands.test.js`): `RULES` system words → maker and picture, `MAKERS`
 name, ink, logo. No picture → the system's initial. Pictures are 240×240
 JPEGs in `public/kit-art/` — **to change one, replace the file**; a new logo is
