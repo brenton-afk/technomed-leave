@@ -17,15 +17,17 @@ const ART = name => `/kit-art/${name}`
 
 const MAKERS = {
   seaspine: { name: 'SeaSpine', ink: '#b8500e', logo: ART('logo-seaspine.png'), logoBg: '#ffffff', logoAspect: 5.25 },
-  signus: { name: 'SIGNUS', ink: '#c8102e' },
+  signus: { name: 'SIGNUS', ink: '#c8102e', logo: ART('logo-signus.png'), logoBg: '#ffffff', logoAspect: 3.04 },
   precision: { name: 'Precision Spine', ink: '#1f3c88', logo: ART('logo-precision-spine.png'), logoBg: '#ffffff', logoAspect: 3.12 },
   global: { name: 'Global Biomedica', ink: '#3f7d2c', logo: ART('logo-global-biomedica.png'), logoBg: '#ffffff', logoAspect: 3.07 },
   orthofix: { name: 'Orthofix', ink: '#003da5', logo: ART('logo-orthofix.png'), logoBg: '#ffffff', logoAspect: 2.8 },
   nuvasive: { name: 'NuVasive', ink: '#6b2d8f' },
   globus: { name: 'Globus Medical', ink: '#0b4f8a' },
   brainlab: { name: 'Brainlab', ink: '#3d4a5c', logo: ART('logo-brainlab.png'), logoBg: '#3d4a5c', logoAspect: 1.4 },
-  technomed: { name: 'TechnoMed', ink: '#0f6f60' },
-  arthrex: { name: 'Arthrex', ink: '#1f2a37' },
+  technomed: { name: 'TechnoMed', ink: '#0f6f60', logo: ART('logo-technomed.png'), logoBg: '#ffffff', logoAspect: 4.25 },
+  arthrex: { name: 'Arthrex', ink: '#1f2a37', logo: ART('logo-arthrex.png'), logoBg: '#ffffff', logoAspect: 3.38 },
+  newclip: { name: 'Newclip Technics', ink: '#1f2a37', logo: ART('logo-newclip.png'), logoBg: '#ffffff', logoAspect: 3.92 },
+  ausbiotech: { name: 'Australian Biotechnologies', ink: '#222222', logo: ART('logo-ausbiotech.png'), logoBg: '#ffffff', logoAspect: 3.0 },
   synthes: { name: 'DePuy Synthes', ink: '#c8102e' }
 }
 
@@ -43,9 +45,8 @@ const RULES = [
   [/signus/, 'signus', null],
   [/dakota/, 'precision', 'dakota.jpg'],
   [/reform/, 'precision', 'reform.jpg'],
-  // The ALIF is Catenary (Brent, 21 Nov 2026), E4's own brochure: its maker
-  // line falls back to the distributor.
-  [/catenary|alif/, null, 'catenary.jpg'],
+  // The ALIF is Catenary (Brent, 21 Nov 2026), Global Biomedica's.
+  [/catenary|alif/, 'global', 'catenary.jpg'],
   [/global|bmd/, 'global', 'global-plif.jpg'],
   [/lonestar/, 'orthofix', 'lonestar.jpg'],
   [/forza/, 'orthofix', 'forza.jpg'],
@@ -54,8 +55,11 @@ const RULES = [
   [/nuvasive|xcore/, 'nuvasive', 'nuvasive.jpg'],
   [/reline|globus/, 'globus', null],
   [/brainlab|airo/, 'brainlab', 'brainlab.jpg'],
-  [/arthrex/, 'arthrex', null],
+  [/arthrex|mini drill|drill saw/, 'arthrex', 'arthrex-drill.jpg'],
+  [/newclip/, 'newclip', null],
+  [/boost|ultrafib/, 'ausbiotech', 'boost.jpg'],
   [/synthes|clavicle|tibia/, 'synthes', null],
+  [/cerc+ess/, 'technomed', 'cercess.jpg'],
   [/^tm\b|technomed/, 'technomed', null]
 ]
 

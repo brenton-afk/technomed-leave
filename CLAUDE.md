@@ -1660,6 +1660,12 @@ guides) and the maker above its name — as its logo (`data-tile-logo`, 15px, on
 chip of `logoBg` when that is dark — Brainlab's is white), never over the
 picture (Brent, same day: "the Seaspine logo covers part of the images"), else
 its name in its colour (`data-tile-maker`, falling back to the distributor).
+Then (same day): SIGNUS (from Dropbox `/Distributors/Signus/Signus Logos`),
+TechnoMed on every TM kit, Arthrex (and the Arthrex drill as the Mini Drill's
+picture), Newclip (its mark beside its name, so it reads at tile size), the
+Cercess retractors' picture, Boost UltraFibres (the fibres and Australian
+Biotechnologies' logo from the Device brochure in Dropbox), Catenary under
+Global Biomedica, and Firebird's screws cut out of their grey studio background.
 Logos are drawn to about the same area, not one height (Brent, same day:
 "make the logos for the company names consistent sizes"): `logoAspect` per
 maker, `logoHeight` gives 14–24px (SeaSpine ~16, Global/Orthofix/Precision
