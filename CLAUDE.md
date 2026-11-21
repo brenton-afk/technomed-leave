@@ -1675,7 +1675,9 @@ bottom … tap back to go back to the rest of the list"). A saved tray
 Leave out) opens `TrayPage` — full screen in an `Overlay`, zIndex 3150
 (above SystemDetail 3100, under Repair 3200 / Move 3250 / DocViewer), the
 back arrow (`data-tray-back`) and the phone's back button (`useBackLayer`)
-return to the list; Move, Edit, Print, the photo (sticky at the page's top)
+return to the list; Move, Edit, Print, the photo (sticky at the page's very top —
+`top: -space.sm` to cover the page's own top padding, or rows showed through a
+strip above it; Brent, 21 Nov 2026)
 and only that tray's lines. A tray being checked after an upload still
 opens in place.
 **Instrument trays, then implant trays** (Brent, same day: "group instrument

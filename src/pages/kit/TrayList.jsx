@@ -158,7 +158,7 @@ function TrayBlock({ tray, open, onToggle, onRemove, onRemoveLine, photoData, us
                 third of the screen at most; tap it for full size (Brent,
                 21 Nov 2026: "It's just a long way to scroll"). */}
             {(photoData || tray.photo) && (
-              <div data-sticky-photo style={{ position: 'sticky', top: asPage ? 0 : -space.md, zIndex: 2, background: colour.surface,
+              <div data-sticky-photo style={{ position: 'sticky', top: asPage ? -space.sm : -space.md, zIndex: 2, background: colour.surface,
                 padding: `${space.md}px 0 ${space.xs}px`, borderBottom: border.hairlineSoft }}>
                 {photoData
                   ? <button type="button" data-tray-photo aria-label={`${tray.name} — full size`}
