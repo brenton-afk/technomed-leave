@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense, lazy } from 'react'
 import { useBackLayer } from '../../backButton.js'
 import TimesheetApprovals from './TimesheetApprovals.jsx'
 import StaffPins from './StaffPins.jsx'
@@ -10,8 +10,10 @@ import Invoices from './Invoices.jsx'
 import AmendLeave from './AmendLeave.jsx'
 import Commissions from './Commissions.jsx'
 import PriceLists from './PriceLists.jsx'
+// Brent only, and loaded only when opened (22 Nov 2026).
+const StockPreview = lazy(() => import('./stock/StockPreview.jsx'))
 import { Header, Body, NavGroup, NavCard } from '../../design/Shell.jsx'
-import { IconLeave, IconClock, IconWallet, IconChart, IconChat, IconFile, IconLock, IconAdmin } from '../../design/icons.jsx'
+import { IconLeave, IconClock, IconWallet, IconChart, IconChat, IconFile, IconLock, IconAdmin, IconStock } from '../../design/icons.jsx'
 
 const LEAVE_LABELS = {
   'ANNUAL_LEAVE': 'Annual Leave',
@@ -126,7 +128,16 @@ export default function AdminPortal({ user, section, onExit }) {
     fetch('/api/xero/info?action=commission-access', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
       .then(r => setCanCommission(r.ok)).catch(() => {})
   }, [user?.token])
-  const sections = canCommission ? [...SECTIONS.slice(0, 4), ['commissions', 'Commissions', 'Commissions'], ...SECTIONS.slice(4)] : SECTIONS
+  // The stock-on-hand preview: the same rule (Brent, 22 Nov 2026).
+  const [canStock, setCanStock] = useState(false)
+  useEffect(() => {
+    fetch('/api/xero/info?action=stock-preview-access', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
+      .then(r => setCanStock(r.ok)).catch(() => {})
+  }, [user?.token])
+  const sections = [
+    ...(canCommission ? [...SECTIONS.slice(0, 4), ['commissions', 'Commissions', 'Commissions'], ...SECTIONS.slice(4)] : SECTIONS),
+    ...(canStock ? [['stock', 'Stock on hand', 'Stock on hand (preview)']] : [])
+  ]
   const [domain, setDomain] = useState(() => {
     // null is the hub; Dropbox's return lands straight on System.
     try { return new URLSearchParams(window.location.search).get('dropbox') ? 'system' : (section || null) } catch { return section || null }
@@ -266,6 +277,11 @@ export default function AdminPortal({ user, section, onExit }) {
               <NavCard icon={IconChart} tint="navy" label="Commissions" detail="Worked out from Xero before the 1st of each month" onClick={() => setDomain('commissions')} />
             )}
           </NavGroup>
+          {canStock && (
+            <NavGroup label="Trying out">
+              <NavCard icon={IconStock} tint="teal" label="Stock on hand (preview)" detail="The stock mock-ups as screens to try — only you see this" onClick={() => setDomain('stock')} />
+            </NavGroup>
+          )}
           <NavGroup label="Email">
             <NavCard icon={IconChat} tint="sky" label="Supplier notices" detail="Who is told about bookings and loan sets" onClick={() => setDomain('notices')} />
             <NavCard icon={IconFile} tint="slate" label="Sent email" detail="Every email the portal has sent" onClick={() => setDomain('email')} />
@@ -287,6 +303,7 @@ export default function AdminPortal({ user, section, onExit }) {
         {domain === 'invoices' && <Invoices user={user} />}
         {domain === 'prices' && <PriceLists user={user} />}
         {domain === 'commissions' && canCommission && <Commissions user={user} />}
+        {domain === 'stock' && canStock && <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:'#6b7a8d' }}>Loading…</div>}><StockPreview /></Suspense>}
         {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
         {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{error}</div>}

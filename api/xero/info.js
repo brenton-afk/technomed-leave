@@ -1,4 +1,5 @@
 import { requireAdmin, requireSession } from '../_auth.js'
+import { mayPreviewStock } from '../_stockPreview.js'
 import { mayUseCommissions, getRules, saveRules, getRun, listRuns, runCommissions, approveRun } from '../_commissions.js'
 import { nextSalesMonth, paymentDateFor, calcDateFor } from '../../src/commissions/schedule.js'
 import { todayStr } from '../../src/clinicalPlan/week.js'
@@ -30,6 +31,16 @@ export default async function handler(req, res) {
   const action = req.query.action || 'status'
 
   try {
+    // ── Stock on hand preview (Brent only, 22 Nov 2026) ──
+    // The stock-on-hand mock-ups as working screens with sample data, for
+    // Brent to try before anything is built. Everyone else: a plain 404.
+    if (action === 'stock-preview-access') {
+      const session = await requireSession(req, res)
+      if (!session) return
+      if (!mayPreviewStock(session.email)) return res.status(404).json({ error: 'Not found' })
+      return res.status(200).json({ ok: true })
+    }
+
     // ── Commissions (Brent only, 15 Nov 2026) ──
     // Anyone not on COMMISSION_USERS gets a plain 404, as if there were none.
     if (String(action).startsWith('commission')) {

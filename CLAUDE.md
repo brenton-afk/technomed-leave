@@ -2342,6 +2342,22 @@ list", each wrong or unlisted code with **Use {code}**, and "It's from
 {distributor}". Advisory, never a stop, never a price. Saved lines keep
 `listed` (the status) and `rebate` for the stock processes to come.
 
+### Stock on hand preview (Brent only, 22 Nov 2026)
+
+"Wire in these stock on hand modules into my admin portal for now (not
+visible by anyone else). I want to have a play with them and give feedback."
+Admin → **Stock on hand (preview)** (under "Trying out"), shown only when
+`/api/xero/info?action=stock-preview-access` answers 200 — `STOCK_PREVIEW_USERS`
+(default brenton@; `mayPreviewStock` in `api/_stockPreview.js`), everyone else
+a plain 404. `src/pages/admin/stock/StockPreview.jsx` lists the twelve
+mock-ups (`claude.ai/artifact/DhntrzaARgzpwbwfSnnRmN`) and opens each from
+`stock/screens/*.jsx` (lazy, its own chunk; phone screens in a 420px frame) —
+ported from the mock-ups with the portal chrome dropped, responding to taps on
+**made-up data**: no fetch, no storage, nothing saved or sent
+(`stockPreview.test.jsx` holds that). Screens link to each other with `go(id)`
+(stocktake → count → review). Shared colours in `stock/ui.js`. When the design
+settles, the real thing is built properly and this preview is removed.
+
 ### Commissions (Brent only, 15 Nov 2026)
 
 "Build an auto commission pay calculator, based on the commission tables saved
