@@ -39,10 +39,14 @@ const GROUPS = [
 
 const TINTS = ['teal', 'navy', 'amber', 'sky', 'grape', 'ocean', 'rose', 'slate']
 
-export default function StockPreview({ onTitle }) {
-  const [open, setOpen] = useState(null)
-  const go = id => { if (SCREENS[id]) { setOpen(id); onTitle?.(SCREENS[id].label) } }
-  const close = () => { setOpen(null); onTitle?.(null) }
+// Which screen is open is held by Admin (`open` / `onOpen`), so the band's
+// back arrow returns to this list, not to the Admin hub (Brent, 22 Nov 2026).
+export default function StockPreview({ open: shown, onOpen }) {
+  const [own, setOwn] = useState(null)
+  const open = onOpen ? shown : own
+  const setOpen = onOpen || setOwn
+  const go = id => { if (SCREENS[id]) setOpen(id) }
+  const close = () => setOpen(null)
   useBackLayer(!!open, close)
 
   return (

@@ -2355,7 +2355,7 @@ mock-ups (`claude.ai/artifact/DhntrzaARgzpwbwfSnnRmN`) and opens each from
 ported from the mock-ups with the portal chrome dropped, responding to taps on
 **made-up data**: no fetch, no storage, nothing saved or sent
 (`stockPreview.test.jsx` holds that). Screens link to each other with `go(id)`
-(stocktake → count → review). Shared colours in `stock/ui.js`. When the design
+(stocktake → count → review). Shared colours in `stock/ui.js`. The open screen is held by `AdminPortal` (`stockScreen`), so the band's back arrow (and the phone's back) returns to the stock list, not the Admin hub; the band then names the screen. When the design
 settles, the real thing is built properly and this preview is removed.
 
 ### Commissions (Brent only, 15 Nov 2026)

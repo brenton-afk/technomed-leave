@@ -12,6 +12,7 @@ import Commissions from './Commissions.jsx'
 import PriceLists from './PriceLists.jsx'
 // Brent only, and loaded only when opened (22 Nov 2026).
 const StockPreview = lazy(() => import('./stock/StockPreview.jsx'))
+const STOCK_TITLES = { main: 'Stock on hand', item: 'Find an implant', resupply: 'Resupply and back orders', phoneResupply: 'Waiting on distributors', billing: 'Case billing from usage', stocktake: 'Stocktake · choose a tray', count: 'Stocktake · count a tray', review: 'Stocktake · differences', teach: 'Teach the portal a tray', restock: 'Restock a tray', leader: 'Which trays to open', flow: 'How stock moves' }
 import { Header, Body, NavGroup, NavCard } from '../../design/Shell.jsx'
 import { IconLeave, IconClock, IconWallet, IconChart, IconChat, IconFile, IconLock, IconAdmin, IconStock } from '../../design/icons.jsx'
 
@@ -125,6 +126,8 @@ export default function AdminPortal({ user, section, onExit }) {
   // (Brent alone, 15 Nov 2026) — everyone else gets a 404 and no chip.
   const [canCommission, setCanCommission] = useState(false)
   const [canStock, setCanStock] = useState(false)
+  // The stock preview screen open, if any — the band's back arrow closes it first.
+  const [stockScreen, setStockScreen] = useState(null)
   useEffect(() => {
     fetch('/api/xero/info?action=commission-access', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
       .then(async r => {
@@ -255,9 +258,9 @@ export default function AdminPortal({ user, section, onExit }) {
           the little buttons … stuck at the top of the screen"). The hub is the
           portal's own grouped list; a section has the band with a back arrow
           to the hub. Replaces the row of chips. */}
-      <Header title={domain ? (sections.find(([id]) => id === domain)?.[2] || 'Admin') : 'Admin'}
-        eyebrow={domain ? 'Admin' : undefined}
-        onBack={domain ? () => setDomain(null) : onExit} />
+      <Header title={domain === 'stock' && stockScreen ? (STOCK_TITLES[stockScreen] || 'Stock on hand') : domain ? (sections.find(([id]) => id === domain)?.[2] || 'Admin') : 'Admin'}
+        eyebrow={domain === 'stock' && stockScreen ? 'Stock on hand (preview)' : domain ? 'Admin' : undefined}
+        onBack={domain === 'stock' && stockScreen ? () => setStockScreen(null) : domain ? () => { setStockScreen(null); setDomain(null) } : onExit} />
       {domain === 'leave' && (
         <div data-leave-tabs style={{ display:'flex', gap:8, padding:'12px 16px 0', overflowX:'auto', flexWrap:'nowrap' }}>
           {tabs.map(t => (
@@ -308,7 +311,7 @@ export default function AdminPortal({ user, section, onExit }) {
         {domain === 'invoices' && <Invoices user={user} />}
         {domain === 'prices' && <PriceLists user={user} />}
         {domain === 'commissions' && canCommission && <Commissions user={user} />}
-        {domain === 'stock' && canStock && <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:'#6b7a8d' }}>Loading…</div>}><StockPreview /></Suspense>}
+        {domain === 'stock' && canStock && <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:'#6b7a8d' }}>Loading…</div>}><StockPreview open={stockScreen} onOpen={setStockScreen} /></Suspense>}
         {domain === 'leave' && <>
         {loading && <div style={{ textAlign:'center', padding:40, color:'#6b7a8d' }}>Loading...</div>}
         {error && <div style={{ background:'#fdecea', color:'#c0392b', padding:'12px 14px', borderRadius:10, marginBottom:12, fontSize:13 }}>{error}</div>}

@@ -39,3 +39,27 @@ describe('stock on hand preview (Brent only, 22 Nov 2026)', () => {
     }
   })
 })
+
+describe('the band back arrow inside a stock screen (Brent, 22 Nov 2026)', () => {
+  it('goes back to the stock list, not to the Admin hub', async () => {
+    const { render, screen, fireEvent, waitFor } = await import('@testing-library/react')
+    const React = (await import('react')).default
+    const { default: AdminPortal } = await import('../AdminPortal.jsx')
+    const realFetch = globalThis.fetch
+    globalThis.fetch = async url => {
+      const u = String(url)
+      const ok = /stock-preview-access|commission-access/.test(u)
+      return new Response(JSON.stringify(ok ? { ok: true, stock: true } : { pending: [], approved: [], declined: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    try {
+      render(React.createElement(AdminPortal, { user: { token: 't', email: 'brenton@technomed.com.au', isAdmin: true }, onExit: () => {} }))
+      fireEvent.click(await screen.findByText('Stock on hand (preview)'))
+      fireEvent.click(await screen.findByText('Restock a tray'))
+      await waitFor(() => expect(document.querySelector('[data-preview-screen="restock"]')).toBeTruthy())
+      fireEvent.click(screen.getAllByRole('button', { name: /back/i })[0])
+      await waitFor(() => expect(document.querySelector('[data-preview-screen]')).toBeNull())
+      expect(screen.getByText('Restock a tray')).toBeTruthy()
+      expect(document.querySelector('[data-stock-preview]')).toBeTruthy()
+    } finally { globalThis.fetch = realFetch }
+  })
+})
