@@ -1662,7 +1662,9 @@ trays, Attach agreements, Movement history. The distributor chips are gone
 (search covers distributors). A tile is the distributor in small capitals, the
 system's name, a bar split by where its trays are (`data-place-bar`), the
 same in words, and "N trays on the move". Inside a system
-(`kit/SystemDetail.jsx`): a white header (back, name, **Rename**, distributor
+(`kit/SystemDetail.jsx`): a white header (back — a solid navy 44px button
+with a bold white arrow, `data-system-back`, Brent 22 Nov 2026: "so the arrow
+is a bit more noticeable" — name, **Rename**, distributor
 · trays, **+ Add a tray** and **Documents** — each set's tray-list tools,
 `TrayList rows={false}`, its documents and Set details), then **"On the shelf
 at {place} · N"** per place: each set there (its tick, Move all) with its

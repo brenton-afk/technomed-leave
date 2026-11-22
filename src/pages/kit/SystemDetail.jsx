@@ -5,6 +5,7 @@ import { displayName } from '../../kit/brands.js'
 import { matchesSearch } from '../../kit/moveRequest.js'
 import { Mic } from '../voice/VoiceSheet.jsx'
 import { useBackLayer } from '../../backButton.js'
+import { IconBack } from '../../design/icons.jsx'
 import TrayList from './TrayList.jsx'
 import KitDocs from './KitDocs.jsx'
 import { PLACE_ORDER, setLabel, traysByPlace, caseFor, DIST_SHORT } from '../../kit/systems.js'
@@ -110,10 +111,11 @@ export default function SystemDetail({ system, distributor = '', canEdit, user, 
         }}>
           <div style={{ padding: space.md, background: colour.surface, borderBottom: border.hairline, display: 'flex', flexDirection: 'column', gap: space.sm }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
-              <button onClick={onClose} aria-label="Back to the kit room" style={{
-                width: 40, height: 40, borderRadius: radius.control, border: 'none', background: colour.canvas, color: colour.ink,
-                cursor: 'pointer', ...text('heading'), flexShrink: 0
-              }}>‹</button>
+              {/* A solid navy button with a bold arrow (Brent, 22 Nov 2026: "so the arrow is a bit more noticeable") */}
+              <button onClick={onClose} aria-label="Back to the kit room" data-system-back style={{
+                ...face.navy, width: 44, height: 44, padding: 0, borderRadius: radius.control, flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+              }}><IconBack size={24} strokeWidth={2.6} colour="#fff" /></button>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {naming === null ? (
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' }}>
