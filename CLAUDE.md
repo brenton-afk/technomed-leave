@@ -1723,7 +1723,7 @@ picture (Brent, same day: "the Seaspine logo covers part of the images"), else
 its name in its colour (`data-tile-maker`, falling back to the distributor).
 Then (same day): SIGNUS (from Dropbox `/Distributors/Signus/Signus Logos`),
 SIGNUS (Brent's sharper file, same day), TechnoMed on every TM kit, Arthrex (and the Arthrex drill as the Mini Drill's
-picture), Newclip (its mark beside its name, so it reads at tile size), the
+picture — two stray black marks cleaned off, 22 Nov 2026), Newclip (its mark beside its name, so it reads at tile size), the
 Cercess retractors' picture (a SIGNUS product — SIGNUS logo, Brent same day), Boost UltraFibres (the fibres and Australian
 Biotechnologies' logo from the Device brochure in Dropbox), Catenary under
 Global Biomedica, and Firebird's screws cut out of their grey studio background.
