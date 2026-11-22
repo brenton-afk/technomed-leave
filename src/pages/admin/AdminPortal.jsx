@@ -124,15 +124,20 @@ export default function AdminPortal({ user, section, onExit }) {
   // Commissions appear only when the server says this person may see them
   // (Brent alone, 15 Nov 2026) — everyone else gets a 404 and no chip.
   const [canCommission, setCanCommission] = useState(false)
-  useEffect(() => {
-    fetch('/api/xero/info?action=commission-access', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
-      .then(r => setCanCommission(r.ok)).catch(() => {})
-  }, [user?.token])
-  // The stock-on-hand preview: the same rule (Brent, 22 Nov 2026).
   const [canStock, setCanStock] = useState(false)
   useEffect(() => {
+    fetch('/api/xero/info?action=commission-access', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
+      .then(async r => {
+        setCanCommission(r.ok)
+        // The stock preview rides on this answer too, in case its own check
+        // is the one that does not come back (Brent, 22 Nov 2026).
+        if (r.ok) { const j = await r.json().catch(() => ({})); if (j.stock) setCanStock(true) }
+      }).catch(() => {})
+  }, [user?.token])
+  // The stock-on-hand preview: the same rule (Brent, 22 Nov 2026).
+  useEffect(() => {
     fetch('/api/xero/info?action=stock-preview-access', { headers: { Authorization: `Bearer ${user?.token || ''}` } })
-      .then(r => setCanStock(r.ok)).catch(() => {})
+      .then(r => { if (r.ok) setCanStock(true) }).catch(() => {})
   }, [user?.token])
   const sections = [
     ...(canCommission ? [...SECTIONS.slice(0, 4), ['commissions', 'Commissions', 'Commissions'], ...SECTIONS.slice(4)] : SECTIONS),

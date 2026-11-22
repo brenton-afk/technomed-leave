@@ -361,7 +361,7 @@ async function handleInvoices(action, req, res, session) {
 async function handleCommissions(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
   try {
-    if (action === 'commission-access') return res.status(200).json({ ok: true })
+    if (action === 'commission-access') return res.status(200).json({ ok: true, stock: mayPreviewStock(session.email) })
     if (action === 'commission-runs') {
       const next = nextSalesMonth(todayStr())
       return res.status(200).json({ runs: await listRuns(), next: { salesMonth: next, paymentDate: paymentDateFor(next), calcDate: calcDateFor(next) } })
