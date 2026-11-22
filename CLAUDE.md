@@ -1549,6 +1549,20 @@ stay with admins and the clinical team. Everything is in `kits:history`.
   page that fails to draw is left blank, not thrown. Checked in Chromium on the
   signed Outrigger agreement (7 pages, first page ~1s); Safari itself is not
   available here.
+- **Spreadsheets open in the portal** (Brent, 22 Nov 2026: "Why do xlsx
+  files try to load in PayPal?" — an iPhone cannot show an .xlsx, so a
+  download was offered to whichever app claims spreadsheets). `viewKind` now
+  gives `.xlsx` / `.xlsm` the kind `sheet`: `DocViewer` reads it with exceljs
+  (loaded only then; `readWorkbook` / `sheetsFromWorkbook` / `cellText` /
+  `filterRows` in `src/kit/sheetView.js`, pure, `sheetView.test.js`) and draws
+  `SheetView` — a tab per visible sheet, **Find in this sheet** (every word,
+  heading kept), the table in its own box scrolling both ways with the heading
+  row held, codes on one line, zoom making the text bigger; up to 3000 rows ×
+  60 columns ("N more not shown — Download"). Formulas show their result,
+  links their words only. Print prints the table. Resources and kit documents
+  get it for free (both open everything in DocViewer); a past usage's sheet
+  (`scan/CaseFiles.jsx`) now opens there too, with no Dropbox path so it is
+  never kept on the phone. An old `.xls` still downloads.
 - **TM loan kits have no consignment agreement** (Brent, same day: "Just tray
   lists for these kits"): `needsAgreement` (`src/kit/agreements.js`, kind
   `floating` → false) hides the tile's Agreement chip (its Tray list chip

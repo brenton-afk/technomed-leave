@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { FileViewer } from '../Chat.jsx'
+import DocViewer, { viewKind } from '../../kit/DocViewer.jsx'
 
 // ─── A past usage's own files (Brent, 9 Nov 2026) ────────────────────────────
 // "You should be able to tap the usage from past scanned usages and see your
@@ -8,7 +9,10 @@ import { FileViewer } from '../Chat.jsx'
 // sheet, an amended sheet, the Boost tracking form — listed from the record,
 // each opened through action=open, which only opens what the portal itself
 // filed (the rest of the usage tree stays locked until the redaction is done).
-// A PDF or photo is shown in the portal's own viewer; a spreadsheet downloads.
+// A PDF or photo is shown in the portal's own viewer; a spreadsheet in the
+// document viewer's table (22 Nov 2026 — it used to download, and an iPhone
+// offered it to whatever app claimed spreadsheets). Passed no Dropbox path, so
+// a usage sheet is never kept on the phone.
 
 const kindOf = name => (/\.pdf$/i.test(name) ? 'application/pdf' : /\.(jpe?g)$/i.test(name) ? 'image/jpeg' : /\.png$/i.test(name) ? 'image/png' : '')
 const label = name => {
@@ -24,6 +28,7 @@ export default function CaseFiles({ usage, user }) {
   const [opening, setOpening] = useState('')
   const [error, setError] = useState('')
   const [viewing, setViewing] = useState(null) // { url, name, type }
+  const [sheet, setSheet] = useState(null) // { url, name } — a spreadsheet
   const files = usage.filesSaved || []
 
   // An object URL made for the viewer is let go when it closes.
@@ -39,7 +44,8 @@ export default function CaseFiles({ usage, user }) {
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.url) throw new Error(data.error || 'That file could not be opened')
       const type = kindOf(name)
-      if (!type) { window.location.assign(data.url); return } // a spreadsheet: download it
+      if (!type && viewKind(name) === 'sheet') { setSheet({ url: data.url, name }); return }
+      if (!type) { window.location.assign(data.url); return } // anything else: download it
       try {
         const blob = await (await fetch(data.url)).blob()
         setViewing({ url: URL.createObjectURL(new Blob([blob], { type })), name, type })
@@ -65,12 +71,13 @@ export default function CaseFiles({ usage, user }) {
             }}>
             <span style={{ ...text('bodyStrong'), color: colour.ink, flex: 1 }}>{label(name)}</span>
             <span style={{ ...text('caption'), color: colour.accent }}>
-              {opening === name ? 'Opening…' : kindOf(name) ? 'View' : 'Download'}
+              {opening === name ? 'Opening…' : kindOf(name) || viewKind(name) === 'sheet' ? 'View' : 'Download'}
             </span>
           </button>
         ))}
       {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginTop: space.xs }}>{error}</div>}
       {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
+      {sheet && <DocViewer name={sheet.name} url={sheet.url} onClose={() => setSheet(null)} />}
     </div>
   )
 }

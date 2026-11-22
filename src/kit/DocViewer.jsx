@@ -4,6 +4,7 @@ import { colour, text, space, radius } from '../design/tokens.js'
 import { cachedDoc, keepDoc, downloadWithProgress, dropboxAppLink } from './docCache.js'
 import { typeOfName } from './share.js'
 import { useBackLayer } from '../backButton.js'
+import { readWorkbook, filterRows } from './sheetView.js'
 
 // ─── Read a kit's document in the portal (Brent, 11 Nov 2026) ───────────────
 // "The kit room needs a viewer built in so you don't need to download the
@@ -31,6 +32,7 @@ export function viewKind(name = '') {
   const ext = String(name).toLowerCase().split('.').pop()
   if (ext === 'pdf') return 'pdf'
   if (ext === 'docx') return 'docx'
+  if (ext === 'xlsx' || ext === 'xlsm') return 'sheet' // Brent, 22 Nov 2026: an iPhone offered them to PayPal
   if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return 'image'
   if (['txt', 'csv'].includes(ext)) return 'text'
   return ''
@@ -255,6 +257,8 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
+  const [tab, setTab] = useState(0) // which sheet of a workbook
+  const [find, setFind] = useState('')
 
   useEffect(() => {
     const key = e => { if (e.key === 'Escape') onClose() }
@@ -283,6 +287,13 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
         setBlobUrl(href)
         if (kind === 'image') { setState({ phase: 'image', src: href }); return }
         if (kind === 'text') { setState({ phase: 'text', body: new TextDecoder().decode(buf) }); return }
+        if (kind === 'sheet') {
+          const sheets = await readWorkbook(buf)
+          if (!live) return
+          if (!sheets.length) throw new Error('There is nothing on this spreadsheet')
+          setState({ phase: 'sheet', sheets })
+          return
+        }
         if (kind === 'docx') {
           const body = await wordBody(buf)
           if (live) setState({ phase: 'word', body })
@@ -472,6 +483,14 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
         const img = document.createElement('img')
         img.src = state.src
         node.appendChild(img)
+      } else if (state.phase === 'sheet') {
+        const sheet = state.sheets[Math.min(tab, state.sheets.length - 1)]
+        const table = document.createElement('table')
+        filterRows(sheet.rows, find).forEach((r, i) => {
+          const tr = table.insertRow()
+          for (const c of r) { const cell = document.createElement(i === 0 ? 'th' : 'td'); cell.textContent = c; tr.appendChild(cell) }
+        })
+        node.appendChild(table)
       } else if (state.phase === 'text') {
         const pre = document.createElement('pre')
         pre.textContent = state.body
@@ -529,6 +548,9 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
           {state.phase === 'cannot' && message('This kind of file cannot be shown in the portal — Download it to open it.')}
           {state.phase === 'failed' && message(`${state.error}. Tap Dropbox below to open it in the Dropbox app, or Download it.`)}
 
+          {state.phase === 'sheet' && (
+            <SheetView sheets={state.sheets} tab={tab} onTab={setTab} find={find} onFind={setFind} zoom={zoom} />
+          )}
           {['image', 'text', 'word', 'pdf'].includes(state.phase) && (
             // The stage is laid out at the screen's width and scaled; the sizer
             // around it is the zoomed size, so the scroll area matches exactly.
@@ -590,5 +612,50 @@ export default function DocViewer({ name, url, onClose, onShare, path = '', rev 
         </div>
       </div>
     </Overlay>
+  )
+}
+
+// A workbook: a tab per sheet, a Find box, and the sheet as a table that
+// scrolls both ways in its own box with the heading row held at the top.
+// Zoom (pinch, + / −) makes the text bigger rather than scaling a picture.
+function SheetView({ sheets, tab, onTab, find, onFind, zoom }) {
+  const i = Math.min(tab, sheets.length - 1)
+  const sheet = sheets[i]
+  const rows = filterRows(sheet.rows, find)
+  const size = Math.round(13 * Math.min(zoom, 2.5))
+  const cell = { border: '1px solid #d6dde3', padding: '4px 8px', textAlign: 'left', verticalAlign: 'top', minWidth: 48, maxWidth: 280 }
+  // A code or number stays on one line; only longer words wrap.
+  const wrap = c => (String(c).length > 24 ? { whiteSpace: 'pre-wrap', overflowWrap: 'break-word', minWidth: 200 } : { whiteSpace: 'nowrap' })
+  const chip = on => ({ ...text('caption'), fontWeight: 600, whiteSpace: 'nowrap', minHeight: 34, padding: '0 12px', borderRadius: radius.pill, cursor: 'pointer', border: 'none',
+    background: on ? colour.accent : 'rgba(255,255,255,0.12)', color: 'white' })
+  return (
+    <div data-sheet-view style={{ display: 'flex', flexDirection: 'column', gap: space.xs, padding: space.sm, height: '100%', boxSizing: 'border-box' }}>
+      {sheets.length > 1 && (
+        <div role="tablist" style={{ display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0 }}>
+          {sheets.map((s, n) => (
+            <button key={s.name + n} role="tab" aria-selected={n === i} data-sheet-tab={s.name} type="button" onClick={() => onTab(n)} style={chip(n === i)}>{s.name}</button>
+          ))}
+        </div>
+      )}
+      <input type="search" value={find} onChange={e => onFind(e.target.value)} placeholder="Find in this sheet" aria-label="Find in this sheet" data-sheet-find
+        style={{ fontSize: 16, minHeight: 40, padding: '0 12px', borderRadius: radius.control, border: 'none', flexShrink: 0, boxSizing: 'border-box', width: '100%' }} />
+      <div style={{ ...text('caption'), color: 'rgba(255,255,255,0.65)', flexShrink: 0 }}>
+        {find ? `${Math.max(0, rows.length - 1)} of ${Math.max(0, sheet.rows.length - 1)} rows` : `${Math.max(0, sheet.rows.length - 1)} rows`}
+        {sheet.more > 0 && ` · ${sheet.more} more not shown — Download to see them all`}
+      </div>
+      <div data-sheet-scroll style={{ flex: 1, minHeight: 0, overflow: 'auto', background: 'white', borderRadius: 3, WebkitOverflowScrolling: 'touch' }}>
+        <table data-sheet-table style={{ borderCollapse: 'collapse', fontSize: size, lineHeight: 1.35, color: colour.ink, fontFamily: 'inherit' }}>
+          <tbody>
+            {rows.map((r, n) => (
+              <tr key={n} style={n === 0 ? { position: 'sticky', top: 0, zIndex: 1 } : n % 2 === 0 ? { background: '#f6f8fa' } : undefined}>
+                {r.map((c, k) => n === 0
+                  ? <th key={k} style={{ ...cell, ...wrap(c), background: '#e7eef3', fontWeight: 700 }}>{c}</th>
+                  : <td key={k} style={{ ...cell, ...wrap(c) }}>{c}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }

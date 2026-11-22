@@ -14,7 +14,8 @@ describe('the document viewer', () => {
     expect(viewKind('Agreement.docx')).toBe('docx')
     expect(viewKind('photo.jpeg')).toBe('image')
     expect(viewKind('old.doc')).toBe('')
-    expect(viewKind('list.xlsx')).toBe('')
+    expect(viewKind('list.xlsx')).toBe('sheet') // shown as a table since 22 Nov 2026
+    expect(viewKind('old.xls')).toBe('')
   })
 
   it('says plainly when a file cannot be shown, and offers Download', async () => {
