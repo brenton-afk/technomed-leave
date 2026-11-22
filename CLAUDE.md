@@ -1680,7 +1680,9 @@ needs to be called Catenary ALIF"): renamed in `inventory.js` (old names kept
 as `aka`), `systems.js`, `systemSuggestions.js` and the kit room
 (`catenary-name-2026-11-21` → `renameSystem`); "catenary" now routes to E4 in
 `_distributors.js` (it did not — a Catenary kit line got no E4 notice). Its
-picture is the cage from E4's brochure; Firebird has the coloured screws and
+picture is the cage from E4's brochure with a Catenary screw beside it (cut from
+E4's Catenary ALIF Screw Ref Guide, Eland's email of 4 Jun 2026; Brent, 22 Nov
+2026); Firebird has the coloured screws and
 Ascot the plate with green screws (his files). Later the same day: Shoreline's picture became
 his single cage-and-plate shot, and Mariner's screw was cut out of its grey
 studio background (OpenCV GrabCut, run once here; the file is plain white).
