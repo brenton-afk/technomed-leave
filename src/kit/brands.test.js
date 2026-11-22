@@ -61,6 +61,7 @@ describe('pictures added 22 Nov 2026', () => {
     expect(brandFor('NewClip Trans-Articular Screw').pic).toBe('/kit-art/newclip.jpg')
     expect(brandFor('TM Locking Distractor')).toMatchObject({ maker: 'TechnoMed', pic: '/kit-art/tm-locking-distractor.jpg' })
     expect(brandFor('TM Corpectomy')).toMatchObject({ maker: 'TechnoMed', pic: '/kit-art/tm-corpectomy.jpg' })
+    expect(brandFor('TM Screw Removal')).toMatchObject({ maker: 'TechnoMed', pic: '/kit-art/tm-screw-removal.jpg' })
     expect(brandFor('Catenary')).toMatchObject({ maker: 'Global Biomedica', pic: '/kit-art/catenary.jpg' })
     expect(brandFor('Global BMD')).toMatchObject({ maker: 'Global Biomedica', pic: '/kit-art/global-plif.jpg' })
   })

@@ -62,6 +62,7 @@ const RULES = [
   [/synthes|clavicle|tibia/, 'synthes', null],
   [/locking distractor/, 'technomed', 'tm-locking-distractor.jpg'],
   [/corpectomy/, 'technomed', 'tm-corpectomy.jpg'],
+  [/screw removal/, 'technomed', 'tm-screw-removal.jpg'],
   [/^tm\b|technomed/, 'technomed', null]
 ]
 
