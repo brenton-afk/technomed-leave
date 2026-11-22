@@ -1918,8 +1918,9 @@ the agreement filler (`sameSystem`, new sets), so neither loses the renamed
 sets; `inventoryFor` already knows both short names as `aka`. Same day, tile
 pictures: Newclip (the two screws, black background removed), TM Locking
 Distractor (grey background removed, a soft outline so its white parts read
-on the white tile), TM Corpectomy (a blue-handled cup curette cut out of the
-Calvary Corpectomy agreement's tray photo), and Mariner and Dakota cleaned of a
+on the white tile), TM Corpectomy (a Signus bone curette from page 10 of their Lumbar Preparation
+brochure in Dropbox, `/Archives/Distributors/Signus/POSEIDON/` — the
+tray-photo cut-out first used was too soft), and Mariner and Dakota cleaned of a
 background remnant and a yellow fleck.
 
 **A distributor's loan set in the kit room** (Brent, 21 Nov 2026: "put that
