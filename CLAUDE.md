@@ -1920,7 +1920,12 @@ pictures: Newclip (the two screws, black background removed), TM Locking
 Distractor (grey background removed, a soft outline so its white parts read
 on the white tile), TM Corpectomy (a Signus bone curette from page 10 of their Lumbar Preparation
 brochure in Dropbox, `/Archives/Distributors/Signus/POSEIDON/` — the
-tray-photo cut-out first used was too soft), and Mariner and Dakota cleaned of a
+tray-photo cut-out first used was too soft). **The TM Corpectomy tray's own photo is in colour** (Brent, same day:
+"the tray in the kit room is black and white … I love the colour photo"):
+the signed agreement PDF is a grey scan; the Word copy has the colour photo.
+`corpectomy-colour-2026-11-22` overwrites the tray's photo where it is in
+Dropbox (`_kitSeedCorpectomyPhoto.js`), and the generated
+`_kitAgreementPhotos_clv-corpectomy.js` carries the colour one too, and Mariner and Dakota cleaned of a
 background remnant and a yellow fleck.
 
 **A distributor's loan set in the kit room** (Brent, 21 Nov 2026: "put that

@@ -97,7 +97,10 @@ export const KIT_CORRECTIONS = [
   { id: 'reform-e4-loan-clv-2026-11-21', add: REFORM_LOAN_KIT, seed: 'reform-loan' },
   // System names without the operation in the kit room: Catenary, Global BMD
   // (Brent, 22 Nov 2026). Bookings and the inventory keep theirs.
-  { id: 'system-names-2026-11-22', seed: 'system-names' }
+  { id: 'system-names-2026-11-22', seed: 'system-names' },
+  // The TM Corpectomy curette tray's photo in colour, from the Word copy of
+  // the agreement (Brent, 22 Nov 2026); the signed PDF was a grey scan.
+  { id: 'corpectomy-colour-2026-11-22', seed: 'corpectomy-colour' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -237,6 +240,31 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'corpectomy-colour') {
+    const { CORPECTOMY_COLOUR } = await import('./_kitSeedCorpectomyPhoto.js')
+    const { uploadFile } = await import('./_dropbox.js')
+    const sets = (await getDefs()).filter(k => /corpectomy/i.test(String(k.system || k.name)) && k.home === 'CLV')
+    for (const kit of sets) {
+      const list = await getTrayList(kit.id)
+      const tray = (list?.trays || []).find(t => /corpectomy/i.test(t.name)) || list?.trays?.[0]
+      if (!tray) continue
+      const safe = s => String(s || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim()
+      const path = tray.photo || `/Tray Lists/Tray Photos/${safe(kit.name)}/${safe(tray.name)}.jpg`
+      let done = false
+      for (let a = 0; a < 3 && !done; a += 1) {
+        try { await uploadFile(path, Buffer.from(CORPECTOMY_COLOUR, 'base64')); done = true } catch {
+          await new Promise(r => setTimeout(r, process.env.VITEST ? 0 : 1500 * (a + 1)))
+        }
+      }
+      if (!done) continue
+      if (!tray.photo) {
+        const now = await getTrayList(kit.id)
+        await redisSetBody(LIST(kit.id), JSON.stringify({ ...now, trays: now.trays.map(t => (t.name === tray.name ? { ...t, photo: path } : t)) }))
+      }
+      await addHistory({ kind: 'edit', kitId: kit.id, kitName: kit.name, by: 'Claude (colour tray photo)', text: `${tray.name}: photo now in colour` })
+    }
     return
   }
   if (name === 'system-names') {
