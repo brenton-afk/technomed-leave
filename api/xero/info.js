@@ -1,5 +1,6 @@
 import { requireAdmin, requireSession } from '../_auth.js'
 import { mayPreviewStock } from '../_stockPreview.js'
+import { brainlabMonth, decide, draftBrainlabInvoice } from '../_brainlabMonth.js'
 import { mayUseCommissions, getRules, saveRules, getRun, listRuns, runCommissions, approveRun } from '../_commissions.js'
 import { nextSalesMonth, paymentDateFor, calcDateFor } from '../../src/commissions/schedule.js'
 import { todayStr } from '../../src/clinicalPlan/week.js'
@@ -284,7 +285,7 @@ export default async function handler(req, res) {
   }
 }
 
-const INVOICE_ACTIONS = new Set(['supplier-quotes', 'supplier-quote-read', 'supplier-po-save', 'supplier-quote-dismiss', 'quote-auto', 'quote-retry', 'quote-requests', 'quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create'])
+const INVOICE_ACTIONS = new Set(['supplier-quotes', 'supplier-quote-read', 'supplier-po-save', 'supplier-quote-dismiss', 'quote-auto', 'quote-retry', 'quote-requests', 'quote-templates', 'accounts-audit', 'po-list', 'po-read', 'po-auto', 'po-retry', 'sales-lookup', 'invoice-create', 'quote-create', 'brainlab-month', 'brainlab-decide', 'brainlab-invoice'])
 
 async function handleInvoices(action, req, res, session) {
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
@@ -333,7 +334,17 @@ async function handleInvoices(action, req, res, session) {
       const [contacts, items] = await Promise.all([findContacts(String(req.query.q || '')), listItems()])
       return res.status(200).json({ contacts: contacts.slice(0, 50), items })
     }
+    // ── The Brainlab invoice from the bookings (Brent, 22 Nov 2026) ──
+    if (action === 'brainlab-month') return res.status(200).json(await brainlabMonth(String(req.query.month || '')))
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    if (action === 'brainlab-decide') {
+      const change = {}
+      if ('attended' in body) change.attended = body.attended
+      if ('kind' in body) change.kind = body.kind
+      await decide(String(body.month || ''), String(body.id || ''), change, session.email)
+      return res.status(200).json(await brainlabMonth(String(body.month || '')))
+    }
+    if (action === 'brainlab-invoice') return res.status(200).json(await draftBrainlabInvoice(String(body.month || ''), session.email))
     if (action === 'quote-auto') return res.status(200).json(await autoQuotes({ by: session.email }))
     if (action === 'quote-retry') {
       const id = String(body.id || '')

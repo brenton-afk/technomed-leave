@@ -605,6 +605,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         // and been told. The fact that decides who is on site at half seven.
         listPlace: read.listPlace,
         etbs: read.etbs,
+        brainlab: read.brainlab,
         hospital: detectHospital(event.location, event.description, { caseEvent: true }),
         start: event.start,
         end: event.end,

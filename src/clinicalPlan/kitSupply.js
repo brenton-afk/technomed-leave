@@ -91,7 +91,7 @@ export function parseKitSupplies(kit) {
   return out
 }
 
-const NAVIGATION = /\b(?:brainlab|airo|curve|navigation|stealth)\b/i
+const NAVIGATION = /\b(?:brain\s*lab|airo|curve|vario\s*guide|navigation|stealth)\b/i
 
 /** Adds a system, trimming the separators it may be wearing. */
 function pushSystem(list, raw) {

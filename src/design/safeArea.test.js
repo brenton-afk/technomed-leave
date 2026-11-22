@@ -123,7 +123,7 @@ describe('no screen is left out', () => {
     // A section of the kit sheet, which owns the backdrop.
     'kit/TrayList.jsx', 'kit/EditableTray.jsx', 'kit/KitDocs.jsx', 'kit/FromDropbox.jsx', 'kit/AttachAgreements.jsx',
     // Part of the auto-add card and the booking sheets.
-    'cases/KitPicker.jsx',
+    'cases/KitPicker.jsx', 'cases/BrainlabBilling.jsx',
     // The set-aside list inside the bookings Inbox sheet.
     'cases/SetAsideEmails.jsx',
     'cases/LoanTrail.jsx',
@@ -137,7 +137,7 @@ describe('no screen is left out', () => {
     // Full-bleed on purpose, like the PIN screen it stands in for.
     'LockScreen.jsx',
     'admin/StaffPins.jsx', 'admin/SystemStatus.jsx', 'admin/TimesheetApprovals.jsx',
-    'admin/EmailLog.jsx', 'admin/ToilLedger.jsx', 'admin/NoticeSettings.jsx', 'admin/Invoices.jsx', 'admin/Commissions.jsx', 'admin/PriceLists.jsx', 'admin/AmendLeave.jsx',
+    'admin/EmailLog.jsx', 'admin/ToilLedger.jsx', 'admin/NoticeSettings.jsx', 'admin/Invoices.jsx', 'admin/Commissions.jsx', 'admin/PriceLists.jsx', 'admin/BrainlabInvoice.jsx', 'admin/AmendLeave.jsx',
     // Chooses between two screens and renders its switcher inside whichever
     // one's Header is showing. It draws no chrome of its own to inset.
     'Cases.jsx',

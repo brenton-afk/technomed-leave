@@ -4,6 +4,7 @@ import { SYSTEM_BUTTONS, variantOf, inventoryFor } from '../../clinicalPlan/inve
 import { SUPPLY_OPTIONS, parseKitSupplies, formatKitSupplies } from '../../clinicalPlan/kitSupply.js'
 import { suggestSystems, SYSTEM_GROUPS } from '../../clinicalPlan/systemSuggestions.js'
 import { hospitalCode } from '../../clinicalPlan/labelledFields.js'
+import { noImplantSystem } from '../../clinicalPlan/brainlabBilling.js'
 
 // ─── The kit, chosen by tapping ──────────────────────────────────────────────
 // "I need to be able to tap the system with a button as opposed to writing it
@@ -78,6 +79,19 @@ export default function KitPicker({ kit, onChange, systemsOnly = false, operatio
     background: on ? colour.accentSoft : colour.surface,
     ...text('caption'), fontWeight: on ? 700 : 400, color: on ? colour.accentDeep : colour.inkMuted
   })
+
+  // A biopsy, a shunt, a craniotomy or sinus surgery takes no implant system
+  // of ours, so the buttons fold away (Brent, 22 Nov 2026: a Varioguide biopsy
+  // at Calvary was offered Diplomat, Mariner and the rest).
+  if (!showAll && !chosen.length && !others.length && noImplantSystem(operation)) {
+    return (
+      <div data-no-implant style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        No implant system for this operation.
+        <button type="button" onClick={() => setShowAll(true)}
+          style={{ ...chip(false), border: `1px dashed ${colour.line}`, color: colour.accentDeep, fontWeight: 700 }}>+ Add a system</button>
+      </div>
+    )
+  }
 
   return (
     <div style={{ marginBottom: space.sm }}>

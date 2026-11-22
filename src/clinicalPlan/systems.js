@@ -349,9 +349,11 @@ const NAVIGATION_WORDS =
 
 const LEFTOVER_ONLY = /^(?:(?:spinal|spine|cranial)\s*)+$/i
 
-/** Words that describe navigation without naming anything of ours. */
+/** Words that describe navigation without naming anything of ours. A version
+ * number ("Varioguide 2.0") and the biopsy arm are part of the platform's name
+ * (Brent, 22 Nov 2026: a Calvary biopsy was offered supply buttons for it). */
 const NAVIGATION_FILLER =
-  /\b(?:spinal|spine|cranial|cervical|lumbar|system|platform|scanner|support|required|req|and|with|the|for|only|case|spins?|scans?|ct|post|intra|op|operative|image|imaging)\b/gi
+  /\b(?:spinal|spine|cranial|cervical|lumbar|system|platform|scanner|support|required|req|and|with|the|for|only|case|spins?|scans?|ct|post|intra|op|operative|image|imaging|biopsy|arm|needle|v?\d+(?:\.\d+)*)\b/gi
 
 /**
  * Whether a kit-line entry is a navigation platform and nothing more.

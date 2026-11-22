@@ -25,6 +25,8 @@ import { queueBookingSave, isNetworkFailure } from '../../offlineQueue.js'
 import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 import { offerNotices } from '../../notices.js'
 import { isRhh, etbsFrom } from '../../clinicalPlan/etbs.js'
+import BrainlabBilling from './BrainlabBilling.jsx'
+import { brainlabLabel } from '../../clinicalPlan/brainlabBilling.js'
 import { useBackLayer } from '../../backButton.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
@@ -684,10 +686,12 @@ export default function EditBooking({
 
   // ETBS on an RHH case (Brent, 8 Nov 2026) — a yes/no, not text.
   const etbsChanged = Boolean(loaded && etbsFrom(fields.etbs) !== etbsFrom(loaded.fields?.etbs))
+  // What the case is billed to Brainlab, when somebody has said (brainlabBilling.js).
+  const brainlabChanged = Boolean(loaded && brainlabLabel(fields.brainlab) !== brainlabLabel(loaded.fields?.brainlab))
 
   const changed = loaded && (
     FIELDS.some(f => (fields[f.key] || '') !== (loaded.fields?.[f.key] || ''))
-    || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged || plannedChanged || etbsChanged)
+    || notes !== (loaded.notes || '') || movedTime || recoloured || repsChanged || plannedChanged || etbsChanged || brainlabChanged)
 
   async function save({ withTitle, base = loaded } = {}) {
     setStatus('saving'); setError('')
@@ -707,6 +711,7 @@ export default function EditBooking({
           }
           if (plannedChanged) patch.planned = planned.join(' / ')
           if (etbsFrom(fields.etbs) !== etbsFrom(base.fields?.etbs)) patch.etbs = etbsFrom(fields.etbs) ? 'Yes' : ''
+          if (brainlabLabel(fields.brainlab) !== brainlabLabel(base.fields?.brainlab)) patch.brainlab = fields.brainlab || ''
           return {
             eventId,
             etag: base.etag,
@@ -1131,6 +1136,12 @@ export default function EditBooking({
                       }}>ETBS{etbsFrom(fields.etbs) ? ' ✓' : ''}</button>
                   </div>
                 )}
+
+                {/* Brainlab billing (Brent, 22 Nov 2026): what this case is
+                    billed to Brainlab when we attend it — suggested by the
+                    rules, changed with a tap. */}
+                <BrainlabBilling fields={fields} notes={notes} reps={reps}
+                  onChange={value => setFields(c => ({ ...c, brainlab: value }))} />
 
                 {/* ── What the room has to have set up ──
                     

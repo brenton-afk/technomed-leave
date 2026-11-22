@@ -1659,6 +1659,8 @@ export function readBooking(title, description, { colourSurgeon, knownPatient } 
     listPlace: parseListPlace(labelled.list) || undefined,
     // ETBS on an RHH case, shown beside the list place (etbs.js).
     etbs: etbsFrom(labelled.etbs) || undefined,
+    // The booking's own Brainlab billing line, as written (brainlabBilling.js).
+    brainlab: String(labelled.brainlab || '').trim() || undefined,
     navigation: findNavigation(everything).join(' + ') || undefined,
     notRequired: attendanceNotRequired(everything) || undefined,
     // The hospital told us about the case and said nobody from here is wanted

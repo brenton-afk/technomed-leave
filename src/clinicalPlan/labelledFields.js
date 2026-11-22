@@ -39,12 +39,17 @@ export const LABELS = {
   // planned - confirmed" — and would be read as a label.
   planned: ['planned rep', 'planned reps'],
   // "ETBS: Yes" on an RHH case (Brent, 8 Nov 2026) — see etbs.js.
-  etbs: ['etbs']
+  etbs: ['etbs'],
+  // What the case is billed to Brainlab — "Brainlab billing: AIRO" /
+  // "Navigation" / "Not billed" (Brent, 22 Nov 2026) — see
+  // clinicalPlan/brainlabBilling.js. Two words, so "Spinal Brainlab - AIRO" on a
+  // Calvary email is never read as an instruction to bill.
+  brainlab: ['brainlab billing']
 }
 
 // How a label is written when the portal adds it, where capitalising the first
 // letter is wrong: ETBS is an acronym.
-const HEADINGS = { etbs: 'ETBS' }
+const HEADINGS = { etbs: 'ETBS', brainlab: 'Brainlab billing' }
 
 // Longest first, so "Procedure" is not matched as "Proc" and "Surgeon" is never
 // read as "Surg" with "eon" left over as the value.

@@ -71,6 +71,8 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
+import { brainlabLabel } from '../../src/clinicalPlan/brainlabBilling.js'
+const BRAINLAB_LINE = { airo: 'AIRO', nav: 'Navigation', none: 'Not billed' }
 import { kitWithAutoOutrigger } from '../../src/clinicalPlan/outrigger.js'
 import { kitWithDaySupplies } from '../../src/clinicalPlan/kitSupply.js'
 import { cleanListPlace, withListPlace, bySession, moveWithinList, parseListPlace } from '../../src/clinicalPlan/listPlace.js'
@@ -657,6 +659,13 @@ async function handleSave(req, res) {
       description = etbsFrom(body.fields.etbs) || body.fields.etbs === true
         ? setLabelledValue(description, 'etbs', 'Yes')
         : removeLabelledLine(description, 'etbs')
+    }
+
+    // Brainlab billing (Brent, 22 Nov 2026): "AIRO", "Navigation" or "Not
+    // billed" writes the line; blank takes it off and the rules decide again.
+    if (Object.prototype.hasOwnProperty.call(body.fields || {}, 'brainlab')) {
+      const v = BRAINLAB_LINE[brainlabLabel(body.fields.brainlab) || '']
+      description = v ? setLabelledValue(description, 'brainlab', v) : removeLabelledLine(description, 'brainlab')
     }
 
     // Free notes are the unlabelled remainder, so they are rewritten wholesale:

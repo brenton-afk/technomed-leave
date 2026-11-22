@@ -698,6 +698,52 @@ Shoreline, CYLOX, Catenary — plate screws) is labelled only where AIRO is
 written. "Airo-Spin", "post-op spin", "scan" and "CT" are navigation filler
 (`NAVIGATION_FILLER`), so such a kit entry never gets supply buttons.
 
+### Brainlab billing, and the invoice from the bookings (Brent, 22 Nov 2026)
+
+"I want the portal to be tracking our case attendances from a Brainlab point
+of view … build a fool proof system where by when the bookings are entered
+into the portal with the relevant navigation, the portal can auto generate
+the Brainlab invoice." The rules (his): **RHH** — an attended AIRO case $300,
+an attended navigation case (Curve, Varioguide, EM for ENT) $250, No F2F
+tracked not billed; **Calvary** — nothing (the theatre techs run the
+navigation) except the **Varioguide stereotactic needle biopsies**, $250.
+`src/clinicalPlan/brainlabBilling.js` (pure, `brainlabBilling.test.js`):
+`brainlabService` — the booking's own **`Brainlab billing:`** line first
+(`AIRO` / `Navigation` / `Not billed`; two words so "Spinal Brainlab - AIRO" on
+a Calvary email is never read as one; `brainlab` in `LABELS`, read as
+`brainlab` on the case, in `planSignature`), then AIRO written, Curve /
+Varioguide written, a removal alone → none, posterior screws / pelvis → AIRO,
+VP shunts (billed both ways in the past — AIRO when stereotactic, Toni's key)
+→ `check`, max fax → AIRO, ENT → nav, cranial → nav, **anterior-only (ACDF,
+ALIF, corpectomy) → none**, other spine → AIRO. `sortMonth` puts every case
+with a service in one list: `bill` (a roster person on the booking —
+`whoAttended`, so "(no attendance)" / "(TM not required)" are not people — or
+"we attended" answered), `noF2F`, `ask` (nobody marked attended; a VP shunt)
+and `notBilled`; `invoiceLine` / `invoiceReference` write exactly what the
+invoices have since 2024 ("Surgeon / Patient / Surgery Date d.m.yy / Surgery …
+(AIRO|CURVE) / Hospital", reference "{MONTH} {YYYY} Clinical Support", item
+**BLCS**, GST exclusive). **Edit booking** has a Brainlab row
+(`cases/BrainlabBilling.jsx`, `data-brainlab-billing`): AIRO $300 /
+Navigation $250 / Not billed, the rules' suggestion and what it waits on;
+`fields.brainlab` on save writes or removes the line. **Admin → Brainlab
+invoice** (`admin/BrainlabInvoice.jsx`; `brainlab-month` / `brainlab-decide`
+/ `brainlab-invoice` on `api/xero/info.js`, admins; `api/_brainlabMonth.js`):
+the month's bookings read the way the week reads them, answers kept in
+`brainlab:month:{YYYY-MM}`, totals ex/inc GST, and **Draft the invoice in
+Xero** only once nothing is left to answer — a DRAFT to Brainlab Australia
+(`BRAINLAB_CONTACT`, `BRAINLAB_ITEM_CODE`), refused if Xero already holds that
+reference. **Checked against the real thing**: every Brainlab invoice since
+June 2024 and Toni's booking document (817 of 853 cases agree; the rest are VP
+shunts billed both ways, ENT billed $300 against the $250 rule, a microscope
+calibration call-out and the Dubey Calvary request), and the live calendar
+for Aug–Oct 2026: **October 9 cases $2,700 and September 19 cases $5,550,
+exactly the invoices**; August one more than invoiced (Ibbett T6/7 PSF, 11 Aug,
+Brent attending — on neither the invoice nor the document). Also: a
+**Varioguide is navigation**, not a kit (`NAVIGATION_FILLER` takes version
+numbers, `kitSupply` NAVIGATION knows Varioguide — no supply buttons), and a
+biopsy / shunt / craniotomy / sinus operation folds the system buttons away
+behind **+ Add a system** (`noImplantSystem`, `KitPicker` `data-no-implant`).
+
 ### The portal face lift, direction A (Brent, 12 Nov 2026)
 
 "Overhaul the look … the buttons are all pretty basic … build some style into
