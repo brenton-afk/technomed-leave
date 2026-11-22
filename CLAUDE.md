@@ -1908,6 +1908,20 @@ left off.
 be underneath the Calvary instrument kit; not listed first") — `groupSystems`
 ranks an `INSIDE` set half a place later.
 
+**Kit room system names without the operation** (Brent, 22 Nov 2026: "make
+Catenary ALIF name just catenary, and drop PLIF from the Global BMD name").
+The kit room says **Catenary** and **Global BMD** (`system-names-2026-11-22`
+→ `renameSystem`); bookings, the inventory and the booking buttons keep
+"Catenary ALIF" and "Global BMD PLIF". `kitSystemName` / `KIT_SYSTEM_NAMES` in
+`src/kit/systems.js` map between them, used by Resources' Tray list link and by
+the agreement filler (`sameSystem`, new sets), so neither loses the renamed
+sets; `inventoryFor` already knows both short names as `aka`. Same day, tile
+pictures: Newclip (the two screws, black background removed), TM Locking
+Distractor (grey background removed, a soft outline so its white parts read
+on the white tile), TM Corpectomy (a blue-handled cup curette cut out of the
+Calvary Corpectomy agreement's tray photo), and Mariner and Dakota cleaned of a
+background remnant and a yellow fleck.
+
 **A distributor's loan set in the kit room** (Brent, 21 Nov 2026: "put that
 Loan kit into the Kit room under Reform as a loan set so it can be turned
 around"). Kind `loan` (beside consignment / floating / technomed): never a

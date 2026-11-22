@@ -55,3 +55,13 @@ describe('the name on a tile', () => {
     expect(tileName('Nuvasive')).toBe('Nuvasive')
   })
 })
+
+describe('pictures added 22 Nov 2026', () => {
+  it('gives Newclip, the TM locking distractor and the TM corpectomy set their pictures, and keeps the renamed systems branded', () => {
+    expect(brandFor('NewClip Trans-Articular Screw').pic).toBe('/kit-art/newclip.jpg')
+    expect(brandFor('TM Locking Distractor')).toMatchObject({ maker: 'TechnoMed', pic: '/kit-art/tm-locking-distractor.jpg' })
+    expect(brandFor('TM Corpectomy')).toMatchObject({ maker: 'TechnoMed', pic: '/kit-art/tm-corpectomy.jpg' })
+    expect(brandFor('Catenary')).toMatchObject({ maker: 'Global Biomedica', pic: '/kit-art/catenary.jpg' })
+    expect(brandFor('Global BMD')).toMatchObject({ maker: 'Global Biomedica', pic: '/kit-art/global-plif.jpg' })
+  })
+})

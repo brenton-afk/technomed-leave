@@ -13,6 +13,7 @@
 import { redis, redisSetBody } from './_redis.js'
 import { listFilesUnder } from './_dropbox.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
+import { kitSystemName } from '../src/kit/systems.js'
 
 export const DISTRIBUTOR_FOLDERS = {
   signus: ['/Distributors/Signus'],
@@ -176,7 +177,7 @@ export function resourcesBySystem({ catalogue = [], picks = {}, kits = [], syste
         others: found.filter(f => f.path !== chosen?.path).slice(0, 12).map(f => ({ name: f.name, path: f.path }))
       }
     }
-    const trays = kits.filter(k => k.system === s.system && k.trayCount > 0).map(k => ({ id: k.id, name: k.name, trays: k.trayCount }))
+    const trays = kits.filter(k => (k.system === s.system || k.system === kitSystemName(s.system)) && k.trayCount > 0).map(k => ({ id: k.id, name: k.name, trays: k.trayCount }))
     return { system: s.system, distributor: s.distributor, distributorName: DISTRIBUTOR_NAMES[s.distributor] || s.distributor, slots, trays }
   })
 }

@@ -57,9 +57,11 @@ const RULES = [
   [/reline|globus/, 'globus', null],
   [/brainlab|airo/, 'brainlab', 'brainlab.jpg'],
   [/arthrex|mini drill|drill saw/, 'arthrex', 'arthrex-drill.jpg'],
-  [/newclip/, 'newclip', null],
+  [/newclip/, 'newclip', 'newclip.jpg'],
   [/boost|ultrafib/, 'ausbiotech', 'boost.jpg'],
   [/synthes|clavicle|tibia/, 'synthes', null],
+  [/locking distractor/, 'technomed', 'tm-locking-distractor.jpg'],
+  [/corpectomy/, 'technomed', 'tm-corpectomy.jpg'],
   [/^tm\b|technomed/, 'technomed', null]
 ]
 

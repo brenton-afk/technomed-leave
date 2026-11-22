@@ -11,6 +11,14 @@ import { trayPlace } from './trayPlaces.js'
 
 export const PLACE_ORDER = ['CLV', 'RHH', 'office']
 
+// The kit room names a system without the operation (Brent, 22 Nov 2026:
+// "make Catenary ALIF name just Catenary, and drop PLIF from the Global BMD
+// name … system names without the procedure description"). Bookings and the
+// inventory keep their own names; this maps between the two.
+export const KIT_SYSTEM_NAMES = { 'catenary alif': 'Catenary', 'global bmd plif': 'Global BMD' }
+/** The kit room's name for a system named anywhere else ("Catenary ALIF" → "Catenary"). */
+export const kitSystemName = s => KIT_SYSTEM_NAMES[String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')] || String(s || '').trim()
+
 // A kit that belongs inside another system's tile (Brent, 20 Nov 2026: the
 // Mariner Outrigger "needs to be with the other SeaSpine trays in Calvary").
 // Display only: bookings, supplies and moves still use the kit's own system.

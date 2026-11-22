@@ -15,6 +15,7 @@ import { redis, redisSetBody } from './_redis.js'
 import { getDefs, getTrayList, saveTrayList, saveKitDef, addHistory } from './_kits.js'
 import { listKitDocs, linkKitDoc } from './_kitDocs.js'
 import { AGREEMENTS, PHOTO_LOADERS } from './_kitAgreementData.js'
+import { kitSystemName } from '../src/kit/systems.js'
 
 const DONE = 'kits:agreements:done'
 const BY = name => `${name} (from the consignment agreements)`
@@ -39,7 +40,7 @@ export function sameTray(a, b, kit = '') {
   return both / Math.min(A.w.size, B.w.size) >= 0.6 && both / Math.max(A.w.size, B.w.size) >= 0.5
 }
 
-const sameSystem = (a, b) => words(a).join(' ') === words(b).join(' ')
+const sameSystem = (a, b) => words(kitSystemName(a)).join(' ') === words(kitSystemName(b)).join(' ')
 const byIdNatural = (x, y) => x.id.localeCompare(y.id, 'en', { numeric: true })
 
 /**
@@ -116,7 +117,7 @@ export async function fillFromAgreement(docSlug, byName, deps = {}) {
   if (!sets.length) {
     for (let n = 1; n <= wanted; n += 1) {
       await saveKitDef({
-        name: wanted > 1 ? `${a.kit} ${n}` : a.kit, system: a.kit, distributor: a.distributor || '',
+        name: wanted > 1 ? `${kitSystemName(a.kit)} ${n}` : kitSystemName(a.kit), system: kitSystemName(a.kit), distributor: a.distributor || '',
         kind: /^TM\b/.test(a.kit) ? 'technomed' : 'consignment', home: a.hospital, trays: []
       }, by)
     }

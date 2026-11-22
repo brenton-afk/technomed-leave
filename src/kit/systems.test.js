@@ -99,3 +99,13 @@ describe('what is away, said as where it is (21 Nov 2026)', () => {
     expect(awayLines([{ home: 'CLV', at: 'CLV', trays: ['A'] }])).toEqual([])
   })
 })
+
+describe('kit room system names without the operation (Brent, 22 Nov 2026)', async () => {
+  const { kitSystemName } = await import('./systems.js')
+  it('maps the inventory names to the kit room ones and leaves the rest alone', () => {
+    expect(kitSystemName('Catenary ALIF')).toBe('Catenary')
+    expect(kitSystemName('Global BMD PLIF')).toBe('Global BMD')
+    expect(kitSystemName('Diplomat')).toBe('Diplomat')
+    expect(kitSystemName('Mariner MIS')).toBe('Mariner MIS')
+  })
+})

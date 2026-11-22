@@ -94,7 +94,10 @@ export const KIT_CORRECTIONS = [
   { id: 'dakota-clv-shelf-2026-11-21', seed: 'dakota-clv' },
   // E4's Reform loan set at Calvary, from the checklist that came with it, so
   // it can be turned around for the next Reform case (Brent, 21 Nov 2026).
-  { id: 'reform-e4-loan-clv-2026-11-21', add: REFORM_LOAN_KIT, seed: 'reform-loan' }
+  { id: 'reform-e4-loan-clv-2026-11-21', add: REFORM_LOAN_KIT, seed: 'reform-loan' },
+  // System names without the operation in the kit room: Catenary, Global BMD
+  // (Brent, 22 Nov 2026). Bookings and the inventory keep theirs.
+  { id: 'system-names-2026-11-22', seed: 'system-names' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -234,6 +237,12 @@ async function runSeed(name) {
   if (name === 'shoreline') {
     const { runShorelineFix } = await import('./_kitShorelineFix.js')
     await runShorelineFix()
+    return
+  }
+  if (name === 'system-names') {
+    for (const [from, to] of [['Catenary ALIF', 'Catenary'], ['Global BMD PLIF', 'Global BMD']]) {
+      try { await renameSystem(from, to, 'Claude (system names without the operation)') } catch { /* none to rename */ }
+    }
     return
   }
   if (name === 'reform-loan') {
