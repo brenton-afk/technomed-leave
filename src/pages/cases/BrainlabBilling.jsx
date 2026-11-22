@@ -20,7 +20,7 @@ const CHOICES = [
 
 export default function BrainlabBilling({ fields = {}, notes = '', reps = [], onChange }) {
   const said = brainlabLabel(fields.brainlab)
-  const rules = brainlabService({ hospital: fields.hospital, procedure: fields.procedure, kit: fields.kit, notes })
+  const rules = brainlabService({ hospital: fields.hospital, surgeon: fields.surgeon, procedure: fields.procedure, kit: fields.kit, notes })
   const where = String(fields.hospital || '').toUpperCase()
   const ourSite = /RHH|ROYAL|CLV|CALVARY|LENAH/.test(where)
   if (!said && !rules.kind && !(ourSite && /airo|curve|vario|brain\s*lab|navigat|stereotac/i.test(`${fields.procedure}\n${fields.kit}\n${notes}`))) return null

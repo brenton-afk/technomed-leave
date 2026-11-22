@@ -707,18 +707,23 @@ the Brainlab invoice." The rules (his): **RHH** — an attended AIRO case $300,
 an attended navigation case (Curve, Varioguide, EM for ENT) $250, No F2F
 tracked not billed; **Calvary** — nothing (the theatre techs run the
 navigation) except the **Varioguide stereotactic needle biopsies**, $250.
+**Toni keeps her booking document and invoices as before for now** (Brent,
+22 Nov 2026: "I just want to be able to do it automatically via the portal to
+know that it's accurate and possible") — the portal's month runs alongside.
 `src/clinicalPlan/brainlabBilling.js` (pure, `brainlabBilling.test.js`):
 `brainlabService` — the booking's own **`Brainlab billing:`** line first
 (`AIRO` / `Navigation` / `Not billed`; two words so "Spinal Brainlab - AIRO" on
 a Calvary email is never read as one; `brainlab` in `LABELS`, read as
 `brainlab` on the case, in `planSignature`), then AIRO written, Curve /
 Varioguide written, a removal alone → none, posterior screws / pelvis → AIRO,
-VP shunts (billed both ways in the past — AIRO when stereotactic, Toni's key)
-→ `check`, max fax → AIRO, ENT → nav, cranial → nav, **anterior-only (ACDF,
+VP shunts → AIRO **only under Ibbett**, else nav (Brent, 22 Nov 2026), max
+fax → AIRO, **ENT → AIRO at $300** (Brent, same day: "if ENT has historically
+been billed at $300 I'm happy with that" — through 2025 it was; the two 2026
+FESS lines went at $250), cranial → nav, **anterior-only (ACDF,
 ALIF, corpectomy) → none**, other spine → AIRO. `sortMonth` puts every case
 with a service in one list: `bill` (a roster person on the booking —
 `whoAttended`, so "(no attendance)" / "(TM not required)" are not people — or
-"we attended" answered), `noF2F`, `ask` (nobody marked attended; a VP shunt)
+"we attended" answered), `noF2F`, `ask` (nobody marked attended)
 and `notBilled`; `invoiceLine` / `invoiceReference` write exactly what the
 invoices have since 2024 ("Surgeon / Patient / Surgery Date d.m.yy / Surgery …
 (AIRO|CURVE) / Hospital", reference "{MONTH} {YYYY} Clinical Support", item

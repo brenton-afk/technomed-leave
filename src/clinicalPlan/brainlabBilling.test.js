@@ -40,7 +40,8 @@ const RHH = [
   ['Left Petrus Apex Biopsy', 'nav'],
   ['Resection AVM', 'nav'],
   ['Cranial Registration', 'nav'],
-  ['Revision FESS', 'nav'] // Brent, 22 Nov 2026: EM for ENT is $250 (some were billed $300)
+  ['Revision FESS', 'airo'], // Brent, 22 Nov 2026: ENT at $300, as billed through 2025
+  ['FESS (Functional endoscopic sinus surgery)', 'airo']
 ]
 
 describe('what a case is billed to Brainlab (Brent, 22 Nov 2026)', () => {
@@ -50,9 +51,10 @@ describe('what a case is billed to Brainlab (Brent, 22 Nov 2026)', () => {
     }
   })
 
-  it('RHH: VP shunts are asked about at month end — they have gone both ways', () => {
-    expect(brainlabService({ hospital: 'RHH', procedure: 'VP shunt insertion' })).toMatchObject({ kind: 'nav', check: true })
-    expect(brainlabService({ hospital: 'RHH', procedure: 'Stereotactic VP shunt Insertion' })).toMatchObject({ kind: 'airo', check: true })
+  it('RHH: a VP shunt is AIRO only under Ibbett (Brent, 22 Nov 2026)', () => {
+    expect(brainlabService({ hospital: 'RHH', surgeon: 'Ibbett', procedure: 'VP shunt insertion' }).kind).toBe('airo')
+    expect(brainlabService({ hospital: 'RHH', surgeon: 'Fowler', procedure: 'Stereotactic VP shunt Insertion' }).kind).toBe('nav')
+    expect(brainlabService({ hospital: 'RHH', surgeon: 'Fowler', procedure: 'VP shunt insertion' }).check).toBeUndefined()
   })
 
   it('Calvary: only the Varioguide biopsies are billed', () => {
@@ -110,14 +112,15 @@ describe('the month and its invoice', () => {
       { ...base, id: 'h', hospital: 'CLV', procedure: 'Stereotactic needle biopsy', reps: ['Brent'] },
       { ...base, id: 'i', hospital: 'CLV', procedure: 'L4/5 PLIF', reps: ['Brent'] }
     ])
-    expect(m.bill.map(r => [r.id, r.amount])).toEqual([['a', 300], ['b', 250], ['h', 250]])
-    expect(m.ask.map(r => [r.id, r.question])).toEqual([['c', 'attended'], ['f', 'kind']])
+    // A Fowler VP shunt is navigation; only Ibbett's are AIRO.
+    expect(m.bill.map(r => [r.id, r.amount])).toEqual([['a', 300], ['b', 250], ['f', 250], ['h', 250]])
+    expect(m.ask.map(r => [r.id, r.question])).toEqual([['c', 'attended']])
     expect(m.noF2F.map(r => r.id)).toEqual(['d'])
     // A Calvary PLIF and a carpal tunnel are not Brainlab cases at all.
     expect(m.notBilled.map(r => r.id)).toEqual(['e'])
-    expect(m.net).toBe(800)
-    expect(m.gst).toBe(80)
-    expect(m.total).toBe(880)
+    expect(m.net).toBe(1050)
+    expect(m.gst).toBe(105)
+    expect(m.total).toBe(1155)
   })
 
   it('answers at month end settle the open ones', () => {

@@ -38,9 +38,8 @@ const MAX_FAX = /\bzmc\b|zygom|orbital|\borbit\b|le\s*fort|lefort|midface|mid\s*
 const PELVIS_SCREWS = /\bsij\b|\bsi[\s-]?joint|sacro[\s-]?iliac|\bsi\s+screw|pelvi\w*|acetab\w*|\bfemur\b|femoral|\bfemur\b/i
 // Cranial and ENT are navigation: the Curve, Varioguide, EM.
 const CRANIAL = /crani\w*|\bshunt\b|\bavm\b|arteriovenous|\blesion\b|tumou?r|glioma|meningioma|metasta\w*|biops|stereotac|pituitar|prolactinoma|trans\s*sphenoid|transphenoid|sphenoid\w*|\bburr\s*hole|ventric\w*|\bdbs\b|cranial\s+registration|vario\s*guide|\bcurve\b|neuro\s*nav/i
-const ENT = /\bent\b|\bfess\b|sinus\w*|sinonasal|skull\s*base|petrous|petrus|\bem\b|electromagnetic|\bkick\b/i
+const ENT = /\bent\b|\bfess\b|sinus\w*|sinonasal|skull\s*base|\bem\b|electromagnetic|\bkick\b/i
 // Ibbett's stereotactic VP shunts are AIRO (Toni's key).
-const AIRO_SHUNT = /stereotac\w*\s+(?:\w+\s+){0,2}(?:vp\s+)?shunt/i
 const BIOPSY = /biops/i
 const REMOVAL = /\bremov(?:al|e)\b|\br\/o\b|\bromw\b/gi
 const GOING_IN = /\b(?:fixation|fusion|psf|plif|tlif|insert\w*|instrumentation|extension|revision|re-?instrument\w*)\b/i
@@ -71,7 +70,7 @@ const site = h => {
  * { kind: 'airo' | 'nav' | null, why, said } — `said` when the booking's own
  * Brainlab line decided it.
  */
-export function brainlabService({ hospital, procedure = '', kit = '', notes = '', brainlab = '' } = {}) {
+export function brainlabService({ hospital, surgeon = '', procedure = '', kit = '', notes = '', brainlab = '' } = {}) {
   const said = brainlabLabel(brainlab)
   if (said) return { kind: said === 'none' ? null : said, why: 'Written on the booking', said: true }
   const where = site(hospital)
@@ -94,13 +93,15 @@ export function brainlabService({ hospital, procedure = '', kit = '', notes = ''
   // Screws in the spine or pelvis outrank every cranial word: "PSF for an L1
   // tumour", "stereotactic SI screw fixation" are AIRO cases.
   if (nav.includes('AIRO') || SCREWS_IN.test(text) || PELVIS_SCREWS.test(text)) return { kind: 'airo', why: 'Spine / screws (AIRO)' }
-  // VP shunts went both ways on past invoices — AIRO when stereotactic
-  // (Toni's key), else navigation — so the month-end list asks about each.
-  if (SHUNT.test(text)) return AIRO_SHUNT.test(text)
-    ? { kind: 'airo', why: 'Stereotactic VP shunt (AIRO)', check: true }
-    : { kind: 'nav', why: 'VP shunt (navigation)', check: true }
+  // VP shunts: AIRO only when Ibbett is the surgeon, navigation otherwise
+  // (Brent, 22 Nov 2026).
+  if (SHUNT.test(text)) return /ibbett/i.test(surgeon)
+    ? { kind: 'airo', why: 'Ibbett VP shunt (AIRO)' }
+    : { kind: 'nav', why: 'VP shunt (navigation)' }
   if (MAX_FAX.test(text)) return { kind: 'airo', why: 'Max fax (AIRO spin)' }
-  if (ENT.test(text)) return { kind: 'nav', why: 'ENT navigation (EM)' }
+  // ENT (the EM) at $300, as billed through 2025 (Brent, 22 Nov 2026: "if ENT
+  // has historically been billed at $300 I'm happy with that").
+  if (ENT.test(text)) return { kind: 'airo', why: 'ENT navigation — billed at $300' }
   if (CRANIAL.test(text)) return { kind: 'nav', why: 'Cranial navigation' }
   // An operation from the front alone — ACDF, ALIF, corpectomy — is not a
   // Brainlab case (October 2026: ten attended ACDFs and corpectomies, none on
