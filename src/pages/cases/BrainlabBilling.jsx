@@ -1,6 +1,6 @@
 import React from 'react'
 import { colour, text, space, radius } from '../../design/tokens.js'
-import { brainlabService, brainlabLabel, RATES } from '../../clinicalPlan/brainlabBilling.js'
+import { brainlabService, brainlabLabel } from '../../clinicalPlan/brainlabBilling.js'
 import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 
 // ─── Brainlab billing on a booking (Brent, 22 Nov 2026) ──────────────────────
@@ -12,9 +12,12 @@ import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 // which then wins over the rules. Shown only where there is something to say:
 // an RHH or Calvary case the rules bill, or one somebody has marked.
 
+// No amounts here (Brent, 22 Nov 2026: "the billing amount ... is information
+// mainly for the admin/billing team and not relevant to the clinical team").
+// The rates live in brainlabBilling.js and show only on Admin -> Brainlab invoice.
 const CHOICES = [
-  ['airo', `AIRO · $${RATES.airo}`, 'AIRO'],
-  ['nav', `Navigation · $${RATES.nav}`, 'Navigation'],
+  ['airo', 'AIRO', 'AIRO'],
+  ['nav', 'Navigation', 'Navigation'],
   ['none', 'Not billed', 'Not billed']
 ]
 
@@ -29,8 +32,8 @@ export default function BrainlabBilling({ fields = {}, notes = '', reps = [], on
   const noF2F = attendanceNotRequired(notes)
   const status = kind === 'none' ? 'Not billed to Brainlab'
     : noF2F ? 'No F2F — tracked, not billed'
-      : reps.length ? `Billed $${RATES[kind]} — ${reps.join(' / ')} attended`
-        : `Billed $${RATES[kind]} once a rep is marked as attended`
+      : reps.length ? `Counted for Brainlab — ${reps.join(' / ')} attended`
+        : 'Counted for Brainlab once a rep is marked as attended'
 
   const chip = on => ({
     padding: `7px ${space.md}px`, borderRadius: radius.pill, cursor: 'pointer', ...text('caption'),
@@ -55,7 +58,7 @@ export default function BrainlabBilling({ fields = {}, notes = '', reps = [], on
         ))}
       </div>
       <div style={{ ...text('caption'), color: colour.inkMuted }} data-brainlab-status>
-        {status}{said ? ' · set on this booking' : rules.kind ? ` · suggested: ${rules.why.toLowerCase()}` : ''}
+        {status}{said ? ' · set on this booking' : rules.kind ? ` · suggested: ${rules.why.replace(/ — billed at .*$/, '').toLowerCase()}` : ''}
       </div>
     </div>
   )

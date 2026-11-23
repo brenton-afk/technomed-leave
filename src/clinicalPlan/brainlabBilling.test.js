@@ -173,3 +173,14 @@ describe('what August and September 2026 taught it', () => {
     expect(m.ask.map(r => r.id)).toEqual(['a', 'b'])
   })
 })
+
+describe("Calvary's Varioguide on the kit (Brent, 22 Nov 2026)", async () => {
+  const { kitWithVarioguide } = await import('./brainlabBilling.js')
+  it('fills in Varioguide 2.0 for a Calvary needle biopsy, and nowhere else', () => {
+    expect(kitWithVarioguide({ hospital: 'CLV', procedure: 'Brainlab Stereotactic Needle Biopsy', kit: '' })).toBe('Varioguide 2.0')
+    expect(kitWithVarioguide({ hospital: 'Calvary Lenah Valley', procedure: 'Varioguide biopsy', kit: 'Varioguide 2.0 (Consignment)' })).toBe('Varioguide 2.0 (Consignment)')
+    expect(kitWithVarioguide({ hospital: 'RHH', procedure: 'Stereotactic needle biopsy', kit: '' })).toBe('')
+    expect(kitWithVarioguide({ hospital: 'CLV', procedure: 'L4/5 PLIF', kit: 'Diplomat' })).toBe('Diplomat')
+    expect(kitWithVarioguide({ hospital: 'CLV', procedure: 'Stereotactic biopsy', kit: 'Brainlab' })).toBe('Brainlab / Varioguide 2.0')
+  })
+})

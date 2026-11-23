@@ -200,3 +200,23 @@ export const monthBounds = month => {
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
   return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(last)}` }
 }
+
+// ─── Calvary's Varioguide on the kit line (Brent, 22 Nov 2026) ───────────────
+// "I want Kit to pre-populate for Calvary Varioguide/Needle Biopsies as
+// Varioguide 2.0." The biopsy arm is Calvary's own Brainlab set, so no supply
+// is written — it is navigation, never asked where it comes from.
+export const VARIOGUIDE = 'Varioguide 2.0'
+
+/** Whether this is a Calvary Varioguide / stereotactic needle biopsy. Pure. */
+export function isCalvaryVarioguide({ hospital, procedure = '', kit = '', notes = '' } = {}) {
+  if (site(hospital) !== 'CLV') return false
+  const text = `${procedure}\n${kit}`
+  return /vario\s*guide/i.test(`${text}\n${notes}`) || (BIOPSY.test(procedure) && /stereotac|needle|burr\s*hole/i.test(`${procedure}\n${notes}`))
+}
+
+/** The kit line with Varioguide 2.0 on it, for a Calvary biopsy that has none. */
+export function kitWithVarioguide({ hospital, procedure = '', kit = '', notes = '' } = {}) {
+  const line = String(kit || '').trim()
+  if (/vario\s*guide/i.test(line) || !isCalvaryVarioguide({ hospital, procedure, kit: line, notes })) return String(kit || '')
+  return line ? `${line} / ${VARIOGUIDE}` : VARIOGUIDE
+}

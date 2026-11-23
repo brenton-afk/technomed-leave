@@ -26,7 +26,7 @@ import { attendanceNotRequired } from '../../clinicalPlan/attendance.js'
 import { offerNotices } from '../../notices.js'
 import { isRhh, etbsFrom } from '../../clinicalPlan/etbs.js'
 import BrainlabBilling from './BrainlabBilling.jsx'
-import { brainlabLabel } from '../../clinicalPlan/brainlabBilling.js'
+import { brainlabLabel, kitWithVarioguide } from '../../clinicalPlan/brainlabBilling.js'
 import { useBackLayer } from '../../backButton.js'
 
 // ─── Amending a booking from the portal ──────────────────────────────────────
@@ -574,7 +574,9 @@ export default function EditBooking({
   const typedRef = React.useRef(false)
   const apply = data => {
     setLoaded(data)
-    setFields({ ...data.fields })
+    // A Calvary needle biopsy's kit is Varioguide 2.0 (Brent, 22 Nov 2026) —
+    // filled in on opening, written when the booking is saved.
+    setFields({ ...data.fields, kit: kitWithVarioguide({ hospital: data.fields?.hospital, procedure: data.fields?.procedure, kit: data.fields?.kit, notes: data.notes }) })
     setNotes(data.notes || '')
     const from = civilParts(data.start)
     const to = civilParts(data.end)

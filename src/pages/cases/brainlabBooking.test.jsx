@@ -7,10 +7,11 @@ import KitPicker from './KitPicker.jsx'
 describe('a Varioguide biopsy at Calvary (Brent, 22 Nov 2026)', () => {
   const fields = { hospital: 'CLV', procedure: 'Brainlab Stereotactic Needle Biopsy', kit: 'Varioguide 2.0 (Consignment)' }
 
-  it('shows Navigation $250 suggested, and what it waits on', () => {
-    render(<BrainlabBilling fields={fields} notes="" reps={[]} onChange={() => {}} />)
-    expect(screen.getByRole('button', { name: 'Navigation · $250' })).toHaveAttribute('aria-pressed', 'true')
-    expect(document.querySelector('[data-brainlab-status]').textContent).toMatch(/\$250 once a rep is marked as attended · suggested: varioguide biopsy at calvary/)
+  it('shows Navigation suggested and what it waits on — never an amount (Brent, 22 Nov 2026)', () => {
+    const { container } = render(<BrainlabBilling fields={fields} notes="" reps={[]} onChange={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Navigation' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('[data-brainlab-status]').textContent).toMatch(/once a rep is marked as attended · suggested: varioguide biopsy at calvary/)
+    expect(container.textContent).not.toMatch(/\$/)
   })
 
   it('a tap writes the line; tapping it again hands back to the rules', () => {

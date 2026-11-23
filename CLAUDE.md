@@ -728,8 +728,10 @@ and `notBilled`; `invoiceLine` / `invoiceReference` write exactly what the
 invoices have since 2024 ("Surgeon / Patient / Surgery Date d.m.yy / Surgery …
 (AIRO|CURVE) / Hospital", reference "{MONTH} {YYYY} Clinical Support", item
 **BLCS**, GST exclusive). **Edit booking** has a Brainlab row
-(`cases/BrainlabBilling.jsx`, `data-brainlab-billing`): AIRO $300 /
-Navigation $250 / Not billed, the rules' suggestion and what it waits on;
+(`cases/BrainlabBilling.jsx`, `data-brainlab-billing`): AIRO / Navigation /
+Not billed, the rules' suggestion and what it waits on — **never an amount**
+(Brent, 22 Nov 2026: billing is for the admin team, not the clinical team;
+the rates show only on Admin → Brainlab invoice);
 `fields.brainlab` on save writes or removes the line. **Admin → Brainlab
 invoice** (`admin/BrainlabInvoice.jsx`; `brainlab-month` / `brainlab-decide`
 / `brainlab-invoice` on `api/xero/info.js`, admins; `api/_brainlabMonth.js`):
@@ -748,6 +750,11 @@ Brent attending — on neither the invoice nor the document). Also: a
 numbers, `kitSupply` NAVIGATION knows Varioguide — no supply buttons), and a
 biopsy / shunt / craniotomy / sinus operation folds the system buttons away
 behind **+ Add a system** (`noImplantSystem`, `KitPicker` `data-no-implant`).
+**Calvary needle biopsies get Varioguide 2.0 on the kit** (Brent, same day):
+`kitWithVarioguide` / `isCalvaryVarioguide` — in `writeBooking`, in
+`handleSave` when an edit touches hospital, procedure or kit, and filled into
+Edit booking's Kit box on opening (written on Save); no supply, it is
+navigation.
 
 ### The portal face lift, direction A (Brent, 12 Nov 2026)
 

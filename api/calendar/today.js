@@ -71,7 +71,7 @@ import {
   hourForNewCase, layOutDay, hourToTime, inPreferredOrder
 } from '../../src/clinicalPlan/dayLayout.js'
 import { isRhh, etbsFrom } from '../../src/clinicalPlan/etbs.js'
-import { brainlabLabel } from '../../src/clinicalPlan/brainlabBilling.js'
+import { brainlabLabel, kitWithVarioguide } from '../../src/clinicalPlan/brainlabBilling.js'
 const BRAINLAB_LINE = { airo: 'AIRO', nav: 'Navigation', none: 'Not billed' }
 import { kitWithAutoOutrigger } from '../../src/clinicalPlan/outrigger.js'
 import { kitWithDaySupplies } from '../../src/clinicalPlan/kitSupply.js'
@@ -630,6 +630,8 @@ async function handleSave(req, res) {
       // The Mariner Outrigger on standby (DNO) for an extension, revision or
       // connecting case (Brent, 19 Nov 2026; outrigger.js).
       kit = kitWithAutoOutrigger({ procedure: now.procedure, kit, notes: editNotes })
+      // Calvary's Varioguide on a needle biopsy (Brent, 22 Nov 2026).
+      kit = kitWithVarioguide({ hospital: now.hospital || current.location, procedure: now.procedure, kit, notes: editNotes })
       if (kit !== String(now.kit || '')) description = setLabelledValue(description, 'kit', kit)
       // And any system left without a supply gets one, the day considered
       // (Brent, 16 Nov 2026) — the same rule as a new booking.
@@ -883,6 +885,8 @@ async function writeBooking({ fields: given = {}, date, notes, rep, colorId, att
     // connecting case (Brent, 19 Nov 2026) — its supply is set below with the
     // rest: Consignment at Calvary, Calvary Loan (a transfer) at RHH.
     kit = kitWithAutoOutrigger({ procedure: fields.procedure, kit, notes })
+    // Calvary's Varioguide on a needle biopsy (Brent, 22 Nov 2026).
+    kit = kitWithVarioguide({ hospital: fields.hospital, procedure: fields.procedure, kit, notes })
     if (kit !== String(fields.kit || '')) fields = { ...fields, kit }
   }
 
