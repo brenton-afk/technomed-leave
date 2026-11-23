@@ -700,13 +700,10 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
             of the information should be patient/surgeon, then the operation
             description, then the system and loan/consignment, then the
             information about where it is on the list". */}
-        {/* Who is ahead of us, where known. The place itself is a pill on the
-            footer row (compact card, Brent 9 Nov 2026). */}
-        {place?.ahead && !off && (
-          <span style={{ ...text('caption'), display: 'block', color: ink.muted, marginTop: 2 }}>
-            {place.ahead}
-          </span>
-        )}
+        {/* Who is ahead of us is not on the card (Brent, 23 Nov 2026: "This
+            extra info re: list doesn't need to appear here. It is fine to just
+            be in the list tab") — the place pill on the footer row and the ⇅
+            list view carry it. */}
 
         {surgicalCase.unread && (
           <span style={{ ...text('caption'), display: 'block', color: ink.muted }}>

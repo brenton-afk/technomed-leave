@@ -588,7 +588,8 @@ describe('where we are on the hospital\'s list', () => {
     await waitFor(() => expect(screen.getByText('Pennant')).toBeInTheDocument())
     expect(screen.getByText('1st · PM')).toBeInTheDocument()
     expect(screen.getByText('2nd · PM · from 1pm')).toBeInTheDocument()
-    expect(screen.getByText('after a PLIF — KT Medical, not ours')).toBeInTheDocument()
+    // What is ahead lives in the list view, not on the card (Brent, 23 Nov 2026).
+    expect(screen.queryByText('after a PLIF — KT Medical, not ours')).not.toBeInTheDocument()
   })
 
   it('does not show the line back as an unread note', async () => {

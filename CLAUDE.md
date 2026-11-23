@@ -1323,6 +1323,10 @@ line `inSituNoted` accepts and returns the systems it names, else the makers
 — "Diplomat in situ", "Medtronic in situ" — as `inSituNote` on the case (in
 `planSignature`), drawn as the in-situ pill on the phone card's footer
 (`data-in-situ-note`) and on the week card's list line.
+**…and only there** (Brent, 23 Nov 2026: "This extra info re: list doesn't
+need to appear here. It is fine to just be in the list tab"): the case card
+no longer prints what is ahead ("Pt …, then a laminectomy …") under the kit —
+the place pill ("5th · AM") stays on the footer, the rest is in the ⇅ list view.
 **The list view names every case ahead of ours it knows** (`rowsFor` in
 `ListOrder.jsx`): from the List line's words, else a note starting "After …"
 (`aheadWords`). Fewer named than the gap: the named ones numbered, then "N
