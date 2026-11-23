@@ -17,6 +17,7 @@ import {
   accentForCase, accentTextForCase, washFor, withAlpha, inkOn
 } from '../clinicalPlan/theme.js'
 import { isNavigationOnly } from '../clinicalPlan/systems.js'
+import { isCalvaryVarioguide, VARIOGUIDE } from '../clinicalPlan/brainlabBilling.js'
 import { implantQuestion } from '../clinicalPlan/deduceKit.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { IconCopy } from '../design/icons.jsx'
@@ -374,17 +375,26 @@ function patientLabel(surgicalCase) {
   return surgicalCase?.patient || (surgicalCase?.awaitingName ? 'Name to come' : '')
 }
 
-function suppliesFor(surgicalCase) {
+export function suppliesFor(surgicalCase) {
   if (!surgicalCase || surgicalCase.cancelled || surgicalCase.notRequired) return null
   // Navigation is not something anybody supplies. The badge says AIRO; a line
   // underneath reading "AIRO (Distributor Loan?)" says a tray is being chased
   // that nobody has ever ordered.
+  // Except Calvary's Varioguide 2.0 (Brent, 23 Nov 2026: "should be listed
+  // like a system"): it is the kit for a needle biopsy there, so it gets a
+  // chip — no supply, it is consigned — even when the booking was typed before
+  // the kit line was filled in.
+  const vario = e => /vario\s*guide/i.test(String(e?.system || ''))
   const entries = (surgicalCase.supplies || [])
-    .filter(e => e?.system && !e.navigation && !isNavigationOnly(e.system))
+    .filter(e => e?.system && (vario(e) || (!e.navigation && !isNavigationOnly(e.system))))
+    .map(e => (vario(e) ? { ...e, system: VARIOGUIDE, navigation: true } : e))
+  if (!entries.some(vario) && isCalvaryVarioguide({ hospital: surgicalCase.hospital, procedure: surgicalCase.operation || '' })) {
+    entries.push({ system: VARIOGUIDE, navigation: true })
+  }
   if (!entries.length) return null
 
   return entries.map(entry => {
-    if (entry.supply) return { ...entry, inferred: false }
+    if (entry.supply || entry.navigation) return { ...entry, inferred: false }
     // The day-aware guess when the week worked one out: the second Dakota at
     // Calvary is the office's loan kit, not a second consignment set.
     const guess = entry.suggested || suggestSupply(entry.system, surgicalCase.hospital)

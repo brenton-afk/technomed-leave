@@ -750,6 +750,11 @@ Brent attending — on neither the invoice nor the document). Also: a
 numbers, `kitSupply` NAVIGATION knows Varioguide — no supply buttons), and a
 biopsy / shunt / craniotomy / sinus operation folds the system buttons away
 behind **+ Add a system** (`noImplantSystem`, `KitPicker` `data-no-implant`).
+**…and the card shows it like a system** (Brent, 23 Nov 2026: "VARIOGUIDE
+2.0 should be listed like a system"): `suppliesFor` in `CaseWeek.jsx` keeps a
+Varioguide entry as a chip (named Varioguide 2.0, no supply) and adds one for a
+Calvary needle biopsy whose booking has no kit line yet (`isCalvaryVarioguide`);
+other navigation stays off the chips. `pages/varioguideChip.test.jsx`.
 **Calvary needle biopsies get Varioguide 2.0 on the kit** (Brent, same day):
 `kitWithVarioguide` / `isCalvaryVarioguide` — in `writeBooking`, in
 `handleSave` when an edit touches hospital, procedure or kit, and filled into
