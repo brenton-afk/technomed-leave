@@ -17,7 +17,7 @@ import {
   accentForCase, accentTextForCase, washFor, withAlpha, inkOn
 } from '../clinicalPlan/theme.js'
 import { isNavigationOnly } from '../clinicalPlan/systems.js'
-import { isCalvaryVarioguide, VARIOGUIDE } from '../clinicalPlan/brainlabBilling.js'
+import { varioguideFor } from '../clinicalPlan/brainlabBilling.js'
 import { implantQuestion } from '../clinicalPlan/deduceKit.js'
 import { useIsDesktop } from '../design/viewport.js'
 import { IconCopy } from '../design/icons.jsx'
@@ -384,13 +384,14 @@ export function suppliesFor(surgicalCase) {
   // like a system"): it is the kit for a needle biopsy there, so it gets a
   // chip — no supply, it is consigned — even when the booking was typed before
   // the kit line was filled in.
+  // RHH's is Varioguide 1.0 (Brent, 23 Nov 2026).
   const vario = e => /vario\s*guide/i.test(String(e?.system || ''))
+  const kitLine = (surgicalCase.supplies || []).map(e => e?.system || '').join(' / ')
+  const named = varioguideFor({ hospital: surgicalCase.hospital, procedure: surgicalCase.operation || '', kit: kitLine })
   const entries = (surgicalCase.supplies || [])
     .filter(e => e?.system && (vario(e) || (!e.navigation && !isNavigationOnly(e.system))))
-    .map(e => (vario(e) ? { ...e, system: VARIOGUIDE, navigation: true } : e))
-  if (!entries.some(vario) && isCalvaryVarioguide({ hospital: surgicalCase.hospital, procedure: surgicalCase.operation || '' })) {
-    entries.push({ system: VARIOGUIDE, navigation: true })
-  }
+    .map(e => (vario(e) ? { ...e, system: named || e.system, navigation: true } : e))
+  if (!entries.some(vario) && named) entries.push({ system: named, navigation: true })
   if (!entries.length) return null
 
   return entries.map(entry => {

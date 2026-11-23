@@ -201,22 +201,40 @@ export const monthBounds = month => {
   return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(last)}` }
 }
 
-// ─── Calvary's Varioguide on the kit line (Brent, 22 Nov 2026) ───────────────
+// ─── The Varioguide on the kit line, at both hospitals ───────────────────────
 // "I want Kit to pre-populate for Calvary Varioguide/Needle Biopsies as
-// Varioguide 2.0." The biopsy arm is Calvary's own Brainlab set, so no supply
-// is written — it is navigation, never asked where it comes from.
-export const VARIOGUIDE = 'Varioguide 2.0'
+// Varioguide 2.0" (Brent, 22 Nov 2026); then (23 Nov 2026): "at RHH it is
+// Varioguide 1.0 and at Calvary it is Varioguide 2.0. These systems must be
+// recognised for both hospitals automatically." The biopsy arm is each
+// hospital's own Brainlab set, so no supply is written — it is navigation,
+// never asked where it comes from.
+export const VARIOGUIDE_AT = { CLV: 'Varioguide 2.0', RHH: 'Varioguide 1.0' }
+export const VARIOGUIDE = VARIOGUIDE_AT.CLV
 
-/** Whether this is a Calvary Varioguide / stereotactic needle biopsy. Pure. */
-export function isCalvaryVarioguide({ hospital, procedure = '', kit = '', notes = '' } = {}) {
-  if (site(hospital) !== 'CLV') return false
+/**
+ * The Varioguide a booking needs — "Varioguide 2.0" at Calvary, "Varioguide
+ * 1.0" at RHH — or '' when it is not a Varioguide case: the word Varioguide
+ * anywhere on it, or a biopsy that says stereotactic, needle or burr hole.
+ * Pure.
+ */
+export function varioguideFor({ hospital, procedure = '', kit = '', notes = '' } = {}) {
+  const name = VARIOGUIDE_AT[site(hospital)]
+  if (!name) return ''
   const text = `${procedure}\n${kit}`
-  return /vario\s*guide/i.test(`${text}\n${notes}`) || (BIOPSY.test(procedure) && /stereotac|needle|burr\s*hole/i.test(`${procedure}\n${notes}`))
+  const yes = /vario\s*guide/i.test(`${text}\n${notes}`)
+    || (BIOPSY.test(procedure) && /stereotac|needle|burr\s*hole/i.test(`${procedure}\n${notes}`))
+  return yes ? name : ''
 }
 
-/** The kit line with Varioguide 2.0 on it, for a Calvary biopsy that has none. */
+/** Whether this is a Calvary Varioguide / stereotactic needle biopsy. Pure. */
+export function isCalvaryVarioguide(booking = {}) {
+  return site(booking.hospital) === 'CLV' && Boolean(varioguideFor(booking))
+}
+
+/** The kit line with the hospital's Varioguide on it, for a biopsy that has none. */
 export function kitWithVarioguide({ hospital, procedure = '', kit = '', notes = '' } = {}) {
   const line = String(kit || '').trim()
-  if (/vario\s*guide/i.test(line) || !isCalvaryVarioguide({ hospital, procedure, kit: line, notes })) return String(kit || '')
-  return line ? `${line} / ${VARIOGUIDE}` : VARIOGUIDE
+  const name = varioguideFor({ hospital, procedure, kit: line, notes })
+  if (/vario\s*guide/i.test(line) || !name) return String(kit || '')
+  return line ? `${line} / ${name}` : name
 }

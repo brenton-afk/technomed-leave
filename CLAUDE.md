@@ -768,6 +768,14 @@ behind **+ Add a system** (`noImplantSystem`, `KitPicker` `data-no-implant`).
 Varioguide entry as a chip (named Varioguide 2.0, no supply) and adds one for a
 Calvary needle biopsy whose booking has no kit line yet (`isCalvaryVarioguide`);
 other navigation stays off the chips. `pages/varioguideChip.test.jsx`.
+**RHH needle biopsies get Varioguide 1.0** (Brent, 23 Nov 2026: "at RHH it
+is Varioguide 1.0 and at Calvary it is Varioguide 2.0 … recognised for both
+hospitals automatically"): `varioguideFor` / `VARIOGUIDE_AT` in
+`brainlabBilling.js` — the word Varioguide anywhere, or a biopsy (in the
+procedure) that says stereotactic, needle or burr hole — gives the hospital's
+version; `kitWithVarioguide` and the card chip use it at both hospitals
+(`isCalvaryVarioguide` remains for Calvary-only questions). A plain
+"Varioguide" on an RHH kit line is shown as 1.0.
 **Calvary needle biopsies get Varioguide 2.0 on the kit** (Brent, same day):
 `kitWithVarioguide` / `isCalvaryVarioguide` — in `writeBooking`, in
 `handleSave` when an edit touches hospital, procedure or kit, and filled into
