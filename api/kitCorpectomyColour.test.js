@@ -31,3 +31,20 @@ describe('the TM Corpectomy tray photo in colour', () => {
     expect(JSON.parse(store.get('kits:list:tm-corpectomy-clv')).trays[0].lines[0].description).toBe('Curette')
   })
 })
+
+describe('the TM Screw Removal tray photo in colour (Brent, 23 Nov 2026)', () => {
+  it('overwrites the old black-and-white photo where it is', async () => {
+    uploadFile.mockClear()
+    const path = '/Tray Lists/Tray Photos/TM Screw Removal/TM Screw Removal Set.jpg'
+    store.set('kits:defs', JSON.stringify([{ id: 'tm-screw-removal-clv', name: 'TM Screw Removal', system: 'TM Screw Removal', home: 'CLV', kind: 'technomed', trays: ['TM Screw Removal Set'] }]))
+    store.set('kits:applied', JSON.stringify(KIT_CORRECTIONS.map(c => c.id).filter(id => id !== 'screw-removal-colour-2026-11-23')))
+    store.set('kits:list:tm-screw-removal-clv', JSON.stringify({ trays: [{ name: 'TM Screw Removal Set', photo: path, lines: [{ code: 'B', description: 'Pliers', qty: 1, kind: 'instrument' }] }] }))
+    await listKits()
+    expect(uploadFile).toHaveBeenCalledTimes(1)
+    expect(uploadFile.mock.calls[0][0]).toBe(path)
+    const jpg = uploadFile.mock.calls[0][1]
+    expect(jpg[0]).toBe(0xff)
+    expect(jpg[1]).toBe(0xd8)
+    expect(JSON.parse(store.get('kits:applied'))).toContain('screw-removal-colour-2026-11-23')
+  })
+})

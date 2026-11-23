@@ -100,7 +100,9 @@ export const KIT_CORRECTIONS = [
   { id: 'system-names-2026-11-22', seed: 'system-names' },
   // The TM Corpectomy curette tray's photo in colour, from the Word copy of
   // the agreement (Brent, 22 Nov 2026); the signed PDF was a grey scan.
-  { id: 'corpectomy-colour-2026-11-22', seed: 'corpectomy-colour' }
+  { id: 'corpectomy-colour-2026-11-22', seed: 'corpectomy-colour' },
+  // The TM Screw Removal tray in colour, as it is now (Brent, 23 Nov 2026).
+  { id: 'screw-removal-colour-2026-11-23', seed: 'screw-removal-colour' }
 ]
 
 /** Applies corrections not yet applied. Returns null when nothing changed. */
@@ -244,27 +246,12 @@ async function runSeed(name) {
   }
   if (name === 'corpectomy-colour') {
     const { CORPECTOMY_COLOUR } = await import('./_kitSeedCorpectomyPhoto.js')
-    const { uploadFile } = await import('./_dropbox.js')
-    const sets = (await getDefs()).filter(k => /corpectomy/i.test(String(k.system || k.name)) && k.home === 'CLV')
-    for (const kit of sets) {
-      const list = await getTrayList(kit.id)
-      const tray = (list?.trays || []).find(t => /corpectomy/i.test(t.name)) || list?.trays?.[0]
-      if (!tray) continue
-      const safe = s => String(s || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim()
-      const path = tray.photo || `/Tray Lists/Tray Photos/${safe(kit.name)}/${safe(tray.name)}.jpg`
-      let done = false
-      for (let a = 0; a < 3 && !done; a += 1) {
-        try { await uploadFile(path, Buffer.from(CORPECTOMY_COLOUR, 'base64')); done = true } catch {
-          await new Promise(r => setTimeout(r, process.env.VITEST ? 0 : 1500 * (a + 1)))
-        }
-      }
-      if (!done) continue
-      if (!tray.photo) {
-        const now = await getTrayList(kit.id)
-        await redisSetBody(LIST(kit.id), JSON.stringify({ ...now, trays: now.trays.map(t => (t.name === tray.name ? { ...t, photo: path } : t)) }))
-      }
-      await addHistory({ kind: 'edit', kitId: kit.id, kitName: kit.name, by: 'Claude (colour tray photo)', text: `${tray.name}: photo now in colour` })
-    }
+    await colourTrayPhoto(/corpectomy/i, CORPECTOMY_COLOUR)
+    return
+  }
+  if (name === 'screw-removal-colour') {
+    const { SCREW_REMOVAL_COLOUR } = await import('./_kitSeedScrewRemovalPhoto.js')
+    await colourTrayPhoto(/screw\s*removal/i, SCREW_REMOVAL_COLOUR)
     return
   }
   if (name === 'system-names') {
@@ -947,4 +934,32 @@ async function editTrayListNow(kitId, { op, tray, index, line, expect, name, rep
   await redisSetBody(LIST(kitId), JSON.stringify(list))
   await addHistory({ kind: 'edit', kitId, kitName: kit?.name || kitId, by, text: `${t.name} — ${note}` })
   return list
+}
+
+
+// A Calvary TM set's one tray photo, replaced where it is in Dropbox (or filed
+// and put on the tray when it has none). Used for the colour photos of 22 and
+// 23 Nov 2026 (Corpectomy, Screw Removal).
+async function colourTrayPhoto(match, b64) {
+  const { uploadFile } = await import('./_dropbox.js')
+  const sets = (await getDefs()).filter(k => match.test(String(k.system || k.name)) && k.home === 'CLV')
+  for (const kit of sets) {
+    const list = await getTrayList(kit.id)
+    const tray = (list?.trays || []).find(t => match.test(t.name)) || list?.trays?.[0]
+    if (!tray) continue
+    const safe = x => String(x || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim()
+    const path = tray.photo || `/Tray Lists/Tray Photos/${safe(kit.name)}/${safe(tray.name)}.jpg`
+    let done = false
+    for (let a = 0; a < 3 && !done; a += 1) {
+      try { await uploadFile(path, Buffer.from(b64, 'base64')); done = true } catch {
+        await new Promise(r => setTimeout(r, process.env.VITEST ? 0 : 1500 * (a + 1)))
+      }
+    }
+    if (!done) continue
+    if (!tray.photo) {
+      const now = await getTrayList(kit.id)
+      await redisSetBody(LIST(kit.id), JSON.stringify({ ...now, trays: now.trays.map(t => (t.name === tray.name ? { ...t, photo: path } : t)) }))
+    }
+    await addHistory({ kind: 'edit', kitId: kit.id, kitName: kit.name, by: 'Claude (colour tray photo)', text: `${tray.name}: photo now in colour` })
+  }
 }
