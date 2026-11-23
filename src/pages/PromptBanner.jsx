@@ -2,12 +2,21 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { IconAlert, IconChevron } from '../design/icons.jsx'
 import { STAFF, isSameStaff } from '../staffConfig.js'
-import { currentPeriod, isPeriodClosed } from '../../api/_fortnight.js'
+import { periodDue, isPeriodClosed, periodDeadline } from '../../api/_fortnight.js'
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 // What the Today feed was actually for. Everything else on it duplicated the
 // case plan, so only this survives: one slim line when something needs you,
 // nothing at all when it does not. Deliberately not a second feed.
+
+// "Timesheet due Sunday" / "… due Monday 12pm" (Toni, 23 Nov 2026), and on the
+// day itself "due today".
+export function dueWords(periodStart, nowMs = Date.now()) {
+  const dl = periodDeadline(periodStart)
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Hobart' }).format(new Date(nowMs))
+  if (today === dl.date) return dl.noon ? 'Timesheet due today by 12pm' : 'Timesheet due today'
+  return `Timesheet due ${dl.words}`
+}
 
 export default function PromptBanner({ user, onNavigate }) {
   const [prompts, setPrompts] = useState([])
@@ -22,7 +31,8 @@ export default function PromptBanner({ user, onNavigate }) {
         try {
           const res = await fetch('/api/timesheet/agent?action=mine', { headers: authHeaders })
           const data = await res.json()
-          const period = currentPeriod()
+          // On a Monday morning the fortnight due by noon is the one just ended.
+          const period = periodDue()
           const records = data.records || []
           const rejected = records.find(r => r.periodStart === period.start && r.status === 'rejected')
           const submitted = records.some(r => r.periodStart === period.start && r.status !== 'rejected')
@@ -39,7 +49,7 @@ export default function PromptBanner({ user, onNavigate }) {
               tone: isPeriodClosed(period.start) ? 'danger' : 'warning',
               text: isPeriodClosed(period.start)
                 ? `Timesheet overdue — ${period.start} to ${period.end}`
-                : 'Timesheet due Sunday',
+                : dueWords(period.start),
               go: { tab: 'me', sub: 'timesheets' }
             })
           }

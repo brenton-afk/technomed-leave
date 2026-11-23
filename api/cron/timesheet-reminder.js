@@ -1,7 +1,7 @@
 import { commissionsDue } from '../_commissions.js'
 import { STAFF } from '../../src/staffConfig.js'
 import { getAllTimesheets } from '../_redis.js'
-import { currentPeriod, todayAest } from '../_fortnight.js'
+import { currentPeriod, todayAest, periodDue, periodDeadline } from '../_fortnight.js'
 import { sendSms, toE164, twilioConfigured } from '../_twilio.js'
 import { owingFor, caseLine, leaderEmailFor, casesOn } from '../_usageReminders.js'
 import { sendUsageReminderEmail, sendInSituAlert, PORTAL_URL } from '../_email.js'
@@ -175,14 +175,17 @@ export default async function handler(req, res) {
       console.error('in situ alerts failed:', err.message)
       inSitu = { error: err.message }
     }
-    // Timesheet reminders only at the weekend, as when this ran Sat/Sun only.
-    if (!['Sat', 'Sun'].includes(hobartWeekday())) {
+    // Timesheet reminders at the weekend, and on Monday morning for a
+    // fortnight due by Monday noon (Erin, 19 Nov 2026).
+    const due = periodDue()
+    const mondayNoon = hobartWeekday() === 'Mon' && periodDeadline(due.start).noon && due.start !== currentPeriod().start
+    if (!['Sat', 'Sun'].includes(hobartWeekday()) && !mondayNoon) {
       return res.status(200).json({ ran: 'morning', usage, inSitu, invoices: await settled(), timesheets: 'not a weekend' })
     }
   }
 
   try {
-    const period = currentPeriod()
+    const period = periodDue()
     const all = await getAllTimesheets(100)
     const submitted = new Set(
       all.filter(r => r.periodStart === period.start && r.status !== 'rejected').map(r => r.email)
@@ -201,7 +204,7 @@ export default async function handler(req, res) {
       })
     }
 
-    const deadline = period.end
+    const deadline = periodDeadline(period.start).date
     for (const staff of owing) {
       if (!toE164(staff.mobileNumber)) {
         skipped.push({ name: staff.name, reason: 'no mobile number on file' })
@@ -209,7 +212,7 @@ export default async function handler(req, res) {
       }
       const body = `Hi ${staff.name.split(' ')[0]}, your TechnoMed timesheet for `
         + `${period.start} to ${period.end} hasn't been submitted yet. `
-        + `It's due by end of Sunday ${deadline}. `
+        + (periodDeadline(period.start).noon ? `It's due by 12pm Monday ${deadline}. ` : `It's due by end of Sunday ${deadline}. `)
         + `Submit it here: ${PORTAL_URL}`
       try {
         const result = await sendSms(staff.mobileNumber, body)

@@ -3204,6 +3204,18 @@ Flow and invariants:
 - Staff submit → Xero as `DRAFT`. Admin approve → the **same** Xero timesheet (`TimesheetID` included in the POST, which makes it an update) flips to `APPROVED`. That is how the spec's "submit to Xero" and later "approval triggers the pay run" both hold.
 - **Validation runs before Xero**, so invalid hours never leave the app; and Xero is called before the record is stored, so a submitted record always means Xero accepted it.
 - Resubmission is blocked with 409 unless the timesheet was returned; returning requires a reason.
+- **Due Monday 12pm from the changeover fortnight** (Erin's email of 19 Nov
+  2026, "Pay cycle change": payday moves to Tuesday, first Tue 15 Dec;
+  "Timesheets must now be lodged by Monday at 1200pm"; Toni, 23 Nov: the
+  banner still said Sunday). `periodDeadline` in `api/_fortnight.js`: periods
+  starting on or after `NOON_MONDAY_FROM` (2026-11-30) are due 12 noon Hobart
+  the Monday after they end; 16–29 Nov "goes ahead as normal" (Sunday).
+  `isPeriodClosed` uses it, and `periodDue` gives the fortnight owed — on that
+  Monday morning, the one just ended. The banner (`dueWords` in
+  `PromptBanner.jsx`) says "due Sunday" / "due Monday 12pm" / "due today by
+  12pm"; the morning reminder also runs that Monday. Periods are still Monday
+  to Sunday — Toni asked Erin whether they become Tuesday to Monday (her email
+  says so) and that was not answered; `FORTNIGHT_ANCHOR` is unchanged.
 - `api/cron/timesheet-reminder.js` is now both daily jobs (Hobby allows two), chosen by `?job=`: `evening` 07:00 UTC (6pm AEDT) sends the "usage not sent" reminders (`api/_usageReminders.js`, Task 11), `morning` 22:00 UTC (9am AEDT) escalates yesterday's unsent usage to the week's team leader and, on Sat/Sun only, sends the timesheet reminders as before. It verifies `CRON_SECRET`. **Tasmania observes daylight saving**, so from October to April this lands at 9am local — Hobby allows only two crons total, so there is no seasonal second pair. Staff `mobileNumber` fields in `staffConfig.js` are blank, so every reminder is currently skipped rather than sent.
 
 **Leave and TOIL taken on the timesheet** (Brent, 12 Nov 2026). Xero keeps

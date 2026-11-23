@@ -3,7 +3,7 @@
 //
 // The spec named "Monday 16 June 2026", but 16 June 2026 is a Tuesday. The
 // Monday→Sunday shape is the load-bearing part (it drives the grid, the Xero
-// NumberOfUnits ordering and the Sunday deadline), so the anchor is the Monday
+// NumberOfUnits ordering and the deadline), so the anchor is the Monday
 // of that week. If the intent really was Tuesday-to-Monday periods, change this
 // one constant and everything else follows.
 export const FORTNIGHT_ANCHOR = '2026-06-15'
@@ -77,9 +77,50 @@ export function isValidPeriodStart(dateStr) {
   return fortnightStartFor(dateStr) === dateStr
 }
 
-// Deadline is the end of the final Sunday, in Tasmanian time.
+// ─── When a timesheet is due ─────────────────────────────────────────────────
+// Until the pay-cycle change, the end of the final Sunday. From the changeover
+// fortnight on (Erin, 19 Nov 2026: "Timesheets must now be lodged by Monday at
+// 1200pm" — payday moves to Tuesday, first paid Tue 15 Dec), 12 noon on the
+// Monday after the period ends. The 16–29 Nov fortnight "goes ahead as
+// normal" (paid Sun 29 Nov), so it keeps Sunday.
+export const NOON_MONDAY_FROM = '2026-11-30'
+
+// Hobart's wall clock, daylight saving included — the deadline is noon there.
+function hobartClock(nowMs) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Australia/Hobart', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23'
+  }).formatToParts(new Date(nowMs)).map(p => [p.type, p.value]))
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) }
+}
+
+/** The deadline of a period: the day, the hour (24 = end of day) and how to say it. */
+export function periodDeadline(periodStart) {
+  const end = addDays(periodStart, FORTNIGHT_DAYS - 1)
+  if (periodStart >= NOON_MONDAY_FROM) {
+    return { date: addDays(end, 1), hour: 12, words: 'Monday 12pm', noon: true }
+  }
+  return { date: end, hour: 24, words: 'Sunday', noon: false }
+}
+
+// Past the deadline, in Tasmanian time.
 export function isPeriodClosed(periodStart, nowMs = Date.now()) {
-  return todayAest(nowMs) > addDays(periodStart, FORTNIGHT_DAYS - 1)
+  const { date, hour } = periodDeadline(periodStart)
+  const now = hobartClock(nowMs)
+  return now.date > date || (now.date === date && now.hour >= hour)
+}
+
+/**
+ * The fortnight a timesheet is owed for right now. Normally the current one;
+ * on the Monday morning a noon deadline falls on, still the one that ended
+ * yesterday — that is the one due by noon.
+ */
+export function periodDue(nowMs = Date.now()) {
+  const now = hobartClock(nowMs)
+  const current = periodFor(now.date)
+  const previous = periodFor(addDays(current.start, -1))
+  const dl = periodDeadline(previous.start)
+  if (dl.noon && now.date === dl.date && now.hour < 12) return previous
+  return current
 }
 
 export function dayLabel(dateStr) {
