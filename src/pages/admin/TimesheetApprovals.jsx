@@ -527,6 +527,12 @@ export default function TimesheetApprovals({ user }) {
                       style={{ flex: 1, padding: 12, background: '#fdecea', color: '#c0392b', border: '1px solid rgba(192,57,43,0.2)', borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
                       Return
                     </button>
+                    <button data-clear-timesheet onClick={() => {
+                      if (window.confirm(`Clear ${record.staffName}'s timesheet for ${record.periodStart} off this list? Nobody is emailed and Xero is not changed — use this only when it was dealt with outside the portal.`)) decide(record, 'clear', 'Dealt with outside the portal')
+                    }} disabled={busy === record.email + 'clear'}
+                      style={{ flex: 1, padding: 12, background: 'white', color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+                      {busy === record.email + 'clear' ? 'Clearing…' : 'Clear'}
+                    </button>
                   </div>
                 )}
               </div>

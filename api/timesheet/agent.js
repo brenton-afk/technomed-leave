@@ -1091,7 +1091,7 @@ async function handleList(req, res) {
   if (!admin) return
 
   const all = await getAllTimesheets(100)
-  const byStatus = { submitted: [], approved: [], rejected: [] }
+  const byStatus = { submitted: [], approved: [], rejected: [], cleared: [] }
   for (const r of all) (byStatus[r.status] ||= []).push(r)
 
   const period = currentPeriod()
@@ -1114,12 +1114,24 @@ async function handleDecide(req, res) {
 
   const { email, periodStart, decision, reason, entries, overtime } = req.body || {}
   if (!email || !periodStart) throw badRequest('email and periodStart are required')
-  if (!['approve', 'reject'].includes(decision)) throw badRequest('decision must be approve or reject')
+  if (!['approve', 'reject', 'clear'].includes(decision)) throw badRequest('decision must be approve, reject or clear')
 
   const record = await getTimesheet('submitted', email, periodStart)
   if (!record) return res.status(404).json({ error: 'Timesheet not found' })
   if (record.status !== 'submitted') {
     return res.status(409).json({ error: `This timesheet has already been ${record.status}` })
+  }
+
+  // Clear (Brent, 23 Nov 2026: old timesheets "need clearing from the portal
+  // memory"): taken off the approvals list as dealt with outside the portal.
+  // Nothing is emailed and Xero is not touched; the record is kept, marked.
+  if (decision === 'clear') {
+    const cleared = {
+      ...record, status: 'cleared', clearedReason: String(reason || '').trim() || 'Dealt with outside the portal',
+      decidedBy: admin.email, decidedAt: new Date().toISOString()
+    }
+    await saveTimesheet('submitted', cleared)
+    return res.status(200).json({ record: cleared })
   }
 
   if (decision === 'reject') {

@@ -214,6 +214,25 @@ describe('submitting and approving', () => {
     expect(xeroCalls.leave).toHaveLength(0)
   })
 
+  it('clears an old timesheet off the list — no email, no Xero (Brent, 23 Nov 2026)', async () => {
+    const { sendTimesheetDecisionEmail } = await import('./_email.js')
+    sendTimesheetDecisionEmail.mockClear()
+    await call('submit', 'POST', fortnight({ toil_taken: { '2026-11-03': 2 } }))
+    const sent = xeroCalls.timesheets.length
+    const cleared = await call('decide', 'POST', { email: 'ben@technomed.com.au', periodStart: '2026-11-02', decision: 'clear' })
+    expect(cleared.statusCode).toBe(200)
+    expect(cleared.payload.record).toMatchObject({ status: 'cleared', clearedReason: 'Dealt with outside the portal' })
+    expect(xeroCalls.timesheets).toHaveLength(sent)
+    expect(xeroCalls.leave).toHaveLength(0)
+    expect(sendTimesheetDecisionEmail).not.toHaveBeenCalled()
+    const list = await call('list', 'GET')
+    expect(list.payload.submitted).toHaveLength(0)
+    expect(list.payload.cleared).toHaveLength(1)
+    // Once cleared it cannot be approved by mistake.
+    const again = await call('decide', 'POST', { email: 'ben@technomed.com.au', periodStart: '2026-11-02', decision: 'approve' })
+    expect(again.statusCode).toBe(409)
+  })
+
   it('puts TOIL for today or later on the leave calendar when the draft is saved, not past days', async () => {
     await call('draft', 'POST', { periodStart: '2026-11-02', entries: { toil_taken: { '2026-11-03': 2 } } })
     // 3 Nov is past: nothing written.

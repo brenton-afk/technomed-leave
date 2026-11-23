@@ -3155,6 +3155,11 @@ sticky** (Brent, 15 Nov 2026: the leave was hidden under the bar). The
 fortnight-total bar is `position: sticky; bottom: 0` inside the page
 (`data-total-bar`), never `fixed` at a guessed 70px over the tab bar;
 `safeArea.test.js` holds it.
+**Clear** (Brent, 23 Nov 2026: two old timesheets "need clearing from the
+portal memory"): beside Approve and Return, asked once — `decision: 'clear'`
+on `action=decide` marks it `status: 'cleared'` (`clearedReason`, who, when),
+off the waiting list; nobody is emailed and Xero is not touched. It still
+counts as filed for that fortnight (no resubmit, no call-ins logged into it).
 **"Try a timesheet as…"** (Brent, 15 Nov 2026): Admin → Timesheets, a button
 per person opens their own timesheet screen (`Timesheets actAs`), every
 request carrying `as` (admins only, else 403; `req.actingAs`). Nothing of
