@@ -298,6 +298,10 @@ export default function TimesheetApprovals({ user }) {
     setBusy('')
   }
 
+  function clearRecord(record) {
+    if (window.confirm(`Clear ${record.staffName}'s timesheet for ${rangeLabel(record.periodStart, record.periodEnd)} off this list? Nobody is emailed and Xero is not changed — use this only when it was dealt with outside the portal (paid already).`)) decide(record, 'clear', 'Dealt with outside the portal')
+  }
+
   async function checkLeaveNow(record) {
     const k = `${record.email}-${record.periodStart}`
     if (liveLeave[k]) return
@@ -457,6 +461,15 @@ export default function TimesheetApprovals({ user }) {
               {record.status === 'submitted' && flagsFor(record).length === 0 && (
                 <div style={{ fontSize: 11, color: TEAL, marginTop: 5, fontWeight: 600 }}>✓ Nothing unusual</div>
               )}
+              {/* On the card, not only inside it (Brent, 23 Nov 2026: "I can't see a clear button"). */}
+              {record.status === 'submitted' && (
+                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="button" data-clear-card onClick={e => { e.stopPropagation(); clearRecord(record) }} disabled={busy === record.email + 'clear'}
+                    style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 999, background: 'white', color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                    {busy === record.email + 'clear' ? 'Clearing…' : 'Clear — already dealt with'}
+                  </button>
+                </div>
+              )}
             </div>
 
             {isOpen && (
@@ -527,9 +540,7 @@ export default function TimesheetApprovals({ user }) {
                       style={{ flex: 1, padding: 12, background: '#fdecea', color: '#c0392b', border: '1px solid rgba(192,57,43,0.2)', borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
                       Return
                     </button>
-                    <button data-clear-timesheet onClick={() => {
-                      if (window.confirm(`Clear ${record.staffName}'s timesheet for ${record.periodStart} off this list? Nobody is emailed and Xero is not changed — use this only when it was dealt with outside the portal.`)) decide(record, 'clear', 'Dealt with outside the portal')
-                    }} disabled={busy === record.email + 'clear'}
+                    <button data-clear-timesheet onClick={() => clearRecord(record)} disabled={busy === record.email + 'clear'}
                       style={{ flex: 1, padding: 12, background: 'white', color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
                       {busy === record.email + 'clear' ? 'Clearing…' : 'Clear'}
                     </button>

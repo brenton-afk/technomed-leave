@@ -2059,6 +2059,25 @@ day; `withKnownNumbers` fills them into a list saved before, never over a
 typed number). Edited on Kit room → **Courier numbers**
 (`kit/CourierNumbers.jsx`, admins and the clinical team, `kits=couriers`);
 `cleanCouriers` refuses a bad number and any "password" — every phone sees it.
+**Move something else** (Brent, 23 Nov 2026: "an entry portal page a bit
+like the add booking page for kit transfers that aren't part of our day to day
+kit … transfer the Brainlab trays on behalf of the hospital … still be able to
+email the respective loans departments and book couriers"). A dashed button
+under the Kit room's search row (`data-move-other`) opens
+`kit/OtherMoveSheet.jsx`: what is moving (typed), whose (RHH / Calvary /
+Brainlab chips or typed), from and to (office / Calvary / RHH), trays one a
+line, when, the case (as a kit move) and a note → `kits=move-other`
+(`prepareOtherMove`, pending `other-…` an hour) → the email shown and editable
+→ `kits=confirm-other` (`confirmOtherMove`) → the courier step.
+`draftOtherEmail` (pure) tells the loans contact of **every hospital at either
+end** — into the office too, since it is usually their property — label
+"Transfer". Sent **whatever the kit-move email switch says** (that waits on
+our own stock-take, as repairs do). Nothing's location is kept: one
+`kind: 'other'` history line; a courier call is logged by `itemName`. The
+courier step, case picker and email preview are shared with MoveSheet in
+`kit/moveParts.jsx`. `api/kitOtherMove.test.js`, `OtherMoveSheet.test.jsx`.
+**Clear on the card** (same day): the timesheet Clear is also on each
+waiting card ("Clear — already dealt with"), not only inside it.
 **Reset all trays to home** (Brent, same day: "reset all trays to their
 original locations in one tap"): a Kit room button for admins and the
 clinical team, asked once (`kits=reset-all`, `resetAllLocations`): every set

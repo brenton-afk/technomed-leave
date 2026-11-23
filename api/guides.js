@@ -8,7 +8,7 @@ import {
 } from './_preferences.js'
 import { firstNameFor, STAFF } from '../src/staffConfig.js'
 import {
-  listKits, kitHistory, prepareMove, confirmMove, returnKit, checkKit, getKitOrder, saveKitOrder, logKitEvent,
+  listKits, kitHistory, prepareMove, confirmMove, prepareOtherMove, confirmOtherMove, returnKit, checkKit, getKitOrder, saveKitOrder, logKitEvent,
   getCouriers, saveCouriers, logCourierCall, resetAllLocations, renameSystem,
   saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
@@ -441,6 +441,15 @@ async function handleKits(req, res, session) {
         label: 'Kit move', badge: 'Kit move'
       })))
     }
+    // Something that is not one of our kits (Brent, 23 Nov 2026).
+    if (what === 'move-other') return res.status(200).json(await prepareOtherMove({ ...body, today: hobartToday() }, sender))
+    if (what === 'confirm-other') {
+      return res.status(200).json(await confirmOtherMove(body, sender, (email, from) => sendBookingNotice({
+        to: email.to, cc: email.cc, subject: email.subject, text: email.text,
+        sender: { name: from.name, email: from.email },
+        label: 'Transfer', badge: 'Transfer'
+      })))
+    }
     if (what === 'return') { await returnKit(body.kitId, sender); return res.status(200).json({ ok: true }) }
     if (what === 'check') { await checkKit(body.kitId, body.at, sender.firstName || sender.email); return res.status(200).json({ ok: true }) }
 
@@ -591,7 +600,7 @@ async function handleKits(req, res, session) {
       return res.status(200).json({ text })
     }
     if (what === 'courier-called') {
-      await logCourierCall({ kitId: String(body.kitId || ''), courierId: String(body.courierId || '') }, who)
+      await logCourierCall({ kitId: String(body.kitId || ''), courierId: String(body.courierId || ''), itemName: String(body.itemName || '') }, who)
       return res.status(200).json({ ok: true })
     }
     if (what === 'settings') {

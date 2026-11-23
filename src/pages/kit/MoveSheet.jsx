@@ -1,23 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, border } from '../../design/tokens.js'
-import { readBooking, detectHospital, isCancelled } from '../../clinicalPlan/parse.js'
-import { parseDateStr, addCivilDays, toDateStr } from '../../clinicalPlan/week.js'
 import { useBackLayer } from '../../backButton.js'
-import { dialable, bookingWords } from '../../kit/couriers.js'
+import { PLACES, useCasesAt, label, field, primary, secondary, CasePick, EmailPreview, CourierStep } from './moveParts.jsx'
 
 // ─── Moving a kit ────────────────────────────────────────────────────────────
 // Two steps, and the second is the safeguard: where it is going and what is
 // in it, then the exact email the hospital will get — editable, with Send,
 // Move without emailing, or Back. "We don't want inaccurate comms going to
 // either team." Nothing is moved until the second step is confirmed.
-
-const PLACES = { office: 'TM office / Warehouse', CLV: 'Calvary', RHH: 'RHH' }
-
-function shortDay(dateStr) {
-  const d = new Date(`${dateStr}T00:00:00Z`)
-  return d.toLocaleDateString('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' })
-}
 
 export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, onDone, onMoved, couriers = [], initialTo = '', initialTrays = null }) {
   // After the move: who to ring to collect it (Brent, 20 Nov 2026).
@@ -30,7 +21,6 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
   const [trays, setTrays] = useState(initialTrays?.length ? (kit.trays || []).filter(t => initialTrays.includes(t)) : (kit.trays || []))
   const [date, setDate] = useState(today || '')
   const [caseChoice, setCaseChoice] = useState('')
-  const [cases, setCases] = useState(null)
   const [note, setNote] = useState('')
   const [preview, setPreview] = useState(null)
   const [body, setBody] = useState('')
@@ -39,31 +29,7 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
 
   const isReturn = to && to === kit.home
 
-  // Cases at the destination over the next fortnight, so the email can say
-  // which case it is for without anybody retyping the date or the surname.
-  useEffect(() => {
-    if (!today || (to !== 'CLV' && to !== 'RHH') || isReturn) { setCases(null); return }
-    let live = true
-    const end = toDateStr(addCivilDays(parseDateStr(today), 14))
-    fetch(`/api/calendar/today?action=week&start=${today}&end=${end}`, {
-      headers: { Authorization: `Bearer ${user?.token || ''}` }
-    }).then(r => r.json()).then(d => {
-      if (!live) return
-      const found = (d.events || []).filter(e => e.source === 'bookings' && e.start?.dateTime)
-        .map(e => {
-          const b = readBooking(e.summary, e.description, { knownPatient: e.knownPatient }) || {}
-          const hospital = b.hospital || detectHospital(e.location, e.description, { caseEvent: true })
-          return {
-            id: e.id, date: String(e.start.dateTime).slice(0, 10), hospital,
-            surname: b.patient || '', surgeon: b.surgeon || '', system: b.system || '',
-            cancelled: isCancelled(e.summary, e.description)
-          }
-        })
-        .filter(c => c.hospital === to && !c.cancelled && c.date >= today && c.date <= end)
-      setCases(found)
-    }).catch(() => live && setCases([]))
-    return () => { live = false }
-  }, [to, today, isReturn, user?.token])
+  const cases = useCasesAt(to, today, user?.token, isReturn)
 
   const chosenCase = (cases || []).find(c => c.id === caseChoice)
 
@@ -97,8 +63,6 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
     post('courier-called', { kitId: kit.id, courierId: c.id }).catch(() => {})
   }
 
-  const label = { ...text('micro'), textTransform: 'uppercase', color: colour.inkFaint, margin: `${space.lg}px 0 ${space.sm}px` }
-  const field = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', ...text('field'), border: border.hairline, borderRadius: radius.control, background: colour.surface, color: colour.ink }
 
   return (
     <Overlay>
@@ -173,69 +137,19 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
                 {to && !isReturn && (
                   <>
                     <div style={label}>When</div>
-                    <input type="date" value={date} min={today} onChange={e => setDate(e.target.value)} style={field} aria-label="Date of the move" />
+                    <input type="date" value={date} min={today} onChange={e => setDate(e.target.value)} style={{ ...field, fontSize: 16 }} aria-label="Date of the move" />
 
-                    {(to === 'CLV' || to === 'RHH') && (
-                      <>
-                        <div style={label}>For which case</div>
-                        {cases === null && <div style={{ ...text('caption'), color: colour.inkFaint }}>Finding cases at {PLACES[to]}…</div>}
-                        {cases && (
-                          <select value={caseChoice} onChange={e => setCaseChoice(e.target.value)} style={field} aria-label="Case this kit is for">
-                            <option value="">No particular case</option>
-                            {cases.map(c => (
-                              <option key={c.id} value={c.id}>
-                                {shortDay(c.date)} · {c.surname || 'name to come'}{c.surgeon ? ` · ${c.surgeon}` : ''}{c.system ? ` · ${c.system}` : ''}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        {cases && cases.length === 0 && (
-                          <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: 4 }}>No cases at {PLACES[to]} in the next two weeks.</div>
-                        )}
-                      </>
-                    )}
+                    {(to === 'CLV' || to === 'RHH') && <CasePick to={to} cases={cases} value={caseChoice} onChange={setCaseChoice} />}
 
                     <div style={label}>Note (optional)</div>
                     <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-                      placeholder="e.g. Going by Jet courier, double bagged" style={{ ...field, resize: 'vertical', fontFamily: 'inherit' }} />
+                      placeholder="e.g. Going by Jet courier, double bagged" style={{ ...field, fontSize: 16, resize: 'vertical', fontFamily: 'inherit' }} />
                   </>
                 )}
               </>
             )}
 
-            {moved && (
-              <div data-courier-step>
-                <div role="status" style={{ ...text('bodyStrong'), background: colour.successSoft, color: colour.accentDeep,
-                  border: `1px solid ${colour.accent}`, borderRadius: radius.control, padding: space.md }}>
-                  ✓ Moved to {PLACES[moved.to]}{moved.emailed ? ' · email sent' : ''}
-                </div>
-                <div style={label}>Book the collection</div>
-                <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>
-                  {bookingWords({ kitName: kit.name, trays: moved.trays, from: moved.from, to: moved.to, places: PLACES })}
-                  {' '}Ask for a job ID.
-                </div>
-                <div style={{ display: 'grid', gap: space.sm }}>
-                  {couriers.map(c => {
-                    const tel = dialable(c.phone)
-                    return tel ? (
-                      <a key={c.id} href={`tel:${tel}`} onClick={() => callCourier(c)} data-call-courier={c.id}
-                        style={{ ...secondary, display: 'flex', alignItems: 'center', gap: space.sm, textDecoration: 'none',
-                          ...(called === c.id ? { borderColor: colour.accent, color: colour.accentDeep } : {}) }}>
-                        <span aria-hidden="true">📞</span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'block' }}>Call {c.name}{called === c.id ? ' ✓' : ''}</span>
-                          <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}>{c.phone}{c.note ? ` · ${c.note}` : ''}</span>
-                        </span>
-                      </a>
-                    ) : (
-                      <div key={c.id} style={{ ...text('caption'), color: colour.inkFaint, padding: `${space.xs}px ${space.sm}px` }}>
-                        {c.name} — no number yet (Kit room → Courier numbers)
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
+            {moved && <CourierStep name={kit.name} moved={moved} couriers={couriers} called={called} onCall={callCourier} />}
 
             {!moved && preview && !preview.email && (
               <div style={{ ...text('body'), color: colour.ink }}>
@@ -253,12 +167,7 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
                     check it reads right.
                   </div>
                 )}
-                <Row label="To">{preview.email.to.join(', ')}</Row>
-                <Row label="Cc">{preview.email.cc.join(', ')}</Row>
-                <Row label="Subject">{preview.email.subject}</Row>
-                <div style={{ ...label, marginTop: space.md }}>Email</div>
-                <textarea value={body} onChange={e => setBody(e.target.value)} rows={14} aria-label="Email to the hospital"
-                  style={{ ...field, resize: 'vertical', fontFamily: 'inherit' }} />
+                <EmailPreview email={preview.email} body={body} onBody={setBody} />
               </>
             )}
           </div>
@@ -288,22 +197,4 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
       </div>
     </Overlay>
   )
-}
-
-function Row({ label, children }) {
-  return (
-    <div style={{ display: 'flex', gap: space.sm, padding: `${space.xs}px 0`, borderBottom: border.hairlineSoft }}>
-      <div style={{ ...text('caption'), color: colour.inkFaint, width: 56, flexShrink: 0 }}>{label}</div>
-      <div style={{ ...text('caption'), color: colour.ink, overflowWrap: 'anywhere' }}>{children || '—'}</div>
-    </div>
-  )
-}
-
-const primary = disabled => ({
-  ...text('bodyStrong'), padding: `${space.md}px`, borderRadius: radius.control, border: 'none',
-  background: colour.accent, color: 'white', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1
-})
-const secondary = {
-  ...text('bodyStrong'), padding: `${space.md}px`, borderRadius: radius.control, border: border.hairline,
-  background: colour.surface, color: colour.ink, cursor: 'pointer'
 }

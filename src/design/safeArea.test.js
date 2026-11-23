@@ -121,7 +121,7 @@ describe('no screen is left out', () => {
     // A sheet over everything, with its own fixed backdrop.
     'voice/VoiceSheet.jsx',
     // A section of the kit sheet, which owns the backdrop.
-    'kit/TrayList.jsx', 'kit/EditableTray.jsx', 'kit/KitDocs.jsx', 'kit/FromDropbox.jsx', 'kit/AttachAgreements.jsx',
+    'kit/TrayList.jsx', 'kit/moveParts.jsx', 'kit/EditableTray.jsx', 'kit/KitDocs.jsx', 'kit/FromDropbox.jsx', 'kit/AttachAgreements.jsx',
     // Part of the auto-add card and the booking sheets.
     'cases/KitPicker.jsx', 'cases/BrainlabBilling.jsx',
     // The set-aside list inside the bookings Inbox sheet.

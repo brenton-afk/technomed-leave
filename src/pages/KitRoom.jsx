@@ -9,6 +9,7 @@ import SystemDetail from './kit/SystemDetail.jsx'
 import SayMove from './kit/SayMove.jsx'
 import { Mic } from './voice/VoiceSheet.jsx'
 import AddTraySheet from './kit/AddTraySheet.jsx'
+import OtherMoveSheet from './kit/OtherMoveSheet.jsx'
 import CourierNumbers from './kit/CourierNumbers.jsx'
 import KitSettings from './kit/KitSettings.jsx'
 import FillAgreements from './kit/FillAgreements.jsx'
@@ -76,6 +77,7 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
   const [open, setOpen] = useState(null)
   // The kit room is one tile per system (Brent, 20 Nov 2026); this is the one open.
   const [openSystem, setOpenSystem] = useState('')
+  const [movingOther, setMovingOther] = useState(false)
   const [addingTray, setAddingTray] = useState(null)
   const [openFocus, setOpenFocus] = useState('')
   // One tray moved on its own, from its Move button in the kit (Brent, 20 Nov 2026).
@@ -264,6 +266,21 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
           )}
         </div>
 
+        {/* Trays that are not ours or not in the kit room yet (Brent, 23 Nov 2026). */}
+        {data && (
+          <button onClick={() => setMovingOther(true)} data-move-other style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: space.sm, textAlign: 'left', cursor: 'pointer',
+            padding: `${space.sm + 2}px ${space.md}px`, marginBottom: space.md, borderRadius: radius.control,
+            border: `1px dashed ${colour.accent}`, background: colour.accentSoft, color: colour.accentDeep
+          }}>
+            <span aria-hidden="true" style={{ ...text('title'), lineHeight: 1 }}>⇄</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', ...text('bodyStrong') }}>Move something else</span>
+              <span style={{ display: 'block', ...text('caption'), color: colour.inkMuted }}>A hospital's Brainlab trays, or a kit not in the kit room yet — email the loans team and call a courier</span>
+            </span>
+          </button>
+        )}
+
         <div style={{ position: 'relative', marginBottom: space.md }}>
           <span style={{ position: 'absolute', left: 12, top: 11, color: colour.inkFainter, display: 'flex' }}><IconSearch size={18} /></span>
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search systems, trays or distributors"
@@ -334,6 +351,10 @@ export default function KitRoom({ user, onBack, openKit = '' }) {
       {saying && (
         <SayMove kits={kits} user={user} onClose={() => setSaying(false)}
           onMove={(kit, trays, to) => { setSaying(false); setMoveTo(to || ''); setMoveTrays(trays); setMoving(kit) }} />
+      )}
+      {movingOther && (
+        <OtherMoveSheet user={user} today={data?.today} post={post} couriers={data?.couriers || []}
+          onClose={() => setMovingOther(false)} onDone={() => { setMovingOther(false); load() }} />
       )}
       {addingTray && (
         <AddTraySheet system={addingTray.system} systems={systems} post={post}

@@ -200,11 +200,13 @@ export async function saveCouriers(list, by) {
 }
 
 /** A courier called for a move, on the movement history. */
-export async function logCourierCall({ kitId, courierId }, by) {
-  const [kit, couriers] = await Promise.all([listKits().then(ks => ks.find(k => k.id === kitId)), getCouriers()])
+export async function logCourierCall({ kitId, courierId, itemName }, by) {
+  const [kit, couriers] = await Promise.all([kitId ? listKits().then(ks => ks.find(k => k.id === kitId)) : null, getCouriers()])
   const courier = couriers.find(c => c.id === courierId)
-  if (!kit || !courier) throw new Error('No such kit or courier')
-  await addHistory({ kind: 'courier', kitId, kitName: kit.name, by, text: `Courier called: ${courier.name}` })
+  // Something that is not one of our kits is named by what was typed.
+  const name = kit?.name || String(itemName || '').trim().slice(0, 80)
+  if (!name || !courier) throw new Error('No such kit or courier')
+  await addHistory({ kind: 'courier', ...(kit ? { kitId } : {}), kitName: name, by, text: `Courier called: ${courier.name}` })
 }
 
 const APPLIED = 'kits:applied'
@@ -624,6 +626,96 @@ export async function confirmMove({ id, send, text }, sender, sendEmail) {
     emailed, emailTo: emailed ? pending.email.to : [],
     text: `${isReturn ? 'Returned' : 'Moved'} ${PLACES[pending.from]?.short || pending.from} → ${PLACES[pending.to].short}`
       + (kit && pending.trays?.length && pending.trays.length < (kit.trays || []).length ? ` (${pending.trays.join(', ')})` : '')
+      + (emailed ? ' · hospital emailed' : pending.email ? ' · no email sent' : '')
+  })
+  return { ok: true, emailed }
+}
+
+// ─── Moving something else (Brent, 23 Nov 2026) ─────────────────────────────
+// "An entry page ... for kit transfers that aren't part of our day to day kit
+// ... when we get asked to transfer the Brainlab trays on behalf of the
+// hospital ... still be able to email the respective loans departments and
+// book couriers." Not a kit record: nothing's location is kept, only a line on
+// the movement history. Same two steps as a kit move — the email is shown and
+// editable, then sent — and, like an instrument repair, it is sent whatever
+// the kit-move hospital-email switch says (that switch waits on the stock-take
+// of our own kits).
+
+const OTHER_PLACES = ['office', 'CLV', 'RHH']
+const clip = (v, n) => String(v || '').trim().slice(0, n)
+
+/** The email for something that is not one of our kits. Pure. */
+export function draftOtherEmail({ item, owner, from, to, trays = [], date, today, caseDate, surname, note, contacts, team }) {
+  // Every hospital at either end hears about it — out of a hospital as much as
+  // into one, since it is usually their property we are carrying.
+  const hospitals = [to, from].filter((h, i, a) => HOSPITAL_CONTACT[h] && a.indexOf(h) === i)
+  const people = hospitals.map(h => contacts.find(c => c.id === HOSPITAL_CONTACT[h])).filter(Boolean)
+  if (!people.length) return null
+  const toList = [...new Set(people.flatMap(p => p.to || []))]
+  const lower = toList.map(x => x.toLowerCase())
+  const ccList = [...new Set([...people.flatMap(p => p.cc || []), 'bookings@technomed.com.au', ...team]
+    .filter(a => !lower.includes(String(a).toLowerCase())))]
+  const greeting = people.map(p => p.greeting || p.name).join(', ')
+  const when = !date || date === today ? 'today' : `on ${longDate(date)}`
+  const whose = owner ? ` (${/^(RHH|Calvary)$/i.test(owner) ? `${PLACES[owner.toUpperCase() === 'RHH' ? 'RHH' : 'CLV'].short}'s` : owner}${/^(RHH|Calvary)$/i.test(owner) ? '' : "'s"})` : ''
+  const lines = [
+    `Hi ${greeting},`,
+    '',
+    `Just letting you know TechnoMed ${when === 'today' ? 'is moving' : 'will be moving'} the ${item}${whose} from ${PLACES[from].long} to ${PLACES[to].long} ${when}.`,
+    ''
+  ]
+  if (trays.length) {
+    lines.push(`${item}:`)
+    for (const t of trays) lines.push(`- ${t}`)
+    lines.push('')
+  }
+  if (caseDate && PLACES[to] && to !== 'office') {
+    lines.push(`It's needed for a case at ${PLACES[to].short} on ${longDate(caseDate)}${surname ? ` — please assign it to pt ${surname}` : ''}.`)
+    lines.push('')
+  }
+  if (note) { lines.push(note); lines.push('') }
+  lines.push('Any questions, let me know.')
+  const subject = `TechnoMed transfer — ${item} to ${PLACES[to].short} ${shortDate(date || today)}`.trim()
+  return { to: toList, cc: ccList, subject, text: lines.join('\n') }
+}
+
+export async function prepareOtherMove({ item, owner, from, to, trays, date, today, caseDate, surname, surgeon, note }, sender) {
+  const what = clip(item, 80)
+  if (!what) throw new Error('Say what is being moved')
+  if (!OTHER_PLACES.includes(from)) throw new Error('Choose where it is coming from')
+  if (!OTHER_PLACES.includes(to)) throw new Error('Choose where it is going')
+  if (from === to) throw new Error('It is already there — choose another place')
+  const list = (Array.isArray(trays) ? trays : String(trays || '').split('\n'))
+    .map(t => clip(t, 80)).filter(Boolean).slice(0, 30)
+  const { contacts } = await getNoticeSettings()
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : today
+  const pending = {
+    id: `other-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    kind: 'other', item: what, owner: clip(owner, 60), from, to, trays: list, date: day,
+    caseDate: /^\d{4}-\d{2}-\d{2}$/.test(caseDate || '') ? caseDate : '',
+    surname: clip(surname, 40), surgeon: clip(surgeon, 40), note: clip(note, 500), by: sender?.email
+  }
+  pending.email = draftOtherEmail({ ...pending, today, contacts, team: clinicalTeam().filter(e => e !== sender?.email) })
+  await redisSetBody(PENDING(pending.id), JSON.stringify(pending))
+  await redis('expire', PENDING(pending.id), 3600)
+  return pending
+}
+
+export async function confirmOtherMove({ id, send, text }, sender, sendEmail) {
+  const raw = String(id || '').startsWith('other-') ? await redis('get', PENDING(id)) : null
+  if (!raw) throw new Error('This move has expired — start it again')
+  const pending = JSON.parse(raw)
+  if (pending.by !== sender?.email) throw new Error('Only the person who started this move can confirm it')
+  let emailed = false
+  if (send && pending.email) {
+    await sendEmail({ ...pending.email, text: String(text || pending.email.text).slice(0, 5000) }, sender)
+    emailed = true
+  }
+  await redis('del', PENDING(id))
+  await addHistory({
+    kind: 'other', kitName: pending.item, from: pending.from, to: pending.to, trays: pending.trays,
+    by: sender?.firstName || sender?.email, emailed, emailTo: emailed ? pending.email.to : [],
+    text: `Moved ${PLACES[pending.from].short} → ${PLACES[pending.to].short}${pending.owner ? ` for ${pending.owner}` : ''} (not one of our kits)`
       + (emailed ? ' · hospital emailed' : pending.email ? ' · no email sent' : '')
   })
   return { ok: true, emailed }
