@@ -16,7 +16,7 @@ import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, 
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
 import { codesForSystem, codeCounts } from './_resourcePrices.js'
-import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath, uploadPathFor } from './_resources.js'
+import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath, uploadPathFor, applyResourceAdditions } from './_resources.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
 import { repairEmail } from './_kitRepairs.js'
 import { getNoticeSettings } from './_bookingNotices.js'
@@ -277,6 +277,8 @@ async function handleResources(req, res, session) {
   try {
     if (what === 'list' && req.method === 'GET') {
       const fresh = req.query.fresh === '1'
+      // Certificates sent by Brent, filed and chosen once (23 Nov 2026).
+      await applyResourceAdditions().catch(() => [])
       const [catalogue, picks, kits] = await Promise.all([resourceCatalogue({ fresh }), getPicks(), listKits().catch(() => [])])
       const lists = kits.length ? await redis('mget', ...kits.map(k => `kits:list:${k.id}`)).catch(() => []) : []
       const withTrays = kits.map((k, i) => {

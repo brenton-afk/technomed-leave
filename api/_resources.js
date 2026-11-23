@@ -11,7 +11,7 @@
 // Only the folders below are read or opened. Never the usage tree.
 
 import { redis, redisSetBody } from './_redis.js'
-import { listFilesUnder } from './_dropbox.js'
+import { listFilesUnder, uploadFile } from './_dropbox.js'
 import { INVENTORY } from '../src/clinicalPlan/inventory.js'
 import { kitSystemName } from '../src/kit/systems.js'
 
@@ -215,4 +215,53 @@ export function uploadPathFor({ system, slot, filename, catalogue = [], systems 
   const namesSystem = sysWords.every(w => wordAt(`${folder}/${base}`.toLowerCase(), w) >= 0)
   const name = slotOf(base) === slot && namesSystem ? base : `${system} ${SLOT_WORD[slot]} - ${base}`
   return { path: `${folder}/${name}`, distributor: sys.distributor }
+}
+
+// ─── ARTG certificates sent by Brent (23 Nov 2026) ──────────────────────────
+// "Please see ARTG certificates. Please update the portal with these." Each is
+// done once (`resources:applied`): the Global BMD lumbar cage certificate is
+// already in E4's Dropbox folder and is chosen for Catenary ALIF and Global
+// BMD PLIF (an older 2022 summary sat beside the PLIF cage); Reform's was not
+// in Dropbox at all, so it is filed in E4's folder beside Reform's other
+// references, the way an upload would be, and chosen for Reform Cervical.
+export const RESOURCE_ADDITIONS = [
+  { id: 'artg-gb-lumbar-2026-11-23', slot: 'artg', distributor: 'e4',
+    systems: ['Catenary ALIF', 'Global BMD PLIF'],
+    existing: 'ARTG 323520 (GB lumbar cage including Standalone).pdf' },
+  { id: 'artg-reform-2026-11-23', slot: 'artg', distributor: 'e4',
+    systems: ['Reform Cervical'],
+    filename: 'Reform Cervical ARTG 287906 - POCT and Slim HP.pdf',
+    load: () => import('./_resourceSeedReformArtg.js').then(m => m.REFORM_ARTG) }
+]
+const APPLIED = 'resources:applied'
+const nameOf = p => String(p || '').split('/').pop().toLowerCase()
+
+/** Runs the additions not yet done. Never throws; a failed one is tried again next time. */
+export async function applyResourceAdditions({ additions = RESOURCE_ADDITIONS, upload = uploadFile, list = listFilesUnder } = {}) {
+  let applied = []
+  try { applied = JSON.parse(await redis('get', APPLIED) || '[]') } catch { applied = [] }
+  const due = additions.filter(a => !applied.includes(a.id))
+  if (!due.length) return []
+  if (await redis('set', `${APPLIED}:lock`, '1', 'NX', 'EX', '60') !== 'OK') return []
+  const done = []
+  try {
+    for (const a of due) {
+      try {
+        let catalogue = await resourceCatalogue({ fresh: true, distributor: a.distributor, list })
+        const want = nameOf(a.existing || a.filename)
+        let file = catalogue.find(f => f.distributor === a.distributor && nameOf(f.path) === want)
+        if (!file && a.load) {
+          const { path } = uploadPathFor({ system: a.systems[0], slot: a.slot, filename: a.filename, catalogue })
+          await upload(path, Buffer.from(await a.load(), 'base64'), { keep: true })
+          catalogue = await resourceCatalogue({ fresh: true, distributor: a.distributor, list })
+          file = catalogue.find(f => f.path.toLowerCase() === path.toLowerCase())
+        }
+        if (!file) continue
+        for (const system of a.systems) await setPick(system, a.slot, file.path, catalogue)
+        applied.push(a.id); done.push(a.id)
+        await redisSetBody(APPLIED, JSON.stringify(applied))
+      } catch (err) { console.error('resource addition failed', a.id, err?.message) }
+    }
+  } finally { await redis('del', `${APPLIED}:lock`).catch(() => {}) }
+  return done
 }

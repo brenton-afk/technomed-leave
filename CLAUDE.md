@@ -256,7 +256,20 @@ the description into Catenary ALIF and Global BMD PLIF; Mariner apart from its
 Outrigger; X-CORE → Nuvasive, FORTIFY/ACP → Globus), description, code, type
 and rebate code with a search; KT's Private and RHH lists are a switch.
 **Prices only for admins**, as the price store has always been — the server
-leaves `price` off for anyone else. The file slot is now "Rebate document".
+leaves `price` off for anyone else. **The "Rebate document" file slot is gone
+from the cards** (Brent, 23 Nov 2026: "what is the rebate tab for? There's
+already a section for rebate codes and prices") — `SLOT_LABELS` in
+`Resources.jsx` is ARTG and Surgical technique; the server still classifies
+rebate files, it just shows none.
+**ARTG certificates Brent sent** (23 Nov 2026): `RESOURCE_ADDITIONS` /
+`applyResourceAdditions` in `api/_resources.js`, run from `resources=list`,
+each once (`resources:applied`, under a 60s lock): ARTG 323520 (Global
+Biomedica lumbar cages incl. standalone — already in Dropbox, E4 Surgical /
+E4 Global ALIF) chosen for Catenary ALIF and Global BMD PLIF; ARTG 287906
+(Precision Spine Reform POCT and Slim HP — not in Dropbox) filed beside Reform
+Cervical's references as "Reform Cervical ARTG 287906 - POCT and Slim HP.pdf"
+(`_resourceSeedReformArtg.js`, the PDF as base64) and chosen for Reform
+Cervical. `api/resourceAdditions.test.js`.
 **Resources is one card per system we carry** (Brent, 12 Nov 2026: "ARTG
 certificates, the full surgical techniques, the rebate codes and prices and a
 tray list"; chose by system, systems we carry). `pages/Resources.jsx`, served by

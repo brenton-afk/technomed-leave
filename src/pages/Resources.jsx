@@ -32,7 +32,9 @@ function asBase64(file) {
 
 const CACHE_KEY = 'tm_resources_v1'
 
-export const SLOT_LABELS = { artg: 'ARTG', technique: 'Surgical technique', rebate: 'Rebate document' }
+// The rebate document slot is gone (Brent, 23 Nov 2026: "what is the rebate tab for? There's
+// already a section for rebate codes and prices") — the Rebate codes chip below is it.
+export const SLOT_LABELS = { artg: 'ARTG', technique: 'Surgical technique' }
 
 export default function Resources({ user, onOpenKit, onBack }) {
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
