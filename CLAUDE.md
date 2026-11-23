@@ -2739,6 +2739,11 @@ Invariants worth preserving:
   "Any questions, reply here…" was "a bit unprofessional"). Corrections and tests use the same layout, the
   correction line first, TEST at the top.
 - **Patient data never reaches a log.** Identifiers travel inside the Excel attachment; the usage email's panel carries the surname only (19 Nov 2026), never a first name, UR or date of birth. Error strings never interpolate extracted content — keep it that way when adding to this module.
+- **The review's size box has the room** (Ben, 24 Nov 2026: a BMD cage's
+  size "W … L … H: 13mm A: 8°" had to be scrolled across). Size sits beside a
+  narrow Qty box (`data-size-row`, `minmax(0, 1fr) 76px`) and is a `GrowField`
+  — a one-line textarea that grows to show the whole value; a typed newline is
+  dropped. `usageSizeField.test.jsx`.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
 ### Resupply scanning (Brent, 6 Nov 2026)

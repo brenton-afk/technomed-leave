@@ -258,9 +258,30 @@ const inputStyle = {
 }
 const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }
 
+// A box that grows to show all of its value (Ben, 24 Nov 2026: a BMD cage's
+// size — "W: 26mm L: 32mm H: 13mm A: 8°" — had to be scrolled across).
+// One line until it needs two; a pressed Enter is not kept.
+function GrowField({ label, value, onChange }) {
+  const ref = React.useRef(null)
+  React.useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+  return (
+    <div style={{ marginBottom: 12, minWidth: 0 }}>
+      <label style={labelStyle}>{label}</label>
+      <textarea ref={ref} rows={1} value={value || ''} aria-label={label} data-grow-field
+        onChange={e => onChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
+        style={{ ...inputStyle, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', lineHeight: 1.35, display: 'block' }} />
+    </div>
+  )
+}
+
 function Field({ label, value, onChange, type = 'text', options }) {
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: 12, minWidth: 0 }}>
       <label style={labelStyle}>{label}</label>
       {options
         ? (
@@ -1012,8 +1033,14 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <Field label="Reference code" value={item.referenceCode} onChange={v => updateItem(item.id, 'referenceCode', v)} />
                       <Field label="Lot number" value={item.lotNumber} onChange={v => updateItem(item.id, 'lotNumber', v)} />
-                      <Field label="Size" value={item.size} onChange={v => updateItem(item.id, 'size', v)} />
-                      <Field label="Quantity" type="number" value={item.quantity} onChange={v => updateItem(item.id, 'quantity', v)} />
+                    </div>
+                    {/* Size gets the room and the quantity is a narrow box
+                        (Ben, 24 Nov 2026), so a long size reads at a glance. */}
+                    <div data-size-row style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 76px', gap: 10 }}>
+                      <GrowField label="Size" value={item.size} onChange={v => updateItem(item.id, 'size', v)} />
+                      <Field label="Qty" type="number" value={item.quantity} onChange={v => updateItem(item.id, 'quantity', v)} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <Field label="Rebate code" value={item.rebateCode} onChange={v => updateItem(item.id, 'rebateCode', v)} />
                     </div>
                     <Field label="Distributor" value={item.distributorKey || ''} onChange={v => updateItem(item.id, 'distributorKey', v)} options={DISTRIBUTOR_OPTIONS} />
