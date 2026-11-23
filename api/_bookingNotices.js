@@ -56,7 +56,13 @@ export const DEFAULT_CONTACTS = [
     to: ['kirsty.patmore@ths.tas.gov.au', 'christopher.calverle@ths.tas.gov.au', 'rhhcsdloancoordinator@ths.tas.gov.au', 'tobias.long@ths.tas.gov.au'], cc: [] },
   { id: 'calvary_repairs', name: 'Calvary instrument repairs', greeting: 'Gerardo, Brett and Julie',
     note: 'An instrument taken off a kit at Calvary for repair',
-    to: ['Gerardo.Lacapra@calvarycare.org.au', 'Brett.Battersby@calvarycare.org.au', 'Julie.Robinson@calvarycare.org.au'], cc: [] }
+    to: ['Gerardo.Lacapra@calvarycare.org.au', 'Brett.Battersby@calvarycare.org.au', 'Julie.Robinson@calvarycare.org.au'], cc: [] },
+  // Copied on every tray moving between Calvary and RHH (Brent, 23 Nov 2026:
+  // "include Brett, Julie Robinson and Tobias Long in the email trails").
+  { id: 'hospital_transfers', name: 'Calvary ↔ RHH tray transfers (copied)', greeting: '',
+    note: 'Copied on kit and tray moves between Calvary and RHH',
+    // Kept as To here (a contact needs one); the transfer email copies them.
+    to: ['Brett.Battersby@calvarycare.org.au', 'Julie.Robinson@calvarycare.org.au', 'tobias.long@ths.tas.gov.au'], cc: [] }
 ]
 
 // Corrections to contacts already saved in Redis. A saved copy replaces the
@@ -74,6 +80,8 @@ export const CONTACT_CORRECTIONS = [
   { id: 'kit-hospitals-2026-11-01', addContacts: ['calvary_loans', 'rhh_loans'] },
   // The instrument-repair contacts, added to a copy saved before they existed.
   { id: 'kit-repairs-2026-11-20', addContacts: ['rhh_repairs', 'calvary_repairs'] },
+  // Brett, Julie and Toby copied on Calvary ↔ RHH tray moves (23 Nov 2026).
+  { id: 'hospital-transfers-2026-11-23', addContacts: ['hospital_transfers'] },
   // Device loan requests on, in a copy saved while they were offered but off.
   { id: 'device-loans-on-2026-11-02', enableLoans: 'device' },
   // The Dubey neurophys rule, added to a copy saved before it existed.

@@ -502,6 +502,18 @@ function longDate(dateStr) {
 }
 const shortDate = s => { const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? `${Number(m[2])}/${Number(m[1])}` : '' }
 
+/**
+ * Copied on anything moving between Calvary and RHH, either way (Brent, 23 Nov
+ * 2026: Brett, Julie Robinson and Toby Long) — the `hospital_transfers`
+ * contact in Admin → Supplier notices, never from the request.
+ */
+export function betweenHospitalsCc(from, to, contacts = []) {
+  const pair = [from, to].sort().join('-')
+  if (pair !== 'CLV-RHH') return []
+  const c = contacts.find(x => x.id === 'hospital_transfers')
+  return c ? [...(c.to || []), ...(c.cc || [])] : []
+}
+
 const KIND_WORD = { consignment: 'consignment', floating: 'TechnoMed loan', technomed: 'TechnoMed', loan: 'distributor loan' }
 
 /**
@@ -517,7 +529,7 @@ export function draftKitEmail({ kit, from, to, trays, date, today, caseDate, sur
   const people = hospitals.map(h => contacts.find(c => c.id === HOSPITAL_CONTACT[h])).filter(Boolean)
   if (!people.length) return null
   const toList = [...new Set(people.flatMap(p => p.to || []))]
-  const ccList = [...new Set([...people.flatMap(p => p.cc || []), 'bookings@technomed.com.au', ...team]
+  const ccList = [...new Set([...people.flatMap(p => p.cc || []), ...betweenHospitalsCc(from, to, contacts), 'bookings@technomed.com.au', ...team]
     .filter(a => !toList.map(x => x.toLowerCase()).includes(String(a).toLowerCase())))]
   const names = people.map(p => p.greeting || p.name)
   // "Hi Katelin, Sharon and Loans team" — the receiving hospital first.
@@ -653,7 +665,7 @@ export function draftOtherEmail({ item, owner, from, to, trays = [], date, today
   if (!people.length) return null
   const toList = [...new Set(people.flatMap(p => p.to || []))]
   const lower = toList.map(x => x.toLowerCase())
-  const ccList = [...new Set([...people.flatMap(p => p.cc || []), 'bookings@technomed.com.au', ...team]
+  const ccList = [...new Set([...people.flatMap(p => p.cc || []), ...betweenHospitalsCc(from, to, contacts), 'bookings@technomed.com.au', ...team]
     .filter(a => !lower.includes(String(a).toLowerCase())))]
   const greeting = people.map(p => p.greeting || p.name).join(', ')
   const when = !date || date === today ? 'today' : `on ${longDate(date)}`

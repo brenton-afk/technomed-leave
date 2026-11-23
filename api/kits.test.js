@@ -41,13 +41,18 @@ describe('who is told', () => {
     const email = draft()
     expect(email.to).toEqual(['rhhcsdloancoordinator@ths.tas.gov.au',
       'Sharon.Ashworth@calvarycare.org.au', 'TAS-LVH-Loansets@calvarycare.org.au'])
-    expect(email.cc).toEqual(['bookings@technomed.com.au', 'mat@technomed.com.au'])
+    // Brett, Julie and Toby on every Calvary ↔ RHH move (Brent, 23 Nov 2026).
+    expect(email.cc).toEqual(['Brett.Battersby@calvarycare.org.au', 'Julie.Robinson@calvarycare.org.au',
+      'tobias.long@ths.tas.gov.au', 'bookings@technomed.com.au', 'mat@technomed.com.au'])
     expect(email.text).toMatch(/^Hi Katelin, Sharon and Loans team,/)
+    expect(draft({ from: 'RHH', to: 'CLV' }).cc).toContain('tobias.long@ths.tas.gov.au')
   })
 
   it('tells only the receiving hospital when it leaves the office', () => {
     const email = draft({ from: 'office', to: 'CLV' })
     expect(email.to).toEqual(['Sharon.Ashworth@calvarycare.org.au', 'TAS-LVH-Loansets@calvarycare.org.au'])
+    // Not a hospital-to-hospital move: Brett, Julie and Toby are not copied.
+    expect(email.cc).not.toContain('Brett.Battersby@calvarycare.org.au')
   })
 
   it('tells nobody when a kit goes to the office', () => {

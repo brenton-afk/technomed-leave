@@ -2064,6 +2064,15 @@ day; `withKnownNumbers` fills them into a list saved before, never over a
 typed number). Edited on Kit room → **Courier numbers**
 (`kit/CourierNumbers.jsx`, admins and the clinical team, `kits=couriers`);
 `cleanCouriers` refuses a bad number and any "password" — every phone sees it.
+**Brett, Julie and Toby on every Calvary ↔ RHH move** (Brent, 23 Nov 2026:
+"For all trays that move between calvary and rhh, please include Brett, Julie
+Robinson and Tobias Long in the email trails"). Contact `hospital_transfers`
+in `_bookingNotices.js` (added to saved settings by
+`hospital-transfers-2026-11-23`, edited in Admin → Supplier notices — its
+addresses sit in To because a contact needs one); `betweenHospitalsCc` in
+`_kits.js` copies them on a kit / tray move (`draftKitEmail`) and a "Move
+something else" (`draftOtherEmail`) whenever one end is Calvary and the other
+RHH — never to or from the office.
 **Move something else** (Brent, 23 Nov 2026: "an entry portal page a bit
 like the add booking page for kit transfers that aren't part of our day to day
 kit … transfer the Brainlab trays on behalf of the hospital … still be able to

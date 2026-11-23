@@ -38,6 +38,7 @@ describe('the email', () => {
     expect(email.to).toEqual(['Sharon.Ashworth@calvarycare.org.au', 'TAS-LVH-Loansets@calvarycare.org.au',
       'rhhcsdloancoordinator@ths.tas.gov.au'])
     expect(email.cc).toContain('bookings@technomed.com.au')
+    expect(email.cc).toEqual(expect.arrayContaining(['Brett.Battersby@calvarycare.org.au', 'Julie.Robinson@calvarycare.org.au', 'tobias.long@ths.tas.gov.au']))
     expect(email.text).toMatch(/is moving the Brainlab cranial trays \(RHH's\) from the Royal Hobart Hospital to Calvary Lenah Valley today\./)
     expect(email.text).toMatch(/- Cranial instruments\n- Reference arrays/)
     expect(email.subject).toBe('TechnoMed transfer — Brainlab cranial trays to Calvary 24/11')
