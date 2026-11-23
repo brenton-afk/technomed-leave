@@ -1629,8 +1629,13 @@ export function readBooking(title, description, { colourSurgeon, knownPatient } 
   // was read first, shown against both. "Mariner (DT LOAN) E4 Global PLIF
   // (Consignment)" came out as "Mariner / E4 Global PLIF · Distributor Loan",
   // saying the cages were on loan when they are on the shelf.
-  const supplies = parseKitSupplies(
-    resolveKit(labelled.kit, labelled.procedure || '') || title)
+  // With no Kit line the title is read for one — but only entries that name a
+  // system we know: "Bruce - Thani" is a patient and a surgeon, and was shown
+  // on the card as a system with "supply?" (Brent, 23 Nov 2026).
+  const kitLine = resolveKit(labelled.kit, labelled.procedure || '')
+  const supplies = kitLine
+    ? parseKitSupplies(kitLine)
+    : parseKitSupplies(title).filter(e => e.navigation || findSystems(e.system).length)
   const operation = cleanOperation(labelled.procedure, { system, context: everything })
     || inferred.operation
   const kit = isLabelled ? undefined : inferred.kit
