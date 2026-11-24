@@ -518,3 +518,22 @@ export async function patientHistory(surname, { limit = 25 } = {}) {
   })
   return { cases, query }
 }
+
+/** A file's metadata (content_hash, rev, size), or null when it is not there. */
+export async function fileMetadata(path) {
+  assertUsageReadable(path)
+  const { ok, data, status, text } = await rpc('files/get_metadata', { path })
+  if (!ok) {
+    if (String(data?.error_summary || text || '').includes('not_found')) return null
+    throw dropboxFault('read a file\'s details', status, data?.error_summary || text)
+  }
+  return data
+}
+
+/** Moves a file to Dropbox's deleted files (restorable there). */
+export async function deletePath(path) {
+  const { ok, data, status, text } = await rpc('files/delete_v2', { path })
+  if (!ok && !String(data?.error_summary || text || '').includes('not_found')) {
+    throw dropboxFault('delete a file', status, data?.error_summary || text)
+  }
+}

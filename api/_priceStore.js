@@ -22,6 +22,7 @@
 import ExcelJS from 'exceljs'
 import { redis, redisSetBody } from './_redis.js'
 import { listFolder, downloadFile, dropboxConfigured } from './_dropbox.js'
+import { deliverInbox } from './_dropboxInbox.js'
 
 export const PRICE_FOLDER = process.env.PRICE_LIST_FOLDER || '/Admin/Accounts'
 const NAME = /distributor[_\s-]*price[_\s-]*list/i
@@ -154,6 +155,9 @@ export async function savePriceBook({ file, modified, by = '' }, { lists, notes 
  */
 export async function refreshPriceBook({ force = false, by = '' } = {}) {
   if (!dropboxConfigured()) return { skipped: 'Dropbox is not connected' }
+  // A workbook Claude was asked to put in (api/_dropboxInbox.js) lands first.
+  const delivered = await deliverInbox().catch(() => [])
+  if (delivered.some(d => d.delivered)) force = true
   const file = await newestPriceFile()
   if (!file) return { skipped: `No price list workbook in ${PRICE_FOLDER}` }
   const now = await loadPriceBook({ fresh: true }).catch(() => null)
@@ -161,7 +165,7 @@ export async function refreshPriceBook({ force = false, by = '' } = {}) {
   const parsed = await parsePriceBook(await downloadFile(file.path))
   if (!Object.keys(parsed.lists).length) throw new Error(`${file.name} has no distributor tabs the portal recognises`)
   const meta = await savePriceBook({ file: file.name, modified: file.modified, by }, parsed)
-  return { read: true, meta }
+  return { read: true, meta, delivered }
 }
 
 const codeKey = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '')

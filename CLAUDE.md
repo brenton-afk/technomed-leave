@@ -2480,6 +2480,20 @@ ARTG and notes). Self-funding quotes (`priceList` in `_priceList.js`) now price
 from it first, the 12-hour Dropbox read as fallback. **No pricing in the repo
 or tests** — fixtures are invented; the real workbook was checked locally
 (counts match its Read me: 282 / 587 / 1639 / 803 / 692 / 1001).
+**Files Claude puts in Dropbox** (Brent, 24 Nov 2026: "I want you to put
+the device price list into Dropbox"). Claude's Dropbox tools write text only,
+so it leaves a delivery note — a `.json` in `/Admin/Claude Inbox` — and the
+portal writes the file (`api/_dropboxInbox.js`, `deliverInbox`, run first by
+`refreshPriceBook`: Read it again and the nightly cron). A note is a whole
+file (`base64` + `sha256`) or `kind: 'edit'` — `appendRows` (styled like the
+last row), `replaceInFormulas`, `setCell`, `autoFilter` applied with exceljs,
+checked to keep Toni's workbook cell for cell. Only into `ALLOWED`
+(`/Admin/Accounts/`), never the usage tree; `replaces` (the Dropbox
+content_hash it was made against) must still match or nothing is written; the
+note is deleted once delivered; results in `dropbox:inbox:log`. Prices travel
+in the note, never the repo. First use: Boost UltraFibres 2.5g (NCC90), 5.0g
+(NCC78) and DBM 2.5cc (NCC98) on the Device tab — codes from Device's email of
+27 Oct 2022, prices as invoiced Mar–Jul 2026; there is no 10g.
 **Every scanned usage line is checked** (`src/usagePriceCheck.js`, in
 `action=scan` after the loan check, never fatal): `listed` (rebate code filled
 where blank; "✓ On the price list · Diplomat · QQ741"), `other-distributor`
