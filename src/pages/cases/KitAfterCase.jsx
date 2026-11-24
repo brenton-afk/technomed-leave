@@ -24,6 +24,8 @@ export default function KitAfterCase({ user, id = '', date = '', surname = '', t
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [notHolding, setNotHolding] = useState({})
+  const [swapOpen, setSwapOpen] = useState('')
+  const [swapped, setSwapped] = useState(null)
   const headers = { Authorization: `Bearer ${user?.token || ''}` }
 
   async function load() {
@@ -52,7 +54,29 @@ export default function KitAfterCase({ user, id = '', date = '', surname = '', t
     setBusy('')
   }
 
-  if (!data?.kits?.length) return error ? <div role="alert" style={{ ...text('caption'), color: colour.danger }}>{error}</div> : null
+  // "Which patient was this actually used for?" (Ben, 24 Nov 2026): the
+  // two bookings swap that system's set; the question is asked again after.
+  async function swap(kit, other) {
+    if (!window.confirm(`Swap the ${kit.system} sets? pt ${data.case.patient} gets ${other.supply || 'no supply'} and pt ${other.patient} gets ${kit.supply}. Both bookings are changed.`)) return
+    setBusy(`${kit.key}:swap`); setError('')
+    try {
+      const res = await fetch('/api/calendar/today?action=kit-after', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: data.case.id, date: data.case.date, key: kit.key, swapWith: other.id })
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) throw new Error(json.error || 'The swap did not go through')
+      setSwapped(json.swapped); setSwapOpen('')
+      await load()
+    } catch (err) { setError(err.message) }
+    setBusy('')
+  }
+
+  if (!data?.kits?.length) return error || swapped ? (
+    <div role={error ? 'alert' : undefined} style={{ ...text('caption'), color: error ? colour.danger : colour.accentDeep, fontWeight: 600 }}>
+      {error || `✓ Swapped — pt ${data?.case?.patient || ''} now ${swapped.here || 'no supply'}, pt ${swapped.other.patient} now ${swapped.there}.`}
+    </div>
+  ) : null
   const c = data.case
   const loans = c.hospital && /rhh|royal/i.test(c.hospital) ? 'RHH loans (Katelin)' : 'Calvary loans (Sharon)'
   const btn = on => ({ ...text('caption'), fontWeight: 700, padding: '9px 14px', borderRadius: radius.pill, cursor: 'pointer', ...(on ? face.primary : face.secondary) })
@@ -74,6 +98,28 @@ export default function KitAfterCase({ user, id = '', date = '', surname = '', t
                 {' · '}{k.kind === 'distributor' ? `${k.distributorName} loan set` : k.kind === 'tm' ? 'TechnoMed loan set' : k.kind === 'hospital' ? `borrowed from ${k.homeName}` : 'consignment'}
               </span>
             </div>
+
+            {k.others?.length > 0 && (
+              swapOpen === k.key ? (
+                <div data-kit-swap style={{ display: 'flex', flexDirection: 'column', gap: space.xs, background: colour.canvas, borderRadius: radius.control, padding: space.sm }}>
+                  <div style={{ ...text('caption'), color: colour.ink, fontWeight: 600 }}>Which set did pt {c.patient} actually have?</div>
+                  {k.others.map(o => (
+                    <button key={o.id} data-kit-swap-with={o.id} disabled={Boolean(busy)} onClick={() => swap(k, o)}
+                      style={{ ...btn(false), textAlign: 'left' }}>
+                      {busy === `${k.key}:swap` ? '…' : `The ${o.supply || 'other'} set — swap with pt ${o.patient}${o.surgeon ? ` (${o.surgeon})` : ''}`}
+                    </button>
+                  ))}
+                  <button onClick={() => setSwapOpen('')} style={{ ...text('caption'), background: 'none', border: 'none', color: colour.inkFaint, cursor: 'pointer', alignSelf: 'flex-start' }}>
+                    No — it was the {k.supply}
+                  </button>
+                </div>
+              ) : (
+                <button data-kit-swap-open onClick={() => setSwapOpen(k.key)}
+                  style={{ ...text('caption'), background: 'none', border: 'none', padding: 0, color: colour.accentDeep, fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-start', textDecoration: 'underline' }}>
+                  Used a different set? {k.others.length === 1 ? `pt ${k.others[0].patient} had the ${k.others[0].supply || 'other'} set` : 'Swap with another case'}
+                </button>
+              )
+            )}
 
             {n && k.kind !== 'consignment' && !returned && (
               holding ? (
@@ -132,6 +178,7 @@ export default function KitAfterCase({ user, id = '', date = '', surname = '', t
           </div>
         )
       })}
+      {swapped && <div data-kit-swapped style={{ ...text('caption'), color: colour.accentDeep, fontWeight: 600 }}>✓ Swapped — pt {c.patient} now {swapped.here || 'no supply'}, pt {swapped.other.patient} now {swapped.there}.</div>}
       {error && <div role="alert" style={{ ...text('caption'), color: colour.danger }}>{error}</div>}
       <div style={{ ...text('caption'), color: colour.inkFaint }}>Emails open for you to check before they send. Looks {28} days ahead at {c.hospital || 'this hospital'}.</div>
     </section>

@@ -51,7 +51,7 @@ import {
   setTeamLeaderFor, setDayLeader, getWorklist, redis,
   getUsageHistory, getRecentResupplies, redisSetBody
 } from '../_redis.js'
-import { afterCase, kitAfterEmail, LOOK_AHEAD_DAYS } from '../../src/clinicalPlan/turnAround.js'
+import { afterCase, kitAfterEmail, LOOK_AHEAD_DAYS, swapCandidates, swapKitSupply, retitleSupply, systemKey } from '../../src/clinicalPlan/turnAround.js'
 import { listKits } from '../_kits.js'
 import { getPreferences } from '../_preferences.js'
 import { searchPortal } from '../_portalSearch.js'
@@ -2953,12 +2953,15 @@ async function handleKitAfter(req, res) {
     const caseOut = { id: theCase.id, patient: theCase.patient, surgeon: theCase.surgeon, date: theCase.date, hospital: theCase.hospital }
     if (req.method !== 'POST') {
       const saved = kits.length ? await redis('mget', ...kits.map(k => kitAfterKey(theCase.id, k.key))).catch(() => []) : []
+      // Ben, 24 Nov 2026: "Maybe a toggle 'which patient was this actually
+      // used for?'" — the other cases that day sharing the system on another supply.
       return res.status(200).json({ case: caseOut, kits: kits.map((k, i) => {
         let decision = null
         try { decision = saved?.[i] ? JSON.parse(saved[i]) : null } catch { decision = null }
-        return { ...k, decision }
+        return { ...k, decision, others: swapCandidates(theCase, ahead, k.system) }
       }) })
     }
+    if (body.swapWith) return swapKitWith(theCase, String(body.key || ''), String(body.swapWith), session, res, ahead)
     const entry = kits.find(k => k.key === String(body.key || ''))
     if (!entry) return res.status(404).json({ error: 'That kit is not on this case any more' })
     const outcome = ['hold', 'return', 'priority'].includes(body.outcome) ? body.outcome : null
@@ -2998,6 +3001,47 @@ async function handleKitAfter(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Could not read the bookings' })
   }
+}
+
+// ─── Swap a system's supply between two cases of one day (Ben, 24 Nov 2026) ──
+// The bookings said pt Hart had the TM loan Dakota; in theatre Hart had the
+// Calvary consignment set and the loan set went to the next case. Each booking
+// is read fresh, only that system's bracket is swapped (and the title's, when
+// it names it), each write is version-checked, and a line on each says who
+// changed it. A kit decision already made for either case is let go, so the
+// question is asked again about the right patient.
+async function swapKitWith(theCase, key, otherId, session, res, sameDay) {
+  const other = (sameDay || []).find(b => b.id === otherId)
+  const entry = (theCase.supplies || []).find(s => systemKey(s.system) === key)
+  if (!other || !entry) return res.status(404).json({ error: 'That case is not on the same day any more' })
+  if (!swapCandidates(theCase, sameDay, entry.system).some(c => c.id === otherId)) {
+    return res.status(409).json({ error: 'Those two cases no longer have that kit on different sets' })
+  }
+  const [a, b] = await Promise.all([getCalendarEvent(theCase.id), getCalendarEvent(otherId)])
+  const kitA = parseLabelledDescription(a.description || '').kit || ''
+  const kitB = parseLabelledDescription(b.description || '').kit || ''
+  const swapped = swapKitSupply(kitA, kitB, entry.system)
+  if (!swapped) return res.status(409).json({ error: 'The bookings changed — open them and check the kit' })
+  const by = firstNameFor(session.email) || session.email
+  const stamp = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Australia/Hobart' })
+  const note = (d, from, to) => `${d.replace(/\s+$/, '')}\n${entry.system}: ${to || 'no supply'} (was ${from || 'none'}) — swapped by ${by} ${stamp}`
+  const patchFor = (ev, kit, from, to) => {
+    const patch = { description: note(setLabelledValue(ev.description || '', 'kit', kit), from, to) }
+    const title = retitleSupply(ev.summary || '', from, to)
+    if (title !== (ev.summary || '')) patch.summary = title
+    return patch
+  }
+  await updateCalendarEvent(a.id, patchFor(a, swapped.a, swapped.was.a, swapped.was.b), { etag: a.etag })
+  try {
+    await updateCalendarEvent(b.id, patchFor(b, swapped.b, swapped.was.b, swapped.was.a), { etag: b.etag })
+  } catch (err) {
+    // Put the first one back rather than leave both cases on one set.
+    const fresh = await getCalendarEvent(a.id).catch(() => null)
+    if (fresh) await updateCalendarEvent(a.id, { description: a.description || '', summary: a.summary || '' }, { etag: fresh.etag }).catch(() => {})
+    return res.status(409).json({ error: 'The other booking changed while this was saving — nothing was swapped' })
+  }
+  await redis('del', kitAfterKey(theCase.id, key), kitAfterKey(otherId, key)).catch(() => {})
+  return res.status(200).json({ ok: true, swapped: { system: entry.system, here: swapped.was.b, there: swapped.was.a, other: { id: other.id, patient: other.patient } } })
 }
 
 async function handleNotify(req, res) {

@@ -14,6 +14,7 @@
 // and the wording of the hospital email. Nothing is sent from here.
 
 import { inventoryFor, siteCode, suggestSupply } from './inventory.js'
+import { parseKitSupplies, formatKitSupplies } from './kitSupply.js'
 
 export const DISTRIBUTOR_NAMES = { e4: 'E4 Surgical', signus: 'Signus', device: 'Device Technologies', kt: 'KT Medical', globus: 'Globus Medical' }
 const SITE_NAMES = { CLV: 'Calvary', RHH: 'RHH' }
@@ -117,4 +118,52 @@ export function kitAfterEmail({ greeting = 'Loans team', theCase, entry, outcome
     'Thank you.'
   ]
   return { subject: `${entry.system} kit after pt ${theCase.patient} — back to ${to}`, text: lines.join('\n'), label: 'Kit return' }
+}
+
+// ─── "Which patient was this actually used for?" (Ben, 24 Nov 2026) ─────────
+// Two cases at one hospital on one day share a system — one on the hospital's
+// consignment set, one on a loan set — and on the day the sets are used the
+// other way round (pt Hart had the Calvary Dakota, the TM loan Dakota went to
+// the next case). The bookings, and so the kit question and its email, then
+// name the wrong patient. These let the person say so: the two bookings swap
+// that system's supply, and nothing else on either changes.
+
+/** The other live cases that day, same hospital, same system, a different supply. */
+export function swapCandidates(theCase, sameDay = [], system) {
+  const site = siteCode(theCase?.hospital)
+  const mine = (theCase?.supplies || []).find(s => sameSystem(s.system, system))
+  if (!site || !mine) return []
+  const minesSupply = mine.supply || suggestSupply(mine.system, theCase.hospital) || ''
+  return (sameDay || [])
+    .filter(b => b.id !== theCase.id && !b.cancelled && b.date === theCase.date && siteCode(b.hospital) === site)
+    .map(b => ({ b, s: (b.supplies || []).find(x => sameSystem(x.system, system)) }))
+    .filter(({ s }) => s && (s.supply || '') !== minesSupply)
+    .map(({ b, s }) => ({ id: b.id, patient: b.patient, surgeon: b.surgeon || '', supply: s.supply || null, hour: b.hour ?? null }))
+}
+
+/**
+ * The two kit lines with that system's supply swapped, or null when either
+ * line does not carry the system. Every other system and note is kept.
+ */
+export function swapKitSupply(kitA, kitB, system) {
+  const a = parseKitSupplies(kitA)
+  const b = parseKitSupplies(kitB)
+  const ia = a.findIndex(e => !e.navigation && sameSystem(e.system, system))
+  const ib = b.findIndex(e => !e.navigation && sameSystem(e.system, system))
+  if (ia < 0 || ib < 0) return null
+  const sa = a[ia].supply
+  const sb = b[ib].supply
+  if ((sa || '') === (sb || '')) return null
+  a[ia] = { ...a[ia], supply: sb }
+  b[ib] = { ...b[ib], supply: sa }
+  return { a: formatKitSupplies(a), b: formatKitSupplies(b), was: { a: sa, b: sb } }
+}
+
+/** A title that names the old supply in brackets names the new one; otherwise it is left alone. */
+export function retitleSupply(summary, from, to) {
+  const text = String(summary || '')
+  if (!from) return text
+  const re = new RegExp(`\\(\\s*${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\)`, 'i')
+  if (!re.test(text)) return text
+  return to ? text.replace(re, `(${to})`) : text.replace(new RegExp(`\\s*${re.source}`, 'i'), '')
 }

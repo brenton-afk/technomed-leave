@@ -49,3 +49,24 @@ describe('the kit after the case', () => {
     expect(container.querySelector('[data-kit-after]')).toBeNull()
   })
 })
+
+describe('which patient was the set actually used for (Ben, 24 Nov 2026)', () => {
+  it('offers the other same-day case and swaps the sets on confirm', async () => {
+    const tm = kit({ system: 'Dakota', key: 'dakota', kind: 'tm', supply: 'TM Loan', next: null, priority: false,
+      others: [{ id: 'c2', patient: 'Othercase', surgeon: 'Ibbett', supply: 'Consignment' }] })
+    globalThis.fetch.mockImplementationOnce(async () => ({ ok: true, json: async () => ({ case: { id: 'c1', patient: 'Testcase', date: '2026-12-01', hospital: 'Calvary' }, kits: [tm] }) }))
+    globalThis.confirm = () => true
+    render(<KitAfterCase user={{ token: 't' }} date="2026-12-01" surname="Testcase" />)
+    await waitFor(() => expect(document.querySelector('[data-kit-swap-open]')).toBeTruthy())
+    expect(document.querySelector('[data-kit-swap-open]')).toHaveTextContent('pt Othercase had the Consignment set')
+    fireEvent.click(document.querySelector('[data-kit-swap-open]'))
+    globalThis.fetch.mockImplementationOnce(async (url, opts) => {
+      posts.push(JSON.parse(opts.body))
+      return { ok: true, json: async () => ({ ok: true, swapped: { system: 'Dakota', here: 'Consignment', there: 'TM Loan', other: { id: 'c2', patient: 'Othercase' } } }) }
+    })
+    fireEvent.click(document.querySelector('[data-kit-swap-with="c2"]'))
+    await waitFor(() => expect(posts.some(p => p.swapWith === 'c2')).toBe(true))
+    expect(posts.find(p => p.swapWith)).toMatchObject({ id: 'c1', key: 'dakota', swapWith: 'c2' })
+    await waitFor(() => expect(document.body).toHaveTextContent('pt Othercase now TM Loan'))
+  })
+})
