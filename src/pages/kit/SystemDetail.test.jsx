@@ -25,7 +25,7 @@ describe('a system with a loan set on site', () => {
     expect(loan.querySelector('[data-system-set="dak-loan"]')).toBeTruthy()
     expect(loan).toHaveTextContent('TechnoMed loan set, on loan to Calvary')
     expect(loan.querySelector('[data-set-kind]')).toHaveTextContent('LOAN')
-    // The case the move was for (Brent, 21 Nov 2026: "it's there for Pt Hart").
+    // The case the move was for (Brent, 21 Nov 2026: "it's there for pt …").
     expect(loan.querySelector('[data-set-case]')).toHaveTextContent('For pt Testcase · Gupta · Tue 24 Nov')
     expect(screen.getByRole('button', { name: 'Move all of the TM loan set' })).toHaveTextContent('Send it back')
   })

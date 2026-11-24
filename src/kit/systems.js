@@ -119,7 +119,7 @@ export const DIST_SHORT = { e4: 'E4', signus: 'Signus', device: 'Device', kt: 'K
 /**
  * The case a set or tray was moved for, as the move sheet was told (Brent,
  * 21 Nov 2026: "You need to tell me which case it's for as you asked the
- * question in the portal when I did the move"). "pt Hart · Gupta · Tue 24
+ * question in the portal when I did the move"). "pt … · Gupta · Tue 24
  * Nov"; '' when the move named no case. Pure.
  */
 export function caseFor(meta) {
