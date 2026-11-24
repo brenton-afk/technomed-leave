@@ -1332,6 +1332,13 @@ day: "The jobs aren't being ticked off … only show things that are related to
 kit movements … Things that are projects should stay in the my to do list"):
 `kitJobs` / `isKitTask` — move, tray back, restock, dispatch suggestions, or a
 task naming a kit; project items (`undoneDue`) are no longer drawn on Cases.
+**A "Something else" job shows only when it moves something** (Brent, 25 Nov
+2026: Ben's "Look at new drill guide and reengineering the fixed drill" sat on
+everyone's Cases page as overdue — "an ongoing project … does not need to be
+visible to everyone"). Its words are in `thing`, so naming a kit had been
+enough; now `isKitTask` needs a moving word (`MOVES_SOMETHING`: move, transfer,
+send, take, drop off, pick up, collect, courier, deliver, bring, return, get …
+back). Move / tray back / restock jobs and dispatch suggestions are unchanged.
 **Not when the booking already says what is in there** (Brent, 9 Nov 2026):
 `inSituNoted` — one line of the operation or notes that says it is already in
 (in situ, existing, old/previous construct …) *and* names a system or maker

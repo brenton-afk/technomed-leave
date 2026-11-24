@@ -227,7 +227,16 @@ export const undoneDue = due => (due || []).filter(t => t.status !== 'done')
  * own dispatch suggestions, and any other task that names a kit. Project items
  * are not drawn here at all.
  */
-export const isKitTask = t => Boolean(t && (t.suggested || ['move', 'return', 'restock'].includes(t.kind) || t.thing))
+//
+// A "Something else" job keeps its words in `thing`, so naming a kit used to be
+// enough to show it — Ben's "Look at new drill guide and reengineering the fixed
+// drill" sat on everyone's Cases page as an overdue job (Brent, 25 Nov 2026:
+// "an ongoing project … does not need to be visible to everyone"). One of those
+// shows only when it moves something.
+const MOVES_SOMETHING = /\b(?:move|moving|transfer|send|sending|take|drop(?:\s+off)?|pick\s+up|collect|courier|deliver|bring|return|get(?:\s+\w+){1,4}\s+back)\b/i
+export const isKitTask = t => Boolean(t && (t.suggested || ['move', 'return', 'restock'].includes(t.kind)
+  || (t.kind !== 'other' && t.thing)
+  || (t.kind === 'other' && MOVES_SOMETHING.test(`${t.thing || ''} ${t.what || ''}`))))
 export const kitJobs = tasks => openTasks(tasks).filter(isKitTask)
 
 /** "Mon 3 Nov", for a job carried over from that day. */

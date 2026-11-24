@@ -1677,4 +1677,14 @@ describe('only kit jobs on the Cases page (Brent, 17 Nov 2026)', () => {
     ])
     expect(jobs.map(j => j.id)).toEqual(['a', 'b', 'c', 'd'])
   })
+  // Brent, 25 Nov 2026: an ongoing project naming a kit is not a Cases job.
+  it('drops a "something else" job that names a kit but moves nothing', async () => {
+    const { kitJobs } = await import('./CaseWeek.jsx')
+    const jobs = kitJobs([
+      { id: 'p', kind: 'other', thing: 'Look at new drill guide and reengineering the fixed drill' },
+      { id: 'q', kind: 'other', thing: 'Take the fixed drill to RHH' },
+      { id: 'r', kind: 'other', thing: 'Get the Diplomat tray back from Calvary' }
+    ])
+    expect(jobs.map(j => j.id)).toEqual(['q', 'r'])
+  })
 })
