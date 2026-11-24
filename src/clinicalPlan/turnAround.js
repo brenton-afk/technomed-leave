@@ -123,8 +123,8 @@ export function kitAfterEmail({ greeting = 'Loans team', theCase, entry, outcome
 // ─── "Which patient was this actually used for?" (Ben, 24 Nov 2026) ─────────
 // Two cases at one hospital on one day share a system — one on the hospital's
 // consignment set, one on a loan set — and on the day the sets are used the
-// other way round (pt Hart had the Calvary Dakota, the TM loan Dakota went to
-// the next case). The bookings, and so the kit question and its email, then
+// other way round (the 3rd case had the Calvary Dakota, the TM loan Dakota
+// went to the 4th). The bookings, and so the kit question and its email, then
 // name the wrong patient. These let the person say so: the two bookings swap
 // that system's supply, and nothing else on either changes.
 

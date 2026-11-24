@@ -1394,11 +1394,10 @@ hold it and tell them / No), "Needed again tomorrow — put priority tags on
 the trays" (Priority tags on), and with nothing ahead "What's happening with
 the kit after the case?" (Back to E4 Surgical — tell Calvary loans / no email).
 
-**"Which patient was this actually used for?"** (Ben, 24 Nov 2026: pt
-Hart, 3rd on Ibbett's Calvary list, was booked on the TM loan Dakota and
-the 4th case on the Calvary consignment set — Mat had typed "(Consignment)"
-on the 4th case first, so the portal's day-supply rule gave Hart the loan;
-in theatre it was the other way round). On the kit card, each kit with
+**"Which patient was this actually used for?"** (Ben, 24 Nov 2026: the
+3rd case on a Calvary list was booked on the TM loan Dakota and the 4th on
+the Calvary consignment set; in theatre the nurses opened the consignment set
+for the 3rd). On the kit card, each kit with
 another live case that day at that hospital on a different set of the same
 system (`swapCandidates` in `turnAround.js`, sent as `others` by the GET) has
 **Used a different set?** (`data-kit-swap-open`) → **The {supply} set — swap
@@ -1410,8 +1409,10 @@ the old set retitled (`retitleSupply`), a line on each "{system}: X (was Y)
 if the second fails), and both cases' kit decisions for that system let go so
 the question is asked again about the right patient. No email is sent by the
 swap; a correction to the loans team goes through the card's own buttons or
-by hand. The day-supply rule still counts a written "(Consignment)" before
-list order — not changed yet.
+by hand. **The booking was right** (Brent, 24 Nov 2026: "there was nothing
+wrong with the original allocation of the kit. The nursing staff just opened
+a different kit") — the day-supply rule stays as it is; this switch is for
+when theatre opens the sets the other way round.
 
 ### TM loan kits are sent ahead (Brent, 5 Nov 2026)
 

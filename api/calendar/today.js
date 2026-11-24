@@ -3004,8 +3004,8 @@ async function handleKitAfter(req, res) {
 }
 
 // ─── Swap a system's supply between two cases of one day (Ben, 24 Nov 2026) ──
-// The bookings said pt Hart had the TM loan Dakota; in theatre Hart had the
-// Calvary consignment set and the loan set went to the next case. Each booking
+// The bookings said the 3rd case had the TM loan Dakota; in theatre it had
+// the Calvary consignment set and the loan set went to the next case. Each booking
 // is read fresh, only that system's bracket is swapped (and the title's, when
 // it names it), each write is version-checked, and a line on each says who
 // changed it. A kit decision already made for either case is let go, so the
