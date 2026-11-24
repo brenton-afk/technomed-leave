@@ -2673,8 +2673,11 @@ Invariants worth preserving:
   `action=save` files the usage scan **without** the tracking pages and the
   tracking form beside it as `{folder}_Boost_Tracking_Form.pdf` (in
   `filesSaved`, so the send does not file it twice). Review says "Boost
-  tracking form found — page N"; the Done screen offers the separate Boost
-  form scan only when the scan held no tracking form.
+  tracking form found — page N". **The separate Boost form scan is gone from
+  the screens** (Brent, 24 Nov 2026: "obsolete, as the portal automatically
+  recognises and sends the boost usage to where it needs to be") — no card on
+  the Done screen, no Boost form button in Past scans (`boostFormGone.test.jsx`);
+  `scan/BoostForm.jsx` and `action=boost-form` remain, unreachable.
 - **Loan stock must be marked LOAN** (Brent, 13 Nov 2026, after the Munro
   usage went to Device as consignment). The reader returns `stockMarking`
   per item (loan / consignment / ''); `action=scan` looks up the day's one

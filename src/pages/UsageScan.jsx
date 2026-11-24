@@ -3,7 +3,6 @@ import { looksBlank, release } from '../scanner/blankCheck.js'
 import { reorder } from './scan/pageList.js'
 import RegistrarText from './scan/RegistrarText.jsx'
 import AmendUsage from './scan/AmendUsage.jsx'
-import BoostForm from './scan/BoostForm.jsx'
 import CaseFiles from './scan/CaseFiles.jsx'
 import WrongKind from './scan/WrongKind.jsx'
 import { priceCheckLine } from '../usagePriceCheck.js'
@@ -396,8 +395,6 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
   const [note, setNote] = useState('')
   // Which past usage is open for a correction (scan/AmendUsage.jsx).
   const [amending, setAmending] = useState(null)
-  // Which past usage has its Boost tracking form being scanned (scan/BoostForm.jsx).
-  const [boostFor, setBoostFor] = useState(null)
   // Which past usage is open to show its filed files (scan/CaseFiles.jsx).
   const [filesFor, setFilesFor] = useState(null)
   const [history, setHistory] = useState([])
@@ -779,10 +776,6 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
               return <AmendUsage key={h.id} usageId={h.id} user={user}
                 onClose={() => setAmending(null)} onDone={loadHistory} />
             }
-            if (boostFor === h.id) {
-              return <BoostForm key={h.id} usageId={h.id} user={user} toPage={fileToPage}
-                sentAt={h.boostFormSentAt} onClose={() => setBoostFor(null)} onSent={loadHistory} />
-            }
             return (
               <div key={h.id} style={{ background: 'white', borderRadius: 12, padding: '13px 15px', marginBottom: 10, border: `1px solid ${BORDER}` }}>
                 {/* Tap the usage to see its files (Brent, 9 Nov 2026). */}
@@ -809,12 +802,6 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
                     <button type="button" onClick={() => removeDuplicate(h)}
                       style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', minHeight: 32, borderRadius: 20, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: '#c0392b' }}>
                       Remove duplicate
-                    </button>
-                  )}
-                  {h.hasBoost && (
-                    <button type="button" onClick={() => setBoostFor(h.id)} data-boost-form-open
-                      style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', minHeight: 32, borderRadius: 20, cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'white', color: NAVY }}>
-                      {h.boostFormSentAt ? 'Boost form ✓' : 'Boost form'}
                     </button>
                   )}
                   <button type="button" onClick={() => setAmending(h.id)}
@@ -1230,18 +1217,12 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
               Copy as well as the link, because a rep standing in a corridor
               may want it in WhatsApp rather than a text, and the clipboard
               reaches both. */}
-          {/* A Boost case: its tracking form is scanned on its own and goes to
-              the Boost team only (Brent, 9 Nov 2026). */}
-          {/* Only when the scan held no tracking form: one that did went to the
-              Boost team with the usage (Brent, 14 Nov 2026), listed below. */}
-          {!result.test && !result.emails.some(e => e.key === 'boost_tracking')
-            && (result.record?.items || []).some(i => i.distributorKey === 'device_boost' && !i.excluded) && (
-            <BoostForm usageId={result.record.id} user={user} toPage={fileToPage}
-              sentAt={(result.emails.find(e => e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt
-                || ((result.record.emailsSent || []).find(e => e && e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt} />
-          )}
           {/* RHH cases only (Brent, 24 Nov 2026: "we don't need a registrar
               text message for calvary bookings, only for RHH"). */}
+          {/* The separate Boost tracking form scan is gone (Brent, 24 Nov 2026:
+              "obsolete, as the portal automatically recognises and sends the
+              boost usage to where it needs to be"). scan/BoostForm.jsx and
+              action=boost-form stay for now, unreachable. */}
           {caseRecord && isRhhCase(caseRecord) && (
             <RegistrarText key={caseRecord.id || caseRecord.folderName}
               caseRecord={caseRecord} booking={result.attendance?.booking || null} />
