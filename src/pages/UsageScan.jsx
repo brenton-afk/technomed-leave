@@ -279,6 +279,9 @@ function GrowField({ label, value, onChange }) {
   )
 }
 
+/** The registrar text is for RHH cases only (Brent, 24 Nov 2026). */
+export const isRhhCase = c => /^\s*(rhh|royal hobart)/i.test(String(c?.hospital || ''))
+
 function Field({ label, value, onChange, type = 'text', options }) {
   return (
     <div style={{ marginBottom: 12, minWidth: 0 }}>
@@ -1237,7 +1240,9 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
               sentAt={(result.emails.find(e => e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt
                 || ((result.record.emailsSent || []).find(e => e && e.key === 'boost_tracking' && e.ok && !e.test) || {}).sentAt} />
           )}
-          {caseRecord && (
+          {/* RHH cases only (Brent, 24 Nov 2026: "we don't need a registrar
+              text message for calvary bookings, only for RHH"). */}
+          {caseRecord && isRhhCase(caseRecord) && (
             <RegistrarText key={caseRecord.id || caseRecord.folderName}
               caseRecord={caseRecord} booking={result.attendance?.booking || null} />
           )}

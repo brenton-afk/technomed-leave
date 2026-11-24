@@ -931,7 +931,10 @@ fixation only** (Brent, 9 Nov 2026: pedicles and lateral masses, "NOT for ACDF
 or ALIF"): `isScrewFixation` — posterior screw words win (pedicle, lateral
 mass, PSF, PLIF, TLIF, posterior, S2AI, percutaneous, extension), an anterior
 operation alone (ACDF, ALIF, corpectomy…) gets no level rows even when its
-booking says "fixation" for the plate; "+ Add screw levels" brings them back. Consultant titles are guessed
+booking says "fixation" for the plate; "+ Add screw levels" brings them back. **RHH cases only**
+(Brent, 24 Nov 2026: "we don't need a registrar text message for calvary
+bookings, only for RHH") — `isRhhCase` in `UsageScan.jsx` gates it on the
+Done screen; `registrarRhhOnly.test.jsx`. Consultant titles are guessed
 only where known (`SURGEON_TITLES`). Still a draft for the phone's messaging
 app, never a send.
 
