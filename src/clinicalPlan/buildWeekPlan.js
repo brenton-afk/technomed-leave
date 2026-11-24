@@ -5,6 +5,7 @@ import { inSituReason, inSituNoted, inSituNote } from './priorImplants.js'
 // the UI, the text copy and the .docx export without any of them diverging.
 
 import { classifyItem } from './itemKind.js'
+import { readAwayTitle } from './away.js'
 import { readTask, settleCopies } from './tasks.js'
 import './types.js'
 import {
@@ -212,15 +213,20 @@ function whoIsAway(dayPlans) {
     for (const item of items) {
       if (item.kind !== 'leave') continue
       const text = String(item.text || item.title || '')
+      // An Away entry (training day, RDO) is "not here" too, but it is not
+      // leave — the chip says so (Brent, 24 Nov 2026).
+      const away = readAwayTitle(item.title || item.text)
       for (const person of peopleNamedIn(text)) {
-        const already = found.get(person.email) || { ...person, days: [] }
+        const already = found.get(person.email) || { ...person, days: [], why: {} }
         if (!already.days.includes(day.date)) already.days.push(day.date)
+        if (away && !already.why[day.date]) already.why[day.date] = away.word
+        else if (!away) already.why[day.date] = 'Leave'
         found.set(person.email, already)
       }
     }
   }
   return [...found.values()].map(p => ({
-    email: p.email, firstName: p.firstName, name: p.name, days: p.days
+    email: p.email, firstName: p.firstName, name: p.name, days: p.days, why: p.why
   }))
 }
 

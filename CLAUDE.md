@@ -545,6 +545,27 @@ preferences. Inboxes are re-read when the screen opens and the last read is
 POs/quotes held, Erin's or Toni's own inboxes (domain-wide delegation and
 their agreement first).
 
+### Away: paid, but not available for cases (Brent, 24 Nov 2026)
+
+"Mat is at a training day. He's not on leave as he'll be paid for his time
+there, but he is also not available for cases"; "Leave the colour of the away
+as the same colour as leave"; "That can also cover RDOs". **+ Away** on the
+Cases action row (`data-add-away`), shown only to Brent, Erin and Toni
+(`mayAddAway` / `AWAY_EDITOR_EMAILS` in `src/clinicalPlan/away.js`; the server
+checks `AWAY_EDITORS` env, else the same three) → `cases/AwaySheet.jsx`: who,
+why (Training day / RDO / Conference / Course / typed), all day over a run of
+days or set hours on one day, a note; and **Coming up** with Remove.
+`action=away` on `api/calendar/today.js` (GET list, POST, DELETE `id`;
+`api/_away.js`, record `away:entries`) writes to the Staff Leave calendar via
+`leaveCalendarRequest` (as bookings@, else the service account, else the
+bookings calendar) — **Grape, like leave**, titled "Mat — Away · Training day"
+or "Mat — RDO" (`awayTitle` / `readAwayTitle`), "Not leave …" in the
+description. **Nothing goes to Xero**; the person fills in their timesheet as
+a normal day. `classifyItem` reads it as kind `leave` with label Away/RDO, so
+everything that treats leave as "not here" does the same; `whoIsAway` carries
+`why` per day and the team leader chip and sheet say "Away" / "RDO" instead of
+"On leave". `clinicalPlan/away.test.js`, `cases/AwaySheet.test.jsx`.
+
 ### Supplier booking notices (Tasks 8/9)
 
 `api/_bookingNotices.js` holds the rules and contacts (Redis `notices:settings`,

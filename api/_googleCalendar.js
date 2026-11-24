@@ -290,6 +290,32 @@ async function leaveCalendarWays() {
 }
 
 /**
+ * One request to the Staff Leave calendar, the way TOIL and leave are written
+ * (as bookings@ where it can be, else the service account, else the bookings
+ * calendar). Used by Away entries (api/_away.js). A calendarId pins it to where
+ * an entry already is. Returns { ok, calendarId, data } or { ok: false, error }.
+ */
+export async function leaveCalendarRequest(method, calendarId, path = '', body = null) {
+  const ways = await leaveCalendarWays()
+  let last = ''
+  for (const way of ways.filter(w => !calendarId || w.id === calendarId)) {
+    let bearer
+    try { bearer = await way.token() } catch (err) { last = err.message; continue }
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(way.id)}/events${path}`, {
+      method, headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    })
+    if (res.ok || (method === 'DELETE' && (res.status === 404 || res.status === 410))) {
+      calendarChanged()
+      return { ok: true, calendarId: way.id, data: method === 'DELETE' ? null : await res.json().catch(() => ({})) }
+    }
+    last = `${res.status}`
+    if (res.status !== 403 && res.status !== 404) break
+  }
+  return { ok: false, error: last }
+}
+
+/**
  * @param {object} input
  * @param {string} input.name        the person
  * @param {object} input.want        { day: hours } — today and later only

@@ -10,6 +10,7 @@ import {
   serviceAccountEmail
 } from '../_googleCalendar.js'
 import { requireSession, requireAdmin } from '../_auth.js'
+import { addAway, removeAway, upcomingAway, mayEditAway } from '../_away.js'
 import {
   getNoticeSettings, saveNoticeSettings, noticesFor, describeBooking,
   holdNotice, takeNotice, restoreNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest, loanLogFor,
@@ -176,6 +177,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'taskdone') return handleTaskDone(req, res)
   // Day jobs left unticked on earlier days, brought forward to today.
   if (req.query.action === 'opentasks') return handleOpenTasks(req, res)
+  // Away — a training day, an RDO: paid, but not available for cases.
+  if (req.query.action === 'away') return handleAway(req, res)
   if (req.query.action === 'delete') return handleDelete(req, res)
   // The booking review queue. Bookings read out of bookings@ wait here for a
   // person before they reach the calendar — see api/_redis.js for why.
@@ -413,6 +416,36 @@ function sendWeek(res, body, seen) {
 // point of the checklist is that the team can see the day's duties are done —
 // that the evening sweep happened, that tomorrow's lists went out — so the ticks
 // carry who made them.
+
+// ─── Away (Brent, 24 Nov 2026) ────────────────────────────────────────────────
+// GET: may this person add them, and what is coming up. POST: add one.
+// DELETE ?id=: take one off. Only Brent, Erin and Toni add or remove
+// (AWAY_EDITORS); anyone signed in may read the list.
+async function handleAway(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  const editor = mayEditAway(session.email)
+  try {
+    if (req.method === 'GET') {
+      const today = toDateStr(zonedCivil(new Date(), TZ))
+      return res.status(200).json({ mayEdit: editor, entries: await upcomingAway(today) })
+    }
+    if (!editor) return res.status(403).json({ error: 'Only Brent, Erin and Toni can add or remove away days.' })
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+      const out = await addAway(body, { email: session.email, name: session.name })
+      return res.status(out.status).json(out.error ? { error: out.error } : { entry: out.entry })
+    }
+    if (req.method === 'DELETE') {
+      const out = await removeAway(String(req.query.id || ''))
+      return res.status(out.status).json(out.error ? { error: out.error } : { removed: out.removed })
+    }
+    return res.status(405).json({ error: 'Method not allowed' })
+  } catch (err) {
+    console.error('away failed:', err.message)
+    return res.status(500).json({ error: 'Could not save that just now. Try again shortly.' })
+  }
+}
 
 async function handleRunsheet(req, res) {
   const session = await requireSession(req, res)

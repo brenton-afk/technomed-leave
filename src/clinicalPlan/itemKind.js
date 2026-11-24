@@ -16,6 +16,8 @@
  * leave note often says "due back", and "On call" is hours rather than a meeting
  * even when it is written as a handover.
  */
+import { readAwayTitle } from './away.js'
+
 const KINDS = [
   {
     kind: 'leave',
@@ -57,7 +59,13 @@ export function classifyItem(item = {}) {
 
   // Grape is this app's own leave colour, so it settles the question before any
   // wording does — a leave entry titled only with a name still reads as leave.
-  if (colour === 'grape') return { kind: 'leave', label: 'Leave' }
+  // An Away entry (a training day, an RDO — Brent, 24 Nov 2026) is in the
+  // same colour on purpose, and counts as "not here" exactly like leave; only
+  // its label differs, because it is not leave and nobody's balance moves.
+  if (colour === 'grape') {
+    const away = readAwayTitle(item.title || item.summary)
+    return away ? { kind: 'leave', label: away.word, away: true } : { kind: 'leave', label: 'Leave' }
+  }
 
   for (const candidate of KINDS) {
     if (candidate.match.test(text)) return { kind: candidate.kind, label: candidate.label }

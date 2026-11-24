@@ -63,6 +63,16 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
   const isAway = email => away.some(p => p.email === email
     && (!day || !Array.isArray(p.days) || p.days.includes(day)))
   const leaderAway = leader?.email && isAway(leader.email)
+  // "On leave", or "Away" / "RDO" for a training day or an RDO — not leave,
+  // but not here either (Brent, 24 Nov 2026).
+  const awayWord = email => {
+    const p = away.find(x => x.email === email)
+    const days = day ? [day] : (p?.days || [])
+    const words = days.map(d => p?.why?.[d]).filter(Boolean)
+    if (!words.length || words.includes('Leave')) return 'On leave'
+    return words[0]
+  }
+  const awayPhrase = email => ({ 'On leave': 'on leave', RDO: 'on an RDO' })[awayWord(email)] || 'away'
   // Somebody other than whoever the standing rota names.
   const covering = leader?.source === 'set'
     && leader?.rostered && leader.rostered.email !== leader.email
@@ -114,7 +124,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
       }}>
       <span style={{ color: colour.inkFaint }}>Lead</span>
       <strong>{leader?.firstName || leader?.name || '—'}</strong>
-      {leaderAway && <span style={{ color: colour.warning, fontWeight: 700 }}>On leave</span>}
+      {leaderAway && <span style={{ color: colour.warning, fontWeight: 700 }}>{awayWord(leader.email)}</span>}
       <span aria-hidden="true" style={{ color: colour.inkFaint }}>✎</span>
     </button>
   )
@@ -160,7 +170,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
         {leaderAway && (
           <span style={{
             ...text('micro'), textTransform: 'uppercase', color: colour.warning
-          }}>On leave</span>
+          }}>{awayWord(leader.email)}</span>
         )}
         {onDuty && !leaderAway && (
           <span style={{
@@ -226,7 +236,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                     borderRadius: radius.control, padding: space.sm, marginBottom: space.sm,
                     ...text('caption'), color: colour.ink, lineHeight: 1.5
                   }}>
-                    {leader.firstName} is on leave this week. Somebody else needs it.
+                    {leader.firstName} is {awayPhrase(leader.email)} this week. Somebody else needs it.
                   </div>
                 )}
 
@@ -250,7 +260,7 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                       <span style={{ flex: 1, ...text('bodyStrong'), color: colour.ink }}>
                         {person.firstName}
                         <span style={{ ...text('caption'), color: colour.inkFaint, fontWeight: 400 }}>
-                          {' · '}{unavailable ? 'on leave this week' : person.role}
+                          {' · '}{unavailable ? `${awayPhrase(person.email)} ${day ? 'this day' : 'this week'}` : person.role}
                         </span>
                       </span>
                       {on && <span style={{ ...text('bodyStrong'), color: colour.accentDeep }}>✓</span>}
