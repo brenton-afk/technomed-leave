@@ -15,4 +15,10 @@ describe('usage review: size and quantity', () => {
     expect(src).toMatch(/el\.style\.height = `\$\{el\.scrollHeight\}px`/)
     expect(src).toMatch(/replace\(\/\\s\*\\n\\s\*\/g, ' '\)/)
   })
+  // Brent, 24 Nov 2026: "We can't have situations where the names of things are chopped off."
+  it('makes every plain text field grow to show its whole value', () => {
+    expect(src).toMatch(/if \(!options && type === 'text'\) return <GrowField/)
+    expect(src).toMatch(/overflowWrap: 'anywhere'/)
+    expect(src).toMatch(/<Field label="Procedure" wide/)
+  })
 })

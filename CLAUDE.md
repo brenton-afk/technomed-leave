@@ -2769,7 +2769,10 @@ Invariants worth preserving:
   size "W … L … H: 13mm A: 8°" had to be scrolled across). Size sits beside a
   narrow Qty box (`data-size-row`, `minmax(0, 1fr) 76px`) and is a `GrowField`
   — a one-line textarea that grows to show the whole value; a typed newline is
-  dropped. `usageSizeField.test.jsx`.
+  dropped. **Nothing on the review is cut off** (Brent, same day: Procedure
+  and Lot number were chopped): every plain text `Field` is a `GrowField`
+  (wraps, `overflowWrap: 'anywhere'` for long codes), Procedure has a full
+  row (`wide`); dates, numbers and choices stay inputs. `usageSizeField.test.jsx`.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
 ### Resupply scanning (Brent, 6 Nov 2026)

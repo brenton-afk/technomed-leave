@@ -260,7 +260,7 @@ const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: MUT
 // A box that grows to show all of its value (Ben, 24 Nov 2026: a BMD cage's
 // size — "W: 26mm L: 32mm H: 13mm A: 8°" — had to be scrolled across).
 // One line until it needs two; a pressed Enter is not kept.
-function GrowField({ label, value, onChange }) {
+function GrowField({ label, value, onChange, wide }) {
   const ref = React.useRef(null)
   React.useLayoutEffect(() => {
     const el = ref.current
@@ -269,11 +269,11 @@ function GrowField({ label, value, onChange }) {
     el.style.height = `${el.scrollHeight}px`
   }, [value])
   return (
-    <div style={{ marginBottom: 12, minWidth: 0 }}>
+    <div style={{ marginBottom: 12, minWidth: 0, ...(wide ? { gridColumn: '1 / -1' } : {}) }}>
       <label style={labelStyle}>{label}</label>
       <textarea ref={ref} rows={1} value={value || ''} aria-label={label} data-grow-field
         onChange={e => onChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
-        style={{ ...inputStyle, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', lineHeight: 1.35, display: 'block' }} />
+        style={{ ...inputStyle, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', lineHeight: 1.35, display: 'block', overflowWrap: 'anywhere' }} />
     </div>
   )
 }
@@ -281,7 +281,11 @@ function GrowField({ label, value, onChange }) {
 /** The registrar text is for RHH cases only (Brent, 24 Nov 2026). */
 export const isRhhCase = c => /^\s*(rhh|royal hobart)/i.test(String(c?.hospital || ''))
 
-function Field({ label, value, onChange, type = 'text', options }) {
+// Every text box on the review shows its whole value (Brent, 24 Nov 2026:
+// "We can't have situations where the names of things are chopped off") —
+// a plain text field is a GrowField; dates, numbers and choices stay inputs.
+function Field({ label, value, onChange, type = 'text', options, wide }) {
+  if (!options && type === 'text') return <GrowField label={label} value={value} onChange={onChange} wide={wide} />
   return (
     <div style={{ marginBottom: 12, minWidth: 0 }}>
       <label style={labelStyle}>{label}</label>
@@ -971,7 +975,7 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
                   The form was read with the patient and surgeon the wrong way round — they have been swapped back. Check both.
                 </div>
               )}
-              <Field label="Procedure" value={caseRecord.procedure} onChange={v => updateCase('procedure', v)} />
+              <Field label="Procedure" wide value={caseRecord.procedure} onChange={v => updateCase('procedure', v)} />
               <Field label="Hospital" value={caseRecord.hospital} onChange={v => updateCase('hospital', v)}
                 options={[{ key: '', label: 'Select…' }, { key: 'CLV', label: 'CLV — Calvary' }, { key: 'RHH', label: 'Royal Hobart' }]} />
             </div>
