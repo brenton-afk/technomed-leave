@@ -35,18 +35,18 @@ const pt = mm => mm * PT_PER_MM
 const clampQty = q => Math.max(0, Math.min(999, Math.floor(Number(q) || 0)))
 
 /**
- * @param jobs [{ png: Uint8Array, qty, name?, size: { w, h } mm, sheet?: { page: { w, h }, slots: [{ x, y }] } }]
+ * @param jobs [{ png: Uint8Array, qty, name?, size: { w, h } mm, sheet?: { page: { w, h }, slots: [{ x, y }] }, fit? }]
  *             size defaults to 68 × 21; sheet is needed for layout 'sheet'.
  * @param layout 'label' | 'sheet'
  * @param start  for 'sheet': the place on the first sheet to start at (1 = top left)
  * @returns Uint8Array — the PDF
  */
-export async function buildLabelPdf(jobs, { title = 'TechnoMed labels', at = new Date(), layout = 'label', start = 1 } = {}) {
+export async function buildLabelPdf(jobs, { title = 'TechnoMed labels', at = new Date(), layout = 'label', start = 1, offset = { x: 0, y: 0 } } = {}) {
   const doc = await PDFDocument.create()
   doc.setTitle(title)
   doc.setCreator('TechnoMed staff portal — Label Studio')
   doc.setCreationDate(at)
-  if (layout === 'sheet') await placeOnSheets(doc, jobs, start)
+  if (layout === 'sheet') await placeOnSheets(doc, jobs, start, offset)
   else {
     for (const job of jobs || []) {
       const qty = clampQty(job.qty)
@@ -69,7 +69,15 @@ export async function buildLabelPdf(jobs, { title = 'TechnoMed labels', at = new
 /** Same sheet (page size and places) → keep filling the page; a different one starts a new page. */
 const sheetKey = s => JSON.stringify([s.page.w, s.page.h, s.slots.map(p => [p.x, p.y])])
 
-async function placeOnSheets(doc, jobs, start) {
+/**
+ * job.fit ({ w, h, dx, dy } mm — sheetStocks.fitInSlot) draws the label at
+ * that size inside its place; without it, at its own size from the corner.
+ * offset nudges every label (mm, + is right / down) for a printer that does
+ * not feed true.
+ */
+async function placeOnSheets(doc, jobs, start, offset) {
+  const ox = Number(offset?.x) || 0
+  const oy = Number(offset?.y) || 0
   let page = null
   let key = ''
   let next = 0
@@ -93,8 +101,9 @@ async function placeOnSheets(doc, jobs, start) {
         page = doc.addPage([pt(sheet.page.w), pt(sheet.page.h)])
       }
       const slot = sheet.slots[next++]
+      const f = job.fit || { w: size.w, h: size.h, dx: 0, dy: 0 }
       // PDF measures up from the bottom of the page.
-      page.drawImage(image, { x: pt(slot.x), y: pt(sheet.page.h - slot.y - size.h), width: pt(size.w), height: pt(size.h) })
+      page.drawImage(image, { x: pt(slot.x + f.dx + ox), y: pt(sheet.page.h - (slot.y + f.dy + oy) - f.h), width: pt(f.w), height: pt(f.h) })
     }
   }
 }

@@ -76,6 +76,11 @@ export const AUTO_MARGIN = 10
 export function sheetLayout(label) {
   const t = trimSize(label)
   const s = label?.sheet
+  const out = autoOrOwn(label, t, s)
+  return { ...out, slot: out.slot || t }
+}
+
+function autoOrOwn(label, t, s) {
   if (s && Number(s.across) > 0 && Number(s.down) > 0) {
     const page = { w: Number(s.pageW) || A4.w, h: Number(s.pageH) || A4.h }
     const px = Number(s.pitchX) > 0 ? Number(s.pitchX) : t.w

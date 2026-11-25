@@ -7,11 +7,25 @@ import { loadFabric, renderLabelPng } from './editorCanvas.js'
 import { loadLabelFonts } from './fonts.js'
 import { buildLabelPdf } from './pdf.js'
 import { trimSize, sheetLayout } from './model.js'
+import { stockById, stockLayout, fitInSlot } from './sheetStocks.js'
+
+/**
+ * The sheet a label prints on: a stock from sheetStocks (by id), else the
+ * label's own Avery layout, else as many as fit on A4.
+ */
+export function sheetFor(label, stockId) {
+  const stock = stockById(stockId)
+  return stock ? stockLayout(stock) : sheetLayout(label)
+}
 import { shareFileObjects } from '../kit/share.js'
 import { isAppleMobile } from '../pages/kit/trayListPdf.js'
 
-/** jobs: [{ label, qty }] → a PDF Blob. layout 'label' | 'sheet'; start: first place on the sheet. */
-export async function makeLabelPdf(jobs, logos, { onProgress, layout = 'label', start = 1 } = {}) {
+/**
+ * jobs: [{ label, qty }] → a PDF Blob. layout 'label' | 'sheet'; on a sheet:
+ * stock (sheetStocks id, or '' for the label's own), start (first place),
+ * fill (scale each design to fill its label), offset ({ x, y } mm nudge).
+ */
+export async function makeLabelPdf(jobs, logos, { onProgress, layout = 'label', start = 1, stock = '', fill = false, offset } = {}) {
   await loadLabelFonts()
   const fabric = await loadFabric()
   fabric.cache?.clearFontCache?.()
@@ -20,11 +34,13 @@ export async function makeLabelPdf(jobs, logos, { onProgress, layout = 'label', 
   for (const job of jobs) {
     if (!(Number(job.qty) > 0)) continue
     onProgress?.(`Drawing ${job.label.name} (${++n} of ${jobs.length})…`)
-    pngs.push({ png: await renderLabelPng(fabric, job.label, logos), qty: job.qty, name: job.label.name, size: trimSize(job.label), sheet: sheetLayout(job.label) })
+    const size = trimSize(job.label)
+    const sheet = sheetFor(job.label, stock)
+    pngs.push({ png: await renderLabelPng(fabric, job.label, logos), qty: job.qty, name: job.label.name, size, sheet, fit: fitInSlot(size, sheet.slot, { fill }) })
   }
   onProgress?.('Making the PDF…')
   const title = jobs.length === 1 ? `${jobs[0].label.name} × ${jobs[0].qty}` : `TechnoMed labels (${jobs.length})`
-  const bytes = await buildLabelPdf(pngs, { title, layout, start })
+  const bytes = await buildLabelPdf(pngs, { title, layout, start, offset })
   return new Blob([bytes], { type: 'application/pdf' })
 }
 
