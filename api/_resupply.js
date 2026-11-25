@@ -1,4 +1,4 @@
-import { detectDistributor, distributorName, DISTRIBUTORS } from './_distributors.js'
+import { detectDistributor, distributorName, DISTRIBUTORS, isExcludedProduct } from './_distributors.js'
 import { parseFolderName } from './_usageCase.js'
 
 // ─── Resupply (Brent, 6 Nov 2026: "go ahead with the scanner for resupply") ──
@@ -99,6 +99,8 @@ export function normaliseResupply(raw = {}) {
       unsure: str(l.confidence).toLowerCase() === 'low'
     }))
     .filter(l => l.referenceCode || l.description)
+    // Haemostats are nothing to do with us (Brent, 25 Nov 2026): off the paper.
+    .filter(l => !isExcludedProduct(l.description, l.referenceCode))
   const text = [raw.supplier, ...lines.map(l => `${l.description} ${l.referenceCode}`)].join(' ')
   const distributorKey = detectDistributor(raw.supplier) || detectDistributor(text)
   const reference = str(raw.caseReference)

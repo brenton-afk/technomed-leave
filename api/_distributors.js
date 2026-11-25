@@ -164,7 +164,15 @@ const EXCLUDED_PRODUCT_PATTERNS = [
   /tisseel/i,
   /arista/i,
   /bone\s*wax/i,
-  /haemostat|hemostat/i
+  /haemostat|hemostat/i,
+  // Brent, 25 Nov 2026: "Floseal, Gel foam, Spongistan etc etc can be omitted
+  // from all scans of resupply and usage" — the rest of the family too.
+  /surgi[\s-]*flo/i,
+  /avitene/i,
+  /evicel/i,
+  /gelita/i,
+  /hemopatch|haemopatch/i,
+  /veriset/i
 ]
 
 // Ordered most-specific-first: BOOST must beat the generic Device match, and
@@ -174,7 +182,9 @@ const DISTRIBUTOR_RULES = [
   { key: 'dtbv', pattern: /\bcbm\b|donor\s*tissue|\bdtbv\b|allograft/i },
   { key: 'signus', pattern: /signus|diplomat|athlet|ascot|mobis/i },
   { key: 'device', pattern: /mariner|shoreline|device\s*tech/i },
-  { key: 'e4', pattern: /dakota|reform|e4\s*global|\be4\b|\bbmd\b|global\s*biomedica/i },
+  // Global Biomedica (BMD) makes Catenary and the BMD cages; E4 distributes
+  // them in Australia, so every one is E4's (Brent, 25 Nov 2026).
+  { key: 'e4', pattern: /dakota|reform|catenary|e4\s*global|\be4\b|\bbmd\b|\bgbm\b|global\s*-?\s*bmd|global\s*-?\s*bio\s*-?\s*medica/i },
   { key: 'kt', pattern: /kt\s*medical|\bktm\b/i },
   { key: 'globus', pattern: /nuvasive|globus/i }
 ]
