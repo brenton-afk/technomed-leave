@@ -8,6 +8,7 @@
 //   labels:deleted    the last 50 labels taken off, whole, so one can be put back
 //   labels:seeded     set once the Vistaprint export has been loaded
 //   labels:fit-v1     set once imported labels seeded before fit-to-box had it
+//   labels:prev:<id>  the label as it was before "Tidy all labels", so it can be put back
 // Seeded once from api/_labelSeed.js on the first list (under a lock). Reads
 // are one SMEMBERS, one MGET and one GET — the Upstash allowance is small.
 
@@ -148,19 +149,41 @@ export function labelStore(deps = {}) {
    * Saves over a label only if nobody has saved it since the editor opened it:
    * `version` is the one the editor started from. Otherwise { conflict, current }.
    */
-  async function saveLabel(id, input, version, by) {
+  async function saveLabel(id, input, version, by, { tidy = false } = {}) {
     const keys = await logoKeys()
     return withLock(`labels:lock:${id}`, async () => {
       const current = await getLabel(id)
       if (!current) return { missing: true }
       if (Number(version) !== Number(current.version)) return { conflict: true, current }
       const clean = sanitiseLabel(input, { logoKeys: keys })
+      // Tidying keeps the label as it was (once — tidying twice keeps the original).
+      if (tidy && !current.tidied) await setBody(`labels:prev:${id}`, JSON.stringify(current))
+      const tidied = tidy ? (current.tidied || { at: now(), by, fromVersion: current.version }) : current.tidied
       const label = {
         ...clean, id: current.id, version: current.version + 1,
+        createdAt: current.createdAt, createdBy: current.createdBy, updatedAt: now(), updatedBy: by,
+        ...(current.source ? { source: current.source, vistaprintCreated: current.vistaprintCreated } : {}),
+        ...(tidied ? { tidied } : {})
+      }
+      await setBody(KEY(id), JSON.stringify(label))
+      return { label }
+    })
+  }
+
+  /** Puts back the label as it was before it was tidied — a new version, nothing lost. */
+  async function restoreLabel(id, by) {
+    return withLock(`labels:lock:${id}`, async () => {
+      const current = await getLabel(id)
+      if (!current) return { missing: true }
+      const before = parse(await redis('get', `labels:prev:${id}`))
+      if (!before) return { nothing: true }
+      const label = {
+        ...sanitiseLabel(before), id: current.id, version: current.version + 1,
         createdAt: current.createdAt, createdBy: current.createdBy, updatedAt: now(), updatedBy: by,
         ...(current.source ? { source: current.source, vistaprintCreated: current.vistaprintCreated } : {})
       }
       await setBody(KEY(id), JSON.stringify(label))
+      await redis('del', `labels:prev:${id}`)
       return { label }
     })
   }
@@ -197,7 +220,7 @@ export function labelStore(deps = {}) {
     return { logo }
   }
 
-  return { ensureSeeded, listLabels, getLabel, createLabel, saveLabel, deleteLabel, addLogo, readLogos }
+  return { ensureSeeded, listLabels, getLabel, createLabel, saveLabel, restoreLabel, deleteLabel, addLogo, readLogos }
 }
 
 /** Width and height of a PNG or JPEG, from its bytes; null if it is neither. */

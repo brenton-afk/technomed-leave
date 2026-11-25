@@ -727,7 +727,8 @@ function dropboxRedirectUri(req) {
 }
 
 /**
- * Admin → Labels (Brent, 25 Nov 2026). list | save | create | delete | logo.
+ * Admin → Labels (Brent, 25 Nov 2026). list | save | create | delete | logo | restore
+ * (save with `tidy: true` keeps the label as it was, for restore).
  * Admins only; anyone else gets the same 404 as a missing route.
  */
 async function handleLabels(req, res, session) {
@@ -742,9 +743,15 @@ async function handleLabels(req, res, session) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
     if (what === 'create') return res.status(200).json({ label: await store.createLabel(body.label, by) })
     if (what === 'save') {
-      const out = await store.saveLabel(String(body.id || ''), body.label, body.version, by)
+      const out = await store.saveLabel(String(body.id || ''), body.label, body.version, by, { tidy: body.tidy === true })
       if (out.missing) return res.status(404).json({ error: 'That label has been deleted' })
       if (out.conflict) return res.status(409).json({ error: `${out.current.updatedBy || 'Someone'} saved this label while you had it open`, current: out.current })
+      return res.status(200).json(out)
+    }
+    if (what === 'restore') {
+      const out = await store.restoreLabel(String(body.id || ''), by)
+      if (out.missing) return res.status(404).json({ error: 'That label has been deleted' })
+      if (out.nothing) return res.status(409).json({ error: 'There is no earlier version to put back' })
       return res.status(200).json(out)
     }
     if (what === 'delete') {

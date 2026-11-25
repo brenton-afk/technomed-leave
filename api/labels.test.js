@@ -138,3 +138,24 @@ describe('labels seeded before fit-to-box', () => {
     expect(f.kv.get('labels:fit-v1')).toBeTruthy()
   })
 })
+
+describe('Tidy all labels: keep the old version, put it back', () => {
+  it('a tidy save keeps the label as it was; Put back restores it as a new version', async () => {
+    const { s, f } = store()
+    await s.listLabels()
+    const before = await s.getLabel('a')
+    const { label: tidied } = await s.saveLabel('a', { ...before, items: [] }, before.version, 'Brent', { tidy: true })
+    expect(tidied.tidied).toMatchObject({ by: 'Brent', fromVersion: 1 })
+    expect(JSON.parse(f.kv.get('labels:prev:a')).items).toHaveLength(1)
+    // An edit after tidying keeps the mark; tidying again keeps the original.
+    const { label: edited } = await s.saveLabel('a', { ...tidied, name: 'Beta 2' }, tidied.version, 'Erin', { tidy: true })
+    expect(edited.tidied.by).toBe('Brent')
+    expect(JSON.parse(f.kv.get('labels:prev:a')).version).toBe(1)
+    const { label: back } = await s.restoreLabel('a', 'Brent')
+    expect(back).toMatchObject({ name: 'Beta', version: 4 })
+    expect(back.items).toHaveLength(1)
+    expect(back.tidied).toBeUndefined()
+    expect(f.kv.has('labels:prev:a')).toBe(false)
+    expect(await s.restoreLabel('a', 'Brent')).toEqual({ nothing: true })
+  })
+})

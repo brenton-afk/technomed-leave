@@ -18,7 +18,8 @@ async function call(token, what, body) {
 
 export const listLabels = token => call(token, 'list')
 export const createLabel = (token, label) => call(token, 'create', { label })
-export const saveLabel = (token, id, label, version) => call(token, 'save', { id, label, version })
+export const saveLabel = (token, id, label, version, opts = {}) => call(token, 'save', { id, label, version, ...(opts.tidy ? { tidy: true } : {}) })
+export const restoreLabel = (token, id) => call(token, 'restore', { id })
 export const deleteLabel = (token, id) => call(token, 'delete', { id })
 export const uploadLogo = (token, name, data) => call(token, 'logo', { name, data })
 

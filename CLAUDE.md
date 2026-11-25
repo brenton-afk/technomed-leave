@@ -2756,6 +2756,36 @@ die-cut gloss labels.
   fabric's optional dependency — else skipped), `api/labels.test.js`.
   Screenshots: `docs/label-screenshots/`.
 
+**Tidy all labels** (Brent, 25 Nov 2026: "sweep all the labels … make all
+the fonts, sizes, orientations etc consistent"; chose option A of
+`claude.ai/artifact/3vCGEyKmTBgDQgTXfLaK1p`). Label Studio → **Tidy all
+labels** (`TidySheet.jsx`, `data-tidy-sheet`): every label before and after,
+those with something to check first, untick to leave one alone, then **Tidy N
+labels** — each saved with `tidy: true` against the version it was made from.
+Rules in `src/labels/tidy.js` (pure, `tidy.test.js`): `readLabel` reads the
+system line, description, size, REF(s), rebate, logos and size bands;
+`tidyLabel` rebuilds — TechnoMed logo top left, the maker's logo(s) top right
+(`MAKERS`; Reform is Reform + E4, Orthofix systems Orthofix + KT), logos
+trimmed of blank space (`LOGO_TRIM` crops, measured once from the seed files —
+SeaSpine's was 80% blank) and sized to the same area, capped at the 5 mm row
+(`logoHeight`); the name the same for every label of a system (`SYSTEMS`,
+"SEASPINE MARINER MIS", Mulish 8 pt bold in the maker's colour), description
+and size 7 pt black, centred; a 0.15 mm line in the maker's colour; `REF` left,
+`REBATE` right only where there is a code (fascial blades, K-wires, guidewires
+have none). Placeholder dots → `____` (`writeIn`, `tidySize`: "4.5 × ____ mm").
+**Device Technologies' logo comes off** (they stop distributing SeaSpine next
+year; the DE… rebate codes are kept until Brent has new ones). **Screw size
+colours** (`SCREW_COLOURS`): a 4 mm band on the left edge into the bleed —
+Diplomat pedicle 4.5 grey, 5.5 burgundy, 6.5 Mariner's yellow, 7.5 royal blue,
+8.5 brown, 9.5 green; Mariner by diameter 4.5 dark grey, 5.5 dark magenta, 6.5
+navy, 7.5 green, 8.5 yellow, 9.5 blue, 10.5 purple; Reform keeps its own. It
+never invents a REF or rebate (a test holds every seeded label to that) and
+tidying twice changes nothing. **Put back** on a tidied card (`labels=restore`,
+`restoreLabel`): the label as it was before tidying is kept at
+`labels:prev:{id}` (the first tidy only) and restored as a new version.
+`summarise` now reads "REBATE EY011" as well as "Rebate Code:", and REF only
+as a word (it read "REFORM" as REF "ORM").
+
 ### Stock on hand preview (Brent only, 22 Nov 2026)
 
 "Wire in these stock on hand modules into my admin portal for now (not

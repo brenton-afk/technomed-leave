@@ -8,10 +8,11 @@ import { colour, text, space, radius, face, border } from '../design/tokens.js'
 import LabelSvg from './LabelSvg.jsx'
 import PrintSheet from './PrintSheet.jsx'
 import { summarise, matchesSearch, blankLabel, duplicateLabel, toHex } from './model.js'
-import { listLabels, createLabel, deleteLabel } from './api.js'
+import { listLabels, createLabel, deleteLabel, restoreLabel } from './api.js'
 import { loadLabelFonts } from './fonts.js'
 
 const LabelEditor = lazy(() => import('./LabelEditor.jsx'))
+const TidySheet = lazy(() => import('./TidySheet.jsx'))
 
 const btn = { ...text('caption'), fontWeight: 600, padding: '7px 12px', borderRadius: radius.control, cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap' }
 const fieldStyle = { ...text('field'), padding: '9px 12px', border: border.hairline, borderRadius: radius.control, boxSizing: 'border-box', background: colour.surface, color: colour.ink }
@@ -31,7 +32,7 @@ function usedColours(labels) {
   return out.slice(0, 18)
 }
 
-function LabelCard({ label, logos, queued, onOpen, onPrint, onQueue, onDuplicate, onDelete }) {
+function LabelCard({ label, logos, queued, onOpen, onPrint, onQueue, onDuplicate, onDelete, onRestore }) {
   const s = summarise(label, logos)
   const [asking, setAsking] = useState(false)
   return (
@@ -56,6 +57,7 @@ function LabelCard({ label, logos, queued, onOpen, onPrint, onQueue, onDuplicate
           <button data-print-one onClick={onPrint} style={{ ...btn, ...face.secondary }}>Print</button>
           <button data-queue aria-pressed={queued} onClick={onQueue} style={{ ...btn, ...(queued ? face.navy : face.secondary) }}>{queued ? '✓ In queue' : '+ Queue'}</button>
           <button data-duplicate onClick={onDuplicate} style={{ ...btn, ...face.secondary }}>Duplicate</button>
+          {label.tidied && <button data-restore onClick={onRestore} title={`Tidied by ${label.tidied.by}`} style={{ ...btn, ...face.secondary }}>Put back</button>}
           {!asking && <button data-delete onClick={() => setAsking(true)} style={{ ...btn, ...face.secondary, color: colour.danger }}>Delete</button>}
           {asking && (
             <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -83,6 +85,7 @@ export default function LabelStudio({ user }) {
   const [printFromQueue, setPrintFromQueue] = useState(false)
   const [queue, setQueue] = useState([])
   const [, setFontsIn] = useState(false)
+  const [tidying, setTidying] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -130,6 +133,13 @@ export default function LabelStudio({ user }) {
       setNotice(`Deleted “${label.name}”.`)
     } catch (err) { setError(`Could not delete — ${err.message}`) }
   }
+  async function restore(label) {
+    try {
+      const { label: back } = await restoreLabel(token, label.id)
+      upsert(back)
+      setNotice(`Put “${back.name}” back as it was before tidying.`)
+    } catch (err) { setError(`Could not put it back — ${err.message}`) }
+  }
   const toggleQueue = label => setQueue(q => (q.some(j => j.label.id === label.id) ? q.filter(j => j.label.id !== label.id) : [...q, { label, qty: 1 }]))
 
   return (
@@ -142,6 +152,7 @@ export default function LabelStudio({ user }) {
           <option value="recent">Recently changed</option>
         </select>
         <button data-new-label onClick={() => setEditing(blankLabel())} style={{ ...btn, ...face.primary, padding: '10px 14px' }}>+ New label</button>
+        <button data-tidy-open disabled={!labels?.length} onClick={() => setTidying(true)} style={{ ...btn, ...face.secondary, padding: '10px 14px' }}>Tidy all labels</button>
         <button data-print-queue disabled={!queue.length} onClick={() => { setPrintFromQueue(true); setPrintJobs(queue) }} style={{ ...btn, ...(queue.length ? face.navy : face.secondary), padding: '10px 14px', opacity: queue.length ? 1 : 0.5 }}>Print queue ({queue.length})</button>
       </div>
       {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, background: colour.dangerSoft, border: `1px solid ${colour.dangerLine}`, borderRadius: radius.control, padding: space.md, marginBottom: space.md }}>{error}</div>}
@@ -157,7 +168,7 @@ export default function LabelStudio({ user }) {
         {shown.map(l => (
           <LabelCard key={l.id} label={l} logos={logos} queued={queue.some(j => j.label.id === l.id)}
             onOpen={() => setEditing(l)} onPrint={() => { setPrintFromQueue(false); setPrintJobs([{ label: l, qty: 1 }]) }} onQueue={() => toggleQueue(l)}
-            onDuplicate={() => duplicate(l)} onDelete={() => remove(l)} />
+            onDuplicate={() => duplicate(l)} onDelete={() => remove(l)} onRestore={() => restore(l)} />
         ))}
       </div>
       {labels && !shown.length && <div style={{ ...text('body'), color: colour.inkFaint, padding: space.xl, textAlign: 'center' }}>No label matches “{query}”.</div>}
@@ -168,6 +179,11 @@ export default function LabelStudio({ user }) {
             onClose={() => setEditing(null)}
             onSaved={saved => { upsert(saved); setQueue(q => q.map(j => (j.label.id === saved.id ? { ...j, label: saved } : j))) }}
             onPrint={current => { setPrintFromQueue(false); setPrintJobs([{ label: current, qty: 1 }]) }} />
+        </Suspense>
+      )}
+      {tidying && (
+        <Suspense fallback={null}>
+          <TidySheet user={user} labels={labels || []} logos={logos} onSaved={upsert} onClose={() => setTidying(false)} />
         </Suspense>
       )}
       {printJobs && (

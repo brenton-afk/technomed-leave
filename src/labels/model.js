@@ -279,8 +279,8 @@ export function pivot(item) {
 
 // ── What the library shows ────────────────────────────────────────────────
 
-const REF_RE = /\bREF\s*[:.]?\s*([A-Z0-9][A-Z0-9\-./]*[A-Z0-9.]|[A-Z0-9])/i
-const REBATE_RE = /\bRebate\s*Code\s*[:.]?\s*([A-Z]{2}\s?\d{2,4}[A-Z]?)/i
+const REF_RE = /\bREF\b\s*[:.]?\s*([A-Z0-9][A-Z0-9\-./]*[A-Z0-9.]|[A-Z0-9])/i
+const REBATE_RE = /\bRebate\s*(?:Code)?\s*[:.]?\s*([A-Z]{2}\s?\d{2,4}[A-Z]?)/i
 
 /** REF and rebate code read from a label's words, and its brand logo. */
 export function summarise(label, logos = {}) {
