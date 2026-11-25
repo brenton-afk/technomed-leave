@@ -2588,6 +2588,94 @@ list", each wrong or unlisted code with **Use {code}**, and "It's from
 {distributor}". Advisory, never a stop, never a price. Saved lines keep
 `listed` (the status) and `rebate` for the stock processes to come.
 
+### Label Studio (Brent, 25 Nov 2026)
+
+"Replace Vistaprint for implant product labels" — then: "It must give us the
+full functionality of the Vistaprint version." Admin → **Labels** (group
+Products; admins only — `labels=` on `api/guides.js` answers anyone else 404,
+no new function). Printed on the Epson ColorWorks CW-C4010A, 68 × 21 mm
+die-cut gloss labels.
+- **Store** (`api/_labels.js`, `labelStore()`, deps injectable for tests):
+  `labels:<id>` (the label + `version`, created/updated by and at),
+  `labels:index` (set of ids), `labels:logos` (`{k: {k, name, w, h, url}}`,
+  the pictures in **Vercel Blob** `labels/logos/…`; one shared library for
+  every label), `labels:deleted` (last 50, whole), `labels:seeded`. A list is
+  SMEMBERS + MGET + GET. **Seeded once** on the first `labels=list` from
+  `api/_labelSeed.js` (94 labels, 10 logos) and `_labelSeedLogos.js` (the
+  PNGs, imported only then), under `labels:seeding` (NX, 120 s); if Blob
+  refuses a seed logo it is kept at `labels:logodata:{k}` and served inline.
+  Both seed files are generated: `node scripts/build-label-seed.mjs
+  export.json` (the export's 20 images are 10 pictures — deduped by hash).
+  `vercel.json` gives guides.js `includeFiles:
+  "{theatre-guides/**,node_modules/@vercel/blob/**}"`.
+- **Actions**: `list`, `create`, `save` (`{id, label, version}` — 409 with
+  `current` if someone saved since; the editor offers Load theirs / Keep
+  mine), `delete`, `logo` (PNG/JPEG ≤ 2 MB, checked by magic bytes,
+  `imageSize`). `sanitiseLabel` (model.js) cuts every save down to the model;
+  a logo is only ever a key in the library, never a URL.
+- **The model** (`src/labels/model.js`, pure, shared with the server):
+  canvas `w × h` mm including bleed (Vistaprint's 70.7 × 23 / 24); items in
+  draw order — `txt` (`runs` of `{text, font, size pt, color, underline,
+  bold, italic}`, `ha`, `lh` line spacing × size, `ls` letter spacing in
+  1/1000 em), `img` (`k`, `crop` fractions), `rect` / `ellipse` / `line`
+  (`fill`, `stroke {color, width mm}`); every item `x y w h rot`, `locked`.
+  Colours are stored `#rrggbb` (CMYK converted r = 255·(1−c)(1−k)).
+  **Trim**: 68 × 21 mm, `TRIM_OFFSETS` (23 mm canvas → 1.35, 1.0; 24 mm →
+  1.35, 1.5) — assumed centred, **not yet checked against a printed
+  Vistaprint label**; change those numbers only. Safe area 1.5 mm.
+  **Import** (`importLabel` / `cleanRuns`): trailing spaces and blank lines
+  dropped, leading blank lines dropped with the box moved down by their
+  height, spaces inside a line kept, the page's white ground dropped.
+  `nameCheck` flags a project name whose "N x Mmm" disagrees with the label
+  — only "Signus Diplomat K-Wire 1.6 x 500mm" (label reads 1.8 x 500mm, REF
+  MACNIT18500; imported as the label reads, `check` shown as **To check**
+  until someone taps Mark as checked and saves).
+- **Fonts** (`public/fonts/labels`, OFL, from fontsource; `fonts.js` adds
+  them with the FontFace API when Label Studio opens): Apertura → **Mulish**,
+  Borges Titulo CE Blanca → **Cormorant Garamond** (its numerals are
+  old-style), Alumni Sans, Alex Brush, Damion as themselves, Arial → Arial /
+  Helvetica. Import maps to these names. Mulish is a little wider than
+  Apertura, so a few long REF/Rebate lines run past the safe area.
+- **Editor = Fabric.js** (`fabric` 6.7.1, the one runtime dependency added,
+  only in the Labels chunk). The saved format is the model; Fabric is
+  reached through `fabricAdapter.js` (pure `itemToSpec` / `objectToItem`:
+  text is an IText, originX = alignment, never wraps, one style per
+  character; images centre-origin with cropX/cropY; scale folded back into
+  sizes) and `editorCanvas.js` (`createObject`, `readAbsolute` — reads an
+  object inside a multi-selection — and `renderLabelPng`). Fabric works in
+  millimetres; zoom is the viewport. **Text turns about its anchor**
+  (`pivot`), shapes and logos about their centre. `LabelEditor.jsx`: inline
+  typing; per-letter font/size/B/I/U/colour (highlight letters while typing);
+  colour swatches (colours used across the labels), picker and CMYK;
+  alignment, line and letter spacing; logo library + upload, swap, crop
+  (ghost picture + frame), keep proportions; rectangles, ellipses, lines;
+  handles, rotate (snaps to 45°), multi-select, snapping with guides
+  (`snap.js`: trim centre/edges, safe area, other items; Alt turns it off),
+  align/distribute, layer order, lock, copy/paste (works across labels),
+  duplicate, delete, nudge 0.1 / Shift 1 mm, undo/redo (`createHistory`,
+  Ctrl/⌘ Z, Shift Z, Y), zoom −/Fit/+, X/Y/W/H/Turn readout in mm from the
+  trim's corner, trim + safe + bleed drawn in `after:render`, rename, save,
+  "Unsaved changes" and a Save / Discard / Keep editing dialog on ✕, the
+  phone's back (`useBackLayer(backToken)` re-arms itself) and page unload.
+  Fabric wraps its canvas, so it sits alone in `[data-editor-canvas]` —
+  React inserting a sibling beside it threw `insertBefore`.
+- **Thumbnails** are SVG (`LabelSvg.jsx`, viewBox in mm) laid out exactly as
+  Fabric lays text (`layoutText`: pitch = size × lh, baseline 0.879 × size).
+- **Print** (`print.js`, `pdf.js`, `PrintSheet.jsx`): each label drawn by
+  Fabric at **600 dpi** (1606 × 496 px, the trim only) → pdf-lib, one label
+  per **68 × 21 mm page (192.756 × 59.528 pt)**, quantity N = N pages, a PNG
+  embedded once. One label, or the **print queue** (+ Queue on cards) of
+  several with a quantity each in one PDF. Print (hidden frame on a
+  computer; share sheet on an iPhone, as tray lists), Download PDF, Open PDF.
+  Print at 100% / Actual size on the Epson's 68 × 21 mm media.
+- Library (`LabelStudio.jsx`): search name / REF / rebate code / brand / any
+  word (`matchesSearch`), sort by name or recently changed (`tm_labels_sort`),
+  New label (`blankLabel`, 70.7 × 23), Duplicate, Delete (asked once).
+- Tests: `src/labels/model.test.js`, `snap.test.js`, `fabricAdapter.test.js`
+  (node; real Fabric via `fabric/node` when node-canvas is installed — it is
+  fabric's optional dependency — else skipped), `api/labels.test.js`.
+  Screenshots: `docs/label-screenshots/`.
+
 ### Stock on hand preview (Brent only, 22 Nov 2026)
 
 "Wire in these stock on hand modules into my admin portal for now (not

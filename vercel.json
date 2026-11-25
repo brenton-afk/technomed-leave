@@ -42,7 +42,7 @@
       "maxDuration": 60
     },
     "api/guides.js": {
-      "includeFiles": "theatre-guides/**",
+      "includeFiles": "{theatre-guides/**,node_modules/@vercel/blob/**}",
       "maxDuration": 60,
       "memory": 1024
     },

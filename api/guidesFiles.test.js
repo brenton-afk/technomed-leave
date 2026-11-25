@@ -100,7 +100,8 @@ describe('the guides endpoint serves pages, not downloads', () => {
     // they are not in the deployment at all and every guide 404s in
     // production while working perfectly here.
     const vercel = JSON.parse(readFileSync(join(__dirname, '..', 'vercel.json'), 'utf8'))
-    expect(vercel.functions['api/guides.js'].includeFiles).toBe('theatre-guides/**')
+    // Brace glob since Label Studio (25 Nov 2026) also needs @vercel/blob.
+    expect(vercel.functions['api/guides.js'].includeFiles).toBe('{theatre-guides/**,node_modules/@vercel/blob/**}')
   })
 })
 

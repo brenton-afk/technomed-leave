@@ -15,6 +15,7 @@ import {
 import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, uploadFile } from './_dropbox.js'
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
+import { labelStore } from './_labels.js'
 import { codesForSystem, codeCounts } from './_resourcePrices.js'
 import { resourceCatalogue, getPicks, setPick, resourcesBySystem, filesFor, openablePath, uploadPathFor, applyResourceAdditions } from './_resources.js'
 import { sendBookingNotice, escapeHtml } from './_email.js'
@@ -172,6 +173,8 @@ export default async function handler(req, res) {
   if (req.query.resources) return handleResources(req, res, session)
   // The distributor price lists the portal keeps (api/_priceStore.js). Admins only.
   if (req.query.prices) return handlePrices(req, res, session)
+  // Label Studio: implant product labels, made and printed here (api/_labels.js). Admins only.
+  if (req.query.labels) return handleLabels(req, res, session)
 
   const slug = String(req.query.guide || '').trim()
 
@@ -626,6 +629,43 @@ function dropboxRedirectUri(req) {
   if (process.env.DROPBOX_REDIRECT_URI) return process.env.DROPBOX_REDIRECT_URI
   const host = req.headers['x-forwarded-host'] || req.headers.host
   return `https://${host}/api/dropbox/callback`
+}
+
+/**
+ * Admin → Labels (Brent, 25 Nov 2026). list | save | create | delete | logo.
+ * Admins only; anyone else gets the same 404 as a missing route.
+ */
+async function handleLabels(req, res, session) {
+  const staff = STAFF.find(s => s.email === session.email)
+  if (!staff?.isAdmin) return res.status(404).json({ error: 'Not found' })
+  const store = labelStore()
+  const what = String(req.query.labels)
+  const by = staff.firstName || staff.name
+  try {
+    if (what === 'list') return res.status(200).json(await store.listLabels())
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    if (what === 'create') return res.status(200).json({ label: await store.createLabel(body.label, by) })
+    if (what === 'save') {
+      const out = await store.saveLabel(String(body.id || ''), body.label, body.version, by)
+      if (out.missing) return res.status(404).json({ error: 'That label has been deleted' })
+      if (out.conflict) return res.status(409).json({ error: `${out.current.updatedBy || 'Someone'} saved this label while you had it open`, current: out.current })
+      return res.status(200).json(out)
+    }
+    if (what === 'delete') {
+      const out = await store.deleteLabel(String(body.id || ''), by)
+      if (out.missing) return res.status(404).json({ error: 'That label has already been deleted' })
+      return res.status(200).json(out)
+    }
+    if (what === 'logo') {
+      const out = await store.addLogo(body, by)
+      if (out.error) return res.status(400).json(out)
+      return res.status(200).json(out)
+    }
+    return res.status(400).json({ error: 'Unknown label action' })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
 }
 
 /**

@@ -13,6 +13,9 @@ import PriceLists from './PriceLists.jsx'
 import BrainlabInvoice from './BrainlabInvoice.jsx'
 // Brent only, and loaded only when opened (22 Nov 2026).
 const StockPreview = lazy(() => import('./stock/StockPreview.jsx'))
+// Label Studio (Brent, 25 Nov 2026): implant labels, made and printed here.
+// Its own chunk — and Fabric, its editor, another one inside it.
+const LabelStudio = lazy(() => import('../../labels/LabelStudio.jsx'))
 const STOCK_TITLES = { main: 'Stock on hand', item: 'Find an implant', resupply: 'Resupply and back orders', phoneResupply: 'Waiting on distributors', billing: 'Case billing from usage', stocktake: 'Stocktake · choose a tray', count: 'Stocktake · count a tray', review: 'Stocktake · differences', teach: 'Teach the portal a tray', restock: 'Restock a tray', leader: 'Which trays to open', flow: 'How stock moves' }
 import { Header, Body, NavGroup, NavCard } from '../../design/Shell.jsx'
 import { IconLeave, IconClock, IconWallet, IconChart, IconChat, IconFile, IconLock, IconAdmin, IconStock } from '../../design/icons.jsx'
@@ -107,7 +110,7 @@ function LeaveBalances({ who, balances }) {
 // The admin sections: id, chip label, page title.
 const SECTIONS = [
   ['leave', 'Leave', 'Leave applications'], ['timesheets', 'Timesheets', 'Timesheets'], ['toil', 'TOIL', 'TOIL'],
-  ['invoices', 'Invoices', 'Invoices & quotes'], ['brainlab', 'Brainlab', 'Brainlab invoice'], ['prices', 'Price lists', 'Price lists'], ['notices', 'Notices', 'Supplier notices'], ['email', 'Email', 'Sent email'],
+  ['invoices', 'Invoices', 'Invoices & quotes'], ['brainlab', 'Brainlab', 'Brainlab invoice'], ['prices', 'Price lists', 'Price lists'], ['labels', 'Labels', 'Label Studio'], ['notices', 'Notices', 'Supplier notices'], ['email', 'Email', 'Sent email'],
   ['pins', 'Staff PINs', 'Staff PINs'], ['system', 'System', 'System']
 ]
 
@@ -287,6 +290,9 @@ export default function AdminPortal({ user, section, onExit }) {
               <NavCard icon={IconChart} tint="navy" label="Commissions" detail="Worked out from Xero before the 1st of each month" onClick={() => setDomain('commissions')} />
             )}
           </NavGroup>
+          <NavGroup label="Products">
+            <NavCard icon={IconStock} tint="sky" label="Labels" detail="Every implant label — edit, make new ones and print on the Epson" onClick={() => setDomain('labels')} />
+          </NavGroup>
           {canStock && (
             <NavGroup label="Trying out">
               <NavCard icon={IconStock} tint="teal" label="Stock on hand (preview)" detail="The stock mock-ups as screens to try — only you see this" onClick={() => setDomain('stock')} />
@@ -313,6 +319,7 @@ export default function AdminPortal({ user, section, onExit }) {
         {domain === 'invoices' && <Invoices user={user} />}
         {domain === 'prices' && <PriceLists user={user} />}
         {domain === 'brainlab' && <BrainlabInvoice user={user} />}
+        {domain === 'labels' && <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:'#6b7a8d' }}>Loading…</div>}><LabelStudio user={user} /></Suspense>}
         {domain === 'commissions' && canCommission && <Commissions user={user} />}
         {domain === 'stock' && canStock && <Suspense fallback={<div style={{ padding:40, textAlign:'center', color:'#6b7a8d' }}>Loading…</div>}><StockPreview open={stockScreen} onOpen={setStockScreen} /></Suspense>}
         {domain === 'leave' && <>
