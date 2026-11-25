@@ -680,6 +680,21 @@ sheet and MTAA hospitality record (cost, share, per head, healthcare
 professionals) download as CSV. The invite (picture or PDF ≤ 3 MB) is filed at
 `/Admin/Events/{id}/`. Not yet: automatic reminders, QR check-in (check-in is
 by name), SMS replies coming back. `api/events.test.js`, `src/events/model.test.js`.
+**Photos on the Events page** (Brent, 26 Nov 2026: "search some photos on
+Dropbox from our team and include these in the Events page … from the ten year
+anniversary party and other labs"). Me → Events opens on a photo hero moving
+through the best of them, a picture card per kind of event to start one, events
+as cards with a date badge, a countdown and a coming / invited bar, past events
+in a strip, and a **Memories** gallery with a full-screen viewer
+(`pages/events/photos.jsx`); each event opens on its own photo hero with the
+replies at a glance and its sections as pills (`EventPage.jsx`). The photos are
+hand-picked Dropbox files listed in `api/_eventPhotos.js` (`ALBUMS`, `PHOTOS`;
+the page gets ids and captions, never paths — `gallery()`) and served by
+`events=photo&id=` on `api/guides.js` as Dropbox thumbnails (`thumbnail()` in
+`_dropbox.js`, `size=large` for the viewer), to people with Events access only;
+only listed ids are opened. **They are never copied into this repo, which is
+public.** Lab photos are of the team and the room, never a specimen or an
+operative field. `api/eventPhotos.test.js`.
 
 ### Supplier booking notices (Tasks 8/9)
 
@@ -2772,6 +2787,22 @@ die-cut gloss labels.
   (node; real Fabric via `fabric/node` when node-canvas is installed — it is
   fabric's optional dependency — else skipped), `api/labels.test.js`.
   Screenshots: `docs/label-screenshots/`.
+
+**Print onto blank label sheets, filled** (Brent, 26 Nov 2026: "print these
+labels onto multi-label glossy sheets … generate the right number of labels
+onto the right sized sheet"). On A4, `PrintSheet.jsx` offers the label's own
+Avery layout or a blank sheet from `src/labels/sheetStocks.js` (`STOCKS`: Avery
+L7765 gloss 8-up, 980014 gloss 14-up — layout estimated, `check`, test print
+first — L7165, L7163, J8162 / L7162, L7160, L7169, L7168, L7651; `stocksFor`
+puts the sheets the design fits first), remembered per label
+(`tm_label_stock:{id}`). One label **fills the sheet** from the start place by
+itself until a quantity is typed (**Fill the sheet** puts it back); a picture
+of the sheet (`data-sheet-picture`) shows the places that print. `fitInSlot`
+draws a smaller design at actual size, centred (or enlarged, **Enlarge the
+design to fill each label**, `tm_label_fill`), and shrinks a bigger one,
+proportions kept; **Line up with the sheet** nudges every label in mm
+(`tm_label_offset`, ±10). `sheetFor` in `print.js` picks the layout;
+`placeOnSheets` in `pdf.js` takes `fit` and `offset`. `sheetStocks.test.js`.
 
 **Tidy all labels** (Brent, 25 Nov 2026: "sweep all the labels … make all
 the fonts, sizes, orientations etc consistent"; chose option A of
