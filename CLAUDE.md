@@ -587,7 +587,10 @@ strip says it). A calendar note about a person — "Toni - TM office", "Aimee -
 Brainlab Training MELB" — now sets their who's-where status (`noteStatus` in
 `whosWhere.js`: first name, a dash, office words → Office, training / course /
 conference / a city → Training with the rest as where; after leave and away and
-a status added in the portal, before theatre from the bookings).
+a status added in the portal, before theatre from the bookings). Then (same day: "The team tap page should have killed those things"):
+Also on today lists only what who's where does not already say —
+`otherItemsWorthListing` drops notes about a person, leave, and the daily List
+Order call.
 
 ### Who's where (option B, Brent 25 Nov 2026)
 

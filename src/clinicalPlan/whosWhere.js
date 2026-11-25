@@ -153,6 +153,18 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
   })
 }
 
+/**
+ * The day's other calendar items still worth listing in the Team sheet: not a
+ * note about where someone is (who's where says it), not leave, and not the
+ * daily List Order call (Brent, 25 Nov 2026: "The team tap page should have
+ * killed those things").
+ */
+export function otherItemsWorthListing(items = [], people = WHO_PEOPLE) {
+  return items.filter(item => item.kind !== 'leave'
+    && !/^\s*list order\b/i.test(String(item.title || item.text || ''))
+    && !people.some(person => noteStatus(person, [item])))
+}
+
 /** The whole-team page's groups, in the mock-up's order. */
 export function groupWhosWhere(rows) {
   const order = [

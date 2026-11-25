@@ -26,6 +26,7 @@ import EditBooking, { prefetchBooking } from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
 import TeamSheet, { TeamButton } from './cases/TeamSheet.jsx'
+import { otherItemsWorthListing } from '../clinicalPlan/whosWhere.js'
 import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import CaseSearch, { SearchButton } from './cases/CaseSearch.jsx'
@@ -2404,7 +2405,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onChanged={() => { loadStatuses(); load(window_, { quiet: true }) }}
           jobs={kitJobs(dayPlan?.tasks)}
           renderJob={task => <TaskRow task={task} onDone={t => { setTeamOpen(false); openTaskSheet(t) }} />}
-          also={[...(dayPlan?.nonSurgeonItems || []), ...(dayPlan?.otherRollup || [])].filter(i => i.kind !== 'leave')}
+          also={otherItemsWorthListing([...(dayPlan?.nonSurgeonItems || []), ...(dayPlan?.otherRollup || [])])}
           renderItem={item => <ItemRow item={item} />}
           onAddTask={() => { setTeamOpen(false); setAddingTask(activeDay) }}
           onInbox={() => { setTeamOpen(false); setShowQueue(true) }}

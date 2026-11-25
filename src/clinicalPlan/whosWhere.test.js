@@ -69,3 +69,15 @@ describe('a calendar note says where someone is (Brent, 25 Nov 2026)', () => {
     expect(noteStatus(toni, [{ title: 'List Order' }, { title: 'Aimee - office' }])).toBeNull()
   })
 })
+
+import { otherItemsWorthListing } from './whosWhere.js'
+describe('the Team sheet lists only what who\'s where does not already say', () => {
+  it('drops notes about people, leave and the daily List Order call', () => {
+    const items = [
+      { title: 'Toni - TM office' }, { title: 'Aimee - Brainlab Training MELB' },
+      { title: 'List Order', time: '4:00pm–4:30pm' }, { title: 'Ben - ANNUAL LEAVE', kind: 'leave' },
+      { title: 'Signus product in-service' }
+    ]
+    expect(otherItemsWorthListing(items, [{ firstName: 'Toni' }, { firstName: 'Aimee' }]).map(i => i.title)).toEqual(['Signus product in-service'])
+  })
+})
