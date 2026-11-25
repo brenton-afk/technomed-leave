@@ -72,6 +72,9 @@ export default function Contacts({ user, onBack, pick = null }) {
   const [editing, setEditing] = useState(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [phoneOnly, setPhoneOnly] = useState(null)
+  const [ticked, setTicked] = useState(new Set())
+  const [adding, setAdding] = useState(false)
   const vcfInput = useRef(null)
   const listInput = useRef(null)
 
@@ -89,9 +92,11 @@ export default function Contacts({ user, onBack, pick = null }) {
     setNotice(''); setError('')
     try {
       const cards = parseVcf(await file.text())
-      const { updates, unmatched } = matchPhoneContacts(contacts || [], cards)
+      const { updates, work } = matchPhoneContacts(contacts || [], cards)
       const { filled } = await api.phoneMobiles(updates)
-      setNotice(`Phone contacts read: ${filled} mobile${filled === 1 ? '' : 's'} added to people already here. ${unmatched} phone contacts not in the list were left out.`)
+      setNotice(`Phone contacts read: ${filled} mobile${filled === 1 ? '' : 's'} added to people already here.${work.length ? ` ${work.length} work contacts are only in your phone — tick who to add below.` : ''} Everyone else in your phone was left out.`)
+      setPhoneOnly(work)
+      setTicked(new Set(work.filter(w => w.suggested).map(w => w.key)))
       load()
     } catch (err) { setError(err.message) }
   }
@@ -105,6 +110,19 @@ export default function Contacts({ user, onBack, pick = null }) {
       load()
     } catch (err) { setError(err.message) }
   }
+
+  async function addPhoneOnly() {
+    setAdding(true); setError('')
+    try {
+      const list = phoneOnly.filter(w => ticked.has(w.key))
+        .map(({ name, mobile, email, group, hospital, title }) => ({ name, mobile, email, group, hospital, title, tags: ['From phone'] }))
+      const r = await api.importContacts(list, 'phone')
+      setNotice(`${r.added} added from your phone. ${r.total} contacts now.`)
+      setPhoneOnly(null)
+      load()
+    } catch (err) { setError(err.message) } finally { setAdding(false) }
+  }
+  const tick = key => setTicked(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
 
   const toggle = id => setChosen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const taken = new Set(pick?.already || [])
@@ -125,6 +143,36 @@ export default function Contacts({ user, onBack, pick = null }) {
         )}
         {notice && <Banner tone="success">{notice}</Banner>}
         {error && <Banner tone="danger">{error}</Banner>}
+        {phoneOnly?.length > 0 && !pick && (
+          <div data-phone-only style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, padding: space.md, marginBottom: space.md }}>
+            <div style={{ ...text('heading'), color: colour.ink }}>Only in your phone</div>
+            <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
+              Work contacts with a mobile that aren&rsquo;t in the list. Clinical staff are ticked; reps and anything unclear are not. Nobody is added until you tap Add.
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: space.sm }}>
+              <button type="button" style={btn()} onClick={() => setTicked(new Set(phoneOnly.map(w => w.key)))}>Tick all</button>
+              <button type="button" style={btn()} onClick={() => setTicked(new Set())}>Untick all</button>
+              <button type="button" style={btn()} onClick={() => setPhoneOnly(null)}>Not now</button>
+            </div>
+            {GROUPS.filter(g => phoneOnly.some(w => w.group === g)).map(g => (
+              <div key={g} style={{ marginBottom: space.sm }}>
+                <div style={{ ...text('micro'), color: colour.inkFaint, textTransform: 'uppercase', margin: `${space.sm}px 0 4px` }}>{g} · {phoneOnly.filter(w => w.group === g).length}</div>
+                {phoneOnly.filter(w => w.group === g).map(w => (
+                  <label key={w.key} data-phone-only-row style={{ display: 'flex', gap: space.sm, alignItems: 'center', padding: '6px 0', borderTop: `1px solid ${colour.line}`, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={ticked.has(w.key)} onChange={() => tick(w.key)} style={{ width: 20, height: 20, fontSize: 16, flexShrink: 0 }} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', ...text('bodyStrong'), color: colour.ink }}>{w.name}</span>
+                      <span style={{ display: 'block', ...text('caption'), color: colour.inkFaint, overflowWrap: 'anywhere' }}>{[w.title, showMobile(w.mobile)].filter(Boolean).join(' · ')}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ))}
+            <button type="button" data-phone-only-add disabled={adding || !ticked.size} style={{ ...btn(true), width: '100%', marginTop: space.sm, opacity: adding || !ticked.size ? 0.6 : 1 }} onClick={addPhoneOnly}>
+              {adding ? 'Adding…' : `Add ${ticked.size} to contacts`}
+            </button>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: space.sm }}>
           {['All', ...GROUPS].map(g => (

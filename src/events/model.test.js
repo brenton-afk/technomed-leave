@@ -58,7 +58,7 @@ describe('phone contacts', () => {
       { id: '3', name: 'Cat Nurse', email: 'cat@hosp.example', mobile: '+61400000003' }
     ]
     const { updates, unmatched } = matchPhoneContacts(contacts, parseVcf(vcf))
-    expect(updates).toEqual([
+    expect(updates.map(({ id, mobile, from }) => ({ id, mobile, from }))).toEqual([
       { id: '1', mobile: '+61400000001', from: 'phone' },
       { id: '2', mobile: '+61400000002', from: 'phone' }
     ])
@@ -93,5 +93,45 @@ describe('little things', () => {
     const ics = icsFor({ id: 'e1', title: 'Dinner, with friends', start: '2026-12-04T08:00:00.000Z', venue: 'Somewhere' }, 'https://x/e/t')
     expect(ics).toMatch(/DTSTART:20261204T080000Z/)
     expect(ics).toMatch(/SUMMARY:Dinner\\, with friends/)
+  })
+})
+
+describe('phone contacts: nicknames, bracketed names, work contacts only in the phone (25 Nov 2026)', () => {
+  const list = [
+    { id: 'a', name: 'Dr Matthew (Matt) Belford', email: 'mb@x.au' },
+    { id: 'b', name: 'Cate (Cathryn) Farrell', email: 'cf@x.au' },
+    { id: 'c', name: 'Michael Creavin', email: 'mc@x.au' },
+    { id: 'd', name: 'Dr P. Scott Mackie (prefers Scott)', email: 'sm@x.au' },
+    { id: 'e', name: 'RHH DMI Chief Radiographer', email: 'dmi@x.au' },
+    { id: 'f', name: 'Sandra Morgan', email: 'sandra@x.au' }
+  ]
+  const card = (name, phone, org = '') => ({ name, org, title: '', emails: [], phones: [phone] })
+
+  it('matches a short first name, a bracketed one and a middle name', () => {
+    const { updates } = matchPhoneContacts(list, [
+      card('Matt Belford', '0400 000 001'), card('Cate Farrell', '0400 000 002'),
+      card('Mike Creavin', '+61 0400 000 003'), card('Scott Mackie', '0400000004')
+    ])
+    expect(Object.fromEntries(updates.map(u => [u.id, u.mobile]))).toEqual({
+      a: '+61400000001', b: '+61400000002', c: '+61400000003', d: '+61400000004'
+    })
+  })
+
+  it('never guesses: a role is not a person, Sam is not Sandra', () => {
+    const { updates } = matchPhoneContacts(list, [card('RHH Radiographer', '0400 000 005'), card('Sam Morgan', '0400 000 006', 'RHH Ortho Registrar')])
+    expect(updates).toEqual([])
+  })
+
+  it('lists work contacts only in the phone — clinical ticked, reps not, personal left out', () => {
+    const { work } = matchPhoneContacts(list, [
+      card('Sam Morgan', '0400 000 006', 'RHH Ortho Registrar'),
+      card('Jo Rep', '0400 000 007', 'Stryker'),
+      card('Geoff Ward', '0400 000 008', 'Boofa'),
+      card('Aunty Sue', '0400 000 009')
+    ])
+    expect(work.map(w => [w.name, w.group, w.hospital, w.suggested])).toEqual([
+      ['Sam Morgan', 'Registrar/Fellow', 'RHH', true],
+      ['Jo Rep', 'Rep/Partner', '', false]
+    ])
   })
 })

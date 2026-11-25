@@ -649,7 +649,24 @@ what the form asks, in its shapes — `summarise`, `parseVcf`,
 `{key}:lock`. Only admins start or delete an event; organisers are chosen per
 event. **Contacts come from email first** (Brent: "Choose contacts that cross
 reference with my email first … forget others") — a phone `.vcf` only fills
-mobiles for people already in the list, never adds anyone. Import a list takes
+mobiles for people already in the list, never adds anyone by itself.
+**Phone matching, second pass** (Brent, same day: "a lot of the phone numbers
+haven't matched"): the list's names carry titles and brackets ("Dr Matthew
+(Matt) Belford") and the phone has "Matt Belford", so a full-name match found
+51 of 281. `nameForms` in `src/events/model.js` gives every "first surname" a
+contact could be saved under — titles off, a bracketed nickname or second
+surname, a middle name gone by ("P. Scott Mackie"), short and long first names
+(`NICKNAMES`, both ways) — against the card's first and last word; a name two
+people could share is never guessed, a role ("RHH DMI Chief Radiographer") is
+not a person (`NOT_A_PERSON`), and "+61 0438 …" now reads as a mobile. On his
+phone: 62 matched. The rest of the gap is people who are only in the phone:
+`matchPhoneContacts` also returns `work` — unmatched cards with a mobile whose
+org or title says a hospital, role or distributor (`WORK`; a name only when it
+is a role, `NAME_WORK`), each with a group (`phoneGroup`) and hospital — and
+Contacts shows them under **Only in your phone** (`data-phone-only`), clinical
+staff ticked, reps and the unclear not, **Add N to contacts** (tag "From
+phone"). Nothing is added without that tap. `importContacts` treats the same
+mobile as the same person when there is no email, so adding twice adds once. Import a list takes
 CSV (a `Keep?` column's No rows skipped) or the email sweep's JSON. **Sending**
 (`sendToGuests`): email as the organiser (`sendEventEmail`, letterhead label
 Invitation / Reminder, each guest's own link, an unsubscribe line) and SMS

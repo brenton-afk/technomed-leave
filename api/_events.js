@@ -122,10 +122,13 @@ export async function importContacts(list, source) {
   return withLock(CONTACTS, async () => {
     const all = await readJson(CONTACTS, [])
     const byEmail = new Map(all.filter(c => c.email).map(c => [c.email, c]))
+    // Someone added from a phone has no email: the same mobile is the same person.
+    const byMobile = new Map(all.filter(c => c.mobile).map(c => [c.mobile, c]))
     let added = 0; let merged = 0
     for (const raw of (Array.isArray(list) ? list : []).slice(0, 3000)) {
       const email = lower(raw.email)
-      const hit = email && byEmail.get(email)
+      const mobile = normaliseMobile(raw.mobile)
+      const hit = (email && byEmail.get(email)) || (!email && mobile && byMobile.get(mobile))
       const keep = Object.fromEntries(Object.entries(raw).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length)))
       if (hit) {
         Object.assign(hit, cleanContact({ ...keep, sources: [source] }, hit))
@@ -133,7 +136,7 @@ export async function importContacts(list, source) {
       } else {
         const c = cleanContact({ ...keep, sources: [source] })
         if (!c.name || (!c.email && !c.mobile)) continue
-        all.push(c); if (c.email) byEmail.set(c.email, c); added++
+        all.push(c); if (c.email) byEmail.set(c.email, c); if (c.mobile) byMobile.set(c.mobile, c); added++
       }
     }
     await writeJson(CONTACTS, all)

@@ -164,6 +164,7 @@ export function summarise(event) {
 export function normaliseMobile(raw) {
   const d = String(raw || '').replace(/[^\d+]/g, '')
   if (!d) return ''
+  if (d.startsWith('+610')) return `+61${d.slice(4)}` // "+61 0438 …"
   if (d.startsWith('+')) return d
   if (d.startsWith('614') && d.length === 11) return `+${d}`
   if (d.startsWith('04') && d.length === 10) return `+61${d.slice(1)}`
@@ -206,28 +207,139 @@ const nameKey = s => String(s || '').toLowerCase()
   .replace(/[^a-z\s'-]/g, ' ').replace(/\s+/g, ' ').trim()
 
 /**
+ * Short and long forms of a first name, both ways (Brent, 25 Nov 2026: the
+ * phone has "Matt Belford", the list "Dr Matthew (Matt) Belford").
+ */
+const NICKNAMES = [
+  ['matthew', 'matt', 'mat'], ['michael', 'mike', 'mick'], ['daniel', 'dan', 'danny'], ['samuel', 'sam'],
+  ['samantha', 'sam', 'sammy'], ['sandra', 'sandy'], ['jennifer', 'jenny', 'jen'], ['catherine', 'cate', 'cathy', 'kate'],
+  ['cathryn', 'cate', 'cath'], ['kathryn', 'kate', 'kath'], ['katherine', 'kate', 'kath'], ['christopher', 'chris'],
+  ['andrew', 'andy', 'drew'], ['anthony', 'tony'], ['benjamin', 'ben'], ['nicholas', 'nick', 'nic'], ['nicola', 'nic', 'nicky'],
+  ['william', 'will', 'bill'], ['robert', 'rob', 'bob'], ['richard', 'rich', 'rick'], ['stephen', 'steve'], ['steven', 'steve'],
+  ['timothy', 'tim'], ['thomas', 'tom'], ['jonathan', 'jon', 'jono'], ['joseph', 'joe'], ['james', 'jim', 'jimmy'],
+  ['alexander', 'alex'], ['alexandra', 'alex', 'lexi'], ['elizabeth', 'liz', 'lizzie', 'beth'], ['rebecca', 'bec', 'becky'],
+  ['victoria', 'vic', 'tori'], ['patricia', 'trish', 'pat'], ['margaret', 'maggie', 'meg'], ['phillip', 'phil'], ['philip', 'phil'],
+  ['edward', 'ed', 'ted'], ['gregory', 'greg'], ['jeremy', 'jez'], ['zachary', 'zac', 'zack'], ['jessica', 'jess'],
+  ['natalie', 'nat'], ['natasha', 'tash'], ['peter', 'pete'], ['david', 'dave'], ['kimberley', 'kim'], ['kimberly', 'kim'],
+  ['abigail', 'abbey', 'abby'], ['sarah', 'sara'], ['philippa', 'pip', 'pippa'], ['deborah', 'deb'], ['susan', 'sue'],
+  ['geoffrey', 'geoff'], ['jeffrey', 'jeff'], ['douglas', 'doug'], ['frederick', 'fred'], ['raymond', 'ray']
+]
+const NICK = new Map()
+for (const group of NICKNAMES) for (const n of group) NICK.set(n, new Set([...(NICK.get(n) || []), ...group]))
+const firstForms = f => [...(NICK.get(f) || [f])]
+
+/**
+ * Every "first surname" a contact could be saved under in a phone: titles
+ * off, a bracketed name read as a nickname ("Matthew (Matt)") or a second
+ * surname ("Andrea Haines (Hammond)"), middle names and initials ignored, and
+ * the usual short and long forms of the first name.
+ */
+/** Words that make a name a place or a role, not a person ("RHH DMI Chief Radiographer"). */
+const NOT_A_PERSON = /\b(rhh|lgh|nwrh|calvary|hospital|theatre|theatres|stores|admin|bookings|radiographer|radiology|dmi|desk|reception|team|department|unit|ward|office|cssd|loans|accounts|services|clinic)\b/i
+
+export function nameForms(raw) {
+  const s = String(raw || '')
+  if (NOT_A_PERSON.test(s)) return []
+  const bracket = (/\(([^)]*)\)/.exec(s)?.[1] || '').replace(/^prefers\s+/i, '')
+  const words = nameKey(s.replace(/\([^)]*\)/g, ' ')).split(' ').filter(w => w && w.length > 1 || /^[a-z]{2,}/.test(w))
+  if (words.length < 2) return []
+  const firsts = new Set([words[0]])
+  const lasts = new Set([words[words.length - 1]])
+  // "P. Scott Mackie" — goes by the middle name.
+  if (words.length > 2) firsts.add(words[1])
+  for (const b of nameKey(bracket).split(' ').filter(Boolean)) {
+    if (bracket.trim().split(/\s+/).length === 1 && !NICK.has(b) && b.length > 2 && words.length >= 2 && /^[A-Z]/.test(bracket.trim()) && !firstForms(words[0]).includes(b)) {
+      // A one-word bracket that is not a short name: a nickname if it looks like a first name, else a maiden name.
+      firsts.add(b); lasts.add(b)
+    } else firsts.add(b)
+  }
+  const out = new Set()
+  for (const f of firsts) for (const ff of firstForms(f)) for (const l of lasts) if (ff !== l) out.add(`${ff} ${l}`)
+  return [...out]
+}
+
+/** A phone card's own "first surname": the first and last words of its name. */
+function cardKey(name) {
+  const words = nameKey(name).split(' ').filter(Boolean)
+  return words.length >= 2 ? `${words[0]} ${words[words.length - 1]}` : ''
+}
+
+/**
  * Phone contacts matched to people already in the list — by email first, then
- * by full name. Unmatched phone contacts are never added (Brent, 25 Nov 2026).
- * Returns the updates (a mobile filled in where the contact had none) and how
- * many were left out.
+ * by name (`nameForms`: nicknames, bracketed names and middle names allowed for).
+ * A name two people in the list could both be is never guessed. Unmatched
+ * phone contacts are never added (Brent, 25 Nov 2026). Returns the updates (a
+ * mobile filled in where the contact had none, with `how` and the phone's
+ * name) and how many were left out.
  */
 export function matchPhoneContacts(contacts, cards) {
   const byEmail = new Map()
   const byName = new Map()
   for (const c of contacts) {
     for (const e of [c.email, ...(c.otherEmails || [])].filter(Boolean)) byEmail.set(e.toLowerCase(), c)
-    const k = nameKey(c.name)
-    if (k.includes(' ')) byName.set(k, byName.has(k) ? null : c) // two of the same name: no guess
+    for (const k of nameForms(c.name)) byName.set(k, byName.has(k) && byName.get(k) !== c ? null : c) // two people: no guess
   }
   const updates = []
+  const seen = new Map()
   let unmatched = 0
   for (const card of cards) {
-    const hit = card.emails.map(e => byEmail.get(e)).find(Boolean) || byName.get(nameKey(card.name))
-    if (!hit) { unmatched++; continue }
     const mobile = card.phones.map(normaliseMobile).find(p => /^\+614\d{8}$/.test(p))
-    if (mobile && !hit.mobile) updates.push({ id: hit.id, mobile, from: 'phone' })
+    const byMail = card.emails.map(e => byEmail.get(e)).find(Boolean)
+    const hit = byMail || byName.get(cardKey(card.name))
+    if (!hit) { unmatched++; continue }
+    if (!mobile || hit.mobile) continue
+    // Two phone cards for one person with different mobiles: leave it to a person.
+    if (seen.has(hit.id)) { if (seen.get(hit.id).mobile !== mobile) seen.get(hit.id).conflict = true; continue }
+    const u = { id: hit.id, mobile, from: 'phone', how: byMail ? 'email' : 'name', card: card.name }
+    seen.set(hit.id, u)
+    updates.push(u)
   }
-  return { updates, unmatched }
+  return { updates: updates.filter(u => !u.conflict), unmatched, work: workCards(cards, contacts, byEmail, byName) }
+}
+
+const WORK = /\b(rhh|royal hobart|calvary|lenah valley|st johns|lgh|launceston general|nwrh|hobart private|hospital|theatres?|reg|registrar|fellow|resident|intern|nurse|anum|num|cnc|scrub|cssd|stores|loans|ward|icu|radiograph\w*|anaesthe\w*|surgeon|neurosurg\w*|ortho\w*|neuro\w*|spine|spinal|max ?fax|omfs|ent|plastics|consultant|clinic|clinical|theatre tech|device technologies|e4 surgical|signus|depuy|synthes|stryker|medtronic|globus|kt medical|evolution surgical|brainlab|seaspine|orthofix|zimmer|smith ?& ?nephew|national surgical)\b/i
+
+const NAME_WORK = /\b(rhh|calvary|st johns|lgh|cssd|radiographer|nurse|reg|scrub|anum|floor coordinator|loans|theatre)\b/i
+
+/** Which group a phone contact's own words put them in. */
+export function phoneGroup(card) {
+  const t = `${card.org || ''} ${card.title || ''} ${card.name || ''}`
+  if (/\b(reg|registrar|fellow|resident|intern)\b/i.test(t)) return 'Registrar/Fellow'
+  if (/\b(device technologies|e4|signus|depuy|synthes|stryker|medtronic|globus|kt medical|evolution|brainlab|seaspine|orthofix|zimmer|nephew|national surgical|orthotech|surgical|sales|product specialist|product manager|territory)\b/i.test(t)) return 'Rep/Partner'
+  if (/\b(surgeon|neurosurgeon|anaesthetist|neuro-?interventionist)\b|\b(ortho\w*|neuro\w*|spine|spinal)\s+consultant\b/i.test(t)) return 'Surgeon'
+  if (/\b(stores|loans|booking|floor coordinator|theatre coordinator)\b/i.test(t)) return 'Hospital admin'
+  if (/\b(nurse|anum|num|cnc|scrub|theatre|cssd|tech|radiograph\w*|ward|icu)\b/i.test(t)) return 'Theatre/Nursing'
+  return 'Other'
+}
+
+const HOSPITAL_WORDS = [[/\b(rhh|royal hobart)\b/i, 'RHH'], [/\b(calvary|lenah valley|st johns)\b/i, 'Calvary'], [/\b(lgh|launceston general)\b/i, 'LGH'], [/hobart private/i, 'Hobart Private'], [/\bnwrh\b/i, 'NWRH']]
+
+/**
+ * Work contacts that are only in the phone (Brent, 25 Nov 2026: "a bunch of
+ * the mobile phone numbers haven't come across" — registrars, theatre staff
+ * and reps he texts but never emails). Never added by themselves: shown for a
+ * person to tick. Clinical people come ticked, reps and anything else not.
+ */
+function workCards(cards, contacts, byEmail, byName) {
+  const out = new Map()
+  for (const card of cards) {
+    if (card.emails.some(e => byEmail.has(e)) || byName.get(cardKey(card.name))) continue
+    const mobile = card.phones.map(normaliseMobile).find(p => /^\+614\d{8}$/.test(p))
+    // The org and title say where someone works; a name only when it is a role ("Calvary Loans", "Rhh nurse").
+    if (!mobile || !card.name || !(WORK.test(`${card.org} ${card.title}`) || NAME_WORK.test(card.name))) continue
+    if (contacts.some(c => c.mobile === mobile)) continue
+    const key = `${nameKey(card.name)}|${mobile}`
+    if (out.has(key)) continue
+    const group = phoneGroup(card)
+    const where = `${card.org} ${card.title}`
+    out.set(key, {
+      key, name: card.name.replace(/\s+/g, ' ').trim(), mobile, email: card.emails[0] || '',
+      group, hospital: HOSPITAL_WORDS.find(([re]) => re.test(where))?.[1] || '',
+      title: [card.title, card.org].filter(Boolean).join(' · ').slice(0, 100),
+      suggested: ['Surgeon', 'Registrar/Fellow', 'Theatre/Nursing', 'Hospital admin'].includes(group)
+    })
+  }
+  return [...out.values()].sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.name.localeCompare(b.name))
 }
 
 /** Escaped for an .ics line. */
