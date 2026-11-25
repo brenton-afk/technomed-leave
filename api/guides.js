@@ -12,7 +12,8 @@ import {
   getCouriers, saveCouriers, logCourierCall, resetAllLocations, renameSystem,
   saveKitDef, removeKitDef, getKitSettings, saveKitSettings, getTrayList, saveTrayList, isTrayPhotoPath, editTrayList
 } from './_kits.js'
-import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, uploadFile } from './_dropbox.js'
+import { temporaryLink, dropboxConnectUrl, finishDropboxConnect, dropboxStatus, uploadFile, thumbnail } from './_dropbox.js'
+import { gallery, photoById } from './_eventPhotos.js'
 import { randomUUID } from 'node:crypto'
 import { redis } from './_redis.js'
 import { labelStore } from './_labels.js'
@@ -205,7 +206,17 @@ async function handleEvents(req, res, session) {
   try {
     if (!(await mayUseEvents(session))) return res.status(404).json({ error: 'Not found' })
     if (what === 'access') return res.status(200).json({ ok: true })
-    if (what === 'list') return res.status(200).json({ events: await listEvents(session), smsReady: clicksendConfigured() })
+    if (what === 'list') return res.status(200).json({ events: await listEvents(session), smsReady: clicksendConfigured(), gallery: gallery() })
+    if (what === 'photo') {
+      // Only the hand-picked photos (api/_eventPhotos.js), as Dropbox thumbnails.
+      const photo = photoById(req.query.id)
+      if (!photo) return res.status(404).json({ error: 'Not found' })
+      const big = req.query.size === 'large'
+      const jpeg = await thumbnail(photo.path, { size: big ? 'w2048h1536' : 'w1024h768' })
+      res.setHeader('Content-Type', 'image/jpeg')
+      res.setHeader('Cache-Control', 'private, no-cache')
+      return res.status(200).send(jpeg)
+    }
     if (what === 'get') {
       const event = await getEvent(id)
       if (!event || event.deleted || !mayOrganise(session, event)) return res.status(404).json({ error: 'That event is gone' })

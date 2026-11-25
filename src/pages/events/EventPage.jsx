@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Page, Header, Body, Banner } from '../../design/Shell.jsx'
+import { Banner } from '../../design/Shell.jsx'
 import { useBackLayer } from '../../backButton.js'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { STAFF } from '../../staffConfig.js'
@@ -8,6 +8,7 @@ import {
 } from '../../events/model.js'
 import { eventsApi, readInviteFile } from './eventsApi.js'
 import Contacts from './Contacts.jsx'
+import { Photo, photoForKind, seedOf, EventStyles, WASH } from './photos.jsx'
 
 // ─── One event, for its organisers (Events, 25 Nov 2026) ────────────────────
 // Sections as in the approved mock-up: Guests, Invite and details, Reply form,
@@ -321,7 +322,7 @@ function CheckIn({ event, api, onChange }) {
   )
 }
 
-export default function EventPage({ user, id, onBack }) {
+export default function EventPage({ user, id, onBack, gallery = null }) {
   const api = useMemo(() => eventsApi(user.token), [user.token])
   const [event, setEvent] = useState(null)
   const [smsReady, setSmsReady] = useState(false)
@@ -336,25 +337,58 @@ export default function EventPage({ user, id, onBack }) {
     return <Contacts user={user} onBack={() => setPicking(false)}
       pick={{ already: event.guests.map(g => g.contactId).filter(Boolean), onAdd: async ids => { setEvent((await api.addGuests(event.id, ids)).event); setPicking(false) } }} />
   }
+  const sum = event ? summarise(event) : null
+  const kind = event ? EVENT_KINDS.find(k => k.id === event.kind) : null
+  const glass = { background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.28)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: 'white' }
+  const stat = (n, label, tone) => (
+    <div style={{ ...glass, borderRadius: radius.control, padding: '6px 12px', minWidth: 64 }}>
+      <div style={{ fontSize: 22, lineHeight: 1.1, fontWeight: 800, color: tone || 'white' }}>{n}</div>
+      <div style={{ ...text('micro'), textTransform: 'uppercase', opacity: 0.85 }}>{label}</div>
+    </div>
+  )
+  // The event's own photo hero (Brent, 26 Nov 2026: "less like a form to fill
+  // out and more like an interactive app"), the replies at a glance, and the
+  // sections as a row of pills.
   return (
-    <Page>
-      <Header eyebrow={event ? `Events · ${EVENT_KINDS.find(k => k.id === event.kind)?.label || ''}` : 'Events'} title={event?.title || 'Loading…'} onBack={onBack} compact
-        subtitle={event ? [whenText(event.start), event.venue].filter(Boolean).join(' · ') : ''}>
-        <nav aria-label="Event sections" style={{ display: 'flex', gap: 18, overflowX: 'auto' }}>
-          {TABS.map(([k, l]) => (
-            <button key={k} type="button" data-event-tab={k} aria-pressed={tab === k} onClick={() => setTab(k)}
-              style={{ background: 'none', border: 'none', padding: '8px 0', cursor: 'pointer', whiteSpace: 'nowrap', ...text('bodyStrong'), color: tab === k ? 'white' : 'rgba(255,255,255,0.65)', borderBottom: tab === k ? `3px solid ${colour.accent}` : '3px solid transparent' }}>{l}</button>
-          ))}
-        </nav>
-      </Header>
-      <Body>
+    <div data-event-page className="tm-page" style={{ background: colour.canvas, minHeight: '100%' }}>
+      <EventStyles />
+      <div data-event-hero style={{ position: 'relative', color: 'white', background: WASH }}>
+        <Photo token={user.token} id={event ? photoForKind(gallery, event.kind, seedOf(event.id)) : ''} size="large" style={{ position: 'absolute', inset: 0 }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(2,27,49,0.25) 0%, rgba(2,27,49,0.55) 50%, rgba(2,27,49,0.92) 100%)' }} />
+        <div style={{ position: 'relative', padding: `calc(env(safe-area-inset-top) + ${space.md}px) ${space.lg}px ${space.md}px`, maxWidth: 1100, margin: '0 auto' }}>
+          <button type="button" onClick={onBack} aria-label="Back" style={{ ...glass, width: 40, height: 40, borderRadius: radius.pill, cursor: 'pointer', ...text('title'), display: 'grid', placeItems: 'center' }}>‹</button>
+          <div style={{ marginTop: 56, animation: 'tmEvRise 450ms ease both' }}>
+            <div style={{ ...text('micro'), textTransform: 'uppercase', opacity: 0.85 }}>{kind?.label || 'Event'}</div>
+            <div style={{ fontSize: 30, lineHeight: 1.12, fontWeight: 800, letterSpacing: '-0.6px', margin: '4px 0 6px' }}>{event?.title || 'Loading…'}</div>
+            <div style={{ ...text('body'), opacity: 0.9 }}>{event ? [whenText(event.start) || 'No date yet', event.venue].filter(Boolean).join(' · ') : ''}</div>
+            {sum && (
+              <div data-event-stats style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: space.md }}>
+                {stat(sum.yes, 'Coming')}
+                {stat(sum.maybe, 'Maybe')}
+                {stat(sum.none, 'No reply')}
+                {stat(sum.invited, 'Invited')}
+                {sum.capacity > 0 && stat(sum.left, 'Seats left')}
+              </div>
+            )}
+          </div>
+          <nav aria-label="Event sections" data-ev-scroll style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: space.lg, scrollbarWidth: 'none' }}>
+            {TABS.map(([k, l]) => (
+              <button key={k} type="button" data-event-tab={k} aria-pressed={tab === k} onClick={() => setTab(k)}
+                style={{ ...(tab === k ? { background: colour.surface, color: colour.ink, border: '1px solid transparent' } : glass), padding: '8px 14px', borderRadius: radius.pill, cursor: 'pointer', whiteSpace: 'nowrap', ...text('bodyStrong'), transition: 'background 200ms ease' }}>{l}</button>
+            ))}
+          </nav>
+        </div>
+      </div>
+      <div style={{ padding: `${space.lg}px ${space.lg}px ${space.xxxl}px`, maxWidth: 1100, margin: '0 auto' }}>
         {error && <Banner tone="danger">{error}</Banner>}
-        {event && tab === 'guests' && <Guests event={event} api={api} smsReady={smsReady} onChange={setEvent} onAdd={() => setPicking(true)} />}
-        {event && tab === 'details' && <Details event={event} api={api} onSave={save} onUploaded={setEvent} />}
-        {event && tab === 'form' && <FormBuilder event={event} onSave={save} />}
-        {event && tab === 'venue' && <Venue event={event} api={api} onSave={save} />}
-        {event && tab === 'checkin' && <CheckIn event={event} api={api} onChange={setEvent} />}
-      </Body>
-    </Page>
+        <div key={tab} style={{ animation: 'tmEvRise 300ms ease both' }}>
+          {event && tab === 'guests' && <Guests event={event} api={api} smsReady={smsReady} onChange={setEvent} onAdd={() => setPicking(true)} />}
+          {event && tab === 'details' && <Details event={event} api={api} onSave={save} onUploaded={setEvent} />}
+          {event && tab === 'form' && <FormBuilder event={event} onSave={save} />}
+          {event && tab === 'venue' && <Venue event={event} api={api} onSave={save} />}
+          {event && tab === 'checkin' && <CheckIn event={event} api={api} onChange={setEvent} />}
+        </div>
+      </div>
+    </div>
   )
 }

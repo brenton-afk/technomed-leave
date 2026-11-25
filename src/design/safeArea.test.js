@@ -158,6 +158,9 @@ describe('no screen is left out', () => {
     // Suggested to-dos, drawn in the body of the Projects page under its Header.
     'projects/Suggested.jsx',
     // The microphone in the quick-add, inside the Projects page.
+    // Photos and their wash, drawn inside the Events pages' own photo heroes,
+    // which carry env(safe-area-inset-top) themselves.
+    'events/photos.jsx',
     'projects/VoiceTask.jsx', 'projects/MeetingReport.jsx', 'projects/Agenda.jsx', 'projects/SavedAgendas.jsx', 'projects/LiveMeeting.jsx',
   ])
 

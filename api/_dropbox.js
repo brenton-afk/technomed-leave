@@ -227,6 +227,25 @@ export async function ensureFolder(path) {
  */
 export const apiArg = obj => JSON.stringify(obj).replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
 
+/**
+ * A JPEG thumbnail of a picture in Dropbox (not under the locked usage tree):
+ * the Events page's photos (Brent, 26 Nov 2026) — a 5 MB camera original
+ * comes back as ~150 KB. size: Dropbox's w1024h768 | w2048h1536 | …
+ */
+export async function thumbnail(path, { size = 'w1024h768' } = {}) {
+  assertUsageReadable(path)
+  const res = await fetch('https://content.dropboxapi.com/2/files/get_thumbnail_v2', {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Dropbox-API-Arg': apiArg({ resource: { '.tag': 'path', path }, format: 'jpeg', size, mode: 'fitone_bestfit' }) }
+  })
+  if (!res.ok) {
+    let summary = ''
+    try { summary = JSON.parse(await res.text()).error_summary } catch { /* keep blank */ }
+    throw dropboxFault('make a thumbnail', res.status, summary)
+  }
+  return Buffer.from(await res.arrayBuffer())
+}
+
 /** One file's bytes (not under the locked usage tree). */
 export async function downloadFile(path) {
   assertUsageReadable(path)
