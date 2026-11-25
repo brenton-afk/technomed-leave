@@ -579,6 +579,15 @@ ones included; `data-team-jobs`), **+ Task** and **Inbox**. The day view draws
 no strip and no kit jobs (`DayPanel hideKitJobs`); **+ Booking** is on the
 day's line (`AddBooking inline`), and above the week in week view. The
 ActionRow is gone. The phone week list and desktop columns keep their jobs.
+**And the day's other items** (Brent, same day: "Why are the items still listed
+down the bottom. Toni tm office, list orders and Aimee in Melbourne?"): the
+"Also on" list is not drawn on the day view (`DayPanel hideOthers`); it is
+**Also on today** in the Team sheet (`data-team-also`, leave left out — the
+strip says it). A calendar note about a person — "Toni - TM office", "Aimee -
+Brainlab Training MELB" — now sets their who's-where status (`noteStatus` in
+`whosWhere.js`: first name, a dash, office words → Office, training / course /
+conference / a city → Training with the rest as where; after leave and away and
+a status added in the portal, before theatre from the bookings).
 
 ### Who's where (option B, Brent 25 Nov 2026)
 

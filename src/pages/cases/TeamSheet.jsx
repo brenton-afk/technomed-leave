@@ -60,7 +60,7 @@ export function TeamButton({ date, days = [], away = [], entries = [], waiting =
  * The sheet. `jobs` are the day's kit jobs, drawn by `renderJob` (CaseWeek's
  * own TaskRow, so they look and tick exactly as they did on the page).
  */
-export default function TeamSheet({ date, days, away, entries, user, onChanged, jobs = [], renderJob, onAddTask, onInbox, queueCount = 0, onClose }) {
+export default function TeamSheet({ date, days, away, entries, user, onChanged, jobs = [], renderJob, also = [], renderItem, onAddTask, onInbox, queueCount = 0, onClose }) {
   useBackLayer(true, onClose)
   const button = { flex: 1, minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text('bodyStrong'), fontWeight: 700, whiteSpace: 'nowrap' }
   return (
@@ -85,6 +85,15 @@ export default function TeamSheet({ date, days, away, entries, user, onChanged, 
               ? jobs.map(job => <React.Fragment key={job.id}>{renderJob(job)}</React.Fragment>)
               : <div style={{ ...text('caption'), color: colour.inkFaint }}>No kit to move today.</div>}
           </div>
+
+          {/* What else is on the calendar today — meetings, reminders, notes
+              (moved off the Cases page, Brent 25 Nov 2026). */}
+          {also.length > 0 && (
+            <div data-team-also style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, padding: space.md, marginBottom: space.md }}>
+              <div style={{ ...text('micro'), color: colour.inkFaint, marginBottom: space.sm }}>ALSO ON TODAY</div>
+              {also.map((item, i) => <React.Fragment key={i}>{renderItem ? renderItem(item) : <div style={{ ...text('body') }}>{item.title || item.text}</div>}</React.Fragment>)}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: space.sm }}>
             <button type="button" onClick={onAddTask} aria-label="Add a task"
