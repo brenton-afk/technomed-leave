@@ -20,6 +20,8 @@ describe('Dropbox delivery notes', () => {
   it('refuses anywhere else, the usage tree above all', () => {
     expect(readDelivery(note('/ALL SURGEON USAGE/x.xlsx', 'x')).error).toBe('path not allowed')
     expect(readDelivery(note('/Tray Lists/x.xlsx', 'x')).error).toBe('path not allowed')
+    expect(readDelivery(note('/Distributors/MAC Surgical/K-Wire/x.pdf', 'x')).error).toBeUndefined()
+    expect(readDelivery(note('/Distributors/Signus/x.pdf', 'x')).error).toBe('path not allowed')
     expect(readDelivery(note('/Admin/Accounts/../ALL SURGEON USAGE/x', 'x')).error).toBe('bad path')
   })
   it('refuses bytes that do not match', () => {

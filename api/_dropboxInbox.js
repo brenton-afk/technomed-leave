@@ -19,7 +19,7 @@ import { redis } from './_redis.js'
 import { listFolder, downloadFile, uploadFile, fileMetadata, deletePath } from './_dropbox.js'
 
 export const INBOX = '/Admin/Claude Inbox'
-export const ALLOWED = ['/admin/accounts/']
+export const ALLOWED = ['/admin/accounts/', '/distributors/mac surgical/']
 const LOG = 'dropbox:inbox:log'
 
 const OPS = new Set(['appendRows', 'replaceInFormulas', 'setCell', 'autoFilter'])

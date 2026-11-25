@@ -2495,7 +2495,8 @@ portal writes the file (`api/_dropboxInbox.js`, `deliverInbox`, run first by
 file (`base64` + `sha256`) or `kind: 'edit'` — `appendRows` (styled like the
 last row), `replaceInFormulas`, `setCell`, `autoFilter` applied with exceljs,
 checked to keep Toni's workbook cell for cell. Only into `ALLOWED`
-(`/Admin/Accounts/`), never the usage tree; `replaces` (the Dropbox
+(`/Admin/Accounts/`, and `/Distributors/MAC Surgical/` for project drawings and
+IFUs — Brent, 25 Nov 2026), never the usage tree; `replaces` (the Dropbox
 content_hash it was made against) must still match or nothing is written; the
 note is deleted once delivered; results in `dropbox:inbox:log`. Prices travel
 in the note, never the repo. First use: Boost UltraFibres 2.5g (NCC90), 5.0g
