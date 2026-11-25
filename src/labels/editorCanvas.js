@@ -4,8 +4,8 @@
 // browser (import('fabric')) and in node tests (fabric/node).
 
 import { itemToSpec, objectToItem, READ_PROPS } from './fabricAdapter.js'
-import { trimOffset, TRIM_W, TRIM_H, fitFactors } from './model.js'
-import { PRINT_DPI, printPixels } from './pdf.js'
+import { trimOffset, trimSize, fitFactors } from './model.js'
+import { printPixels, printDpiFor } from './pdf.js'
 
 let fabricPromise = null
 /** Fabric, loaded only when Label Studio needs it (its own chunk). */
@@ -85,15 +85,17 @@ export function readObject(obj) {
 }
 
 /**
- * The trimmed label as a PNG at `dpi` (600 for print): Fabric drawing the
- * same objects as the editor, on white, cut to 68 × 21 mm.
+ * The trimmed label as a PNG at `dpi` (600 for print, less for a big sheet
+ * label — printDpiFor): Fabric drawing the same objects as the editor, on
+ * white, cut to the finished label.
  */
-export async function renderLabelPng(fabric, label, logos, { dpi = PRINT_DPI } = {}) {
-  const { width, height } = printPixels(dpi)
-  const k = width / TRIM_W
+export async function renderLabelPng(fabric, label, logos, { dpi } = {}) {
+  const size = trimSize(label)
+  const { width, height } = printPixels(dpi || printDpiFor(size), size)
+  const k = width / size.w
   const off = trimOffset(label)
   const canvas = new fabric.StaticCanvas(null, { width, height, backgroundColor: '#ffffff', enableRetinaScaling: false, renderOnAddRemove: false })
-  canvas.setViewportTransform([k, 0, 0, height / TRIM_H, -off.x * k, -off.y * (height / TRIM_H)])
+  canvas.setViewportTransform([k, 0, 0, height / size.h, -off.x * k, -off.y * (height / size.h)])
   for (const item of label.items || []) canvas.add(await createObject(fabric, item, logos))
   canvas.renderAll()
   const el = canvas.getElement ? canvas.getElement() : canvas.lowerCanvasEl

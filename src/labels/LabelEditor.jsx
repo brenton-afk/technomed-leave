@@ -20,7 +20,7 @@ import { colour, text, space, radius, face, border } from '../design/tokens.js'
 import { useBackLayer } from '../backButton.js'
 import { loadFabric, createObject, readAbsolute, isItem, applyControls, applyFit, isImage, isMultiSelection } from './editorCanvas.js'
 import { loadLabelFonts } from './fonts.js'
-import { FONTS, MM_PER_PT, trimOffset, TRIM_W, TRIM_H, SAFE_MARGIN, LINE_HEIGHT, newItemId, fontName } from './model.js'
+import { FONTS, MM_PER_PT, trimOffset, trimSize, hasOwnSize, sizeText, SAFE_MARGIN, LINE_HEIGHT, newItemId, fontName } from './model.js'
 import { labelFrames, snapTargets, snapBox, alignBoxes, distributeBoxes, createHistory } from './snap.js'
 import { pasteItems, styleToRun } from './fabricAdapter.js'
 import { createLabel, saveLabel, uploadLogo, readLogoFile } from './api.js'
@@ -117,7 +117,8 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
   const cropRef = useRef(null)
   const logosRef = useRef(logos)
   logosRef.current = logos
-  const geomRef = useRef({ w: initial.w, h: initial.h })
+  // The canvas and, for a sheet label, its own finished size and sheet.
+  const geomRef = useRef({ w: initial.w, h: initial.h, ...(hasOwnSize(initial) ? { trim: initial.trim, sheet: initial.sheet } : {}) })
 
   const [ready, setReady] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -322,7 +323,8 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
     const v = fc.viewportTransform
     const z = v[0]
     const { w, h } = geomRef.current
-    const off = trimOffset({ w, h })
+    const off = trimOffset(geomRef.current)
+    const { w: TRIM_W, h: TRIM_H } = trimSize(geomRef.current)
     ctx.save()
     ctx.transform(v[0], v[1], v[2], v[3], v[4], v[5])
     // Bleed: shaded outside the trim.
@@ -379,7 +381,7 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
   }
 
   // ── Actions ─────────────────────────────────────────────────────────────
-  const centre = () => { const off = trimOffset(geomRef.current); return { x: off.x + TRIM_W / 2, y: off.y + TRIM_H / 2 } }
+  const centre = () => { const off = trimOffset(geomRef.current); const t = trimSize(geomRef.current); return { x: off.x + t.w / 2, y: off.y + t.h / 2 } }
 
   async function addItem(item, { edit = false } = {}) {
     const fc = fcRef.current
@@ -622,7 +624,8 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
     const a = fc?.getActiveObject()
     if (a?.isEditing) a.exitEditing()
     const items = readItems()
-    const body = { name: name.trim() || 'Untitled label', w: geomRef.current.w, h: geomRef.current.h, items, ...(check ? { check } : {}) }
+    const g = geomRef.current
+    const body = { name: name.trim() || 'Untitled label', w: g.w, h: g.h, items, ...(check ? { check } : {}), ...(g.trim ? { trim: g.trim, ...(g.sheet ? { sheet: g.sheet } : {}) } : {}) }
     setSaving(true); setMessage(null)
     try {
       const out = meta.id
@@ -744,7 +747,9 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
       {!hasSel && (
         <Section title="Label">
           <div style={{ ...text('caption'), color: colour.inkMuted, lineHeight: 1.6 }}>
-            68 × 21 mm finished (red line), {geomRef.current.w} × {geomRef.current.h} mm with bleed (shaded). Keep words inside the dashed safe area.<br />
+            {hasOwnSize(geomRef.current)
+              ? <>{sizeText(geomRef.current)} finished (red line){geomRef.current.sheet?.name ? ` · ${geomRef.current.sheet.name}` : ''}. Keep words inside the dashed safe area.<br /></>
+              : <>68 × 21 mm finished (red line), {geomRef.current.w} × {geomRef.current.h} mm with bleed (shaded). Keep words inside the dashed safe area.<br /></>}
             Click an item to select it; Shift-click or drag a box to select several. Double-click text to type on the label. Arrow keys nudge 0.1 mm (Shift: 1 mm); hold Alt while dragging to stop snapping.
           </div>
         </Section>
@@ -822,7 +827,7 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
       )}
       {one && ['rect', 'ellipse', 'line'].includes(one.t) && (
         <Section title={one.t === 'line' ? 'Line' : 'Shape'}>
-          <ColourField label={one.t === 'line' ? 'Colour' : 'Fill'} value={one.fill} swatches={swatches} onChange={v => v && updateSelected(i => ({ ...i, fill: v }))} />
+          <ColourField label={one.t === 'line' ? 'Colour' : 'Fill'} value={one.fill} swatches={swatches} allowNone={one.t !== 'line'} onChange={v => updateSelected(i => (v ? { ...i, fill: v } : i.t === 'line' ? null : { ...i, fill: 'none' }))} />
           {one.t === 'line' && <NumberField label="Thickness" suffix="mm" value={one.h} onCommit={v => setGeom('h', Math.max(0.05, v))} />}
           {one.t !== 'line' && (
             <>

@@ -17,7 +17,7 @@
 //   image  Image with cropX/cropY and a cropped width/height, centre origin.
 //   rect / ellipse / line   centre origin; a line is a thin rect.
 
-import { MM_PER_PT, FABRIC_SIZE_MULT, fontName, lineSpacing, letterSpacing, textAnchorX, cropBox, sameStyle, toHex, newItemId } from './model.js'
+import { MM_PER_PT, FABRIC_SIZE_MULT, fontName, lineSpacing, letterSpacing, textAnchorX, cropBox, sameStyle, toHex, newItemId, isNoFill } from './model.js'
 
 const r3 = v => Math.round(Number(v) * 1000) / 1000
 const r4 = v => Math.round(Number(v) * 10000) / 10000
@@ -149,7 +149,8 @@ export function itemToSpec(item, { logos = {} } = {}) {
   const stroke = item.stroke && Number(item.stroke.width) > 0
     ? { stroke: toHex(item.stroke.color) || '#000000', strokeWidth: Number(item.stroke.width) }
     : { stroke: null, strokeWidth: 0 }
-  const fill = toHex(item.fill) || '#000000'
+  // An outlined box ('none') is drawn transparent and read back as 'none'.
+  const fill = item.t !== 'line' && isNoFill(item.fill) ? 'transparent' : (toHex(item.fill) || '#000000')
   if (item.t === 'ellipse') {
     return { kind: 'ellipse', props: { ...base, ...centred, rx: r4(item.w / 2), ry: r4(item.h / 2), fill, ...stroke, strokeUniform: true } }
   }
@@ -210,7 +211,7 @@ export function objectToItem(o) {
   return {
     ...base, t: ['rect', 'ellipse', 'line'].includes(o.tmKind) ? o.tmKind : 'rect',
     x: r3(Number(o.left) - w / 2), y: r3(Number(o.top) - h / 2), w, h,
-    fill: toHex(o.fill) || '#000000', stroke: o.tmKind === 'line' ? null : stroke
+    fill: o.tmKind !== 'line' && isNoFill(o.fill) ? 'none' : (toHex(o.fill) || '#000000'), stroke: o.tmKind === 'line' ? null : stroke
   }
 }
 

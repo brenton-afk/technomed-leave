@@ -1,15 +1,17 @@
 // Making and printing the label PDF in the browser. Each label is drawn by
-// Fabric (the editor's own renderer) at 600 dpi once the label fonts are in,
-// then pdf.js lays one per 68 × 21 mm page.
+// Fabric (the editor's own renderer) at print resolution once the label fonts
+// are in, then pdf.js lays them out — one per page at the label's size, or on
+// A4 sheets (see pdf.js).
 
 import { loadFabric, renderLabelPng } from './editorCanvas.js'
 import { loadLabelFonts } from './fonts.js'
 import { buildLabelPdf } from './pdf.js'
+import { trimSize, sheetLayout } from './model.js'
 import { shareFileObjects } from '../kit/share.js'
 import { isAppleMobile } from '../pages/kit/trayListPdf.js'
 
-/** jobs: [{ label, qty }] → a PDF Blob. */
-export async function makeLabelPdf(jobs, logos, { onProgress } = {}) {
+/** jobs: [{ label, qty }] → a PDF Blob. layout 'label' | 'sheet'; start: first place on the sheet. */
+export async function makeLabelPdf(jobs, logos, { onProgress, layout = 'label', start = 1 } = {}) {
   await loadLabelFonts()
   const fabric = await loadFabric()
   fabric.cache?.clearFontCache?.()
@@ -18,11 +20,11 @@ export async function makeLabelPdf(jobs, logos, { onProgress } = {}) {
   for (const job of jobs) {
     if (!(Number(job.qty) > 0)) continue
     onProgress?.(`Drawing ${job.label.name} (${++n} of ${jobs.length})…`)
-    pngs.push({ png: await renderLabelPng(fabric, job.label, logos), qty: job.qty, name: job.label.name })
+    pngs.push({ png: await renderLabelPng(fabric, job.label, logos), qty: job.qty, name: job.label.name, size: trimSize(job.label), sheet: sheetLayout(job.label) })
   }
   onProgress?.('Making the PDF…')
   const title = jobs.length === 1 ? `${jobs[0].label.name} × ${jobs[0].qty}` : `TechnoMed labels (${jobs.length})`
-  const bytes = await buildLabelPdf(pngs, { title })
+  const bytes = await buildLabelPdf(pngs, { title, layout, start })
   return new Blob([bytes], { type: 'application/pdf' })
 }
 

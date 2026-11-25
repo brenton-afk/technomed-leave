@@ -4,7 +4,7 @@
 // The artwork's own sizes and colours are the label's, not the app's scale.
 
 import React from 'react'
-import { layoutText, fontStack, rotation, cropBox, paint, MM_PER_PT, letterSpacing, trimOffset, TRIM_W, TRIM_H, SAFE_MARGIN, textAnchorX } from './model.js'
+import { layoutText, fontStack, rotation, cropBox, paint, MM_PER_PT, letterSpacing, trimOffset, trimSize, SAFE_MARGIN, textAnchorX, isNoFill } from './model.js'
 import { fitOf } from './measure.js'
 
 function TextItem({ item }) {
@@ -44,7 +44,7 @@ function ImageItem({ item, logo }) {
 }
 
 function ShapeItem({ item }) {
-  const fill = paint(item.fill)
+  const fill = item.t !== 'line' && isNoFill(item.fill) ? 'none' : paint(item.fill)
   const stroke = item.stroke ? { stroke: paint(item.stroke.color), strokeWidth: item.stroke.width } : {}
   const t = rotation(item) || undefined
   if (item.t === 'ellipse') return <ellipse cx={item.x + item.w / 2} cy={item.y + item.h / 2} rx={item.w / 2} ry={item.h / 2} fill={fill} {...stroke} transform={t} />
@@ -52,12 +52,13 @@ function ShapeItem({ item }) {
 }
 
 /**
- * @param trimmed  true: only the 68 × 21 mm that prints (thumbnails); false:
+ * @param trimmed  true: only the finished label that prints (thumbnails); false:
  *                 the whole canvas with bleed, trim and safe-area lines.
  */
 export default function LabelSvg({ label, logos = {}, trimmed = true, style, title }) {
   if (!label) return null
   const off = trimOffset(label)
+  const { w: TRIM_W, h: TRIM_H } = trimSize(label)
   const viewBox = trimmed ? `${off.x} ${off.y} ${TRIM_W} ${TRIM_H}` : `0 0 ${label.w} ${label.h}`
   const clipId = `trim-${String(label.id || 'new').replace(/[^\w-]/g, '')}`
   return (

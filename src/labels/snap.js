@@ -3,11 +3,12 @@
 // height }), so it is tested without a canvas. The editor feeds it the moving
 // object's bounding box and draws the guide lines it returns.
 
-import { TRIM_W, TRIM_H, SAFE_MARGIN, trimOffset } from './model.js'
+import { SAFE_MARGIN, trimOffset, trimSize } from './model.js'
 
 /** The trim and safe-area rectangles of a label, in canvas mm. */
 export function labelFrames(label) {
   const o = trimOffset(label)
+  const { w: TRIM_W, h: TRIM_H } = trimSize(label)
   const trim = { left: o.x, top: o.y, width: TRIM_W, height: TRIM_H }
   const safe = { left: o.x + SAFE_MARGIN, top: o.y + SAFE_MARGIN, width: TRIM_W - 2 * SAFE_MARGIN, height: TRIM_H - 2 * SAFE_MARGIN }
   const bleed = { left: 0, top: 0, width: Number(label.w), height: Number(label.h) }

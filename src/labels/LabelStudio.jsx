@@ -7,12 +7,13 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from
 import { colour, text, space, radius, face, border } from '../design/tokens.js'
 import LabelSvg from './LabelSvg.jsx'
 import PrintSheet from './PrintSheet.jsx'
-import { summarise, matchesSearch, blankLabel, duplicateLabel, toHex } from './model.js'
+import { summarise, matchesSearch, blankLabel, duplicateLabel, toHex, hasOwnSize, sizeText } from './model.js'
 import { listLabels, createLabel, deleteLabel, restoreLabel } from './api.js'
 import { loadLabelFonts } from './fonts.js'
 
 const LabelEditor = lazy(() => import('./LabelEditor.jsx'))
 const TidySheet = lazy(() => import('./TidySheet.jsx'))
+const ImportSheet = lazy(() => import('./ImportSheet.jsx'))
 
 const btn = { ...text('caption'), fontWeight: 600, padding: '7px 12px', borderRadius: radius.control, cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap' }
 const fieldStyle = { ...text('field'), padding: '9px 12px', border: border.hairline, borderRadius: radius.control, boxSizing: 'border-box', background: colour.surface, color: colour.ink }
@@ -45,6 +46,7 @@ function LabelCard({ label, logos, queued, onOpen, onPrint, onQueue, onDuplicate
           <div style={{ ...text('bodyStrong'), color: colour.ink, flex: 1, minWidth: 0 }}>{label.name}</div>
           {label.check && <span data-to-check title={label.check} style={{ ...text('micro'), textTransform: 'uppercase', color: colour.warning, background: colour.warningSoft, border: `1px solid ${colour.warningLine}`, borderRadius: radius.pill, padding: '2px 8px', flexShrink: 0 }}>To check</span>}
         </div>
+        {hasOwnSize(label) && <div data-label-size style={{ ...text('caption'), color: colour.accentDeep }}>{sizeText(label)}{label.sheet?.name ? ` · ${label.sheet.name}` : ''}</div>}
         <div style={{ ...text('caption'), color: colour.inkMuted }}>
           {s.brand && <span>{s.brand}</span>}
           {s.ref && <span>{s.brand ? ' · ' : ''}REF {s.ref}</span>}
@@ -86,6 +88,8 @@ export default function LabelStudio({ user }) {
   const [queue, setQueue] = useState([])
   const [, setFontsIn] = useState(false)
   const [tidying, setTidying] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [kind, setKind] = useState('all')
 
   const load = useCallback(async () => {
     try {
@@ -105,17 +109,18 @@ export default function LabelStudio({ user }) {
 
   const swatches = useMemo(() => usedColours(labels || []), [labels])
   const shown = useMemo(() => {
-    const list = (labels || []).filter(l => matchesSearch(l, logos, query))
+    const list = (labels || []).filter(l => matchesSearch(l, logos, query) && (kind === 'all' || (kind === 'sheet') === hasOwnSize(l)))
     if (sort === 'recent') list.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
     else list.sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }))
     return list
-  }, [labels, logos, query, sort])
+  }, [labels, logos, query, sort, kind])
 
   const upsert = saved => setLabels(list => {
     const rest = (list || []).filter(l => l.id !== saved.id)
     return [...rest, saved]
   })
   const toCheck = (labels || []).filter(l => l.check).length
+  const sheetCount = (labels || []).filter(hasOwnSize).length
 
   async function duplicate(label) {
     try {
@@ -151,7 +156,13 @@ export default function LabelStudio({ user }) {
           <option value="name">By name</option>
           <option value="recent">Recently changed</option>
         </select>
+        <select aria-label="Which labels" data-label-kind value={kind} onChange={e => setKind(e.target.value)} style={{ ...fieldStyle, flex: '0 0 auto' }}>
+          <option value="all">All labels</option>
+          <option value="implant">Implant labels (68 × 21)</option>
+          <option value="sheet">Sheet labels</option>
+        </select>
         <button data-new-label onClick={() => setEditing(blankLabel())} style={{ ...btn, ...face.primary, padding: '10px 14px' }}>+ New label</button>
+        <button data-import-open onClick={() => setImporting(true)} style={{ ...btn, ...face.secondary, padding: '10px 14px' }}>Import labels</button>
         <button data-tidy-open disabled={!labels?.length} onClick={() => setTidying(true)} style={{ ...btn, ...face.secondary, padding: '10px 14px' }}>Tidy all labels</button>
         <button data-print-queue disabled={!queue.length} onClick={() => { setPrintFromQueue(true); setPrintJobs(queue) }} style={{ ...btn, ...(queue.length ? face.navy : face.secondary), padding: '10px 14px', opacity: queue.length ? 1 : 0.5 }}>Print queue ({queue.length})</button>
       </div>
@@ -161,7 +172,7 @@ export default function LabelStudio({ user }) {
       {labels && (
         <div style={{ ...text('caption'), color: colour.inkFaint, marginBottom: space.sm }}>
           {shown.length === labels.length ? `${labels.length} labels` : `${shown.length} of ${labels.length} labels`}
-          {toCheck ? ` · ${toCheck} to check` : ''} · printed 68 × 21 mm
+          {toCheck ? ` · ${toCheck} to check` : ''} · implant labels print 68 × 21 mm{sheetCount ? `; ${sheetCount} sheet label${sheetCount === 1 ? '' : 's'} at their own size` : ''}
         </div>
       )}
       <div data-label-grid style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: space.md }}>
@@ -184,6 +195,16 @@ export default function LabelStudio({ user }) {
       {tidying && (
         <Suspense fallback={null}>
           <TidySheet user={user} labels={labels || []} logos={logos} onSaved={upsert} onClose={() => setTidying(false)} />
+        </Suspense>
+      )}
+      {importing && (
+        <Suspense fallback={null}>
+          <ImportSheet user={user} labels={labels || []} onClose={() => setImporting(false)}
+            onImported={(made, newLogos) => {
+              setLogos(l => ({ ...l, ...newLogos }))
+              setLabels(list => [...(list || []), ...made])
+              if (made.length) setNotice(`Imported ${made.length} label${made.length === 1 ? '' : 's'}.`)
+            }} />
         </Suspense>
       )}
       {printJobs && (

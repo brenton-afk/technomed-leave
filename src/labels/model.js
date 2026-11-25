@@ -34,9 +34,67 @@ export const TRIM_OFFSETS = {
 export const BLANK_CANVAS = { w: 70.7, h: 23 }
 
 export function trimOffset(label) {
-  const known = TRIM_OFFSETS[Math.round(Number(label?.h) * 10) / 10]
-  if (known && Math.abs(Number(label?.w) - 70.7) < 0.01) return known
-  return { x: round((Number(label?.w || TRIM_W) - TRIM_W) / 2, 3), y: round((Number(label?.h || TRIM_H) - TRIM_H) / 2, 3) }
+  const t = trimSize(label)
+  if (!hasOwnSize(label)) {
+    const known = TRIM_OFFSETS[Math.round(Number(label?.h) * 10) / 10]
+    if (known && Math.abs(Number(label?.w) - 70.7) < 0.01) return known
+  }
+  return { x: round((Number(label?.w || t.w) - t.w) / 2, 3), y: round((Number(label?.h || t.h) - t.h) / 2, 3) }
+}
+
+// ── Labels of other sizes (Brent, 25 Nov 2026) ──────────────────────────
+// "Export these label designs … into our portal label builder": the Avery
+// sheet labels — GreenGuard (199.6 × 143.5, 2 per A4), courier, address,
+// distributor stickers — are not 68 × 21. Such a label carries its finished
+// size as `trim` ({ w, h } mm) and, where it came off an Avery sheet, the
+// sheet's layout as `sheet`. A label without `trim` is an implant label,
+// 68 × 21 on the Epson, exactly as before. "I want to be able to print the
+// labels on a printer that works for me": every label prints either one per
+// page at its own size (a label printer) or laid out on A4 (any printer).
+
+/** True when the label has its own finished size (not the 68 × 21 implant label). */
+export const hasOwnSize = label => Boolean(label?.trim && Number(label.trim.w) > 0 && Number(label.trim.h) > 0)
+
+/** The finished label in mm: its own `trim`, else 68 × 21. */
+export function trimSize(label) {
+  return hasOwnSize(label) ? { w: Number(label.trim.w), h: Number(label.trim.h) } : { w: TRIM_W, h: TRIM_H }
+}
+
+/** "68 × 21 mm", "199.6 × 143.5 mm". */
+export const sizeText = label => { const t = trimSize(label); return `${round(t.w, 1)} × ${round(t.h, 1)} mm` }
+
+export const A4 = { w: 210, h: 297 }
+/** Space kept between labels and round the page when a label has no sheet of its own. */
+export const AUTO_GAP = 3
+export const AUTO_MARGIN = 10
+
+/**
+ * Where each label goes on one sheet, in mm from the page's top-left:
+ * the label's own Avery layout, else as many as fit on A4 with AUTO_GAP
+ * between them. Returns { page: { w, h }, slots: [{ x, y }], name }.
+ */
+export function sheetLayout(label) {
+  const t = trimSize(label)
+  const s = label?.sheet
+  if (s && Number(s.across) > 0 && Number(s.down) > 0) {
+    const page = { w: Number(s.pageW) || A4.w, h: Number(s.pageH) || A4.h }
+    const px = Number(s.pitchX) > 0 ? Number(s.pitchX) : t.w
+    const py = Number(s.pitchY) > 0 ? Number(s.pitchY) : t.h
+    const slots = []
+    for (let r = 0; r < Number(s.down); r++) {
+      for (let c = 0; c < Number(s.across); c++) slots.push({ x: round(Number(s.left || 0) + c * px, 3), y: round(Number(s.top || 0) + r * py, 3) })
+    }
+    return { page, slots, name: s.name || `${slots.length} per sheet` }
+  }
+  const page = A4
+  const fit = (room, size) => Math.max(1, Math.floor((room - 2 * AUTO_MARGIN + AUTO_GAP) / (size + AUTO_GAP)))
+  const across = fit(page.w, t.w)
+  const down = fit(page.h, t.h)
+  const left = (page.w - (across * t.w + (across - 1) * AUTO_GAP)) / 2
+  const top = (page.h - (down * t.h + (down - 1) * AUTO_GAP)) / 2
+  const slots = []
+  for (let r = 0; r < down; r++) for (let c = 0; c < across; c++) slots.push({ x: round(left + c * (t.w + AUTO_GAP), 3), y: round(top + r * (t.h + AUTO_GAP), 3) })
+  return { page, slots, name: `${slots.length} per A4` }
 }
 
 // ── Type ───────────────────────────────────────────────────────────────────
@@ -80,6 +138,10 @@ export const FONT_FILES = {
   'Alex Brush': { file: 'alex-brush', bold: false, italic: false },
   'Damion': { file: 'damion', bold: false, italic: false }
 }
+
+// Fonts the Avery designs use, drawn by the nearest we have (Arimo is
+// Arial's metric twin; the humanist sans faces go to Mulish).
+Object.assign(FONT_MAP, { 'Arimo': 'Arial', 'Helvetica': 'Arial', 'Gill Sans': 'Mulish', 'Ubuntu': 'Mulish', 'Avery Sans': 'Mulish', 'Ascender Sans': 'Arial' })
 
 const FALLBACK = { 'Cormorant Garamond': 'Georgia, serif', 'Alex Brush': 'cursive', 'Damion': 'cursive' }
 export function fontName(family) {
@@ -441,7 +503,18 @@ export function importLabel(raw, keyMap = {}) {
 /** Every item gets a fresh id, for a duplicated label or a pasted item. */
 export const newItemId = () => `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
-export function blankLabel(name = 'New label') {
+export function blankLabel(name = 'New label', size = null) {
+  if (size && Number(size.w) > 0 && Number(size.h) > 0) {
+    const w = round(Number(size.w), 3)
+    const h = round(Number(size.h), 3)
+    const pt = Math.min(14, Math.max(8, h / 4))
+    return {
+      name, w, h, trim: { w, h }, items: [
+        { id: newItemId(), t: 'txt', x: SAFE_MARGIN + 1, y: SAFE_MARGIN + 1, w: w - 2 * SAFE_MARGIN - 2, h: pt * MM_PER_PT * 1.2, rot: 0, ha: 'left', va: 'top',
+          runs: [{ text: 'Your text', font: 'Mulish', size: pt, color: '#000000', underline: false, bold: false, italic: false }], lh: LINE_HEIGHT, ls: 0 }
+      ]
+    }
+  }
   const off = trimOffset(BLANK_CANVAS)
   return {
     name,
@@ -457,15 +530,17 @@ export function blankLabel(name = 'New label') {
 }
 
 export function duplicateLabel(label) {
-  const { id: _id, version: _v, createdAt: _c, updatedAt: _u, updatedBy: _b, createdBy: _cb, check: _ch, ...rest } = label
+  const { id: _id, version: _v, createdAt: _c, updatedAt: _u, updatedBy: _b, createdBy: _cb, check: _ch, sourceId: _si, tidied: _t, ...rest } = label
   return { ...rest, name: `${label.name} (copy)`, items: (label.items || []).map(i => ({ ...i, id: newItemId() })) }
 }
 
 // ── What a saved label may hold (the server applies this) ────────────────
 
-const MAX_ITEMS = 60
-const MAX_TEXT = 400
-const COORD = [-20, 120]
+const MAX_ITEMS = 80
+const MAX_TEXT = 1200
+// Big enough for an A5 label with bleed (GreenGuard is 199.6 × 143.5).
+const MAX_SIDE = 320
+const COORD = [-20, MAX_SIDE + 20]
 
 /**
  * A label as sent by the editor, cut down to what the model allows. Unknown
@@ -475,15 +550,15 @@ const COORD = [-20, 120]
 export function sanitiseLabel(input, { logoKeys = null } = {}) {
   const l = input || {}
   const name = String(l.name || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Untitled label'
-  const w = clamp(num(l.w, BLANK_CANVAS.w), 20, 200)
-  const h = clamp(num(l.h, BLANK_CANVAS.h), 10, 100)
+  const w = clamp(num(l.w, BLANK_CANVAS.w), 10, MAX_SIDE)
+  const h = clamp(num(l.h, BLANK_CANVAS.h), 5, MAX_SIDE)
   const items = []
   for (const it of (Array.isArray(l.items) ? l.items : []).slice(0, MAX_ITEMS)) {
     if (!it || typeof it !== 'object') continue
     const base = {
       id: String(it.id || newItemId()).replace(/[^\w-]/g, '').slice(0, 40) || newItemId(),
       x: clamp(num(it.x), ...COORD), y: clamp(num(it.y), ...COORD),
-      w: clamp(num(it.w, 1), 0.2, 150), h: clamp(num(it.h, 1), 0.05, 150), rot: clamp(num(it.rot), -360, 360),
+      w: clamp(num(it.w, 1), 0.2, MAX_SIDE), h: clamp(num(it.h, 1), 0.05, MAX_SIDE), rot: clamp(num(it.rot), -360, 360),
       ...(it.locked ? { locked: true } : {})
     }
     if (it.t === 'txt') {
@@ -507,10 +582,34 @@ export function sanitiseLabel(input, { logoKeys = null } = {}) {
       items.push({ ...base, t: 'img', k, ...(crop ? { crop } : {}) })
     } else if (['rect', 'ellipse', 'line'].includes(it.t)) {
       const st = it.stroke && Number(it.stroke.width) > 0 ? { color: toHex(it.stroke.color) || '#000000', width: clamp(num(it.stroke.width), 0.05, 5) } : null
-      items.push({ ...base, t: it.t, fill: toHex(it.fill) || '#000000', stroke: st })
+      items.push({ ...base, t: it.t, fill: it.t !== 'line' && isNoFill(it.fill) ? 'none' : (toHex(it.fill) || '#000000'), stroke: st })
     }
   }
   const out = { name, w, h, items }
   if (l.check && typeof l.check === 'string') out.check = l.check.slice(0, 200)
+  if (hasOwnSize(l)) {
+    out.trim = { w: clamp(num(l.trim.w), 5, MAX_SIDE), h: clamp(num(l.trim.h), 5, MAX_SIDE) }
+    const sh = cleanSheet(l.sheet)
+    if (sh) out.sheet = sh
+  }
+  if (l.source === 'avery' && l.sourceId) { out.source = 'avery'; out.sourceId = String(l.sourceId).replace(/[^\w-]/g, '').slice(0, 64) }
   return out
+}
+
+/** A shape with no fill: 'none' (an outlined box). */
+export const isNoFill = v => v === 'none' || v === null || v === 'transparent' || /^rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)$/i.test(String(v ?? ''))
+
+/** An Avery sheet layout, bounded; null when it is not one. */
+export function cleanSheet(sh) {
+  if (!sh || typeof sh !== 'object') return null
+  const across = Math.round(num(sh.across))
+  const down = Math.round(num(sh.down))
+  if (!(across >= 1 && across <= 20 && down >= 1 && down <= 40)) return null
+  return {
+    name: String(sh.name || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+    pageW: clamp(num(sh.pageW, A4.w), 50, 500), pageH: clamp(num(sh.pageH, A4.h), 50, 500),
+    left: clamp(num(sh.left), 0, 200), top: clamp(num(sh.top), 0, 200),
+    pitchX: clamp(num(sh.pitchX), 0, 400), pitchY: clamp(num(sh.pitchY), 0, 400),
+    across, down
+  }
 }

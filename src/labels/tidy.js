@@ -19,7 +19,7 @@
 // It never invents a REF or a rebate code; what it could not read is said in
 // `warnings`, and the person sees every label before and after.
 
-import { trimOffset, TRIM_W, TRIM_H, MM_PER_PT, FABRIC_SIZE_MULT, itemText } from './model.js'
+import { hasOwnSize, trimOffset, TRIM_W, TRIM_H, MM_PER_PT, FABRIC_SIZE_MULT, itemText } from './model.js'
 
 export const TIDY_VERSION = 1
 
@@ -231,6 +231,8 @@ export function logoHeight(k, logos) {
  * { label, read, warnings, changed }.
  */
 export function tidyLabel(label, logos = {}) {
+  // The house style is for 68 × 21 implant labels; sheet labels keep their design.
+  if (hasOwnSize(label)) return { label, changed: false, warnings: [] }
   const read = readLabel(label)
   const maker = makerOf(read, label)
   const m = MAKERS[maker]

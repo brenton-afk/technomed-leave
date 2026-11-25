@@ -163,6 +163,7 @@ export function labelStore(deps = {}) {
         ...clean, id: current.id, version: current.version + 1,
         createdAt: current.createdAt, createdBy: current.createdBy, updatedAt: now(), updatedBy: by,
         ...(current.source ? { source: current.source, vistaprintCreated: current.vistaprintCreated } : {}),
+        ...(current.sourceId ? { sourceId: current.sourceId } : {}),
         ...(tidied ? { tidied } : {})
       }
       await setBody(KEY(id), JSON.stringify(label))

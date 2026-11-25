@@ -1,5 +1,6 @@
 // Print: one label or a queue of several, each with a quantity, into one PDF
-// of 68 × 21 mm pages — then Print, Download or Open.
+// — one label per page at its own size (a label printer: the Epson for 68 ×
+// 21) or laid out on A4 sheets (any printer) — then Print, Download or Open.
 
 import React, { useState } from 'react'
 import { Overlay } from '../design/Shell.jsx'
@@ -8,6 +9,7 @@ import { useBackLayer } from '../backButton.js'
 import LabelSvg from './LabelSvg.jsx'
 import { makeLabelPdf, printPdf, downloadPdf, openPdf, pdfName } from './print.js'
 import { shareReady } from '../kit/share.js'
+import { hasOwnSize, sizeText, sheetLayout } from './model.js'
 
 const btn = { ...text('bodyStrong'), padding: `${space.sm + 2}px ${space.lg}px`, borderRadius: radius.control, cursor: 'pointer', font: 'inherit' }
 const fieldStyle = { ...text('field'), width: 64, padding: '6px 8px', textAlign: 'center', border: border.hairline, borderRadius: radius.control }
@@ -19,6 +21,13 @@ export default function PrintSheet({ jobs, logos, onChange, onClose }) {
   const [error, setError] = useState('')
   const [needsTap, setNeedsTap] = useState(false)
   const total = jobs.reduce((s, j) => s + (Number(j.qty) || 0), 0)
+  // Sheet labels start on A4; implant labels on the label printer, as before.
+  const [layout, setLayout] = useState(() => (jobs.some(j => hasOwnSize(j.label)) ? 'sheet' : 'label'))
+  const [start, setStart] = useState(1)
+  const firstSheet = jobs[0] ? sheetLayout(jobs[0].label) : null
+  const places = firstSheet?.slots.length || 1
+  const sizes = [...new Set(jobs.map(j => sizeText(j.label)))]
+  const pick = v => { setPdf(null); setLayout(v) }
 
   const setQty = (i, qty) => { setPdf(null); onChange(jobs.map((j, k) => (k === i ? { ...j, qty: Math.max(0, Math.min(999, Math.floor(Number(qty) || 0))) } : j))) }
   const remove = i => { setPdf(null); onChange(jobs.filter((_, k) => k !== i)) }
@@ -26,7 +35,7 @@ export default function PrintSheet({ jobs, logos, onChange, onClose }) {
   async function make() {
     setError(''); setPdf(null)
     try {
-      const blob = await makeLabelPdf(jobs, logos, { onProgress: setBusy })
+      const blob = await makeLabelPdf(jobs, logos, { onProgress: setBusy, layout, start: layout === 'sheet' ? start : 1 })
       setPdf(blob)
       return blob
     } catch (err) {
@@ -74,8 +83,28 @@ export default function PrintSheet({ jobs, logos, onChange, onClose }) {
               </div>
             </div>
           ))}
+          <div data-print-layout role="radiogroup" aria-label="How to print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: space.sm, marginTop: space.md }}>
+            {[['label', 'Label printer', `One label per page, ${sizes.length === 1 ? sizes[0] : 'each at its own size'}`],
+              ['sheet', 'A4 sheet', firstSheet ? `${firstSheet.name} — any office printer` : 'Any office printer']].map(([v, title, sub]) => (
+              <button key={v} role="radio" aria-checked={layout === v} data-print-layout-pick={v} onClick={() => pick(v)}
+                style={{ ...btn, textAlign: 'left', padding: `${space.sm}px ${space.md}px`, ...(layout === v ? face.navy : face.secondary) }}>
+                <div>{title}</div>
+                <div style={{ ...text('caption'), fontWeight: 400, opacity: 0.85 }}>{sub}</div>
+              </button>
+            ))}
+          </div>
+          {layout === 'sheet' && places > 1 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginTop: space.sm, ...text('caption'), color: colour.inkMuted }}>
+              Start at place
+              <input data-print-start aria-label="Start at place on the sheet" inputMode="numeric" value={start}
+                onChange={e => { setPdf(null); setStart(Math.max(1, Math.min(places, Math.floor(Number(e.target.value) || 1)))) }} style={fieldStyle} />
+              of {places} (1 is top left, across then down) — to use up a part-used sheet.
+            </label>
+          )}
           <div style={{ ...text('caption'), color: colour.inkFaint, margin: `${space.md}px 0` }}>
-            {total} label{total === 1 ? '' : 's'} · one per 68 × 21 mm page. In the print dialog choose the Epson CW-C4010A with 68 × 21 mm media, and print at <strong>100% / Actual size</strong> — never “Fit to page”.
+            {total} label{total === 1 ? '' : 's'}{layout === 'label'
+              ? <> · one per page. Load the printer with {sizes.length === 1 ? sizes[0] : 'the matching'} labels (the Epson CW-C4010A for 68 × 21 mm), and print at <strong>100% / Actual size</strong> — never “Fit to page”.</>
+              : <> · on A4 label sheets. In the print dialog choose your printer, A4, and <strong>100% / Actual size</strong> — never “Fit to page”. Print one on plain paper first and hold it against a sheet to check it lines up.</>}
           </div>
           {busy && <div role="status" style={{ ...text('caption'), color: colour.accentDeep, marginBottom: space.sm }}>{busy}</div>}
           {error && <div role="alert" style={{ ...text('caption'), color: colour.danger, marginBottom: space.sm }}>{error}</div>}
