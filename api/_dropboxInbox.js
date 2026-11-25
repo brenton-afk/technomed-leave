@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto'
 import ExcelJS from 'exceljs'
 import { redis } from './_redis.js'
 import { listFolder, downloadFile, uploadFile, fileMetadata, deletePath } from './_dropbox.js'
+import { attachmentByName } from './_gmail.js'
 
 export const INBOX = '/Admin/Claude Inbox'
 export const ALLOWED = ['/admin/accounts/', '/distributors/mac surgical/']
@@ -44,6 +45,16 @@ export function readDelivery(json) {
     if (!edits.length || edits.some(e => !OPS.has(e?.op) || !e.sheet)) return { error: 'bad edits' }
     return { path, edits, replaces: String(d.replaces) }
   }
+  // A file too big to type into a note is fetched from an email it is attached
+  // to, in one of our own mailboxes; the checksum still has to match.
+  if (d?.gmail) {
+    const { mailbox, messageId, filename } = d.gmail
+    if (!/^[^@\s]+@technomed\.com\.au$/i.test(String(mailbox || ''))) return { error: 'bad mailbox' }
+    if (!messageId || !filename) return { error: 'bad gmail source' }
+    if (!/^[0-9a-f]{64}$/i.test(String(d.sha256 || ''))) return { error: 'checksum missing' }
+    return { path, gmail: { mailbox: String(mailbox), messageId: String(messageId), filename: String(filename) },
+      sha256: String(d.sha256).toLowerCase(), replaces: d?.replaces ? String(d.replaces) : null }
+  }
   const bytes = Buffer.from(String(d?.base64 || ''), 'base64')
   if (!bytes.length) return { error: 'empty file' }
   const sha = createHash('sha256').update(bytes).digest('hex')
@@ -68,7 +79,16 @@ export async function deliverInbox() {
           continue
         }
       }
-      const bytes = d.edits ? await editWorkbook(await downloadFile(d.path), d.edits) : d.bytes
+      let bytes = d.bytes
+      if (d.edits) bytes = await editWorkbook(await downloadFile(d.path), d.edits)
+      if (d.gmail) {
+        bytes = await attachmentByName(d.gmail.mailbox, d.gmail.messageId, d.gmail.filename)
+        if (!bytes) { out.push({ note: e.name, error: 'attachment not found' }); continue }
+        if (createHash('sha256').update(bytes).digest('hex') !== d.sha256) {
+          out.push({ note: e.name, error: 'checksum does not match' })
+          continue
+        }
+      }
       await uploadFile(d.path, bytes)
       await deletePath(notePath)
       out.push({ note: e.name, delivered: d.path })

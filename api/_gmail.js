@@ -254,6 +254,20 @@ export async function readAttachment(mailbox, messageId, attachmentId) {
   return { data, mediaType: sniffMediaType(data, '') }
 }
 
+/**
+ * An attachment found by its file name — attachment ids are not stable between
+ * reads, so a delivery note names the file instead (Brent, 25 Nov 2026).
+ * Returns its bytes as a Buffer, or null when the message has no such file.
+ */
+export async function attachmentByName(mailbox, messageId, filename) {
+  const message = await gmail(`/messages/${encodeURIComponent(messageId)}?format=full`, { impersonate: mailbox })
+  const found = walk(message.payload, { text: '', html: '', attachments: [] }).attachments
+    .find(a => a.filename === filename)
+  if (!found) return null
+  const { data } = await readAttachment(mailbox, messageId, found.attachmentId)
+  return Buffer.from(data, 'base64')
+}
+
 function stripHtml(html) {
   return String(html || '')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')

@@ -24,6 +24,14 @@ describe('Dropbox delivery notes', () => {
     expect(readDelivery(note('/Distributors/Signus/x.pdf', 'x')).error).toBe('path not allowed')
     expect(readDelivery(note('/Admin/Accounts/../ALL SURGEON USAGE/x', 'x')).error).toBe('bad path')
   })
+  it('takes a file attached to an email in our own mailbox', () => {
+    const gmail = { mailbox: 'brenton@technomed.com.au', messageId: 'm1', filename: 'a.pdf' }
+    const d = readDelivery(JSON.stringify({ path: '/Distributors/MAC Surgical/a.pdf', gmail, sha256: 'a'.repeat(64) }))
+    expect(d.error).toBeUndefined()
+    expect(d.gmail.filename).toBe('a.pdf')
+    expect(readDelivery(JSON.stringify({ path: '/Distributors/MAC Surgical/a.pdf', gmail: { ...gmail, mailbox: 'x@gmail.com' }, sha256: 'a'.repeat(64) })).error).toBe('bad mailbox')
+    expect(readDelivery(JSON.stringify({ path: '/Distributors/MAC Surgical/a.pdf', gmail })).error).toBe('checksum missing')
+  })
   it('refuses bytes that do not match', () => {
     const n = JSON.parse(note('/Admin/Accounts/a.xlsx', 'x'))
     n.sha256 = '0'.repeat(64)
