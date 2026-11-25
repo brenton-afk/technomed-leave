@@ -193,13 +193,12 @@ describe('both views show them', () => {
     expect(component).toMatch(/textDecoration: 'line-through'/)
   })
 
-  it('offers the button beside Add a booking', () => {
-    // One row of + Booking, + Task, Inbox now (Brent, 4 Nov 2026).
-    const row = source.slice(source.indexOf('function ActionRow'))
-    expect(row).toMatch(/onAddTask\(day\)/)
+  it('offers + Task in the Team sheet', () => {
+    // + Task moved into the Team sheet with the Inbox (option B, Brent 25 Nov 2026).
+    expect(source).toMatch(/onAddTask=\{\(\) => \{ setTeamOpen\(false\); setAddingTask\(activeDay\) \}\}/)
   })
 
   it('does not call a day with a task on it empty', () => {
-    expect(phone).toMatch(/&& !kitJobs\(day\.tasks\)\.length/)
+    expect(phone).toMatch(/\|\| !kitJobs\(day\.tasks\)\.length/)
   })
 })

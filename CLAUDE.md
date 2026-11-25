@@ -565,6 +565,21 @@ everything that treats leave as "not here" does the same; `whoIsAway` carries
 `why` per day and the team leader chip and sheet say "Away" / "RDO" instead of
 "On leave". `clinicalPlan/away.test.js`, `cases/AwaySheet.test.jsx`.
 
+### Cases is just cases — the Team button (option B, Brent 25 Nov 2026)
+
+"Have a cases page that is literally just cases", built from his pick of the
+mock-ups (`claude.ai/artifact/VfpWNEpBq7q3FLNaXYtYZi`, B). A **Team** button
+(`cases/TeamSheet.jsx`, `TeamButton`, `data-team-button`) — up to four faces
+of people with a status that day and a count of kit jobs + Inbox bookings
+(`data-team-waiting`) — sits beside the band's mark on a phone (the title row
+has no room at 360px; checked in a real render) and beside search on a
+computer. It opens the **Team sheet** (`data-team-sheet`, `useBackLayer`): the
+who's-where strip, the day's kit jobs (CaseWeek's own `TaskRow`, carried-over
+ones included; `data-team-jobs`), **+ Task** and **Inbox**. The day view draws
+no strip and no kit jobs (`DayPanel hideKitJobs`); **+ Booking** is on the
+day's line (`AddBooking inline`), and above the week in week view. The
+ActionRow is gone. The phone week list and desktop columns keep their jobs.
+
 ### Who's where (option B, Brent 25 Nov 2026)
 
 From the "Cases page redesign" canvas (`claude.ai/artifact/UMUjMpRmSQsEEiDSbU7Tgr`)

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react'
 import CaseWeek from './CaseWeek.jsx'
 import { LIVE_POLL_MS, AWAY_LONG_ENOUGH_MS } from '../liveRefresh.js'
 import { formatWeekRangeShort } from '../clinicalPlan/week.js'
@@ -436,30 +436,35 @@ describe('who is away', () => {
     end: { date: '2026-09-23' }
   }
 
-  // Since option B (Brent, 25 Nov 2026) the day's leave is the who's-where
-  // strip above the cases — Ben's ring in the leave colour — not a chip.
-  it('shows leave above the cases, not below them', async () => {
+  // Since option B (Brent, 25 Nov 2026) the day's leave is in the Team sheet's
+  // who's-where strip — Ben's ring in the leave colour — and Cases is just
+  // cases: no chip, no box.
+  const openTeam = async () => {
+    await waitFor(() => expect(document.querySelector('[data-team-button]')).not.toBeNull())
+    fireEvent.click(document.querySelector('[data-team-button]'))
+    await waitFor(() => expect(document.querySelector('[data-team-sheet]')).not.toBeNull())
+  }
+
+  it('shows leave in the Team sheet', async () => {
     events = [...BOOKINGS, LEAVE]
     show()
+    await screen.findByText('Mardon')
+    await openTeam()
     await waitFor(() => expect(document.querySelector('[data-whos-where-person="Ben"]')?.dataset.status).toBe('leave'))
-    const strip = document.querySelector('[data-whos-where]')
-    const firstCase = screen.getByText('Mardon')
-    expect(strip.compareDocumentPosition(firstCase) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('does not also repeat it as a chip or at the bottom', async () => {
     events = [...BOOKINGS, LEAVE]
     show()
-    await waitFor(() => expect(document.querySelector('[data-whos-where-person="Ben"]')?.dataset.status).toBe('leave'))
+    await screen.findByText('Mardon')
     expect(screen.queryByText('Ben - ANNUAL LEAVE')).toBeNull()
+    expect(document.querySelector('[data-whos-where]')).toBeNull()
   })
 
   it('leaves the other odds and ends where they were', async () => {
     events = [...BOOKINGS, LEAVE]
     show()
-    const meeting = await screen.findByText('Team meeting')
-    const strip = document.querySelector('[data-whos-where]')
-    expect(strip.compareDocumentPosition(meeting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(await screen.findByText('Team meeting')).toBeInTheDocument()
   })
 })
 
@@ -467,9 +472,26 @@ describe("an away entry is on the strip, not in a box too (Brent, 25 Nov 2026)",
   it('reads "Mat — Away · Conference" in any colour as Mat away, once', async () => {
     events = [...BOOKINGS, { id: 'aw1', summary: 'Mat — Away · Conference', description: '', location: '', colorId: '6', start: { date: '2026-09-21' }, end: { date: '2026-09-22' } }]
     show()
+    await screen.findByText('Mardon')
+    expect(screen.queryByText('Mat — Away · Conference')).toBeNull()
+    fireEvent.click(document.querySelector('[data-team-button]'))
     await waitFor(() => expect(document.querySelector('[data-whos-where-person="Mat"]')?.dataset.status).toBe('away'))
     expect(document.querySelector('[data-whos-where-person="Mat"]').textContent).toMatch(/CONFERENCE/)
-    expect(screen.queryByText('Mat — Away · Conference')).toBeNull()
+  })
+})
+
+describe('Cases is just cases (option B, Brent 25 Nov 2026)', () => {
+  it('has + Booking on the day, and + Task, Inbox and kit jobs in the Team sheet', async () => {
+    show()
+    await screen.findByText('Mardon')
+    expect(screen.getByRole('button', { name: /^Add a booking to/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add a task' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check the bookings inbox' })).toBeNull()
+    fireEvent.click(document.querySelector('[data-team-button]'))
+    const sheet = await waitFor(() => document.querySelector('[data-team-sheet]'))
+    expect(sheet.querySelector('[data-team-jobs]')).not.toBeNull()
+    expect(within(sheet).getByRole('button', { name: 'Add a task' })).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Check the bookings inbox' })).toBeInTheDocument()
   })
 })
 

@@ -37,9 +37,10 @@ describe('Add status (option B, Brent 25 Nov 2026)', () => {
     expect(document.querySelector('[data-status-leave-note]').textContent).toMatch(/"Leave" only/)
   })
 
-  it('is no longer a + Away button on Cases — the strip has + Add', () => {
+  it('is no longer a + Away button on Cases — the Team sheet\'s strip has + Add', () => {
     const src = readFileSync(join(__dirname, '..', 'CaseWeek.jsx'), 'utf8')
     expect(src).not.toMatch(/data-add-away/)
-    expect(src).toMatch(/<WhosWhere /)
+    expect(src).toMatch(/<TeamSheet /)
+    expect(readFileSync(join(__dirname, 'TeamSheet.jsx'), 'utf8')).toMatch(/<WhosWhere /)
   })
 })

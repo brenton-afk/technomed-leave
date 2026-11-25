@@ -25,7 +25,7 @@ import { caseSummaryText, copyText } from '../clinicalPlan/caseSummary.js'
 import EditBooking, { prefetchBooking } from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
-import WhosWhere from './cases/WhosWhere.jsx'
+import TeamSheet, { TeamButton } from './cases/TeamSheet.jsx'
 import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import CaseSearch, { SearchButton } from './cases/CaseSearch.jsx'
@@ -882,32 +882,19 @@ function ItemRow({ item }) {
  * busy"). The booking button still names the day it adds to, for a screen
  * reader and for the test that holds it to that.
  */
-function ActionRow({ day, onAdd, onAddTask, onInbox, queueCount }) {
+/** + Booking: on the day's line in day view, above the week otherwise. */
+function AddBooking({ day, onAdd, inline = false }) {
   const when = day ? `${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}` : ''
-  // A status (training, away, office …) is added from the who's-where strip
-  // under the day (Brent, 25 Nov 2026), not from here.
-  const button = { minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text('bodyStrong'), fontWeight: 700, padding: `0 ${space.xs}px`, whiteSpace: 'nowrap' }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.sm, marginBottom: space.md, maxWidth: 560 }}>
-      <button type="button" onClick={() => onAdd(day)} aria-label={when ? `Add a booking to ${when}` : 'Add a booking'}
-        style={{ ...button, border: `1px solid ${colour.accent}`, background: colour.accentSoft, color: colour.accentDeep }}>
-        + Booking
-      </button>
-      <button type="button" onClick={() => onAddTask(day)} aria-label={when ? `Add a task to ${when}` : 'Add a task'}
-        style={{ ...button, border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink }}>
-        + Task
-      </button>
-      {/* Never "nothing waiting": the count is only what has already been
-          read, and the mailbox may hold more — opening it checks. */}
-      <button type="button" onClick={onInbox} aria-label="Check the bookings inbox"
-        style={{
-          ...button,
-          border: `1px solid ${queueCount > 0 ? colour.warningLine : colour.line}`,
-          background: queueCount > 0 ? colour.warningSoft : colour.surface, color: colour.ink
-        }}>
-        Inbox{queueCount > 0 ? ` · ${queueCount}` : ''}
-      </button>
-    </div>
+    <button type="button" onClick={() => onAdd(day)} aria-label={when ? `Add a booking to ${when}` : 'Add a booking'}
+      style={{
+        minHeight: inline ? 36 : 44, flexShrink: 0, borderRadius: inline ? radius.pill : radius.control, cursor: 'pointer',
+        ...text(inline ? 'caption' : 'bodyStrong'), fontWeight: 700, padding: `0 ${space.md}px`, whiteSpace: 'nowrap',
+        border: `1px solid ${colour.accent}`, background: colour.accentSoft, color: colour.accentDeep,
+        marginBottom: inline ? 0 : space.md, alignSelf: 'flex-start'
+      }}>
+      + Booking
+    </button>
   )
 }
 
@@ -1315,7 +1302,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
  * one running order and everybody is reading it.
  */
 
-function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone, due, today, onDueDone, hideAway }) {
+function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone, due, today, onDueDone, hideAway, hideKitJobs }) {
   const groups = day.casesByHospital || []
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
@@ -1336,7 +1323,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   // those are the same sentence twice, a few centimetres apart — and the one
   // that can be acted on is the other one.
   const empty = !groups.length && !others.length && !away.length
-    && !attention.length && !shownFlags(day.flags).length && !kitJobs(day.tasks).length
+    && !attention.length && !shownFlags(day.flags).length && (hideKitJobs || !kitJobs(day.tasks).length)
 
   return (
     <>
@@ -1380,7 +1367,8 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           because a job that has to happen before the list starts is the thing
           somebody needs to see first. Same component as the week column, so
           the two cannot drift apart. */}
-      {kitJobs(day.tasks).map(task => (
+      {/* In the Team sheet instead on the day view (option B, 25 Nov 2026). */}
+      {!hideKitJobs && kitJobs(day.tasks).map(task => (
         <TaskRow key={task.id} task={task} onDone={onTaskDone} />
       ))}
       {/* Project items stay in My To Do (Brent, 17 Nov 2026). */}
@@ -1470,6 +1458,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   // The day a task is being added to, or null. Separate from `adding` so that
   // opening one does not look like opening the other.
   const [addingTask, setAddingTask] = useState(null)
+  // The Team sheet (option B, Brent 25 Nov 2026): who's where, kit jobs, + Task, Inbox.
+  const [teamOpen, setTeamOpen] = useState(false)
   // A tapped task opens rather than ticking itself. See cases/TaskSheet.jsx.
   const [openTask, setOpenTask] = useState(null)
   const prefs = useMemo(() => readPrefs(), [])
@@ -2018,6 +2008,14 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   const caseCount = day => (day?.casesByHospital || []).reduce(
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
+  // The Team button (option B, Brent 25 Nov 2026): faces of who's where, and
+  // a count of kit jobs and bookings waiting in the Inbox.
+  const teamButton = plan ? (
+    <TeamButton date={activeDay} days={plan.days || []} away={plan.away || []}
+      entries={statusEntries} onClick={() => setTeamOpen(true)}
+      waiting={kitJobs(dayPlan?.tasks).length + queueCount} />
+  ) : null
+
   return (
     <InSituProvider plan={plan} token={user?.token}>
     <Page
@@ -2038,10 +2036,18 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           the tile mark — the scattered tiles were too busy there (Brent,
           6 Nov 2026). */}
       <Header title="Cases" compact sticky art={desktop ? true : 'subtle'}
-        logo={desktop ? <BandLogo height={40} /> : <BandMark size={40} />}
+        // On a phone the Team button sits beside the mark: the title row has
+        // no room for it beside the search and Day/Week/Lists at 360px.
+        logo={desktop ? <BandLogo height={40} /> : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
+            <BandMark size={40} />
+            {teamButton}
+          </div>
+        )}
         eyebrow={desktop ? greeting : undefined}
         right={(
           <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+            {desktop && teamButton}
             <SearchButton onClick={() => setSearching(true)} />
             <SpanToggle span={span}
               options={desktop ? ['week', 'lists'] : ['day', 'week', 'lists']}
@@ -2198,8 +2204,10 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
         {/* One row for the three ways in — a booking, a task, the inbox —
             instead of three full-width bars above the cases. The team leader
             is no longer a bar here: it sits under each day's date. */}
-        <ActionRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask}
-          onInbox={() => setShowQueue(true)} queueCount={queueCount} />
+        {/* Cases is just cases (option B, Brent 25 Nov 2026): + Task and the
+            Inbox are in the Team sheet; + Booking sits on the day's line, and
+            above the week in week view. */}
+        {span !== 'day' && <AddBooking day={activeDay} onAdd={setAdding} />}
 
         {plan && span === 'day' && (
           <>
@@ -2223,14 +2231,10 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
                 )}
               </div>
               <span style={{ flexShrink: 0 }}>{leaderChip(activeDay)}</span>
+              <AddBooking day={activeDay} onAdd={setAdding} inline />
             </div>
-            {/* Who's where, under the day (option B, Brent 25 Nov 2026). It
-                replaces the leave and away chips the day used to carry. */}
-            <WhosWhere date={activeDay} days={plan.days || []} away={plan.away || []}
-              entries={statusEntries} user={user}
-              onChanged={() => { loadStatuses(); load(window_, { quiet: true }) }} />
             {dayPlan
-              ? <DayPanel day={dayPlan} onOpen={setEditing} hideAway
+              ? <DayPanel day={dayPlan} onOpen={setEditing} hideAway hideKitJobs
                   due={dueFor(activeDay)} today={today} onDueDone={openDueSheet}
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
@@ -2393,6 +2397,17 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onCreated={() => load(window_, { quiet: true })} />
       )}
 
+      {teamOpen && plan && (
+        <TeamSheet date={activeDay} days={plan.days || []} away={plan.away || []}
+          entries={statusEntries} user={user}
+          onChanged={() => { loadStatuses(); load(window_, { quiet: true }) }}
+          jobs={kitJobs(dayPlan?.tasks)}
+          renderJob={task => <TaskRow task={task} onDone={t => { setTeamOpen(false); openTaskSheet(t) }} />}
+          onAddTask={() => { setTeamOpen(false); setAddingTask(activeDay) }}
+          onInbox={() => { setTeamOpen(false); setShowQueue(true) }}
+          queueCount={queueCount}
+          onClose={() => setTeamOpen(false)} />
+      )}
       {showQueue && (
         <BookingQueue
           user={user}

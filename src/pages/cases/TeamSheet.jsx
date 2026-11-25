@@ -1,0 +1,109 @@
+import React, { useMemo } from 'react'
+import { useBackLayer } from '../../backButton.js'
+import { Overlay } from '../../design/Shell.jsx'
+import { colour, text, space, radius, statusTint } from '../../design/tokens.js'
+import { whosWhere } from '../../clinicalPlan/whosWhere.js'
+import { weekdayName, parseDateStr } from '../../clinicalPlan/week.js'
+import WhosWhere from './WhosWhere.jsx'
+
+// ─── The Team button and sheet (option B, Brent 25 Nov 2026) ────────────────
+// "Have a cases page that is literally just cases": who's where, the day's kit
+// jobs, + Task and the Inbox moved off the Cases page into one sheet, opened
+// from a button on the band that shows a few faces and a count of what is
+// waiting (kit jobs + bookings in the Inbox), so nothing is hidden.
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const shortDay = date => {
+  const d = parseDateStr(date)
+  return `${weekdayName(date).slice(0, 3)} ${d.day} ${MONTHS[d.month - 1]}`
+}
+
+/** The band's button: up to four faces of people with a status that day. */
+export function TeamButton({ date, days = [], away = [], entries = [], waiting = 0, onClick }) {
+  const day = days.find(d => d.date === date)
+  const faces = useMemo(
+    () => whosWhere({ date, day, away, entries }).filter(r => r.kind).slice(0, 4),
+    [date, day, away, entries])
+  return (
+    <button type="button" data-team-button onClick={onClick}
+      aria-label={`Team today${waiting ? ` — ${waiting} waiting` : ''}`}
+      style={{
+        position: 'relative', height: 36, flexShrink: 0, borderRadius: radius.pill, cursor: 'pointer',
+        border: 'none', background: colour.navySoft, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), 0 2px 6px rgba(0,0,0,0.28)',
+        color: 'white', display: 'flex', alignItems: 'center', gap: 6, padding: `0 ${space.md}px 0 6px`
+      }}>
+      <span aria-hidden="true" style={{ display: 'flex', paddingRight: faces.length ? 6 : 0 }}>
+        {faces.map(r => {
+          const tint = statusTint[r.kind]
+          return (
+            <span key={r.person.email} style={{
+              width: 24, height: 24, borderRadius: 12, boxSizing: 'border-box', marginRight: -6,
+              border: `2px solid ${tint.ring}`, background: tint.soft, color: tint.ink,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', ...text('micro'), letterSpacing: 0
+            }}>{r.initials}</span>
+          )
+        })}
+      </span>
+      <span style={{ ...text('caption'), fontWeight: 700 }}>Team</span>
+      {waiting > 0 && (
+        <span data-team-waiting style={{
+          minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px', boxSizing: 'border-box',
+          background: colour.warning, color: 'white', ...text('micro'),
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>{waiting}</span>
+      )}
+    </button>
+  )
+}
+
+/**
+ * The sheet. `jobs` are the day's kit jobs, drawn by `renderJob` (CaseWeek's
+ * own TaskRow, so they look and tick exactly as they did on the page).
+ */
+export default function TeamSheet({ date, days, away, entries, user, onChanged, jobs = [], renderJob, onAddTask, onInbox, queueCount = 0, onClose }) {
+  useBackLayer(true, onClose)
+  const button = { flex: 1, minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text('bodyStrong'), fontWeight: 700, whiteSpace: 'nowrap' }
+  return (
+    <Overlay>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(4,39,70,0.45)', zIndex: 2900, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+        <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Team" data-team-sheet className="tm-sheet"
+          style={{
+            background: colour.canvas, width: '100%', maxWidth: 520, maxHeight: '88%', overflowY: 'auto', overflowX: 'hidden',
+            boxSizing: 'border-box', borderRadius: `${radius.sheet}px ${radius.sheet}px 0 0`, padding: space.lg
+          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.md }}>
+            <h2 style={{ margin: 0, flex: 1, ...text('title'), color: colour.ink }}>Team · {shortDay(date)}</h2>
+            <button type="button" onClick={onClose} aria-label="Close"
+              style={{ width: 40, height: 40, borderRadius: 20, border: 'none', background: colour.surface, cursor: 'pointer', ...text('heading'), color: colour.ink }}>✕</button>
+          </div>
+
+          <WhosWhere date={date} days={days} away={away} entries={entries} user={user} onChanged={onChanged} />
+
+          <div data-team-jobs style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, padding: space.md, marginBottom: space.md }}>
+            <div style={{ ...text('micro'), color: colour.inkFaint, marginBottom: space.sm }}>KIT JOBS</div>
+            {jobs.length
+              ? jobs.map(job => <React.Fragment key={job.id}>{renderJob(job)}</React.Fragment>)
+              : <div style={{ ...text('caption'), color: colour.inkFaint }}>No kit to move today.</div>}
+          </div>
+
+          <div style={{ display: 'flex', gap: space.sm }}>
+            <button type="button" onClick={onAddTask} aria-label="Add a task"
+              style={{ ...button, border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink }}>
+              + Task
+            </button>
+            {/* Never "nothing waiting": the count is only what has already been
+                read, and the mailbox may hold more — opening it checks. */}
+            <button type="button" onClick={onInbox} aria-label="Check the bookings inbox"
+              style={{
+                ...button,
+                border: `1px solid ${queueCount > 0 ? colour.warningLine : colour.line}`,
+                background: queueCount > 0 ? colour.warningSoft : colour.surface, color: colour.ink
+              }}>
+              Inbox{queueCount > 0 ? ` · ${queueCount}` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Overlay>
+  )
+}
