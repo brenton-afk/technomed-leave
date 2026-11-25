@@ -58,6 +58,12 @@ describe('away entries', () => {
     expect(awayWhen({ from: '2026-11-26', to: '2026-11-26', allDay: false, start: '08:00', end: '12:30' })).toBe('Thu 26 Nov · 08:00–12:30')
   })
 
+  it('reads one of our titles as "not here" whatever its colour (25 Nov 2026)', () => {
+    expect(classifyItem({ title: 'Mat — Away · Conference', colourName: 'tangerine' })).toMatchObject({ kind: 'leave', label: 'Away' })
+    expect(classifyItem({ title: 'Aimee — Training · Melbourne' })).toMatchObject({ kind: 'leave', label: 'Training' })
+    expect(classifyItem({ title: 'Team meeting' }).kind).toBe('meeting')
+  })
+
   it('reads as "not here" like leave, labelled Away', () => {
     expect(classifyItem({ title: 'Mat — Away · Training day', colourName: 'grape' })).toMatchObject({ kind: 'leave', label: 'Away' })
     expect(classifyItem({ title: 'Mat — RDO', colourName: 'grape' })).toMatchObject({ kind: 'leave', label: 'RDO' })

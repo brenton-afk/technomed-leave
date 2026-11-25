@@ -66,6 +66,12 @@ export function classifyItem(item = {}) {
     const away = readAwayTitle(item.title || item.summary)
     return away ? { kind: 'leave', label: away.word, away: true } : { kind: 'leave', label: 'Leave' }
   }
+  // The portal's own titles ("Mat — Away · Conference", "Aimee — Training ·
+  // Melbourne") mean "not here" whatever colour the entry ended up in — one
+  // without Grape was read as a meeting for the word Conference and Mat's
+  // circle stayed empty (Brent, 25 Nov 2026).
+  const own = readAwayTitle(item.title || item.summary)
+  if (own) return { kind: 'leave', label: own.word, away: true }
 
   for (const candidate of KINDS) {
     if (candidate.match.test(text)) return { kind: candidate.kind, label: candidate.label }

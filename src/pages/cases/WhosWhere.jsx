@@ -36,7 +36,7 @@ const tagStyle = kind => {
   const tint = statusTint[kind || 'none']
   return {
     display: 'inline-block', ...text('micro'), color: tint.ink, background: tint.soft,
-    borderRadius: radius.pill, padding: '1px 6px', maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+    borderRadius: radius.pill, padding: '1px 6px', maxWidth: 88, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
   }
 }
 

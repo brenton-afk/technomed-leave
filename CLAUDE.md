@@ -861,6 +861,11 @@ eyebrow is the greeting and date (Header A), on a phone three tiles give the
 week at a glance — cases this week, the day picked in the strip ("today"
 on today, else e.g. "Tue 22"), who leads that day (Header C,
 `data-glance`; tests look past it for cards and the leader chip).
+**Since 25 Nov 2026 that is one line, not three tiles** (Brent: "too big.
+Reduce it down") — "13 this week · 2 today · Ben leading ✎", the leader
+still a tap (`data-leading-tile`). An Away / Training entry in the portal's
+own title form (`Mat — Away · Conference`) is "not here" whatever colour it
+is in (`classifyItem`), so the who's-where strip shows it.
 Revised the same day: on a phone the band has **just the tile mark**
 (`BandMark`, `public/logo-mark.png`) and no scattered tiles ("too busy");
 the header's search, span toggle and week arrows are **solid** (`navySoft` /

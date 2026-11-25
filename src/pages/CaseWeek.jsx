@@ -2075,32 +2075,25 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
             smallest thing on the screen. Three items now, not four — the
             Day/Week pair moved up beside the title — so the range has room to
             be read and the arrows have room to be hit. */}
-        {/* The week at a glance, on a phone (Header C, Brent 6 Nov 2026). */}
+        {/* The week at a glance, on a phone — one line now, not three big
+            tiles (Brent, 25 Nov 2026: "too big. Reduce it down"), as in the
+            option B mock-up: "13 this week · 2 today · Ben leading ✎". The
+            leader is still a tap to change who leads (7 Nov 2026). */}
         {!desktop && plan && (
-          <div data-glance style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.xs, marginBottom: space.sm }}>
-            {glance.map(([value, label]) => {
-              // The "leading" tile opens the team leader sheet for the day on
-              // show (Brent, 7 Nov 2026: "tap and choose"). The others only say.
-              const tappable = label === 'leading' && shownDay
-              const Tile = tappable ? 'button' : 'div'
-              return (
-              <Tile key={label} {...(tappable ? {
-                type: 'button', 'data-leading-tile': true,
-                'aria-label': `Leading ${dayLabel}: ${value}. Tap to change who leads.`,
-                onClick: () => setLeaderSheetDay(shownDay)
-              } : {})}
-                style={{ position: 'relative', background: colour.navySoft, boxShadow: RAISED, borderRadius: radius.card, padding: '8px 12px', minWidth: 0,
-                  ...(tappable ? { border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', width: '100%' } : {}) }}>
-                {/* The value is a text node beside its label, not an element of
-                    its own, so "1" or "Ben" up here is never mistaken for a
-                    card's or the leader chip's. */}
-                <div style={{ ...text('heading'), color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {value}
-                  <div style={{ ...text('micro'), color: 'rgba(122,214,196,0.9)', textTransform: 'uppercase', letterSpacing: 0.6 }}>{label}{tappable ? ' ✎' : ''}</div>
-                </div>
-              </Tile>
-              )
-            })}
+          <div data-glance style={{
+            display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: space.sm,
+            ...text('caption'), color: 'rgba(255,255,255,0.82)'
+          }}>
+            <span><b style={{ color: 'white' }}>{glance[0][0]}</b> {glance[0][1]}</span>
+            <span aria-hidden="true">·</span>
+            <span><b style={{ color: 'white' }}>{glance[1][0]}</b> {glance[1][1]}</span>
+            <span aria-hidden="true">·</span>
+            <button type="button" data-leading-tile disabled={!shownDay}
+              aria-label={`Leading ${dayLabel}: ${glance[2][0]}. Tap to change who leads.`}
+              onClick={() => shownDay && setLeaderSheetDay(shownDay)}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: shownDay ? 'pointer' : 'default', font: 'inherit', color: 'inherit' }}>
+              <b style={{ color: 'white' }}>{glance[2][0]}</b> leading ✎
+            </button>
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
