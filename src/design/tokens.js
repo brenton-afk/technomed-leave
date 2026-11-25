@@ -53,6 +53,18 @@ export const site = {
 }
 
 // Closed set. `size` is px, `line` is a unitless line-height.
+// Who's where (Brent, 25 Nov 2026): a ring and a wash per status. Away and
+// Leave share the leave colour on purpose — "that flags it in the same way
+// for the team".
+export const statusTint = {
+  theatre: { ring: '#189a85', soft: '#e8f4f2', ink: '#0f7566' },
+  office: { ring: '#3b78c2', soft: '#e1ecf8', ink: '#24548f' },
+  training: { ring: '#d98a3a', soft: '#fcebd9', ink: '#94500f' },
+  away: { ring: '#8e24aa', soft: '#f3e5f7', ink: '#6a1b80' },
+  leave: { ring: '#8e24aa', soft: '#f3e5f7', ink: '#6a1b80' },
+  none: { ring: '#d3dae4', soft: '#f6f8fa', ink: '#93a1ad' }
+}
+
 export const type = {
   display: { size: 25, line: 1.18, weight: 700, spacing: '-0.4px' },
   title: { size: 19, line: 1.25, weight: 700, spacing: '-0.2px' },

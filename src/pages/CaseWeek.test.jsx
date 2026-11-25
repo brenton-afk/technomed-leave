@@ -78,7 +78,8 @@ afterEach(() => {
 const show = (props = {}) => render(<CaseWeek user={USER} {...props} />)
 // The band's week-at-a-glance tiles (Header C) repeat a count and the leader's
 // name; these tests are about the cards and the leader chip below them.
-const outsideGlance = els => els.filter(el => !el.closest('[data-glance]'))
+// The who's-where strip (25 Nov 2026) names everyone too.
+const outsideGlance = els => els.filter(el => !el.closest('[data-glance]') && !el.closest('[data-whos-where]'))
 const byTextOutsideGlance = t => outsideGlance(screen.getAllByText(t))[0]
 
 describe('a case, in full', () => {
@@ -99,7 +100,7 @@ describe('a case, in full', () => {
     // thing about one of them.
     expect(screen.getByText('· Cons')).toBeInTheDocument()
     // The rep the old calendar view dropped on the floor.
-    expect(screen.getByText('Mat')).toBeInTheDocument()
+    expect(byTextOutsideGlance('Mat')).toBeInTheDocument()
   })
 
   it('leaves the notes the team wrote to the booking', async () => {
@@ -434,33 +435,30 @@ describe('who is away', () => {
     end: { date: '2026-09-23' }
   }
 
+  // Since option B (Brent, 25 Nov 2026) the day's leave is the who's-where
+  // strip above the cases — Ben's ring in the leave colour — not a chip.
   it('shows leave above the cases, not below them', async () => {
-    // It sat under the theatre list, so on a busy day you had to scroll past
-    // every case to find out who was not in. Leave changes who covers what, so
-    // it is read before the list rather than after it.
     events = [...BOOKINGS, LEAVE]
     show()
-    const leave = await screen.findByText('Ben - ANNUAL LEAVE')
+    await waitFor(() => expect(document.querySelector('[data-whos-where-person="Ben"]')?.dataset.status).toBe('leave'))
+    const strip = document.querySelector('[data-whos-where]')
     const firstCase = screen.getByText('Mardon')
-    // Node.compareDocumentPosition: 4 means the argument follows in the document.
-    expect(leave.compareDocumentPosition(firstCase) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy()
+    expect(strip.compareDocumentPosition(firstCase) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('does not also repeat it at the bottom', async () => {
+  it('does not also repeat it as a chip or at the bottom', async () => {
     events = [...BOOKINGS, LEAVE]
     show()
-    await waitFor(() => expect(screen.getAllByText('Ben - ANNUAL LEAVE')).toHaveLength(1))
+    await waitFor(() => expect(document.querySelector('[data-whos-where-person="Ben"]')?.dataset.status).toBe('leave'))
+    expect(screen.queryByText('Ben - ANNUAL LEAVE')).toBeNull()
   })
 
   it('leaves the other odds and ends where they were', async () => {
-    // Only leave is promoted. A team meeting is not a reason to look up.
     events = [...BOOKINGS, LEAVE]
     show()
-    const leave = await screen.findByText('Ben - ANNUAL LEAVE')
-    const meeting = screen.getByText('Team meeting')
-    expect(leave.compareDocumentPosition(meeting) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy()
+    const meeting = await screen.findByText('Team meeting')
+    const strip = document.querySelector('[data-whos-where]')
+    expect(strip.compareDocumentPosition(meeting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 
@@ -1000,7 +998,7 @@ describe('who is team leader this week', () => {
     await waitFor(() => expect(byTextOutsideGlance('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
-    fireEvent.click(screen.getByText(/^Aimee/))
+    fireEvent.click(byTextOutsideGlance(/^Aimee/))
     await waitFor(() => {
       const post = global.fetch.mock.calls.find(
         ([u, o]) => String(u).includes('action=leader') && o?.method === 'POST')
@@ -1013,7 +1011,7 @@ describe('who is team leader this week', () => {
     await waitFor(() => expect(byTextOutsideGlance('Ben')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Team leader:/ }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Team leader' })).toBeInTheDocument())
-    fireEvent.click(screen.getByText(/^Aimee/))
+    fireEvent.click(byTextOutsideGlance(/^Aimee/))
 
     await waitFor(() => {
       const post = global.fetch.mock.calls.find(
@@ -1570,7 +1568,7 @@ describe('the Friday handover', () => {
     fireEvent.click(screen.getByLabelText(/Team leader: Brent\. Change\./))
     fireEvent.click(await screen.findByRole('tab', { name: 'Their whole turn' }))
     expect(screen.getByText(/Fri 18 Sep to Thu 24 Sep/)).toBeInTheDocument()
-    fireEvent.click(screen.getByText(/^Aimee/))
+    fireEvent.click(byTextOutsideGlance(/^Aimee/))
     await waitFor(() => {
       const post = global.fetch.mock.calls.find(([u, o]) => String(u).includes('action=leader') && o?.method === 'POST')
       expect(JSON.parse(post[1].body)).toEqual({ email: 'aimee@technomed.com.au', from: '2026-09-21' })

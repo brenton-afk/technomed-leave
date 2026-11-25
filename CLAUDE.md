@@ -550,9 +550,8 @@ their agreement first).
 "Mat is at a training day. He's not on leave as he'll be paid for his time
 there, but he is also not available for cases"; "Leave the colour of the away
 as the same colour as leave"; "That can also cover RDOs". **+ Away** on the
-Cases action row (`data-add-away`), shown only to Brent, Erin and Toni
-(`mayAddAway` / `AWAY_EDITOR_EMAILS` in `src/clinicalPlan/away.js`; the server
-checks `AWAY_EDITORS` env, else the same three) → `cases/AwaySheet.jsx`: who,
+Cases action row — **replaced 25 Nov 2026 by Add status on the who's-where
+strip** (below), open to everyone — who,
 why (Training day / RDO / Conference / Course / typed), all day over a run of
 days or set hours on one day, a note; and **Coming up** with Remove.
 `action=away` on `api/calendar/today.js` (GET list, POST, DELETE `id`;
@@ -565,6 +564,33 @@ a normal day. `classifyItem` reads it as kind `leave` with label Away/RDO, so
 everything that treats leave as "not here" does the same; `whoIsAway` carries
 `why` per day and the team leader chip and sheet say "Away" / "RDO" instead of
 "On leave". `clinicalPlan/away.test.js`, `cases/AwaySheet.test.jsx`.
+
+### Who's where (option B, Brent 25 Nov 2026)
+
+From the "Cases page redesign" canvas (`claude.ai/artifact/UMUjMpRmSQsEEiDSbU7Tgr`)
+Brent chose B: a **who's-where strip** under the day's heading on Cases
+(`cases/WhosWhere.jsx`, `data-whos-where`; day view only) — an avatar per
+person (`WHO_PEOPLE`: files a timesheet or is on the clinical team) with a
+ring in the status colour (`statusTint` in `tokens.js`), first name and a short
+tag, **+ Add**, and **Whole team ›** (a page grouped Theatre / Office /
+Training / Away & leave / No entry, stepping through the week's days). Tapping
+a person shows where, when and why, with Remove for an entry. It **replaces
+the leave and away chips on the day** (`DayPanel hideAway`); the phone week
+list and desktop columns keep theirs. The rules are pure, in
+`src/clinicalPlan/whosWhere.js`: Leave > Away / RDO > Training (from the Staff
+Leave calendar, via `plan.away`'s `why`) > a status someone added > **Theatre
+from the bookings — attended or planned rep** (cancelled / not-required cases
+ignored) > **Office by default for Erin and Toni** > nothing. **Leave shows as
+"Leave" only.** Away and Leave share the leave purple ("flags it in the same
+way"). **Add status** (`cases/StatusSheet.jsx`, replacing the + Away sheet and
+button of 24 Nov) is one form for Theatre, Office, Training / travel (where),
+Away (why) and Leave, **open to everyone on the staff list** (`mayAddAway`;
+`AWAY_EDITORS` narrows it). Training, Away and Leave go on the Staff Leave
+calendar in Grape as before (`Aimee — Training · Melbourne`, `Mat — Leave`,
+read back by `readAwayTitle`); Theatre and Office are kept only in
+`away:entries` (`kind`, `where`). `action=away` GET takes `from`/`to` for the
+week (`awayBetween`), polled with the week. `whosWhere.test.js`,
+`WhosWhere.test.jsx`, `StatusSheet.test.jsx`.
 
 ### Supplier booking notices (Tasks 8/9)
 

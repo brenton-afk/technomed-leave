@@ -11,11 +11,19 @@ import { STAFF } from '../staffConfig.js'
 const MAT = STAFF.find(s => s.firstName === 'Mat')
 
 describe('away entries', () => {
-  it('only Brent, Erin and Toni add them', () => {
+  it('anyone on the staff list adds them (Brent, 25 Nov 2026); a list narrows it', () => {
     expect(mayAddAway('brenton@technomed.com.au')).toBe(true)
-    expect(mayAddAway('ERIN@technomed.com.au')).toBe(true)
-    expect(mayAddAway('toni@technomed.com.au')).toBe(true)
-    expect(mayAddAway('mat@technomed.com.au')).toBe(false)
+    expect(mayAddAway('mat@technomed.com.au')).toBe(true)
+    expect(mayAddAway('someone@example.com')).toBe(false)
+    expect(mayAddAway('mat@technomed.com.au', ['erin@technomed.com.au'])).toBe(false)
+  })
+
+  it('titles and reads back training and leave too', () => {
+    expect(awayTitle(MAT, 'Melbourne', 'training')).toBe('Mat — Training · Melbourne')
+    expect(awayTitle(MAT, '', 'leave')).toBe('Mat — Leave')
+    expect(readAwayTitle('Mat — Training · Melbourne')).toEqual({ word: 'Training', reason: 'Melbourne' })
+    expect(readAwayTitle('Mat — Leave')).toEqual({ word: 'Leave', reason: 'Leave' })
+    expect(cleanAway({ email: MAT.email, kind: 'office', from: '2026-11-26' }).error).toBeUndefined()
   })
 
   it('titles and reads back a training day and an RDO', () => {

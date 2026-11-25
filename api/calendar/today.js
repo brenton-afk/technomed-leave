@@ -10,7 +10,7 @@ import {
   serviceAccountEmail
 } from '../_googleCalendar.js'
 import { requireSession, requireAdmin } from '../_auth.js'
-import { addAway, removeAway, upcomingAway, mayEditAway } from '../_away.js'
+import { addAway, removeAway, upcomingAway, awayBetween, mayEditAway } from '../_away.js'
 import {
   getNoticeSettings, saveNoticeSettings, noticesFor, describeBooking,
   holdNotice, takeNotice, restoreNotice, previewOf, loanRequestsFor, loanStateFor, recordLoanRequest, loanLogFor,
@@ -418,9 +418,10 @@ function sendWeek(res, body, seen) {
 // carry who made them.
 
 // ─── Away (Brent, 24 Nov 2026) ────────────────────────────────────────────────
-// GET: may this person add them, and what is coming up. POST: add one.
-// DELETE ?id=: take one off. Only Brent, Erin and Toni add or remove
-// (AWAY_EDITORS); anyone signed in may read the list.
+// GET: may this person add them, and what is coming up (or, with from/to,
+// every entry touching those days — the who's-where strip). POST: add one.
+// DELETE ?id=: take one off. Anyone on the staff list (Brent, 25 Nov 2026;
+// AWAY_EDITORS narrows it).
 async function handleAway(req, res) {
   const session = await requireSession(req, res)
   if (!session) return
@@ -428,9 +429,14 @@ async function handleAway(req, res) {
   try {
     if (req.method === 'GET') {
       const today = toDateStr(zonedCivil(new Date(), TZ))
-      return res.status(200).json({ mayEdit: editor, entries: await upcomingAway(today) })
+      const { from, to } = req.query
+      const span = /^\d{4}-\d{2}-\d{2}$/
+      const entries = span.test(String(from || '')) && span.test(String(to || ''))
+        ? await awayBetween(String(from), String(to))
+        : await upcomingAway(today)
+      return res.status(200).json({ mayEdit: editor, entries })
     }
-    if (!editor) return res.status(403).json({ error: 'Only Brent, Erin and Toni can add or remove away days.' })
+    if (!editor) return res.status(403).json({ error: 'You cannot add or remove statuses.' })
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
       const out = await addAway(body, { email: session.email, name: session.name })

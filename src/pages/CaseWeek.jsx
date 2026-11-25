@@ -25,8 +25,7 @@ import { caseSummaryText, copyText } from '../clinicalPlan/caseSummary.js'
 import EditBooking, { prefetchBooking } from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
-import AwaySheet from './cases/AwaySheet.jsx'
-import { mayAddAway } from '../clinicalPlan/away.js'
+import WhosWhere from './cases/WhosWhere.jsx'
 import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import CaseSearch, { SearchButton } from './cases/CaseSearch.jsx'
@@ -883,13 +882,13 @@ function ItemRow({ item }) {
  * busy"). The booking button still names the day it adds to, for a screen
  * reader and for the test that holds it to that.
  */
-function ActionRow({ day, onAdd, onAddTask, onAway, onInbox, queueCount }) {
+function ActionRow({ day, onAdd, onAddTask, onInbox, queueCount }) {
   const when = day ? `${weekdayName(day)} ${dayNum(day)} ${monthOf(day)}` : ''
-  // Four across on a 360px phone when + Away is there: a size smaller so
-  // "+ Booking" and "Inbox · 12" fit their quarter without clipping.
-  const button = { minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text(onAway ? 'caption' : 'bodyStrong'), fontWeight: 700, padding: `0 ${space.xs}px`, whiteSpace: 'nowrap' }
+  // A status (training, away, office …) is added from the who's-where strip
+  // under the day (Brent, 25 Nov 2026), not from here.
+  const button = { minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text('bodyStrong'), fontWeight: 700, padding: `0 ${space.xs}px`, whiteSpace: 'nowrap' }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${onAway ? 4 : 3}, minmax(0, 1fr))`, gap: space.sm, marginBottom: space.md, maxWidth: onAway ? 680 : 560 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: space.sm, marginBottom: space.md, maxWidth: 560 }}>
       <button type="button" onClick={() => onAdd(day)} aria-label={when ? `Add a booking to ${when}` : 'Add a booking'}
         style={{ ...button, border: `1px solid ${colour.accent}`, background: colour.accentSoft, color: colour.accentDeep }}>
         + Booking
@@ -898,13 +897,6 @@ function ActionRow({ day, onAdd, onAddTask, onAway, onInbox, queueCount }) {
         style={{ ...button, border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink }}>
         + Task
       </button>
-      {/* A training day, an RDO — Brent, Erin and Toni only (24 Nov 2026). */}
-      {onAway && (
-        <button type="button" onClick={() => onAway(day)} data-add-away aria-label={when ? `Add an away day from ${when}` : 'Add an away day'}
-          style={{ ...button, border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink }}>
-          + Away
-        </button>
-      )}
       {/* Never "nothing waiting": the count is only what has already been
           read, and the mailbox may hold more — opening it checks. */}
       <button type="button" onClick={onInbox} aria-label="Check the bookings inbox"
@@ -1323,7 +1315,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
  * one running order and everybody is reading it.
  */
 
-function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone, due, today, onDueDone }) {
+function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone, due, today, onDueDone, hideAway }) {
   const groups = day.casesByHospital || []
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
@@ -1365,7 +1357,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
         </div>
       )}
 
-      {away.length > 0 && (
+      {away.length > 0 && !hideAway && (
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: space.sm
         }}>
@@ -1479,7 +1471,6 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   // The day a task is being added to, or null. Separate from `adding` so that
   // opening one does not look like opening the other.
   const [addingTask, setAddingTask] = useState(null)
-  const [addingAway, setAddingAway] = useState(null)
   // A tapped task opens rather than ticking itself. See cases/TaskSheet.jsx.
   const [openTask, setOpenTask] = useState(null)
   const prefs = useMemo(() => readPrefs(), [])
@@ -1621,6 +1612,20 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
 
   useEffect(() => { load(window_) }, [window_, load])
   useLiveRefresh(useCallback(() => load(window_, { quiet: true }), [window_, load]), [window_, load])
+  // Who's where (option B, Brent 25 Nov 2026): the portal's own status
+  // entries for the week, polled like the week itself.
+  const [statusEntries, setStatusEntries] = useState([])
+  const loadStatuses = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/calendar/today?action=away&from=${window_.startDate}&to=${window_.endDate}`, {
+        headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {}
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      setStatusEntries(Array.isArray(data.entries) ? data.entries : [])
+    } catch { /* offline: the strip reads the plan alone */ }
+  }, [user, window_])
+  useLiveRefresh(loadStatuses, [loadStatuses])
 
   /**
    * Writes the day's running order to the calendar.
@@ -2241,7 +2246,6 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
             instead of three full-width bars above the cases. The team leader
             is no longer a bar here: it sits under each day's date. */}
         <ActionRow day={activeDay} onAdd={setAdding} onAddTask={setAddingTask}
-          onAway={mayAddAway(user?.email) ? setAddingAway : null}
           onInbox={() => setShowQueue(true)} queueCount={queueCount} />
 
         {plan && span === 'day' && (
@@ -2262,8 +2266,13 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
               </div>
               <span style={{ flexShrink: 0 }}>{leaderChip(activeDay)}</span>
             </div>
+            {/* Who's where, under the day (option B, Brent 25 Nov 2026). It
+                replaces the leave and away chips the day used to carry. */}
+            <WhosWhere date={activeDay} days={plan.days || []} away={plan.away || []}
+              entries={statusEntries} user={user}
+              onChanged={() => { loadStatuses(); load(window_, { quiet: true }) }} />
             {dayPlan
-              ? <DayPanel day={dayPlan} onOpen={setEditing}
+              ? <DayPanel day={dayPlan} onOpen={setEditing} hideAway
                   due={dueFor(activeDay)} today={today} onDueDone={openDueSheet}
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
@@ -2424,12 +2433,6 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           preset={taskPreset}
           onClose={() => { setAddingTask(null); setTaskPreset(null) }}
           onCreated={() => load(window_, { quiet: true })} />
-      )}
-
-      {addingAway && (
-        <AwaySheet user={user} date={addingAway}
-          onClose={() => setAddingAway(null)}
-          onSaved={() => load(window_, { quiet: true })} />
       )}
 
       {showQueue && (
