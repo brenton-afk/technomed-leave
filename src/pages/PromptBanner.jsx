@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { IconAlert, IconChevron } from '../design/icons.jsx'
-import { STAFF, isSameStaff } from '../staffConfig.js'
 import { periodDue, isPeriodClosed, periodDeadline } from '../../api/_fortnight.js'
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
@@ -56,24 +55,8 @@ export default function PromptBanner({ user, onNavigate }) {
         } catch { /* a prompt is never worth an error state */ }
       }
 
-      try {
-        const res = await fetch('/api/meetings/agent?action=worklist', { headers: authHeaders })
-        const data = await res.json()
-        // Matched tolerantly: an item assigned before Mat was renamed from
-        // "Matthew Usher" in October is still his, and a nudge that quietly
-        // stops counting half somebody's work is worse than no nudge.
-        const me = STAFF.find(p => p.email === user?.email)
-        const mine = (data.items || []).filter(i =>
-          i.status !== 'done'
-          && (!i.assignee || (me ? isSameStaff(i.assignee, me) : i.assignee === user?.name)))
-        if (mine.length) {
-          found.push({
-            id: 'actions', tone: 'info',
-            text: `${mine.length} action${mine.length === 1 ? '' : 's'} assigned to you`,
-            go: { tab: 'projects' }
-          })
-        }
-      } catch { /* same */ }
+      // No "N actions assigned to you" any more (Brent, 25 Nov 2026) — My To Do
+      // under Projects is where they are.
 
       if (!cancelled) setPrompts(found)
     }

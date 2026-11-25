@@ -36,7 +36,7 @@ const tagStyle = kind => {
   const tint = statusTint[kind || 'none']
   return {
     display: 'inline-block', ...text('micro'), color: tint.ink, background: tint.soft,
-    borderRadius: radius.pill, padding: '1px 6px', maxWidth: 88, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+    borderRadius: radius.pill, padding: '1px 6px', maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
   }
 }
 
@@ -60,22 +60,24 @@ export default function WhosWhere({ date, days = [], away = [], entries = [], us
           Whole team ›
         </button>
       </div>
-      <div style={{ display: 'flex', gap: space.md, overflowX: 'auto', paddingBottom: 2 }}>
+      {/* Everyone at once, evenly spaced, wrapping to a second row — never a
+          sideways scroll (Brent, 25 Nov 2026). */}
+      <div data-whos-where-grid style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(58px, 1fr))', gap: `${space.sm}px ${space.xs}px`, justifyItems: 'center' }}>
         {rows.map(row => (
           <button key={row.person.email} type="button" data-whos-where-person={row.person.firstName}
             data-status={row.kind || 'none'}
             aria-label={`${row.person.firstName}, ${row.kind ? WHO_KINDS[row.kind].label : 'no entry'}`}
             onClick={() => (row.kind ? setPicked(row) : setAdding({ email: row.person.email }))}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, minWidth: 56 }}>
-            <Avatar row={row} />
-            <span style={{ ...text('caption'), fontWeight: 700, color: colour.ink }}>{row.person.firstName}</span>
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%', minWidth: 0 }}>
+            <Avatar row={row} size={42} />
+            <span style={{ ...text('caption'), fontWeight: 700, color: colour.ink, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.person.firstName}</span>
             <span style={tagStyle(row.kind)}>{row.kind ? row.short : '—'}</span>
           </button>
         ))}
         <button type="button" data-whos-where-add onClick={() => setAdding({})}
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, minWidth: 56 }}>
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%', minWidth: 0 }}>
           <span aria-hidden="true" style={{
-            width: 46, height: 46, borderRadius: 23, boxSizing: 'border-box', border: `2px dashed ${colour.inkFainter}`,
+            width: 42, height: 42, borderRadius: 21, boxSizing: 'border-box', border: `2px dashed ${colour.inkFainter}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center', ...text('title'), color: colour.inkFaint
           }}>+</span>
           <span style={{ ...text('caption'), fontWeight: 700, color: colour.inkMuted }}>Add</span>

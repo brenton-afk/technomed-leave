@@ -1463,7 +1463,6 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   // The search sheet. A result opens the same edit sheet a card does.
   const [searching, setSearching] = useState(false)
   // The day whose team leader sheet is open from the band's "leading" tile.
-  const [leaderSheetDay, setLeaderSheetDay] = useState(null)
   // The day the sheet should open on, or null when it is closed.
   const [adding, setAdding] = useState(null)
   // Fields from a booking spoken at the mic, applied when the form opens.
@@ -2013,30 +2012,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
 
   useEffect(() => { countQueue() }, [countQueue])
 
-  // The band's greeting (desktop) and week at a glance (phone).
+  // The band's greeting (desktop).
   const hour = Number(new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Hobart', hour: 'numeric', hourCycle: 'h23' }).format(new Date()))
   const greeting = `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}${me ? `, ${me}` : ''} · ${weekdayName(today)} ${dayNum(today)} ${monthOf(today)}`
-  const weekCases = (plan?.days || []).reduce((n, d) => n + (d.casesByHospital || []).reduce((m, g) => m + g.cases.filter(c => !c.cancelled).length, 0), 0)
-  // The middle and last tiles follow the day picked in the strip (Brent,
-  // 6 Nov 2026: "when I tap Monday next week the number stays at 0") —
-  // labelled "today" on today, else the day itself.
-  const shownDay = window_.days.includes(activeDay) ? activeDay
-    : window_.days.includes(today) ? today : null
-  const dayCases = (plan?.days || []).filter(d => d.date === shownDay)
-    .reduce((n, d) => n + (d.casesByHospital || []).reduce((m, g) => m + g.cases.filter(c => !c.cancelled).length, 0), 0)
-  const dayLabel = !shownDay ? 'today' : shownDay === today ? 'today'
-    : `${weekdayName(shownDay).slice(0, 3)} ${dayNum(shownDay)}`
-  // Only the day's own answer: falling back to "the week's" leader named
-  // Monday's turn on a weekend that belongs to the next one.
-  const leaderSheet = leaderSheetDay
-    ? leaderChip(leaderSheetDay, { sheetOnly: true, onSheetClose: () => setLeaderSheetDay(null) })
-    : null
-  const leadOnDay = leader?.byDay?.[shownDay]?.email ? firstNameFor(leader.byDay[shownDay].email) : ''
-  const glance = [
-    [String(weekCases), 'this week'],
-    [shownDay ? String(dayCases) : '—', dayLabel],
-    [leadOnDay || '—', 'leading']
-  ]
   const caseCount = day => (day?.casesByHospital || []).reduce(
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
@@ -2075,27 +2053,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
             smallest thing on the screen. Three items now, not four — the
             Day/Week pair moved up beside the title — so the range has room to
             be read and the arrows have room to be hit. */}
-        {/* The week at a glance, on a phone — one line now, not three big
-            tiles (Brent, 25 Nov 2026: "too big. Reduce it down"), as in the
-            option B mock-up: "13 this week · 2 today · Ben leading ✎". The
-            leader is still a tap to change who leads (7 Nov 2026). */}
-        {!desktop && plan && (
-          <div data-glance style={{
-            display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: space.sm,
-            ...text('caption'), color: 'rgba(255,255,255,0.82)'
-          }}>
-            <span><b style={{ color: 'white' }}>{glance[0][0]}</b> {glance[0][1]}</span>
-            <span aria-hidden="true">·</span>
-            <span><b style={{ color: 'white' }}>{glance[1][0]}</b> {glance[1][1]}</span>
-            <span aria-hidden="true">·</span>
-            <button type="button" data-leading-tile disabled={!shownDay}
-              aria-label={`Leading ${dayLabel}: ${glance[2][0]}. Tap to change who leads.`}
-              onClick={() => shownDay && setLeaderSheetDay(shownDay)}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: shownDay ? 'pointer' : 'default', font: 'inherit', color: 'inherit' }}>
-              <b style={{ color: 'white' }}>{glance[2][0]}</b> leading ✎
-            </button>
-          </div>
-        )}
+        {/* No glance line on a phone any more (Brent, 25 Nov 2026: "The Team
+            leader is written twice. The date is written twice"). The strip
+            says the day; the line under it says the count and who leads. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
           <button onClick={() => goWeek(-1)} aria-label="Previous week" style={arrowStyle}>‹</button>
           <button onClick={goToday}
@@ -2250,9 +2210,14 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
                 phone and left a gap above the day (Brent, 6 Nov 2026). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
               <div style={{ flex: 1, minWidth: 0 }}>
+                {/* The date only on a desktop: on a phone the day strip above
+                    already says it (Brent, 25 Nov 2026: "The date is written
+                    twice"). */}
+                {desktop && (
                 <div style={{ ...text('heading'), color: colour.ink }}>
                   {activeDay === today ? 'Today' : weekdayName(activeDay)} {dayNum(activeDay)} {monthOf(activeDay).slice(0, 3)}
                 </div>
+                )}
                 {dayPlan?.caseCountLine && (
                   <div style={{ ...text('caption'), color: colour.inkFaint }}>{dayPlan.caseCountLine}</div>
                 )}
@@ -2437,7 +2402,6 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onAccepted={() => { countQueue(); load(window_, { quiet: true }) }} />
       )}
 
-      {leaderSheet}
 
       {searching && (
         <CaseSearch user={user}

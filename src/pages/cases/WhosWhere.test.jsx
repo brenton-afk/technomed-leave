@@ -18,6 +18,16 @@ describe("who's where strip", () => {
     expect(document.querySelector('[data-whos-where-add]')).toBeTruthy()
   })
 
+  it('lays everyone out in even columns that wrap, never a sideways scroll', () => {
+    // Brent, 25 Nov 2026: "not evenly spaced and I don't like having to
+    // scroll across to see other team members".
+    render(<WhosWhere date={D} days={days} entries={[]} />)
+    const grid = document.querySelector('[data-whos-where-grid]')
+    expect(grid.style.display).toBe('grid')
+    expect(grid.style.gridTemplateColumns).toMatch(/auto-fill/)
+    expect(grid.style.overflowX).toBe('')
+  })
+
   it('opens a person, the whole team by status, and the next day', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ entries: [] }) })))
     render(<WhosWhere date={D} days={days} away={[]} entries={[]} />)

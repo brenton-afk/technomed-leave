@@ -861,9 +861,13 @@ eyebrow is the greeting and date (Header A), on a phone three tiles give the
 week at a glance — cases this week, the day picked in the strip ("today"
 on today, else e.g. "Tue 22"), who leads that day (Header C,
 `data-glance`; tests look past it for cards and the leader chip).
-**Since 25 Nov 2026 that is one line, not three tiles** (Brent: "too big.
-Reduce it down") — "13 this week · 2 today · Ben leading ✎", the leader
-still a tap (`data-leading-tile`). An Away / Training entry in the portal's
+**Since 25 Nov 2026 there is no glance on the band at all** (Brent: "too
+big. Reduce it down", then "The Team leader is written twice. The date is
+written twice"): the strip says the day, and on a phone the day's line under
+it is the count and the leader chip only — no date (the desktop keeps it).
+The who's-where avatars are a wrapping grid of even columns
+(`data-whos-where-grid`), never a sideways scroll, and the home screen's
+"N actions assigned to you" prompt is gone (`PromptBanner.jsx`). An Away / Training entry in the portal's
 own title form (`Mat — Away · Conference`) is "not here" whatever colour it
 is in (`classifyItem`), so the who's-where strip shows it. Leave and away are
 never day alerts (`isAway` in `buildWeekPlan` skips the flag rules — the word

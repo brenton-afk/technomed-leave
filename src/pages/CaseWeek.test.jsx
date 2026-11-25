@@ -203,8 +203,9 @@ describe('a navigation case', () => {
 describe('the day and the week', () => {
   it('opens on today', async () => {
     show()
-    // One line now: the strip above picked the day (Brent, 4 Nov 2026).
-    expect(await screen.findByText(/^Today 21 Sep$/)).toBeInTheDocument()
+    // The strip says the day; the date is not repeated under it (Brent,
+    // 25 Nov 2026).
+    await waitFor(() => expect(document.querySelector('[data-day-strip] [aria-current="date"]')?.getAttribute('aria-label')).toBe('Monday 21 September'))
   })
 
   it('shows only that day in day view', async () => {
@@ -308,7 +309,7 @@ describe('opening the app', () => {
     // scrolled to yesterday means the first thing it shows is wrong, quietly.
     localStorage.setItem('tm_clinical_prefs', JSON.stringify({ weekStart: '2026-08-24' }))
     show()
-    expect(await screen.findByText(/^Today 21 Sep$/)).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('[data-day-strip] [aria-current="date"]')?.getAttribute('aria-label')).toBe('Monday 21 September'))
   })
 })
 
@@ -1613,37 +1614,15 @@ describe('the week on screen is the week drawn', () => {
 
 // ─── The band (Brent, 6 Nov 2026): Header A on desktop, C on a phone ────────
 describe('the top band', () => {
-  it('carries the logo and, on a phone, the week at a glance', async () => {
+  it('carries the logo, and no glance line repeating the day and the leader', async () => {
+    // Brent, 25 Nov 2026: "The Team leader is written twice. The date is
+    // written twice." The strip says the day, the line under it the leader.
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     expect(screen.getByAltText(/TechnoMed/)).toBeInTheDocument()
-    const glance = document.querySelector('[data-glance]')
-    expect(glance.textContent).toMatch(/this week/)
-    expect(glance.textContent).toMatch(/today/)
-  })
-
-  it('counts the day picked in the strip, not only today', async () => {
-    // "When I tap Monday next week the number stays at 0" (Brent, 6 Nov 2026).
-    show()
-    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    const glance = () => document.querySelector('[data-glance]').textContent
-    expect(glance()).toMatch(/1\s*today/)
-    fireEvent.click(screen.getByRole('button', { name: /^Tuesday 22 September/ }))
-    // Two live cases on the Tuesday; the cancelled one is not counted.
-    await waitFor(() => expect(glance()).toMatch(/2\s*Tue 22/))
-  })
-})
-
-describe('the leading tile (Brent, 7 Nov 2026: "tap and choose")', () => {
-  it('opens the team leader sheet for the day on show', async () => {
-    show()
-    await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    const tile = document.querySelector('[data-leading-tile]')
-    expect(tile).not.toBeNull()
-    fireEvent.click(tile)
-    const sheet = await screen.findByRole('dialog', { name: 'Team leader' })
-    expect(sheet.textContent).toMatch(/This day only/)
-    expect(sheet.textContent).toMatch(/Their whole turn/)
+    expect(document.querySelector('[data-glance]')).toBeNull()
+    expect(document.querySelector('[data-leading-tile]')).toBeNull()
+    expect(screen.queryByText(/^Today 21 Sep$/)).not.toBeInTheDocument()
   })
 })
 

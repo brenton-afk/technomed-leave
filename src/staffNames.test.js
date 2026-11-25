@@ -77,8 +77,7 @@ describe('the names already written down', () => {
     // on the home screen, and who gets the summary email. All three compared
     // on the exact name, so all three would have dropped his old items.
     const check = [
-      ['pages/Projects.jsx', __dirname],
-      ['pages/PromptBanner.jsx', __dirname]
+      ['pages/Projects.jsx', __dirname]
     ]
     for (const [file, root] of check) {
       expect(readFileSync(join(root, file), 'utf8'), file).toMatch(/isSameStaff\(/)
