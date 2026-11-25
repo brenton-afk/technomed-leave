@@ -3,6 +3,7 @@ import { useBackLayer } from '../../backButton.js'
 import { Page, Header, Body, Banner, NavGroup, NavCard, EmptyState } from '../../design/Shell.jsx'
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { EVENT_KINDS, whenText, defaultForm } from '../../events/model.js'
+import { IconCalendar, IconMe } from '../../design/icons.jsx'
 import { eventsApi } from './eventsApi.js'
 import EventPage from './EventPage.jsx'
 import Contacts from './Contacts.jsx'
@@ -44,7 +45,7 @@ export default function Events({ user, onBack }) {
   const upcoming = (events || []).filter(e => !e.start || new Date(e.start).getTime() >= now - 12 * 3600e3)
   const past = (events || []).filter(e => e.start && new Date(e.start).getTime() < now - 12 * 3600e3)
   const row = e => (
-    <NavCard key={e.id} label={e.title} tint="teal"
+    <NavCard key={e.id} icon={IconCalendar} label={e.title} tint="teal"
       detail={[whenText(e.start) || 'No date yet', e.venue, `${e.yes} coming of ${e.invited} invited`].filter(Boolean).join(' · ')}
       onClick={() => setOpen(e.id)} />
   )
@@ -62,7 +63,7 @@ export default function Events({ user, onBack }) {
           </div>
         )}
         <NavGroup label="People" first>
-          <NavCard label="Contacts" tint="navy" detail="Surgeons, registrars, theatre staff and reps to invite" onClick={() => setContacts(true)} />
+          <NavCard icon={IconMe} label="Contacts" tint="navy" detail="Surgeons, registrars, theatre staff and reps to invite" onClick={() => setContacts(true)} />
         </NavGroup>
         {events && !events.length && <EmptyState title="No events yet" detail={user.isAdmin ? 'Start one above.' : 'An admin adds you as an organiser of an event.'} />}
         {upcoming.length > 0 && <NavGroup label="Coming up">{upcoming.slice().reverse().map(row)}</NavGroup>}

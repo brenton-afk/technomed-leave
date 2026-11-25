@@ -193,9 +193,8 @@ describe('both views show them', () => {
     expect(component).toMatch(/textDecoration: 'line-through'/)
   })
 
-  it('offers + Task in the Team sheet', () => {
-    // + Task moved into the Team sheet with the Inbox (option B, Brent 25 Nov 2026).
-    expect(source).toMatch(/onAddTask=\{\(\) => \{ setTeamOpen\(false\); setAddingTask\(activeDay\) \}\}/)
+  it('no longer offers + Task (Brent, 25 Nov 2026: tasks come from kit movement)', () => {
+    expect(source).not.toMatch(/setAddingTask\(activeDay\)/)
   })
 
   it('does not call a day with a task on it empty', () => {

@@ -60,7 +60,7 @@ export function TeamButton({ date, days = [], away = [], entries = [], waiting =
  * The sheet. `jobs` are the day's kit jobs, drawn by `renderJob` (CaseWeek's
  * own TaskRow, so they look and tick exactly as they did on the page).
  */
-export default function TeamSheet({ date, days, away, entries, user, onChanged, jobs = [], renderJob, also = [], renderItem, onAddTask, onInbox, queueCount = 0, onClose }) {
+export default function TeamSheet({ date, days, away, entries, user, onChanged, jobs = [], renderJob, also = [], renderItem, onInbox, queueCount = 0, onClose }) {
   useBackLayer(true, onClose)
   const button = { flex: 1, minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text('bodyStrong'), fontWeight: 700, whiteSpace: 'nowrap' }
   return (
@@ -95,22 +95,16 @@ export default function TeamSheet({ date, days, away, entries, user, onChanged, 
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: space.sm }}>
-            <button type="button" onClick={onAddTask} aria-label="Add a task"
-              style={{ ...button, border: `1px solid ${colour.line}`, background: colour.surface, color: colour.ink }}>
-              + Task
-            </button>
-            {/* Never "nothing waiting": the count is only what has already been
-                read, and the mailbox may hold more — opening it checks. */}
-            <button type="button" onClick={onInbox} aria-label="Check the bookings inbox"
-              style={{
-                ...button,
-                border: `1px solid ${queueCount > 0 ? colour.warningLine : colour.line}`,
-                background: queueCount > 0 ? colour.warningSoft : colour.surface, color: colour.ink
-              }}>
-              Inbox{queueCount > 0 ? ` · ${queueCount}` : ''}
-            </button>
-          </div>
+          {/* + Task is gone (Brent, 25 Nov 2026: tasks will come mostly from kit
+              movement, not be typed in). */}
+          <button type="button" onClick={onInbox} aria-label="Check the bookings inbox"
+            style={{
+              ...button, width: '100%',
+              border: `1px solid ${queueCount > 0 ? colour.warningLine : colour.line}`,
+              background: queueCount > 0 ? colour.warningSoft : colour.surface, color: colour.ink
+            }}>
+            Inbox{queueCount > 0 ? ` · ${queueCount}` : ''}
+          </button>
         </div>
       </div>
     </Overlay>

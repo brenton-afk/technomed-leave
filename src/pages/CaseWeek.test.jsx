@@ -385,6 +385,12 @@ describe('the header', () => {
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
     const add = screen.getByRole('button', { name: /Add a booking to Monday 21 September/ })
     fireEvent.click(add)
+    // + Booking asks how first (Brent, 25 Nov 2026): type, say, or the inbox.
+    const chooser = await waitFor(() => document.querySelector('[data-booking-chooser]'))
+    expect(chooser.textContent).toMatch(/Type it in/)
+    expect(chooser.textContent).toMatch(/Say it/)
+    expect(chooser.textContent).toMatch(/Check the inbox/)
+    fireEvent.click(chooser.querySelector('[data-add-via="type"]'))
     expect(await screen.findByDisplayValue('2026-09-21')).toBeInTheDocument()
   })
 })
@@ -489,7 +495,7 @@ describe("an away entry is on the strip, not in a box too (Brent, 25 Nov 2026)",
 })
 
 describe('Cases is just cases (option B, Brent 25 Nov 2026)', () => {
-  it('has + Booking on the day, and + Task, Inbox and kit jobs in the Team sheet', async () => {
+  it('has + Booking on the day, and the Inbox and kit jobs in the Team sheet — no + Task', async () => {
     show()
     await screen.findByText('Mardon')
     expect(screen.getByRole('button', { name: /^Add a booking to/ })).toBeInTheDocument()
@@ -498,7 +504,7 @@ describe('Cases is just cases (option B, Brent 25 Nov 2026)', () => {
     fireEvent.click(document.querySelector('[data-team-button]'))
     const sheet = await waitFor(() => document.querySelector('[data-team-sheet]'))
     expect(sheet.querySelector('[data-team-jobs]')).not.toBeNull()
-    expect(within(sheet).getByRole('button', { name: 'Add a task' })).toBeInTheDocument()
+    expect(within(sheet).queryByRole('button', { name: 'Add a task' })).toBeNull()
     expect(within(sheet).getByRole('button', { name: 'Check the bookings inbox' })).toBeInTheDocument()
   })
 })

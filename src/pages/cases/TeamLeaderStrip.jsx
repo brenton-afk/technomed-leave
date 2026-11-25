@@ -197,7 +197,15 @@ export default function TeamLeaderStrip({ leader, away = [], onChange, week, tod
                 padding: `${space.md}px ${space.md}px ${space.sm}px`,
                 borderBottom: `1px solid ${colour.line}`
               }}>
-                <div style={{ ...text('heading'), color: colour.ink }}>Team leader</div>
+                {/* A way out without changing anything (Brent, 25 Nov 2026: "no option
+                    to exit it without editing"). */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+                  <div style={{ ...text('heading'), color: colour.ink, flex: 1 }}>Team leader</div>
+                  <button type="button" data-leader-close onClick={() => setOpen(false)} aria-label="Close without changing"
+                    style={{ minHeight: 36, padding: `0 ${space.md}px`, borderRadius: radius.pill, border: `1px solid ${colour.line}`, background: colour.surface, cursor: 'pointer', ...text('bodyStrong'), color: colour.ink }}>
+                    Close
+                  </button>
+                </div>
                 {day && (
                   <div role="tablist" aria-label="Change it for" style={{ display: 'flex', gap: 4, margin: '6px 0' }}>
                     {[['day', 'This day only'], ['week', 'Their whole turn']].map(([id, label]) => (
