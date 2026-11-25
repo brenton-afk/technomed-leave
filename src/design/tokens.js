@@ -62,6 +62,7 @@ export const statusTint = {
   training: { ring: '#d98a3a', soft: '#fcebd9', ink: '#94500f' },
   away: { ring: '#8e24aa', soft: '#f3e5f7', ink: '#6a1b80' },
   leave: { ring: '#8e24aa', soft: '#f3e5f7', ink: '#6a1b80' },
+  notworking: { ring: '#7b8794', soft: '#eef1f4', ink: '#4b5865' },
   none: { ring: '#d3dae4', soft: '#f6f8fa', ink: '#93a1ad' }
 }
 

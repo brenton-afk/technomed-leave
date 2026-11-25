@@ -23,7 +23,8 @@ export const WHO_KINDS = {
   office: { label: 'Office', tag: 'OFFICE' },
   training: { label: 'Training / travel', tag: 'TRAINING' },
   away: { label: 'Away', tag: 'AWAY' },
-  leave: { label: 'Leave', tag: 'LEAVE' }
+  leave: { label: 'Leave', tag: 'LEAVE' },
+  notworking: { label: 'Not working', tag: 'NOT WORKING' }
 }
 
 export const initialsOf = person => {
@@ -118,8 +119,11 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
       return { ...base, kind: 'away', short: word === 'RDO' ? 'RDO' : (why ? why.toUpperCase().slice(0, 12) : 'AWAY'), where: word === 'RDO' ? 'RDO' : (why ? `Away · ${why}` : 'Away'), when: whenOf(e), note: e?.note || '', entry: e, source: 'calendar' }
     }
 
-    // A status somebody added in the portal (Theatre, Office), newest first.
-    const own = [...mine].filter(e => ['theatre', 'office'].includes(e.kind)).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0]
+    // A status somebody added in the portal (Theatre, Office, Not working), newest first.
+    const own = [...mine].filter(e => ['theatre', 'office', 'notworking'].includes(e.kind)).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0]
+    if (own?.kind === 'notworking') {
+      return { ...base, kind: 'notworking', short: 'OFF', where: 'Not working', when: whenOf(own), note: own.note || '', entry: own, source: 'added' }
+    }
     if (own) {
       const isTheatre = own.kind === 'theatre'
       return {
@@ -169,7 +173,7 @@ export function otherItemsWorthListing(items = [], people = WHO_PEOPLE) {
 export function groupWhosWhere(rows) {
   const order = [
     ['theatre', 'Theatre'], ['office', 'Office'], ['training', 'Training / travel'],
-    ['off', 'Away / leave'], ['none', 'No entry']
+    ['off', 'Away / leave'], ['notworking', 'Not working'], ['none', 'No entry']
   ]
   const keyOf = r => (!r.kind ? 'none' : (r.kind === 'away' || r.kind === 'leave') ? 'off' : r.kind)
   return order.map(([key, label]) => ({ key, label, rows: rows.filter(r => keyOf(r) === key) }))

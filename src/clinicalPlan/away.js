@@ -43,9 +43,13 @@ export const STATUS_KINDS = [
   { id: 'office', label: 'Office', hint: 'TechnoMed office day', calendar: false },
   { id: 'training', label: 'Training / travel', hint: 'Courses, trips, conferences', calendar: true },
   { id: 'away', label: 'Away', hint: 'Out, not on leave — an RDO, a day off site', calendar: true },
-  { id: 'leave', label: 'Leave', hint: 'Shows as "Leave" only — the reason stays in Xero', calendar: true }
+  { id: 'leave', label: 'Leave', hint: 'Shows as "Leave" only — the reason stays in Xero', calendar: true },
+  // Brent, 26 Nov 2026: "an option which is just 'not working'" — a day
+  // someone part-time does not work. Not leave and not away: kept by the
+  // portal only, like Office, so it never reaches the Staff Leave calendar or Xero.
+  { id: 'notworking', label: 'Not working', hint: 'Not a work day — nothing goes to the leave calendar or Xero', calendar: false }
 ]
-export const kindOf = id => STATUS_KINDS.find(k => k.id === id) || STATUS_KINDS[3]
+export const kindOf = id => STATUS_KINDS.find(k => k.id === id) || STATUS_KINDS.find(k => k.id === 'away')
 
 /** The words a title carries after the dash, so the calendar reads it plainly. */
 export function awayWords(reason, kind = 'away') {
@@ -53,6 +57,7 @@ export function awayWords(reason, kind = 'away') {
   if (kind === 'leave') return 'Leave'
   if (kind === 'training') return r ? `Training · ${r}` : 'Training'
   if (kind === 'office') return 'Office'
+  if (kind === 'notworking') return 'Not working'
   if (kind === 'theatre') return r ? `Theatre · ${r}` : 'Theatre'
   if (!r) return 'Away'
   if (/^rdo$/i.test(r)) return 'RDO'

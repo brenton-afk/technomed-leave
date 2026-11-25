@@ -626,6 +626,14 @@ read back by `readAwayTitle`); Theatre and Office are kept only in
 `away:entries` (`kind`, `where`). `action=away` GET takes `from`/`to` for the
 week (`awayBetween`), polled with the week. `whosWhere.test.js`,
 `WhosWhere.test.jsx`, `StatusSheet.test.jsx`.
+**Not working** (Brent, 26 Nov 2026: "we need the ability to have an option
+which is just 'not working'"): a sixth status (`notworking` in `STATUS_KINDS`,
+grey `statusTint.notworking`, tag OFF) for a day someone does not work — not
+leave, not away. Kept in `away:entries` only (`calendar: false`), so nothing
+reaches the Staff Leave calendar or Xero; it ranks with the other statuses
+added in the portal, so it takes the place of Erin's and Toni's office default
+and of theatre read off the bookings, and the whole-team page lists it under
+its own **Not working** group.
 
 ### Events and RSVPs (Brent, 25 Nov 2026)
 

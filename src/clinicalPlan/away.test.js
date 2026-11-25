@@ -81,3 +81,15 @@ describe('away entries', () => {
     expect(plan.away.find(p => p.firstName === 'Ben').why['2026-11-26']).toBe('Leave')
   })
 })
+
+describe('Not working is a portal status, never the leave calendar', () => {
+  it('is offered, kept off the calendar, and reads plainly', async () => {
+    const { STATUS_KINDS, kindOf, awayWords, cleanAway } = await import('./away.js')
+    expect(STATUS_KINDS.map(k => k.id)).toContain('notworking')
+    expect(kindOf('notworking').calendar).toBe(false)
+    expect(kindOf('nonsense').id).toBe('away')
+    expect(awayWords('', 'notworking')).toBe('Not working')
+    const clean = cleanAway({ email: 'toni@technomed.com.au', kind: 'notworking', from: '2026-11-27' })
+    expect(clean).toMatchObject({ kind: 'notworking', from: '2026-11-27', to: '2026-11-27' })
+  })
+})

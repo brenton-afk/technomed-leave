@@ -81,3 +81,18 @@ describe('the Team sheet lists only what who\'s where does not already say', () 
     expect(otherItemsWorthListing(items, [{ firstName: 'Toni' }, { firstName: 'Aimee' }]).map(i => i.title)).toEqual(['Signus product in-service'])
   })
 })
+
+describe('Not working (Brent, 26 Nov 2026)', () => {
+  const entry = { email: 'toni@technomed.com.au', kind: 'notworking', from: D, to: D, allDay: true, at: '2026-11-25T01:00:00Z' }
+
+  it('takes the place of the office default, and of theatre from the bookings', () => {
+    const rows = whosWhere({ date: D, day, entries: [entry, { ...entry, email: 'ben@technomed.com.au' }] })
+    expect(row(rows, 'Toni')).toMatchObject({ kind: 'notworking', short: 'OFF', where: 'Not working', source: 'added' })
+    expect(row(rows, 'Ben')).toMatchObject({ kind: 'notworking' })
+  })
+
+  it('is its own group on the whole-team page', () => {
+    const groups = groupWhosWhere(whosWhere({ date: D, day, entries: [entry] }))
+    expect(groups.find(g => g.key === 'notworking').rows.map(r => r.person.firstName)).toEqual(['Toni'])
+  })
+})
