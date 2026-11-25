@@ -738,6 +738,17 @@ export async function sendBookingNotice({ to, cc, subject, html, text, sender, c
 }
 
 /**
+ * An event invitation or reminder (api/_events.js), sent as the organiser so a
+ * reply reaches them. The label names the event, never a guest.
+ */
+export async function sendEventEmail({ to, subject, html, text, sender, label }) {
+  return send({
+    kind: 'event', to, subject, sender, label: label || subject,
+    html, text, replyTo: sender?.email ? [sender.email] : undefined
+  })
+}
+
+/**
  * What is in situ, a week before the case, to the team leader on shift
  * (Brent, 17 Nov 2026). Names the surgeon, operation, hospital and day — never
  * the patient, like the other staff reminders. See api/_inSitu.js.
