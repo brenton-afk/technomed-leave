@@ -26,6 +26,7 @@ import EditBooking, { prefetchBooking } from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
 import TeamSheet, { TeamButton } from './cases/TeamSheet.jsx'
+import BookingChooser from './cases/BookingChooser.jsx'
 import { otherItemsWorthListing } from '../clinicalPlan/whosWhere.js'
 import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
@@ -1455,6 +1456,9 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   // The day whose team leader sheet is open from the band's "leading" tile.
   // The day the sheet should open on, or null when it is closed.
   const [adding, setAdding] = useState(null)
+  // + Booking asks how first: type it, say it, or check the inbox (Brent, 25 Nov 2026).
+  const [choosing, setChoosing] = useState(null)
+  const [addStart, setAddStart] = useState('type')
   // Fields from a booking spoken at the mic, applied when the form opens.
   const [spokenBooking, setSpokenBooking] = useState(null)
   // The day a task is being added to, or null. Separate from `adding` so that
@@ -2209,7 +2213,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
         {/* Cases is just cases (option B, Brent 25 Nov 2026): + Task and the
             Inbox are in the Team sheet; + Booking sits on the day's line, and
             above the week in week view. */}
-        {span !== 'day' && <AddBooking day={activeDay} onAdd={setAdding} />}
+        {span !== 'day' && <AddBooking day={activeDay} onAdd={setChoosing} />}
 
         {plan && span === 'day' && (
           <>
@@ -2233,7 +2237,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
                 )}
               </div>
               <span style={{ flexShrink: 0 }}>{leaderChip(activeDay)}</span>
-              <AddBooking day={activeDay} onAdd={setAdding} inline />
+              <AddBooking day={activeDay} onAdd={setChoosing} inline />
             </div>
             {dayPlan
               ? <DayPanel day={dayPlan} onOpen={setEditing} hideAway hideKitJobs hideOthers
@@ -2372,7 +2376,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           alreadyBooked={((plan?.days || []).find(d => d.date === adding)?.casesByHospital || [])
             .flatMap(g => g.cases)
             .filter(c => !c.cancelled)}
-          onClose={() => { setAdding(null); setSpokenBooking(null) }}
+          start={addStart}
+          onClose={() => { setAdding(null); setSpokenBooking(null); setAddStart('type') }}
           onCreated={() => load(window_, { quiet: true })} />
       )}
 
@@ -2407,10 +2412,19 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           renderJob={task => <TaskRow task={task} onDone={t => { setTeamOpen(false); openTaskSheet(t) }} />}
           also={otherItemsWorthListing([...(dayPlan?.nonSurgeonItems || []), ...(dayPlan?.otherRollup || [])])}
           renderItem={item => <ItemRow item={item} />}
-          onAddTask={() => { setTeamOpen(false); setAddingTask(activeDay) }}
           onInbox={() => { setTeamOpen(false); setShowQueue(true) }}
           queueCount={queueCount}
           onClose={() => setTeamOpen(false)} />
+      )}
+      {choosing && (
+        <BookingChooser when={`${weekdayName(choosing)} ${dayNum(choosing)} ${monthOf(choosing)}`} queueCount={queueCount}
+          onClose={() => setChoosing(null)}
+          onPick={via => {
+            const day = choosing
+            setChoosing(null)
+            if (via === 'inbox') { setShowQueue(true); return }
+            setAddStart(via); setAdding(day)
+          }} />
       )}
       {showQueue && (
         <BookingQueue

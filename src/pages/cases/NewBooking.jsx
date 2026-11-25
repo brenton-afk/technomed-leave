@@ -193,7 +193,7 @@ function siteOf(text) {
   return null
 }
 
-export default function NewBooking({ user, date: openOn, alreadyBooked = [], spoken, onClose, onCreated }) {
+export default function NewBooking({ user, date: openOn, alreadyBooked = [], spoken, start = 'type', onClose, onCreated }) {
   useBackLayer(true, onClose) // the phone's back button closes it (src/backButton.js)
   // Opens on the day being looked at, which is the booking most likely being
   // made. Falls back to the next weekday when opened from nowhere in particular.
@@ -212,7 +212,8 @@ export default function NewBooking({ user, date: openOn, alreadyBooked = [], spo
   const [etbs, setEtbs] = useState(false)
   const [status, setStatus] = useState('ready')
   const [error, setError] = useState('')
-  const [dictating, setDictating] = useState(false)
+  // Opened from + Booking → Say it, the recorder is already up (Brent, 25 Nov 2026).
+  const [dictating, setDictating] = useState(start === 'speak' && !spoken)
   // A registrar's WhatsApp, read and booked straight in (Brent, 16 Nov 2026).
   const [pasting, setPasting] = useState(false)
   const pasteDone = useRef(false)

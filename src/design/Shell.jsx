@@ -296,7 +296,8 @@ export function IconTile({ icon: Icon, tint = 'teal', size = 38 }) {
       background: `linear-gradient(145deg, ${a} 0%, ${b} 100%)`,
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 6px rgba(4,39,70,0.18)'
     }}>
-      <Icon size={Math.round(size * 0.52)} />
+      {/* No icon is a blank tile, never a crashed screen (Events, 25 Nov 2026). */}
+      {Icon && <Icon size={Math.round(size * 0.52)} />}
     </span>
   )
 }

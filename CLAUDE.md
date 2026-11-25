@@ -579,6 +579,14 @@ ones included; `data-team-jobs`), **+ Task** and **Inbox**. The day view draws
 no strip and no kit jobs (`DayPanel hideKitJobs`); **+ Booking** is on the
 day's line (`AddBooking inline`), and above the week in week view. The
 ActionRow is gone. The phone week list and desktop columns keep their jobs.
+**+ Booking asks how** (Brent, 25 Nov 2026: "open and give you the option to
+add by writing it in, speaking it OR checking the inbox"): `cases/BookingChooser.jsx`
+(`data-booking-chooser`, `data-add-via` type | speak | inbox, the Inbox count
+on its row) → NewBooking (`start="speak"` opens with the recorder up) or the
+Inbox. **+ Task is gone** from the Team sheet ("most of these will be derived
+from our activity … mostly automatically from kit movement"); NewTask stays for
+the dispatch suggestions and the task sheet. The team leader sheet has a
+**Close** (`data-leader-close`) — it could only be left by tapping outside.
 **And the day's other items** (Brent, same day: "Why are the items still listed
 down the bottom. Toni tm office, list orders and Aimee in Melbourne?"): the
 "Also on" list is not drawn on the day view (`DayPanel hideOthers`); it is
