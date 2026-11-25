@@ -54,3 +54,30 @@ describe("who's where", () => {
     expect(WHO_PEOPLE.length).toBeGreaterThan(4)
   })
 })
+
+import { noteStatus } from './whosWhere.js'
+describe('a calendar note says where someone is (Brent, 25 Nov 2026)', () => {
+  const toni = { firstName: 'Toni' }
+  const aimee = { firstName: 'Aimee' }
+  it('reads "Toni - TM office" as the office', () => {
+    expect(noteStatus(toni, [{ title: 'Toni - TM office' }])).toMatchObject({ kind: 'office', where: 'TechnoMed office' })
+  })
+  it('reads "Aimee - Brainlab Training MELB" as training', () => {
+    expect(noteStatus(aimee, [{ title: 'Aimee - Brainlab Training MELB' }])).toMatchObject({ kind: 'training', where: 'Brainlab Training MELB' })
+  })
+  it('leaves other people and other notes alone', () => {
+    expect(noteStatus(toni, [{ title: 'List Order' }, { title: 'Aimee - office' }])).toBeNull()
+  })
+})
+
+import { otherItemsWorthListing } from './whosWhere.js'
+describe('the Team sheet lists only what who\'s where does not already say', () => {
+  it('drops notes about people, leave and the daily List Order call', () => {
+    const items = [
+      { title: 'Toni - TM office' }, { title: 'Aimee - Brainlab Training MELB' },
+      { title: 'List Order', time: '4:00pm–4:30pm' }, { title: 'Ben - ANNUAL LEAVE', kind: 'leave' },
+      { title: 'Signus product in-service' }
+    ]
+    expect(otherItemsWorthListing(items, [{ firstName: 'Toni' }, { firstName: 'Aimee' }]).map(i => i.title)).toEqual(['Signus product in-service'])
+  })
+})

@@ -55,6 +55,30 @@ const shortHospital = h => {
 
 const covers = (e, date) => e.from <= date && e.to >= date
 
+/**
+ * A note on the calendar about a person — "Toni - TM office", "Aimee -
+ * Brainlab Training MELB" (Brent, 25 Nov 2026: those sat under the cases as
+ * "Also on"; they say where somebody is). The person's first name, a dash or
+ * colon, then where: office words → office; training, course, conference or a
+ * city → training / travel, with the rest as where.
+ */
+export function noteStatus(person, items = []) {
+  const first = String(person.firstName || '').toLowerCase()
+  if (!first) return null
+  for (const item of items) {
+    const title = String(item.title || item.text || '').trim()
+    const m = /^([A-Za-z]+)\s*[-–—:]\s*(.+)$/.exec(title)
+    if (!m || m[1].toLowerCase() !== first) continue
+    const rest = m[2].replace(/\s*·.*$/, '').trim()
+    if (/\b(leave|rdo|away)\b/i.test(rest)) continue // the Staff Leave calendar answers these
+    if (/\boffice\b|\bwfh\b|work(ing)? from home/i.test(rest)) return { kind: 'office', where: /\btm\b|technomed/i.test(rest) || /^office$/i.test(rest) ? 'TechnoMed office' : rest, note: '' }
+    if (/training|course|conference|congress|workshop|meeting in|melb|melbourne|sydney|brisbane|adelaide|perth|launceston|interstate|travel|flight/i.test(rest)) {
+      return { kind: 'training', where: rest, note: '' }
+    }
+  }
+  return null
+}
+
 /** "All day", or "08:00–12:00". */
 const whenOf = e => (e && e.allDay === false && e.start ? `${e.start}–${e.end}` : 'All day')
 
@@ -105,6 +129,15 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
       }
     }
 
+    // A note on the calendar saying where they are ("Toni - TM office").
+    const noted = noteStatus(person, [...(day?.nonSurgeonItems || []), ...(day?.otherRollup || [])])
+    if (noted) {
+      return {
+        ...base, kind: noted.kind, where: noted.where, when: 'All day', source: 'calendar note',
+        short: noted.kind === 'office' ? 'OFFICE' : noted.where.toUpperCase().slice(0, 12)
+      }
+    }
+
     // Theatre, read off the bookings: attended or planned.
     const theirs = cases.filter(c => onCase(person, c))
     if (theirs.length) {
@@ -118,6 +151,18 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
     }
     return base
   })
+}
+
+/**
+ * The day's other calendar items still worth listing in the Team sheet: not a
+ * note about where someone is (who's where says it), not leave, and not the
+ * daily List Order call (Brent, 25 Nov 2026: "The team tap page should have
+ * killed those things").
+ */
+export function otherItemsWorthListing(items = [], people = WHO_PEOPLE) {
+  return items.filter(item => item.kind !== 'leave'
+    && !/^\s*list order\b/i.test(String(item.title || item.text || ''))
+    && !people.some(person => noteStatus(person, [item])))
 }
 
 /** The whole-team page's groups, in the mock-up's order. */

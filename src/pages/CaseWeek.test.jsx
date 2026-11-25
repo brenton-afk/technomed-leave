@@ -228,11 +228,16 @@ describe('the day and the week', () => {
     expect(await screen.findByText(/RHH · 1 case/)).toBeInTheDocument()
   })
 
-  it('separates what is not a case, and says what it is', async () => {
+  it('separates what is not a case, and says what it is — in the Team sheet', async () => {
+    // Brent, 25 Nov 2026: "Cases is just cases" — the day's other items are
+    // in the Team sheet, not under the cards.
     show()
     await waitFor(() => expect(screen.getByText('Mardon')).toBeInTheDocument())
-    expect(screen.getByText('Team meeting')).toBeInTheDocument()
-    expect(screen.getByText('Meeting')).toBeInTheDocument()
+    expect(screen.queryByText('Team meeting')).toBeNull()
+    fireEvent.click(document.querySelector('[data-team-button]'))
+    const also = await waitFor(() => document.querySelector('[data-team-also]'))
+    expect(also.textContent).toMatch(/Team meeting/)
+    expect(also.textContent).toMatch(/Meeting/)
   })
 })
 
@@ -461,10 +466,13 @@ describe('who is away', () => {
     expect(document.querySelector('[data-whos-where]')).toBeNull()
   })
 
-  it('leaves the other odds and ends where they were', async () => {
+  it('puts the other odds and ends in the Team sheet, not under the cases', async () => {
     events = [...BOOKINGS, LEAVE]
     show()
-    expect(await screen.findByText('Team meeting')).toBeInTheDocument()
+    await screen.findByText('Mardon')
+    expect(screen.queryByText('Team meeting')).toBeNull()
+    fireEvent.click(document.querySelector('[data-team-button]'))
+    await waitFor(() => expect(document.querySelector('[data-team-also]')?.textContent).toMatch(/Team meeting/))
   })
 })
 

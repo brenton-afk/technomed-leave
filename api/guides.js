@@ -152,17 +152,112 @@ export const COMING = [
   { name: 'CYLOX ST', maker: 'SIGNUS', group: 'Spine', distributor: 'signus' }
 ]
 
+import {
+  mayUseEvents, mayOrganise, listEvents, getEvent, saveEvent, deleteEvent, addGuests, updateGuest,
+  sendToGuests, saveInvite, guestView, guestReply, guestStop, guestInviteLink, guestCalendar,
+  listContacts, saveContact, removeContact, importContacts, applyPhoneMobiles, venueCsv, hospitalityCsv
+} from './_events.js'
+import { clicksendConfigured } from './_clicksend.js'
+import { summarise } from '../src/events/model.js'
+
 const ROOT = join(process.cwd(), 'theatre-guides')
+
+const bodyOf = req => (typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body) } catch { return {} } })() : (req.body || {}))
+const sendError = (res, err) => res.status(err.status || 500).json({ error: err.status ? err.message : `Could not do that: ${err.message}` })
+
+async function handleRsvp(req, res) {
+  const what = String(req.query.rsvp)
+  const token = String(req.query.t || '')
+  res.setHeader('Cache-Control', 'no-store')
+  try {
+    if (what === 'view' && req.method === 'GET') {
+      const view = await guestView(token)
+      return view ? res.status(200).json(view) : res.status(404).json({ error: 'This invitation link is not valid any more.' })
+    }
+    if (what === 'reply' && req.method === 'POST') {
+      const view = await guestReply(token, bodyOf(req))
+      return view ? res.status(200).json(view) : res.status(404).json({ error: 'This invitation link is not valid any more.' })
+    }
+    if (what === 'stop' && req.method === 'POST') {
+      const done = await guestStop(token)
+      return done ? res.status(200).json(done) : res.status(404).json({ error: 'This invitation link is not valid any more.' })
+    }
+    if (what === 'invite' && req.method === 'GET') {
+      const url = await guestInviteLink(token)
+      if (!url) return res.status(404).end()
+      res.setHeader('Location', url)
+      return res.status(302).end()
+    }
+    if (what === 'ics' && req.method === 'GET') {
+      const ics = await guestCalendar(token)
+      if (!ics) return res.status(404).end()
+      res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
+      return res.status(200).send(ics)
+    }
+    return res.status(404).json({ error: 'Not found' })
+  } catch (err) { return sendError(res, err) }
+}
+
+async function handleEvents(req, res, session) {
+  const what = String(req.query.events)
+  const body = req.method === 'POST' ? bodyOf(req) : {}
+  const id = String(req.query.id || body.id || '')
+  try {
+    if (!(await mayUseEvents(session))) return res.status(404).json({ error: 'Not found' })
+    if (what === 'access') return res.status(200).json({ ok: true })
+    if (what === 'list') return res.status(200).json({ events: await listEvents(session), smsReady: clicksendConfigured() })
+    if (what === 'get') {
+      const event = await getEvent(id)
+      if (!event || event.deleted || !mayOrganise(session, event)) return res.status(404).json({ error: 'That event is gone' })
+      return res.status(200).json({ event, summary: summarise(event), smsReady: clicksendConfigured() })
+    }
+    if (what === 'venue.csv' || what === 'record.csv') {
+      const event = await getEvent(id)
+      if (!event || !mayOrganise(session, event)) return res.status(404).end()
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+      return res.status(200).send(what === 'venue.csv' ? venueCsv(event) : hospitalityCsv(event))
+    }
+    if (what === 'invite-link') {
+      const event = await getEvent(id)
+      if (!event?.invite?.path || !mayOrganise(session, event)) return res.status(404).json({ error: 'No invite uploaded' })
+      return res.status(200).json({ url: (await temporaryLink(event.invite.path)).url, kind: event.invite.kind })
+    }
+    if (what === 'contacts') return res.status(200).json({ contacts: await listContacts() })
+    if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
+    if (what === 'save') return res.status(200).json({ event: await saveEvent(body, session) })
+    if (what === 'delete') return res.status(200).json(await deleteEvent(id, session))
+    if (what === 'guests-add') {
+      const out = await addGuests(id, body, session)
+      return res.status(200).json({ added: out.added, event: out.event })
+    }
+    if (what === 'guest') return res.status(200).json({ event: await updateGuest(id, String(body.token || ''), body.change || {}, session) })
+    if (what === 'send') {
+      const via = (Array.isArray(body.via) ? body.via : ['email']).filter(v => v === 'email' || v === 'sms')
+      return res.status(200).json(await sendToGuests(id, { via, who: body.who || 'unsent', reminder: Boolean(body.reminder) }, session))
+    }
+    if (what === 'invite') return res.status(200).json({ event: await saveInvite(id, body, session) })
+    if (what === 'contact-save') return res.status(200).json({ contact: await saveContact(body.contact || {}, session) })
+    if (what === 'contact-remove') return res.status(200).json(await removeContact(String(body.contactId || '')))
+    if (what === 'contacts-import') return res.status(200).json(await importContacts(body.contacts, String(body.source || 'import').slice(0, 30)))
+    if (what === 'contacts-phone') return res.status(200).json(await applyPhoneMobiles(body.updates))
+    return res.status(404).json({ error: 'Not found' })
+  } catch (err) { return sendError(res, err) }
+}
 
 export default async function handler(req, res) {
   // Dropbox sends the browser back here with no session header of ours, so
   // this one is answered before the session check — and trusts nothing but a
   // `state` this portal issued to an admin in the last ten minutes.
   if (req.query.dropbox === 'callback') return handleDropboxCallback(req, res)
+  // A guest's own invitation link (Events, 25 Nov 2026): no session — the
+  // unguessable token in the link is the whole of the access.
+  if (req.query.rsvp) return handleRsvp(req, res)
 
   const session = await requireSession(req, res)
   if (!session) return
   if (req.query.dropbox) return handleDropbox(req, res, session)
+  // Events, contacts and RSVPs, for organisers.
+  if (req.query.events) return handleEvents(req, res, session)
 
   // The editable surgeon preference cards (Task 18), here rather than in a
   // function of their own: the plan allows twelve and the app is at twelve.

@@ -26,6 +26,7 @@ import EditBooking, { prefetchBooking } from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
 import TeamSheet, { TeamButton } from './cases/TeamSheet.jsx'
+import { otherItemsWorthListing } from '../clinicalPlan/whosWhere.js'
 import ListOrder from './cases/ListOrder.jsx'
 import BookingQueue from './cases/BookingQueue.jsx'
 import CaseSearch, { SearchButton } from './cases/CaseSearch.jsx'
@@ -1302,7 +1303,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
  * one running order and everybody is reading it.
  */
 
-function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone, due, today, onDueDone, hideAway, hideKitJobs }) {
+function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferences, onTaskDone, due, today, onDueDone, hideAway, hideKitJobs, hideOthers }) {
   const groups = day.casesByHospital || []
   const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
   // Who is away is read before the list, not after it. It changes who covers
@@ -1322,7 +1323,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   // the week and this answered it for the day. On the day that is on screen
   // those are the same sentence twice, a few centimetres apart — and the one
   // that can be acted on is the other one.
-  const empty = !groups.length && !others.length && !away.length
+  const empty = !groups.length && (hideOthers || !others.length) && !away.length
     && !attention.length && !shownFlags(day.flags).length && (hideKitJobs || !kitJobs(day.tasks).length)
 
   return (
@@ -1397,7 +1398,8 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
         </>
       )}
 
-      {others.length > 0 && (
+      {/* In the Team sheet on the day view (Brent, 25 Nov 2026: "Cases is just cases"). */}
+      {!hideOthers && others.length > 0 && (
         <>
           <Heading>{groups.length ? 'Also on' : 'On today'}</Heading>
           {others.map((item, i) => <ItemRow key={i} item={item} />)}
@@ -2234,7 +2236,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
               <AddBooking day={activeDay} onAdd={setAdding} inline />
             </div>
             {dayPlan
-              ? <DayPanel day={dayPlan} onOpen={setEditing} hideAway hideKitJobs
+              ? <DayPanel day={dayPlan} onOpen={setEditing} hideAway hideKitJobs hideOthers
                   due={dueFor(activeDay)} today={today} onDueDone={openDueSheet}
                   onSetPlace={setPlacing} leader={leader}
                   onPreferences={openPreferences}
@@ -2403,6 +2405,8 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onChanged={() => { loadStatuses(); load(window_, { quiet: true }) }}
           jobs={kitJobs(dayPlan?.tasks)}
           renderJob={task => <TaskRow task={task} onDone={t => { setTeamOpen(false); openTaskSheet(t) }} />}
+          also={otherItemsWorthListing([...(dayPlan?.nonSurgeonItems || []), ...(dayPlan?.otherRollup || [])])}
+          renderItem={item => <ItemRow item={item} />}
           onAddTask={() => { setTeamOpen(false); setAddingTask(activeDay) }}
           onInbox={() => { setTeamOpen(false); setShowQueue(true) }}
           queueCount={queueCount}
