@@ -4,7 +4,7 @@
 // browser (import('fabric')) and in node tests (fabric/node).
 
 import { itemToSpec, objectToItem, READ_PROPS } from './fabricAdapter.js'
-import { trimOffset, TRIM_W, TRIM_H } from './model.js'
+import { trimOffset, TRIM_W, TRIM_H, fitFactors } from './model.js'
 import { PRINT_DPI, printPixels } from './pdf.js'
 
 let fabricPromise = null
@@ -41,6 +41,7 @@ export async function createObject(fabric, item, logos, opts = {}) {
   let obj
   if (spec.kind === 'text') {
     obj = new fabric.IText(spec.text, { ...spec.props, objectCaching: false })
+    applyFit(obj)
   } else if (spec.kind === 'image') {
     let el = null
     if (spec.url) { try { el = await loadImage(fabric, spec.url) } catch { el = null } }
@@ -59,6 +60,21 @@ export async function createObject(fabric, item, logos, opts = {}) {
   }
   obj.set({ cornerSize: 10, transparentCorners: false, cornerColor: '#ffffff', cornerStrokeColor: '#189a85', borderColor: '#189a85', borderScaleFactor: 1.5, padding: 0 })
   return applyControls(obj, opts)
+}
+
+/**
+ * Squeezes a fitted text box into its box width (model.fitFactors), from
+ * Fabric's own measure of its widest line. Called on creation and whenever
+ * its words or styles change. Returns the factors.
+ */
+export function applyFit(obj) {
+  if (obj?.tmKind !== 'txt') return { sx: 1, sy: 1 }
+  const userX = (Number(obj.scaleX) || 1) / (Number(obj.tmFitX) || 1)
+  const userY = (Number(obj.scaleY) || 1) / (Number(obj.tmFitY) || 1)
+  const f = obj.tmFit ? fitFactors(Number(obj.width) * userX, Number(obj.tmBoxW) * userX) : { sx: 1, sy: 1 }
+  obj.set({ tmFitX: f.sx, tmFitY: f.sy, scaleX: userX * f.sx, scaleY: userY * f.sy })
+  obj.setCoords?.()
+  return f
 }
 
 /** A live Fabric object → an item. */

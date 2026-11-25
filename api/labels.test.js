@@ -121,3 +121,20 @@ describe('Label Studio storage', () => {
     expect(imageSize(Buffer.from('nope'))).toBeNull()
   })
 })
+
+describe('labels seeded before fit-to-box', () => {
+  it('get fit on their text once, unless someone has saved them since', async () => {
+    const txt = text => ({ id: 't', t: 'txt', x: 1, y: 1, w: 9, h: 3, runs: [{ text, size: 8 }] })
+    const { s, f } = store({ seed: { SEED_LOGOS: [], SEED_LABELS: [
+      { id: 'a', name: 'A', w: 70.7, h: 23, source: 'vistaprint', items: [txt('x')] },
+      { id: 'b', name: 'B', w: 70.7, h: 23, source: 'vistaprint', items: [txt('y')] }
+    ] } })
+    await s.listLabels()
+    f.kv.delete('labels:fit-v1') // as if seeded by the first build
+    f.kv.set('labels:b', JSON.stringify({ ...JSON.parse(f.kv.get('labels:b')), version: 2 }))
+    const { labels } = await s.listLabels()
+    expect(labels.find(l => l.id === 'a').items[0].fit).toBe(true)
+    expect(labels.find(l => l.id === 'b').items[0].fit).toBeUndefined()
+    expect(f.kv.get('labels:fit-v1')).toBeTruthy()
+  })
+})

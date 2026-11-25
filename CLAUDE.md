@@ -2681,10 +2681,33 @@ die-cut gloss labels.
   until someone taps Mark as checked and saves).
 - **Fonts** (`public/fonts/labels`, OFL, from fontsource; `fonts.js` adds
   them with the FontFace API when Label Studio opens): Apertura → **Mulish**,
-  Borges Titulo CE Blanca → **Cormorant Garamond** (its numerals are
-  old-style), Alumni Sans, Alex Brush, Damion as themselves, Arial → Arial /
-  Helvetica. Import maps to these names. Mulish is a little wider than
-  Apertura, so a few long REF/Rebate lines run past the safe area.
+  Borges Titulo CE Blanca → **Cormorant Garamond**, Alumni Sans, Alex Brush,
+  Damion as themselves, Arial → Arial / Helvetica. Import maps to these
+  names. Cormorant's digits are old-style by default; its **lining figures
+  are baked into the four files** (`scripts/freeze-lining-figures.py`
+  remaps 0–9 to the `lnum` glyphs — canvas cannot switch an OpenType
+  feature on), so REF numbers sit on the line.
+- **Fit to box** (coordinator review, 25 Nov 2026 — Vistaprint parity):
+  Mulish is wider than Apertura, so every **imported** text item has
+  `fit: true` and keeps to its Vistaprint box width `w`: a line wider than
+  the box is condensed (scaleX down to `MIN_CONDENSE` 0.85), past that the
+  type is made smaller too (`fitFactors`). Worked out from the real font
+  wherever it is drawn — Fabric's own width in the editor and print
+  (`applyFit`, re-run as text is typed or styled; the squeeze is kept in
+  `tmFitX/Y` and is never folded into the saved sizes), the browser's
+  `measureText` for the SVG thumbnails (`measure.js`; identical to Fabric's
+  on all 333 imported text items). The text panel says "Fitted to its N mm
+  box: letters at 92% width…" with a **Fit to its box width** switch; new
+  text is not fitted unless switched on. Labels seeded before this get
+  `fit` once (`labels:fit-v1`, only those still at version 1). Checked on
+  all 94 in Chromium: 73 of 333 text items squeezed (35 also smaller type,
+  Shoreline's REF lines the most at 76% / 90%); **none past its box or the
+  trim**; 4 REF lines past the safe area only because Vistaprint's own box
+  runs past it (Reform Rod Straight 350mm Ti, Signus Diplomat Tulip
+  Standard, Rod Straight, Crosslink Medium) — move them in the editor if
+  wanted. Fabric's default `strokeWidth: 1` (a whole mm here) is set to 0
+  on text: it widened every text box by 1 mm for snapping and alignment and
+  moved the printed text half a mm.
 - **Editor = Fabric.js** (`fabric` 6.7.1, the one runtime dependency added,
   only in the Labels chunk). The saved format is the model; Fabric is
   reached through `fabricAdapter.js` (pure `itemToSpec` / `objectToItem`:
@@ -2720,7 +2743,7 @@ die-cut gloss labels.
 - Library (`LabelStudio.jsx`): search name / REF / rebate code / brand / any
   word (`matchesSearch`), sort by name or recently changed (`tm_labels_sort`),
   New label (`blankLabel`, 70.7 × 23), Duplicate, Delete (asked once).
-- Tests: `src/labels/model.test.js`, `snap.test.js`, `fabricAdapter.test.js`
+- Tests: `src/labels/model.test.js`, `snap.test.js`, `fit.test.js`, `fabricAdapter.test.js`
   (node; real Fabric via `fabric/node` when node-canvas is installed — it is
   fabric's optional dependency — else skipped), `api/labels.test.js`.
   Screenshots: `docs/label-screenshots/`.

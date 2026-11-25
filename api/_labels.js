@@ -7,6 +7,7 @@
 //                     pictures themselves in Vercel Blob (labels/logos/…)
 //   labels:deleted    the last 50 labels taken off, whole, so one can be put back
 //   labels:seeded     set once the Vistaprint export has been loaded
+//   labels:fit-v1     set once imported labels seeded before fit-to-box had it
 // Seeded once from api/_labelSeed.js on the first list (under a lock). Reads
 // are one SMEMBERS, one MGET and one GET — the Upstash allowance is small.
 
@@ -44,7 +45,11 @@ export function labelStore(deps = {}) {
 
   /** Loads the Vistaprint export once. Returns true while another request is doing it. */
   async function ensureSeeded() {
-    if (await redis('get', 'labels:seeded')) return false
+    const [seeded, fitted] = await redis('mget', 'labels:seeded', 'labels:fit-v1') || []
+    if (seeded) {
+      if (!fitted) await fitImported()
+      return false
+    }
     if (await redis('set', 'labels:seeding', '1', 'NX', 'EX', '120') !== 'OK') return true
     try {
       const { SEED_LABELS, SEED_LOGOS } = deps.seed || await import('./_labelSeed.js')
@@ -70,9 +75,32 @@ export function labelStore(deps = {}) {
       }
       if (SEED_LABELS.length) await redis('sadd', 'labels:index', ...SEED_LABELS.map(l => l.id))
       await redis('set', 'labels:seeded', at)
+      await redis('set', 'labels:fit-v1', at)
       return false
     } finally {
       await redis('del', 'labels:seeding')
+    }
+  }
+
+  /**
+   * Labels seeded before fit-to-box (25 Nov 2026) get `fit: true` on their
+   * text, as a fresh import would — only those nobody has saved since.
+   */
+  async function fitImported() {
+    if (await redis('set', 'labels:fit-v1:lock', '1', 'NX', 'EX', '60') !== 'OK') return
+    try {
+      const ids = await redis('smembers', 'labels:index') || []
+      for (let i = 0; i < ids.length; i += 100) {
+        const raws = await redis('mget', ...ids.slice(i, i + 100).map(KEY)) || []
+        for (const l of raws.map(parse).filter(Boolean)) {
+          if (l.source !== 'vistaprint' || l.version !== 1) continue
+          const items = (l.items || []).map(it => (it.t === 'txt' && !it.fit ? { ...it, fit: true } : it))
+          await setBody(KEY(l.id), JSON.stringify({ ...l, items }))
+        }
+      }
+      await redis('set', 'labels:fit-v1', now())
+    } finally {
+      await redis('del', 'labels:fit-v1:lock')
     }
   }
 

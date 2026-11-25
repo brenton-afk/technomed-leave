@@ -120,7 +120,13 @@ export function itemToSpec(item, { logos = {} } = {}) {
         textAlign: ['left', 'center', 'right'].includes(item.ha) ? item.ha : 'left',
         lineHeight: r4(lineSpacing(item) / FABRIC_SIZE_MULT),
         charSpacing: letterSpacing(item),
-        tmBoxW: Number(item.w) || 0, tmBoxH: Number(item.h) || 0
+        tmBoxW: Number(item.w) || 0, tmBoxH: Number(item.h) || 0,
+        // Fabric's default stroke width is 1 unit — here 1 mm — and it widens
+        // the box handles, snapping and alignment use. Text has no stroke.
+        strokeWidth: 0,
+        // Fitted to the box: editorCanvas.applyFit sets the scale from the
+        // real widths once the object exists, and records it in tmFitX/Y.
+        tmFit: Boolean(item.fit), tmFitX: 1, tmFitY: 1
       }
     }
   }
@@ -161,8 +167,10 @@ export function itemToSpec(item, { logos = {} } = {}) {
 export function objectToItem(o) {
   const angle = r3(((Number(o.angle) || 0) % 360 + 360) % 360)
   const rot = angle > 180 ? r3(angle - 360) : angle
-  const sx = Number(o.scaleX) || 1
-  const sy = Number(o.scaleY) || 1
+  // A fitted text box's own squeeze is not a change of size: only scaling
+  // beyond it (a handle dragged) becomes bigger or smaller type.
+  const sx = (Number(o.scaleX) || 1) / (o.tmKind === 'txt' && o.tmFit ? Number(o.tmFitX) || 1 : 1)
+  const sy = (Number(o.scaleY) || 1) / (o.tmKind === 'txt' && o.tmFit ? Number(o.tmFitY) || 1 : 1)
   const base = { id: o.tmId || newItemId(), rot, ...(o.tmLocked ? { locked: true } : {}) }
   if (o.tmKind === 'txt') {
     const ha = ['left', 'center', 'right'].includes(o.textAlign) ? o.textAlign : 'left'
@@ -178,6 +186,7 @@ export function objectToItem(o) {
       ha, va: 'top',
       lh: r3((Number(o.lineHeight) || 1.16) * FABRIC_SIZE_MULT),
       ls: r3(Number(o.charSpacing) || 0),
+      ...(o.tmFit ? { fit: true } : {}),
       runs
     }
   }
@@ -206,7 +215,7 @@ export function objectToItem(o) {
 }
 
 /** The properties objectToItem reads, for pulling them off a live object. */
-export const READ_PROPS = ['tmId', 'tmKind', 'tmLocked', 'tmBoxW', 'tmBoxH', 'tmIw', 'tmIh', 'k', 'left', 'top', 'angle', 'scaleX', 'scaleY',
+export const READ_PROPS = ['tmId', 'tmKind', 'tmLocked', 'tmBoxW', 'tmBoxH', 'tmFit', 'tmFitX', 'tmFitY', 'tmIw', 'tmIh', 'k', 'left', 'top', 'angle', 'scaleX', 'scaleY',
   'width', 'height', 'originX', 'originY', 'text', 'styles', 'fontFamily', 'fontSize', 'fill', 'underline', 'fontWeight', 'fontStyle',
   'lineHeight', 'charSpacing', 'textAlign', 'cropX', 'cropY', 'rx', 'ry', 'stroke', 'strokeWidth']
 

@@ -18,7 +18,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Overlay } from '../design/Shell.jsx'
 import { colour, text, space, radius, face, border } from '../design/tokens.js'
 import { useBackLayer } from '../backButton.js'
-import { loadFabric, createObject, readAbsolute, isItem, applyControls, isImage, isMultiSelection } from './editorCanvas.js'
+import { loadFabric, createObject, readAbsolute, isItem, applyControls, applyFit, isImage, isMultiSelection } from './editorCanvas.js'
 import { loadLabelFonts } from './fonts.js'
 import { FONTS, MM_PER_PT, trimOffset, TRIM_W, TRIM_H, SAFE_MARGIN, LINE_HEIGHT, newItemId, fontName } from './model.js'
 import { labelFrames, snapTargets, snapBox, alignBoxes, distributeBoxes, createHistory } from './snap.js'
@@ -161,7 +161,9 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
       const st = active.getSelectionStyles(active.selectionStart, active.selectionStart + 1)[0] || {}
       rangeStyle = styleToRun({ fontFamily: active.fontFamily, fontSize: active.fontSize, fill: active.fill, underline: active.underline, fontWeight: active.fontWeight, fontStyle: active.fontStyle, ...st })
     }
+    const t = objs.length === 1 && objs[0].tmKind === 'txt' ? objs[0] : null
     setSel({
+      fit: t ? { on: Boolean(t.tmFit), sx: Number(t.tmFitX) || 1, sy: Number(t.tmFitY) || 1 } : null,
       count: objs.length,
       items: objs.map(o => readAbsolute(fabricRef.current, o)),
       editing: Boolean(active?.isEditing),
@@ -282,6 +284,8 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
         fc.on('text:selection:changed', refreshSel)
         fc.on('text:editing:entered', refreshSel)
         fc.on('text:editing:exited', () => commit())
+        // Typing into a fitted box re-fits it as the words change.
+        fc.on('text:changed', e => { if (e.target?.tmFit) { applyFit(e.target); fc.requestRenderAll(); requestAnimationFrame(refreshSel) } })
         fc.on('object:moving', onMoving)
         fc.on('object:scaling', () => requestAnimationFrame(refreshSel))
         fc.on('object:rotating', () => requestAnimationFrame(refreshSel))
@@ -366,7 +370,7 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
     if (!t || cropRef.current) return
     // A text box scaled with its corner becomes bigger type, not stretched type.
     const objs = isMultiSelection(t) ? [] : [t]
-    const scaledText = objs.filter(o => o.tmKind === 'txt' && (Math.abs(o.scaleX - 1) > 1e-6 || Math.abs(o.scaleY - 1) > 1e-6))
+    const scaledText = objs.filter(o => o.tmKind === 'txt' && (Math.abs(o.scaleX / (o.tmFitX || 1) - 1) > 1e-6 || Math.abs(o.scaleY / (o.tmFitY || 1) - 1) > 1e-6))
     if (scaledText.length) {
       await replaceItems(scaledText.map(obj => ({ obj, item: readAbsolute(fabricRef.current, obj) })))
       return
@@ -531,6 +535,7 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
     if (a?.isEditing && a.selectionStart !== a.selectionEnd) {
       a.setSelectionStyles(FABRIC_STYLE[key](value))
       a.initDimensions?.()
+      applyFit(a)
       a.setCoords()
       fc.requestRenderAll()
       commit()
@@ -781,6 +786,19 @@ export default function LabelEditor({ user, label: initial, logos, onLogosChange
                   <button key={v} data-align-text={v} aria-pressed={texts[0].ha === v} onClick={() => setTextProp('ha', v)} style={tool(texts[0].ha === v)}>{l}</button>
                 ))}
               </div>
+              {sel.fit && (
+                <div data-fit-panel style={{ margin: `${space.sm}px 0`, padding: space.sm, borderRadius: radius.control, background: colour.canvas, border: border.hairlineSoft }}>
+                  <label style={{ ...text('caption'), color: colour.ink, display: 'flex', gap: 6, alignItems: 'center', fontWeight: 600 }}>
+                    <input type="checkbox" data-fit-toggle style={{ fontSize: 16 }} checked={sel.fit.on} onChange={e => setTextProp('fit', e.target.checked || undefined)} />
+                    Fit to its box width
+                  </label>
+                  <div data-fit-hint style={{ ...text('caption'), color: colour.inkFaint, marginTop: 2 }}>
+                    {!sel.fit.on ? `Off — a line longer than the box (${r2(texts[0].w)} mm) runs past it.`
+                      : sel.fit.sx >= 0.9995 ? `Fits its ${r2(texts[0].w)} mm box as typed.`
+                        : `Fitted to its ${r2(texts[0].w)} mm box: letters at ${Math.round(sel.fit.sx * 100)}% width${sel.fit.sy < 0.9995 ? `, type at ${Math.round(sel.fit.sy * 100)}% size` : ''}. This is what prints.`}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: space.sm }}>
                 <NumberField label="Line spacing" suffix="×" step={0.05} value={texts[0].lh ?? LINE_HEIGHT} onCommit={v => setTextProp('lh', Math.max(0.5, Math.min(4, v)))} />
                 <NumberField label="Letter spacing" step={10} value={texts[0].ls || 0} onCommit={v => setTextProp('ls', Math.max(-200, Math.min(2000, v)))} />

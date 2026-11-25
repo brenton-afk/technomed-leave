@@ -4,12 +4,17 @@
 // The artwork's own sizes and colours are the label's, not the app's scale.
 
 import React from 'react'
-import { layoutText, fontStack, rotation, cropBox, paint, MM_PER_PT, letterSpacing, trimOffset, TRIM_W, TRIM_H, SAFE_MARGIN } from './model.js'
+import { layoutText, fontStack, rotation, cropBox, paint, MM_PER_PT, letterSpacing, trimOffset, TRIM_W, TRIM_H, SAFE_MARGIN, textAnchorX } from './model.js'
+import { fitOf } from './measure.js'
 
 function TextItem({ item }) {
   const ls = letterSpacing(item)
+  // Fitted to its box: squeezed about the point its lines hang from, as Fabric scales it.
+  const { sx, sy } = fitOf(item)
+  const ax = textAnchorX(item)
+  const fit = sx !== 1 || sy !== 1 ? `translate(${ax} ${item.y}) scale(${sx} ${sy}) translate(${-ax} ${-item.y})` : ''
   return (
-    <g transform={rotation(item) || undefined}>
+    <g transform={[rotation(item), fit].filter(Boolean).join(' ') || undefined} data-fit={fit ? `${sx.toFixed(3)} ${sy.toFixed(3)}` : undefined}>
       {layoutText(item).map((line, i) => line.segments.length ? (
         <text key={i} x={line.anchorX} y={line.baseline} textAnchor={line.anchor} xmlSpace="preserve" style={{ whiteSpace: 'pre' }}>
           {line.segments.map((s, j) => (

@@ -198,6 +198,48 @@ export function textAnchorX(item) {
   return item.ha === 'center' ? x + w / 2 : item.ha === 'right' ? x + w : x
 }
 
+// ── Fitting imported text to its Vistaprint box (Brent, 25 Nov 2026) ───────
+// Mulish is a little wider than Apertura, so a line that just fitted its box
+// on Vistaprint runs past it here. A text item with `fit: true` (every
+// imported one; new text only when switched on) keeps to its box width `w`:
+// a line wider than the box is first condensed, down to MIN_CONDENSE, and
+// beyond that the type is made smaller as well. The factors are worked out
+// from the real font's widths wherever the label is drawn — Fabric in the
+// editor and the print, the browser's own measure for the thumbnails — and
+// the editor's text panel says what was done.
+export const MIN_CONDENSE = 0.85
+
+/** { sx, sy } for a widest line `natural` mm across in a box `boxW` mm wide. */
+export function fitFactors(natural, boxW) {
+  const n = Number(natural)
+  const w = Number(boxW)
+  if (!(n > 0) || !(w > 0) || n <= w) return { sx: 1, sy: 1 }
+  const r = w / n
+  if (r >= MIN_CONDENSE) return { sx: r, sy: 1 }
+  return { sx: r, sy: r / MIN_CONDENSE }
+}
+
+/**
+ * The widest line of a text item in mm, with `measure(text, run)` giving one
+ * run's width in mm (letter spacing added here, as Fabric adds it).
+ */
+export function naturalWidth(item, measure) {
+  const ls = letterSpacing(item)
+  let widest = 0
+  for (const line of textLines(item)) {
+    let w = 0
+    for (const seg of line.segments) {
+      w += measure(seg.text, seg)
+      if (ls) w += (ls / 1000) * (Number(seg.size) || 8) * MM_PER_PT * [...seg.text].length
+    }
+    widest = Math.max(widest, w)
+  }
+  return widest
+}
+
+/** A CSS/canvas font shorthand for a run, at `px` pixels. */
+export const runFont = (run, px) => `${run.italic ? 'italic ' : ''}${run.bold ? 700 : 400} ${px}px ${fontStack(run.font)}`
+
 /** Plain text of a text item, line breaks kept. */
 export const itemText = item => (item?.runs || []).map(r => r.text).join('')
 
@@ -370,7 +412,7 @@ export function importLabel(raw, keyMap = {}) {
     const base = { id: `i${++n}`, x: num(it.x), y: num(it.y), w: num(it.w), h: num(it.h), rot: num(it.rot) }
     if (it.t === 'txt') {
       const { runs, shift } = cleanRuns(it.runs)
-      out.push({ ...base, t: 'txt', y: round(base.y + shift, 3), h: round(Math.max(0.5, base.h - shift), 3), ha: ['left', 'center', 'right'].includes(it.ha) ? it.ha : 'left', va: 'top', lh: LINE_HEIGHT, ls: 0, runs })
+      out.push({ ...base, t: 'txt', y: round(base.y + shift, 3), h: round(Math.max(0.5, base.h - shift), 3), ha: ['left', 'center', 'right'].includes(it.ha) ? it.ha : 'left', va: 'top', lh: LINE_HEIGHT, ls: 0, fit: true, runs })
     } else if (it.t === 'img') {
       const crop = it.crop && ['t', 'b', 'l', 'r'].some(s => Number(it.crop[s]))
         ? { t: num(it.crop.t), b: num(it.crop.b), l: num(it.crop.l), r: num(it.crop.r) } : null
@@ -456,7 +498,7 @@ export function sanitiseLabel(input, { logoKeys = null } = {}) {
       }))
       if (!runs.length) runs.push({ text: '', font: DEFAULT_FONT, size: 8, color: '#000000', underline: false, bold: false, italic: false })
       items.push({ ...base, t: 'txt', ha: ['left', 'center', 'right'].includes(it.ha) ? it.ha : 'left', va: 'top',
-        lh: clamp(num(it.lh, LINE_HEIGHT), 0.5, 4), ls: clamp(num(it.ls), -200, 2000), runs })
+        lh: clamp(num(it.lh, LINE_HEIGHT), 0.5, 4), ls: clamp(num(it.ls), -200, 2000), ...(it.fit ? { fit: true } : {}), runs })
     } else if (it.t === 'img') {
       const k = String(it.k || '').replace(/[^\w-]/g, '').slice(0, 60)
       if (!k || (logoKeys && !logoKeys.has(k))) continue
