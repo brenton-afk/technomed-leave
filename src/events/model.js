@@ -258,3 +258,75 @@ export function whenText(iso) {
   const time = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Hobart', hour: 'numeric', minute: '2-digit', hour12: true }).format(d).replace(/\s/g, '').toLowerCase()
   return `${day} · ${time}`
 }
+
+/** One CSV line into cells, quotes honoured. */
+function csvCells(line) {
+  const out = []; let cur = ''; let q = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (q) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++ } else if (ch === '"') q = false; else cur += ch
+    } else if (ch === '"') q = true
+    else if (ch === ',') { out.push(cur); cur = '' } else cur += ch
+  }
+  out.push(cur)
+  return out.map(c => c.trim())
+}
+
+const GROUP_WORDS = [
+  [/registrar|fellow|\breg\b|resident|jmo/i, 'Registrar/Fellow'],
+  [/surgeon|consultant|neurosurg|orthopaed|\bvmo\b/i, 'Surgeon'],
+  [/nurse|\bnum\b|\banum\b|theatre|cssd|scrub|radiograph|perioperative|sterilis/i, 'Theatre/Nursing'],
+  [/\brep\b|partner|distributor|sales/i, 'Rep/Partner'],
+  [/admin|booking|secretar|coordinator|manager|mailbox/i, 'Hospital admin']
+]
+
+/** A typed group word ("Registrar", "NUM", "Surgeon?") as one of GROUPS. */
+export function groupFrom(...words) {
+  const said = words.filter(Boolean).join(' ')
+  const exact = GROUPS.find(g => g.toLowerCase() === said.trim().toLowerCase())
+  if (exact) return exact
+  for (const [re, g] of GROUP_WORDS) if (re.test(said)) return g
+  return 'Other'
+}
+
+/**
+ * A list to import — a spreadsheet saved as CSV (a header row naming name,
+ * group, hospital, title, email, mobile, tags) or the JSON the email sweep
+ * writes. Returns contacts in the server's import shape.
+ */
+export function parseContactList(textOrJson) {
+  const text = String(textOrJson || '').trim()
+  let rows = []
+  if (text.startsWith('[')) {
+    try { rows = JSON.parse(text) } catch { rows = [] }
+    return rows.filter(r => r && (r.name || r.email)).map(r => ({
+      name: r.name, email: r.email, otherEmails: r.otherEmails || [],
+      mobile: (r.phones || []).map(normaliseMobile).find(p => /^\+614\d{8}$/.test(p)) || r.mobile || '',
+      group: groupFrom(r.group === 'Unknown' || r.group === 'Shared mailbox' ? '' : r.group, r.title),
+      hospital: r.organisation || r.hospital || '', title: [r.title, r.department].filter(Boolean).join(' · '),
+      lastSeen: r.lastSeen || '', tags: r.group === 'Shared mailbox' ? ['shared mailbox'] : []
+    }))
+  }
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return []
+  const head = csvCells(lines[0]).map(h => h.toLowerCase())
+  const col = (...names) => head.findIndex(h => names.some(n => h.includes(n)))
+  const at = {
+    name: col('name'), group: col('group', 'role', 'type'), hospital: col('hospital', 'organisation', 'org', 'company'),
+    title: col('title', 'position'), email: col('email'), mobile: col('mobile', 'phone'), tags: col('tag'), keep: col('keep')
+  }
+  for (const line of lines.slice(1)) {
+    const c = csvCells(line)
+    const get = k => (at[k] >= 0 ? c[at[k]] || '' : '')
+    if (at.keep >= 0 && /^n/i.test(get('keep'))) continue
+    const name = get('name')
+    if (!name) continue
+    rows.push({
+      name, email: get('email').split(/[;\s]+/)[0] || '', mobile: normaliseMobile(get('mobile').split(';')[0]),
+      group: groupFrom(get('group'), get('title')), hospital: get('hospital'), title: get('title'),
+      tags: get('tags') ? get('tags').split(/[;|]/).map(t => t.trim()).filter(Boolean) : []
+    })
+  }
+  return rows
+}

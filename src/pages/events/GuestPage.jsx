@@ -109,7 +109,7 @@ export default function GuestPage({ token }) {
 
   const shell = children => (
     <div data-guest-page style={{ minHeight: '100dvh', background: colour.canvas, color: colour.ink, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      <div style={{ background: colour.surface, borderBottom: `1px solid ${colour.line}`, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ background: colour.surface, borderBottom: `1px solid ${colour.line}`, padding: '12px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <img src="/logo-mark.png" alt="" width="26" height="26" style={{ borderRadius: 6 }} />
         <span style={{ ...text('bodyStrong'), color: colour.navy }}>TechnoMed Events</span>
         {view && <span style={{ marginLeft: 'auto', ...text('caption'), color: colour.inkFaint }}>For {view.guest.name}</span>}

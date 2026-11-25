@@ -109,7 +109,10 @@ describe('no screen is left out', () => {
   // screen" is not something a test can infer. Anything added to src/pages that
   // draws its own has to be accounted for here deliberately.
   const HANDLED = new Set([
-    'UsageScan.jsx', 'PinScreen.jsx', 'admin/AdminPortal.jsx', 'scan/CameraSheet.jsx'
+    'UsageScan.jsx', 'PinScreen.jsx', 'admin/AdminPortal.jsx', 'scan/CameraSheet.jsx',
+    // A guest's invitation page, outside the signed-in shell: its white top
+    // bar pads itself below the clock.
+    'events/GuestPage.jsx'
   ])
   // Drawn inside another screen's frame, so the frame's insets already apply.
   const INSIDE_ANOTHER = new Set([

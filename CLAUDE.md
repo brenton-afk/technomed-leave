@@ -607,6 +607,43 @@ read back by `readAwayTitle`); Theatre and Office are kept only in
 week (`awayBetween`), polled with the week. `whosWhere.test.js`,
 `WhosWhere.test.jsx`, `StatusSheet.test.jsx`.
 
+### Events and RSVPs (Brent, 25 Nov 2026)
+
+"An RSVP portal within our Technomed portal for dinners etc … as good as
+RSVPify", built from the approved mock-ups (`claude.ai/artifact/X68K93QyWJY2vbDohfijhg`).
+**Me → Events** (Administration group, `events=access` 200 — admins and anyone
+named organiser on an event): `pages/events/Events.jsx` (new event by kind,
+Contacts, coming up / past), `EventPage.jsx` (Guests · Invite and details ·
+Reply form · Venue and costs · Check-in), `Contacts.jsx` (also the "Add guests"
+picker). Guests open **`/e/{token}`** with no login (`GuestPage.jsx`, matched
+in `App.jsx` before the PIN screen as `GUEST_TOKEN`): the uploaded invite (or a
+TechnoMed design), details, Yes / Maybe / Can't make it, the event's own
+questions, a confirmation with Add to calendar and Change my reply; `?stop=1`
+unsubscribes. Served from `api/guides.js` — `rsvp=` (view, reply, stop,
+invite → 302 to a Dropbox link, ics) **before the session check**, the token
+the whole of the access; `events=` for organisers. Logic in `api/_events.js`,
+pure rules in `src/events/model.js` (question library, `cleanAnswers` — only
+what the form asks, in its shapes — `summarise`, `parseVcf`,
+`matchPhoneContacts`, `parseContactList`, `icsFor`). Redis: `events:contacts`,
+`events:index`, `event:{id}` (guests inside), `rsvp:{token}`; writes under
+`{key}:lock`. Only admins start or delete an event; organisers are chosen per
+event. **Contacts come from email first** (Brent: "Choose contacts that cross
+reference with my email first … forget others") — a phone `.vcf` only fills
+mobiles for people already in the list, never adds anyone. Import a list takes
+CSV (a `Keep?` column's No rows skipped) or the email sweep's JSON. **Sending**
+(`sendToGuests`): email as the organiser (`sendEventEmail`, letterhead label
+Invitation / Reminder, each guest's own link, an unsubscribe line) and SMS
+through a **ClickSend sub-account** (`api/_clicksend.js`:
+`CLICKSEND_USERNAME`, `CLICKSEND_API_KEY`, `CLICKSEND_FROM` the dedicated
+number; "Reply STOP to opt out"; "not set up" until the keys exist). Opted-out
+contacts are skipped (Spam Act). Invite, remind those who haven't replied,
+remind those coming — each a person's tap, asked once; nothing is automatic
+yet. A yes past `capacity` (a partner is a seat) goes on the waitlist. Venue
+sheet and MTAA hospitality record (cost, share, per head, healthcare
+professionals) download as CSV. The invite (picture or PDF ≤ 3 MB) is filed at
+`/Admin/Events/{id}/`. Not yet: automatic reminders, QR check-in (check-in is
+by name), SMS replies coming back. `api/events.test.js`, `src/events/model.test.js`.
+
 ### Supplier booking notices (Tasks 8/9)
 
 `api/_bookingNotices.js` holds the rules and contacts (Redis `notices:settings`,

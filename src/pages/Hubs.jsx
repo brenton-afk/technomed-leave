@@ -75,7 +75,7 @@ function QuickTile({ icon, tint, label, badge, onClick }) {
   )
 }
 
-export function MeHub({ user, onNavigate, onLogout, treasury = false, unread = 0 }) {
+export function MeHub({ user, onNavigate, onLogout, treasury = false, events = false, unread = 0 }) {
   const hasTimesheets = user?.staff?.hasTimesheets === true
   const me = STAFF.find(s => s.email === user?.email)
   const role = [user?.staff?.role || me?.role, me?.division].filter(Boolean).join(' · ') || 'Staff'
@@ -100,8 +100,13 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, unread = 0
           <QuickTile icon={third.icon} tint={third.tint} label={third.label} onClick={go(third.to)} />
         </div>
 
-        {(user?.isAdmin || treasury) && (
+        {(user?.isAdmin || treasury || events) && (
           <NavGroup label="Administration" first>
+            {/* Dinners, in-services and RSVPs (Brent, 25 Nov 2026). */}
+            {events && (
+              <NavCard icon={IconChat} label="Events" tint="teal"
+                detail="Invitations, RSVPs, dietary and coffee orders, check-in" onClick={go({ tab: 'me', sub: 'events' })} />
+            )}
             {user?.isAdmin && (
               <NavCard icon={IconAdmin} label="Admin" tint="navy"
                 detail="Approvals, invoices, commissions, notices and system" onClick={go({ tab: 'admin', sub: null })} />
@@ -114,7 +119,7 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, unread = 0
           </NavGroup>
         )}
 
-        <NavGroup label="Pay and time" first={!user?.isAdmin && !treasury}>
+        <NavGroup label="Pay and time" first={!user?.isAdmin && !treasury && !events}>
           {/* Only for the people who file one (Brent, 12 Nov 2026). */}
           {hasTimesheets && (
             <NavCard icon={IconClock} label="Timesheets" tint="ocean"

@@ -191,7 +191,6 @@ async function handleRsvp(req, res) {
       const ics = await guestCalendar(token)
       if (!ics) return res.status(404).end()
       res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
-      res.setHeader('Content-Disposition', 'attachment; filename="event.ics"')
       return res.status(200).send(ics)
     }
     return res.status(404).json({ error: 'Not found' })
@@ -215,7 +214,6 @@ async function handleEvents(req, res, session) {
       const event = await getEvent(id)
       if (!event || !mayOrganise(session, event)) return res.status(404).end()
       res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-      res.setHeader('Content-Disposition', `attachment; filename="${what === 'venue.csv' ? 'venue sheet' : 'hospitality record'}.csv"`)
       return res.status(200).send(what === 'venue.csv' ? venueCsv(event) : hospitalityCsv(event))
     }
     if (what === 'invite-link') {
