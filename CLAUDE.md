@@ -772,6 +772,13 @@ level, sacrum, ilium, iliosacral, pelvis, pars or percutaneous beside
 Shoreline, CYLOX, Catenary — plate screws) is labelled only where AIRO is
 written. "Airo-Spin", "post-op spin", "scan" and "CT" are navigation filler
 (`NAVIGATION_FILLER`), so such a kit entry never gets supply buttons.
+**A booked service is not a kit either** (Brent, 25 Nov 2026: "Neurophysiologist
+is not a system/kit. It is a service that is booked for some cases. No need for
+it to be on booking tabs"): `isServiceOnly` / `isNotAKit` in `systems.js`
+(neurophys / neurophysiologist / neuromonitoring / IONM) — no chip on the
+cards (`suppliesFor`) and no supply buttons (`systemsToSupply`,
+`kitWithDaySupplies`). The kit line in Google is left as typed.
+`serviceNotKit.test.js`.
 
 ### Brainlab billing, and the invoice from the bookings (Brent, 22 Nov 2026)
 

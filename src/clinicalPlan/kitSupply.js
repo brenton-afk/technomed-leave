@@ -26,7 +26,7 @@
 // which is the whole reason the field could not just be a single choice.
 
 /** The three, in the order they appear on the buttons. */
-import { isNavigationOnly } from './systems.js'
+import { isNotAKit } from './systems.js'
 import { inventoryFor, siteCode, suggestSupplyOnDay } from './inventory.js'
 
 // Calvary Loan added 1 Nov 2026 at Brent's request: Calvary's consigned kit
@@ -194,7 +194,7 @@ export function systemsToSupply({ kit, system } = {}) {
     // kit line in `system` — Oakley's read "Mariner / Spinal Brainlab / AIRO"
     // there and nowhere else — so filtering one branch left the other asking
     // which distributor the scanner was coming from.
-    .filter(s => !isNavigationOnly(s))
+    .filter(s => !isNotAKit(s))
     .filter(s => {
       const key = s.toLowerCase()
       if (!s || seen.has(key)) return false
@@ -261,7 +261,7 @@ export function kitWithDaySupplies({ kit, hospital, sameDay = [] } = {}) {
   if (!site || !entries.some(e => !e.supply && !e.navigation)) return text
   let changed = false
   const next = entries.map(e => {
-    if (e.supply || e.navigation || isNavigationOnly(e.system)) return e
+    if (e.supply || e.navigation || isNotAKit(e.system)) return e
     const item = inventoryFor(e.system)
     if (!item) return e
     const onShelf = (sameDay || []).filter(c => !c.cancelled && siteCode(c.hospital) === site

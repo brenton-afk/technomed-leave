@@ -16,7 +16,7 @@ import {
 import {
   accentForCase, accentTextForCase, washFor, withAlpha, inkOn
 } from '../clinicalPlan/theme.js'
-import { isNavigationOnly } from '../clinicalPlan/systems.js'
+import { isNotAKit } from '../clinicalPlan/systems.js'
 import { varioguideFor } from '../clinicalPlan/brainlabBilling.js'
 import { implantQuestion } from '../clinicalPlan/deduceKit.js'
 import { useIsDesktop } from '../design/viewport.js'
@@ -399,7 +399,7 @@ export function suppliesFor(surgicalCase) {
   const kitLine = (surgicalCase.supplies || []).map(e => e?.system || '').join(' / ')
   const named = varioguideFor({ hospital: surgicalCase.hospital, procedure: surgicalCase.operation || '', kit: kitLine })
   const entries = (surgicalCase.supplies || [])
-    .filter(e => e?.system && (vario(e) || (!e.navigation && !isNavigationOnly(e.system))))
+    .filter(e => e?.system && (vario(e) || (!e.navigation && !isNotAKit(e.system))))
     .map(e => (vario(e) ? { ...e, system: named || e.system, navigation: true } : e))
   if (!entries.some(vario) && named) entries.push({ system: named, navigation: true })
   if (!entries.length) return null

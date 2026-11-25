@@ -343,6 +343,24 @@ export const NAVIGATION = [
 // AIRO_SIGNALS matches Mariner on purpose, so testing for navigation alone
 // would throw the system away with it.
 
+/**
+ * A service booked for the case, not a kit (Brent, 25 Nov 2026: "Neurophysiologist
+ * is not a system/kit. It is a service that is booked for some cases. No need for
+ * it to be on booking tabs"). Nobody supplies it from a shelf or a loan, so it
+ * never gets a chip or supply buttons.
+ */
+const SERVICE_ONLY =
+  /^\s*(?:neuro\s*phys(?:iolog(?:y|ist|ical)?)?|neuro\s*monitoring|ionm|intra-?op(?:erative)?\s+(?:neuro\s*)?monitoring|ssep|meps?|neurophys(?:iology)?\s+monitoring)(?:\s*(?:required|req|booked|needed|monitoring|service|\(.*\)))*\s*\??\s*$/i
+
+export function isServiceOnly(name) {
+  return SERVICE_ONLY.test(String(name || '').replace(/\(supply\?\)/i, ''))
+}
+
+/** Navigation or a booked service: on the booking, but not a kit anybody supplies. */
+export function isNotAKit(name) {
+  return isNavigationOnly(name) || isServiceOnly(name)
+}
+
 /** Words that name a navigation platform rather than something implanted. */
 const NAVIGATION_WORDS =
   /\b(?:airo|brain\s*lab|curve|vario\s*guide|navigation|nav|stealth|o-?arm)\b/gi
