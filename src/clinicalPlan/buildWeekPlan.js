@@ -217,8 +217,11 @@ function whoIsAway(dayPlans) {
       // leave — the chip says so (Brent, 24 Nov 2026).
       const away = readAwayTitle(item.title || item.text)
       for (const person of peopleNamedIn(text)) {
-        const already = found.get(person.email) || { ...person, days: [], why: {} }
+        const already = found.get(person.email) || { ...person, days: [], why: {}, reason: {} }
         if (!already.days.includes(day.date)) already.days.push(day.date)
+        // The reason too ("Conference"), so the who's-where strip can say it
+        // even for an entry the portal has no record of (Brent, 25 Nov 2026).
+        if (away?.reason && away.reason !== away.word && !already.reason[day.date]) already.reason[day.date] = away.reason
         if (away && !already.why[day.date]) already.why[day.date] = away.word
         else if (!away) already.why[day.date] = 'Leave'
         found.set(person.email, already)
@@ -226,7 +229,8 @@ function whoIsAway(dayPlans) {
     }
   }
   return [...found.values()].map(p => ({
-    email: p.email, firstName: p.firstName, name: p.name, days: p.days, why: p.why
+    email: p.email, firstName: p.firstName, name: p.name, days: p.days, why: p.why,
+    ...(Object.keys(p.reason).length ? { reason: p.reason } : {})
   }))
 }
 
@@ -747,7 +751,11 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         flags.push({ text: timeRange && !event.allDay ? `${title} · ${timeRange}` : title, kind: rule.kind, boxed: rule.boxed })
       }
 
-      const priority = classifyFlag(title, PRIORITY_FLAG_RULES)
+      // Leave and away are "not here", never an alert — "Mat — Away ·
+      // Conference" was a travel banner over the cases for the word Conference,
+      // as well as Mat on the who's-where strip (Brent, 25 Nov 2026).
+      const isAway = kind === 'leave'
+      const priority = isAway ? null : classifyFlag(title, PRIORITY_FLAG_RULES)
       if (priority) { asFlag(priority); continue }
 
       if (!event.allDay && NON_SURGEON_BLOCK.test(title)) {
@@ -755,7 +763,7 @@ export function buildWeekPlan(rawEvents, window, opts = {}) {
         continue
       }
 
-      const late = classifyFlag(title, LATE_FLAG_RULES)
+      const late = isAway ? null : classifyFlag(title, LATE_FLAG_RULES)
       if (late) { asFlag(late); continue }
       if (looksLikeMisfiledCase(event, title)) {
         needsAttention.push({

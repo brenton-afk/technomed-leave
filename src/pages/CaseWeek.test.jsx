@@ -462,6 +462,16 @@ describe('who is away', () => {
   })
 })
 
+describe("an away entry is on the strip, not in a box too (Brent, 25 Nov 2026)", () => {
+  it('reads "Mat — Away · Conference" in any colour as Mat away, once', async () => {
+    events = [...BOOKINGS, { id: 'aw1', summary: 'Mat — Away · Conference', description: '', location: '', colorId: '6', start: { date: '2026-09-21' }, end: { date: '2026-09-22' } }]
+    show()
+    await waitFor(() => expect(document.querySelector('[data-whos-where-person="Mat"]')?.dataset.status).toBe('away'))
+    expect(document.querySelector('[data-whos-where-person="Mat"]').textContent).toMatch(/CONFERENCE/)
+    expect(screen.queryByText('Mat — Away · Conference')).toBeNull()
+  })
+})
+
 describe('the week header fits a phone', () => {
   it('drops the year from the range when it is this year', async () => {
     // "21 – 27 September 2026" at heading size does not fit between two 44px

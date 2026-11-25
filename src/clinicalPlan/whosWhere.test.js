@@ -38,6 +38,11 @@ describe("who's where", () => {
     expect(row(rows, 'Toni')).toMatchObject({ kind: 'away', short: 'RDO' })
   })
 
+  it('says why someone is away from the calendar alone (Mat at a conference)', () => {
+    const away = [{ email: 'mat@technomed.com.au', days: [D], why: { [D]: 'Away' }, reason: { [D]: 'Conference' } }]
+    expect(row(whosWhere({ date: D, day, away }), 'Mat')).toMatchObject({ kind: 'away', where: 'Away · Conference', short: 'CONFERENCE' })
+  })
+
   it('a status somebody added beats the bookings and the default', () => {
     const entries = [{ id: 's1', kind: 'office', email: 'mat@technomed.com.au', from: D, to: D, allDay: true, at: '2026-11-25T01:00:00Z' }]
     expect(row(whosWhere({ date: D, day, entries }), 'Mat')).toMatchObject({ kind: 'office', source: 'added' })

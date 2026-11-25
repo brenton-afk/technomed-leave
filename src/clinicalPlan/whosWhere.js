@@ -83,13 +83,15 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
         const e = entryOf('leave')
         return { ...base, kind: 'leave', short: 'LEAVE', where: 'On leave', when: whenOf(e), entry: e, source: 'calendar' }
       }
+      const said = off.reason?.[date] || ''
       if (word === 'Training') {
         const e = entryOf('training')
-        const where = e?.where || e?.reason || ''
+        const where = e?.where || e?.reason || said
         return { ...base, kind: 'training', short: (where || 'TRAINING').toUpperCase().slice(0, 9), where: where || 'Training / travel', when: whenOf(e), note: [e?.reason && e.reason !== where ? e.reason : '', e?.note].filter(Boolean).join(' · '), entry: e, source: 'calendar' }
       }
       const e = entryOf('away')
-      return { ...base, kind: 'away', short: word === 'RDO' ? 'RDO' : 'AWAY', where: word === 'RDO' ? 'RDO' : (e?.reason || 'Away'), when: whenOf(e), note: e?.note || '', entry: e, source: 'calendar' }
+      const why = e?.reason || said
+      return { ...base, kind: 'away', short: word === 'RDO' ? 'RDO' : (why ? why.toUpperCase().slice(0, 12) : 'AWAY'), where: word === 'RDO' ? 'RDO' : (why ? `Away · ${why}` : 'Away'), when: whenOf(e), note: e?.note || '', entry: e, source: 'calendar' }
     }
 
     // A status somebody added in the portal (Theatre, Office), newest first.
