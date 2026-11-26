@@ -234,13 +234,65 @@ function normaliseDate(raw) {
 }
 
 // One extracted row → one normalised line item.
+// ─── Rebate codes (Brent, 26 Nov 2026) ──────────────────────────────────────
+// "The rebate code is being filled with the reference code … Rebate codes
+// generally have letters and numbers and are short. They aren't usually longer
+// numbers with hyphens." Calvary's form heads its left-hand column "rebate
+// code", so the reader copied the reference into both boxes. A rebate code is
+// kept only when it is short, letters and digits together, and is not the
+// item's own reference or lot. The price list fills a blank one where it knows
+// it (src/usagePriceCheck.js).
+const plain = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+export function cleanRebate(rebate, code = '', lot = '') {
+  const r = str(rebate)
+  if (!r) return ''
+  if (/[^A-Za-z0-9]/.test(r)) return ''
+  if (r.length > 10 || r.length < 3) return ''
+  if (!/[A-Za-z]/.test(r) || !/[0-9]/.test(r)) return ''
+  if (plain(r) === plain(code) || plain(r) === plain(lot)) return ''
+  return r
+}
+
+// ─── One graft, read twice (Brent, 26 Nov 2026) ──────────────────────────────
+// "It is doubling up on the CBM DTBV extraction": the sticker on the hospital
+// form and the DTBV allograft form gave the same graft as two lines — one with
+// the lot read as its reference. Two lines are the same item when one's
+// reference is the other's lot, or (grafts, where every lot is one graft) the
+// lots agree. The cleaner line is kept — fewer things to review, then more
+// filled in — and lends the other its size or lot where it has none.
+// Implants are not merged on a shared lot: different sizes share lots.
+const GRAFT = /\bcbm\b|\bdbm\b|allograft|donor\s*tissue|\bdtbv\b|\bboost\b|bone\s*matrix|fibres|fibers/i
+const isGraft = it => it.distributorKey === 'dtbv' || it.distributorKey === 'device_boost'
+  || GRAFT.test([it.productName, it.description].join(' '))
+const filled = it => ['productName', 'referenceCode', 'lotNumber', 'description', 'size', 'rebateCode'].filter(k => it[k]).length
+function sameItem(a, b) {
+  if (a.distributorKey && b.distributorKey && a.distributorKey !== b.distributorKey) return false
+  const long = v => plain(v).length >= 6
+  if (long(a.referenceCode) && plain(a.referenceCode) === plain(b.lotNumber)) return true
+  if (long(b.referenceCode) && plain(b.referenceCode) === plain(a.lotNumber)) return true
+  return isGraft(a) && isGraft(b) && long(a.lotNumber) && plain(a.lotNumber) === plain(b.lotNumber)
+}
+export function mergeDuplicateItems(items) {
+  const out = []
+  for (const it of items) {
+    const j = out.findIndex(o => sameItem(o, it))
+    if (j < 0) { out.push(it); continue }
+    const o = out[j]
+    const better = (it.reviewReasons.length < o.reviewReasons.length)
+      || (it.reviewReasons.length === o.reviewReasons.length && filled(it) > filled(o))
+    const [keep, other] = better ? [it, o] : [o, it]
+    out[j] = { ...keep, size: keep.size || other.size, lotNumber: keep.lotNumber || other.lotNumber }
+  }
+  return out
+}
+
 export function normaliseItem(raw, index) {
   const productName = str(raw.productName || raw.product || raw.systemName)
   const referenceCode = str(raw.referenceCode || raw.ref || raw.catalogueCode)
   const lotNumber = str(raw.lotNumber || raw.lot)
   const description = str(raw.description)
   const size = str(raw.size || raw.dimensions)
-  const rebateCode = str(raw.rebateCode)
+  const rebateCode = cleanRebate(raw.rebateCode, raw.referenceCode || raw.ref || raw.catalogueCode, raw.lotNumber || raw.lot)
   const modelDistributor = str(raw.distributor || raw.manufacturer)
   const notes = str(raw.notes)
 
@@ -371,12 +423,13 @@ export function normaliseCase(extracted, { repName, repEmail, scanDate }) {
   const hospital = normaliseHospital(extracted.hospital)
   const procedure = str(extracted.procedure || extracted.procedureDescription)
 
-  const items = (Array.isArray(extracted.items) ? extracted.items : [])
+  const readItems = (Array.isArray(extracted.items) ? extracted.items : [])
     .map(normaliseItem)
     .filter(it => it.productName || it.referenceCode || it.lotNumber)
     // Not TechnoMed's (Floseal, TachoSil, Gelfoam, other haemostats): left off
     // the scan entirely rather than listed as excluded for the rep to scroll past.
     .filter(it => !isExcludedProduct(it.productName, it.description, it.referenceCode))
+  const items = mergeDuplicateItems(readItems)
 
   const caseDetails = {
     patientSurname,

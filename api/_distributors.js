@@ -176,7 +176,12 @@ const EXCLUDED_PRODUCT_PATTERNS = [
   /evicel/i,
   /gelita/i,
   /hemopatch|haemopatch/i,
-  /veriset/i
+  /veriset/i,
+  // Brent, 26 Nov 2026: "Horizon weck clips and dermabond never need to be
+  // included".
+  /\bhorizon\b/i,
+  /\bweck\b/i,
+  /derma[\s-]*bond/i
 ]
 
 // Ordered most-specific-first: BOOST must beat the generic Device match, and

@@ -3188,6 +3188,17 @@ Invariants worth preserving:
   (413, 504) into a sentence. Used by usage save, email, retry and resupply
   save. **Orthofix, Firebird, Forza and Lonestar route to KT Medical**
   (`DISTRIBUTOR_RULES`; a line reading only "Orthofix" had no distributor).
+- **One graft read twice is one line; rebate codes are rebate codes; clips
+  and glue are not on a scan** (Brent, 26 Nov 2026). `mergeDuplicateItems` in
+  `api/_usageCase.js` (in `normaliseCase`): two lines whose reference is the
+  other's lot, or two grafts (DTBV / Boost / allograft words) with the same lot,
+  are one — the line with fewer review reasons, then more filled in, is kept
+  and takes the other's size or lot where it has none; implants sharing only a
+  lot are never merged. `cleanRebate`: a rebate is kept only when 3–10 letters
+  and digits together and not the item's reference or lot (Calvary's form
+  heads its left column "rebate code", and the reference was copied into
+  both); the prompt says the same. Horizon / Weck clips and Dermabond are
+  dropped like the haemostats. `api/usageCleanup.test.js`.
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
 ### Resupply scanning (Brent, 6 Nov 2026)
