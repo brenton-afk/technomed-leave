@@ -105,7 +105,7 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
 
                 {isReturn && (
                   <div style={{ ...text('caption'), color: colour.inkFaint, marginTop: space.sm }}>
-                    A return: the kit goes back to {PLACES[kit.home]} and nobody is emailed.
+                    A return: the kit goes back to {PLACES[kit.home]}, and the hospital{kit.at !== 'office' && kit.home !== 'office' ? 's are' : ' is'} emailed to close off the transfer.
                   </div>
                 )}
 
@@ -134,12 +134,12 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
                   </>
                 )}
 
-                {to && !isReturn && (
+                {to && (
                   <>
                     <div style={label}>When</div>
                     <input type="date" value={date} min={today} onChange={e => setDate(e.target.value)} style={{ ...field, fontSize: 16 }} aria-label="Date of the move" />
 
-                    {(to === 'CLV' || to === 'RHH') && <CasePick to={to} cases={cases} value={caseChoice} onChange={setCaseChoice} />}
+                    {!isReturn && (to === 'CLV' || to === 'RHH') && <CasePick to={to} cases={cases} value={caseChoice} onChange={setCaseChoice} />}
 
                     <div style={label}>Note (optional)</div>
                     <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
@@ -154,7 +154,7 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
             {!moved && preview && !preview.email && (
               <div style={{ ...text('body'), color: colour.ink }}>
                 {preview.isReturn
-                  ? `${kit.name} goes back to ${PLACES[kit.home]}. Nobody is emailed for a return.`
+                  ? `${kit.name} goes back to ${PLACES[kit.home]}. No hospital is involved, so nobody is emailed.`
                   : `${kit.name} moves to ${PLACES[preview.to]}. Nobody outside TechnoMed is emailed for this move.`}
               </div>
             )}
@@ -178,7 +178,7 @@ export default function MoveSheet({ kit, user, emailsOn, today, post, onClose, o
             )}
             {!moved && !preview && (
               <button disabled={!to || busy || ((kit.trays || []).length > 0 && !isReturn && !trays.length)} onClick={next} style={primary(!to || busy)}>
-                {busy ? 'Working…' : isReturn ? 'Next' : 'Next: check the email'}
+                {busy ? 'Working…' : 'Next: check the email'}
               </button>
             )}
             {!moved && preview && preview.email && emailsOn && (

@@ -55,8 +55,14 @@ describe('who is told', () => {
     expect(email.cc).not.toContain('Brett.Battersby@calvarycare.org.au')
   })
 
-  it('tells nobody when a kit goes to the office', () => {
-    expect(draft({ from: 'RHH', to: 'office' })).toBeNull()
+  it('tells the hospital it left when a kit comes back to the office (closing the loop)', () => {
+    const email = draft({ from: 'RHH', to: 'office', isReturn: true })
+    expect(email.text).toMatch(/is returning the Diplomat .* from the Royal Hobart Hospital to the TechnoMed office/)
+    expect(email.subject).toMatch(/kit return/)
+  })
+
+  it('tells nobody about an office-to-office move', () => {
+    expect(draft({ from: 'office', to: 'office' })).toBeNull()
   })
 })
 
@@ -155,14 +161,18 @@ describe('moving and returning', () => {
     await expect(confirmMove({ id: preview.id }, { email: 'someone@technomed.com.au' }, vi.fn())).rejects.toThrow(/Only the person/)
   })
 
-  it('returns a kit home without emailing anybody', async () => {
+  it('a return home emails both hospitals, closing the loop (Brent, 26 Nov 2026)', async () => {
     await saveKitSettings({ emailsOn: true }, 'Brent')
     const kit = (await listKits()).find(k => k.home === 'CLV' && k.system === 'Diplomat')
     const preview = await prepareMove({ kitId: kit.id, to: 'RHH', trays: kit.trays, today: '2026-11-03' }, BEN)
     await confirmMove({ id: preview.id, send: false }, BEN, vi.fn())
     const back = await prepareMove({ kitId: kit.id, to: 'CLV', trays: kit.trays, today: '2026-11-04' }, BEN)
     expect(back.isReturn).toBe(true)
-    expect(back.email).toBeNull()
+    expect(back.email.subject).toMatch(/kit return — Diplomat to Calvary/)
+    expect(back.email.text).toMatch(/is returning the Diplomat/)
+    expect(back.email.text).toMatch(/closes off the earlier transfer/)
+    // Both loans teams, as on the way out.
+    expect([...back.email.to].sort()).toEqual([...preview.email.to].sort())
     await returnKit(kit.id, BEN).catch(() => {})
     expect((await listKits()).find(k => k.id === kit.id).at).toBe('CLV')
   })

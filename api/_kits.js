@@ -520,12 +520,16 @@ const KIND_WORD = { consignment: 'consignment', floating: 'TechnoMed loan', tech
  * Who hears about a move, and the words they get. Pure, so it can be tested
  * line by line — this is the part that must never say something untrue.
  *
- * Into a hospital: that hospital. Out of one hospital into the other: both.
- * Into the office: nobody (it is ours, and returns are not announced).
+ * Every hospital at either end hears about it: into a hospital, that
+ * hospital; out of one hospital into the other, both; out of a hospital back
+ * to the office, the hospital it left. A return is announced like any move
+ * (Brent, 26 Nov 2026: "we would like to turn on notification emails when a
+ * kit is returned (same as when we send a kit) … close the loop after the
+ * transfer is complete") — only an office-to-office move tells nobody.
  */
-export function draftKitEmail({ kit, from, to, trays, date, today, caseDate, surname, note, sender, contacts, team }) {
-  if (to === 'office' || !HOSPITAL_CONTACT[to]) return null
-  const hospitals = [to, ...(HOSPITAL_CONTACT[from] && from !== to ? [from] : [])]
+export function draftKitEmail({ kit, from, to, trays, date, today, caseDate, surname, note, sender, contacts, team, isReturn = false }) {
+  const hospitals = [to, from].filter((h, i, a) => HOSPITAL_CONTACT[h] && a.indexOf(h) === i)
+  if (!hospitals.length) return null
   const people = hospitals.map(h => contacts.find(c => c.id === HOSPITAL_CONTACT[h])).filter(Boolean)
   if (!people.length) return null
   const toList = [...new Set(people.flatMap(p => p.to || []))]
@@ -541,10 +545,13 @@ export function draftKitEmail({ kit, from, to, trays, date, today, caseDate, sur
   const partial = allTrays.length > 0 && sending.length < allTrays.length
   const what = `${kit.system} ${KIND_WORD[kit.kind] || ''} ${sending.length === 1 ? 'tray' : 'trays'}`.replace(/\s+/g, ' ')
 
+  const verb = isReturn
+    ? (when === 'today' ? 'is returning' : 'will be returning')
+    : (when === 'today' ? 'is moving' : 'will be moving')
   const lines = [
     `Hi ${greeting},`,
     '',
-    `Just letting you know TechnoMed ${when === 'today' ? 'is moving' : 'will be moving'} the ${what} from ${PLACES[from]?.long || from} to ${PLACES[to].long} ${when}.`,
+    `Just letting you know TechnoMed ${verb} the ${what} from ${PLACES[from]?.long || from} to ${PLACES[to].long} ${when}.`,
     ''
   ]
   if (sending.length) {
@@ -552,7 +559,11 @@ export function draftKitEmail({ kit, from, to, trays, date, today, caseDate, sur
     for (const t of sending) lines.push(`- ${t}`)
     lines.push('')
   }
-  if (caseDate) {
+  if (isReturn) {
+    lines.push(`This closes off the earlier transfer — the ${sending.length === 1 ? 'tray goes' : 'trays go'} back to ${PLACES[to].short}.`)
+    lines.push('')
+  }
+  if (caseDate && !isReturn) {
     lines.push(`It's needed for a case at ${PLACES[to].short} on ${longDate(caseDate)}${surname ? ` — please assign it to pt ${surname}` : ''}.`)
     lines.push('')
   }
@@ -560,7 +571,7 @@ export function draftKitEmail({ kit, from, to, trays, date, today, caseDate, sur
   // Signed off by sendBookingNotice, with the sender's name, role and details.
   lines.push('Any questions, let me know.')
 
-  const subject = `TechnoMed kit transfer — ${kit.system} to ${PLACES[to].short} ${shortDate(date || today)}`.trim()
+  const subject = `TechnoMed kit ${isReturn ? 'return' : 'transfer'} — ${kit.system} to ${PLACES[to].short} ${shortDate(date || today)}`.trim()
   return { to: toList, cc: ccList, subject, text: lines.join('\n') }
 }
 
@@ -586,8 +597,8 @@ export async function prepareMove({ kitId, to, trays, date, today, caseDate, sur
   const settings = await getKitSettings()
   const { contacts } = await getNoticeSettings()
   const isReturn = to === kit.home
-  const email = isReturn ? null : draftKitEmail({
-    kit, from, to, trays: validTrays, date, today,
+  const email = draftKitEmail({
+    kit, from, to, trays: validTrays, date, today, isReturn,
     caseDate: /^\d{4}-\d{2}-\d{2}$/.test(caseDate || '') ? caseDate : '',
     surname: String(surname || '').trim().slice(0, 40),
     note: String(note || '').slice(0, 500), sender, contacts,

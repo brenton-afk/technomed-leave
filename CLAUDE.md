@@ -1677,8 +1677,14 @@ whereabouts is its own key (`kits:loc:{id}`) so two moves cannot overwrite each
 other; `kits:history` is the log. A move is two steps — `move` returns the
 drafted email, `confirm` does it — and the location changes only on confirm.
 Recipients come from the `calvary_loans` / `rhh_loans` contacts in Admin →
-Notices, never from the request. Into a hospital: that hospital, plus the one
-it left; into the office or back home: nobody. **Hospital emails are off
+Notices, never from the request. Every hospital at either end is told:
+into a hospital, that hospital plus the one it left; back to the office, the
+hospital it left. **Returns are announced too** (Brent, 26 Nov 2026: "turn on
+notification emails when a kit is returned (same as when we send a kit) … close
+the loop after the transfer is complete"): `draftKitEmail({ isReturn })` says
+"is returning … This closes off the earlier transfer", subject "TechnoMed kit
+return — …", the move sheet shows When / Note and the email step for a return
+too (no case picker). Only an office-to-office move tells nobody. **Hospital emails are off
 (`kits:settings`) until an admin turns them on after the stock-take** — until
 then a move shows the email it would have sent and sends nothing. A move whose
 email fails is not recorded, so it can be retried.
