@@ -722,6 +722,14 @@ minutes `meeting:finalizing:{id}` — each let go only if the action failed
 before writing. Device Technologies are on no rule: they asked not to get booking
 notices. Notices for an edit made offline and sent later are not offered.
 
+**Send the supplier booking emails again** (Brent, 26 Nov 2026: "Ben
+booked the case but accidentally chose not to send the email"). A button in
+Edit booking (`data-resend-notices`, above Call this case off) →
+`action=renotify` (`handleRenotify`): the booking as it now stands is offered
+as a new booking through `prepareNotices` and the ordinary notice sheet —
+each email shown, editable, sent only on confirm; recipients from the rules.
+Nothing on the calendar changes; a called-off booking is refused (409).
+
 **An edit offers a booking notice only when the case moves** (Brent, 11 Nov
 2026: "the portal will automatically draft emails at the drop of a hat … the
 only reasons … moves dates, is cancelled, or … a change of set … that

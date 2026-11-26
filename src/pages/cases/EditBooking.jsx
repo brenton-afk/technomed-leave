@@ -549,6 +549,26 @@ export default function EditBooking({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asksAboutExisting, fields.patient, fields.surgeon, user?.token])
 
+  // Supplier emails offered again for this booking as it stands (Brent, 26 Nov 2026).
+  const [renotify, setRenotify] = useState('')
+  async function sendNoticesAgain() {
+    setRenotify('busy')
+    try {
+      const res = await fetch('/api/calendar/today?action=renotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...auth },
+        body: JSON.stringify({ eventId })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'The emails could not be got ready')
+      const any = (data.notices || []).length || (data.noticesSent || []).length
+      offerNotices(data)
+      setRenotify(any ? '' : (data.noticeError || 'No supplier is set to be told about this booking.'))
+    } catch (err) {
+      setRenotify(err.message)
+    }
+  }
+
   /** Calls the case off, or puts it back on. */
   async function setCancelled(off) {
     setStatus('saving'); setError('')
@@ -1519,6 +1539,23 @@ export default function EditBooking({
                     </>
                   ) : (
                     <>
+                      {/* Brent, 26 Nov 2026: a booking made with its supplier
+                          email unticked by mistake — offer it again. The same
+                          notice sheet: shown, editable, sent only on confirm. */}
+                      {!confirmCancel && (
+                        <button data-resend-notices onClick={sendNoticesAgain} disabled={renotify === 'busy'}
+                          style={{
+                            width: '100%', padding: space.sm, marginBottom: space.sm,
+                            cursor: renotify === 'busy' ? 'default' : 'pointer', ...text('bodyStrong'),
+                            background: 'transparent', color: colour.accentDeep,
+                            border: `1px solid ${colour.accent}`, borderRadius: radius.control
+                          }}>
+                          {renotify === 'busy' ? 'Getting the emails ready…' : 'Send the supplier booking emails again'}
+                        </button>
+                      )}
+                      {renotify && renotify !== 'busy' && (
+                        <div style={{ ...text('caption'), color: colour.inkMuted, marginBottom: space.sm }}>{renotify}</div>
+                      )}
                       {confirmCancel && (
                         <label style={{ display: 'block', marginBottom: space.sm }}>
                           <span style={{

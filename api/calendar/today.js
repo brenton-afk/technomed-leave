@@ -213,6 +213,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'search') return handleSearch(req, res)
   if (req.query.action === 'find') return handleFind(req, res)
   if (req.query.action === 'notify') return handleNotify(req, res)
+  // A booking's supplier emails offered again (Brent, 26 Nov 2026).
+  if (req.query.action === 'renotify') return handleRenotify(req, res)
   // After a case: hold a loan kit for the next case, priority tags, or send it back.
   if (req.query.action === 'kit-after') return handleKitAfter(req, res)
   if (req.query.action === 'nousage') return handleNoUsage(req, res)
@@ -2620,6 +2622,31 @@ async function handleCancel(req, res) {
     if (err.code === 'conflict') {
       return res.status(409).json({ error: err.message, code: 'conflict' })
     }
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+// ─── The booking emails, again (Brent, 26 Nov 2026) ─────────────────────────
+// "Ben booked the case but accidentally chose not to send the email." The
+// booking as it stands now is offered to its suppliers as a new booking, in
+// the ordinary notice sheet — a person sees each email and confirms it; the
+// recipients are the rules', never the request's. Nothing on the calendar
+// changes. A cancelled booking offers nothing.
+async function handleRenotify(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const eventId = String(body.eventId || '').trim()
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' })
+    const current = await getCalendarEvent(eventId)
+    if (isCancelled(current.summary || '', current.description || '')) {
+      return res.status(409).json({ error: 'This case is called off — put it back on first.' })
+    }
+    const notices = await prepareNotices({ kind: 'new', afterEvent: current, eventId, session })
+    return res.status(200).json({ ok: true, ...notices })
+  } catch (err) {
     return res.status(500).json({ error: err.message })
   }
 }
