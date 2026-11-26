@@ -75,3 +75,25 @@ describe('filingPages', async () => {
     expect(filingPages([page('only', null)])[0].data).toBe('only')
   })
 })
+
+// Brent, 26 Nov 2026: a long scan's reading copies on top of the sharper ones
+// went past Vercel's 4.5MB and an iPhone said "The string did not match the
+// expected pattern." The whole request is now kept under the budget.
+describe('the whole request stays under the budget', async () => {
+  const { filingPages, fitPages, readJson, BODY_BUDGET } = await import('../UsageScan.jsx')
+  const page = (data, full) => ({ mediaType: 'image/jpeg', data, full })
+  const total = ps => ps.reduce((s, p) => s + p.data.length, 0)
+  it('counts the reading copies of later pages too', () => {
+    const pages = Array.from({ length: 7 }, () => page('r'.repeat(400_000), 's'.repeat(1_100_000)))
+    expect(total(filingPages(pages))).toBeLessThanOrEqual(BODY_BUDGET)
+  })
+  it('makes the pages smaller when even the reading copies are too much', async () => {
+    const pages = Array.from({ length: 12 }, () => page('r'.repeat(400_000), null))
+    const out = await fitPages(pages, async d => d.slice(0, d.length / 2))
+    expect(total(out)).toBeLessThanOrEqual(BODY_BUDGET)
+  })
+  it('turns a plain-text refusal into a sentence', async () => {
+    const res = new Response('Request Entity Too Large', { status: 413 })
+    expect((await readJson(res)).error).toMatch(/too large/)
+  })
+})

@@ -160,19 +160,67 @@ export function payloadBytes(pages) {
 // ─── The sharper copy, where it fits ──────────────────────────────────────────
 // Filing and the distributor's PDF get the 2400-pixel page the scanner keeps
 // (see CameraSheet, FILE_IMAGE_DIM); reading gets the 1568 one. Vercel refuses
-// a request over 4.5MB, so the sharper copies are used page by page only while
-// the whole request stays comfortably under it — a long form falls back to the
-// reading copy for its later pages rather than failing to file at all.
-const FILING_BUDGET = 3_400_000
+// a request over 4.5MB — with a plain-text page, which an iPhone reports as
+// "The string did not match the expected pattern." (Brent, 26 Nov 2026: a
+// usage, chargeable form, Boost and DTBV forms in one scan). So the WHOLE
+// request is kept under BODY_BUDGET: every page starts as its reading copy,
+// pages are swapped for the sharper copy in order while it still fits, and
+// only if the reading copies alone are too much are they made smaller
+// (fitPages). It used to cap only the sharper copies, so a long scan's
+// reading copies on top went over.
+export const BODY_BUDGET = 3_800_000
+
+const totalLength = pages => pages.reduce((s, p) => s + String(p.data || '').length, 0)
 
 export function filingPages(pages) {
-  let used = 0
+  let used = totalLength(pages)
   return pages.map(p => {
-    const sharp = p.full && used + p.full.length <= FILING_BUDGET
-    const data = sharp ? p.full : p.data
-    used += data.length
-    return { mediaType: p.mediaType, data }
+    const sharp = p.full && used - p.data.length + p.full.length <= BODY_BUDGET
+    if (sharp) used += p.full.length - p.data.length
+    return { mediaType: p.mediaType, data: sharp ? p.full : p.data }
   })
+}
+
+async function shrinkBase64(data, maxDim, quality) {
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = () => reject(new Error('Could not shrink a page'))
+    el.src = `data:image/jpeg;base64,${data}`
+  })
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(img.naturalWidth * scale)
+  canvas.height = Math.round(img.naturalHeight * scale)
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+  const out = canvas.toDataURL('image/jpeg', quality).split(',')[1] || data
+  canvas.width = canvas.height = 0
+  return out.length < data.length ? out : data
+}
+
+/** filingPages, made smaller still when even the reading copies are too much. */
+export async function fitPages(pages, shrink = shrinkBase64) {
+  let out = filingPages(pages)
+  for (const [dim, q] of [[1400, 0.8], [1200, 0.72], [1000, 0.65]]) {
+    if (totalLength(out) <= BODY_BUDGET) break
+    out = await Promise.all(out.map(async p => (p.mediaType === 'image/jpeg'
+      ? { ...p, data: await shrink(p.data, dim, q).catch(() => p.data) }
+      : p)))
+  }
+  return out
+}
+
+/**
+ * A response's JSON, or a sentence when the server sent something else — a
+ * request too large, a timeout — rather than the phone's own parse error.
+ */
+export async function readJson(res) {
+  if (typeof res.text !== 'function') return res.json()
+  const raw = await res.text()
+  try { return JSON.parse(raw) } catch { /* not JSON */ }
+  if (res.status === 413) return { error: 'The pages were too large to send in one go. Nothing was filed or sent — try again, or retake the pages a little further back.' }
+  if (res.status === 504) return { error: 'The portal took too long to answer. Check Past scans before trying again — it may already have been filed or sent.' }
+  return { error: `The portal could not finish that (error ${res.status}). Check Past scans before trying again.` }
 }
 
 function newPageId() {
@@ -426,7 +474,7 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
     setHistoryLoading(true)
     try {
       const res = await fetch('/api/usage/agent?action=list', { headers: authHeaders })
-      const data = await res.json()
+      const data = await readJson(res)
       if (data.error) throw new Error(data.error)
       setHistory(data.records || [])
     } catch (err) {
@@ -539,7 +587,7 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           scanDate: deviceToday()
         })
       })
-      const data = await res.json()
+      const data = await readJson(res)
       if (data.error) throw new Error(data.error)
 
       // "I scanned a page the other day and it scanned well then it froze with
@@ -616,12 +664,13 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
   async function confirmAndSend({ testOnly = false, separate = false } = {}) {
     setBusy(true); setError(''); setNotice('')
     try {
+      const sendPages = await fitPages(pages)
       const saveRes = await fetch('/api/usage/agent?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           case: caseRecord,
-          pages: filingPages(pages),
+          pages: sendPages,
           // Only from "It's a different operation" on the already-filed panel.
           confirmSeparate: separate,
           // A surgeon the portal does not know, confirmed as new on review.
@@ -632,7 +681,7 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           stockConfirmed: Boolean(caseRecord.stockConfirmed)
         })
       })
-      const saved = await saveRes.json()
+      const saved = await readJson(saveRes)
       // Already filed (api/_usageDuplicate.js): nothing was filed or sent.
       // The panel on this screen says what was, and what to do instead.
       if (saved.error === 'duplicate' && saved.duplicate) {
@@ -657,10 +706,10 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           // them server-side — the record holds the transcription, not the
           // photographs — and this is what lets the distributor get the signed
           // form whether or not Dropbox is connected.
-          pages: filingPages(pages)
+          pages: sendPages
         })
       })
-      const emailed = await emailRes.json()
+      const emailed = await readJson(emailRes)
 
       setResult({
         record: saved.record,
@@ -696,7 +745,7 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ usageId: h.id, reason: 'duplicate scan' })
       })
-      const data = await res.json()
+      const data = await readJson(res)
       if (data.error) throw new Error(data.error)
       setNotice(`${h.folderName} removed as a duplicate.`)
       loadHistory()
@@ -722,10 +771,10 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           confirmRepeat: held,
           // Still in memory unless the app has been reloaded, in which case the
           // retry sends the sheet without the scan and says so.
-          pages: filingPages(pages)
+          pages: await fitPages(pages)
         })
       })
-      const data = await res.json()
+      const data = await readJson(res)
       const byKey = new Map((data.results || []).map(r => [r.key, r]))
       setResult(r => ({ ...r, emails: r.emails.map(e => byKey.get(e.key) || e) }))
       loadHistory()

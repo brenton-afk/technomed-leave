@@ -3178,6 +3178,16 @@ Invariants worth preserving:
   and Lot number were chopped): every plain text `Field` is a `GrowField`
   (wraps, `overflowWrap: 'anywhere'` for long codes), Procedure has a full
   row (`wide`); dates, numbers and choices stay inputs. `usageSizeField.test.jsx`.
+- **The whole save / send request stays under Vercel's 4.5MB** (Brent, 26 Nov
+  2026: a usage scanned with its chargeable, Boost and DTBV forms stopped on
+  "The string did not match the expected pattern." — Vercel's plain-text 413,
+  which an iPhone reports as a JSON error). `filingPages` used to cap only the
+  sharper copies, with every later page's reading copy on top; now the total
+  is held to `BODY_BUDGET` (3.8M), and `fitPages` re-encodes the pages smaller
+  if the reading copies alone exceed it. `readJson` turns a non-JSON answer
+  (413, 504) into a sentence. Used by usage save, email, retry and resupply
+  save. **Orthofix, Firebird, Forza and Lonestar route to KT Medical**
+  (`DISTRIBUTOR_RULES`; a line reading only "Orthofix" had no distributor).
 - **Images are downscaled to 1568px client-side** (`src/pages/UsageScan.jsx`). That is both Claude's effective maximum resolution and what keeps a 3-page form under Vercel's 4.5MB request-body limit. Do not remove it and post full-resolution photos.
 
 ### Resupply scanning (Brent, 6 Nov 2026)

@@ -189,7 +189,10 @@ const DISTRIBUTOR_RULES = [
   // Global Biomedica (BMD) makes Catenary and the BMD cages; E4 distributes
   // them in Australia, so every one is E4's (Brent, 25 Nov 2026).
   { key: 'e4', pattern: /dakota|reform|catenary|e4\s*global|\be4\b|\bbmd\b|\bgbm\b|global\s*-?\s*bmd|global\s*-?\s*bio\s*-?\s*medica/i },
-  { key: 'kt', pattern: /kt\s*medical|\bktm\b/i },
+  // Orthofix is KT Medical's (Brent, 26 Nov 2026: "Orthofix implants go to KT
+  // medical as per Firebird and Forza") — a line reading only "Orthofix" had
+  // no distributor and was held for review.
+  { key: 'kt', pattern: /kt\s*medical|\bktm\b|orthofix|firebird|forza|lone\s*star/i },
   { key: 'globus', pattern: /nuvasive|globus/i }
 ]
 

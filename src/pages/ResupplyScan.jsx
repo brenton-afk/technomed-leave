@@ -4,7 +4,7 @@ import ScanKindSwitch from './scan/ScanKind.jsx'
 import WrongKind from './scan/WrongKind.jsx'
 import ScanPages, { NewScanButton } from './scan/ScanPages.jsx'
 import { reorder } from './scan/pageList.js'
-import { fileToPage, pageFromPreview, filingPages, payloadBytes } from './UsageScan.jsx'
+import { fileToPage, pageFromPreview, filingPages, fitPages, readJson, payloadBytes } from './UsageScan.jsx'
 import { releaseCamera } from '../scanner/cameraStream.js'
 import { Page, Header, Banner, Button } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
@@ -320,9 +320,9 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
     try {
       const res = await fetch('/api/usage/agent?action=resupply-save', {
         method: 'POST', headers,
-        body: JSON.stringify({ id: scanId.current, usageId, resupply: read.resupply, pages: filingPages(pagesRef.current) })
+        body: JSON.stringify({ id: scanId.current, usageId, resupply: read.resupply, pages: await fitPages(pagesRef.current) })
       })
-      const data = await res.json()
+      const data = await readJson(res)
       if (data.error) throw new Error(data.error)
       setSaved(data)
       setStep('done')
