@@ -17,6 +17,8 @@ import { parseFolderName } from './_usageCase.js'
 //
 // Patient data: only a surname, as on the usage side. Nothing read is logged.
 
+import { REDACTION_PROMPT, REDACTION_FIELDS } from '../src/scanner/redactRules.js'
+
 export const RESUPPLY_PROMPT = `You are reading a resupply document sent to TechnoMed, a surgical implant distributor in Tasmania, by one of its suppliers after implants were used in a case. It may be a delivery docket, packing slip, consignment replenishment note, sales order, or simply a photo of the resupplied items showing their labels.
 
 Extract:
@@ -27,7 +29,7 @@ Extract:
 
 Also say what the document is, as "documentKind": "resupply" for anything a supplier sends with or about stock (docket, packing slip, replenishment note, sales order, invoice, a photo of supplied items); "usage" if it is instead the hospital's own record of implantable / rebatable / chargeable items used in an operation — a form with implant stickers stuck on it, filled in in theatre — or a Boost allograft patient tracking form; "other" for anything else. E4 Surgical send a reprint or copy of the hospital's chargeable-items form back as their resupply record: when an E4 form is printed or photocopied rather than an original with the stickers stuck on, or anything on it shows it came back from E4 with stock, say "resupply". People sometimes scan an original usage form here by mistake, so say "usage" when it is one.
 
-Do NOT extract the patient's first name, UR number, date of birth or any other identifier — the surname is the only patient identifier this system holds. Never invent a value: return an empty string for anything not legible. If you are unsure of a line, set "confidence" to "low".
+"patientSurname" is the SURNAME only. Do NOT put the patient's first name, UR number, date of birth, sex or any other identifier in any field except "patientLabel" (see PATIENT LABEL below) — the surname is the only patient identifier this system stores. Never invent a value: return an empty string for anything not legible. If you are unsure of a line, set "confidence" to "low".
 
 Return ONLY a JSON object (no markdown fences, no commentary) of exactly this shape:
 {
@@ -43,8 +45,8 @@ Return ONLY a JSON object (no markdown fences, no commentary) of exactly this sh
   "poReference": "",
   "lines": [
     { "referenceCode": "", "description": "", "lotNumber": "", "quantity": "1", "backordered": "0", "confidence": "high | medium | low" }
-  ]
-}`
+  ]${REDACTION_FIELDS}
+}${REDACTION_PROMPT}`
 
 const str = v => (v == null ? '' : String(v)).trim()
 

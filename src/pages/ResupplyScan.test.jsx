@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import ScanTab from './ScanTab.jsx'
 
+// jsdom draws no PDFs: an uploaded PDF stands in as one picture of a page.
+vi.mock('../scanner/redact.js', async orig => ({
+  ...(await orig()),
+  pdfToPages: async file => [{ id: `pdf-${file.name}`, mediaType: 'image/jpeg', data: 'JVBERi0xLjQgaW52ZW50ZWQ=', full: null, preview: null, name: file.name }]
+}))
+
 // Invented case and products — no real patient is named in a test.
 const CASE = { id: 'u1', folderName: 'Testa_02112026_Ibbett_Fixation_RHH', patientSurname: 'Testa', surgeonSurname: 'Ibbett', hospital: 'RHH', date: '2026-11-02', filed: true }
 const COMPARISON = {

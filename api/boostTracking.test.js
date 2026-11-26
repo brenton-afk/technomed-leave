@@ -36,7 +36,8 @@ vi.mock('./_dropbox.js', () => ({
 const { default: handler } = await import('./usage/agent.js')
 const call = (action, body) => new Promise(resolve => {
   const res = { statusCode: 200, status(c) { this.statusCode = c; return this }, json(d) { resolve({ status: this.statusCode, data: d }) } }
-  handler({ method: 'POST', query: { action }, body, headers: {} }, res)
+  // Pages reach the server covered (src/scanner/redactRules.js).
+  handler({ method: 'POST', query: { action }, body: { redaction: 'v1', ...body }, headers: {} }, res)
 })
 const page = { mediaType: 'image/jpeg', data: 'x'.repeat(40) }
 const CASE = {

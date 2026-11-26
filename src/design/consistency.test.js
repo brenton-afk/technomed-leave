@@ -37,7 +37,9 @@ const EXEMPT = [
   // A full-screen camera view over a live video feed. It has no page ground to
   // sit on and no surface to be legible against, so the app's palette does not
   // apply: everything is white or teal on whatever the camera happens to see.
-  'scan/CameraSheet.jsx'
+  'scan/CameraSheet.jsx',
+  // The patient-label covering editor: a dark full-screen working view like the camera's.
+  'scan/RedactPanel.jsx'
 ]
 
 const SCALE = new Set(Object.values(type).map(t => t.size))

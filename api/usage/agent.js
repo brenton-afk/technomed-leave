@@ -22,6 +22,7 @@ import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf, stampLines } from '../_usagePdf.js'
 import { loanStampFlags, stockConflicts, withStock } from '../../src/usageLoanCheck.js'
 import { splitBoostReadings, boostPagesFromWhole, cleanBoostPages, splitPages } from '../_boostPages.js'
+import { REDACTION_PROMPT, REDACTION_FIELDS, REDACTION_VERSION, redactionFrom } from '../../src/scanner/redactRules.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
   listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile, caseFoldersOnDay
@@ -44,7 +45,7 @@ const VISION_MODEL = process.env.USAGE_VISION_MODEL || 'claude-opus-5'
 const MAX_PAGES = 8
 const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given. For each item also return \`stockMarking\`, read ONLY from TechnoMed's own rubber stamps: \"loan\" if the red LOAN stamp is on that item (or stamped across the whole form), \"consignment\" if the blue CONSIGNMENT stamp is on it (or across the whole form), otherwise \"\". Ignore every other indicator — ticked boxes (such as the hospital's \"Loan instruments/implants\" box), printed headings or labels, and handwritten words — they are not the stamp. If neither stamp is there, return \"\".
+const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. "patientSurname" is the surname only. Do NOT put the patient's first name, UR number, date of birth, sex or any other identifier in any field except "patientLabel" (see PATIENT LABEL below) — the surname is the only patient identifier this system stores. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given. For each item also return \`stockMarking\`, read ONLY from TechnoMed's own rubber stamps: \"loan\" if the red LOAN stamp is on that item (or stamped across the whole form), \"consignment\" if the blue CONSIGNMENT stamp is on it (or across the whole form), otherwise \"\". Ignore every other indicator — ticked boxes (such as the hospital's \"Loan instruments/implants\" box), printed headings or labels, and handwritten words — they are not the stamp. If neither stamp is there, return \"\".
 
 The document is a "Record of Implantable/Rebatable Items Used" form from Calvary Health Care Tasmania (CLV) or Royal Hobart Hospital (RHH). It mixes printed implant stickers with handwritten quantities ("x1", "x3", "×4"), handwritten product names, a printed patient ID label, and a handwritten date, procedure and rep name.
 
@@ -76,9 +77,9 @@ Return ONLY a JSON object (no markdown fences, no preamble, no trailing commenta
       "confidence": "high | medium | low",
       "manualReview": false
     }
-  ]
+  ]${REDACTION_FIELDS}
 }
-If the document contains no implant items, return an empty items array.`
+If the document contains no implant items, return an empty items array.${REDACTION_PROMPT}`
 
 export default async function handler(req, res) {
   const action = req.query.action
@@ -125,6 +126,19 @@ function badRequest(message) {
 }
 
 // ─── Page validation ───────────────────────────────────────
+
+/**
+ * Pages are filed or sent only once the phone has covered the patient label
+ * (src/scanner/redactRules.js). A phone still running a build from before
+ * that would send the photograph as taken, so it is turned away until it
+ * reloads — which useNewBuild does by itself within a minute.
+ */
+function requireRedacted(req) {
+  if (req.body?.redaction === REDACTION_VERSION) return
+  const err = new Error('This phone is running an older version of the portal. Close the portal, open it again and scan the form again — the patient label is now covered for you.')
+  err.status = 409
+  throw err
+}
 
 function validatePages(pages) {
   if (!Array.isArray(pages) || pages.length === 0) {
@@ -226,7 +240,12 @@ export function mergeExtractions(readings) {
 async function readForm(pages) {
   if (!FAST) {
     const whole = await readOnce(pages, 'high')
-    return { ...whole, boostPages: boostPagesFromWhole(whole.extracted, pages.length), documentKind: documentKindOf(whole.extracted?.documentKind) }
+    return {
+      ...whole,
+      boostPages: boostPagesFromWhole(whole.extracted, pages.length),
+      documentKind: documentKindOf(whole.extracted?.documentKind),
+      redaction: redactionFrom([whole.extracted], pages.length, { perPage: false })
+    }
   }
   const readPage = async (page, i) => {
     const note = pages.length > 1
@@ -250,7 +269,10 @@ async function readForm(pages) {
     extracted: mergeExtractions(split.readings),
     truncated: readings.some(r => r.truncated),
     boostPages: split.boostPages,
-    documentKind: documentKindOfPages(readings.map(r => r.extracted?.documentKind))
+    documentKind: documentKindOfPages(readings.map(r => r.extracted?.documentKind)),
+    // Where the patient label is on each page, and what is printed in its
+    // place (src/scanner/redactRules.js). Handed to the phone, never stored.
+    redaction: redactionFrom(readings.map(r => r.extracted), pages.length)
   }
 }
 
@@ -274,7 +296,7 @@ async function handleScan(req, res, session) {
 
   const pages = validatePages(req.body?.pages)
 
-  const { extracted, truncated, boostPages = [], documentKind = '' } = await readForm(pages)
+  const { extracted, truncated, boostPages = [], documentKind = '', redaction } = await readForm(pages)
   const caseRecord = normaliseCase(extracted, {
     // The device's own date. The server has none to offer: Vercel runs in UTC, so
     // through a Hobart evening its "today" is already tomorrow here, and a case
@@ -314,7 +336,10 @@ async function handleScan(req, res, session) {
     truncated,
     // 'resupply' when the pages are a supplier's docket: the screen asks
     // before going on (Brent, 18 Nov 2026).
-    documentKind
+    documentKind,
+    // The patient label's place on each page and the details printed over it
+    // (Brent, 26 Nov 2026). Not stored anywhere — the phone paints it in.
+    redaction: redaction || redactionFrom([], pages.length)
   })
 }
 
@@ -323,6 +348,7 @@ async function handleScan(req, res, session) {
 async function handleSave(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  requireRedacted(req)
   const pages = validatePages(req.body?.pages)
   const incoming = req.body?.case
   if (!incoming) throw badRequest('No case data supplied')
@@ -497,6 +523,7 @@ async function handleEmail(req, res, session) {
 
   const { usageId, only, testOnly, pages, confirmRepeat, note } = req.body || {}
   if (!usageId) throw badRequest('No usage record specified')
+  if (Array.isArray(pages) && pages.length) requireRedacted(req)
 
   const record = await getUsageRecord(usageId)
   if (!record) return res.status(404).json({ error: 'Usage record not found' })
@@ -710,6 +737,7 @@ async function usageGreetings() {
 async function handleBoostForm(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { usageId, pages, testOnly, confirmRepeat } = req.body || {}
+  requireRedacted(req)
   const record = await getUsageRecord(String(usageId || ''))
   if (!record) return res.status(404).json({ error: 'Usage record not found' })
   if (record.removed) return res.status(410).json({ error: 'This scan was removed as a duplicate — nothing was sent.' })
@@ -1149,10 +1177,13 @@ async function handleResupplyRead(req, res) {
   if (message.stop_reason === 'refusal') throw new Error('The document could not be processed. Please contact Brenton.')
   const textBlock = message.content.find(b => b.type === 'text')
   if (!textBlock) throw new Error('No data was returned from the document')
+  const extracted = parseExtraction(textBlock.text)
+  // Where the patient label is, for the phone to cover (redactRules.js).
+  const redaction = redactionFrom([extracted], pages.length, { perPage: false })
 
   // Checked before matching: a docket whose supplier was not recognised
   // takes the distributor its codes are listed under, which matching uses.
-  const resupply = await checkResupplyCodes(normaliseResupply(parseExtraction(textBlock.text)), { infer: true })
+  const resupply = await checkResupplyCodes(normaliseResupply(extracted), { infer: true })
   const records = await getUsageHistory(RESUPPLY_LOOKBACK)
   const candidates = candidateCases(resupply, records)
   const best = candidates[0]
@@ -1168,7 +1199,8 @@ async function handleResupplyRead(req, res) {
     matchedId: matched ? best.record.id : null,
     comparison: matched?.comparison || null,
     naming: matched?.naming || null,
-    earlierCount: matched?.earlier.length || 0
+    earlierCount: matched?.earlier.length || 0,
+    redaction
   })
 }
 
@@ -1206,6 +1238,7 @@ async function handleResupplySave(req, res, session) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { id, usageId } = req.body || {}
   if (!/^[a-z0-9-]{8,64}$/i.test(String(id || ''))) throw badRequest('Missing resupply id')
+  if (Array.isArray(req.body?.pages) && req.body.pages.length) requireRedacted(req)
   const given = req.body?.resupply || {}
   const read = normaliseResupply(given)
   const resupply = await checkResupplyCodes({ ...read, distributorKey: given.distributorKey || read.distributorKey }, { hospital: given.hospital })

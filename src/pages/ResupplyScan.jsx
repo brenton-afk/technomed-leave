@@ -9,6 +9,9 @@ import { releaseCamera } from '../scanner/cameraStream.js'
 import { Page, Header, Banner, Button } from '../design/Shell.jsx'
 import { colour, text, space, radius } from '../design/tokens.js'
 import { priceCheckLine } from '../usagePriceCheck.js'
+import RedactPanel from './scan/RedactPanel.jsx'
+import { useRedaction } from '../scanner/useRedaction.js'
+import { pdfToPages } from '../scanner/redact.js'
 
 // ─── Resupply scanning (Brent, 6 Nov 2026) ───────────────────────────────────
 // The paperwork that comes back with the stock — a delivery docket, a packing
@@ -207,6 +210,8 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
   const [saved, setSaved] = useState(null)
   // The reader says these pages are a usage form (scan/WrongKind.jsx).
   const [wrongKind, setWrongKind] = useState(false)
+  // The patient label painted out of every page (Brent, 26 Nov 2026).
+  const cover = useRedaction()
   const scanId = useRef(newId())
   const uploadRef = useRef(null)
 
@@ -239,13 +244,18 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
   async function addFiles(list) {
     try {
       const added = []
-      for (const file of Array.from(list || [])) added.push(await fileToPage(file))
+      for (const file of Array.from(list || [])) {
+        // A PDF becomes pictures of its pages, so its label can be covered.
+        if (file.type === 'application/pdf') added.push(...await pdfToPages(file))
+        else added.push(await fileToPage(file))
+      }
       if (added.length) { addPages(added); setStep('capture') }
     } catch (err) { setError(err.message) }
   }
 
   function startNew() {
     pagesRef.current = []
+    cover.clear()
     scanId.current = newId()
     setPages([]); setRead(null); setUsageId(null); setComparison(null); setNaming(null); setSaved(null); setError('')
     setStep('capture'); setShowCamera(true)
@@ -268,6 +278,12 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       if (!data.resupply) throw new Error('The resupply came back empty. Try the photograph again.')
+      // The patient label painted out of every page first (Brent, 26 Nov 2026).
+      if (data.redaction) {
+        const covered = await cover.begin(pagesRef.current, data.redaction, data.resupply.surgeon)
+        pagesRef.current = covered
+        setPages(covered)
+      }
       const settled = (data.matchedId && data.naming?.distributorKey) || data.resupply.distributorKey
       setRead({ resupply: { ...data.resupply, distributorKey: settled }, candidates: data.candidates || [] })
       setUsageId(data.matchedId || null)
@@ -315,12 +331,20 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
     compareWith(usageId, resupply, { recheck: true })
   }
 
+  async function repaint(opts) {
+    const covered = await cover.repaint(pagesRef.current, read?.resupply?.surgeon, opts)
+    pagesRef.current = covered
+    setPages(covered)
+    return covered
+  }
+
   async function save() {
     setBusy(true); setError('')
     try {
+      const pages = await repaint()
       const res = await fetch('/api/usage/agent?action=resupply-save', {
         method: 'POST', headers,
-        body: JSON.stringify({ id: scanId.current, usageId, resupply: read.resupply, pages: filingPages(pagesRef.current) })
+        body: JSON.stringify({ id: scanId.current, usageId, resupply: read.resupply, pages: filingPages(pages), ...cover.flagFor(pages) })
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -353,7 +377,7 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
       <Page>
         {header('Is this a resupply?', `${pages.length} page${pages.length === 1 ? '' : 's'} read`)}
         <div style={{ padding: space.lg }}>
-          <WrongKind looksLike="usage" onMove={() => onReadAsUsage(pagesRef.current)} onStay={() => setWrongKind(false)} />
+          <WrongKind looksLike="usage" onMove={() => onReadAsUsage(cover.unredacted(pagesRef.current))} onStay={() => setWrongKind(false)} />
         </div>
       </Page>
     )
@@ -431,7 +455,14 @@ export default function ResupplyScan({ user, kind, onKind, initialPages, onReadA
             </div>
           )}
 
-          <Button onClick={save} disabled={busy || !resupply.lines.length || (usageId && !comparison)}>
+          {/* The patient label, painted out (Brent, 26 Nov 2026). */}
+          <RedactPanel pages={pages} originals={cover.originals} redaction={cover.redaction}
+            label={cover.label} surgeon={resupply.surgeon} busy={busy}
+            onLabel={next => cover.setLabel(next)}
+            onBoxes={(index, boxes) => { repaint({ boxesFor: { index, boxes } }).catch(err => setError(err.message)) }}
+            checked={cover.checked} onChecked={cover.setChecked} />
+          <div style={{ height: space.sm }} />
+          <Button onClick={save} disabled={busy || !resupply.lines.length || (usageId && !comparison) || cover.blocked}>
             {busy ? 'Saving…' : chosen ? 'Record and file in the case folder' : 'Record it'}
           </Button>
           <div style={{ height: space.sm }} />

@@ -87,7 +87,7 @@ describe('sending a usage', () => {
     records.set(CASE.id, CASE)
     await call('email', { usageId: CASE.id })
     const stale = { ...CASE, emailsSent: [], createdAt: '2030-01-01T00:00:00Z', createdByEmail: 'someone@example.test', folderName: 'Renamed_06112026_Sample_PLIF_CLV' }
-    const saved = await call('save', { case: stale, pages: [{ mediaType: 'image/jpeg', data: 'A'.repeat(40) }] })
+    const saved = await call('save', { case: stale, pages: [{ mediaType: 'image/jpeg', data: 'A'.repeat(40) }], redaction: 'v1' })
     expect(saved.status).toBe(200)
     const kept = records.get(CASE.id)
     expect(kept.emailsSent.filter(e => e.ok)).toHaveLength(1)
@@ -102,7 +102,7 @@ describe('sending a usage', () => {
   it('a scan removed as a duplicate is neither saved nor sent again', async () => {
     records.set(CASE.id, { ...CASE, removed: { by: 'Admin', at: '2026-11-06' } })
     expect((await call('email', { usageId: CASE.id })).status).toBe(410)
-    expect((await call('save', { case: CASE, pages: [{ mediaType: 'image/jpeg', data: 'A'.repeat(40) }] })).status).toBe(410)
+    expect((await call('save', { case: CASE, pages: [{ mediaType: 'image/jpeg', data: 'A'.repeat(40) }], redaction: 'v1' })).status).toBe(410)
     expect(sends).toHaveLength(0)
   })
 })
@@ -128,3 +128,11 @@ describe('amending a usage', () => {
   })
 })
 
+
+describe('the patient label', () => {
+  it('a page the phone has not covered is never filed', async () => {
+    const res = await call('save', { case: CASE, pages: [{ mediaType: 'image/jpeg', data: 'A'.repeat(40) }] })
+    expect(res.status).toBe(409)
+    expect(res.data.error).toMatch(/older version/)
+  })
+})

@@ -17,6 +17,9 @@ import { loanStampFlags, stockConflicts, asConsignment } from '../usageLoanCheck
 import KitAfterCase from './cases/KitAfterCase.jsx'
 import { SURGEON_KEYS, normaliseSurgeon } from '../clinicalPlan/parse.js'
 import { colour } from '../design/tokens.js'
+import RedactPanel from './scan/RedactPanel.jsx'
+import { useRedaction } from '../scanner/useRedaction.js'
+import { pdfToPages } from '../scanner/redact.js'
 
 // Every surgeon the portal knows, the same list the bookings are read with
 // (Brent, 9 Nov 2026: "the portal … should be able to tell that Thani is a
@@ -415,6 +418,8 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
   const [readWhenReady, setReadWhenReady] = useState(false)
   // The reader says these pages are a supplier's docket (scan/WrongKind.jsx).
   const [wrongKind, setWrongKind] = useState(false)
+  // The patient label painted out of every page (Brent, 26 Nov 2026).
+  const cover = useRedaction()
 
   const uploadRef = useRef(null)
 
@@ -464,7 +469,11 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
     setError('')
     try {
       const added = []
-      for (const file of files) added.push(await fileToPage(file))
+      // A PDF becomes pictures of its pages, so its label can be covered.
+      for (const file of files) {
+        if (file.type === 'application/pdf') added.push(...await pdfToPages(file))
+        else added.push(await fileToPage(file))
+      }
       addPages(added)
     } catch (err) {
       setError(err.message)
@@ -512,6 +521,7 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
 
   function startNew() {
     pagesRef.current = []
+    cover.clear()
     setPages([]); setCaseRecord(null); setResult(null); setDuplicate(null); setNote('')
     setError(''); setNotice(''); setStep('capture'); setShowCamera(true)
   }
@@ -557,6 +567,14 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           + 'more light, and the whole sheet in frame.')
       }
 
+      // Every patient label painted out before anything else happens. If it
+      // cannot be, nothing goes further: the pages stay as they were and the
+      // scan is not filed.
+      if (data.redaction) {
+        const covered = await cover.begin(pagesRef.current, data.redaction, data.case.surgeonName)
+        pagesRef.current = covered
+        setPages(covered)
+      }
       setCaseRecord(data.case)
       setWrongKind(data.documentKind === 'resupply' && Boolean(onReadAsResupply))
       if (data.truncated) setNotice('The document was long and extraction may be incomplete — check every row carefully.')
@@ -613,15 +631,27 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
 
   // Save to Dropbox, then email. Emails only go out once the files are safely
   // stored, so a Dropbox failure is always retryable without double-sending.
+  /** Painted again with the latest boxes, details and surgeon. */
+  async function repaint(opts) {
+    const covered = await cover.repaint(pagesRef.current, caseRecord?.surgeonName, opts)
+    pagesRef.current = covered
+    setPages(covered)
+    return covered
+  }
+
   async function confirmAndSend({ testOnly = false, separate = false } = {}) {
     setBusy(true); setError(''); setNotice('')
     try {
+      // The covering as it now stands — a surgeon or name corrected on review
+      // is printed in place of the label too.
+      const pages = await repaint()
       const saveRes = await fetch('/api/usage/agent?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           case: caseRecord,
           pages: filingPages(pages),
+          ...cover.flagFor(pages),
           // Only from "It's a different operation" on the already-filed panel.
           confirmSeparate: separate,
           // A surgeon the portal does not know, confirmed as new on review.
@@ -657,7 +687,8 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           // them server-side — the record holds the transcription, not the
           // photographs — and this is what lets the distributor get the signed
           // form whether or not Dropbox is connected.
-          pages: filingPages(pages)
+          pages: filingPages(pages),
+          ...cover.flagFor(pages)
         })
       })
       const emailed = await emailRes.json()
@@ -722,7 +753,8 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
           confirmRepeat: held,
           // Still in memory unless the app has been reloaded, in which case the
           // retry sends the sheet without the scan and says so.
-          pages: filingPages(pages)
+          pages: filingPages(pages),
+          ...cover.flagFor(pages)
         })
       })
       const data = await res.json()
@@ -890,7 +922,7 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
       <div style={{ minHeight: '100%', background: colour.canvas }}>
         <Header title="Is this a usage form?" subtitle={`${pages.length} page${pages.length === 1 ? '' : 's'} read`} />
         <div style={{ padding: 20 }}>
-          <WrongKind looksLike="resupply" onMove={() => onReadAsResupply(pagesRef.current)} onStay={() => setWrongKind(false)} />
+          <WrongKind looksLike="resupply" onMove={() => onReadAsResupply(cover.unredacted(pagesRef.current))} onStay={() => setWrongKind(false)} />
         </div>
       </div>
     )
@@ -903,6 +935,8 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
     // 19 Nov 2026): the rep says which it is before it goes.
     const conflicts = stockConflicts(caseRecord.items, caseRecord.bookingKit)
     const loanBlocked = (loanFlags.length > 0 && !caseRecord.loanConfirmed) || (conflicts.length > 0 && !caseRecord.stockConfirmed)
+      // A page the reader found no label on waits for a person to look.
+      || cover.blocked
 
     return (
       <div style={{ minHeight: '100%', background: colour.canvas, fontFamily: '-apple-system,sans-serif' }}>
@@ -1088,6 +1122,12 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
               onAmend={() => { setAmending(duplicate.earlier.id); setDuplicate(null); setStep('history'); loadHistory() }}
               onSeparate={() => confirmAndSend({ separate: true })} />
           )}
+          {/* The patient label, painted out (Brent, 26 Nov 2026). */}
+          <RedactPanel pages={pages} originals={cover.originals} redaction={cover.redaction}
+            label={cover.label} surgeon={caseRecord.surgeonName} busy={busy}
+            onLabel={next => { cover.setLabel(next) }}
+            onBoxes={(index, boxes) => { repaint({ boxesFor: { index, boxes } }).catch(err => setError(err.message)) }}
+            checked={cover.checked} onChecked={cover.setChecked} />
           {/* The Boost tracking form found in this scan (Brent, 14 Nov 2026). */}
           {(caseRecord.boostPages || []).length > 0 && (
             <div data-boost-pages style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginTop: 14, fontSize: 12.5, color: NAVY, lineHeight: 1.5 }}>

@@ -3139,6 +3139,37 @@ Invariants worth preserving:
   (name, role, phone, email) — no closing line before it (Brent, 18 Nov 2026:
   "Any questions, reply here…" was "a bit unprofessional"). Corrections and tests use the same layout, the
   correction line first, TEST at the top.
+- **The patient label is covered by the portal, never by a card** (Brent,
+  26 Nov 2026: "the label should not be visible anywhere. The first name,
+  surname of the patient and the surgeon name need to be kept for all forms.
+  Ok if the UR number is also kept. For DTBV allograft forms … PLUS the DOB
+  and the sex … destroyed permanently after scanning and redaction"). The
+  usage and resupply readers also return `labels` (every patient-identifier
+  area per page, fractions of the image), `patientLabel` (first name,
+  surname, UR, DOB, sex — the only place those may be returned) and
+  `dtbvPages` (`REDACTION_PROMPT` in `src/scanner/redactRules.js`, pure,
+  `redactRules.test.js`); `redactionFrom` pads and cleans the boxes and the
+  scan / resupply-read answer carries `redaction` — **never stored**.
+  The phone paints it into the pixels (`src/scanner/redact.js`,
+  `coverImage`: solid white block, navy edge, the kept details in the
+  biggest block — `stampLines`: Patient First SURNAME, UR, Surgeon; on a
+  DTBV page DOB and Sex too), for the reading and the filing copy, before
+  the review is shown (`useRedaction` in both scan screens). Review →
+  **Patient label covered** (`scan/RedactPanel.jsx`): every page as it will
+  go, the printed details editable, a page tapped to move / resize / add a
+  covering (`BoxEditor`, `useBackLayer`, in an `Overlay`); a page with no
+  label found must be ticked as checked before filing (`pagesToCheck`,
+  `cover.blocked`). The photo as taken lives only in the phone's memory
+  (`originals`) until the scan is filed or abandoned (`clear`); it is painted
+  again from them at Send so a corrected name or surgeon is printed. An
+  uploaded PDF is drawn as page pictures first (`pdfToPages`) so it can be
+  covered. **The server refuses to file or send a page the phone has not
+  covered**: `requireRedacted` (409, "older version of the portal") on
+  `save`, `email` with pages, `boost-form` and `resupply-save` with pages —
+  the client sends `redaction: 'v1'` only when every page is `redacted`.
+  Checked in Chromium: a black label area comes back with no dark pixels
+  left and the details printed. Not yet: files filed before this (the
+  Dropbox redaction is separate) and photos posted in Messages.
 - **Patient data never reaches a log.** Identifiers travel inside the Excel attachment; the usage email's panel carries the surname only (19 Nov 2026), never a first name, UR or date of birth. Error strings never interpolate extracted content — keep it that way when adding to this module.
 - **The review's size box has the room** (Ben, 24 Nov 2026: a BMD cage's
   size "W … L … H: 13mm A: 8°" had to be scrolled across). Size sits beside a

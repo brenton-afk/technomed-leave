@@ -21,7 +21,10 @@ const workbook = readFileSync(join(__dirname, '_usageExcel.js'), 'utf8')
 describe('what we ask the model for', () => {
   it('asks for a surname and says not to read the rest', () => {
     expect(prompt).toContain('patient surname')
-    expect(prompt).toMatch(/Do NOT extract the patient's first name, UR number/)
+    // Since 26 Nov 2026 the label is read to be covered (src/scanner/redactRules.js):
+    // the first name, UR, date of birth and sex may come back only in
+    // patientLabel, which is printed over the label and never stored.
+    expect(prompt).toMatch(/Do NOT put the patient's first name, UR number, date of birth, sex or any other identifier in any field except \"patientLabel\"/)
   })
 
   it('does not put the other identifiers in the response shape', () => {
@@ -38,6 +41,7 @@ describe('what we keep when it arrives anyway', () => {
     patientUrNumber: 'UR4417829',
     urNumber: 'UR4417829',
     patientDob: '1954-02-11',
+    patientLabel: { firstName: 'David', surname: 'Hollis', ur: 'UR4417829', dob: '1954-02-11', sex: 'M' },
     surgeonName: 'Thani',
     hospital: 'RHH',
     procedure: 'ACDF',

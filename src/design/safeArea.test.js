@@ -278,6 +278,7 @@ describe('a layer that covers the screen is rendered outside the shell', () => {
   // rather than a fix: the next rearrangement of the shell would do it again.
   const overlays = [
     'src/pages/scan/CameraSheet.jsx',      // the camera and the crop review
+    'src/pages/scan/RedactPanel.jsx',      // moving the covering over a patient label
     'src/pages/Timesheets.jsx',            // number pad, on-call, split a day
     'src/pages/admin/TimesheetApprovals.jsx' // return a timesheet
   ]
