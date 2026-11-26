@@ -51,7 +51,7 @@ export function scrubDetail(text) {
  * would be raised after Resend had already accepted the message.
  */
 export async function recordEmail({
-  kind, label, sentByEmail, from, to, cc, caseId, status, messageId, detail, at
+  kind, label, sentByEmail, from, to, cc, caseId, status, messageId, detail, at, sentCopy
 }) {
   try {
     await saveEmailLogEntry({
@@ -70,7 +70,9 @@ export async function recordEmail({
       caseId: caseId || '',
       status: status === 'sent' ? 'sent' : 'failed',
       messageId: messageId || '',
-      detail: status === 'sent' ? '' : scrubDetail(detail)
+      detail: status === 'sent' ? '' : scrubDetail(detail),
+      // Whether a copy went into the sender's Gmail Sent (api/_sentCopy.js).
+      ...(sentCopy ? { sentCopy: String(sentCopy).slice(0, 40) } : {})
     })
   } catch {
     // Deliberately silent. See above.

@@ -169,6 +169,14 @@ export default function EmailLog({ user }) {
             }}>{e.detail}</div>
           )}
 
+          {/* The copy in the sender's Gmail Sent (api/_sentCopy.js). */}
+          {e.sentCopy && (
+            <div data-sent-copy={e.sentCopy} style={{ fontSize: 11.5, marginTop: 5, color: e.sentCopy === 'filed' ? '#0f7566' : '#8a5a00' }}>
+              {e.sentCopy === 'filed' ? '✓ In the sender\u2019s Gmail Sent folder'
+                : e.sentCopy === 'not allowed yet' ? 'Not in their Gmail Sent — Google Admin permission (gmail.insert) not added yet'
+                  : `Not in their Gmail Sent (${e.sentCopy})`}
+            </div>
+          )}
           {e.messageId && (
             <div style={{ fontSize: 10.5, color: '#aab0bb', marginTop: 5 }}>
               Resend {e.messageId}

@@ -1,5 +1,6 @@
 import { STAFF, leaveApprovers } from '../src/staffConfig.js'
 import { recordEmail } from './_emailLog.js'
+import { copyToSent, copyOwner, newMessageId, sentCopyOn } from './_sentCopy.js'
 import { usageEmailContent } from './_usageEmailBody.js'
 import { EMAIL_LOGO_PNG_BASE64 } from './_emailLogo.js'
 import { emailShell, para, factsPanel, bullets, button, aside, signoff, shellFromText, LOGO_CID } from './_emailLayout.js'
@@ -223,6 +224,12 @@ async function send({
   const files = [...(attachments || [])]
   if (String(html || '').includes(`cid:${LOGO_CID}`) && !files.some(a => a?.content_id === LOGO_CID)) files.unshift(signatureLogo())
   if (files.length) payload.attachments = files
+  // Sent as a staff member: a copy is filed in their own Gmail Sent
+  // (api/_sentCopy.js). Resend's own Message-ID is left alone — overriding it
+  // through Resend has not been checked, and a header it refused would stop
+  // every email — so the copy carries its own.
+  const owner = sentCopyOn() ? copyOwner(from, sender) : ''
+  const messageHeader = owner ? newMessageId() : ''
 
   const note = (status, extra) => recordEmail({
     kind,
@@ -269,8 +276,24 @@ async function send({
     // Resend accepted it; an unparseable body costs us the id and nothing else.
   }
 
-  await note('sent', { messageId })
-  return { sent: true, recipients, from, messageId }
+  // A copy in the sender's Gmail Sent folder (Brent, 26 Nov 2026). The email
+  // has gone; this never fails it.
+  let sentCopy = ''
+  if (owner) {
+    try {
+      const { getGoogleToken } = await import('./_googleCalendar.js')
+      sentCopy = await copyToSent({
+        messageId: messageHeader, from, to: recipients, cc: copies, replyTo,
+        subject, html, text, attachments: files
+      }, owner, { getToken: getGoogleToken })
+    } catch {
+      sentCopy = 'failed'
+    }
+    if (sentCopy !== 'filed') console.warn(`Sent copy not filed (${kind || 'email'}): ${sentCopy}`)
+  }
+
+  await note('sent', { messageId, ...(sentCopy ? { sentCopy } : {}) })
+  return { sent: true, recipients, from, messageId, ...(sentCopy ? { sentCopy } : {}) }
 }
 
 function summaryText(application, prefix, extra = '') {

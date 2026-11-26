@@ -3909,6 +3909,21 @@ A usage email goes **only to the distributor it is for** — no Bcc, no archive 
 
 There is **no fallback sender**. A rejected send fails loudly: staff see `Email not sent — please contact Brenton.` and the technical cause goes to the server log and the sent-email log. The previous silent retry — reported as success — is what let a usage go out from an address the distributor could not reply to.
 
+**A copy lands in the sender's own Gmail Sent folder** (Brent, 26 Nov 2026:
+"the sender of that email doesn't get a sent item … the staff are used to
+being able to see their sent items"; "lets set up the sent item setting").
+`api/_sentCopy.js`: when `send()`'s From is the staff member's own address
+(`copyOwner`), once Resend has accepted it, the same message (`buildMime`: headers, text and
+html, attachments, inline logo) is filed in their Gmail with the SENT label
+by `messages.insert` acting as them (`GMAIL_INSERT`,
+`https://www.googleapis.com/auth/gmail.insert`, the service account's
+domain-wide delegation — **added in Google Admin by Brent**; until then each
+send logs `sentCopy: 'not allowed yet'`). The copy has its own Message-ID (Resend's is not overridden — unverified, and
+a refused header would stop every email), so a reply may not thread with it.
+Insert only files a message, never sends one; a failure never fails the email. Admin → Email shows "✓ In the
+sender's Gmail Sent folder" or why not (`data-sent-copy`). `SENT_COPY=off`
+turns it off; off under vitest unless `SENT_COPY=on`. `api/sentCopy.test.js`.
+
 Every send is recorded by `api/_emailLog.js`, readable at Admin → Email. **The subject is deliberately not stored**: for a usage email it is the case folder name, which is built from the patient's surname. The case id is the link back instead. Each entry carries a **`label`** saying which email it was without the patient (Brent, 6 Nov 2026: "no way to tell which outgoing message it is"): booking and loan notices build it from the notice word, supplier, systems, surgeon, hospital and day (`New booking → Signus · Ibbett · RHH Fri 6 Nov`); usage is `Usage · {distributor}`; leave, timesheet, meeting and PIN emails use their subject, which names staff, never patients. Admin → Email shows it with To and Cc.
 
 ## Conventions
