@@ -22,6 +22,7 @@ import { buildUsageWorkbook } from '../_usageExcel.js'
 import { buildScanPdf, stampLines } from '../_usagePdf.js'
 import { loanStampFlags, stockConflicts, withStock } from '../../src/usageLoanCheck.js'
 import { splitBoostReadings, boostPagesFromWhole, cleanBoostPages, splitPages } from '../_boostPages.js'
+import { splitDtbvReadings, dtbvPagesFromWhole, splitFormPages, DTBV_FORM_FILE } from '../_dtbvPages.js'
 import {
   caseFolderPath, saveUsageFiles, dropboxConfigured,
   listFolder, temporaryLink, resourcesRoot, usageRoot, patientHistory, uploadFile, caseFoldersOnDay
@@ -29,7 +30,7 @@ import {
 import { amendItems, changesByDistributor, amendGaps } from '../_usageAmend.js'
 import { earlierSends } from '../_usageRepeat.js'
 import { findDuplicate, freeFolderName } from '../_usageDuplicate.js'
-import { sendUsageEmail, sendBoostTrackingEmail } from '../_email.js'
+import { sendUsageEmail, sendBoostTrackingEmail, sendDtbvFormEmail } from '../_email.js'
 import { getNoticeSettings, usageGreetingsFrom } from '../_bookingNotices.js'
 
 // Usage scanning lives in this one function, routed by ?action=, for the same
@@ -44,7 +45,7 @@ const VISION_MODEL = process.env.USAGE_VISION_MODEL || 'claude-opus-5'
 const MAX_PAGES = 8
 const ACCEPTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given. For each item also return \`stockMarking\`, read ONLY from TechnoMed's own rubber stamps: \"loan\" if the red LOAN stamp is on that item (or stamped across the whole form), \"consignment\" if the blue CONSIGNMENT stamp is on it (or across the whole form), otherwise \"\". Ignore every other indicator — ticked boxes (such as the hospital's \"Loan instruments/implants\" box), printed headings or labels, and handwritten words — they are not the stamp. If neither stamp is there, return \"\".
+const EXTRACTION_PROMPT = `You are a surgical implant usage extraction specialist. Analyse this hospital usage document carefully. Extract every implant sticker and handwritten entry. For each item identify: distributor/manufacturer, product name, reference/catalogue code, lot number, size/dimensions, quantity used, rebate code if present. Also extract: patient surname, surgeon name, date, hospital (CLV or RHH), procedure description, rep name. Do NOT extract the patient's first name, UR number, date of birth or any other identifier, even where they are legible on the label — the surname is the only patient identifier this system holds. A surname can be more than one word (\"Van der Berg\", \"Lloyd Jones\"): return all of it. EXCLUDE entirely — do not list them at all: Floseal, TachoSil, Gelfoam (gel foam), Surgicel, Spongistan and other haemostatic/peripheral products that are not implants. Flag any handwritten items that cannot be clearly identified as MANUAL REVIEW REQUIRED. Return structured JSON. Also return \`boostTrackingPages\`: the page numbers (1 = the first image you were given) that are Device Technologies' Boost allograft / donor tissue patient tracking form — not the hospital's record of implantable or chargeable items — or [] if none is. Do not list a graft from the tracking form as an item when the same graft's sticker is on another page you were given. Also return \`dtbvAllograftPages\`: the page numbers that are the Donor Tissue Bank of Victoria (DTBV / VIFM) allograft usage record — the tissue recipient form for CBM or DBM bone allograft supplied through KT Medical — not the hospital's record of implantable or chargeable items and not Device's Boost form; or [] if none is. Do not list a graft from the DTBV form as an item when the same graft's sticker is on another page you were given. For each item also return \`stockMarking\`, read ONLY from TechnoMed's own rubber stamps: \"loan\" if the red LOAN stamp is on that item (or stamped across the whole form), \"consignment\" if the blue CONSIGNMENT stamp is on it (or across the whole form), otherwise \"\". Ignore every other indicator — ticked boxes (such as the hospital's \"Loan instruments/implants\" box), printed headings or labels, and handwritten words — they are not the stamp. If neither stamp is there, return \"\".
 
 The document is a "Record of Implantable/Rebatable Items Used" form from Calvary Health Care Tasmania (CLV) or Royal Hobart Hospital (RHH). It mixes printed implant stickers with handwritten quantities ("x1", "x3", "×4"), handwritten product names, a printed patient ID label, and a handwritten date, procedure and rep name.
 
@@ -226,7 +227,12 @@ export function mergeExtractions(readings) {
 async function readForm(pages) {
   if (!FAST) {
     const whole = await readOnce(pages, 'high')
-    return { ...whole, boostPages: boostPagesFromWhole(whole.extracted, pages.length), documentKind: documentKindOf(whole.extracted?.documentKind) }
+    return {
+      ...whole,
+      boostPages: boostPagesFromWhole(whole.extracted, pages.length),
+      dtbvPages: dtbvPagesFromWhole(whole.extracted, pages.length),
+      documentKind: documentKindOf(whole.extracted?.documentKind)
+    }
   }
   const readPage = async (page, i) => {
     const note = pages.length > 1
@@ -246,10 +252,13 @@ async function readForm(pages) {
   const readings = await Promise.all(pages.map(readPage))
   // The Boost tracking form is told apart page by page (api/_boostPages.js).
   const split = splitBoostReadings(readings.map(r => r.extracted))
+  // And the DTBV allograft form (api/_dtbvPages.js), the same way.
+  const dtbv = splitDtbvReadings(split.readings)
   return {
-    extracted: mergeExtractions(split.readings),
+    extracted: mergeExtractions(dtbv.readings),
     truncated: readings.some(r => r.truncated),
     boostPages: split.boostPages,
+    dtbvPages: dtbv.dtbvPages,
     documentKind: documentKindOfPages(readings.map(r => r.extracted?.documentKind))
   }
 }
@@ -274,7 +283,7 @@ async function handleScan(req, res, session) {
 
   const pages = validatePages(req.body?.pages)
 
-  const { extracted, truncated, boostPages = [], documentKind = '' } = await readForm(pages)
+  const { extracted, truncated, boostPages = [], dtbvPages = [], documentKind = '' } = await readForm(pages)
   const caseRecord = normaliseCase(extracted, {
     // The device's own date. The server has none to offer: Vercel runs in UTC, so
     // through a Hobart evening its "today" is already tomorrow here, and a case
@@ -307,6 +316,8 @@ async function handleScan(req, res, session) {
   // Which pages are the Boost tracking form: kept on the case, so the send
   // leaves them out of every distributor's scan and sends them to boost@ alone.
   caseRecord.boostPages = boostPages
+  // And the DTBV allograft form's: they go with the DTBV email alone.
+  caseRecord.dtbvPages = dtbvPages
 
   return res.status(200).json({
     case: caseRecord,
@@ -407,13 +418,16 @@ async function handleSave(req, res, session) {
   // (Brent, 14 Nov 2026: "split the boost form off … store in Dropbox
   // separately"). Its pages were told apart on the scan (api/_boostPages.js).
   const boostPages = cleanBoostPages(incoming.boostPages, pages.length)
-  const { usagePages, trackingPages } = splitPages(pages, boostPages)
-  const [scanPdf, usageSheet, trackingPdf] = await Promise.all([
+  // The DTBV allograft form likewise (api/_dtbvPages.js, Brent 26 Nov 2026).
+  const dtbvPages = cleanBoostPages(incoming.dtbvPages, pages.length)
+  const { usagePages, trackingPages, dtbvPages: dtbvFormPages } = splitFormPages(pages, { boostPages, dtbvPages })
+  const [scanPdf, usageSheet, trackingPdf, dtbvPdf] = await Promise.all([
     buildScanPdf(usagePages.length ? usagePages : pages),
     // The Dropbox copy: every distributor's items together, and the only place
     // that records who scanned it and which rows never left the building.
     buildUsageWorkbook(caseRecord, included, { internal: true }),
-    trackingPages.length && usagePages.length ? buildScanPdf(trackingPages) : null
+    trackingPages.length && usagePages.length ? buildScanPdf(trackingPages) : null,
+    dtbvFormPages.length && usagePages.length ? buildScanPdf(dtbvFormPages) : null
   ])
 
   // Dropbox is optional. Where it is configured it goes first, so a filing
@@ -438,6 +452,15 @@ async function handleSave(req, res, session) {
         console.error('Boost tracking form not filed:', err.message)
       }
     }
+    if (dtbvPdf) {
+      const name = DTBV_FORM_FILE(caseRecord.folderName)
+      try {
+        await uploadFile(`${folderPath}/${name}`, dtbvPdf, { keep: true })
+        saved = [...saved, name]
+      } catch (err) {
+        console.error('DTBV allograft form not filed:', err.message)
+      }
+    }
   } else {
     dropboxSkipped = true
   }
@@ -449,6 +472,7 @@ async function handleSave(req, res, session) {
     dropboxSkipped,
     filesSaved: saved,
     boostPages,
+    dtbvPages,
     emailsSent: stored?.emailsSent || [],
     ...(stored?.amendments ? { amendments: stored.amendments } : {}),
     createdByEmail: stored?.createdByEmail || session.email,
@@ -546,13 +570,26 @@ async function handleEmail(req, res, session) {
   let scanPdf = null
   let scanError = ''
   let trackingPages = []
+  // The DTBV allograft form's pages go only in the DTBV email (with the
+  // usage pages), never in anybody else's (api/_dtbvPages.js).
+  let dtbvScanPdf = null
+  let dtbvFormOnly = null
   if (Array.isArray(pages) && pages.length) {
     try {
       const valid = validatePages(pages)
-      const split = splitPages(valid, cleanBoostPages(record.boostPages, valid.length))
+      const split = splitFormPages(valid, {
+        boostPages: cleanBoostPages(record.boostPages, valid.length),
+        dtbvPages: cleanBoostPages(record.dtbvPages, valid.length)
+      })
       trackingPages = split.trackingPages
+      if (split.dtbvPages.length) {
+        dtbvScanPdf = await buildScanPdf([...split.usagePages, ...split.dtbvPages])
+        dtbvFormOnly = await buildScanPdf(split.dtbvPages)
+      }
       if (split.usagePages.length) scanPdf = await buildScanPdf(split.usagePages)
-      else scanError = 'only the Boost tracking form was scanned — the chargeable items form was not'
+      else scanError = split.trackingPages.length
+        ? 'only the Boost tracking form was scanned — the chargeable items form was not'
+        : 'only the DTBV allograft form was scanned — the chargeable items form was not'
     } catch (err) {
       scanError = err.message
     }
@@ -569,6 +606,31 @@ async function handleEmail(req, res, session) {
       const sent = await sendTrackingForm({ record, pdf: await buildScanPdf(trackingPages), test, session })
       if (sent.result) results.push(sent.result)
       trackingFiled = sent.filed
+    }
+  }
+
+  // The DTBV allograft form with no DTBV item read off the usage: it still
+  // goes, alone, to the DTBV addresses — once (Brent, 26 Nov 2026).
+  if (dtbvFormOnly && !groups.has('dtbv') && (!only?.length || only.includes('dtbv'))) {
+    const d = DISTRIBUTORS.dtbv
+    const done = (record.emailsSent || []).some(e => e && e.key === 'dtbv' && e.ok && !e.test)
+    if (!done || test) {
+      const to = test ? [session.email] : d.to
+      if (test || await claimUsageSend(record.id, 'dtbv')) {
+        try {
+          await sendDtbvFormEmail({
+            to, cc: test ? [] : d.cc, subject: record.folderName, pdf: dtbvFormOnly,
+            pdfFilename: DTBV_FORM_FILE(record.folderName), caseId: record.id,
+            test: test ? { wouldSendTo: d.to } : undefined,
+            sender: { name: session.name, email: session.email }
+          })
+          results.push({ key: 'dtbv', name: d.name, to, itemCount: 0, ok: true, test, dtbvForm: true, sentAt: new Date().toISOString() })
+        } catch (err) {
+          results.push({ key: 'dtbv', name: d.name, to, itemCount: 0, ok: false, test, error: err.message })
+        } finally {
+          if (!test) await releaseUsageSend(record.id, 'dtbv')
+        }
+      }
     }
   }
 
@@ -620,13 +682,18 @@ async function handleEmail(req, res, session) {
     }
     const items = groups.get(key)
     const to = test ? [session.email] : distributor.to
+    // A distributor with its own copy list (DTBV: admin@ only) gets that, not
+    // the clinical team (Brent, 26 Nov 2026: "Just to those email addresses").
+    const theirCc = test ? [] : (distributor.cc || cc)
+    // The DTBV email carries the DTBV allograft form too; nobody else does.
+    const theirScan = key === 'dtbv' && dtbvScanPdf ? dtbvScanPdf : scanPdf
     // Named for what is in this distributor's sheet, not the whole form.
     const theirName = nameForDistributor(record.folderName, record.procedure, items)
     try {
       const xlsx = await buildUsageWorkbook(record, items)
       const sent = await sendUsageEmail({
         to,
-        cc,
+        cc: theirCc,
         subject: theirName,
         // Personal from both ends (Brent, 17 Nov 2026): their greeting, the
         // case facts for their items, the rep's note and signature.
@@ -638,7 +705,7 @@ async function handleEmail(req, res, session) {
         distributorLabel: distributor.name,
         xlsx,
         xlsxFilename: `${theirName}_Usage_Sheet.xlsx`,
-        scanPdf,
+        scanPdf: theirScan,
         scanPdfFilename: `${theirName}_Scan.pdf`,
         test: test ? { wouldSendTo: distributor.to } : undefined,
         // Sent as the rep, and replies come back to them.
@@ -647,7 +714,8 @@ async function handleEmail(req, res, session) {
       results.push({
         key, name: distributor.name, to, itemCount: items.length, ok: true, test,
         from: sent?.from || session.email,
-        scanAttached: Boolean(scanPdf),
+        scanAttached: Boolean(theirScan),
+        ...(key === 'dtbv' && dtbvScanPdf ? { dtbvForm: true } : {}),
         sentAt: new Date().toISOString()
       })
     } catch (err) {

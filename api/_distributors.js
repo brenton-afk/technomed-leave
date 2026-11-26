@@ -34,9 +34,13 @@ export const DISTRIBUTORS = {
     name: 'Nuvasive/Globus',
     to: ['customeraccounts@globusmedical.com', 'jlagoon@globusmedical.com', 'cmckenzie@globusmedical.com']
   },
+  // With the DTBV allograft form (api/_dtbvPages.js): "to Ben Reynolds,
+  // allograft@ and DTBV utilisation@ plus technomed admin … Just to those email
+  // addresses please" (Brent, 26 Nov 2026). `cc` replaces the clinical team copy.
   dtbv: {
     name: 'Donor Tissue Bank of Victoria',
-    to: ['dtbv.utilization@vifm.org', 'kt@ktmedical.com.au', 'ben@ktmedical.com.au']
+    to: ['dtbv.utilization@vifm.org', 'allograft@ktmedical.com.au', 'ben@ktmedical.com.au'],
+    cc: ['admin@technomed.com.au']
   }
 }
 

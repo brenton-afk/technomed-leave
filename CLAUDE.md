@@ -3067,6 +3067,22 @@ Invariants worth preserving:
   recognises and sends the boost usage to where it needs to be") — no card on
   the Done screen, no Boost form button in Past scans (`boostFormGone.test.jsx`);
   `scan/BoostForm.jsx` and `action=boost-form` remain, unreachable.
+- **The DTBV allograft form is split off the same way** (Brent, 26 Nov 2026:
+  "a similar set up to the boost emails … scan all items on the usage … the
+  DTBV allograft form to go to Ben Reynolds, allograft@ and DTBV utilisation@
+  plus technomed admin … automatically … Just to those email addresses").
+  The reader returns `dtbvAllograftPages` per page; `splitDtbvReadings` /
+  `splitFormPages` in `api/_dtbvPages.js` (pure, `dtbvForm.test.js`) keep them
+  as `dtbvPages` on the case, drop a form page's graft when another page has a
+  DTBV item, and keep them out of **every** other distributor's scan PDF. The
+  DTBV usage email (`DISTRIBUTORS.dtbv`: dtbv.utilization@vifm.org,
+  allograft@ktmedical.com.au, ben@ktmedical.com.au; its own `cc`
+  admin@technomed.com.au replaces the clinical team copy) carries the usage
+  pages **and** the form; with no DTBV item on the usage the form goes alone
+  (`sendDtbvFormEmail`, key `dtbv`, once). Filed beside the usage as
+  `{folder}_DTBV_Allograft_Form.pdf`, not inside the usage scan. The review
+  says "DTBV allograft form found — page N" (`data-dtbv-pages`). DTBV need
+  the full patient label on that form (TGA — Anna Ciabarra, 6 Nov 2026).
 - **Loan stock must be marked LOAN** (Brent, 13 Nov 2026, after the Munro
   usage went to Device as consignment). The reader returns `stockMarking`
   per item (loan / consignment / ''); `action=scan` looks up the day's one

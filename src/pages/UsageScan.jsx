@@ -1096,6 +1096,14 @@ export default function UsageScan({ user, switcher, initialPages, onReadAsResupp
               Device's restocking email gets the chargeable form without it.
             </div>
           )}
+          {/* The DTBV allograft form found in this scan (Brent, 26 Nov 2026). */}
+          {(caseRecord.dtbvPages || []).length > 0 && (
+            <div data-dtbv-pages style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginTop: 14, fontSize: 12.5, color: NAVY, lineHeight: 1.5 }}>
+              <strong>DTBV allograft form found</strong> — page {caseRecord.dtbvPages.map(i => i + 1).join(', ')}.
+              It goes with the DTBV usage to DTBV, KT allograft and Ben Reynolds (admin@ copied) only, and is filed separately in Dropbox.
+              No other distributor gets it.
+            </div>
+          )}
           {/* Loan stock not marked LOAN on the form (Brent, 13 Nov 2026). */}
           {loanFlags.length > 0 && (
             <div data-loan-flags style={{ background: '#fff4e5', border: `1px solid ${AMBER_TEXT}`, borderRadius: 12, padding: 14, marginTop: 14 }}>

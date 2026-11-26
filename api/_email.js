@@ -564,6 +564,30 @@ export async function sendBoostTrackingEmail({ to, cc, subject, pdf, pdfFilename
   })
 }
 
+/**
+ * The DTBV allograft usage record on its own, when the usage itself named no
+ * DTBV item (api/_dtbvPages.js; Brent, 26 Nov 2026). Usually it travels inside
+ * the DTBV usage email instead.
+ */
+export async function sendDtbvFormEmail({ to, cc, subject, pdf, pdfFilename, test, sender, caseId }) {
+  const body = 'Please find the DTBV allograft usage record attached.'
+  const heading = `${test ? '[TEST] ' : ''}DTBV allograft form – ${subject}`
+  const wouldHaveGone = test ? `Would have gone to: ${test.wouldSendTo.join(', ')}` : ''
+  const html = emailShell({
+    label: 'DTBV allograft form',
+    banner: test ? { tone: 'warning', title: 'TEST — not sent to DTBV', detail: wouldHaveGone } : null,
+    body: [para('Hi DTBV team,'), para(body), signoff({ closing: 'Thanks,', ...personSignoff(sender) })].join('\n')
+  })
+  return send({
+    to, cc, kind: 'usage', caseId,
+    label: test ? 'DTBV allograft form (test)' : 'DTBV allograft form',
+    subject: heading, html,
+    text: `${test ? `TEST — not sent to DTBV. ${wouldHaveGone}\n\n` : ''}${body}\n\nWarm regards,\nTechnoMed`,
+    attachments: [{ filename: pdfFilename || 'DTBV_Allograft_Form.pdf', content: pdf.toString('base64') }],
+    sender, replyTo: sender?.email
+  })
+}
+
 // ─── MEETING MINUTES / ACTION ITEMS ────────────────────────
 
 const PRIORITY_COLORS = { urgent: '#c0392b', normal: '#1a7a6e', low: '#6b7a8d' }
