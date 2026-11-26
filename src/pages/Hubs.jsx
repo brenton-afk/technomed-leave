@@ -125,8 +125,11 @@ export function MeHub({ user, onNavigate, onLogout, treasury = false, events = f
             <NavCard icon={IconClock} label="Timesheets" tint="ocean"
               detail="Fortnightly hours for payroll" onClick={go({ tab: 'me', sub: 'timesheets' })} />
           )}
-          <NavCard icon={IconLeave} label="Leave" tint="grape"
-            detail="Apply for annual, personal or TOIL" onClick={go({ tab: 'me', sub: 'leave' })} />
+          {/* Your leave coming up, from the portal and the Staff Leave calendar (Toni, 26 Nov 2026). */}
+          <NavCard icon={IconLeave} label="My leave" tint="grape"
+            detail="Your leave coming up — requested and approved" onClick={go({ tab: 'me', sub: 'myleave' })} />
+          <NavCard icon={IconLeave} label="Apply for leave" tint="grape"
+            detail="Annual, personal or TOIL" onClick={go({ tab: 'me', sub: 'leave' })} />
           <NavCard icon={IconPayslip} label="Payslips" tint="slate"
             detail="Not set up yet" onClick={go({ tab: 'me', sub: 'payslips' })} />
         </NavGroup>

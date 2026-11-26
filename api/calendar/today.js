@@ -54,6 +54,7 @@ import {
 } from '../_redis.js'
 import { afterCase, kitAfterEmail, LOOK_AHEAD_DAYS, swapCandidates, swapKitSupply, retitleSupply, systemKey } from '../../src/clinicalPlan/turnAround.js'
 import { listKits } from '../_kits.js'
+import { myUpcomingLeave } from '../../src/leave/myLeave.js'
 import { getPreferences } from '../_preferences.js'
 import { searchPortal } from '../_portalSearch.js'
 import { searchChat } from '../_chatSearch.js'
@@ -179,6 +180,8 @@ export default async function handler(req, res) {
   if (req.query.action === 'opentasks') return handleOpenTasks(req, res)
   // Away — a training day, an RDO: paid, but not available for cases.
   if (req.query.action === 'away') return handleAway(req, res)
+  // Your own leave coming up, from the portal and the Staff Leave calendar (Toni, 26 Nov 2026).
+  if (req.query.action === 'myleave') return handleMyLeave(req, res)
   if (req.query.action === 'delete') return handleDelete(req, res)
   // The booking review queue. Bookings read out of bookings@ wait here for a
   // person before they reach the calendar — see api/_redis.js for why.
@@ -3146,4 +3149,53 @@ async function handleNoUsage(req, res) {
   if (!eventId) return res.status(400).json({ error: 'eventId is required' })
   await markNoUsage(eventId, firstNameFor(session.email) || session.email, body.on !== false)
   return res.status(200).json({ ok: true, noUsage: body.on !== false })
+}
+
+/**
+ * The signed-in person's leave from today on (Toni, 26 Nov 2026): their
+ * pending and approved portal requests, and every Staff Leave calendar entry
+ * naming them — what Toni entered before the portal took leave requests.
+ * Read-only. Three Redis calls (two lists and one MGET) and one calendar read.
+ */
+async function handleMyLeave(req, res) {
+  const session = await requireSession(req, res)
+  if (!session) return
+  const person = STAFF_BY_EMAIL(session.email)
+  if (!person) return res.status(403).json({ error: 'Not on the staff list' })
+  const today = todayInHobart()
+  const until = toDateStr(addCivilDays(parseDateStr(today), 400))
+
+  const readPortal = async () => {
+    const [pending, approved] = await Promise.all([
+      redis('lrange', 'leave:pending', '0', '-1'),
+      redis('lrange', 'leave:approved', '0', '99')
+    ])
+    const ids = [...new Set([...(pending || []), ...(approved || [])])]
+    if (!ids.length) return []
+    const rows = await redis('mget', ...ids.map(id => `leave:${id}`)) || []
+    return rows.map(r => { try { return r ? JSON.parse(r) : null } catch { return null } }).filter(Boolean)
+  }
+  const readCalendar = async () => {
+    const token = await getGoogleToken(CALENDAR_SCOPE_READONLY)
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(LEAVE_CALENDAR_ID)}/events`
+      + `?timeMin=${encodeURIComponent(`${today}T00:00:00+11:00`)}&timeMax=${encodeURIComponent(`${until}T23:59:59+10:00`)}`
+      + `&singleEvents=true&orderBy=startTime&maxResults=2500&timeZone=${encodeURIComponent(QUERY_TZ)}`
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const data = await r.json()
+    if (data.error) throw new Error(data.error.message || 'calendar')
+    return (data.items || []).map(e => ({ id: e.id, summary: e.summary || '', start: e.start, end: e.end }))
+  }
+
+  const [portal, calendar] = await Promise.allSettled([readPortal(), readCalendar()])
+  const leave = myUpcomingLeave({
+    person, today,
+    applications: portal.status === 'fulfilled' ? portal.value : [],
+    events: calendar.status === 'fulfilled' ? calendar.value : []
+  })
+  return res.status(200).json({
+    today,
+    leave,
+    ...(portal.status === 'rejected' ? { portalError: 'Your portal requests could not be read just now.' } : {}),
+    ...(calendar.status === 'rejected' ? { calendarError: 'The Staff Leave calendar could not be read just now.' } : {})
+  })
 }

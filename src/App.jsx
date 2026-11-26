@@ -8,7 +8,7 @@ import Cases from './pages/Cases.jsx'
 import { Screens, LazyScreen, prefetchScreens } from './lazyScreens.jsx'
 // Loaded when opened rather than with the app — see lazyScreens.jsx.
 const {
-  LeaveForm, KitRoom, Projects, TeamLeader, UsageScan, ScanTab, TheatreGuides, Chat, Timesheets,
+  LeaveForm, MyLeave, KitRoom, Projects, TeamLeader, UsageScan, ScanTab, TheatreGuides, Chat, Timesheets,
   AdminPortal, FileBrowser, Resources, PatientHistory, Notifications
 } = Screens
 import FaceIdSetup from './pages/FaceIdSetup.jsx'
@@ -510,6 +510,8 @@ export default function App() {
         case 'messages': return <Chat user={user} onRead={unread.refresh} />
         case 'timesheets': return <Timesheets user={user} onBack={back} />
         case 'leave': return <LeaveForm user={user} onSuccess={setSubmitted} onBack={back} />
+        // Your leave coming up, requested and approved (Toni, 26 Nov 2026).
+        case 'myleave': return <MyLeave user={user} onBack={back} onApply={() => navigate({ tab: 'me', sub: 'leave' })} />
         case 'usagefiles':
           return <FileBrowser user={user} root="usage" eyebrow="Your files" title="Filed usage" onBack={back} />
         case 'patient':

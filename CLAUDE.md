@@ -2436,6 +2436,20 @@ what the team already writes by hand. Notably, **`api/auth/pin.js` imports it ac
    hours card (7.6 a day, editable), and `api/submit.js` takes hours whenever
    sent.
 
+6. **My leave** (Toni, 26 Nov 2026: "the ME section of portal could hold all
+   future leave dates for yourself that have been requested and already
+   approved … generated from 'staff leave' calendar"). Me → Pay and time →
+   **My leave** (`pages/leave/MyLeave.jsx`, sub `myleave`; the old Leave card
+   is now **Apply for leave**). `action=myleave` on `api/calendar/today.js`
+   (read-only, the signed-in person only): their pending and approved portal
+   requests (two LRANGEs and one MGET) and every Staff Leave calendar entry
+   naming them for the next 400 days. `myUpcomingLeave` in
+   `src/leave/myLeave.js` (pure, `myLeave.test.js`): a calendar entry counts as
+   approved; one the portal wrote on approval (`calendar.eventId`) or covering
+   the same days as a portal request is shown once, as the portal's record;
+   Away / RDO / Training entries are listed with their label. Nothing is
+   written anywhere.
+
 Redis keys: `leave:{id}` (JSON blob), `leave:pending` / `leave:approved` / `leave:declined` (id lists), `pin:{email}` (4-digit PIN, plaintext), `session:{token}` (JSON, 1h TTL), `xero_at` / `xero_rt` / `xero_tid` / `xero_exp`.
 
 All Redis access goes through the single exported `redis()` helper in `api/_redis.js`; don't re-implement it per route (it used to be duplicated in `api/auth/pin.js` and `_xeroClient.js`, which is how the token-encoding mismatch went unnoticed).

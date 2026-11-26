@@ -17,6 +17,7 @@ import { colour, text, space, radius } from './design/tokens.js'
 
 const loaders = {
   LeaveForm: () => import('./pages/LeaveForm.jsx'),
+  MyLeave: () => import('./pages/leave/MyLeave.jsx'),
   KitRoom: () => import('./pages/KitRoom.jsx'),
   Projects: () => import('./pages/Projects.jsx'),
   TeamLeader: () => import('./pages/TeamLeader.jsx'),
