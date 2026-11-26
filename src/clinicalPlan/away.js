@@ -41,6 +41,9 @@ export const AWAY_REASONS = ['Training day', 'RDO', 'Conference', 'Course']
 export const STATUS_KINDS = [
   { id: 'theatre', label: 'Theatre', hint: 'Covering cases at a hospital', calendar: false },
   { id: 'office', label: 'Office', hint: 'TechnoMed office day', calendar: false },
+  // Brent, 27 Nov 2026: "a work from home office day option" — an office day
+  // worked from home. A normal work day: kept by the portal only, like Office.
+  { id: 'wfh', label: 'Working from home', hint: 'Office day, worked from home', calendar: false },
   { id: 'training', label: 'Training / travel', hint: 'Courses, trips, conferences', calendar: true },
   { id: 'away', label: 'Away', hint: 'Out, not on leave — an RDO, a day off site', calendar: true },
   { id: 'leave', label: 'Leave', hint: 'Shows as "Leave" only — the reason stays in Xero', calendar: true },
@@ -57,6 +60,7 @@ export function awayWords(reason, kind = 'away') {
   if (kind === 'leave') return 'Leave'
   if (kind === 'training') return r ? `Training · ${r}` : 'Training'
   if (kind === 'office') return 'Office'
+  if (kind === 'wfh') return 'Working from home'
   if (kind === 'notworking') return 'Not working'
   if (kind === 'theatre') return r ? `Theatre · ${r}` : 'Theatre'
   if (!r) return 'Away'

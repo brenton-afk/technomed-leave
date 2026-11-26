@@ -96,3 +96,19 @@ describe('Not working (Brent, 26 Nov 2026)', () => {
     expect(groups.find(g => g.key === 'notworking').rows.map(r => r.person.firstName)).toEqual(['Toni'])
   })
 })
+
+// Brent, 27 Nov 2026: "a work from home office day option".
+describe('working from home', async () => {
+  const { noteStatus, WHO_KINDS } = await import('./whosWhere.js')
+  const { STATUS_KINDS, awayWords } = await import('./away.js')
+  it('is a status anyone can add, kept off the leave calendar', () => {
+    const k = STATUS_KINDS.find(s => s.id === 'wfh')
+    expect(k.calendar).toBe(false)
+    expect(awayWords('', 'wfh')).toBe('Working from home')
+    expect(WHO_KINDS.wfh.tag).toBe('WFH')
+  })
+  it('a calendar note saying WFH sets it', () => {
+    expect(noteStatus({ firstName: 'Toni' }, [{ title: 'Toni - WFH' }]).kind).toBe('wfh')
+    expect(noteStatus({ firstName: 'Toni' }, [{ title: 'Toni - TM office' }]).kind).toBe('office')
+  })
+})

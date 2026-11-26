@@ -635,6 +635,13 @@ added in the portal, so it takes the place of Erin's and Toni's office default
 and of theatre read off the bookings, and the whole-team page lists it under
 its own **Not working** group.
 
+**Working from home** (Brent, 27 Nov 2026: "a work from home office day
+option"): a seventh status (`wfh` in `STATUS_KINDS`, `statusTint.wfh` a lighter
+office blue, tag WFH) — an office day worked from home. Portal only
+(`calendar: false`), ranked with the other added statuses; its own group on
+the whole-team page; a calendar note "Toni - WFH" / "working from home" sets it
+(`noteStatus`).
+
 ### Events and RSVPs (Brent, 25 Nov 2026)
 
 "An RSVP portal within our Technomed portal for dinners etc … as good as

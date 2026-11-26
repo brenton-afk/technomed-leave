@@ -21,6 +21,7 @@ export const OFFICE_BY_DEFAULT = ['erin@technomed.com.au', 'toni@technomed.com.a
 export const WHO_KINDS = {
   theatre: { label: 'Theatre', tag: 'THEATRE' },
   office: { label: 'Office', tag: 'OFFICE' },
+  wfh: { label: 'Working from home', tag: 'WFH' },
   training: { label: 'Training / travel', tag: 'TRAINING' },
   away: { label: 'Away', tag: 'AWAY' },
   leave: { label: 'Leave', tag: 'LEAVE' },
@@ -72,7 +73,8 @@ export function noteStatus(person, items = []) {
     if (!m || m[1].toLowerCase() !== first) continue
     const rest = m[2].replace(/\s*·.*$/, '').trim()
     if (/\b(leave|rdo|away)\b/i.test(rest)) continue // the Staff Leave calendar answers these
-    if (/\boffice\b|\bwfh\b|work(ing)? from home/i.test(rest)) return { kind: 'office', where: /\btm\b|technomed/i.test(rest) || /^office$/i.test(rest) ? 'TechnoMed office' : rest, note: '' }
+    if (/\bwfh\b|work(ing)? from home|\bfrom home\b/i.test(rest)) return { kind: 'wfh', where: 'Working from home', note: '' }
+    if (/\boffice\b/i.test(rest)) return { kind: 'office', where: /\btm\b|technomed/i.test(rest) || /^office$/i.test(rest) ? 'TechnoMed office' : rest, note: '' }
     if (/training|course|conference|congress|workshop|meeting in|melb|melbourne|sydney|brisbane|adelaide|perth|launceston|interstate|travel|flight/i.test(rest)) {
       return { kind: 'training', where: rest, note: '' }
     }
@@ -120,7 +122,10 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
     }
 
     // A status somebody added in the portal (Theatre, Office, Not working), newest first.
-    const own = [...mine].filter(e => ['theatre', 'office', 'notworking'].includes(e.kind)).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0]
+    const own = [...mine].filter(e => ['theatre', 'office', 'wfh', 'notworking'].includes(e.kind)).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0]
+    if (own?.kind === 'wfh') {
+      return { ...base, kind: 'wfh', short: 'WFH', where: own.where || 'Working from home', when: whenOf(own), note: own.note || '', entry: own, source: 'added' }
+    }
     if (own?.kind === 'notworking') {
       return { ...base, kind: 'notworking', short: 'OFF', where: 'Not working', when: whenOf(own), note: own.note || '', entry: own, source: 'added' }
     }
@@ -138,7 +143,7 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
     if (noted) {
       return {
         ...base, kind: noted.kind, where: noted.where, when: 'All day', source: 'calendar note',
-        short: noted.kind === 'office' ? 'OFFICE' : noted.where.toUpperCase().slice(0, 12)
+        short: noted.kind === 'office' ? 'OFFICE' : noted.kind === 'wfh' ? 'WFH' : noted.where.toUpperCase().slice(0, 12)
       }
     }
 
@@ -172,7 +177,7 @@ export function otherItemsWorthListing(items = [], people = WHO_PEOPLE) {
 /** The whole-team page's groups, in the mock-up's order. */
 export function groupWhosWhere(rows) {
   const order = [
-    ['theatre', 'Theatre'], ['office', 'Office'], ['training', 'Training / travel'],
+    ['theatre', 'Theatre'], ['office', 'Office'], ['wfh', 'Working from home'], ['training', 'Training / travel'],
     ['off', 'Away / leave'], ['notworking', 'Not working'], ['none', 'No entry']
   ]
   const keyOf = r => (!r.kind ? 'none' : (r.kind === 'away' || r.kind === 'leave') ? 'off' : r.kind)

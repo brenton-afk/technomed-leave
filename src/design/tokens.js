@@ -59,6 +59,7 @@ export const site = {
 export const statusTint = {
   theatre: { ring: '#189a85', soft: '#e8f4f2', ink: '#0f7566' },
   office: { ring: '#3b78c2', soft: '#e1ecf8', ink: '#24548f' },
+  wfh: { ring: '#5b8fd1', soft: '#e8f0fa', ink: '#2f5f9a' },
   training: { ring: '#d98a3a', soft: '#fcebd9', ink: '#94500f' },
   away: { ring: '#8e24aa', soft: '#f3e5f7', ink: '#6a1b80' },
   leave: { ring: '#8e24aa', soft: '#f3e5f7', ink: '#6a1b80' },
