@@ -2449,6 +2449,14 @@ what the team already writes by hand. Notably, **`api/auth/pin.js` imports it ac
    the same days as a portal request is shown once, as the portal's record;
    Away / RDO / Training entries are listed with their label. Nothing is
    written anywhere.
+   **Only the days the person works count** (Toni, same day: "it's saying my
+   January leave is 8 working days rather than 5 … You MUST have people's
+   hours accurately recorded"): `leaveAmount` — a fixed work pattern
+   (`workPattern` in `staffConfig.js`, Toni Mon/Wed/Thu 5.5h) through
+   `leaveDays` in `leaveHours.js`, a flexible one as weekdays with no hours
+   guessed (Erin), no pattern as weekdays at 7.6h; public holidays never
+   count (`publicHoliday`); a portal request's own hours per day as written.
+   Each row says "N working days · Xh".
 
 Redis keys: `leave:{id}` (JSON blob), `leave:pending` / `leave:approved` / `leave:declined` (id lists), `pin:{email}` (4-digit PIN, plaintext), `session:{token}` (JSON, 1h TTL), `xero_at` / `xero_rt` / `xero_tid` / `xero_exp`.
 

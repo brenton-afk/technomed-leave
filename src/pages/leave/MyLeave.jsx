@@ -9,7 +9,6 @@ import { Page, Header, Body, Card, Banner, Button, EmptyState, Skeleton, Section
 import { colour, text, space, radius } from '../../design/tokens.js'
 import { IconLeave } from '../../design/icons.jsx'
 import { parseDateStr } from '../../clinicalPlan/week.js'
-import { weekdaysIn } from '../../leave/myLeave.js'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -27,10 +26,10 @@ export function spanWords(item) {
 }
 
 function lengthWords(item) {
-  if (item.hours) return `${item.hours}h`
-  const n = weekdaysIn(item.from, item.to)
-  if (!n) return ''
-  return `${n} working day${n === 1 ? '' : 's'}`
+  // Worked out on the server from the person's own working days (myLeave.js).
+  if (item.days == null) return ''
+  const days = `${item.days} working day${item.days === 1 ? '' : 's'}`
+  return item.hours != null ? `${days} · ${item.hours}h` : days
 }
 
 function untilWords(item, today) {

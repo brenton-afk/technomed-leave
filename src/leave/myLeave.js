@@ -13,6 +13,8 @@
 // Pure: the server reads, this decides.
 
 import { readAwayTitle } from '../clinicalPlan/away.js'
+import { leaveDays } from '../leaveHours.js'
+import { publicHoliday } from '../publicHolidays.js'
 
 const TYPE_LABELS = { ANNUAL_LEAVE: 'Annual leave', SICK: 'Personal leave', TOIL: 'TOIL' }
 
@@ -89,7 +91,7 @@ export function myUpcomingLeave({ person, today, applications = [], events = [] 
     label: TYPE_LABELS[a.leaveType] || 'Leave',
     status: a.status,
     source: 'portal',
-    ...(a.totalHours ? { hours: a.totalHours } : {}),
+    ...leaveAmount(a.startDate, a.endDate, person.workPattern, a.hours),
     ...(a.returnDate ? { back: a.returnDate } : {}),
     eventId: a.calendar?.eventId || null
   }))
@@ -116,6 +118,7 @@ export function myUpcomingLeave({ person, today, applications = [], events = [] 
       label,
       status: 'approved',
       source: 'calendar',
+      ...leaveAmount(days.from, days.to, person.workPattern),
       ...(ev.start?.dateTime ? { note: `${String(ev.start.dateTime).slice(11, 16)}–${String(ev.end?.dateTime || '').slice(11, 16)}` } : {})
     })
   }
@@ -125,12 +128,39 @@ export function myUpcomingLeave({ person, today, applications = [], events = [] 
     .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
 }
 
-/** Working days (Mon–Fri) from `from` to `to`, both counted. */
-export function weekdaysIn(from, to) {
+const STANDARD_DAY = 7.6
+const round = h => Math.round(Number(h || 0) * 100) / 100
+
+/**
+ * How much leave a stretch is for this person (Toni, 26 Nov 2026: "it's saying
+ * my January leave is 8 working days rather than 5 … not calculating part
+ * time hours / days correctly"). Only the days they work count, public
+ * holidays never:
+ *   fixed pattern  their contracted days, at their hours (Toni Mon/Wed/Thu 5.5h)
+ *   flexible       weekdays; hours unknown until they say (Erin)
+ *   none           weekdays at 7.6h, full time
+ * A portal request that carries its own hours per day is taken as written.
+ * → { days, hours } (hours null when it cannot be known)
+ */
+export function leaveAmount(from, to, pattern, written = null) {
+  if (Array.isArray(written) && written.length) {
+    const worked = written.filter(d => Number(d.hours) > 0)
+    return { days: worked.length, hours: round(worked.reduce((s, d) => s + Number(d.hours), 0)) }
+  }
+  if (pattern?.kind === 'fixed') {
+    const days = leaveDays(from, to, pattern).filter(d => !publicHoliday(d.date))
+    return { days: days.length, hours: round(days.reduce((s, d) => s + d.hours, 0)) }
+  }
+  const days = weekdaysIn(from, to, { holidays: false })
+  return { days, hours: pattern?.kind === 'flexible' ? null : round(days * STANDARD_DAY) }
+}
+
+/** Working days (Mon–Fri) from `from` to `to`, both counted; public holidays left out unless `holidays`. */
+export function weekdaysIn(from, to, { holidays = true } = {}) {
   let n = 0
   for (let d = from; d <= to; d = addDays(d, 1)) {
     const wd = new Date(`${d}T00:00:00Z`).getUTCDay()
-    if (wd !== 0 && wd !== 6) n++
+    if (wd !== 0 && wd !== 6 && (holidays || !publicHoliday(d))) n++
     if (n > 400) break
   }
   return n
