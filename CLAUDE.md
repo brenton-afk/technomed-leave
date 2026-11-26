@@ -3081,7 +3081,15 @@ Invariants worth preserving:
   pages **and** the form; with no DTBV item on the usage the form goes alone
   (`sendDtbvFormEmail`, key `dtbv`, once). Filed beside the usage as
   `{folder}_DTBV_Allograft_Form.pdf`, not inside the usage scan. The review
-  says "DTBV allograft form found — page N" (`data-dtbv-pages`). DTBV need
+  says "DTBV allograft form found — page N" (`data-dtbv-pages`).
+  **Recognised for sure** (Brent, same day: the form went to every
+  distributor): the prompt's "exactly this shape" JSON had no place for
+  `boostTrackingPages` / `dtbvAllograftPages`, so the reader mostly left them
+  out. It now has them plus `pageType` (usage | boost_tracking |
+  dtbv_allograft | other) and how to tell the forms apart; `saysDtbv` /
+  `saysTracking` read either. And `looksDtbv`: in a scan of several pages, a
+  page not called usage whose every item is a DTBV graft is the form.
+  "Cancellous bone matrix" counts as DTBV without the letters CBM. DTBV need
   the full patient label on that form (TGA — Anna Ciabarra, 6 Nov 2026).
 - **Loan stock must be marked LOAN** (Brent, 13 Nov 2026, after the Munro
   usage went to Device as consignment). The reader returns `stockMarking`

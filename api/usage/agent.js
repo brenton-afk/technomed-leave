@@ -56,6 +56,9 @@ Also say what the document is, as "documentKind": "usage" if it is the hospital'
 Return ONLY a JSON object (no markdown fences, no preamble, no trailing commentary) of exactly this shape:
 {
   "documentKind": "usage | resupply | other",
+  "pageType": "usage | boost_tracking | dtbv_allograft | other — for a single page: what THIS page is (see below)",
+  "boostTrackingPages": [],
+  "dtbvAllograftPages": [],
   "patientSurname": "",
   "surgeonName": "",
   "date": "YYYY-MM-DD, or the raw text if you cannot resolve it",
@@ -79,7 +82,13 @@ Return ONLY a JSON object (no markdown fences, no preamble, no trailing commenta
     }
   ]
 }
-If the document contains no implant items, return an empty items array.`
+If the document contains no implant items, return an empty items array.
+
+How to tell the forms apart (fill "pageType", "boostTrackingPages" and "dtbvAllograftPages" every time — they decide who is emailed which page):
+- "dtbv_allograft": the Donor Tissue Bank of Victoria allograft form — headed or branded Donor Tissue Bank of Victoria, DTBV, VIFM or Victorian Institute of Forensic Medicine, or an allograft / tissue usage or recipient record for CBM or DBM bone (cancellous or cortical bone matrix, demineralised bone), usually with tissue ID / lot numbers like CBM-######-##-##, the recipient's date of birth and sex, and a signature. List its page numbers in "dtbvAllograftPages".
+- "boost_tracking": Device Technologies' / Australian Biotechnologies' Boost allograft patient tracking form. List its page numbers in "boostTrackingPages".
+- "usage": the hospital's record of implantable / rebatable / chargeable items used (Calvary or Royal Hobart).
+When in doubt between "usage" and "dtbv_allograft" for a page whose only content is allograft tissue details with recipient details, it is "dtbv_allograft".`
 
 export default async function handler(req, res) {
   const action = req.query.action

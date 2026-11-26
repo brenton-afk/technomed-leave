@@ -17,7 +17,7 @@
 //     restocks.
 // Pure; used by api/usage/agent.js. Shaped like api/_boostPages.js.
 
-const DTBVY = /\bcbm\b|\bdbm\b|donor\s*tissue|\bdtbv\b|\bvifm\b|cortical\s+bone\s+matrix|demineral/i
+const DTBVY = /\bcbm\b|\bdbm\b|donor\s*tissue|\bdtbv\b|\bvifm\b|(cortical|cancellous)\s+bone\s+matrix|demineral/i
 const BOOSTY = /\bboost\b/i
 export const isDtbvItem = item => {
   if (item?.distributorKey) return item.distributorKey === 'dtbv'
@@ -26,14 +26,23 @@ export const isDtbvItem = item => {
 }
 
 /** Whether one reading (one page, read alone) says it is the DTBV form. */
-const saysDtbv = reading => Array.isArray(reading?.dtbvAllograftPages) && reading.dtbvAllograftPages.map(Number).includes(1)
+const saysDtbv = reading => /dtbv/i.test(String(reading?.pageType || ''))
+  || (Array.isArray(reading?.dtbvAllograftPages) && reading.dtbvAllograftPages.map(Number).includes(1))
+
+// A page whose every item is a DTBV graft and that is not the hospital's own
+// form, in a scan of several pages — the form, even when the reader did not
+// say so (Brent, 26 Nov 2026: the form went to every distributor).
+const looksDtbv = (reading, pageCount) => pageCount > 1
+  && !/^(usage|boost)/i.test(String(reading?.pageType || ''))
+  && Array.isArray(reading?.items) && reading.items.length > 0
+  && reading.items.every(isDtbvItem)
 
 /**
  * Page-by-page readings → which pages are the DTBV form, and the readings with
  * a form page's graft left out when another page has a DTBV item.
  */
 export function splitDtbvReadings(readings) {
-  const dtbvPages = readings.map((r, i) => (saysDtbv(r) ? i : -1)).filter(i => i >= 0)
+  const dtbvPages = readings.map((r, i) => (saysDtbv(r) || looksDtbv(r, readings.length) ? i : -1)).filter(i => i >= 0)
   if (!dtbvPages.length) return { readings, dtbvPages }
   const elsewhere = readings.some((r, i) => !dtbvPages.includes(i)
     && (Array.isArray(r?.items) ? r.items : []).some(isDtbvItem))

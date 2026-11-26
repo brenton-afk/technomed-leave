@@ -188,7 +188,7 @@ const EXCLUDED_PRODUCT_PATTERNS = [
 // the allograft rules must beat a bare "global" hit.
 const DISTRIBUTOR_RULES = [
   { key: 'device_boost', pattern: /\bboost\b/i },
-  { key: 'dtbv', pattern: /\bcbm\b|donor\s*tissue|\bdtbv\b|allograft/i },
+  { key: 'dtbv', pattern: /\bcbm\b|cancellous\s*bone\s*matrix|donor\s*tissue|\bdtbv\b|allograft/i },
   { key: 'signus', pattern: /signus|diplomat|athlet|ascot|mobis/i },
   { key: 'device', pattern: /mariner|shoreline|device\s*tech/i },
   // Global Biomedica (BMD) makes Catenary and the BMD cages; E4 distributes

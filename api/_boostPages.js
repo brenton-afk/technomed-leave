@@ -31,7 +31,8 @@ export function cleanBoostPages(value, pageCount) {
 }
 
 /** Whether one reading (one page, read alone) says it is the tracking form. */
-const saysTracking = reading => Array.isArray(reading?.boostTrackingPages) && reading.boostTrackingPages.map(Number).includes(1)
+const saysTracking = reading => /boost/i.test(String(reading?.pageType || ''))
+  || (Array.isArray(reading?.boostTrackingPages) && reading.boostTrackingPages.map(Number).includes(1))
 
 /**
  * Page-by-page readings → which pages are the tracking form, and the readings

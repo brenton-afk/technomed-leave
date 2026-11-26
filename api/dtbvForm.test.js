@@ -120,3 +120,23 @@ describe('the rules', () => {
     expect(splitFormPages(['a', 'b', 'c'], { boostPages: [1], dtbvPages: [2] })).toEqual({ usagePages: ['a'], trackingPages: ['b'], dtbvPages: ['c'] })
   })
 })
+
+// Brent, 26 Nov 2026: the form was not recognised and went to every
+// distributor. Each page now says what it is, and a page of nothing but DTBV
+// grafts in a longer scan is the form anyway.
+describe('the DTBV form is recognised', async () => {
+  const { splitDtbvReadings } = await import('./_dtbvPages.js')
+  const usage = { pageType: 'usage', items: [{ productName: 'Mariner screw' }, { productName: 'Cancellous Bone Matrix CBM' }] }
+  it('by the page saying it is the DTBV form', () => {
+    const { dtbvPages } = splitDtbvReadings([usage, { pageType: 'dtbv_allograft', items: [] }])
+    expect(dtbvPages).toEqual([1])
+  })
+  it('by a page of nothing but DTBV grafts, its graft not counted twice', () => {
+    const { dtbvPages, readings } = splitDtbvReadings([usage, { items: [{ productName: 'Cancellous Bone Matrix', referenceCode: 'CBM-001947-25-27' }] }])
+    expect(dtbvPages).toEqual([1])
+    expect(readings[1].items).toEqual([])
+  })
+  it('never the hospital usage page itself', () => {
+    expect(splitDtbvReadings([usage]).dtbvPages).toEqual([])
+  })
+})
