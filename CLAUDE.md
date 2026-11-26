@@ -2715,6 +2715,18 @@ single character away) — advisory, since lists are incomplete (Boost, some KT
 ranges). KT uses the RHH list at the RHH. Device Boost → Device's list; DTBV →
 KT private. **Never a price** on the review or in any email. The line shows
 only while the code is the one checked (`priceCheckLine`).
+**A misread code is put right from the list, not offered** (Brent, 27 Nov
+2026, Ben's resupply: the usage read the rod sticker as AB0805-00-150, the list
+has AB0855-00150, so the resupply matched nothing — "The codes should just be
+right"). `listedCodeFor` / `withListedCode` in `src/usagePriceCheck.js`: a code
+on its distributor's list is written as the list writes it; one that is not is
+replaced by the **single** list code it fits (same letters and digits, one
+character changed / added / dropped, or a missed suffix such as "R/R"); two
+candidates and nothing changes. The reading is kept as `codeAsRead`, the review
+says "Code put right from the price list (read as …)". Applied in
+`priceCheckCase` (scan) and `priceCheckResupply` (every resupply line), and
+`comparisonFor` matches against `withListedCodes(record)` so a usage saved
+before this still matches its resupply. `src/usageCodeFix.test.js`.
 **Every resupply line is checked too** (Brent, 19 Nov 2026: "the resupply
 scanner must use the list also"). `priceCheckResupply` (same file) on
 `resupply-read` (before matching, `infer: true` — a docket whose supplier was

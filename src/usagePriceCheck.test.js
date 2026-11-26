@@ -63,8 +63,10 @@ describe('a resupply paper', () => {
   const paper = (distributorKey, codes) => ({ distributorKey, distributor: distributorKey ? 'Named' : '', lines: codes.map((c, i) => ({ id: `line-${i}`, referenceCode: c, quantity: 1 })) })
   it('checks every line, never carrying a price', () => {
     const out = priceCheckResupply(paper('signus', ['AB0010-11111', 'AB0010-11117']), book)
-    expect(out.lines.map(l => l.priceCheck.status)).toEqual(['listed', 'not-listed'])
-    expect(out.lines[1].priceCheck.near).toBe('AB0010-11111')
+    // A code one character from a single list code is now put right
+    // (Brent, 27 Nov 2026), the reading kept.
+    expect(out.lines.map(l => l.priceCheck.status)).toEqual(['listed', 'listed'])
+    expect(out.lines[1]).toMatchObject({ referenceCode: 'AB0010-11111', codeAsRead: 'AB0010-11117' })
     expect(JSON.stringify(out)).not.toMatch(/"price"/)
   })
   it('takes the distributor from the codes when the supplier was not recognised, on the first read only', () => {

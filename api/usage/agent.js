@@ -15,7 +15,7 @@ import {
   resupplyNaming, itemsFor
 } from '../_resupply.js'
 import { loadPriceBook } from '../_priceStore.js'
-import { priceCheckCase, priceCheckResupply } from '../../src/usagePriceCheck.js'
+import { priceCheckCase, priceCheckResupply, withListedCodes } from '../../src/usagePriceCheck.js'
 import { normaliseCase, recomputeCase, normaliseItem, nameForDistributor, looksSwapped, knownSurgeon } from '../_usageCase.js'
 import { DISTRIBUTORS, BOOST_TRACKING, groupByDistributor, ccFor, distributorName } from '../_distributors.js'
 import { buildUsageWorkbook } from '../_usageExcel.js'
@@ -1196,8 +1196,12 @@ async function checkResupplyCodes(resupply, { hospital = '', infer = false } = {
 }
 
 async function comparisonFor(usageId, resupply) {
-  const record = await getUsageRecord(usageId)
+  let record = await getUsageRecord(usageId)
   if (!record) return null
+  // Codes as the price list has them on both sides (Brent, 27 Nov 2026): a
+  // usage saved with a misread code (AB0805-00-150 for AB0855-00150) still
+  // matches its resupply. Only the comparison sees it; the record is unchanged.
+  try { record = withListedCodes(record, await loadPriceBook()) } catch { /* compare as saved */ }
   const all = await getCaseResupplies(usageId)
   // The name is the portal's, never typed (Brent, 20 Nov 2026): Device or
   // Boost from the paper and the usage, partial / remaining from what is

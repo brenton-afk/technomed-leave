@@ -58,6 +58,39 @@ function oneApart(a, b) {
   return edits + (a.length - i) + (b.length - j) <= 1
 }
 
+// ─── A misread code is put right from the list (Brent, 27 Nov 2026) ─────────
+// "We can't have the portal having incorrect codes … I don't want the staff to
+// have to override the incorrect codes. The codes should just be right." Ben's
+// Rowley usage: the rod sticker read AB0805-00-150 — the list has AB0855-00150
+// — so the resupply of AB0855-00150 matched nothing. A code not on its
+// distributor's list is replaced by the one list code it can only have been:
+//   - the same letters and digits in another layout (hyphens, spaces);
+//   - one character changed, added or dropped;
+//   - the read code is the start of it (a suffix like "R/R" missed);
+// and only when exactly one list code fits — two candidates, nothing changes
+// and the line says "check the code" as before. A listed code is written as
+// the list writes it. The code as read is kept on the line (`codeAsRead`).
+export function listedCodeFor(code, dist, book, index = indexPriceBook(book), { hospital = '' } = {}) {
+  const k = codeKey(code)
+  if (!k || !book) return null
+  const d = dist === 'device_boost' ? 'device' : dist
+  const lists = (DISTRIBUTOR_LISTS[d] || []).filter(l => (book.lists?.[l] || []).length)
+  if (!lists.length) return null
+  const rank = l => ((hospital === 'RHH') === (l === 'kt-rhh') ? 0 : 1)
+  const exact = (index.get(k) || []).filter(h => lists.includes(h.list)).sort((a, b) => rank(a.list) - rank(b.list))
+  if (exact.length) return { code: exact[0].row.code, how: 'exact' }
+  const found = new Map()
+  for (const l of lists) {
+    for (const r of book.lists[l]) {
+      const rk = codeKey(r.code)
+      if (!rk) continue
+      if (oneApart(k, rk) || (k.length >= 6 && rk.startsWith(k) && rk.length - k.length <= 3)) found.set(rk, r.code)
+    }
+  }
+  if (found.size !== 1) return null
+  return { code: [...found.values()][0], how: 'corrected' }
+}
+
 /**
  * The check for one usage line.
  * @param item  { referenceCode, distributorKey }
@@ -99,9 +132,11 @@ export function priceCheckItem(item, book, index, { hospital = '' } = {}) {
 export function priceCheckCase(items = [], book, { hospital = '' } = {}) {
   if (!book) return items
   const index = indexPriceBook(book)
-  return items.map(it => {
-    if (it.excluded) return it
+  return items.map(it0 => {
+    if (it0.excluded) return it0
+    const it = withListedCode(it0, book, index, { hospital })
     const check = priceCheckItem(it, book, index, { hospital })
+    if (it.codeAsRead && check.status === 'listed') check.correctedFrom = it.codeAsRead
     const next = { ...it, priceCheck: check }
     if (check.status === 'listed' && check.rebate && !String(it.rebateCode || '').trim()) next.rebateCode = check.rebate
     if (check.status === 'other-distributor') {
@@ -114,10 +149,26 @@ export function priceCheckCase(items = [], book, { hospital = '' } = {}) {
   })
 }
 
+/** The line with its code as the list writes it, or put right from the list. */
+export function withListedCode(it, book, index = indexPriceBook(book), { hospital = '' } = {}) {
+  const fix = listedCodeFor(it?.referenceCode, it?.distributorKey, book, index, { hospital })
+  if (!fix || fix.code === it.referenceCode) return it
+  if (fix.how === 'exact') return { ...it, referenceCode: fix.code }
+  return { ...it, referenceCode: fix.code, codeAsRead: it.codeAsRead || it.referenceCode }
+}
+
+/** A saved case's items with their codes as the list has them — for matching. */
+export function withListedCodes(record, book, { hospital = '' } = {}) {
+  if (!book || !record) return record
+  const index = indexPriceBook(book)
+  return { ...record, items: (record.items || []).map(it => (it.excluded ? it : withListedCode(it, book, index, { hospital: hospital || record.hospital }))) }
+}
+
 /** The one line the review shows under an item, while its code is the one checked. */
 export function priceCheckLine(item) {
   const c = item?.priceCheck
   if (!c || codeKey(c.code) !== codeKey(item.referenceCode)) return null
+  if (c.status === 'listed' && c.correctedFrom) return { tone: 'ok', text: `Code put right from the price list (read as ${c.correctedFrom})${c.range ? ` · ${c.range}` : ''}${c.rebate ? ` · ${c.rebate}` : ''}` }
   if (c.status === 'listed') return { tone: 'ok', text: `On the price list${c.range ? ` · ${c.range}` : ''}${c.rebate ? ` · ${c.rebate}` : ''}` }
   if (c.status === 'other-distributor') return { tone: 'warn', text: `This code is on ${c.distributor}'s price list, not this distributor's.`, move: c.distributorKey, moveLabel: `Send to ${c.distributor}` }
   if (c.status === 'not-listed') return { tone: 'warn', text: `Not on ${c.distributor || 'the distributor'}'s price list — check the code.`, near: c.near }
@@ -154,7 +205,13 @@ export function priceCheckResupply(resupply, book, { hospital = '', infer = fals
     const found = tally(owners)
     if (found) { distributorKey = found; distributor = nameOf(found) }
   }
-  const lines = resupply.lines.map(l => ({ ...l, priceCheck: priceCheckItem({ referenceCode: l.referenceCode, distributorKey }, book, index, { hospital }) }))
+  const lines = resupply.lines.map(l0 => {
+    const l = withListedCode({ ...l0, distributorKey }, book, index, { hospital })
+    const { distributorKey: _d, ...line } = l
+    const check = priceCheckItem({ referenceCode: line.referenceCode, distributorKey }, book, index, { hospital })
+    if (line.codeAsRead && check.status === 'listed') check.correctedFrom = line.codeAsRead
+    return { ...line, priceCheck: check }
+  })
   const checked = lines.filter(l => ['listed', 'other-distributor', 'not-listed'].includes(l.priceCheck.status))
   const elsewhere = tally(checked.map(l => (l.priceCheck.status === 'other-distributor' ? l.priceCheck.distributorKey : '')))
   return {
