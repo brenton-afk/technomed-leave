@@ -1622,7 +1622,10 @@ Healthcare, Stryker, J&J, Medtronic, Zimmer, Globus — or says "not needed").
 card alike: a "Stage N" tag per row, ours in the card's ink, the other greyed
 "— Life Healthcare, not us". Derived on every draw; operation and notes are
 already in `planSignature`. **Forza** alone now reads as Forza XP (`aka`), so
-"Firebird / Forza" at RHH is Consignment, not "supply?".
+"Firebird / Forza" at RHH is Consignment, not "supply?". Brent, 28 Nov 2026: **one
+Firebird and one Forza XP set is consigned at each of RHH and Calvary**
+(`inventory.js` `consigned: { RHH: 1, CLV: 1 }` on both); the bookings that
+read "Forza" with no supply were given "Forza XP (Consignment)" in Google.
 
 ### Turn a kit around, and what happens to it after the case (Brent, 21 Nov 2026)
 
