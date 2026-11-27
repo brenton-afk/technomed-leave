@@ -24,7 +24,11 @@ describe('which cases get the Outrigger on standby', () => {
     'ACDF revision C5/6',
     'Revision ALIF L5/S1',
     'Removal of L4-5 screws',
-    'Posterior cervical extension C3-6'
+    'Posterior cervical extension C3-6',
+    'Sterotactic redo left sided craniotomy and excision open biopsy of enhancing lesion',
+    'Redo burr holes for chronic subdural',
+    'Revision of VP shunt',
+    'Redo'
   ])('not: %s', procedure => expect(needsOutrigger({ procedure })).toBe(false))
 
   it('"No Outrigger" in the notes leaves it off, and a kit naming it is never changed', () => {

@@ -60,7 +60,7 @@ export function TeamButton({ date, days = [], away = [], entries = [], waiting =
  * The sheet. `jobs` are the day's kit jobs, drawn by `renderJob` (CaseWeek's
  * own TaskRow, so they look and tick exactly as they did on the page).
  */
-export default function TeamSheet({ date, days, away, entries, user, onChanged, jobs = [], renderJob, also = [], renderItem, onInbox, queueCount = 0, onClose }) {
+export default function TeamSheet({ date, days, away, entries, user, onChanged, jobs = [], renderJob, also = [], notes = [], renderItem, onInbox, queueCount = 0, onClose }) {
   useBackLayer(true, onClose)
   const button = { flex: 1, minHeight: 44, borderRadius: radius.control, cursor: 'pointer', ...text('bodyStrong'), fontWeight: 700, whiteSpace: 'nowrap' }
   return (
@@ -78,6 +78,15 @@ export default function TeamSheet({ date, days, away, entries, user, onChanged, 
           </div>
 
           <WhosWhere date={date} days={days} away={away} entries={entries} user={user} onChanged={onChanged} />
+
+          {/* Hours and on-call notes from the calendar — "Ben - LATE START",
+              "Ben on Call 5:00pm Fri - 7:30am Mon" (Brent, 27 Nov 2026). */}
+          {notes.length > 0 && (
+            <div data-team-notes style={{ background: colour.warningSoft, border: `1px solid ${colour.warningLine}`, borderRadius: radius.card, padding: space.md, marginBottom: space.md }}>
+              <div style={{ ...text('micro'), color: colour.inkFaint, marginBottom: space.sm }}>HOURS AND ON CALL</div>
+              {notes.map((n, i) => <div key={i} style={{ ...text('body'), color: colour.ink, padding: `${space.xs}px 0` }}>{n.text}</div>)}
+            </div>
+          )}
 
           <div data-team-jobs style={{ background: colour.surface, border: `1px solid ${colour.line}`, borderRadius: radius.card, padding: space.md, marginBottom: space.md }}>
             <div style={{ ...text('micro'), color: colour.inkFaint, marginBottom: space.sm }}>KIT JOBS</div>

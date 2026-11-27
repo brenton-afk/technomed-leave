@@ -75,6 +75,12 @@ const IN_SITU_CHIP = { color: colour.danger, background: colour.surface }
 // booking until we can set up the Dropbox search"). The flag still travels in
 // the plan, so the tag can be looked up.
 const shownFlags = flags => (flags || []).filter(f => f.kind !== 'inSitu')
+// Brent, 27 Nov 2026: "Put the Ben late start and Ben on call into the teams
+// page somewhere easily accessible" — notes about people's hours and on-call
+// sit in the Team sheet, not above the day's cases.
+const TEAM_NOTE_KINDS = new Set(['recurringStaffing', 'onCall'])
+export const teamNotes = flags => shownFlags(flags).filter(f => TEAM_NOTE_KINDS.has(f.kind))
+const caseFlags = (flags, hideTeamNotes) => shownFlags(flags).filter(f => !hideTeamNotes || !TEAM_NOTE_KINDS.has(f.kind))
 
 /** The case card's in-situ tag, from the looked-up answer (cases/InSitu.jsx). */
 function InSituTagText({ id }) {
@@ -1325,7 +1331,7 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
   // those are the same sentence twice, a few centimetres apart — and the one
   // that can be acted on is the other one.
   const empty = !groups.length && (hideOthers || !others.length) && !away.length
-    && !attention.length && !shownFlags(day.flags).length && (hideKitJobs || !kitJobs(day.tasks).length)
+    && !attention.length && !caseFlags(day.flags, hideOthers).length && (hideKitJobs || !kitJobs(day.tasks).length)
 
   return (
     <>
@@ -1335,9 +1341,9 @@ function DayPanel({ day, onOpen, onSetPlace, leader, onPreferences, hasPreferenc
           somebody has to physically do, on that day, and it used to sit at the
           foot of the page under "Also on" — below the cases, which is where a
           task goes to be forgotten. */}
-      {shownFlags(day.flags).length > 0 && (
+      {caseFlags(day.flags, hideOthers).length > 0 && (
         <div style={{ marginBottom: space.sm }}>
-          {shownFlags(day.flags).map((flag, i) => flag.inSituCase ? <InSituFlag key={i} flag={flag} /> : (
+          {caseFlags(day.flags, hideOthers).map((flag, i) => flag.inSituCase ? <InSituFlag key={i} flag={flag} /> : (
             <Banner key={i}
               tone={['clinicalAlert', 'kitTask'].includes(flag.kind) ? 'danger' : 'warning'}>
               {flag.text}
@@ -2410,6 +2416,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
           onChanged={() => { loadStatuses(); load(window_, { quiet: true }) }}
           jobs={kitJobs(dayPlan?.tasks)}
           renderJob={task => <TaskRow task={task} onDone={t => { setTeamOpen(false); openTaskSheet(t) }} />}
+          notes={teamNotes(dayPlan?.flags)}
           also={otherItemsWorthListing([...(dayPlan?.nonSurgeonItems || []), ...(dayPlan?.otherRollup || [])])}
           renderItem={item => <ItemRow item={item} />}
           onInbox={() => { setTeamOpen(false); setShowQueue(true) }}

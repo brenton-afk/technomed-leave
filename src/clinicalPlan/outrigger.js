@@ -24,6 +24,11 @@ const LEVEL = /\b([CTLS])\d{1,2}\b/gi
 const REMOVAL_ONLY = /\b(?:remov(?:al|e)|r\/o|romw)\b/i
 const OPTED_OUT = /\bno\s+(?:mariner\s+)?outrigger\b|\boutrigger\s+(?:is\s+)?not\s+(?:required|needed|req'?d)\b/i
 const HAS_OUTRIGGER = /\boutrigger\b/i
+// Brent, 27 Nov 2026: a "stereotactic redo craniotomy" got the Outrigger —
+// "redo" alone was enough. It is a spinal kit: the operation must say spine
+// (a thoracolumbar level, or a posterior spine word), and nothing cranial.
+const CRANIAL = /\b(?:crani\w*|burr\s*holes?|shunts?|stereotactic|sterotactic|biops\w*|tumou?r|lesion|aneurysm|subdural|cranial|brain|skull|ventric\w*|evd|dbs|transsphenoidal|pituitary)\b/i
+const SPINE_WORDS = /\b(?:spin\w*|lumbar|thoracic|thoracolumbar|sacr\w*|pelvi\w*|iliac)\b/i
 
 export const OUTRIGGER_KIT = 'Mariner Outrigger (DNO)'
 
@@ -37,6 +42,12 @@ export function needsOutrigger({ procedure, notes } = {}) {
   // Only cervical levels named: not a Mariner case.
   const regions = new Set([...op.matchAll(LEVEL)].map(m => m[1].toUpperCase()))
   if (regions.size && [...regions].every(r => r === 'C')) return false
+  const thoracolumbar = [...regions].some(r => r !== 'C')
+  // Cranial work is never a Mariner case, whatever it says about a redo.
+  if (CRANIAL.test(op) && !thoracolumbar) return false
+  // It has to say spine somewhere: a level below the neck, a spine word, or
+  // a posterior construct word.
+  if (!thoracolumbar && !SPINE_WORDS.test(op) && !POSTERIOR.test(op)) return false
   // Anterior only (an ACDF or ALIF revision) — the Outrigger is posterior.
   if (ANTERIOR_ONLY.test(op) && !POSTERIOR.test(op.replace(ANTERIOR_ONLY, ''))) return false
   return true

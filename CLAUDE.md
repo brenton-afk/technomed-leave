@@ -596,6 +596,11 @@ Brainlab Training MELB" — now sets their who's-where status (`noteStatus` in
 `whosWhere.js`: first name, a dash, office words → Office, training / course /
 conference / a city → Training with the rest as where; after leave and away and
 a status added in the portal, before theatre from the bookings). Then (same day: "The team tap page should have killed those things"):
+**Hours and on-call notes** (Brent, 27 Nov 2026: "Put the Ben late start
+and Ben on call into the teams page"): day flags of kind `recurringStaffing`
+and `onCall` (`teamNotes` in `CaseWeek.jsx`) are not drawn above the day's
+cases; they are **Hours and on call** at the top of the Team sheet
+(`data-team-notes`). Clinical alerts and kit tasks stay on Cases.
 Also on today lists only what who's where does not already say —
 `otherItemsWorthListing` drops notes about a person, leave, and the daily List
 Order call.
@@ -1566,6 +1571,12 @@ Consignment at Calvary, **Calvary Loan** at RHH, and `tmLoanDispatches` puts
 "Transfer the Mariner Outrigger kit from Calvary to RHH" on the working day
 before. The Add booking buttons offer it on the same rule (ONLY_WHEN, now also
 for PLIF). `outrigger.test.js`.
+**Never on a cranial case** (Brent, 27 Nov 2026: a "stereotactic redo
+craniotomy" got it — "Outrigger will never be used in a craniotomy even if it
+says redo"): `needsOutrigger` needs spine — a level below the neck, a spine
+word or a posterior construct word — and refuses cranial words (crani…, burr
+hole, shunt, stereotactic, biopsy, lesion, tumour …) unless a thoracolumbar
+level is named. "Redo" alone is not enough.
 
 ### Turn a kit around, and what happens to it after the case (Brent, 21 Nov 2026)
 

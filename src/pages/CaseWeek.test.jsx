@@ -482,6 +482,21 @@ describe('who is away', () => {
   })
 })
 
+describe('hours and on-call notes are in the Team sheet (Brent, 27 Nov 2026)', () => {
+  it('moves "late start" and "on call" off the day into the Team sheet', async () => {
+    events = [...BOOKINGS,
+      { id: 'ls1', summary: "Ben - LATE START / EARLY FINISH (Boy's Week)", description: '', location: '', start: { date: '2026-09-21' }, end: { date: '2026-09-22' } },
+      { id: 'oc1', summary: 'Ben on Call 5:00pm Fri - 7:30am Mon', description: '', location: '', start: { date: '2026-09-21' }, end: { date: '2026-09-22' } }]
+    show()
+    await screen.findByText('Mardon')
+    expect(screen.queryByText(/LATE START/)).toBeNull()
+    expect(screen.queryByText(/Ben on Call/)).toBeNull()
+    fireEvent.click(document.querySelector('[data-team-button]'))
+    await waitFor(() => expect(document.querySelector('[data-team-notes]')?.textContent).toMatch(/LATE START/))
+    expect(document.querySelector('[data-team-notes]').textContent).toMatch(/Ben on Call/)
+  })
+})
+
 describe("an away entry is on the strip, not in a box too (Brent, 25 Nov 2026)", () => {
   it('reads "Mat — Away · Conference" in any colour as Mat away, once', async () => {
     events = [...BOOKINGS, { id: 'aw1', summary: 'Mat — Away · Conference', description: '', location: '', colorId: '6', start: { date: '2026-09-21' }, end: { date: '2026-09-22' } }]
