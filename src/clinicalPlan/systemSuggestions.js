@@ -18,6 +18,7 @@
 // usual systems are ticked for them (`pick`). A booking read from an email
 // follows what the email asks for — this module does not touch those.
 
+import { isCranialCase } from './cranial.js'
 import { findImplantProcedures } from './procedureImplants.js'
 
 /** Kinds of operation, each with its systems in the order they are offered. */
@@ -197,6 +198,9 @@ function fits(system, { operation, surgeon, hospital }) {
 }
 
 export function suggestSystems(input = {}) {
+  // A cranial case is offered no spinal system and has none pre-ticked
+  // (Brent, 27 Nov 2026). "All systems" still lets a person add one.
+  if (isCranialCase(input.operation)) return { groups: [], systems: [], extras: [], picks: [] }
   const { systems, extras, picks, groups } = suggestAll(input)
   const ok = name => fits(name, input)
   return { groups, systems: systems.filter(ok), extras: extras.filter(ok), picks: picks.filter(ok) }

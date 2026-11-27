@@ -16,6 +16,7 @@
 // is only anterior or only cervical (an ACDF revision) is left alone, and so
 // is a removal on its own. "No Outrigger" in the notes leaves it off; a kit
 // line that already names it is never changed.
+import { isCranialCase } from './cranial.js'
 
 const SIGN = /\b(?:extension|extend(?:ed|ing|s)?(?:\s+(?:up|down))?|revision|revis(?:e|ed|ing)|re-?do|connect(?:ing|ion|s|ed)?\s+(?:on)?to\b|connect(?:ing|ion)\s+(?:with|onto)\b|(?:existing|old|previous)\s+(?:construct|hardware|instrumentation|fixation|rods?))\b/i
 const ANTERIOR_ONLY = /\b(?:acdf|accf|alif|olif|xlif|llif|corpectomy|disc\s*replacement|arthroplasty|anterior)\b/i
@@ -24,10 +25,9 @@ const LEVEL = /\b([CTLS])\d{1,2}\b/gi
 const REMOVAL_ONLY = /\b(?:remov(?:al|e)|r\/o|romw)\b/i
 const OPTED_OUT = /\bno\s+(?:mariner\s+)?outrigger\b|\boutrigger\s+(?:is\s+)?not\s+(?:required|needed|req'?d)\b/i
 const HAS_OUTRIGGER = /\boutrigger\b/i
-// Brent, 27 Nov 2026: a "stereotactic redo craniotomy" got the Outrigger —
-// "redo" alone was enough. It is a spinal kit: the operation must say spine
-// (a thoracolumbar level, or a posterior spine word), and nothing cranial.
-const CRANIAL = /\b(?:crani\w*|burr\s*holes?|shunts?|stereotactic|sterotactic|biops\w*|tumou?r|lesion|aneurysm|subdural|cranial|brain|skull|ventric\w*|evd|dbs|transsphenoidal|pituitary)\b/i
+// Brent, 27 Nov 2026: it is a spinal kit — the operation must say spine
+// (a thoracolumbar level, or a posterior spine word), and never a cranial case
+// (isCranialCase in cranial.js).
 const SPINE_WORDS = /\b(?:spin\w*|lumbar|thoracic|thoracolumbar|sacr\w*|pelvi\w*|iliac)\b/i
 
 export const OUTRIGGER_KIT = 'Mariner Outrigger (DNO)'
@@ -43,8 +43,8 @@ export function needsOutrigger({ procedure, notes } = {}) {
   const regions = new Set([...op.matchAll(LEVEL)].map(m => m[1].toUpperCase()))
   if (regions.size && [...regions].every(r => r === 'C')) return false
   const thoracolumbar = [...regions].some(r => r !== 'C')
-  // Cranial work is never a Mariner case, whatever it says about a redo.
-  if (CRANIAL.test(op) && !thoracolumbar) return false
+  // Never on a cranial case, whatever it says about a redo.
+  if (isCranialCase(op) && !thoracolumbar) return false
   // It has to say spine somewhere: a level below the neck, a spine word, or
   // a posterior construct word.
   if (!thoracolumbar && !SPINE_WORDS.test(op) && !POSTERIOR.test(op)) return false

@@ -1577,6 +1577,16 @@ says redo"): `needsOutrigger` needs spine — a level below the neck, a spine
 word or a posterior construct word — and refuses cranial words (crani…, burr
 hole, shunt, stereotactic, biopsy, lesion, tumour …) unless a thoracolumbar
 level is named. "Redo" alone is not enough.
+**…and no automatic spinal kit on any cranial booking** (Brent, same day: "It
+must not mix in spine implants into cranial bookings — that's a bad
+mistake"). `isCranialCase` in `src/clinicalPlan/cranial.js` (pure,
+`cranial.test.js`): a craniotomy / burr hole / shunt / stereotactic / biopsy /
+lesion / pituitary / aneurysm operation with nothing spinal in it (no level,
+spine word or implant word; "cranially" alone is a spine direction). Every
+automatic kit rule asks it first: `needsOutrigger`, `suggestSystems` (no
+systems offered or pre-ticked), `assumedKit` (no kit assumed from an email or
+the surgeon's usual), and `inSituReason` (no In situ? tag). A person can still
+add a system by hand through All systems.
 
 ### Turn a kit around, and what happens to it after the case (Brent, 21 Nov 2026)
 

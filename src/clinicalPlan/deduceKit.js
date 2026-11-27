@@ -27,6 +27,7 @@
 // one of those — La Pietra, the dropped "removal", the Mariner nobody needed
 // — was the app being confident instead of being useful.
 
+import { isCranialCase } from './cranial.js'
 import { systemsToSupply } from './kitSupply.js'
 import { findImplantProcedures } from './procedureImplants.js'
 import { preferenceFor, hasRecordedPreferences } from './surgeonPreferences.js'
@@ -151,6 +152,8 @@ function questionFor(acronyms, needs, preference, surgeon) {
  */
 export function assumedKit({ surgeon, procedure, hospital, kit, fromRules = true, nth = 1 } = {}) {
   if (systemsToSupply({ kit }).length) return null
+  // Never a spinal kit on a cranial booking (Brent, 27 Nov 2026).
+  if (isCranialCase(procedure)) return null
   const found = findImplantProcedures(String(procedure || '')).filter(e => e.needs)
   // One operation, one preference. "ACDF and PLIF" is two kits and asks.
   const site = siteCode(hospital)

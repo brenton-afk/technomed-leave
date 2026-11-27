@@ -1,3 +1,4 @@
+import { isCranialCase } from './cranial.js'
 import { normaliseSurgeon } from './parse.js'
 import { findSystems } from './systems.js'
 
@@ -65,6 +66,9 @@ const IN_SITU = [
 /** Why this case needs what is in situ checked ("extension", "revision"…), or null. */
 export function inSituReason(text) {
   const t = String(text || '')
+  // Spine hardware only: a redo craniotomy is not a construct to look up
+  // (Brent, 27 Nov 2026).
+  if (isCranialCase(t)) return null
   return IN_SITU.find(([, re]) => re.test(t))?.[0] || null
 }
 
