@@ -601,6 +601,14 @@ and Ben on call into the teams page"): day flags of kind `recurringStaffing`
 and `onCall` (`teamNotes` in `CaseWeek.jsx`) are not drawn above the day's
 cases; they are **Hours and on call** at the top of the Team sheet
 (`data-team-notes`). Clinical alerts and kit tasks stay on Cases.
+**The week view says the same** (Brent, 27 Nov 2026: "why hasn't the desktop
+version been updated with the team location updates?"). The desktop's week
+columns and the phone's week list no longer draw leave / away / training chips,
+hours or on-call notes, or the "Also on" list: each day has the who's-where
+faces under its leader chip (`TeamFaces` in `cases/TeamSheet.jsx`,
+`data-team-faces`, a pill per person with a status plus "N notes"), tapping
+opening the Team sheet **for that day** (`teamOpen` holds the date). Clinical
+alerts, kit tasks and kit jobs stay on the week.
 Also on today lists only what who's where does not already say —
 `otherItemsWorthListing` drops notes about a person, leave, and the daily List
 Order call.

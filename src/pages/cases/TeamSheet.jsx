@@ -18,6 +18,53 @@ const shortDay = date => {
   return `${weekdayName(date).slice(0, 3)} ${d.day} ${MONTHS[d.month - 1]}`
 }
 
+/**
+ * Who's where for one day of the week, as small faces (Brent, 27 Nov 2026:
+ * the week view — the desktop's columns and the phone's week list — still
+ * drew the old leave / training / on-call chips; phone and desktop must say
+ * the same thing). Tapping opens the Team sheet for that day.
+ */
+export function TeamFaces({ date, days = [], away = [], entries = [], notes = 0, onClick }) {
+  const day = days.find(d => d.date === date)
+  const rows = useMemo(
+    () => whosWhere({ date, day, away, entries }).filter(r => r.kind),
+    [date, day, away, entries])
+  if (!rows.length && !notes) return null
+  const label = rows.map(r => `${r.person.firstName} ${r.where || r.short || r.kind}`).join(', ')
+  return (
+    <button type="button" data-team-faces={date} onClick={() => onClick?.(date)}
+      aria-label={`Team on ${shortDay(date)}${label ? `: ${label}` : ''}`}
+      title={label}
+      style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 3, width: '100%',
+        background: 'none', border: 'none', padding: 0, margin: '4px 0 2px', cursor: 'pointer'
+      }}>
+      {rows.map(r => {
+        const tint = statusTint[r.kind] || statusTint.office
+        return (
+          <span key={r.person.email} data-team-face={r.person.firstName} data-status={r.kind} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3, boxSizing: 'border-box',
+            border: `1.5px solid ${tint.ring}`, background: tint.soft, color: tint.ink,
+            borderRadius: radius.pill, padding: '1px 6px 1px 2px', ...text('micro'), letterSpacing: 0
+          }}>
+            <span aria-hidden="true" style={{
+              width: 18, height: 18, borderRadius: 9, background: tint.ring, color: 'white',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...text('micro'), letterSpacing: 0, lineHeight: 1
+            }}>{r.initials}</span>
+            {r.person.firstName} · {r.short || r.kind}
+          </span>
+        )
+      })}
+      {notes > 0 && (
+        <span data-team-faces-notes style={{
+          ...text('micro'), letterSpacing: 0, color: colour.warning, background: colour.warningSoft,
+          border: `1px solid ${colour.warningLine}`, borderRadius: radius.pill, padding: '1px 6px'
+        }}>{notes} {notes === 1 ? 'note' : 'notes'}</span>
+      )}
+    </button>
+  )
+}
+
 /** The band's button: up to four faces of people with a status that day. */
 export function TeamButton({ date, days = [], away = [], entries = [], waiting = 0, onClick }) {
   const day = days.find(d => d.date === date)

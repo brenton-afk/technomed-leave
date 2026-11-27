@@ -25,7 +25,7 @@ import { caseSummaryText, copyText } from '../clinicalPlan/caseSummary.js'
 import EditBooking, { prefetchBooking } from './cases/EditBooking.jsx'
 import NewBooking from './cases/NewBooking.jsx'
 import NewTask from './cases/NewTask.jsx'
-import TeamSheet, { TeamButton } from './cases/TeamSheet.jsx'
+import TeamSheet, { TeamButton, TeamFaces } from './cases/TeamSheet.jsx'
 import BookingChooser from './cases/BookingChooser.jsx'
 import { otherItemsWorthListing } from '../clinicalPlan/whosWhere.js'
 import ListOrder from './cases/ListOrder.jsx'
@@ -1170,7 +1170,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
  * the single noisiest thing on the screen; and the reorder arrows themselves,
  * which belong in the day view where there is room to use them.
  */
-function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, dueFor, onDueDone, leaderChip, onPickDay }) {
+function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, dueFor, onDueDone, leaderChip, onPickDay, teamFaces }) {
   return (
     <div style={{
       display: 'grid',
@@ -1183,6 +1183,7 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
       {(plan.days || []).map(day => (
         <WeekColumn key={day.date} day={day} today={today} onOpen={onOpen}
           onSetPlace={onSetPlace} onPreferences={onPreferences} leaderChip={leaderChip} onPickDay={onPickDay}
+          teamFaces={teamFaces}
           hasPreferences={hasPreferences} onTaskDone={onTaskDone}
           due={dueFor(day.date)} onDueDone={onDueDone} />
       ))}
@@ -1196,17 +1197,19 @@ function WeekGrid({ plan, today, onOpen, onSetPlace, onPreferences, hasPreferenc
  * Its own component because each column keeps its own running order while the
  * calendar catches up, and a hook cannot be called inside a map.
  */
-function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, due, onDueDone, leaderChip, onPickDay }) {
+function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferences, onTaskDone, due, onDueDone, leaderChip, onPickDay, teamFaces }) {
   const isToday = day.date === today
         const weekend = [0, 6].includes(new Date(`${day.date}T00:00:00Z`).getUTCDay())
         const groups = day.casesByHospital || []
         const everythingElse = [...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]
-        const away = everythingElse.filter(i => i.kind === 'leave')
+        void everythingElse
         // Every flag the phone shows, in the same order and the same two tones
-        // (8 Nov 2026: the desktop showed only the red ones, so Ben's 9am
-        // appointment was at the top of a phone's Wednesday and missing from
-        // the desktop's — the two must never differ).
-        const alerts = shownFlags(day.flags)
+        // (8 Nov 2026: the desktop showed only the red ones — the two must
+        // never differ). Leave, away, training, hours and on call are in the
+        // day's who's-where faces and its Team sheet now, as on a phone
+        // (Brent, 27 Nov 2026).
+        const away = []
+        const alerts = caseFlags(day.flags, true)
         const danger = f => ['clinicalAlert', 'kitTask', 'inSitu'].includes(f.kind)
 
   return (
@@ -1237,6 +1240,7 @@ function WeekColumn({ day, today, onOpen, onSetPlace, onPreferences, hasPreferen
                 }}>{dayNum(day.date)} {monthOf(day.date).slice(0, 3)}</span>
               </button>
               {leaderChip && <div style={{ marginTop: 4 }}>{leaderChip(day.date)}</div>}
+              {teamFaces && teamFaces(day)}
             </div>
 
             <div style={{ padding: 7 }}>
@@ -2020,6 +2024,17 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
   const caseCount = day => (day?.casesByHospital || []).reduce(
     (n, g) => n + g.cases.filter(c => !c.cancelled).length, 0)
 
+  // Each day of the week view: its who's-where faces, opening that day's
+  // Team sheet (Brent, 27 Nov 2026 — the same on a phone and a desktop).
+  const teamFaces = day => plan ? (
+    <TeamFaces date={day.date} days={plan.days || []} away={plan.away || []}
+      entries={statusEntries}
+      notes={teamNotes(day.flags).length + otherItemsWorthListing([...(day.nonSurgeonItems || []), ...(day.otherRollup || [])]).length}
+      onClick={d => setTeamOpen(d)} />
+  ) : null
+  const teamDate = typeof teamOpen === 'string' ? teamOpen : activeDay
+  const teamDay = (plan?.days || []).find(d => d.date === teamDate)
+
   // The Team button (option B, Brent 25 Nov 2026): faces of who's where, and
   // a count of kit jobs and bookings waiting in the Inbox.
   const teamButton = plan ? (
@@ -2266,6 +2281,7 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
             plan={plan}
             today={today}
             leaderChip={leaderChip}
+            teamFaces={teamFaces}
             onPickDay={pickDay}
             onOpen={setEditing}
             onSetPlace={setPlacing}
@@ -2295,13 +2311,13 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
                 </span>
               )}
             </button>
-            <div style={{ marginBottom: space.sm }}>{leaderChip(day.date)}</div>
+            <div style={{ marginBottom: space.sm }}>{leaderChip(day.date)}{teamFaces(day)}</div>
             {/* Orderable here too. The running order is always set for a day
                 that is not today — the hospital rings about four o'clock about
                 tomorrow — and the week is where anybody looks ahead. Having to
                 find the day first, in a view that had no arrows, meant the one
                 thing this was built for was the awkward one. */}
-            <DayPanel day={day} onOpen={setEditing}
+            <DayPanel day={day} onOpen={setEditing} hideAway hideOthers
               due={dueFor(day.date)} today={today} onDueDone={openDueSheet}
               onSetPlace={setPlacing} leader={leader}
               onPreferences={openPreferences}
@@ -2411,13 +2427,13 @@ export default function CaseWeek({ user, promptBanner, spoken, onSpokenDone, onN
       )}
 
       {teamOpen && plan && (
-        <TeamSheet date={activeDay} days={plan.days || []} away={plan.away || []}
+        <TeamSheet date={teamDate} days={plan.days || []} away={plan.away || []}
           entries={statusEntries} user={user}
           onChanged={() => { loadStatuses(); load(window_, { quiet: true }) }}
-          jobs={kitJobs(dayPlan?.tasks)}
+          jobs={kitJobs(teamDay?.tasks)}
           renderJob={task => <TaskRow task={task} onDone={t => { setTeamOpen(false); openTaskSheet(t) }} />}
-          notes={teamNotes(dayPlan?.flags)}
-          also={otherItemsWorthListing([...(dayPlan?.nonSurgeonItems || []), ...(dayPlan?.otherRollup || [])])}
+          notes={teamNotes(teamDay?.flags)}
+          also={otherItemsWorthListing([...(teamDay?.nonSurgeonItems || []), ...(teamDay?.otherRollup || [])])}
           renderItem={item => <ItemRow item={item} />}
           onInbox={() => { setTeamOpen(false); setShowQueue(true) }}
           queueCount={queueCount}

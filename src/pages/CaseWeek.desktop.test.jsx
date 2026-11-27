@@ -356,8 +356,9 @@ describe('what is going in, on the week', () => {
     // file and the order in a column are not the same thing. The source-level
     // guard lives in src/design/cardParity.test.js.
     await toWeek()
+    // The card itself — the column's who's-where faces also name Aimee.
     const column = document.querySelector('[data-week-column="2026-09-23"]')
-    const text = column.textContent
+    const text = [...column.querySelectorAll('[data-case-id]')].map(n => n.textContent).join(' ')
     const at = what => text.indexOf(what)
 
     // Vellacott, Atallah, Reform, consignment, Aimee — patient, operation,
@@ -371,7 +372,58 @@ describe('what is going in, on the week', () => {
     // question after that.
     await toWeek()
     const wednesday = document.querySelector('[data-week-column="2026-09-23"]')
-    expect(wednesday.textContent.indexOf('Reform'))
-      .toBeLessThan(wednesday.textContent.indexOf('Aimee'))
+    const card = [...wednesday.querySelectorAll('[data-case-id]')].map(n => n.textContent).join(' ')
+    expect(card.indexOf('Reform')).toBeGreaterThan(-1)
+    expect(card.indexOf('Reform')).toBeLessThan(card.indexOf('Aimee'))
+  })
+})
+
+// Brent, 27 Nov 2026: "why hasn't the desktop version been updated with the
+// team location updates?" — the week view (desktop columns and the phone's
+// week list) still drew leave, training and on-call chips. It now shows the
+// same who's-where faces as the day view, opening that day's Team sheet.
+describe("who's where on the week, the same on a desktop and a phone", () => {
+  const allDay = (id, summary, day) => ({
+    id, summary, description: '', location: '',
+    start: { date: `2026-09-${day}` }, end: { date: `2026-09-${String(Number(day) + 1).padStart(2, '0')}` }
+  })
+  const PEOPLE = [
+    allDay('l1', 'Ben - ANNUAL LEAVE', '22'),
+    allDay('o1', 'Ben on Call 5:00pm Fri - 7:30am Mon', '22'),
+    allDay('t1', 'Aimee - Brainlab Training MELB', '22')
+  ]
+  beforeEach(() => {
+    global.fetch = vi.fn(async () => ({
+      ok: true, json: async () => ({ events: [...EVENTS, ...PEOPLE], syncedAt: '2026-09-21T02:00:00.000Z' })
+    }))
+  })
+
+  const check = async () => {
+    await waitFor(() => expect(document.querySelector('[data-team-faces="2026-09-22"]')).not.toBeNull())
+    const faces = document.querySelector('[data-team-faces="2026-09-22"]')
+    expect(faces.querySelector('[data-team-face="Ben"]').dataset.status).toBe('leave')
+    expect(faces.querySelector('[data-team-face="Aimee"]').dataset.status).toBe('training')
+    expect(faces.querySelector('[data-team-faces-notes]').textContent).toMatch(/1 note/)
+    // No old chips anywhere on the week.
+    expect(screen.queryByText('Ben - ANNUAL LEAVE')).toBeNull()
+    expect(screen.queryByText(/Ben on Call/)).toBeNull()
+    fireEvent.click(faces)
+    await waitFor(() => expect(document.querySelector('[data-team-sheet]')).not.toBeNull())
+    expect(document.querySelector('[data-team-notes]').textContent).toMatch(/Ben on Call/)
+  }
+
+  it('on a desktop', async () => {
+    widthOf(1680)
+    show()
+    await screen.findByText('Vellacott')
+    await check()
+  })
+
+  it("on a phone's week list", async () => {
+    widthOf(390)
+    show()
+    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Week' })))
+    await screen.findByText('Vellacott')
+    await check()
   })
 })
