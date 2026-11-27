@@ -85,6 +85,35 @@ export function noteStatus(person, items = []) {
 /** "All day", or "08:00–12:00". */
 const whenOf = e => (e && e.allDay === false && e.start ? `${e.start}–${e.end}` : 'All day')
 
+/** A status added in the portal: Theatre, Office, Working from home, Not working. */
+function addedRow(base, own) {
+  if (own.kind === 'wfh') {
+    return { ...base, kind: 'wfh', short: 'WFH', where: own.where || 'Working from home', when: whenOf(own), note: own.note || '', entry: own, source: 'added' }
+  }
+  if (own.kind === 'notworking') {
+    return { ...base, kind: 'notworking', short: 'OFF', where: 'Not working', when: whenOf(own), note: own.note || '', entry: own, source: 'added' }
+  }
+  const isTheatre = own.kind === 'theatre'
+  return {
+    ...base, kind: own.kind, short: isTheatre ? 'THEATRE' : 'OFFICE',
+    where: own.where || (isTheatre ? 'Theatre' : 'TechnoMed office'), when: whenOf(own), note: own.note || '',
+    entry: own, source: 'added'
+  }
+}
+
+/** Leave / Training / Away saved in the portal, shown before the calendar is read again. */
+function calendarKindRow(base, e) {
+  const k = e.kind || 'away'
+  if (k === 'leave') return { ...base, kind: 'leave', short: 'LEAVE', where: 'On leave', when: whenOf(e), entry: e, source: 'added' }
+  if (k === 'training') {
+    const where = e.where || e.reason || ''
+    return { ...base, kind: 'training', short: (where || 'TRAINING').toUpperCase().slice(0, 9), where: where || 'Training / travel', when: whenOf(e), note: e.note || '', entry: e, source: 'added' }
+  }
+  const why = e.reason || ''
+  const rdo = /^rdo$/i.test(why)
+  return { ...base, kind: 'away', short: rdo ? 'RDO' : (why ? why.toUpperCase().slice(0, 12) : 'AWAY'), where: rdo ? 'RDO' : (why ? `Away · ${why}` : 'Away'), when: whenOf(e), note: e.note || '', entry: e, source: 'added' }
+}
+
 /**
  * The day for every person. `day` is a day of the week plan (its
  * casesByHospital), `away` the plan's whoIsAway, `entries` the portal's status
@@ -104,6 +133,21 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
 
     // The calendar's answer: leave, away, RDO or training.
     const off = away.find(a => String(a.email || '').toLowerCase() === email && (a.days || []).includes(date))
+
+    // The newest status saved in the portal for this day is the answer
+    // (Brent, 27 Nov 2026: "not saving our locations … when we change them" —
+    // they were saved, but a Training / Away day on the calendar beat them).
+    // The one exception: Leave on the calendar with no record of the portal
+    // writing it (approved through the leave form) is never hidden.
+    const latest = [...mine].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))[0]
+    const offWord = off ? (off.why?.[date] || 'Leave') : null
+    const leaveStands = offWord === 'Leave' && !mine.some(e => e.kind === 'leave')
+    if (latest && !leaveStands) {
+      const k = latest.kind || 'away'
+      if (['theatre', 'office', 'wfh', 'notworking'].includes(k)) return addedRow(base, latest)
+      if (!off) return calendarKindRow(base, latest)
+    }
+
     if (off) {
       const word = off.why?.[date] || 'Leave'
       if (word === 'Leave') {
@@ -121,22 +165,9 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
       return { ...base, kind: 'away', short: word === 'RDO' ? 'RDO' : (why ? why.toUpperCase().slice(0, 12) : 'AWAY'), where: word === 'RDO' ? 'RDO' : (why ? `Away · ${why}` : 'Away'), when: whenOf(e), note: e?.note || '', entry: e, source: 'calendar' }
     }
 
-    // A status somebody added in the portal (Theatre, Office, Not working), newest first.
+    // A status somebody added in the portal (Theatre, Office, WFH, Not working), newest first.
     const own = [...mine].filter(e => ['theatre', 'office', 'wfh', 'notworking'].includes(e.kind)).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0]
-    if (own?.kind === 'wfh') {
-      return { ...base, kind: 'wfh', short: 'WFH', where: own.where || 'Working from home', when: whenOf(own), note: own.note || '', entry: own, source: 'added' }
-    }
-    if (own?.kind === 'notworking') {
-      return { ...base, kind: 'notworking', short: 'OFF', where: 'Not working', when: whenOf(own), note: own.note || '', entry: own, source: 'added' }
-    }
-    if (own) {
-      const isTheatre = own.kind === 'theatre'
-      return {
-        ...base, kind: own.kind, short: isTheatre ? 'THEATRE' : 'OFFICE',
-        where: own.where || (isTheatre ? 'Theatre' : 'TechnoMed office'), when: whenOf(own), note: own.note || '',
-        entry: own, source: 'added'
-      }
-    }
+    if (own) return addedRow(base, own)
 
     // A note on the calendar saying where they are ("Toni - TM office").
     const noted = noteStatus(person, [...(day?.nonSurgeonItems || []), ...(day?.otherRollup || [])])

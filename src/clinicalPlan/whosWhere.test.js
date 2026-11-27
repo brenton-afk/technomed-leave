@@ -112,3 +112,43 @@ describe('working from home', async () => {
     expect(noteStatus({ firstName: 'Toni' }, [{ title: 'Toni - TM office' }]).kind).toBe('office')
   })
 })
+
+// Brent, 27 Nov 2026: "The portal is not saving our locations in the team tabs
+// when we change them." The change was saved, but a calendar Training / Away /
+// RDO answer always beat it, so the strip kept showing the old one.
+describe('a change made in the portal is the answer for that day', () => {
+  const training = [{ email: 'aimee@technomed.com.au', days: [D], why: { [D]: 'Training' } }]
+  const trainingEntry = { id: 'cal1', kind: 'training', email: 'aimee@technomed.com.au', from: '2026-11-23', to: '2026-11-27', allDay: true, where: 'Melbourne', at: '2026-11-20T01:00:00Z' }
+  const theatre = { id: 's9', kind: 'theatre', email: 'aimee@technomed.com.au', from: D, to: D, allDay: true, where: 'RHH', at: '2026-11-27T01:00:00Z' }
+
+  it('Training on the calendar, then changed to Theatre for the day', () => {
+    expect(row(whosWhere({ date: D, day, away: training, entries: [trainingEntry, theatre] }), 'Aimee'))
+      .toMatchObject({ kind: 'theatre', source: 'added' })
+    // The other days of the training stay training.
+    const next = '2026-11-26'
+    expect(row(whosWhere({ date: next, day: { date: next }, away: [{ ...training[0], days: [next], why: { [next]: 'Training' } }], entries: [trainingEntry, theatre] }), 'Aimee'))
+      .toMatchObject({ kind: 'training' })
+  })
+
+  it('Training typed straight into Google, then changed in the portal', () => {
+    expect(row(whosWhere({ date: D, day, away: training, entries: [theatre] }), 'Aimee'))
+      .toMatchObject({ kind: 'theatre' })
+  })
+
+  it('Office changed to Working from home: the newer one wins', () => {
+    const office = { id: 'o', kind: 'office', email: 'toni@technomed.com.au', from: D, to: D, allDay: true, at: '2026-11-27T01:00:00Z' }
+    const wfh = { ...office, id: 'w', kind: 'wfh', at: '2026-11-27T02:00:00Z' }
+    expect(row(whosWhere({ date: D, day, entries: [wfh, office] }), 'Toni')).toMatchObject({ kind: 'wfh' })
+  })
+
+  it('Training saved in the portal shows at once, before the calendar is read again', () => {
+    const saved = { ...trainingEntry, from: D, to: D, at: '2026-11-27T03:00:00Z' }
+    expect(row(whosWhere({ date: D, day, entries: [saved] }), 'Aimee')).toMatchObject({ kind: 'training', where: 'Melbourne' })
+  })
+
+  it('approved leave from the leave form is never hidden by an older office status', () => {
+    const leave = [{ email: 'toni@technomed.com.au', days: [D], why: { [D]: 'Leave' } }]
+    const office = { id: 'o', kind: 'office', email: 'toni@technomed.com.au', from: D, to: D, allDay: true, at: '2026-11-27T01:00:00Z' }
+    expect(row(whosWhere({ date: D, day, away: leave, entries: [office] }), 'Toni')).toMatchObject({ kind: 'leave' })
+  })
+})

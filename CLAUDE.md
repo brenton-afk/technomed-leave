@@ -639,6 +639,17 @@ read back by `readAwayTitle`); Theatre and Office are kept only in
 `away:entries` (`kind`, `where`). `action=away` GET takes `from`/`to` for the
 week (`awayBetween`), polled with the week. `whosWhere.test.js`,
 `WhosWhere.test.jsx`, `StatusSheet.test.jsx`.
+**A change made in the portal is the answer for that day** (Brent, 27 Nov
+2026: "The portal is not saving our locations in the team tabs when we change
+them"). They were saved — but a Training / Away / RDO day read from the
+calendar always beat a status added in the portal, so the strip kept the old
+answer. Now the **newest status saved for that day** (any kind, by `at`)
+wins (`addedRow` / `calendarKindRow` in `whosWhere.js`); a Leave / Training /
+Away saved in the portal shows at once, before the calendar is read again. The
+one exception: **Leave on the calendar with no portal record** (approved
+through the leave form) is never hidden by an added status. The calendar
+entry itself is left as it is — the other days of a week's training stay
+training. Tests in `whosWhere.test.js` ("a change made in the portal …").
 **Not working** (Brent, 26 Nov 2026: "we need the ability to have an option
 which is just 'not working'"): a sixth status (`notworking` in `STATUS_KINDS`,
 grey `statusTint.notworking`, tag OFF) for a day someone does not work — not
