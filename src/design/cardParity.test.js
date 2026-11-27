@@ -57,7 +57,7 @@ const week = bodyOf('WeekCase')
 // order, and report an order this screen does not have.
 const MARKERS = [
   ['the patient', /\{label\}/],
-  ['the operation', /\{surgicalCase\.operation &&/],
+  ['the operation', /\{(?:stages \? <Stages[^:]*: )?surgicalCase\.operation &&/],
   ['the kit and where it comes from', /\{(?:!off && )?supplies[ ?]/],
   ['the implant question', /\{(?:!off && )?question && \(/],
   ['where it is on the list', /place\??\.?\.?headline/],

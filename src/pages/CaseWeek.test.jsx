@@ -1726,3 +1726,37 @@ describe('only kit jobs on the Cases page (Brent, 17 Nov 2026)', () => {
     expect(jobs.map(j => j.id)).toEqual(['q', 'r'])
   })
 })
+
+describe('a two-stage case (Brent, 27 Nov 2026)', () => {
+  const staged = () => ev('s1', 'Testa MARINER MIS - Gupta',
+    'Surgeon: Gupta\nPatient: Testa\nHospital: RHH\n'
+    + 'Procedure: Stage 2: L5/S1 MIS Pedicle Screw Fixation\nKit: Mariner MIS (Consignment)\n\n'
+    + 'LHC ALIF Stage 1 then Mariner back up stage 2', { colorId: '3' })
+
+  it('shows both stages on the day card, the other company\'s greyed', async () => {
+    events = [staged()]
+    show()
+    await waitFor(() => expect(screen.getByText('Testa')).toBeInTheDocument())
+    const rows = document.querySelectorAll('[data-case-stages] [data-stage]')
+    expect([...rows].map(r => [r.dataset.stage, r.dataset.stageOurs])).toEqual([['1', 'no'], ['2', 'yes']])
+    expect(rows[0].textContent).toMatch(/Life Healthcare, not us/)
+    expect(rows[1].textContent).toMatch(/L5\/S1 .*Pedicle Screw Fixation/)
+  })
+
+  it('shows the same stages in the week view', async () => {
+    events = [staged()]
+    show()
+    fireEvent.click(await waitFor(() => screen.getByRole('tab', { name: 'Week' })))
+    await waitFor(() => expect(screen.getByText('Testa')).toBeInTheDocument())
+    const rows = document.querySelectorAll('[data-case-stages] [data-stage]')
+    expect([...rows].map(r => r.dataset.stageOurs)).toEqual(['no', 'yes'])
+  })
+
+  it('knows Forza is consigned at RHH', async () => {
+    events = [ev('f1', 'Drewe FIREBIRD - JPW', 'Surgeon: JPW\nPatient: Drewe\nHospital: RHH\n'
+      + 'Procedure: L4/5 PLIF\nKit: Firebird (Consignment) / Forza', { colorId: '3' })]
+    show()
+    await waitFor(() => expect(screen.getByText('Drewe')).toBeInTheDocument())
+    expect(screen.queryByText(/supply\?/)).not.toBeInTheDocument()
+  })
+})

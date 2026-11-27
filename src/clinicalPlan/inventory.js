@@ -157,6 +157,7 @@ export const INVENTORY = [
   },
   {
     system: 'Forza XP', distributor: 'kt',
+    aka: ['Forza'],
     consigned: { RHH: 1, CLV: 1 },
     ours: false,
     weCover: { RHH: true, CLV: false }

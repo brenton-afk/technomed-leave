@@ -38,6 +38,7 @@ import { weekOf, withinWeek } from '../clinicalPlan/teamLeader.js'
 import { describeListPlace } from '../clinicalPlan/listPlace.js'
 import { isOrthopaedic } from '../clinicalPlan/colours.js'
 import { suggestSupply } from '../clinicalPlan/inventory.js'
+import { stagesOf } from '../clinicalPlan/stages.js'
 import { preferencesFor } from '../clinicalPlan/preferences.js'
 import { GuideView } from './TheatreGuides.jsx'
 import { NOT_REQUIRED_LABEL } from '../clinicalPlan/attendance.js'
@@ -393,6 +394,36 @@ function patientLabel(surgicalCase) {
   return surgicalCase?.patient || (surgicalCase?.awaitingName ? 'Name to come' : '')
 }
 
+/**
+ * A staged case, one row a stage (Brent, 27 Nov 2026: Power — Stage 1 a Life
+ * Healthcare ALIF we are not needed for, Stage 2 ours). The stage that is not
+ * ours is greyed and says whose it is; ours is in the card's own ink. Same
+ * rows on the phone card and the week column.
+ */
+export function Stages({ stages, ink, compact = false }) {
+  return (
+    <span data-case-stages style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {stages.map(s => (
+        <span key={s.n} data-stage={s.n} data-stage-ours={s.ours ? 'yes' : 'no'} style={{
+          ...text(compact ? 'micro' : 'body'), display: 'flex', gap: 6, alignItems: 'baseline',
+          textTransform: 'none', letterSpacing: 0, lineHeight: 1.35,
+          color: s.ours ? ink.ink : ink.muted,
+          fontWeight: s.ours ? 600 : 400
+        }}>
+          <span style={{
+            ...text('micro'), fontWeight: 700, flex: 'none', padding: '0 5px', borderRadius: 4,
+            border: `1px solid ${s.ours ? ink.ink : ink.muted}`, opacity: s.ours ? 1 : 0.8
+          }}>Stage {s.n}</span>
+          <span style={{ minWidth: 0, wordBreak: 'break-word' }}>
+            {s.text}
+            {!s.ours && <span style={{ fontStyle: 'italic' }}>{' — '}{s.by ? `${s.by}, ` : ''}not us</span>}
+          </span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export function suppliesFor(surgicalCase) {
   if (!surgicalCase || surgicalCase.cancelled || surgicalCase.notRequired) return null
   // Navigation is not something anybody supplies. The badge says AIRO; a line
@@ -525,6 +556,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
   // and poll, for an answer that cannot change unless the booking does.
   const label = useMemo(() => patientLabel(surgicalCase), [surgicalCase])
   const supplies = useMemo(() => suppliesFor(surgicalCase), [surgicalCase])
+  const stages = useMemo(() => stagesOf(surgicalCase), [surgicalCase])
   const question = useMemo(() => implantQuestion(surgicalCase), [surgicalCase])
 
   return (
@@ -638,7 +670,7 @@ const CaseCard = React.memo(function CaseCard({ surgicalCase, date, onOpen, busy
 
         {/* The operation leads: "C5/6 ACDF" says more about a case than the
             implant system does. */}
-        {surgicalCase.operation && (
+        {stages ? <Stages stages={stages} ink={ink} /> : surgicalCase.operation && (
           <span style={{
             ...text('body'), fontWeight: 600, color: ink.ink, lineHeight: 1.4,
             // One line. It is the thing that tells two of a surgeon's cases
@@ -989,6 +1021,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
   // and poll, for an answer that cannot change unless the booking does.
   const label = useMemo(() => patientLabel(surgicalCase), [surgicalCase])
   const supplies = useMemo(() => suppliesFor(surgicalCase), [surgicalCase])
+  const stages = useMemo(() => stagesOf(surgicalCase), [surgicalCase])
   const question = useMemo(() => implantQuestion(surgicalCase), [surgicalCase])
 
   return (
@@ -1030,7 +1063,7 @@ const WeekCase = React.memo(function WeekCase({ surgicalCase, date, onOpen, onSe
 
         {/* Two lines at most. A week is read by scanning down a column, and a
             case that takes nine lines stops the column being scannable. */}
-        {surgicalCase.operation && (
+        {stages ? <Stages stages={stages} ink={ink} compact /> : surgicalCase.operation && (
           <span style={{
             ...text('micro'), display: '-webkit-box', WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical', overflow: 'hidden', textTransform: 'none',

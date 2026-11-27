@@ -1607,6 +1607,23 @@ systems offered or pre-ticked), `assumedKit` (no kit assumed from an email or
 the surgeon's usual), and `inSituReason` (no In situ? tag). A person can still
 add a system by hand through All systems.
 
+### Two-stage cases, and Forza at RHH (Brent, 27 Nov 2026)
+
+"This is a two stage procedure. Stage 1 is a Life Healthcare L5/S1 ALIF which
+we are not needed for. Stage 2 is ours … view these two stages clearly in the
+case tab." `stagesOf` in `src/clinicalPlan/stages.js` (pure, `stages.test.js`)
+reads "Stage N" from the operation and the notes — "Stage 1: L5/S1 ALIF" or
+"LHC ALIF stage 1 then Mariner back up stage 2" — the operation's own stage
+winning. A stage is ours when the operation names it (or, with no stage in the
+operation, when nothing names another company — `OTHER_COMPANY`: LHC / Life
+Healthcare, Stryker, J&J, Medtronic, Zimmer, Globus — or says "not needed").
+`Stages` in `CaseWeek.jsx` (`data-case-stages`, `data-stage`,
+`data-stage-ours`) replaces the operation line on the phone card and the week
+card alike: a "Stage N" tag per row, ours in the card's ink, the other greyed
+"— Life Healthcare, not us". Derived on every draw; operation and notes are
+already in `planSignature`. **Forza** alone now reads as Forza XP (`aka`), so
+"Firebird / Forza" at RHH is Consignment, not "supply?".
+
 ### Turn a kit around, and what happens to it after the case (Brent, 21 Nov 2026)
 
 "An option to 'turn a kit around' … When we do usage with a loan kit … look
