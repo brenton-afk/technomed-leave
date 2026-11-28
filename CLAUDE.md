@@ -607,7 +607,11 @@ columns and the phone's week list no longer draw leave / away / training chips,
 hours or on-call notes, or the "Also on" list: each day has the who's-where
 faces under its leader chip (`TeamFaces` in `cases/TeamSheet.jsx`,
 `data-team-faces`, a pill per person with a status plus "N notes"), tapping
-opening the Team sheet **for that day** (`teamOpen` holds the date). Clinical
+opening the Team sheet **for that day** (`teamOpen` holds the date). **Every day has it**
+(Brent, 28 Nov 2026: "on desktop there's no way to edit the team entries on a
+specific day"): a day with nobody on it still draws the pill row with **+ Team**
+(`data-team-faces-edit`; **Edit** when there are faces), so any day's Team sheet
+— its strip, + Add and Plan days — opens from the week. Clinical
 alerts, kit tasks and kit jobs stay on the week.
 Also on today lists only what who's where does not already say —
 `otherItemsWorthListing` drops notes about a person, leave, and the daily List

@@ -29,7 +29,9 @@ export function TeamFaces({ date, days = [], away = [], entries = [], notes = 0,
   const rows = useMemo(
     () => whosWhere({ date, day, away, entries }).filter(r => r.kind),
     [date, day, away, entries])
-  if (!rows.length && !notes) return null
+  // Always drawn, with an Edit pill, so every day can be opened — on a
+  // desktop the week is the only view (Brent, 28 Nov 2026: "there's no way to
+  // edit the team entries on a specific day").
   const label = rows.map(r => `${r.person.firstName} ${r.where || r.short || r.kind}`).join(', ')
   return (
     <button type="button" data-team-faces={date} onClick={() => onClick?.(date)}
@@ -61,6 +63,10 @@ export function TeamFaces({ date, days = [], away = [], entries = [], notes = 0,
           border: `1px solid ${colour.warningLine}`, borderRadius: radius.pill, padding: '1px 6px'
         }}>{notes} {notes === 1 ? 'note' : 'notes'}</span>
       )}
+      <span data-team-faces-edit style={{
+        ...text('micro'), letterSpacing: 0, color: colour.accentDeep, background: colour.surface,
+        border: `1px dashed ${colour.inkFainter}`, borderRadius: radius.pill, padding: '1px 8px'
+      }}>{rows.length ? 'Edit' : '+ Team'}</span>
     </button>
   )
 }

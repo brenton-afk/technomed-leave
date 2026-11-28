@@ -419,6 +419,21 @@ describe("who's where on the week, the same on a desktop and a phone", () => {
     await check()
   })
 
+  it('every day can be opened to edit, even with nobody on it (Brent, 28 Nov 2026)', async () => {
+    widthOf(1680)
+    show()
+    await screen.findByText('Vellacott')
+    const sunday = await waitFor(() => {
+      const el = document.querySelector('[data-team-faces="2026-09-27"]')
+      expect(el).not.toBeNull()
+      return el
+    })
+    expect(sunday.querySelector('[data-team-faces-edit]').textContent).toBe('+ Team')
+    fireEvent.click(sunday)
+    await waitFor(() => expect(document.querySelector('[data-team-sheet] [data-whos-where]')).not.toBeNull())
+    expect(document.querySelector('[data-team-sheet] [data-plan-days]')).not.toBeNull()
+  })
+
   it("on a phone's week list", async () => {
     widthOf(390)
     show()
