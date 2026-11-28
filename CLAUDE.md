@@ -628,7 +628,12 @@ list and desktop columns keep theirs. The rules are pure, in
 `src/clinicalPlan/whosWhere.js`: Leave > Away / RDO > Training (from the Staff
 Leave calendar, via `plan.away`'s `why`) > a status someone added > **Theatre
 from the bookings — attended or planned rep** (cancelled / not-required cases
-ignored) > **Office by default for Erin and Toni** > nothing. **Leave shows as
+ignored) > **Office by default for Erin and Toni** > nothing.
+**…only on a day they work** (Brent, 28 Nov 2026: "how have you managed to put
+Erin in the office every single day next week"): `worksThatDay` in
+`whosWhere.js` — Toni on her fixed days (Mon, Wed, Thu, `workPattern`), never
+for a flexible pattern (Erin: her days vary, so nothing shows until a status is
+added), never on a weekend or public holiday. **Leave shows as
 "Leave" only.** Away and Leave share the leave purple ("flags it in the same
 way"). **Add status** (`cases/StatusSheet.jsx`, replacing the + Away sheet and
 button of 24 Nov) is one form for Theatre, Office, Training / travel (where),

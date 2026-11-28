@@ -14,7 +14,9 @@ describe("who's where strip", () => {
     render(<WhosWhere date={D} days={days} away={[{ email: 'mat@technomed.com.au', days: [D], why: { [D]: 'Leave' } }]} entries={[]} />)
     expect(document.querySelector('[data-whos-where-person="Ben"]').dataset.status).toBe('theatre')
     expect(document.querySelector('[data-whos-where-person="Mat"]').dataset.status).toBe('leave')
-    expect(document.querySelector('[data-whos-where-person="Erin"]').dataset.status).toBe('office')
+    // Wed: Toni's day, so the office by default; Erin's days vary, so nothing.
+    expect(document.querySelector('[data-whos-where-person="Toni"]').dataset.status).toBe('office')
+    expect(document.querySelector('[data-whos-where-person="Erin"]').dataset.status).toBe('none')
     expect(document.querySelector('[data-whos-where-add]')).toBeTruthy()
   })
 

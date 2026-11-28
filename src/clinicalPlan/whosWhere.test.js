@@ -19,10 +19,20 @@ describe("who's where", () => {
     expect(row(rows, 'Aimee').kind).toBe(null)
   })
 
-  it('puts Erin and Toni in the office unless something says otherwise', () => {
-    const rows = whosWhere({ date: D, day })
-    expect(row(rows, 'Erin')).toMatchObject({ kind: 'office', source: 'default' })
-    expect(row(rows, 'Toni')).toMatchObject({ kind: 'office' })
+  it('puts Toni in the office on her days only, and never guesses Erin\'s (Brent, 28 Nov 2026)', () => {
+    // Wed 25 Nov: one of Toni's days. Erin's days vary — no default.
+    let rows = whosWhere({ date: D, day })
+    expect(row(rows, 'Toni')).toMatchObject({ kind: 'office', source: 'default' })
+    expect(row(rows, 'Erin').kind).toBe(null)
+    // Tue 24 Nov and Fri 27 Nov: not Toni's days.
+    for (const date of ['2026-11-24', '2026-11-27']) {
+      rows = whosWhere({ date, day: {} })
+      expect(row(rows, 'Toni').kind).toBe(null)
+      expect(row(rows, 'Erin').kind).toBe(null)
+    }
+    // A status Erin adds still shows.
+    rows = whosWhere({ date: D, day, entries: [{ email: 'erin@technomed.com.au', kind: 'office', from: D, to: D, at: '2026-11-24T00:00:00Z' }] })
+    expect(row(rows, 'Erin')).toMatchObject({ kind: 'office' })
   })
 
   it('lets the calendar win: leave says only Leave, training its place', () => {

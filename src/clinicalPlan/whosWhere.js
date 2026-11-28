@@ -8,15 +8,35 @@
 // Pure: the plan, the portal's own status entries and the staff list in, a
 // row per person out. The order a status wins in:
 //   Leave  >  Away / RDO  >  Training  >  a status someone added  >
-//   Theatre from the bookings  >  Office for Erin and Toni  >  nothing.
+//   Theatre from the bookings  >  Office for Toni on her days  >  nothing.
 
 import { STAFF } from '../staffConfig.js'
+import { publicHoliday } from '../publicHolidays.js'
 
 /** Who appears: everyone who files a timesheet or is on the clinical team. */
 export const WHO_PEOPLE = STAFF.filter(s => s.hasTimesheets || s.isClinicalTeam)
 
 /** Office unless anything says otherwise (Brent, 25 Nov 2026). */
 export const OFFICE_BY_DEFAULT = ['erin@technomed.com.au', 'toni@technomed.com.au']
+
+/**
+ * Whether the office default applies on this day (Brent, 28 Nov 2026: "how
+ * have you managed to put Erin in the office every single day next week").
+ * Only on a day the person's work pattern says they work: Toni's fixed days
+ * (Mon, Wed, Thu); never for a flexible pattern (Erin — her days vary, so the
+ * strip says nothing until she or someone adds a status); weekdays for someone
+ * with no pattern. Never on a weekend or a Hobart public holiday.
+ */
+export function worksThatDay(person, date) {
+  const d = new Date(`${date}T12:00:00Z`)
+  if (Number.isNaN(d.getTime())) return false
+  const monFirst = (d.getUTCDay() + 6) % 7
+  if (publicHoliday(date)) return false
+  const pattern = person?.workPattern
+  if (pattern?.kind === 'flexible') return false
+  if (pattern?.kind === 'fixed') return Number(pattern.days?.[monFirst] || 0) > 0
+  return monFirst < 5
+}
 
 export const WHO_KINDS = {
   theatre: { label: 'Theatre', tag: 'THEATRE' },
@@ -186,7 +206,7 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
       return { ...base, kind: 'theatre', short: places.length === 1 ? places[0].toUpperCase().slice(0, 9) : 'THEATRE', where: places.join(' & ') || 'Theatre', when: 'All day', note, source: 'bookings', cases: theirs.length }
     }
 
-    if (OFFICE_BY_DEFAULT.includes(email)) {
+    if (OFFICE_BY_DEFAULT.includes(email) && worksThatDay(person, date)) {
       return { ...base, kind: 'office', short: 'OFFICE', where: 'TechnoMed office', when: 'All day', source: 'default' }
     }
     return base
