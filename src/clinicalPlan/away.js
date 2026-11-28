@@ -50,8 +50,15 @@ export const STATUS_KINDS = [
   // Brent, 26 Nov 2026: "an option which is just 'not working'" — a day
   // someone part-time does not work. Not leave and not away: kept by the
   // portal only, like Office, so it never reaches the Staff Leave calendar or Xero.
-  { id: 'notworking', label: 'Not working', hint: 'Not a work day — nothing goes to the leave calendar or Xero', calendar: false }
+  { id: 'notworking', label: 'Not working', hint: 'Not a work day — nothing goes to the leave calendar or Xero', calendar: false },
+  // Brent, 28 Nov 2026: "Ben's boys week … the week he has his boys and has
+  // late starts and early finishes". Said on top of where he is, never instead
+  // of it; offered for Ben only.
+  { id: 'boysweek', label: 'Boys week', hint: 'Late start and early finish — where he is stays as it is', calendar: false, onlyFor: ['ben@technomed.com.au'] }
 ]
+
+/** The statuses offered for a person (Boys week is Ben's). */
+export const kindsFor = email => STATUS_KINDS.filter(k => !k.onlyFor || k.onlyFor.includes(String(email || '').toLowerCase()))
 export const kindOf = id => STATUS_KINDS.find(k => k.id === id) || STATUS_KINDS.find(k => k.id === 'away')
 
 /** The words a title carries after the dash, so the calendar reads it plainly. */
@@ -62,6 +69,7 @@ export function awayWords(reason, kind = 'away') {
   if (kind === 'office') return 'Office'
   if (kind === 'wfh') return 'Working from home'
   if (kind === 'notworking') return 'Not working'
+  if (kind === 'boysweek') return 'Boys week'
   if (kind === 'theatre') return r ? `Theatre · ${r}` : 'Theatre'
   if (!r) return 'Away'
   if (/^rdo$/i.test(r)) return 'RDO'
@@ -96,6 +104,7 @@ export function cleanAway(body = {}) {
   const person = STAFF.find(s => s.email.toLowerCase() === String(body.email || '').toLowerCase())
   if (!person) return { error: 'Choose who.' }
   const kind = STATUS_KINDS.some(k => k.id === body.kind) ? body.kind : 'away'
+  if (!kindsFor(person.email).some(k => k.id === kind)) return { error: 'That status is not offered for them.' }
   const from = String(body.from || '')
   const to = String(body.to || from)
   if (!DAY.test(from) || !DAY.test(to)) return { error: 'Choose the day.' }

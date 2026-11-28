@@ -5,6 +5,7 @@ import { colour, text, space, radius, statusTint } from '../../design/tokens.js'
 import { whosWhere, groupWhosWhere, WHO_KINDS } from '../../clinicalPlan/whosWhere.js'
 import { parseDateStr, weekdayName } from '../../clinicalPlan/week.js'
 import StatusSheet from './StatusSheet.jsx'
+import PlanDays from './PlanDays.jsx'
 
 // ─── Who's where (option B, Brent 25 Nov 2026) ───────────────────────────────
 // A strip of avatars under the day's heading on Cases — a ring in the status
@@ -47,6 +48,7 @@ export default function WhosWhere({ date, days = [], away = [], entries = [], us
   const [picked, setPicked] = useState(null)
   const [adding, setAdding] = useState(null)
   const [team, setTeam] = useState(false)
+  const [planning, setPlanning] = useState(false)
 
   return (
     <div data-whos-where style={{
@@ -55,6 +57,11 @@ export default function WhosWhere({ date, days = [], away = [], entries = [], us
     }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: space.sm }}>
         <span style={{ ...text('micro'), color: colour.inkFaint, flex: 1 }}>WHO'S WHERE</span>
+        {/* Several days at once, on a calendar (Brent, 28 Nov 2026). */}
+        <button type="button" data-plan-days onClick={() => setPlanning(true)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', ...text('caption'), fontWeight: 700, color: colour.accentDeep, padding: `0 ${space.sm}px`, minHeight: 32 }}>
+          Plan days
+        </button>
         <button type="button" data-whos-where-team onClick={() => setTeam(true)}
           style={{ background: 'none', border: 'none', cursor: 'pointer', ...text('caption'), fontWeight: 700, color: colour.accentDeep, padding: 0, minHeight: 32 }}>
           Whole team ›
@@ -94,6 +101,9 @@ export default function WhosWhere({ date, days = [], away = [], entries = [], us
         <TeamPage date={date} days={days} away={away} entries={entries}
           onClose={() => setTeam(false)}
           onAdd={(email, d) => setAdding({ email, date: d })} />
+      )}
+      {planning && (
+        <PlanDays user={user} date={date} onClose={() => setPlanning(false)} onSaved={() => onChanged?.()} />
       )}
       {adding && (
         <StatusSheet user={user} date={adding.date || date} email={adding.email} kind={adding.kind}

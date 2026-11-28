@@ -45,7 +45,8 @@ export const WHO_KINDS = {
   training: { label: 'Training / travel', tag: 'TRAINING' },
   away: { label: 'Away', tag: 'AWAY' },
   leave: { label: 'Leave', tag: 'LEAVE' },
-  notworking: { label: 'Not working', tag: 'NOT WORKING' }
+  notworking: { label: 'Not working', tag: 'NOT WORKING' },
+  boysweek: { label: 'Boys week', tag: 'BOYS WK' }
 }
 
 export const initialsOf = person => {
@@ -84,6 +85,31 @@ const covers = (e, date) => e.from <= date && e.to >= date
  * colon, then where: office words → office; training, course, conference or a
  * city → training / travel, with the rest as where.
  */
+/**
+ * Selected days as runs of consecutive days, for saving a calendar of picks
+ * as a few entries rather than one per day (Brent, 28 Nov 2026: "bulk update
+ * their days with a calendar style editor").
+ */
+export function dayRuns(days = []) {
+  const sorted = [...new Set(days)].filter(Boolean).sort()
+  const runs = []
+  const next = d => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10) }
+  for (const d of sorted) {
+    const last = runs[runs.length - 1]
+    if (last && next(last.to) === d) last.to = d
+    else runs.push({ from: d, to: d })
+  }
+  return runs
+}
+
+/** The status a person's own portal entries give a day (newest wins), for the planner. */
+export function plannedOn(entries, email, date) {
+  const e = String(email || '').toLowerCase()
+  const mine = entries.filter(x => String(x.email || '').toLowerCase() === e && covers(x, date))
+  const place = mine.filter(x => x.kind !== 'boysweek').sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))[0] || null
+  return { place, boys: mine.some(x => x.kind === 'boysweek'), entries: mine }
+}
+
 export function noteStatus(person, items = []) {
   const first = String(person.firstName || '').toLowerCase()
   if (!first) return null
@@ -94,7 +120,13 @@ export function noteStatus(person, items = []) {
     const rest = m[2].replace(/\s*·.*$/, '').trim()
     if (/\b(leave|rdo|away)\b/i.test(rest)) continue // the Staff Leave calendar answers these
     if (/\bwfh\b|work(ing)? from home|\bfrom home\b/i.test(rest)) return { kind: 'wfh', where: 'Working from home', note: '' }
-    if (/\boffice\b/i.test(rest)) return { kind: 'office', where: /\btm\b|technomed/i.test(rest) || /^office$/i.test(rest) ? 'TechnoMed office' : rest, note: '' }
+    if (/\boffice\b/i.test(rest)) {
+      // "office - 1pm start", "office 10-2": the office, with the time as a note
+      // (Brent, 28 Nov 2026 — Erin writes her own days this way).
+      const note = rest.replace(/\b(?:tm|technomed)\b/ig, '').replace(/\boffice\b/i, '').replace(/^[\s\-–—:,]+|[\s\-–—:,]+$/g, '').trim()
+      const elsewhere = note && !/\d|start|finish|until|from|am\b|pm\b|late|early/i.test(note)
+      return { kind: 'office', where: elsewhere ? rest : 'TechnoMed office', note: elsewhere ? '' : note }
+    }
     if (/training|course|conference|congress|workshop|meeting in|melb|melbourne|sydney|brisbane|adelaide|perth|launceston|interstate|travel|flight/i.test(rest)) {
       return { kind: 'training', where: rest, note: '' }
     }
@@ -145,7 +177,7 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
     .flatMap(g => (g.cases || []).map(c => ({ ...c, hospital: c.hospital || g.hospital })))
     .filter(c => !c.cancelled && !c.notRequired)
 
-  return people.map(person => {
+  const rowOf = (person, entries) => {
     const email = person.email.toLowerCase()
     const base = { person, initials: initialsOf(person), kind: null, short: '', where: '', when: '', note: '', entry: null, source: null }
     const mine = entries.filter(e => String(e.email || '').toLowerCase() === email && covers(e, date))
@@ -193,7 +225,7 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
     const noted = noteStatus(person, [...(day?.nonSurgeonItems || []), ...(day?.otherRollup || [])])
     if (noted) {
       return {
-        ...base, kind: noted.kind, where: noted.where, when: 'All day', source: 'calendar note',
+        ...base, kind: noted.kind, where: noted.where, when: 'All day', note: noted.note || '', source: 'calendar note',
         short: noted.kind === 'office' ? 'OFFICE' : noted.kind === 'wfh' ? 'WFH' : noted.where.toUpperCase().slice(0, 12)
       }
     }
@@ -210,7 +242,28 @@ export function whosWhere({ date, day, away = [], entries = [], people = WHO_PEO
       return { ...base, kind: 'office', short: 'OFFICE', where: 'TechnoMed office', when: 'All day', source: 'default' }
     }
     return base
+  }
+
+  // Ben's boys week (Brent, 28 Nov 2026: "the week he has his boys and has
+  // late starts and early finishes"): never where he is — that still comes
+  // from everything above — but said on top of it.
+  return people.map(person => {
+    const email = person.email.toLowerCase()
+    const mineAll = entries.filter(e => String(e.email || '').toLowerCase() === email)
+    const boys = mineAll.find(e => e.kind === 'boysweek' && covers(e, date))
+    const row = rowOf(person, entries.filter(e => e.kind !== 'boysweek'))
+    return boys ? withBoysWeek(row, boys) : row
   })
+}
+
+export const BOYS_WEEK_NOTE = 'Boys week — late start, early finish'
+
+function withBoysWeek(row, entry) {
+  const note = [row.note, BOYS_WEEK_NOTE].filter(Boolean).join(' · ')
+  if (!row.kind) {
+    return { ...row, kind: 'boysweek', short: 'BOYS WK', where: 'Boys week', when: 'Late start · early finish', note: entry.note || '', entry, source: 'added', boysWeek: true }
+  }
+  return { ...row, note, boysWeek: true, boysEntry: entry }
 }
 
 /**
@@ -229,7 +282,7 @@ export function otherItemsWorthListing(items = [], people = WHO_PEOPLE) {
 export function groupWhosWhere(rows) {
   const order = [
     ['theatre', 'Theatre'], ['office', 'Office'], ['wfh', 'Working from home'], ['training', 'Training / travel'],
-    ['off', 'Away / leave'], ['notworking', 'Not working'], ['none', 'No entry']
+    ['off', 'Away / leave'], ['notworking', 'Not working'], ['boysweek', 'Boys week'], ['none', 'No entry']
   ]
   const keyOf = r => (!r.kind ? 'none' : (r.kind === 'away' || r.kind === 'leave') ? 'off' : r.kind)
   return order.map(([key, label]) => ({ key, label, rows: rows.filter(r => keyOf(r) === key) }))

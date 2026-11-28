@@ -16,7 +16,7 @@ const MIGRATED = [
   'LeaveForm.jsx', 'leave/MyLeave.jsx', 'LockScreen.jsx', 'PromptBanner.jsx', 'Hubs.jsx', 'FileBrowser.jsx', 'Resources.jsx', 'RebateCodes.jsx',
   'Cases.jsx', 'TeamLeader.jsx', 'CaseWeek.jsx', 'cases/EditBooking.jsx', 'cases/NewBooking.jsx',
   'cases/NewTask.jsx', 'cases/ListOrder.jsx',
-  'cases/BookingQueue.jsx', 'cases/SetAsideEmails.jsx', 'cases/DictateBooking.jsx', 'cases/PasteMessage.jsx', 'cases/StatusSheet.jsx', 'cases/WhosWhere.jsx', 'cases/TeamSheet.jsx', 'cases/BookingChooser.jsx', 'events/Events.jsx', 'events/EventPage.jsx', 'events/Contacts.jsx', 'events/GuestPage.jsx', 'events/photos.jsx', 'cases/InSitu.jsx', 'cases/ListPlace.jsx',
+  'cases/BookingQueue.jsx', 'cases/SetAsideEmails.jsx', 'cases/DictateBooking.jsx', 'cases/PasteMessage.jsx', 'cases/StatusSheet.jsx', 'cases/PlanDays.jsx', 'cases/WhosWhere.jsx', 'cases/TeamSheet.jsx', 'cases/BookingChooser.jsx', 'events/Events.jsx', 'events/EventPage.jsx', 'events/Contacts.jsx', 'events/GuestPage.jsx', 'events/photos.jsx', 'cases/InSitu.jsx', 'cases/ListPlace.jsx',
   'cases/TeamLeaderStrip.jsx', 'cases/CaseSearch.jsx', 'PreferenceCards.jsx', 'cases/NoticeSheet.jsx', 'scan/RegistrarText.jsx', 'scan/AmendUsage.jsx', 'scan/BoostForm.jsx', 'scan/CaseFiles.jsx',
   'ResupplyScan.jsx', 'ScanTab.jsx', 'scan/ScanKind.jsx', 'scan/ScanPages.jsx', 'scan/WrongKind.jsx',
   'projects/ProjectList.jsx', 'projects/ProjectBoard.jsx', 'projects/TaskSheet.jsx', 'projects/Workspace.jsx', 'projects/MyToDo.jsx',

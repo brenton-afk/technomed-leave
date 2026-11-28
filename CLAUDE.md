@@ -671,6 +671,29 @@ office blue, tag WFH) — an office day worked from home. Portal only
 the whole-team page; a calendar note "Toni - WFH" / "working from home" sets it
 (`noteStatus`).
 
+**Erin's days come from her own calendar notes** (Brent, 28 Nov 2026: "The
+calendar has information about her days, so make sure you pull from there
+and then let her update"). Erin writes all-day "Erin - office" entries on the
+bookings calendar; `noteStatus` reads them (a time after it — "office - 1pm
+start", "office 10-2" — is the row's note, the place stays TechnoMed office),
+and a status she adds in the portal still wins.
+**Plan days** (Brent, same day: "bulk update their days with a calendar style
+editor instead of having to open each day"): `cases/PlanDays.jsx`
+(`data-plan-days` beside Whole team ›, `data-plan-days-sheet`): who, a status
+(or Clear), a five-week Mon–Sun grid (‹ › four weeks), tap days, **Set N days
+to …** — each run of days in a row is one entry (`dayRuns` in
+`whosWhere.js`), POSTed one after another to `action=away` (never in
+parallel — the list is one key); Clear deletes the person's entries touching
+the chosen days (a longer entry comes off whole, asked first). Each cell shows
+the portal status already saved (`plannedOn`). Calendar notes and leave are
+not edited here. **Ben's boys week** (same day: "the week he has his boys and
+has late starts and early finishes"): status `boysweek` (`STATUS_KINDS`,
+`onlyFor` Ben — `kindsFor(email)`, refused for anyone else by `cleanAway`;
+portal only). It never replaces where he is: `whosWhere` works his row out
+without it and adds "Boys week — late start, early finish" to the note
+(`boysWeek: true`); with nothing else known the row is Boys week itself (tag
+BOYS WK, `statusTint.boysweek`). `PlanDays.test.jsx`.
+
 ### Events and RSVPs (Brent, 25 Nov 2026)
 
 "An RSVP portal within our Technomed portal for dinners etc … as good as

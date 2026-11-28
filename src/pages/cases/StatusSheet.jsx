@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useBackLayer } from '../../backButton.js'
 import { Overlay } from '../../design/Shell.jsx'
 import { colour, text, space, radius, statusTint } from '../../design/tokens.js'
-import { AWAY_REASONS, STATUS_KINDS, awayWhen, awayWords } from '../../clinicalPlan/away.js'
+import { AWAY_REASONS, STATUS_KINDS, kindsFor, awayWhen, awayWords } from '../../clinicalPlan/away.js'
 import { WHO_PEOPLE } from '../../clinicalPlan/whosWhere.js'
 
 // ─── Add status (option B, Brent 25 Nov 2026) ────────────────────────────────
@@ -126,7 +126,7 @@ export default function StatusSheet({ user, date, email: presetEmail = '', kind:
 
             <Label>Status</Label>
             <div style={{ display: 'grid', gap: 6 }}>
-              {STATUS_KINDS.map(k => {
+              {kindsFor(email).map(k => {
                 const on = kind === k.id
                 const tint = statusTint[k.id]
                 return (

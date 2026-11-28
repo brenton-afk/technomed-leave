@@ -162,3 +162,22 @@ describe('a change made in the portal is the answer for that day', () => {
     expect(row(whosWhere({ date: D, day, away: leave, entries: [office] }), 'Toni')).toMatchObject({ kind: 'leave' })
   })
 })
+
+describe("Erin's days come from her own calendar entries (Brent, 28 Nov 2026)", () => {
+  it('reads "Erin - office" all-day entries, times included, and nothing on the other days', async () => {
+    const { buildWeekPlan } = await import('./buildWeekPlan.js')
+    const { weekWindowFor } = await import('./week.js')
+    const ev = (id, summary, date) => ({ id, summary, start: { date }, end: { date } })
+    const plan = buildWeekPlan([
+      ev('e1', 'Erin - office ', '2026-12-01'),
+      ev('e2', 'Erin - office - 1pm start', '2026-12-02'),
+      ev('e3', 'Erin - office 10-2', '2026-12-03')
+    ], weekWindowFor('2026-11-30'), { generatedAt: '2026-11-28T08:00:00+11:00' })
+    const erinOn = date => row(whosWhere({ date, day: plan.days.find(d => d.date === date) }), 'Erin')
+    expect(erinOn('2026-11-30').kind).toBe(null)
+    expect(erinOn('2026-12-01')).toMatchObject({ kind: 'office', where: 'TechnoMed office' })
+    expect(erinOn('2026-12-02')).toMatchObject({ kind: 'office', where: 'TechnoMed office', note: '1pm start' })
+    expect(erinOn('2026-12-03')).toMatchObject({ kind: 'office', where: 'TechnoMed office', note: '10-2' })
+    expect(erinOn('2026-12-04').kind).toBe(null)
+  })
+})
